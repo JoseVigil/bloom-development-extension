@@ -182,8 +182,29 @@ OUTPUT_BINARY="${OUTPUT_DIR}/${BINARY_NAME}"
 
 echo "Build target: ${BUILD_TARGET}" >> "${LOG_FILE}"
 
+BUILD_DATE=$(date '+%Y-%m-%d')
+BUILD_TIME=$(date '+%H:%M:%S')
+
+case "${COMPONENT}" in
+    sensor)
+        CORE_PKG="bloom-sensor/internal/core"
+        ;;
+    sentinel)
+        CORE_PKG="sentinel/internal/core"
+        ;;
+    nucleus)
+        CORE_PKG="nucleus/internal/core"
+        ;;
+    metamorph)
+        CORE_PKG="metamorph/internal/core"
+        ;;
+esac
+
 go build \
-    -ldflags="-s -w -X main.BuildNumber=${BLOOM_BUILD_NUMBER}" \
+    -ldflags="-s -w \
+        -X ${CORE_PKG}.buildNumber=${BLOOM_BUILD_NUMBER} \
+        -X ${CORE_PKG}.BuildDate=${BUILD_DATE} \
+        -X ${CORE_PKG}.BuildTime=${BUILD_TIME}" \
     -o "${OUTPUT_BINARY}" \
     "${BUILD_TARGET}" >> "${LOG_FILE}" 2>&1
 

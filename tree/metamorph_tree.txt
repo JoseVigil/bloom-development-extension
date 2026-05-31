@@ -1,15 +1,19 @@
 bloom-development-extension/
 └── metamorph/
+    ├── .DS_Store
     ├── README.md
     ├── VERSION
     ├── go.mod
     ├── go.sum
     ├── internal/
+    │   ├── .DS_Store
     │   ├── cli/
+    │   │   ├── .DS_Store
     │   │   ├── config.go
     │   │   ├── help_renderer.go
     │   │   └── root.go
     │   ├── core/
+    │   │   ├── .DS_Store
     │   │   ├── build_info.go
     │   │   ├── core.go
     │   │   ├── logger.go
@@ -17,9 +21,11 @@ bloom-development-extension/
     │   │   ├── registry.go
     │   │   └── version.go
     │   ├── inspection/
+    │   │   ├── .DS_Store
     │   │   ├── cortex.go
     │   │   ├── external.go
     │   │   ├── formatting.go
+    │   │   ├── generate_manifest.go
     │   │   ├── inspect.go
     │   │   ├── inspection_test.go
     │   │   ├── ionpump_client.go
@@ -27,20 +33,33 @@ bloom-development-extension/
     │   │   ├── ionrecipes_integration_test.go
     │   │   ├── ionrecipes_test.go
     │   │   ├── managed.go
+    │   │   ├── managed_defs.go
     │   │   ├── reconcile.go
     │   │   ├── status.go
     │   │   ├── types.go
     │   │   ├── utils.go
-    │   │   └── verify_sync.go
+    │   │   ├── verify_sync.go
+    │   │   └── version_parse.go
+    │   ├── ionpump/
+    │   │   ├── .DS_Store
+    │   │   ├── commands.go
+    │   │   ├── helpers.go
+    │   │   ├── list.go
+    │   │   ├── manifest.go
+    │   │   ├── reconcile.go
+    │   │   ├── rollback.go
+    │   │   ├── status.go
+    │   │   └── verify.go
     │   ├── maintenance/
+    │   │   ├── .DS_Store
     │   │   ├── cleanup.go
-    │   │   └── rollout.go
-    │   ├── reconciliation/
-    │   │   ├── generate_manifest.go
-    │   │   └── reconcile.go
+    │   │   ├── rollout.go
+    │   │   ├── rollout_other.go
+    │   │   └── rollout_windows.go
     │   ├── rollback/
     │   │   └── rollback.go
     │   └── system/
+    │       ├── .DS_Store
     │       ├── info.go
     │       └── version.go
     ├── main.go

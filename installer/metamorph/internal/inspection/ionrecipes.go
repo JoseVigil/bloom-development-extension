@@ -279,15 +279,19 @@ func verifyIonRecipeStaging(stagingDir string, update IonRecipeUpdate) error {
 // If step 2 fails, step 1 is immediately reversed before returning the error.
 // Returns the final swapState so crash-recovery can inspect it on next startup.
 func atomicSwap(liveDir, stagingDir, backupDir string) (swapState, error) {
-	// Step 1: live → backup
-	if err := os.Rename(liveDir, backupDir); err != nil {
-		return swapStateNone, fmt.Errorf("swap: first rename (live→backup) failed: %w", err)
+	// Step 1: live → backup (skipped on first install when liveDir doesn't exist yet)
+	if _, err := os.Stat(liveDir); err == nil {
+		if err := os.Rename(liveDir, backupDir); err != nil {
+			return swapStateNone, fmt.Errorf("swap: first rename (live→backup) failed: %w", err)
+		}
 	}
 
 	// Step 2: staging → live
 	if err := os.Rename(stagingDir, liveDir); err != nil {
-		// Reverse step 1 immediately.
-		_ = os.Rename(backupDir, liveDir)
+		// Reverse step 1 immediately if it happened.
+		if _, statErr := os.Stat(backupDir); statErr == nil {
+			_ = os.Rename(backupDir, liveDir)
+		}
 		return swapStateFirstDone, fmt.Errorf("swap: second rename (staging→live) failed: %w", err)
 	}
 
@@ -482,6 +486,14 @@ func ReconcileIonRecipe(
 	}
 
 	// ── Phase 5: Swap ─────────────────────────────────────────────────────────
+	// Ensure the _backup/ parent directory exists before the first rename.
+	if err := os.MkdirAll(filepath.Dir(backupDir), 0755); err != nil {
+		result.Action = "failed"
+		result.Phase = "swap"
+		result.Error = fmt.Sprintf("failed to create backup dir: %v", err)
+		result.DurationMs = time.Since(start).Milliseconds()
+		return result
+	}
 	_, swapErr := atomicSwap(liveDir, stagingDir, backupDir)
 	if swapErr != nil {
 		result.Action = "failed"

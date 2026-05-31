@@ -3,7 +3,7 @@ package inspection
 import (
 	"runtime"
 
-	"github.com/bloom/metamorph/internal/core"
+	"metamorph/internal/core"
 )
 
 // managedBinaryDef describes a managed binary in a platform-agnostic way.

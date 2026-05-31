@@ -36,10 +36,22 @@ HEADER_DIR="nlohmann"
 
 # ============================================================================
 # BUILD NUMBER MANAGEMENT
+#
+# Los archivos de versionado viven en installer/host/, no en src/host/.
+# build-all.py inyecta BLOOM_PROJECT_ROOT para que build.sh pueda
+# encontrarlos sin importar desde dónde se lo invoque.
+# build_info.h se genera en installer/host/ y src/host/ incluye desde ahí.
 # ============================================================================
-BUILD_NUMBER_FILE="build_number.txt"
-VERSION_NUMBER_FILE="version_number.txt"
-BUILD_INFO_HEADER="build_info.h"
+if [ -n "${BLOOM_PROJECT_ROOT:-}" ]; then
+    VERSION_DIR="${BLOOM_PROJECT_ROOT}/installer/host"
+else
+    # Fallback si se corre build.sh manualmente: src/host/../../installer/host
+    VERSION_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)/installer/host"
+fi
+
+BUILD_NUMBER_FILE="${VERSION_DIR}/build_number.txt"
+VERSION_NUMBER_FILE="${VERSION_DIR}/version_number.txt"
+BUILD_INFO_HEADER="${VERSION_DIR}/build_info.h"
 
 if [ ! -f "$BUILD_NUMBER_FILE" ]; then
     echo "0" > "$BUILD_NUMBER_FILE"
@@ -65,14 +77,14 @@ cat > "$BUILD_INFO_HEADER" << EOF_HEADER
 #define BUILD_INFO_H
 
 #define BUILD_NUMBER $NEXT_BUILD
+#define BUILD_DATE "$(date '+%Y-%m-%d')"
+#define BUILD_TIME "$(date '+%H:%M:%S')"
 #define VERSION_STRING "$VERSION_STRING"
 
 #endif // BUILD_INFO_H
 EOF_HEADER
 
 echo -e "${GREEN}✓ Generated $BUILD_INFO_HEADER${NC}"
-
-
 # Validar que todos los archivos existen
 echo -e "${YELLOW}� Validating source files...${NC}"
 for src in "${SOURCE_FILES[@]}"; do

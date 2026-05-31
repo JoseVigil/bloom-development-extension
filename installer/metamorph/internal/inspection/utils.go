@@ -104,11 +104,11 @@ func GetBasePath() string {
 
 	switch runtime.GOOS {
 	case "windows":
-		return homeDir + `\AppData\Local\BloomNucleus\bin`
+		return homeDir + `\AppData\Local\BloomNucleus`
 	case "darwin":
-		return homeDir + "/Library/Application Support/BloomNucleus/bin"
+		return homeDir + "/Library/BloomNucleus"
 	default: // linux and others
-		return homeDir + "/.local/share/BloomNucleus/bin"
+		return homeDir + "/.local/share/BloomNucleus"
 	}
 }
 

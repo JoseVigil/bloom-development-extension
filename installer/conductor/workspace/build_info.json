@@ -11,5 +11,5 @@
   "arch": "win64",
   "node_version": "v22.11.0",
   "electron_version": "^28.3.3",
-  "buildNumber": 0
+  "buildNumber": 1
 }

@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bloom/metamorph/internal/cli"
-	"github.com/bloom/metamorph/internal/core"
-	_ "github.com/bloom/metamorph/internal/inspection"
-	_ "github.com/bloom/metamorph/internal/maintenance"
-	_ "github.com/bloom/metamorph/internal/rollback"
-	_ "github.com/bloom/metamorph/internal/system"
+	"metamorph/internal/cli"
+	"metamorph/internal/core"
+	_ "metamorph/internal/inspection"
+	_ "metamorph/internal/ionpump"
+	_ "metamorph/internal/maintenance"
+	_ "metamorph/internal/rollback"
+	_ "metamorph/internal/system"
 )
 
 func main() {

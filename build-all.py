@@ -101,6 +101,32 @@ def _read_int(path: Path, default: int = 0) -> int:
         return default
 
 
+def _increment_build_number(component: str) -> None:
+    """
+    Incrementa build_number.txt en 1 para el componente dado.
+    Es la fuente de verdad del conteo — debe llamarse UNA vez por build,
+    antes de inject_build_number_env(), para que el número efectivo
+    ya refleje el valor nuevo.
+
+    Solo toca build_number.txt (base). Los archivos de offset de plataforma
+    (build_number.darwin.txt, build_number.windows.txt) los edita el operador
+    manualmente para separar rangos; no se auto-incrementan.
+    """
+    scripts_dir = _BUILD_NUMBER_DIRS.get(component)
+    if scripts_dir is None:
+        return
+    # Garantizar que los archivos existen antes de intentar leer/escribir
+    _ensure_build_number_files(scripts_dir, component)
+    base_file = scripts_dir / "build_number.txt"
+    current = _read_int(base_file, default=0)
+    new_val = current + 1
+    try:
+        base_file.write_text(str(new_val), encoding="utf-8")
+        log(f"  🔢 build_number [{component}]: {current} → {new_val}")
+    except OSError as exc:
+        log(f"  ⚠ No se pudo incrementar build_number para {component}: {exc}")
+
+
 def _ensure_build_number_files(scripts_dir: Path, component: str) -> None:
     """
     Garantiza que los tres archivos de versionado existen en scripts_dir.
@@ -436,6 +462,10 @@ def build_brain() -> StepResult:
     # Garantizar que existen build_number.txt / .windows.txt / .darwin.txt en brain/
     _ensure_build_number_files(_BUILD_NUMBER_DIRS["brain"], "brain")
 
+    # Incrementar y resolver build number antes de lanzar el script
+    _increment_build_number("brain")
+    brain_env = inject_build_number_env("brain")
+
     # Garantizar que el directorio de output existe antes de compilar
     brain_out = _DEV_BIN_BASE / "brain"
     brain_out.mkdir(parents=True, exist_ok=True)
@@ -448,14 +478,11 @@ def build_brain() -> StepResult:
             "-NonInteractive",
             "-File", brain_script.name,
         ]
-        # CI/TERM: evita Clear-Host y secuencias ANSI en subprocess
-        # BLOOM_PROJECT_ROOT: build.py lo usa para resolver rutas cuando corre
-        #   dentro de Start-Job de PowerShell con cwd distinto a la raiz del repo
-        env = {**os.environ, "CI": "1", "TERM": "dumb", "BLOOM_PROJECT_ROOT": str(ROOT)}
+        env = {**brain_env, "CI": "1", "TERM": "dumb", "BLOOM_PROJECT_ROOT": str(ROOT)}
     else:
         log("Ejecutando build-brain.sh ...")
         cmd = ["bash", brain_script.name]
-        env = {**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)}
+        env = {**brain_env, "BLOOM_PROJECT_ROOT": str(ROOT)}
 
     code, out = run_streaming(cmd, cwd=brain_script.parent, env=env)
 
@@ -505,6 +532,10 @@ def build_go_component(component: str) -> StepResult:
         )
 
     log(f"Compilando {component} con {script_path.name} ...")
+
+    # Incrementar build_number.txt antes de resolver el effective, de modo que
+    # BLOOM_BUILD_NUMBER refleje el número nuevo en este build.
+    _increment_build_number(component)
 
     # BUG FIX 2 — inyectar BLOOM_PROJECT_ROOT además de BLOOM_BUILD_NUMBER.
     # Sin esta variable, build-component.sh no puede resolver PROJECT_ROOT
@@ -566,6 +597,7 @@ def build_host() -> StepResult:
         return StepResult("Host", False, error=f"Script no encontrado: {host_script}")
 
     log(f"Ejecutando {host_script.name} ...")
+    _increment_build_number("host")
     env = inject_build_number_env("host")
     code, out = run_streaming(["bash", host_script.name], cwd=host_script.parent, env=env)
     if code != 0:
@@ -595,6 +627,8 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
     # antes de lanzar el build de npm.
     env = {**os.environ}
     if name == "Conductor":
+        # Incrementar antes de resolver para que build_info.json reciba el número nuevo
+        _increment_build_number("conductor")
         build_num = resolve_build_number("conductor") if "conductor" in _BUILD_NUMBER_DIRS else None
         # Garantizar archivos de versionado en workspace/ y setup/
         _ensure_build_number_files(_BUILD_NUMBER_DIRS["conductor"], "conductor")
@@ -771,6 +805,7 @@ def build_cortex() -> StepResult:
         )
 
     log(f"Ejecutando python3 {package_py.name} ...")
+    _increment_build_number("cortex")
     env = inject_build_number_env("cortex")
 
     # --source: raíz de la Chrome Extension (donde está manifest.json)
@@ -1303,11 +1338,16 @@ def main() -> None:
         f"  Bin base : {_DEV_BIN_BASE}"
     )
 
-    # Mostrar build numbers efectivos para la plataforma actual
+    # Derivar filtros temprano para usarlos en el header de build numbers
+    _only_set_preview = set(s.lower() for s in args.only) if args.only else None
+    _skip_set_preview = set(s.lower() for s in args.skip) if args.skip else set()
+
+    # Mostrar build numbers: valor actual en disco y el próximo que se compilará.
+    # Los componentes que entran en este build muestran "actual → próximo".
+    # Los que se saltean muestran solo el valor actual.
     log(f"Build numbers ({_PLATFORM_SUFFIX}):")
     for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "conductor"):
         if comp == "cortex":
-            # Cortex gestiona su propio build number en cortex.meta.json (no en .txt)
             meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
             try:
                 meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -1318,11 +1358,19 @@ def main() -> None:
             continue
         scripts_dir = _BUILD_NUMBER_DIRS.get(comp)
         if scripts_dir:
-            base   = _read_int(scripts_dir / "build_number.txt", 0)
-            offset = _read_int(scripts_dir / f"build_number.{_PLATFORM_SUFFIX}.txt", 0)
+            base      = _read_int(scripts_dir / "build_number.txt", 0)
+            offset    = _read_int(scripts_dir / f"build_number.{_PLATFORM_SUFFIX}.txt", 0)
             effective = base + offset
             offset_str = f"  (+{offset} {_PLATFORM_SUFFIX})" if offset else ""
-            log(f"  {comp:<12} {effective}{offset_str}")
+            will_build = (
+                (_only_set_preview is None or comp in _only_set_preview)
+                and comp not in _skip_set_preview
+                and comp not in ("cortex", "conductor")
+            )
+            if will_build:
+                log(f"  {comp:<12} {effective} → {effective + 1}{offset_str}  ← este build")
+            else:
+                log(f"  {comp:<12} {effective}{offset_str}")
     log("")
 
     # Definir todos los pasos en orden.

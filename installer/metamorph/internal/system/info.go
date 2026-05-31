@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/bloom/metamorph/internal/core"
+	"metamorph/internal/core"
 
 	"github.com/spf13/cobra"
 )
@@ -41,10 +41,10 @@ func createInfoCommand(c *core.Core) *cobra.Command {
   "go_version": "go1.22.0",
   "capabilities": ["state_inspection", "manifest_reconciliation"],
   "paths": {
-    "base":    "~/Library/Application Support/BloomNucleus",
-    "bin":     "~/Library/Application Support/BloomNucleus/bin",
-    "config":  "~/Library/Application Support/BloomNucleus/config",
-    "staging": "~/Library/Application Support/BloomNucleus/staging"
+    "base":    "~/Library/BloomNucleus",
+    "bin":     "~/Library/BloomNucleus/bin",
+    "config":  "~/Library/BloomNucleus/config",
+    "staging": "~/Library/BloomNucleus/staging"
   }
 }`,
 		},

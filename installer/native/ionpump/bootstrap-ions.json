@@ -3,32 +3,33 @@
   "type": "ion_recipes",
   "release_channel": "bootstrap",
   "description": "Bootstrap ions deployed by Conductor Setup before Batcave exists. These are provisional versions that Batcave will supersede once available.",
-  "ion_recipes": [
+  "ions": [
     {
-      "site": "github.com",
+      "domain": "github.com",
       "version": "1.0.0",
+      "zip_path": "installer/native/ionpump/github.com.ion.zip",
       "download_url": "",
-      "sha256": "__GENERATED_AT_BUILD_TIME__",
+      "sha256": "e6519186ab4897f77760b17c95f9f37b03a367b180bf7b4b6a2c3301016f7ecd",
       "files": [
         {
-          "path": "domain.manifest.json",
-          "sha256": "__GENERATED_AT_BUILD_TIME__"
-        },
-        {
           "path": "actions/generate_pat.ion",
-          "sha256": "__GENERATED_AT_BUILD_TIME__"
+          "sha256": "6917800505d3f9fd5b70761a9298a015dc35f2cabcd0487544c735f927b1bc31"
         },
         {
-          "path": "pages/tokens_page.page.ion",
-          "sha256": "__GENERATED_AT_BUILD_TIME__"
+          "path": "domain.manifest.json",
+          "sha256": "e0c5d5e06d312bc2ad50eb6b9942ea68d215ee832baa74d4d47a3e80fc8f0339"
         },
         {
           "path": "pages/new_token_page.page.ion",
-          "sha256": "__GENERATED_AT_BUILD_TIME__"
+          "sha256": "079a9bbe87245856bb965b117c86c0788ec3c86c80fb34922d691e38b4cdde83"
+        },
+        {
+          "path": "pages/tokens_page.page.ion",
+          "sha256": "242b31ff11a9a56abc1a9f90bdd225e00612e317b62c5415d0e338025639b084"
         },
         {
           "path": "shared/session_guard.ion",
-          "sha256": "__GENERATED_AT_BUILD_TIME__"
+          "sha256": "0c0245cadf9624e3dec9131f4910fdb726c7c544b61e67493a2456992557beb1"
         }
       ]
     }

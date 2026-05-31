@@ -1,4 +1,4 @@
-module github.com/bloom/metamorph
+module metamorph
 
 go 1.24.0
 

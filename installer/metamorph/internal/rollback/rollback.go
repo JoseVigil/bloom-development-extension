@@ -3,7 +3,7 @@ package rollback
 import (
 	"fmt"
 
-	"github.com/bloom/metamorph/internal/core"
+	"metamorph/internal/core"
 	"github.com/spf13/cobra"
 )
 
