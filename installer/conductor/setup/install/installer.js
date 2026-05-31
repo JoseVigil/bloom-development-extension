@@ -102,7 +102,7 @@ async function installBrainService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 6, 11, 'Installing Brain Service...');
+  emitProgress(win, 6, 12, 'Installing Brain Service...');
 
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
@@ -140,7 +140,7 @@ async function seedMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 10, 11, 'Seeding master profile...');
+  emitProgress(win, 12, 12, 'Seeding master profile...');
 
   try {
     const { seedMasterProfile: _seed } = require('./installer_nucleus');
@@ -172,7 +172,7 @@ async function launchMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 11, 11, 'Launching master profile...');
+  emitProgress(win, 11, 12, 'Launching master profile...');
 
   try {
     logger.separator('LAUNCHING MASTER PROFILE');
@@ -285,7 +285,7 @@ async function createDirectories(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 1, 11, 'Creating system directories...');
+  emitProgress(win, 1, 12, 'Creating system directories...');
 
   try {
     logger.separator('CREATING DIRECTORIES');
@@ -340,7 +340,7 @@ async function runChromiumInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 2, 11, 'Installing Chromium browser...');
+  emitProgress(win, 2, 12, 'Installing Chromium browser...');
 
   try {
     const result = await installChromium(win);
@@ -362,7 +362,7 @@ async function runRuntimeInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 3, 11, 'Configuring Python runtime...');
+  emitProgress(win, 3, 12, 'Configuring Python runtime...');
 
   try {
     // Remover servicio antes de instalar runtime (si existe)
@@ -494,7 +494,7 @@ async function deployAllSystemBinaries(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 4, 11, 'Deploying system binaries...');
+  emitProgress(win, 4, 12, 'Deploying system binaries...');
 
   try {
     logger.separator('DEPLOYING ALL SYSTEM BINARIES');
@@ -913,7 +913,7 @@ async function installNucleusService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 11, 'Installing Nucleus Service...');
+  emitProgress(win, 7, 12, 'Installing Nucleus Service...');
 
   try {
     logger.separator('INSTALLING NUCLEUS SERVICE (CRITICAL 24/7)');
@@ -961,7 +961,7 @@ async function installOllamaServiceStep(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 12, 'Installing Ollama Service...');
+  emitProgress(win, 9, 12, 'Installing Ollama Service...');
 
   try {
     logger.separator('INSTALLING OLLAMA SERVICE');
@@ -1000,7 +1000,7 @@ async function runCertification(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 11, 'Certifying system components...');
+  emitProgress(win, 11, 12, 'Certifying system components...');
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
@@ -1078,7 +1078,7 @@ async function installSessionSensor(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 11, 'Installing Session Agent...');
+  emitProgress(win, 10, 12, 'Installing Session Agent...');
 
   try {
     const started = await installSensor();
@@ -1092,6 +1092,105 @@ async function installSessionSensor(win) {
 
   } catch (error) {
     logger.warn(`⚠️ Session sensor install warning: ${error.message}`);
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    return { success: false, non_critical: true };
+  }
+}
+
+// ============================================================================
+// IONPUMP BOOTSTRAP
+// ============================================================================
+
+async function deployBootstrapIonSites(win) {
+  const MILESTONE = 'ionpump_bootstrap';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 8, 12, 'Deploying bootstrap ion sites...');
+
+  try {
+    logger.separator('IONPUMP BOOTSTRAP SITES');
+
+    // ── Step 1: Build ion packages ──────────────────────────────────────────
+    logger.info('Step 1 — Building ion packages...');
+
+    const buildScript = path.join(
+      paths.installerDir, 'metamorph', 'scripts', 'build-bootstrap-ions.py'
+    );
+
+    if (!await fs.pathExists(buildScript)) {
+      throw new Error(`build-bootstrap-ions.py not found: ${buildScript}`);
+    }
+
+    const pythonExe = process.platform === 'win32' ? 'python' : 'python3';
+
+    await new Promise((resolve, reject) => {
+      const build = spawn(pythonExe, [buildScript], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: paths.installerDir,
+      });
+
+      let stderr = '';
+      build.stdout.on('data', d => { logger.info(d.toString().trim()); });
+      build.stderr.on('data', d => { stderr += d; });
+
+      build.on('close', code => {
+        if (code === 0) {
+          logger.success('✅ Ion packages built');
+          resolve();
+        } else {
+          reject(new Error(`build-bootstrap-ions.py failed (exit ${code}): ${stderr}`));
+        }
+      });
+
+      build.on('error', reject);
+    });
+
+    // ── Step 2: Deploy via Metamorph ────────────────────────────────────────
+    logger.info('Step 2 — Deploying ion sites via Metamorph...');
+
+    const manifest = path.join(
+      paths.installerDir, 'native', 'ionpump', 'bootstrap-ions.json'
+    );
+
+    if (!await fs.pathExists(manifest)) {
+      throw new Error(`bootstrap-ions.json not found after build: ${manifest}`);
+    }
+
+    await new Promise((resolve, reject) => {
+      const deploy = spawn(
+        paths.metamorphExe,
+        ['ion-pump', 'reconcile', '--manifest', manifest, '--force-swap'],
+        { stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+
+      let stderr = '';
+      deploy.stdout.on('data', d => { logger.info(d.toString().trim()); });
+      deploy.stderr.on('data', d => { stderr += d; });
+
+      deploy.on('close', code => {
+        if (code === 0) {
+          logger.success('✅ Ion sites deployed to ionsites/');
+          resolve();
+        } else {
+          reject(new Error(`metamorph ion-pump reconcile failed (exit ${code}): ${stderr}`));
+        }
+      });
+
+      deploy.on('error', reject);
+    });
+
+    await nucleusManager.completeMilestone(MILESTONE, { deployed: true });
+    return { success: true };
+
+  } catch (error) {
+    // Non-critical — no bloquea el onboarding si falla,
+    // pero Discovery va a necesitar el ion para el flujo de GitHub PAT.
+    logger.warn(`⚠️ IonPump bootstrap warning: ${error.message}`);
     await nucleusManager.failMilestone(MILESTONE, error.message);
     return { success: false, non_critical: true };
   }
@@ -1123,12 +1222,13 @@ async function installService(win) {
     await installBrainService(win);         // 6/11
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed
     // porque seed necesita Temporal workflows
-    await installNucleusService(win);       // 7/11 - Arranca Temporal
-    await installOllamaServiceStep(win);    // 8/12 - Arranca Ollama
-    await installSessionSensor(win);        // 8/11 — non-critical, cannot abort
-    await runCertification(win);            // 9/11 - Verifica Temporal ready
-    await seedMasterProfile(win);                         // 10/11 - Usa Temporal
-    const launchResult = await launchMasterProfile(win);  // 11/11 - Heartbeat final
+    await installNucleusService(win);       // 7/12 - Arranca Temporal
+    await deployBootstrapIonSites(win);     // 8/12 - Ion sites para onboarding
+    await installOllamaServiceStep(win);    // 9/12 - Arranca Ollama
+    await installSessionSensor(win);        // 10/12 — non-critical, cannot abort
+    await runCertification(win);            // 11/12 - Verifica Temporal ready
+    await seedMasterProfile(win);                         // 12/12 - Usa Temporal
+    const launchResult = await launchMasterProfile(win);  // Heartbeat final
 
     await nucleusManager.markInstallationComplete();
 

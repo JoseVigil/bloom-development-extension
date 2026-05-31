@@ -366,6 +366,9 @@ const paths = {
 
   // Native config source (installer/native/config/ -> appdata/config/)
   nativeConfigSource: getResourcePath('native-config'),
+
+  // Installer directory (repo root sibling: installer/)
+  installerDir: path.join(repoRoot, 'installer'),
 };
 
 // ============================================================================
