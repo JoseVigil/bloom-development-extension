@@ -240,6 +240,20 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
+    ionpump_bootstrap: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'metamorph_command',
+        command: 'metamorph ion-pump reconcile --manifest installer/native/ionpump/bootstrap-ions.json',
+        expected_success: true,
+        result: null
+      },
+      error: null,
+      non_critical: true
+    },
+
     // ── Windows-only milestones (presentes pero no ejecutados en Darwin) ──────
     ...(!_isDarwin && {
       orchestration_init: {
@@ -563,6 +577,7 @@ class NucleusManager {
       'metamorph_audit',
       'brain_service_install',
       'nucleus_service_install',
+      'ionpump_bootstrap',
       'ollama_service_install',
       'sensor_install',
       'certification',
@@ -578,6 +593,7 @@ class NucleusManager {
       'metamorph_audit',
       'brain_service_install',
       'nucleus_service_install',
+      'ionpump_bootstrap',
       'sensor_install',
       'vscode_extension',
       'certification',
