@@ -626,7 +626,11 @@ function handleHostMessage(msg) {
   // ─────────────────────────────────────────────────────────────────────
   const DOM_COMMANDS = [
     'DOM_CLICK', 'DOM_TYPE', 'DOM_WAIT',
-    'DOM_FOCUS', 'DOM_SCROLL', 'DOM_EXTRACT'
+    'DOM_FOCUS', 'DOM_SCROLL', 'DOM_EXTRACT',
+    'DOM_NAVIGATE',   // navega a una URL
+    'DOM_WATCH',      // registra MutationObserver para signals
+    'DOM_WATCH_URL',  // intercepta pushState/popstate
+    'DOM_UNWATCH'     // desconecta observers al salir de página
   ];
 
   if (DOM_COMMANDS.includes(msg.command)) {
