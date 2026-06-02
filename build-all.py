@@ -86,10 +86,10 @@ _BUILD_NUMBER_DIRS: dict[str, Path] = {
     "metamorph":        ROOT / "installer/metamorph/scripts",
     "sensor":           ROOT / "installer/sensor/scripts",
     "host":             ROOT / "installer/host",
-    "cortex":           ROOT / "installer/cortex/build-cortex",
-    "conductor":        ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
-    "conductor_setup":  ROOT / "installer/conductor/setup",      # segunda app de Conductor
-    "brain":            ROOT / "brain",                          # build_number.txt en brain/
+    "cortex":     ROOT / "installer/cortex/build-cortex",
+    "workspace":  ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
+    "setup":      ROOT / "installer/conductor/setup",      # instalador de Conductor
+    "brain":      ROOT / "brain",                          # build_number.txt en brain/
 }
 
 
@@ -146,8 +146,8 @@ def _ensure_build_number_files(scripts_dir: Path, component: str) -> None:
         log(f"  ⚠ No se pudo crear directorio {scripts_dir}: {exc}")
         return
 
-    # Conductor usa build_info.json y brain usa solo archivos de plataforma — no crear build_number.txt base
-    if component not in ("conductor", "conductor_setup", "brain"):
+    # workspace/setup usan build_info.json y brain usa solo archivos de plataforma — no crear build_number.txt base
+    if component not in ("workspace", "setup", "brain"):
         base_file = scripts_dir / "build_number.txt"
         if not base_file.exists():
             base_file.write_text("0", encoding="utf-8")
@@ -308,7 +308,6 @@ BUILDS: dict[str, Path | None] = {
 
     # JS/Node: paths a sus directorios de proyecto
     # ¡NO usar build_script() para estos — tienen build_node() propio!
-    "conductor": ROOT / "installer/conductor",
     "cortex":    ROOT / "installer/cortex",
     "bootstrap": ROOT / "installer/bootstrap",
     "vsix":      ROOT,
@@ -623,32 +622,31 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
     if not pkg_json.exists():
         return StepResult(name, False, error=f"package.json no encontrado en: {project_dir}")
 
-    # Para Conductor: parchear build_info.json con el build number de plataforma
+    # Para Setup/Workspace: parchear build_info.json con el build number de plataforma
     # antes de lanzar el build de npm.
     env = {**os.environ}
-    if name == "Conductor":
+    if name in ("Setup", "Workspace"):
+        comp_key = name.lower()  # "setup" o "workspace"
         # Incrementar antes de resolver para que build_info.json reciba el número nuevo
-        _increment_build_number("conductor")
-        build_num = resolve_build_number("conductor") if "conductor" in _BUILD_NUMBER_DIRS else None
+        _increment_build_number(comp_key)
+        build_num = resolve_build_number(comp_key) if comp_key in _BUILD_NUMBER_DIRS else None
         # Garantizar archivos de versionado en workspace/ y setup/
-        _ensure_build_number_files(_BUILD_NUMBER_DIRS["conductor"], "conductor")
-        _ensure_build_number_files(_BUILD_NUMBER_DIRS["conductor_setup"], "conductor_setup")
-        # conductor usa installer/conductor/workspace/build_info.json
-        # y también installer/conductor/setup/build_info.json
-        for rel in ("workspace/build_info.json", "setup/build_info.json"):
-            bi_path = project_dir / rel
-            if bi_path.exists():
-                try:
-                    data = json.loads(bi_path.read_text(encoding="utf-8"))
-                    if build_num is not None:
-                        data["buildNumber"] = build_num
-                        bi_path.write_text(
-                            json.dumps(data, indent=2, ensure_ascii=False),
-                            encoding="utf-8",
-                        )
-                        log(f"  build_info.json [{rel}] → buildNumber={build_num}")
-                except Exception as exc:
-                    log(f"  ⚠ No se pudo parchear {rel}: {exc}")
+        _ensure_build_number_files(_BUILD_NUMBER_DIRS["workspace"], "workspace")
+        _ensure_build_number_files(_BUILD_NUMBER_DIRS["setup"], "setup")
+        # parchear build_info.json del subproyecto correspondiente
+        bi_path = project_dir / "build_info.json"
+        if bi_path.exists():
+            try:
+                data = json.loads(bi_path.read_text(encoding="utf-8"))
+                if build_num is not None:
+                    data["buildNumber"] = build_num
+                    bi_path.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    log(f"  build_info.json [{project_dir.name}] → buildNumber={build_num}")
+            except Exception as exc:
+                log(f"  ⚠ No se pudo parchear build_info.json en {project_dir.name}: {exc}")
         if build_num is not None:
             env["BLOOM_BUILD_NUMBER"] = str(build_num)
 
@@ -1161,68 +1159,109 @@ def _parse_args() -> argparse.Namespace:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# build_conductor_package — electron-builder en setup/ y workspace/
+# build_setup / build_workspace — electron-builder en setup/ y workspace/
 # Genera el instalador nativo: .exe en Windows, .dmg en macOS.
-# Se ejecuta DESPUÉS de conductor (build:all) para que el código esté compilado.
+# Cada paso corre npm install antes del build para garantizar dependencias.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_conductor_package() -> StepResult:
+def _build_conductor_subproject(name: str, target: Path) -> StepResult:
     """
-    Ejecuta el script de packaging nativo en installer/conductor/setup/
-    y installer/conductor/workspace/.
-    - macOS: npm run build:darwin
-    - Windows: npm run build  (build:win64)
+    npm install + npm run build:darwin (mac) / build (win) en un subdirectorio de conductor.
+    name debe ser "Setup" o "Workspace" — se usa como clave lower() para _BUILD_NUMBER_DIRS.
     """
-    conductor_root = ROOT / "installer" / "conductor"
-    targets = [
-        conductor_root / "setup",
-        conductor_root / "workspace",
-    ]
+    if not target.exists():
+        return StepResult(name, False, error=f"Directorio no encontrado: {target}")
 
-    npm_script = "build:darwin" if IS_MACOS else "build"
+    pkg_json = target / "package.json"
+    if not pkg_json.exists():
+        return StepResult(name, False, error=f"package.json no encontrado en: {target}")
 
+    comp_key = name.lower()  # "setup" o "workspace"
     env = {**os.environ}
-    build_num = resolve_build_number("conductor") if "conductor" in _BUILD_NUMBER_DIRS else None
+    build_num = resolve_build_number(comp_key) if comp_key in _BUILD_NUMBER_DIRS else None
     if build_num is not None:
         env["BLOOM_BUILD_NUMBER"] = str(build_num)
 
-    all_output: list[str] = []
+    # ── Limpiar outputs anteriores para evitar EEXIST en symlinks de electron-builder ──
+    #
+    # electron-builder copia .app completos (con symlinks internos de macOS como
+    # Squirrel.framework/Resources) como extraResources. Si esos subdirectorios ya
+    # existen de un build anterior, el intento de re-crear los symlinks falla con:
+    #   EEXIST: file already exists, symlink 'Versions/Current/Resources' → ...
+    #
+    # Dos fuentes de symlinks residuales:
+    #
+    #   1. Output propio (darwin_x64/setup/ o darwin_x64/workspace/):
+    #      Se limpia siempre para que electron-builder arranque con directorio vacío.
+    #
+    #   2. Conductor embebido en setup (darwin_x64/conductor/mac/ y mac-arm64/):
+    #      setup/package.json incluye `darwin_${arch}/conductor` como extraResources.
+    #      Ese directorio contiene subcarpetas mac/ y mac-arm64/ con .app completos.
+    #      electron-builder los copia al output pero no puede sobreescribir sus
+    #      symlinks si ya existen de builds previos del workspace/conductor.
+    #      Se limpian solo esos subdirectorios .app — los .dmg quedan intactos.
 
-    for target in targets:
-        if not target.exists():
-            log(f"  ⚠ Directorio no encontrado, saltando: {target.name}/")
-            continue
+    # 1) Limpiar output propio
+    out_dir = _DEV_BIN_BASE / comp_key  # ej: native/bin/darwin_x64/setup
+    if out_dir.exists():
+        log(f"  🧹 Limpiando output anterior: {out_dir} ...")
+        try:
+            _shutil.rmtree(out_dir)
+            log(f"  ✅ Output limpiado")
+        except OSError as exc:
+            log(f"  ⚠ No se pudo limpiar {out_dir}: {exc}")
 
-        pkg_json = target / "package.json"
-        if not pkg_json.exists():
-            log(f"  ⚠ package.json no encontrado en {target.name}/, saltando")
-            continue
+    # 2) Si es setup en macOS: limpiar subcarpetas mac/ y mac-arm64/ del conductor
+    #    fuente para evitar EEXIST al copiar los .app embebidos como extraResources.
+    if IS_MACOS and comp_key == "setup":
+        # Limpiar en todas las variantes de arquitectura que pueda haber buildeado workspace
+        for arch_folder in ("darwin_x64", "darwin_arm64"):
+            conductor_dir = ROOT / "installer" / "native" / "bin" / arch_folder / "conductor"
+            for app_subdir in ("mac", "mac-arm64"):
+                app_dir = conductor_dir / app_subdir
+                if app_dir.exists():
+                    log(f"  🧹 Limpiando .app del conductor: {app_dir} ...")
+                    try:
+                        _shutil.rmtree(app_dir)
+                        log(f"  ✅ Limpiado")
+                    except OSError as exc:
+                        log(f"  ⚠ No se pudo limpiar {app_dir}: {exc}")
 
-        log(f"Ejecutando npm run {npm_script} en {target.name}/ ...")
-        cmd = [_NPM, "run", npm_script]
-        code, out = run_streaming(cmd, cwd=target, env=env)
-        all_output.append(out)
+    # ── npm install ────────────────────────────────────────────────────────
+    log(f"Ejecutando npm install en {target.name}/ ...")
+    code, out = run_streaming([_NPM, "install"], cwd=target, env=env)
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult(name, False, error=f"npm install falló en {target.name}/:\n{tail}")
 
-        # Escribir log individual en logs/build/
-        if _log_file_path:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            individual_log = _log_file_path.parent / f"conductor_{target.name}_{ts}.log"
-            try:
-                individual_log.write_text(out, encoding="utf-8")
-                log(f"  📄 Log guardado en: {individual_log.name}")
-            except OSError as exc:
-                log(f"  ⚠ No se pudo escribir log individual: {exc}")
+    # ── npm run build:darwin / build ───────────────────────────────────────
+    npm_script = "build:darwin" if IS_MACOS else "build"
+    log(f"Ejecutando npm run {npm_script} en {target.name}/ ...")
+    code, out = run_streaming([_NPM, "run", npm_script], cwd=target, env=env)
 
-        if code != 0:
-            tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
-            return StepResult(
-                "ConductorPkg", False,
-                error=f"npm run {npm_script} falló en {target.name}/:\n{tail}"
-            )
+    if _log_file_path:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        individual_log = _log_file_path.parent / f"conductor_{target.name}_{ts}.log"
+        try:
+            individual_log.write_text(out, encoding="utf-8")
+            log(f"  📄 Log guardado en: {individual_log.name}")
+        except OSError as exc:
+            log(f"  ⚠ No se pudo escribir log individual: {exc}")
 
-        log(f"✅ package completado en {target.name}/")
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult(name, False, error=f"npm run {npm_script} falló en {target.name}/:\n{tail}")
 
-    return StepResult("ConductorPkg", True, output="\n".join(all_output))
+    log(f"✅ package completado en {target.name}/")
+    return StepResult(name, True, output=out)
+
+
+def build_setup() -> StepResult:
+    return _build_conductor_subproject("Setup", ROOT / "installer/conductor/setup")
+
+
+def build_workspace() -> StepResult:
+    return _build_conductor_subproject("Workspace", ROOT / "installer/conductor/workspace")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1346,7 +1385,7 @@ def main() -> None:
     # Los componentes que entran en este build muestran "actual → próximo".
     # Los que se saltean muestran solo el valor actual.
     log(f"Build numbers ({_PLATFORM_SUFFIX}):")
-    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "conductor"):
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "setup", "workspace"):
         if comp == "cortex":
             meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
             try:
@@ -1365,7 +1404,7 @@ def main() -> None:
             will_build = (
                 (_only_set_preview is None or comp in _only_set_preview)
                 and comp not in _skip_set_preview
-                and comp not in ("cortex", "conductor")
+                and comp not in ("cortex", "setup", "workspace")
             )
             if will_build:
                 log(f"  {comp:<12} {effective} → {effective + 1}{offset_str}  ← este build")
@@ -1374,7 +1413,7 @@ def main() -> None:
     log("")
 
     # Definir todos los pasos en orden.
-    # Conductor, Bootstrap y VSIX usan npm run; Cortex usa python3.
+    # Setup, Workspace, Bootstrap y VSIX usan npm run; Cortex usa python3.
     # Brain y Host usan sus propios builders.
     # Los 4 Go components usan build_go_component().
     all_steps: list[tuple[str, str, Callable[[], StepResult]]] = [
@@ -1386,10 +1425,10 @@ def main() -> None:
         ("sentinel",  "Sentinel",  lambda: build_go_component("sentinel")),
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
         ("sensor",    "Sensor",    lambda: build_go_component("sensor")),
-        # Conductor: npm run build:all en installer/conductor/
-        ("conductor",     "Conductor",    lambda: build_node("Conductor", BUILDS["conductor"], "build:all")),  # type: ignore[arg-type]
-        # ConductorPkg: electron-builder en setup/ y workspace/ → genera .dmg / .exe
-        ("conductor_pkg", "ConductorPkg", build_conductor_package),
+        # Setup: npm install + electron-builder en installer/conductor/setup/
+        ("setup",     "Setup",     build_setup),
+        # Workspace: npm install + electron-builder en installer/conductor/workspace/
+        ("workspace", "Workspace", build_workspace),
         # Cortex: python3 package.py (no bash, no npm)
         ("cortex",    "Cortex",    build_cortex),
         # Bootstrap: python3 version-bootstrap.py (no bash)

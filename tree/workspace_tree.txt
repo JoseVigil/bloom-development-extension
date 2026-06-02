@@ -1,15 +1,23 @@
 bloom-development-extension/
 └── workspace/
+    ├── .DS_Store
     ├── assets/
+    │   ├── bloom.icns
     │   └── bloom.ico
     ├── bloom-conductor-version.ps1
     ├── build_info.json
+    ├── build_number.darwin.txt
+    ├── build_number.txt
+    ├── build_number.windows.txt
     ├── core/
     │   ├── core.html
     │   ├── ipc/
     │   │   ├── health-handlers.js
     │   │   └── profiles-handlers.js
     │   └── preload_core.js
+    ├── entitlements.plist
+    ├── ipc/
+    │   └── workspace-synapse-handlers.js
     ├── main_conductor.js
     ├── node_modules/ [... dependencies]
     ├── onboarding/

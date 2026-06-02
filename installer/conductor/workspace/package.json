@@ -12,10 +12,11 @@
   "scripts": {
     "prebuild": "node ../shared/bump-version.js",
     "build": "electron-builder --win --x64",
-    "build:darwin": "electron-builder --mac --x64 && electron-builder --mac --arm64",
-    "build:darwin:x64": "electron-builder --mac --x64",
-    "build:darwin:arm": "electron-builder --mac --arm64",
+    "build:darwin": "npm run build:darwin:x64 && npm run build:darwin:arm",
+    "build:darwin:x64": "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/conductor",
+    "build:darwin:arm": "electron-builder --mac --arm64 -c.directories.output=../../native/bin/darwin_arm64/conductor",
     "dev": "electron .",
+    "dev:darwin": "electron .",
     "version:bump": "node ../shared/bump-version.js",
     "version:patch": "node ../shared/bump-version.js --patch",
     "version:minor": "node ../shared/bump-version.js --minor",
@@ -36,10 +37,13 @@
       ],
       "icon": "assets/bloom.ico",
       "requestedExecutionLevel": "asInvoker",
-      "artifactName": "bloom-conductor.exe"
-    },
-    "portable": {
-      "artifactName": "bloom-conductor.exe"
+      "artifactName": "bloom-conductor.exe",
+      "extraFiles": [
+        {
+          "from": "bloom-conductor-version.ps1",
+          "to": "bloom-conductor-version.ps1"
+        }
+      ]
     },
     "mac": {
       "target": [
@@ -58,13 +62,32 @@
       ],
       "icon": "assets/bloom.icns",
       "category": "public.app-category.utilities",
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "artifactName": "bloom-conductor-${arch}.dmg"
+      "entitlements": "entitlements.plist",
+      "entitlementsInherit": "entitlements.plist",
+      "artifactName": "bloom-conductor-${arch}.dmg",
+      "extraFiles": [
+        {
+          "from": "../shared/logger.js",
+          "to": "shared/logger.js"
+        },
+        {
+          "from": "../shared/global_paths.js",
+          "to": "shared/global_paths.js"
+        },
+        {
+          "from": "bloom-conductor-version.sh",
+          "to": "bloom-conductor-version.sh"
+        }
+      ]
     },
     "dmg": {
       "artifactName": "bloom-conductor-${arch}.dmg",
       "sign": false
+    },
+    "portable": {
+      "artifactName": "bloom-conductor.exe"
     },
     "files": [
       "main_conductor.js",
@@ -77,10 +100,6 @@
       "bloom-conductor-cli.cmd"
     ],
     "extraFiles": [
-      {
-        "from": "bloom-conductor-version.ps1",
-        "to": "bloom-conductor-version.ps1"
-      },
       {
         "from": "../shared/logger.js",
         "to": "shared/logger.js"
