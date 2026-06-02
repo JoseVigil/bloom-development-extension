@@ -1,4 +1,21 @@
 # brain/core/ionpump/ionpump_ipc.py
+#
+# IPC client de IonPump v2.0.
+#
+# CHANGELOG respecto a v4: ningún cambio funcional.
+#
+# El IPC client es genérico — serializa el comando como dict JSON y retorna
+# el ACK del servidor sin validar el tipo de comando. Los nuevos comandos
+# (DOM_NAVIGATE, DOM_WATCH, DOM_WATCH_URL, DOM_UNWATCH, DOM_SELECT) no
+# requieren cambios aquí — el cliente los pasa igualmente al SynapseIPCServer.
+#
+# El SynapseIPCServer (brain/core/synapse/synapse_ipc_server.py) es quien
+# registra los handlers para los nuevos tipos en su _action_map. Ese archivo
+# está fuera del scope de esta sesión (Phase 2 del v5).
+#
+# Este archivo se conserva sin cambios de comportamiento. El comentario
+# documenta explícitamente por qué no necesita cambios — evita regresiones
+# futuras si alguien asume que falta algo.
 
 import asyncio
 import json
@@ -8,7 +25,7 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TIMEOUT = 10.0  # seconds
+_DEFAULT_TIMEOUT = 10.0  # segundos
 _BUFFER_SIZE = 65536
 
 
@@ -18,28 +35,29 @@ class IonIPCError(Exception):
 
 class IonPumpIPCClient:
     """
-    Async TCP client that sends DOM commands to the active SynapseIPCServer
-    running inside the Brain-Host process.
+    Cliente TCP async que envía DOM commands al SynapseIPCServer activo
+    dentro del proceso Brain-Host.
 
-    Port discovery:
-        Reads  BloomNucleus/run/ipc_{launch_id}.port
-        Raises IonIPCError if that file does not exist (Brain-Host not running).
+    Descubrimiento de puerto:
+        Lee BloomNucleus/run/ipc_{launch_id}.port
+        Lanza IonIPCError si el archivo no existe (Brain-Host no está corriendo).
+
+    Nota sobre nuevos comandos (v5):
+        DOM_NAVIGATE, DOM_WATCH, DOM_WATCH_URL, DOM_UNWATCH, DOM_SELECT se
+        envían exactamente igual que los comandos existentes — como un dict JSON
+        con un campo "type". No se requieren cambios en este cliente.
     """
 
     def __init__(self, launch_id: str, run_dir: Path) -> None:
         self._launch_id = launch_id
-        self._run_dir = run_dir
-        self._port: int = 0  # resolved lazily on first use
+        self._run_dir   = run_dir
+        self._port: int = 0  # resuelto lazy en el primer uso
 
     # ------------------------------------------------------------------
     # Port resolution
     # ------------------------------------------------------------------
 
     def _resolve_port(self) -> int:
-        """
-        Read the ephemeral port from the run-dir port file.
-        Raises IonIPCError if the file does not exist.
-        """
         port_file = self._run_dir / f"ipc_{self._launch_id}.port"
         if not port_file.exists():
             raise IonIPCError(
@@ -58,14 +76,14 @@ class IonPumpIPCClient:
 
     async def send_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Send a JSON command dict to SynapseIPCServer.
+        Envía un dict de comando JSON al SynapseIPCServer.
 
-        Returns:
-            {"status": "ok"} on success
-            {"status": "error", "detail": "..."} on application-level error
+        Retorna:
+            {"status": "ok"} en éxito
+            {"status": "error", "detail": "..."} en error de aplicación
 
-        Raises:
-            IonIPCError on connection failure or timeout.
+        Lanza:
+            IonIPCError en fallo de conexión o timeout.
         """
         if self._port == 0:
             self._port = self._resolve_port()

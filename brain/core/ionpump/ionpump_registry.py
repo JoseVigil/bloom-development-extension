@@ -1,84 +1,90 @@
 # brain/core/ionpump/ionpump_registry.py
+#
+# Registry en memoria de paquetes Ion v2.0.
+#
+# CHANGELOG respecto a v4:
+#   - _RegistryEntry eliminado — reemplazado por IonSitePackage (el nuevo modelo
+#     contiene manifest + path + actions + pages + shared).
+#   - register() → register_package() que acepta IonSitePackage directamente.
+#   - get_manifest() y get_path() preservados para compatibilidad con el manager.
+#   - get_recipe() / set_recipe() eliminados (acceso es via get_package() ahora).
+#   - invalidate() → invalida eliminando el paquete (se recarga completo).
+#   - Nuevo: get_package(), update_package().
 
 from pathlib import Path
-from typing import Dict, Optional, List
-from brain.core.ionpump.ionpump_models import IonManifest, IonRecipe
+from typing import Dict, List, Optional
 
-
-class _RegistryEntry:
-    __slots__ = ("manifest", "path", "recipe")
-
-    def __init__(self, manifest: IonManifest, path: Path) -> None:
-        self.manifest: IonManifest = manifest
-        self.path: Path = path
-        self.recipe: Optional[IonRecipe] = None
+from brain.core.ionpump.ionpump_models import IonManifest, IonSitePackage
 
 
 class IonRegistry:
     """
-    In-memory registry for IonPump ions.
+    Registry en memoria para paquetes Ion v2.0.
 
-    Invariants:
-    - Every entry always has a manifest (loaded at Brain startup).
-    - An entry may not have a recipe (lazy-loaded on demand).
-    - The registry never writes to the filesystem.
+    Invariantes:
+    - Cada entrada tiene siempre un IonSitePackage (cargado al startup o hot-reload).
+    - El registry nunca escribe al filesystem.
+    - Thread-safety: el manager es responsable de serializar accesos concurrentes
+      (el registry en sí no añade locks para mantenerlo simple y testeable).
     """
 
     def __init__(self) -> None:
-        self._entries: Dict[str, _RegistryEntry] = {}
+        self._packages: Dict[str, IonSitePackage] = {}
 
     # ------------------------------------------------------------------
-    # Registration
+    # Registro
     # ------------------------------------------------------------------
 
-    def register(self, site: str, manifest: IonManifest, path: Path) -> None:
-        """Register an ion by its manifest. Recipe is loaded later."""
-        self._entries[site] = _RegistryEntry(manifest=manifest, path=path)
+    def register_package(self, site: str, package: IonSitePackage) -> None:
+        """Registra o reemplaza el paquete para un site."""
+        self._packages[site] = package
 
     # ------------------------------------------------------------------
-    # Manifest access
+    # Acceso al paquete completo
+    # ------------------------------------------------------------------
+
+    def get_package(self, site: str) -> Optional[IonSitePackage]:
+        """Retorna el IonSitePackage completo si está registrado, si no None."""
+        return self._packages.get(site)
+
+    def update_package(self, site: str, package: IonSitePackage) -> None:
+        """
+        Actualiza el paquete para un site (usado en hot-reload).
+        No-op si el site no está registrado previamente — usa register_package() en ese caso.
+        """
+        if site in self._packages:
+            self._packages[site] = package
+        else:
+            self._packages[site] = package
+
+    # ------------------------------------------------------------------
+    # Acceso a sub-componentes (compatibilidad con manager y watchdog)
     # ------------------------------------------------------------------
 
     def get_manifest(self, site: str) -> Optional[IonManifest]:
-        """Return the manifest if registered, else None."""
-        entry = self._entries.get(site)
-        return entry.manifest if entry is not None else None
+        """Retorna el manifest si el site está registrado, si no None."""
+        package = self._packages.get(site)
+        return package.manifest if package is not None else None
 
-    # ------------------------------------------------------------------
-    # Recipe access
-    # ------------------------------------------------------------------
-
-    def get_recipe(self, site: str) -> Optional[IonRecipe]:
-        """Return the recipe if already loaded, else None."""
-        entry = self._entries.get(site)
-        if entry is None:
-            return None
-        return entry.recipe
-
-    def set_recipe(self, site: str, recipe: IonRecipe) -> None:
-        """Store a loaded recipe. No-op if the site is not registered."""
-        entry = self._entries.get(site)
-        if entry is not None:
-            entry.recipe = recipe
+    def get_path(self, site: str) -> Optional[Path]:
+        """Retorna el root_path del paquete si está registrado, si no None."""
+        package = self._packages.get(site)
+        return package.root_path if package is not None else None
 
     def invalidate(self, site: str) -> None:
         """
-        Mark the recipe as not loaded (used by watchdog on hot-reload).
-        The manifest is preserved; only the recipe is evicted.
+        Elimina el paquete del registry (usado por watchdog antes de recargar).
+        No-op si el site no existe.
         """
-        entry = self._entries.get(site)
-        if entry is not None:
-            entry.recipe = None
+        self._packages.pop(site, None)
 
     # ------------------------------------------------------------------
-    # Enumeration
+    # Enumeración
     # ------------------------------------------------------------------
 
     def list_sites(self) -> List[str]:
-        """Return all registered site names."""
-        return list(self._entries.keys())
+        """Retorna todos los nombres de sites registrados."""
+        return list(self._packages.keys())
 
-    def get_path(self, site: str) -> Optional[Path]:
-        """Return the filesystem path of the ion directory, if registered."""
-        entry = self._entries.get(site)
-        return entry.path if entry is not None else None
+    def __len__(self) -> int:
+        return len(self._packages)

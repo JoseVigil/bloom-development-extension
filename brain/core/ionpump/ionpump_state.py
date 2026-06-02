@@ -1,29 +1,39 @@
 # brain/core/ionpump/ionpump_state.py
+#
+# State machine de IonPump v2.0.
+#
+# CHANGELOG respecto a v4:
+#   - IonExecutionContext: received_events (List[str]) → event_log (Set[str]).
+#     El cambio es semántico: event_log es un set porque los eventos son únicos
+#     por sesión (memoization de requires[]). El nombre alineado con la spec v5.
+#   - has_received_event() sigue funcionando igual (membership check en el set).
+#   - receive_event() ahora hace set.add() en lugar de list.append().
+#   - El resto de la state machine no cambia.
 
 import threading
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional, Set
 
 
 class IonFlowState(Enum):
-    IDLE = "idle"
+    IDLE          = "idle"
     BOOTSTRAPPING = "bootstrapping"
-    EXECUTING = "executing"
+    EXECUTING     = "executing"
     WAITING_EVENT = "waiting_event"
-    ERROR = "error"
-    COMPLETED = "completed"
+    ERROR         = "error"
+    COMPLETED     = "completed"
 
 
 class IonExecutionContext:
-    """Mutable execution context for a single (tab_id, domain) pair."""
+    """Contexto de ejecución mutable para un par (tab_id, domain)."""
 
     __slots__ = (
         "tab_id",
         "domain",
         "current_flow",
         "state",
-        "received_events",
+        "event_log",        # Set[str] — CAMBIO: era received_events: List[str]
         "context_vars",
         "created_at",
         "updated_at",
@@ -31,14 +41,14 @@ class IonExecutionContext:
 
     def __init__(self, tab_id: int, domain: str) -> None:
         now = datetime.utcnow()
-        self.tab_id: int = tab_id
-        self.domain: str = domain
-        self.current_flow: Optional[str] = None
-        self.state: IonFlowState = IonFlowState.IDLE
-        self.received_events: List[str] = []
-        self.context_vars: Dict[str, Any] = {}
-        self.created_at: datetime = now
-        self.updated_at: datetime = now
+        self.tab_id:        int               = tab_id
+        self.domain:        str               = domain
+        self.current_flow:  Optional[str]     = None
+        self.state:         IonFlowState      = IonFlowState.IDLE
+        self.event_log:     Set[str]          = set()   # memoización de eventos emitidos/recibidos
+        self.context_vars:  Dict[str, Any]    = {}
+        self.created_at:    datetime          = now
+        self.updated_at:    datetime          = now
 
     def _touch(self) -> None:
         self.updated_at = datetime.utcnow()
@@ -50,8 +60,8 @@ def _key(tab_id: int, domain: str) -> str:
 
 class IonStateManager:
     """
-    Thread-safe in-memory state store for IonPump execution contexts.
-    Each context is keyed by (tab_id, domain).
+    Almacén de estado thread-safe para contextos de ejecución IonPump.
+    Cada contexto se identifica por (tab_id, domain).
     """
 
     def __init__(self) -> None:
@@ -63,7 +73,6 @@ class IonStateManager:
     # ------------------------------------------------------------------
 
     def get_or_create(self, tab_id: int, domain: str) -> IonExecutionContext:
-        """Return the existing context or create a fresh one."""
         k = _key(tab_id, domain)
         with self._lock:
             if k not in self._contexts:
@@ -71,7 +80,6 @@ class IonStateManager:
             return self._contexts[k]
 
     def clear(self, tab_id: int, domain: str) -> None:
-        """Remove the context entirely. No-op if it does not exist."""
         k = _key(tab_id, domain)
         with self._lock:
             self._contexts.pop(k, None)
@@ -83,7 +91,6 @@ class IonStateManager:
     def transition(
         self, tab_id: int, domain: str, flow: str, state: IonFlowState
     ) -> None:
-        """Update the current flow and state for the given context."""
         ctx = self.get_or_create(tab_id, domain)
         with self._lock:
             ctx.current_flow = flow
@@ -91,35 +98,36 @@ class IonStateManager:
             ctx._touch()
 
     # ------------------------------------------------------------------
-    # Event handling
+    # Event log (Set[str] — memoización de requires[])
     # ------------------------------------------------------------------
 
     def receive_event(self, tab_id: int, domain: str, event: str) -> None:
-        """Record a received event in the context's event log."""
+        """
+        Registra un evento en el event_log del contexto.
+        Idempotente — el mismo evento registrado varias veces no duplica.
+        """
         ctx = self.get_or_create(tab_id, domain)
         with self._lock:
-            ctx.received_events.append(event)
+            ctx.event_log.add(event)
             ctx._touch()
 
     def has_received_event(self, tab_id: int, domain: str, event: str) -> bool:
-        """Return True if the event was previously received in this context."""
+        """Retorna True si el evento está en el event_log de este contexto."""
         ctx = self.get_or_create(tab_id, domain)
         with self._lock:
-            return event in ctx.received_events
+            return event in ctx.event_log
 
     # ------------------------------------------------------------------
     # Context variables
     # ------------------------------------------------------------------
 
     def set_var(self, tab_id: int, domain: str, key: str, value: Any) -> None:
-        """Set a context variable."""
         ctx = self.get_or_create(tab_id, domain)
         with self._lock:
             ctx.context_vars[key] = value
             ctx._touch()
 
     def get_var(self, tab_id: int, domain: str, key: str) -> Optional[Any]:
-        """Get a context variable. Returns None if not set."""
         ctx = self.get_or_create(tab_id, domain)
         with self._lock:
             return ctx.context_vars.get(key)
