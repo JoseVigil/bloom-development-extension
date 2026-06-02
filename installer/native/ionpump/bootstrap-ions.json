@@ -9,8 +9,12 @@
       "version": "1.0.0",
       "zip_path": "installer/native/ionpump/github.com.ion.zip",
       "download_url": "",
-      "sha256": "e6519186ab4897f77760b17c95f9f37b03a367b180bf7b4b6a2c3301016f7ecd",
+      "sha256": "a4dd0c00606d7c61705114b358c6712d79d264f5b4ac91bada8f90b34c4f40be",
       "files": [
+        {
+          "path": ".DS_Store",
+          "sha256": "d65165279105ca6773180500688df4bdc69a2c7b771752f0a46ef120b7fd8ec3"
+        },
         {
           "path": "actions/generate_pat.ion",
           "sha256": "6917800505d3f9fd5b70761a9298a015dc35f2cabcd0487544c735f927b1bc31"

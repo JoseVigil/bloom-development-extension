@@ -1165,7 +1165,7 @@ async function deployBootstrapIonSites(win) {
       const deploy = spawn(
         paths.metamorphExe,
         ['ion-pump', 'reconcile', '--manifest', manifest, '--force-swap'],
-        { stdio: ['ignore', 'pipe', 'pipe'] }
+        { stdio: ['ignore', 'pipe', 'pipe'], cwd: paths.installerDir }
       );
 
       let stderr = '';
