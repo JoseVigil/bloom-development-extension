@@ -625,17 +625,23 @@ func recalculateHealthState(result *HealthResult) {
 }
 
 // fixSvelteDev attempts to start the Svelte dev server and waits for port 5173.
-// It looks for the project root via BLOOM_DIR or falls back to the nucleus binary's
-// parent tree, then runs `npm run dev` detached so the child outlives this process.
+//
+// CORRECCIÓN (Bug 3): La versión anterior pasaba projectRoot (raíz del repo) como
+// cmd.Dir, pero el script `dev` de Vite vive en webview/app — no en la raíz.
+// npm run dev en la raíz no arranca Vite, el waitForPortOpen de 30s expiraba sin
+// que nada bindeara el puerto, y --fix retornaba FAILED sin mensaje claro.
+//
+// Ahora espejamos la lógica de service.go#startSvelteDev(): cmd.Dir = webview/app,
+// con verificación previa de vite.config.ts para un error temprano y descriptivo.
 func fixSvelteDev() error {
-	// Resolve project root: BLOOM_DIR is the canonical source
+	// Resolver la raíz del repo: BLOOM_DIR es la fuente canónica.
 	projectRoot := getBloomDir()
 	if projectRoot == "" {
-		// Fallback: locate nucleus binary and walk up to find package.json
+		// Fallback: escalar desde el ejecutable buscando webview/app/vite.config.ts
 		if exe, err := os.Executable(); err == nil {
 			dir := filepath.Dir(exe)
 			for i := 0; i < 5; i++ {
-				if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
+				if _, err := os.Stat(filepath.Join(dir, "webview", "app", "vite.config.ts")); err == nil {
 					projectRoot = dir
 					break
 				}
@@ -644,35 +650,41 @@ func fixSvelteDev() error {
 		}
 	}
 	if projectRoot == "" {
-		return fmt.Errorf("cannot locate project root (BLOOM_DIR not set and package.json not found)")
+		return fmt.Errorf("cannot locate project root (BLOOM_DIR not set and vite.config.ts not found in ancestor dirs)")
 	}
 
-	// Resolve npm binary — prefer bundled node, fall back to PATH
+	// CRÍTICO: Svelte/Vite vive en webview/app, no en la raíz del repo.
+	// Apuntar cmd.Dir a la raíz hacía que npm corriera el script equivocado
+	// (o fallara con "Missing script: dev") y 5173 nunca se bindeaba.
+	svelteDir := filepath.Join(projectRoot, "webview", "app")
+	if _, err := os.Stat(filepath.Join(svelteDir, "vite.config.ts")); err != nil {
+		return fmt.Errorf("svelte dir not found at %s — expected webview/app/vite.config.ts (BLOOM_DIR=%s)", svelteDir, projectRoot)
+	}
+
+	// Resolver npm — mismo patrón que service.go#startSvelteDev()
 	npmBin, err := exec.LookPath("npm")
 	if err != nil {
 		return fmt.Errorf("npm not found in PATH: %v", err)
 	}
 
-	// Spawn `npm run dev` detached (no context — we don't want to kill it when
-	// the health check context expires)
+	// Spawn `npm run dev` detached (sin contexto — no matar al expirar el health check)
 	cmd := exec.Command(npmBin, "run", "dev")
-	cmd.Dir = projectRoot
+	cmd.Dir = svelteDir // ← webview/app, no projectRoot
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	// SysProcAttr is set in a platform-specific file (health_windows.go / health_unix.go)
-	// to ensure the child process is detached from our process group.
+	// SysProcAttr se setea en health_windows.go / health_unix.go (setSvelteProcAttr)
 	setSvelteProcAttr(cmd)
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to spawn npm run dev in %s: %v", projectRoot, err)
+		return fmt.Errorf("failed to spawn npm run dev in %s: %v", svelteDir, err)
 	}
 
-	// Detach — we don't own this process after this point
+	// Detach — el health check no es dueño de este proceso
 	go cmd.Wait() //nolint:errcheck
 
-	// Usar "localhost" en lugar de "127.0.0.1" — Vite en Windows escucha en IPv6.
+	// Usar "localhost" — Vite en Windows puede escuchar en IPv6 (::1), no 127.0.0.1
 	if err := waitForPortOpen("localhost:5173", 30*time.Second); err != nil {
-		return fmt.Errorf("npm run dev started (PID %d) but port 5173 not ready after 30s: %v", cmd.Process.Pid, err)
+		return fmt.Errorf("npm run dev started (PID %d) in %s but port 5173 not ready after 30s: %v", cmd.Process.Pid, svelteDir, err)
 	}
 
 	return nil
@@ -1115,12 +1127,15 @@ func checkSvelteDev(ctx context.Context, s *Supervisor, validate bool) Component
 	start := time.Now()
 	// Vite en Windows escucha en IPv6 ([::1]:5173), no en IPv4 (127.0.0.1:5173).
 	// Usar "localhost" permite que el resolver del SO elija la familia correcta.
+	// NOTA: el error nativo de Go refleja la IP resuelta (127.0.0.1 o ::1), no
+	// "localhost". Normalizamos el mensaje para que sea consistente entre plataformas
+	// y no induzca a error al diagnosticar.
 	conn, err := net.DialTimeout("tcp", "localhost:5173", 2*time.Second)
 	health.LatencyMs = time.Since(start).Milliseconds()
 	if err != nil {
 		health.Healthy = false
 		health.State = "UNREACHABLE"
-		health.Error = fmt.Sprintf("Port 5173 not accessible: %v", err)
+		health.Error = "Port 5173 not accessible: dial tcp localhost:5173: connection refused"
 		return health
 	}
 	conn.Close()

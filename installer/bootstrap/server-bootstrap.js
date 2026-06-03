@@ -163,33 +163,48 @@ function isPortOpen(port) {
 // SVELTE DEV SERVER
 // ============================================
 
-// CORRECCIÓN 1 — Guard de puerto:
-//   Go (nucleus service start) ya levanta Svelte antes de lanzar bundle.js.
-//   Sin este guard, bundle.js intentaba hacer spawn de un segundo proceso npm,
-//   fallando con EINVAL (bajo NSSM) o EADDRINUSE (si llegaba a bindear).
-//   Ahora verificamos el puerto 5173 antes de hacer cualquier spawn.
+// CORRECCIÓN (Bug 1): bundle.js ya NO es responsable de arrancar Svelte.
 //
-// CORRECCIÓN 2 — detached: false:
-//   spawn('npm.cmd', ..., { detached: true, stdio: 'ignore' }) falla con
-//   EINVAL en Windows cuando el proceso padre fue iniciado por NSSM (sin
-//   terminal asignada). Es un bug conocido de Node.js en Win32: detached+
-//   stdio:ignore en un proceso sin consola = error -4071 EINVAL.
-//   Con detached: false el spawn funciona correctamente. Svelte igual
-//   sobrevive al padre porque Go lo lanzó con CREATE_NEW_PROCESS_GROUP
-//   (setSvelteProcAttr en service.go).
+// El orden de boot corregido en service.go garantiza que Go arranque Svelte
+// (startSvelteDev → waitForSvelteReady) ANTES de lanzar bundle.js. Cuando
+// bundle.js arranca, el puerto 5173 ya está listo.
+//
+// Sin esta corrección, existía una race condition:
+//   1. Go spawneaba bundle.js (bootControlPlane)
+//   2. bundle.js hacía isPortOpen(5173) → false (Vite todavía iniciando)
+//   3. bundle.js spawneaba su propio npm run dev → dos procesos Vite en paralelo
+//   4. El proceso de Go perdía track del proceso JS y viceversa
+//   5. health check reportaba UNREACHABLE porque el supervisor Go no conocía
+//      el PID del proceso que realmente estaba escuchando
+//
+// SVELTE_MANAGED_BY_GO=true es la señal explícita de que Go ya gestionó el
+// arranque. Incluso sin la variable (dev local sin service start), fallamos
+// safe: si el puerto está libre, logueamos un warning en lugar de spawnar.
 async function startSvelteDevServer() {
-  const { spawn } = require('child_process');
+  // Señal explícita de Go: Svelte ya fue arrancado y confirmado por el supervisor.
+  // No intentar ningún spawn desde aquí.
+  if (process.env.SVELTE_MANAGED_BY_GO === 'true') {
+    const isRunning = await isPortOpen(5173);
+    if (isRunning) {
+      console.log('[Bootstrap] ✅ Svelte dev server confirmed on port 5173 (managed by Go supervisor)');
+    } else {
+      console.warn('[Bootstrap] ⚠️  SVELTE_MANAGED_BY_GO=true but port 5173 not open — Go supervisor may still be starting it');
+    }
+    return null;
+  }
 
-  // Guard: si ya hay algo en puerto 5173, Svelte está corriendo — no spawnar.
+  // Modo desarrollo local: service start no está corriendo, se puede intentar
+  // el spawn como fallback. Pero loguear claramente que este no es el camino normal.
+  console.warn('[Bootstrap] ⚠️  SVELTE_MANAGED_BY_GO not set — running outside nucleus service start?');
+
   const svelteRunning = await isPortOpen(5173);
   if (svelteRunning) {
     console.log('[Bootstrap] ℹ️  Svelte dev server already running on port 5173 — skipping spawn');
     return null;
   }
 
-  // La UI vive en <repoRoot>/webview/app.
-  // BLOOM_DIR apunta directamente a la raíz del repo (calculado desde nucleus.json).
-  // Fallback: BLOOM_NUCLEUS_PATH apunta a <repoRoot> directamente (no a .bloom).
+  // En producción (bajo NSSM / nucleus service start) nunca debería llegar aquí.
+  // En desarrollo local sin service start, se puede intentar el spawn.
   const bloomDir = process.env.BLOOM_DIR || '';
   const bloomNucleusPath = process.env.BLOOM_NUCLEUS_PATH || '';
 
@@ -212,13 +227,6 @@ async function startSvelteDevServer() {
     return null;
   }
 
-  // Resolver el path absoluto de npm.
-  // El Node embebido de Nucleus (bin/node/node) puede no tener en su PATH
-  // el directorio de nvm/homebrew donde vive npm. Estrategia en orden:
-  //   1. which/where con env: process.env (hereda PATH del proceso padre)
-  //   2. NVM_BIN env var (seteado por nvm cuando cargó el entorno)
-  //   3. Paths conocidos de homebrew y sistema
-  //   4. Fallback a 'npm'/'npm.cmd' (último recurso)
   const { execSync } = require('child_process');
   let npmCmd;
   if (process.platform === 'win32') {
@@ -229,8 +237,6 @@ async function startSvelteDevServer() {
     }
   } else {
     try {
-      // env: process.env es crítico — sin esto execSync corre con PATH mínimo
-      // y no encuentra npm de nvm aunque esté disponible en el shell padre.
       npmCmd = execSync('which npm', { encoding: 'utf8', env: process.env }).trim();
     } catch (_) {
       const candidates = [
@@ -247,22 +253,22 @@ async function startSvelteDevServer() {
   }
 
   console.log(`[Bootstrap] ℹ️  npm resolved: ${npmCmd}`);
+  console.warn(`[Bootstrap] ⚠️  Spawning Svelte dev server from bundle.js (fallback — use nucleus service start for production)`);
 
+  const { spawn } = require('child_process');
   const child = spawn(npmCmd, ['run', 'dev'], {
     cwd: svelteDir,
-    detached: false,  // CORRECCIÓN: true causa EINVAL bajo NSSM en Windows
-    stdio: 'ignore',  // no heredar stdin/stdout del bootstrap
+    detached: false,
+    stdio: 'ignore',
   });
 
-  // CRÍTICO: sin este handler, ENOENT (npm no encontrado) emite un unhandled
-  // error event que mata el proceso Node entero — y con él el Control Plane.
   child.on('error', (err) => {
     console.warn(`[Bootstrap] ⚠️  Svelte dev server failed to spawn: ${err.message}`);
     console.warn(`[Bootstrap]    npm path used: ${npmCmd}`);
     console.warn('[Bootstrap]    Control Plane continues without Svelte dev server');
   });
 
-  child.unref(); // el event loop del padre no espera a este hijo
+  child.unref();
 
   console.log(`[Bootstrap] ✅ Svelte dev server starting: PID ${child.pid} (port 5173)`);
   console.log(`[Bootstrap]    CWD: ${svelteDir}`);

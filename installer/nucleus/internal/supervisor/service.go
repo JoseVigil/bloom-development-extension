@@ -1035,7 +1035,15 @@ func (s *Supervisor) updateTelemetry(proc *ManagedProcess) {
 	)
 }
 
-// Shutdown performs graceful shutdown of all managed processes
+// Shutdown performs graceful shutdown of all managed processes.
+//
+// svelte_dev es excluido intencionalmente: startSvelteDev() usa setSvelteProcAttr
+// (Setpgid:true en macOS/Linux) precisamente para que Vite sobreviva al supervisor.
+// Si Shutdown lo mata via Cmd.Process.Signal, se contradice ese diseño y el health
+// check pasa a UNREACHABLE inmediatamente después de cada service stop.
+// Vite es una herramienta de desarrollo — su ciclo de vida es independiente del
+// servicio Nucleus. El usuario lo detiene manualmente (Ctrl-C en la terminal de Vite,
+// o `pkill -f vite`) cuando termina de trabajar.
 func (s *Supervisor) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1043,6 +1051,12 @@ func (s *Supervisor) Shutdown(ctx context.Context) error {
 	var wg sync.WaitGroup
 
 	for name, proc := range s.processes {
+		// svelte_dev sobrevive al shutdown por diseño — ver startSvelteDev()
+		// y el comentario de setSvelteProcAttr. No mandar señal.
+		if name == "svelte_dev" {
+			continue
+		}
+
 		wg.Add(1)
 		go func(n string, p *ManagedProcess) {
 			defer wg.Done()
@@ -1150,6 +1164,12 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		// getBloomDir() lee installation.origin_path de nucleus.json (sube 4 niveles)
 		// o cae al env BLOOM_DIR. Si ambos fallan, bundle.js lo ignorará gracefully.
 		"BLOOM_DIR=" + getBloomDir(),
+		// SVELTE_MANAGED_BY_GO=true: señal para que bundle.js NO intente spawnar
+		// su propio proceso npm run dev. Go (service.go) ya gestiona startSvelteDev()
+		// y confirma el puerto 5173 antes de lanzar bundle.js. Sin esta flag, la
+		// guard de isPortOpen(5173) en bundle.js tiene una race window durante el
+		// arranque de Vite (~3-8s) y puede generar un segundo proceso Vite duplicado.
+		"SVELTE_MANAGED_BY_GO=true",
 	}
 
 	// Log file: logs/nucleus/control_plane/nucleus_control_plane_YYYYMMDD.log
@@ -1536,15 +1556,30 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			if brainProc.LogPath != "" {
 				sup.updateBrainTelemetry(brainProc)
 			}
-			if _, err := sup.bootControlPlane(bootCtx, simulation); err != nil {
-				c.Logger.Printf("[WARN] Control plane failed to start: %v", err)
-			}
+
+			// CORRECCIÓN (Bug 1): arrancar Svelte ANTES que bootControlPlane.
+			//
+			// El orden anterior era: bootControlPlane → startSvelteDev.
+			// bundle.js (el Control Plane) tiene su propio guard de puerto 5173 en
+			// startSvelteDevServer(). Si Go no había terminado de arrancar Svelte
+			// cuando bundle.js hacía isPortOpen(5173), bundle.js veía el puerto
+			// cerrado y lanzaba un segundo proceso npm run dev — generando una race
+			// condition donde dos procesos Vite competían por el puerto 5173.
+			//
+			// Con este orden: Svelte ya está listo (puerto 5173 confirmado) cuando
+			// bundle.js arranca. bundle.js encontrará el puerto ocupado y saltará su
+			// propio spawn. SVELTE_MANAGED_BY_GO=true es una señal adicional para
+			// que bundle.js nunca intente el spawn, incluso si el guard de puerto falla.
 			if _, err := sup.startSvelteDev(bootCtx); err != nil {
 				c.Logger.Printf("[WARN] Svelte dev server failed to start: %v", err)
 			} else {
 				if err := sup.waitForSvelteReady(30 * time.Second); err != nil {
 					c.Logger.Printf("[WARN] Svelte dev server not ready after 30s: %v", err)
 				}
+			}
+
+			if _, err := sup.bootControlPlane(bootCtx, simulation); err != nil {
+				c.Logger.Printf("[WARN] Control plane failed to start: %v", err)
 			}
 
 			// Boot completado. Reportar estado y BLOQUEAR.
