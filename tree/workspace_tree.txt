@@ -5,11 +5,13 @@ bloom-development-extension/
     │   ├── bloom.icns
     │   └── bloom.ico
     ├── bloom-conductor-version.ps1
+    ├── bloom-conductor-version.sh
     ├── build_info.json
     ├── build_number.darwin.txt
     ├── build_number.txt
     ├── build_number.windows.txt
     ├── core/
+    │   ├── .DS_Store
     │   ├── core.html
     │   ├── ipc/
     │   │   ├── health-handlers.js
@@ -21,6 +23,7 @@ bloom-development-extension/
     ├── main_conductor.js
     ├── node_modules/ [... dependencies]
     ├── onboarding/
+    │   ├── .DS_Store
     │   ├── ipc/
     │   │   └── onboarding-handlers.js
     │   ├── onboarding.html

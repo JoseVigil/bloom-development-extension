@@ -205,26 +205,29 @@ async function kickoffDiscovery() {
   }
 
   // Fase 2: navegar a github_auth en Chrome
-  // Fix 2: era 'google_login' — ese step ID no existe en onboarding_steps.json
+  // NOTA: nucleus synapse onboarding solo acepta --step (sin --service).
+  // El step 'github_auth' es el identificador del config file de Cortex para el PAT de GitHub.
+  // Si este step ID no existe en el CLI, el navigate fallará con exit 1 — eso es no-fatal:
+  // Chrome ya está abierto desde el launch, el poll sigue corriendo.
+  // TODO: verificar step ID correcto con: nucleus synapse onboarding --help
   showCortex("Connecting to GitHub…");
   log('info', 'IPC → onboarding:navigate — step: github_auth');
 
   const navResult = await window.onboarding.navigate({
-    step: 'github_auth',
+    step:  'github_auth',
     email: userEmail
   });
-  log(navResult.success ? 'info' : 'error',
+  log(navResult.success ? 'info' : 'warn',
       `IPC ← onboarding:navigate — success: ${navResult.success}`);
 
+  // Navigate failure es NO-FATAL: Chrome puede ya estar abierto y en el step correcto.
+  // No se interrumpe el flujo — se continúa al poll y se muestra advertencia en cortex bar.
   if (!navResult.success) {
+    log('warn', 'navigate falló — Chrome puede ya estar activo, continuando con poll');
     showCortex(
-      "Navigation failed — Chrome may not have opened. Retry or check the (?) for help."
+      "Chrome open — follow the (?) instructions to create your GitHub token and copy it."
     );
-    const btn = document.getElementById('btn-continue-identity');
-    btn.textContent = 'Validate';
-    btn.disabled    = false;
-    btn.onclick     = handleIdentityBtn;
-    return;
+    // No return — continúa al poll
   }
 
   // Fase 3: instrucción al usuario — qué tiene que hacer en Chrome

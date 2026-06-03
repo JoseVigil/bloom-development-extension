@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('onboarding', {
     ipcRenderer.on('onboarding:init-line', (_, data) => callback(data));
   },
 
+  // Completar un step manualmente (fallback cuando Brain no escribe completed_steps)
+  markStepComplete: (params) => ipcRenderer.invoke('onboarding:mark-step-complete', params),
+
   // Logger bridge — renderer → main → archivo de log
   log: (level, message) => ipcRenderer.invoke('onboarding:log', { level, message })
 });

@@ -81,6 +81,8 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       const profileId = nucleusData.master_profile;
       if (!profileId) throw new Error('master_profile not found');
 
+      // NOTA: nucleus synapse onboarding solo acepta --step. El flag --service no existe.
+      // El routing al provider lo determina el step ID. Ver log: "unknown flag: --service"
       const result = await execNucleus(
         ['--json', 'synapse', 'onboarding', profileId, '--step', step],
         10000
@@ -119,6 +121,30 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       const steps = {};
       for (const id of ONBOARDING_STEP_IDS) {
         steps[id] = completedSteps.includes(id);
+      }
+
+      // Detección dual del PAT de GitHub:
+      // 1. completed_steps[] contiene 'github_auth' (escrito por Brain o por mark-step-complete)
+      // 2. Brain escribe onboarding.github_token_fingerprint cuando procesa GITHUB_TOKEN_STORED
+      // Cualquiera de las dos condiciones indica que el token llegó.
+      const githubTokenStored = !!(
+        nucleusData.onboarding?.github_token_fingerprint ||
+        nucleusData.onboarding?.github_token_stored      ||
+        nucleusData.onboarding?.vault_github_stored       // nombre alternativo que usa Brain
+      );
+      if (githubTokenStored) {
+        steps['github_auth'] = true;
+        // Persistir en completed_steps para que relecturas futuras sean consistentes
+        if (!completedSteps.includes('github_auth')) {
+          completedSteps.push('github_auth');
+          nucleusData.onboarding = nucleusData.onboarding || {};
+          nucleusData.onboarding.completed_steps = completedSteps;
+          try {
+            fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
+          } catch (we) {
+            log.warn('[IPC] onboarding:poll-identity — could not backfill completed_steps:', we.message);
+          }
+        }
       }
 
       log.success('[IPC] onboarding:poll-identity — ok:', JSON.stringify(steps));
@@ -255,6 +281,35 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       return { success: true };
     } catch (err) {
       log.error('[IPC] onboarding:complete — FAILED:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ── HANDLER: Marcar un step como completado ─────────────────────────────
+  // Llamado por el renderer cuando recibe confirmación externa (ej: Brain notifica
+  // via bloom-host → extension → Conductor), o como fallback manual.
+  // Escribe en onboarding.completed_steps[] en nucleus.json.
+  ipcMain.handle('onboarding:mark-step-complete', async (event, { step }) => {
+    log.info('[IPC] onboarding:mark-step-complete — step:', step);
+    if (!step || !ONBOARDING_STEP_IDS.includes(step)) {
+      log.warn('[IPC] onboarding:mark-step-complete — unknown step:', step);
+      return { success: false, error: `Unknown step: ${step}` };
+    }
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      data.onboarding.completed_steps = data.onboarding.completed_steps || [];
+      if (!data.onboarding.completed_steps.includes(step)) {
+        data.onboarding.completed_steps.push(step);
+        data.onboarding.updated_at = new Date().toISOString();
+        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+        log.success('[IPC] onboarding:mark-step-complete — persisted:', step);
+      } else {
+        log.info('[IPC] onboarding:mark-step-complete — already present:', step);
+      }
+      return { success: true, step };
+    } catch (err) {
+      log.error('[IPC] onboarding:mark-step-complete — FAILED:', err.message);
       return { success: false, error: err.message };
     }
   });
