@@ -235,13 +235,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 	ig.Core.Logger.Info("[IGNITION] ✅ Config generado (%d bytes): %s", len(generatedContent), configPath)
 
-	// === 5.2 ESCRIBIR HARNESS CONFIG (solo perfiles --dev) ===
-	profileAlias := getStringField(profileData, "alias", "MasterWorker")
-	if err := writeHarnessConfig(profileID, launchID, profileAlias, extDir); err != nil {
-		// No fatal — el harness simplemente no tendrá config en esta sesión
-		ig.Core.Logger.Info("[WARN] Could not write harness config: %v", err)
-	}
-
 	// === 6. ACTUALIZAR NATIVE HOST MANIFEST ===
 	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
 
@@ -298,6 +291,13 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	ig.Core.Logger.Info("           - ignition_spec.json: ✅")
 	ig.Core.Logger.Info("           - %s.synapse.config.js: ✅", mode)
 	ig.Core.Logger.Info("           - native host manifest: ✅")
+
+	// === 7. GENERAR HARNESS CONFIG (si el perfil tiene assets de harness) ===
+	profileAlias := getStringField(profileData, "alias", "")
+	if err := writeHarnessConfig(profileID, launchID, profileAlias, extDir); err != nil {
+		ig.Core.Logger.Info("[WARN] No se pudo generar harness config: %v", err)
+	}
+	ig.Core.Logger.Info("           - harness.synapse.config.json: generado (o inactivo si no hay harness/)")
 
 	return configData, nil
 }

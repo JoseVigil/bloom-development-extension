@@ -336,63 +336,25 @@ async function loadConfig() {
  * "harness.synapse.config.js" debe estar en web_accessible_resources del manifest.
  */
 async function loadHarnessConfig() {
-  // El archivo es .js — generado por Sentinel en launch con self.HARNESS_CONFIG = {...}
-  // Mismo patrón que loadConfig(): importScripts primero, fetch como fallback.
+  // El archivo es .json — generado por Go (writeHarnessConfig) con JSON puro.
+  // Se carga con fetch() + JSON.parse(), que es CSP-safe (no eval, no importScripts).
   // NUNCA usar eval() ni new Function() — violan la CSP de Chrome Extensions.
-  const harnessFile = 'harness.synapse.config.js';
+  const harnessFile = 'harness.synapse.config.json';
 
-  // ── Intento 1: importScripts ──────────────────────────────────────────────
-  try {
-    importScripts(harnessFile);
-
-    if (self.HARNESS_CONFIG) {
-      config.harness = { ...self.HARNESS_CONFIG };
-      console.log('[Harness] ✓ HARNESS_CONFIG loaded via importScripts:', config.harness);
-
-      chrome.runtime.sendMessage({
-        event: 'HARNESS_CONFIG_READY',
-        harness: config.harness
-      }).catch(() => {});
-
-      return;
-    }
-  } catch (importError) {
-    // 404 o CSP — intentar fetch fallback
-    if (importError.message?.includes('Failed to fetch') || importError.message?.includes('404')) {
-      // Archivo no existe — Harness inactivo en este perfil, no es un error.
-      console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
-      return;
-    }
-    console.warn('[Harness] importScripts failed, attempting fetch fallback:', importError.message);
-  }
-
-  // ── Intento 2: fetch fallback ─────────────────────────────────────────────
+  // ── fetch ─────────────────────────────────────────────────────────────────
   try {
     const url = chrome.runtime.getURL(harnessFile);
     const resp = await fetch(url);
 
     if (!resp.ok) {
-      console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
+      console.log('[Harness] harness.synapse.config.json not found — Harness inactive');
       return;
     }
 
-    // El archivo es JS con self.HARNESS_CONFIG = {...}
-    // No se puede eval() — parsear las claves que necesitamos con regex,
-    // igual que el fetch fallback de loadConfig().
+    // El archivo es JSON puro — generado por Go con json.MarshalIndent.
     const text = await resp.text();
 
-    const harnessConfig = {};
-    const matchers = {
-      profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
-      launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
-      profileAlias: /["']?profileAlias["']?\s*:\s*["']([^"']+)["']/,
-      generatedAt:  /["']?generatedAt["']?\s*:\s*["']([^"']+)["']/
-    };
-
-    for (const [key, regex] of Object.entries(matchers)) {
-      const match = text.match(regex);
-      if (match) harnessConfig[key] = match[1];
-    }
+    const harnessConfig = JSON.parse(text);
 
     if (!harnessConfig.profileId) {
       console.warn('[Harness] Could not parse profileId from harness config — Harness inactive');
@@ -1259,6 +1221,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       timestamp: Date.now()
     });
 
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Harness config ready — abrir harness/index.html en nueva tab
+  if (event === 'HARNESS_CONFIG_READY') {
+    const harnessUrl = chrome.runtime.getURL('harness/index.html');
+    chrome.tabs.query({ url: harnessUrl }, (tabs) => {
+      if (tabs && tabs.length > 0) {
+        // Ya está abierto — traerlo al frente
+        chrome.tabs.update(tabs[0].id, { active: true });
+      } else {
+        chrome.tabs.create({ url: harnessUrl, active: false });
+      }
+    });
     sendResp({ received: true });
     return true;
   }
