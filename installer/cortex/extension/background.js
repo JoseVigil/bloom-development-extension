@@ -336,25 +336,37 @@ async function loadConfig() {
  * "harness.synapse.config.js" debe estar en web_accessible_resources del manifest.
  */
 async function loadHarnessConfig() {
-  // El archivo es .json — generado por Go (writeHarnessConfig) con JSON puro.
-  // Se carga con fetch() + JSON.parse(), que es CSP-safe (no eval, no importScripts).
-  // NUNCA usar eval() ni new Function() — violan la CSP de Chrome Extensions.
-  const harnessFile = 'harness.synapse.config.json';
+  // El archivo es .js con self.HARNESS_CONFIG = {...} — generado por Go.
+  // harness/index.html lo carga via <script src> y lee self.HARNESS_CONFIG.
+  // background.js lo carga con fetch() + regex (importScripts falla en MV3
+  // post-instalacion, pero fetch funciona correctamente).
+  // NUNCA eval() ni new Function() — violan la CSP de Chrome Extensions.
+  const harnessFile = 'harness.synapse.config.js';
 
-  // ── fetch ─────────────────────────────────────────────────────────────────
+  // ── fetch fallback ────────────────────────────────────────────────────────
   try {
     const url = chrome.runtime.getURL(harnessFile);
     const resp = await fetch(url);
 
     if (!resp.ok) {
-      console.log('[Harness] harness.synapse.config.json not found — Harness inactive');
+      console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
       return;
     }
 
-    // El archivo es JSON puro — generado por Go con json.MarshalIndent.
     const text = await resp.text();
 
-    const harnessConfig = JSON.parse(text);
+    // Parsear las claves con regex — igual que el fetch fallback de loadConfig().
+    const harnessConfig = {};
+    const matchers = {
+      profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
+      launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
+      profileAlias: /["']?profileAlias["']?\s*:\s*["']([^"']+)["']/,
+      generatedAt:  /["']?generatedAt["']?\s*:\s*["']([^"']+)["']/
+    };
+    for (const [key, regex] of Object.entries(matchers)) {
+      const match = text.match(regex);
+      if (match) harnessConfig[key] = match[1];
+    }
 
     if (!harnessConfig.profileId) {
       console.warn('[Harness] Could not parse profileId from harness config — Harness inactive');

@@ -297,7 +297,7 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	if err := writeHarnessConfig(profileID, launchID, profileAlias, extDir); err != nil {
 		ig.Core.Logger.Info("[WARN] No se pudo generar harness config: %v", err)
 	}
-	ig.Core.Logger.Info("           - harness.synapse.config.json: generado (o inactivo si no hay harness/)")
+	ig.Core.Logger.Info("           - harness.synapse.config.js: generado (o inactivo si no hay harness/)")
 
 	return configData, nil
 }
@@ -401,20 +401,21 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 	return os.WriteFile(profilesPath, updatedData, 0644)
 }
 
-// writeHarnessConfig escribe harness.synapse.config.json en extensionDir.
+// writeHarnessConfig escribe harness.synapse.config.js en extensionDir.
 //
 // Es un no-op silencioso si harness/index.html no existe en extensionDir,
 // lo que garantiza que solo actúa en perfiles creados con `sentinel seed --dev`.
 //
-// El archivo de salida es JSON puro (no JS) para evitar que el Service Worker
-// de Chrome lo evalúe con new Function() / eval(), lo que viola la CSP de
-// Chrome Extensions ("unsafe-eval" no permitido en Service Workers).
-// background.js lo carga con fetch() + JSON.parse(), que es CSP-safe.
+// El archivo de salida es JS con wrapper self.HARNESS_CONFIG = {...} porque
+// harness/index.html lo carga con un <script src="..."> tag y lee
+// self.HARNESS_CONFIG directamente — el mismo patron que discovery.synapse.config.js.
+// background.js lo carga con fetch() como fallback (el importScripts falla en
+// MV3 post-instalacion, pero el fetch funciona correctamente).
 //
 // No es fatal: un error solo emite Warning y no interrumpe el launch.
 func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) error {
-	// Detección de dev mode: la presencia del archivo harness/index.html
-	// es la señal canónica — solo existe en perfiles creados con --dev.
+	// Deteccion de dev mode: la presencia del archivo harness/index.html
+	// es la senal canonica — solo existe en perfiles creados con --dev.
 	harnessPage := filepath.Join(extensionDir, "harness", "index.html")
 	if _, err := os.Stat(harnessPage); os.IsNotExist(err) {
 		// Perfil prod — no-op normal
@@ -433,8 +434,9 @@ func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) 
 		return fmt.Errorf("error serializando harness config: %v", err)
 	}
 
-	configPath := filepath.Join(extensionDir, "harness.synapse.config.json")
-	return os.WriteFile(configPath, configJSON, 0644)
+	jsContent := fmt.Sprintf("self.HARNESS_CONFIG = %s;", string(configJSON))
+	configPath := filepath.Join(extensionDir, "harness.synapse.config.js")
+	return os.WriteFile(configPath, []byte(jsContent), 0644)
 }
 
 // ========== HELPER FUNCTIONS ==========
