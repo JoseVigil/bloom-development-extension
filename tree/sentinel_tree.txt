@@ -1,5 +1,6 @@
 bloom-development-extension/
 └── sentinel/
+    ├── .DS_Store
     ├── VERSION
     ├── cli/
     │   └── help_renderer.go
@@ -13,6 +14,7 @@ bloom-development-extension/
     ├── go.mod
     ├── go.sum
     ├── internal/
+    │   ├── .DS_Store
     │   ├── boot/
     │   │   ├── dev.go
     │   │   ├── npm.go
@@ -21,6 +23,7 @@ bloom-development-extension/
     │   ├── bridge/
     │   │   └── bridge.go
     │   ├── core/
+    │   │   ├── .DS_Store
     │   │   ├── build_info.go
     │   │   ├── config.go
     │   │   ├── core.go
@@ -43,11 +46,13 @@ bloom-development-extension/
     │   ├── health/
     │   │   └── health.go
     │   ├── ignition/
+    │   │   ├── .DS_Store
     │   │   ├── ignition.go
     │   │   ├── ignition_history.go
     │   │   ├── ignition_host_init.go
     │   │   ├── ignition_identity.go
     │   │   ├── ignition_lifecycle.go
+    │   │   ├── ignition_registry_unix.go
     │   │   ├── ignition_registry_windows.go
     │   │   ├── ignition_spec.go
     │   │   ├── launch_commands.go
@@ -59,7 +64,10 @@ bloom-development-extension/
     │   ├── process/
     │   │   └── hygiene.go
     │   ├── seed/
-    │   │   └── seed.go
+    │   │   ├── .DS_Store
+    │   │   ├── seed.go
+    │   │   ├── seed_unix.go
+    │   │   └── seed_windows.go
     │   ├── startup/
     │   │   └── startup.go
     │   ├── system/
@@ -74,13 +82,12 @@ bloom-development-extension/
     │       └── log_station.go
     ├── main.go
     ├── scripts/
+    │   ├── .DS_Store
     │   ├── build-darwin.sh
     │   ├── build-linux.sh
     │   ├── build_number.darwin.txt
     │   ├── build_number.effective.txt
     │   ├── build_number.txt
     │   ├── build_number.windows.txt
-    │   ├── extract_go_files.py
-    │   └── tree/
-    │       └── conductor_tree.txt
+    │   └── extract_go_files.py
     └── sentinel-config.json

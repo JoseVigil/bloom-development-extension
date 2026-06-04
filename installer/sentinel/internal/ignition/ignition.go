@@ -220,15 +220,30 @@ func parseBoolFlag(s string) (value bool, wasProvided bool) {
 // buildOverridesFromFlags construye el mapa de overrides a partir de los flags de CLI.
 // register y heartbeat son strings: "" significa "no pasado", "true"/"false" significa
 // que el usuario lo especificó explícitamente, incluyendo false.
+//
+// EMAIL: cuando --override-email no se pasa (email == ""), el campo se escribe
+// explícitamente como nil en el mapa para que Launch() lo serialice como null
+// en launch_flags — en lugar del default "" que causaba la excepción en Cortex
+// durante el paso github_auth (donde el email todavía no existe).
+// Cortex debe tratar email=null como estado legítimo de "email pendiente".
 func buildOverridesFromFlags(alias, role, email, extension, service string, registerStr, heartbeatStr string, step string) map[string]interface{} {
 	overrides := make(map[string]interface{})
 
 	if alias != ""     { overrides["profile_alias"] = alias }
 	if role != ""      { overrides["role"] = role }
-	if email != ""     { overrides["email"] = email }
 	if extension != "" { overrides["extension_id"] = extension }
 	if service != ""   { overrides["service"] = service }
 	if step != ""      { overrides["step"] = step }
+
+	// FIX: email usa nil como valor explícito cuando no se pasa el flag.
+	// "" (flag omitido) → nil en el mapa → Launch() escribe null en launch_flags.
+	// Cualquier string no vacío → se usa como email real.
+	// Esto sigue el mismo patrón que register/heartbeat con parseBoolFlag.
+	if email != "" {
+		overrides["email"] = email
+	} else {
+		overrides["email"] = nil
+	}
 
 	// FIX: usar parseBoolFlag para distinguir "no pasado" de "pasado como false"
 	if val, ok := parseBoolFlag(registerStr); ok {

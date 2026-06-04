@@ -1,4 +1,4 @@
-// preload_onboarding.js — Bloom Conductor
+// preload_core.js — Bloom Conductor
 // Integración Onboarding UI + Synapse Protocol v4.0
 
 'use strict';
@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('onboarding', {
   // Project
   listRepos:     (params) => ipcRenderer.invoke('onboarding:list-repos', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),
+
+  // Marcar step como completado (confirmación externa o fallback manual)
+  markStepComplete: (params) => ipcRenderer.invoke('onboarding:mark-step-complete', params),
 
   // Finalizar
   complete: (params) => ipcRenderer.invoke('onboarding:complete', params),

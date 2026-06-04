@@ -273,12 +273,20 @@ async function loadConfig() {
         }
         
         if (mode === 'discovery' && config.register === true) {
-          const emailMatch = text.match(emailMatcher.email);
-          if (emailMatch) {
-            config.email = emailMatch[1];
-            console.log(`[Synapse] ✓ Parsed email:`, config.email);
+          // FIX (v3.2): Misma excepción que validateConfig() — GitHub no tiene
+          // email en este step (se resuelve después via api.github.com/user).
+          const isGithubFlow = config.service === 'github';
+          if (!isGithubFlow) {
+            const emailMatch = text.match(emailMatcher.email);
+            if (emailMatch) {
+              config.email = emailMatch[1];
+              console.log(`[Synapse] ✓ Parsed email:`, config.email);
+            } else {
+              console.warn(`[Synapse] ✗ Could not parse email (required when register=true, service: ${config.service})`);
+            }
           } else {
-            console.warn(`[Synapse] ✗ Could not parse email (required when register=true)`);
+            config.email = '';
+            console.log(`[Synapse] ℹ️  Email skipped for github flow (clipboard-based auth)`);
           }
         }
 

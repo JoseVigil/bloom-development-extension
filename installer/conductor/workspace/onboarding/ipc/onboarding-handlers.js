@@ -25,8 +25,13 @@ const ONBOARDING_STEP_IDS = [
 function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
-  // Paso 1: github_auth es el primer step — no se pasa --override-service.
-  // El routing al step lo maneja onboarding:navigate después del launch.
+  // Paso 1: github_auth es el primer step.
+  // Se pasan --override-service y --override-step en el launch para que
+  // background.js los reciba con valores válidos desde el primer mensaje
+  // del Native Messaging host. Sin estos flags, el config llega con
+  // service:"" y step:"", y la guarda github en background.js nunca dispara.
+  // La llamada onboarding:navigate que sigue sigue siendo necesaria para
+  // señalar a discovery.js que muestre la pantalla correcta.
   ipcMain.handle('onboarding:launch-discovery', async (event, { email }) => {
     log.info('[IPC] onboarding:launch-discovery — email:', email || '(none)');
     try {
@@ -37,10 +42,10 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       const args = [
         '--json', 'synapse', 'launch', profileId,
         '--mode', 'discovery',
-        '--override-register', 'true',
+        '--override-register',  'true',
         '--override-heartbeat', 'false',
-        // '--override-service' eliminado: el primer step es github_auth,
-        // el routing lo hace onboarding --step, no la URL de Chrome.
+        '--override-service',   'github',
+        '--override-step',      'github_auth',
       ];
       if (email) args.push('--override-email', email);
 
