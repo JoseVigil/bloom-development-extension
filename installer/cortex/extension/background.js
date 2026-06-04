@@ -362,12 +362,21 @@ async function loadHarnessConfig() {
     }
 
     config.harness = harnessConfig;
-    console.log('[Harness] ✓ HARNESS_CONFIG loaded via fetch fallback:', config.harness);
+    console.log('[Harness] ✓ HARNESS_CONFIG loaded:', config.harness);
 
-    chrome.runtime.sendMessage({
-      event: 'HARNESS_CONFIG_READY',
-      harness: config.harness
-    }).catch(() => {});
+    // Abrir harness/index.html directamente — background no puede recibir
+    // sus propios sendMessage, así que la apertura de tab va aquí mismo.
+    const harnessUrl = chrome.runtime.getURL('harness/index.html');
+    chrome.tabs.query({ url: harnessUrl }, (tabs) => {
+      if (tabs && tabs.length > 0) {
+        // Ya está abierta — traerla al frente
+        chrome.tabs.update(tabs[0].id, { active: true });
+        console.log('[Harness] ✓ Tab already open — brought to front');
+      } else {
+        chrome.tabs.create({ url: harnessUrl, active: false });
+        console.log('[Harness] ✓ Tab created:', harnessUrl);
+      }
+    });
 
   } catch (err) {
     console.warn('[Harness] Could not load harness config:', err.message);
@@ -1221,21 +1230,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       timestamp: Date.now()
     });
 
-    sendResp({ received: true });
-    return true;
-  }
-
-  // Harness config ready — abrir harness/index.html en nueva tab
-  if (event === 'HARNESS_CONFIG_READY') {
-    const harnessUrl = chrome.runtime.getURL('harness/index.html');
-    chrome.tabs.query({ url: harnessUrl }, (tabs) => {
-      if (tabs && tabs.length > 0) {
-        // Ya está abierto — traerlo al frente
-        chrome.tabs.update(tabs[0].id, { active: true });
-      } else {
-        chrome.tabs.create({ url: harnessUrl, active: false });
-      }
-    });
     sendResp({ received: true });
     return true;
   }
