@@ -174,6 +174,7 @@ class ProfileLauncher:
             config_override = spec_data.get('configOverride', {})
             is_register_mode = config_override.get('register', False) is True
             is_google_service = str(config_override.get('service', '')).lower() == 'google'
+            is_github_service = str(config_override.get('service', '')).lower() == 'github'
 
             # ── DIAGNÓSTICO DE FLAGS RECIBIDOS ───────────────────────────────
             # Se loguean SIEMPRE (no solo cuando el gate es True) para poder
@@ -182,14 +183,18 @@ class ProfileLauncher:
             logger.info("🔍 GATE CHECK — configOverride recibido en spec:")
             logger.info(f"   configOverride (raw)  : {config_override!r}")
             logger.info(f"   override.register     : {config_override.get('register', '<ausente>')!r}  →  is_register_mode={is_register_mode}")
-            logger.info(f"   override.service      : {config_override.get('service',  '<ausente>')!r}  →  is_google_service={is_google_service}")
+            logger.info(f"   override.service      : {config_override.get('service',  '<ausente>')!r}  →  is_google_service={is_google_service}  is_github_service={is_github_service}")
             logger.info(f"   override.heartbeat    : {config_override.get('heartbeat', '<ausente>')!r}")
-            logger.info(f"   DECISION              : {'✅ HUMAN REGISTRATION' if (is_register_mode and is_google_service) else '➡️  SPEC-DRIVEN normal'}")
+            logger.info(f"   DECISION              : {'✅ HUMAN REGISTRATION (google)' if (is_register_mode and is_google_service) else '✅ HUMAN REGISTRATION (github)' if (is_register_mode and is_github_service) else '➡️  SPEC-DRIVEN normal'}")
             # ────────────────────────────────────────────────────────────────
 
             if is_register_mode and is_google_service:
-                logger.info("👤 MODO REGISTRO HUMANO detectado → desviando a _launch_human_registration")
+                logger.info("👤 MODO REGISTRO HUMANO detectado (google) → desviando a _launch_human_registration")
                 return self._launch_human_registration(profile, spec_data)
+
+            if is_register_mode and is_github_service:
+                logger.info("🐙 MODO REGISTRO HUMANO detectado (github) → desviando a _launch_github_registration")
+                return self._launch_github_registration(profile, spec_data)
             # ────────────────────────────────────────────────────────────────
 
             logger.info("📋 Modo SPEC-DRIVEN")
@@ -320,6 +325,109 @@ class ProfileLauncher:
                 f"Human registration launch failed: {str(e)}",
                 self.ERROR_LAUNCH_FAILED,
                 {"stage": "human_registration", "error": str(e)}
+            )
+
+    def _launch_github_registration(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Lanzamiento en MODO HUMANO para registro GitHub (PAT).
+
+        Objetivo: abrir Chrome con la extensión cargada y navegar directamente
+        a la página de creación de PATs de GitHub. La extensión detectará el
+        token copiado y lo almacenará en bloom_vault_temp vía GithubAuthFlow.
+
+        Diferencias respecto a _launch_human_registration (Google):
+        ────────────────────────────────────────────────────────────
+        • URL destino: github.com/settings/tokens/new (con scopes pre-seteados)
+        • No requiere bypass anti-bot (GitHub no bloquea por User-Agent/flags)
+        • SÍ se permite agregar --remote-debugging-port si el spec lo indica,
+          ya que GitHub no penaliza el fingerprint de Chrome como Google.
+        • Los flags de automatización livianos (no --enable-automation) son
+          aceptables y se incluyen si el spec los provee.
+
+        Raises:
+            LaunchError: Con código específico del error.
+        """
+        logger.info("🐙 Ejecutando lanzamiento MODO HUMANO (GitHub Registration)")
+
+        # Scopes requeridos por Bloom: repo + read:org (igual que GithubAuthFlow.init())
+        GITHUB_TOKEN_URL = (
+            "https://github.com/settings/tokens/new"
+            "?scopes=repo,read:org"
+            "&description=Bloom+Conductor"
+        )
+
+        try:
+            engine_config = spec.get('engine', {})
+            paths_config  = spec.get('paths', {})
+
+            exe    = engine_config.get('executable')
+            u_data = paths_config.get('user_data')
+            ext    = paths_config.get('extension')
+
+            # Validación mínima de campos requeridos
+            if not all([exe, u_data, ext]):
+                missing = []
+                if not exe:    missing.append('engine.executable')
+                if not u_data: missing.append('paths.user_data')
+                if not ext:    missing.append('paths.extension')
+                raise LaunchError(
+                    f"Spec incompleto para GitHub registration. Campos faltantes: {', '.join(missing)}",
+                    self.ERROR_SPEC_INVALID,
+                    {"missing_fields": missing}
+                )
+
+            # Resolución de rutas
+            exec_path      = self.paths.base_dir / exe    if not os.path.isabs(exe)    else Path(exe)
+            user_data_path = self.paths.base_dir / u_data if not os.path.isabs(u_data) else Path(u_data)
+            extension_path = self.paths.base_dir / ext    if not os.path.isabs(ext)    else Path(ext)
+
+            logger.debug("🔧 Rutas (GitHub Registration):")
+            logger.debug(f"   Executable: {exec_path}")
+            logger.debug(f"   User Data:  {user_data_path}")
+            logger.debug(f"   Extension:  {extension_path}")
+            logger.info (f"   Target URL: {GITHUB_TOKEN_URL}")
+
+            if not exec_path.exists():
+                raise LaunchError(
+                    f"Chrome executable not found: {exec_path}",
+                    self.ERROR_CHROME_NOT_FOUND,
+                    {"path": str(exec_path)}
+                )
+
+            if not extension_path.exists():
+                raise LaunchError(
+                    f"Extension directory not found: {extension_path}",
+                    self.ERROR_EXTENSION_NOT_FOUND,
+                    {"path": str(extension_path)}
+                )
+
+            args = [
+                str(exec_path),
+                f"--user-data-dir={user_data_path}",
+                f"--load-extension={extension_path}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-sync",
+                "--disable-session-crashed-bubble",
+                GITHUB_TOKEN_URL,
+            ]
+
+            launch_id = spec.get('launch_id')
+            log_files = {}
+
+            logger.info("✅ Args construidos para GitHub registration — entregando a handoff")
+            logger.debug(f"   Total args: {len(args)}")
+
+            return self._execute_handoff(args, profile['id'], log_files, launch_id)
+
+        except LaunchError:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error en GitHub registration launch: {e}", exc_info=True)
+            raise LaunchError(
+                f"GitHub registration launch failed: {str(e)}",
+                self.ERROR_LAUNCH_FAILED,
+                {"stage": "github_registration", "error": str(e)}
             )
 
     def _launch_spec_driven(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:

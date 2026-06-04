@@ -300,24 +300,35 @@ func (c *Client) GetProfileStatus(ctx context.Context, profileID string) (*types
 	return &status, nil
 }
 
-// ExecuteOnboardingWorkflow ejecuta el workflow de navegación de onboarding
-// y bloquea hasta obtener el ACK de routing del Brain.
+// ExecuteOnboardingWorkflow despacha el OnboardingWorkflow a Temporal y retorna
+// inmediatamente con status="routed" — sin bloquear hasta que la activity complete.
 //
+// DISEÑO: El Conductor impone un timeout externo de 10s al proceso CLI. La activity
+// sentinel.SendOnboardingNavigate tiene StartToCloseTimeout=30s. we.Get() bloqueaba
+// hasta 30s → el Conductor mataba el proceso → "nucleus timeout after 10000ms".
+//
+// La solución es fire-and-forget: ExecuteWorkflow registra el workflow en Temporal
+// (operación rápida, < 500ms) y retorna su handle. Temporal persiste y ejecuta el
+// workflow de forma independiente al ciclo de vida del proceso CLI. El CLI termina
+// limpiamente con "routed"; el workflow completa por su cuenta en background.
+//
+// Flujo post-retorno:
+//   OnboardingWorkflow (Temporal) → sentinel.SendOnboardingNavigate activity
+//     → SentinelClient TCP → Brain → bloom-host → background.js → discovery.js
+//
+// El requestID sigue el formato BTIPS: onb_nav_{timestamp_unix}_{prefix_3chars}
 // El workflowID sigue la convención: onboarding_{profile_id}_{timestamp_unix_nano}
-// El requestID sigue el formato BTIPS: onb_nav_{timestamp_unix}_{prefix}
 func (c *Client) ExecuteOnboardingWorkflow(
 	ctx context.Context,
 	logger *core.Logger,
 	profileID string,
 	step string,
 ) (*OnboardingResult, error) {
-	// Generar requestID único con formato especificado en BTIPS v4.0
 	prefix := profileID
 	if len(prefix) > 3 {
 		prefix = prefix[:3]
 	}
 	requestID := fmt.Sprintf("onb_nav_%d_%s", time.Now().Unix(), prefix)
-
 	workflowID := fmt.Sprintf("onboarding_%s_%d", profileID, time.Now().UnixNano())
 
 	logger.Info("Executing onboarding workflow: %s (step: %s, request_id: %s)", workflowID, step, requestID)
@@ -333,27 +344,20 @@ func (c *Client) ExecuteOnboardingWorkflow(
 		RequestID: requestID,
 	}
 
-	we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, "OnboardingWorkflow", input)
+	// ExecuteWorkflow registra el workflow en Temporal (< 500ms) sin bloquearse.
+	// we.Get() fue eliminado: el Conductor recibe la respuesta JSON antes de su
+	// timeout de 10s y el workflow continúa en background, gestionado por Temporal.
+	_, err := c.client.ExecuteWorkflow(ctx, workflowOptions, "OnboardingWorkflow", input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start onboarding workflow: %w", err)
-	}
-
-	// Bloquear hasta resultado
-	var wfResult workflows.OnboardingNavigateResult
-	if err := we.Get(ctx, &wfResult); err != nil {
-		return nil, fmt.Errorf("onboarding workflow failed: %w", err)
-	}
-
-	if !wfResult.Success {
-		return nil, fmt.Errorf("onboarding routing failed: %s", wfResult.Error)
+		return nil, fmt.Errorf("failed to dispatch onboarding workflow: %w", err)
 	}
 
 	return &OnboardingResult{
 		Success:   true,
-		ProfileID: wfResult.ProfileID,
-		Step:      wfResult.Step,
-		RequestID: wfResult.RequestID,
-		Status:    wfResult.Status,
+		ProfileID: profileID,
+		Step:      step,
+		RequestID: requestID,
+		Status:    "routed",
 		Timestamp: time.Now().Unix(),
 	}, nil
 }

@@ -1281,7 +1281,7 @@ const Simulator = {
 
     if (channel === 'runtime') {
       // Send via chrome.runtime.sendMessage to background
-      const extensionId = window.HARNESS_CONFIG?.extensionId;
+      const extensionId = ConfigReader.harnessConfig?.extensionId;
 
       if (typeof chrome === 'undefined' || !chrome.runtime) {
         Logger.log('ERR', `chrome.runtime not available`);
@@ -1391,15 +1391,27 @@ const Logger = {
 
 // ============================================================================
 // ConfigReader
-// Reads HARNESS_CONFIG and SYNAPSE_CONFIG injected by Sentinel.
+// Lee HARNESS_CONFIG y SYNAPSE_CONFIG desde los globals inyectados por los
+// script tags al final del body (harness.synapse.config.js y
+// discovery.synapse.config.js). Mismo patrón que discovery/index.html.
+// También escucha HARNESS_CONFIG_READY de background.js como guard de race condition.
 // ============================================================================
 const ConfigReader = {
   harnessConfig: null,
   synapseConfig: null,
 
-  read() {
-    this.harnessConfig = window.HARNESS_CONFIG || null;
-    this.synapseConfig = window.SYNAPSE_CONFIG || null;
+  // Lee HARNESS_CONFIG desde self — inyectado por harness.synapse.config.js vía script tag.
+  // Mismo patrón que discovery.js lee self.SYNAPSE_CONFIG.
+  // No fetch, no eval, no CSP violations.
+  async read() {
+    this.harnessConfig = (typeof self !== 'undefined' && self.HARNESS_CONFIG)
+      ? { ...self.HARNESS_CONFIG }
+      : null;
+
+    this.synapseConfig = (typeof self !== 'undefined' && self.SYNAPSE_CONFIG)
+      ? { ...self.SYNAPSE_CONFIG }
+      : (window.SYNAPSE_CONFIG || null);
+
     return { harness: this.harnessConfig, synapse: this.synapseConfig };
   },
 
@@ -1466,12 +1478,24 @@ const Harness = {
   _activeTab: 'config',
   _rawConfigVisible: false,
 
-  init() {
+  async init() {
     Logger.log('INFO', 'Harness booting…');
 
-    // 1. Read config (injected by Sentinel)
-    ConfigReader.read();
+    // 1. Read config — lee self.HARNESS_CONFIG y self.SYNAPSE_CONFIG inyectados por script tags.
+    await ConfigReader.read();
     ConfigReader.render();
+
+    // 1b. Listen for late HARNESS_CONFIG_READY from background.js (race condition guard:
+    //     background may load the config after this page is already open).
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (msg.event === 'HARNESS_CONFIG_READY' && msg.harness) {
+          ConfigReader.harnessConfig = msg.harness;
+          ConfigReader.render();
+          Logger.log('INFO', `HARNESS_CONFIG_READY received — profile: ${msg.harness.profileId}`);
+        }
+      });
+    }
 
     // 2. Discover and render protocols
     ProtocolReader.discover();
@@ -1560,6 +1584,13 @@ document.addEventListener('DOMContentLoaded', () => {
   Harness.init();
 });
 </script>
+
+  <!-- Config files inyectados como scripts — mismo patrón que discovery/index.html -->
+  <!-- harness.synapse.config.js  → define self.HARNESS_CONFIG  -->
+  <!-- discovery.synapse.config.js → define self.SYNAPSE_CONFIG  -->
+  <script src="../harness.synapse.config.js"></script>
+  <script src="../discovery.synapse.config.js"></script>
+  <script src="ionpump_protocol.js"></script>
 
 </body>
 </html>

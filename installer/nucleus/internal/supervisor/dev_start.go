@@ -29,6 +29,7 @@ func createDevStartCommand(c *core.Core) *cobra.Command {
 	var simulation bool
 	var skipVault bool
 	var skipControlPlane bool
+	var enableHarnessOnboarding bool
 	var outputJSON bool
 
 	cmd := &cobra.Command{
@@ -52,7 +53,8 @@ deterministic startup order.`,
 
 		Example: `  nucleus dev-start
   nucleus dev-start --simulation
-  nucleus dev-start --skip-vault`,
+  nucleus dev-start --skip-vault
+  nucleus dev-start --enable-harness-onboarding`,
 
 		Run: func(cmd *cobra.Command, args []string) {
 			// Inherit global --json flag (same pattern as all other nucleus commands)
@@ -60,10 +62,16 @@ deterministic startup order.`,
 				outputJSON = true
 			}
 
-			// Verify authorization (dev-start requires Master role)
-			if err := governance.RequireMaster(c); err != nil {
-				c.Logger.Printf("[ERROR] ⛔ dev-start requires Master role: %v", err)
-				return
+			// Verify authorization (dev-start requires Master role).
+			// EXCEPCIÓN: --enable-harness-onboarding bypassa el Master check para que
+			// Harness sea usable antes del registro de GitHub (fase de onboarding).
+			if !enableHarnessOnboarding {
+				if err := governance.RequireMaster(c); err != nil {
+					c.Logger.Printf("[ERROR] ⛔ dev-start requires Master role: %v", err)
+					return
+				}
+			} else {
+				c.Logger.Printf("[INFO] 🛠  --enable-harness-onboarding: skipping Master role check")
 			}
 
 			// Create supervisor instance
@@ -79,7 +87,7 @@ deterministic startup order.`,
 
 			// Execute boot sequence
 			ctx := context.Background()
-			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane, logW)
+			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane, enableHarnessOnboarding, logW)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Boot sequence failed: %v", err)
 
@@ -118,6 +126,7 @@ deterministic startup order.`,
 	cmd.Flags().BoolVar(&simulation, "simulation", false, "Run in simulation mode (use test ownership.json)")
 	cmd.Flags().BoolVar(&skipVault, "skip-vault", false, "Skip vault verification (development only)")
 	cmd.Flags().BoolVar(&skipControlPlane, "skip-control-plane", false, "Skip Control Plane startup (pre-onboarding mode)")
+	cmd.Flags().BoolVar(&enableHarnessOnboarding, "enable-harness-onboarding", false, "Enable Harness in onboarding mode (skips Master role check)")
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")
 
 	return cmd
@@ -140,7 +149,7 @@ type BootSequenceResult struct {
 // El parámetro logW recibe os.Stderr cuando el caller está en modo --json,
 // o os.Stdout en modo interactivo. Esto garantiza que los logs de progreso
 // nunca contaminen el JSON que lee Electron u otros callers.
-func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane bool, logW io.Writer) (*BootSequenceResult, error) {
+func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane, enableHarnessOnboarding bool, logW io.Writer) (*BootSequenceResult, error) {
 	log := func(format string, args ...interface{}) {
 		fmt.Fprintf(logW, format+"\n", args...)
 	}
@@ -150,6 +159,19 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	result := &BootSequenceResult{
 		Success:   true,
 		Timestamp: time.Now().Unix(),
+	}
+
+	// ========================================================================
+	// Phase 0: Harness (siempre — antes de governance, independiente del
+	// estado de onboarding). En modo onboarding es la capa de debug principal.
+	// Non-fatal: un fallo de Harness no aborta el boot.
+	// ========================================================================
+	log("[INFO] Starting Harness (debug/observability layer)...")
+	harnessResult := s.bootHarness(ctx, simulation)
+	if !harnessResult.Healthy {
+		log("[WARN] ⚠️  Harness failed to start (mode=%s): %s", harnessResult.Mode, harnessResult.Error)
+	} else {
+		log("[INFO] ✓ Harness started (mode=%s)", harnessResult.Mode)
 	}
 
 	// ========================================================================

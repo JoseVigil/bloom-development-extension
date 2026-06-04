@@ -231,6 +231,7 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 		{"governance", func(ctx context.Context) ComponentHealth { return checkGovernance(ctx, s, appDataDir, validate) }},
 		{"brain_service", func(ctx context.Context) ComponentHealth { return checkBrainService(ctx, s, validate) }},
 		{"bloom_api", func(ctx context.Context) ComponentHealth { return checkBloomAPI(ctx, s, validate) }},
+		{"harness", func(ctx context.Context) ComponentHealth { return checkHarness(ctx, s, appDataDir, validate) }},
 		{"svelte_dev", func(ctx context.Context) ComponentHealth { return checkSvelteDev(ctx, s, validate) }},
 		{"worker_manager", func(ctx context.Context) ComponentHealth { return checkWorkerManager(ctx, s, appDataDir, validate) }},
 	}
@@ -276,7 +277,8 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 
 evaluate:
 	criticalComponents := []string{"temporal", "worker", "vault", "governance"}
-	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
+	// harness es non-critical: disponible durante onboarding, no bloquea el boot.
+	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "harness", "svelte_dev", "worker_manager"}
 
 	criticalFailures, degradedCount := 0, 0
 
@@ -1020,28 +1022,29 @@ func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, vali
 		return health
 	}
 
-	bloomDir := getBloomDir()
-	if bloomDir == "" {
+	// POST-ONBOARDING: resolver la ruta canónica.
+	//   <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
+	// Cae al path legado (getBloomDir()/.ownership.json) si el org slug está ausente.
+	ownershipPath := getOwnershipPath(false, true)
+	if ownershipPath == "" {
 		health.Healthy = true
 		health.State = "SKIPPED"
-		health.Error = "BLOOM_DIR not resolvable (onboarding mode)"
+		health.Error = "cannot resolve .ownership.json path (BLOOM_DIR unset, org slug absent)"
 		return health
 	}
-	// Mismo guard que bootGovernance: path inválido en Windows = onboarding
-	if strings.ContainsAny(bloomDir, "<>|?*") {
+	if strings.ContainsAny(ownershipPath, "<>|?*") {
 		health.Healthy = true
 		health.State = "SKIPPED"
-		health.Error = "BLOOM_DIR path invalid (onboarding mode)"
+		health.Error = "ownership path contains invalid characters"
 		return health
 	}
-	ownershipPath := filepath.Join(bloomDir, ".ownership.json")
 	if _, err := os.Stat(ownershipPath); err != nil {
 		if os.IsNotExist(err) ||
 			strings.Contains(err.Error(), "syntax is incorrect") ||
 			strings.Contains(err.Error(), "invalid") {
 			health.Healthy = true
-			health.State = "SKIPPED"
-			health.Error = ".ownership.json not found (onboarding mode)"
+			health.State = "DEGRADED"
+			health.Error = fmt.Sprintf(".ownership.json not found at expected path: %s", ownershipPath)
 			return health
 		}
 		health.Healthy = false
@@ -1072,6 +1075,54 @@ func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, vali
 			}
 		}
 	}
+	return health
+}
+
+// checkHarness verifica el subsistema de debug/observabilidad Harness.
+//
+// Pre-onboarding: Harness corre en modo STUB. Siempre Healthy=true.
+//   bootHarness() es non-fatal y no tiene condición de fallo en stub mode —
+//   si nucleus service está corriendo, Harness está en STUB por diseño.
+//
+//   DISEÑO: NO se usa la existencia del directorio de log como proxy de
+//   "bootHarness corrió". El directorio lo crea registerHarnessTelemetry()
+//   dentro del proceso de larga vida (nucleus service), pero checkHarness
+//   corre en un proceso efímero nuevo que no comparte ese estado. Usar el
+//   directorio como proxy producía STUB_NOT_STARTED falsos en cada ciclo
+//   del system_health hook (cada minuto), manteniendo health_state en
+//   DEGRADED de forma permanente sin causa real.
+//
+// Post-onboarding: verifica que .ownership.json existe en la ruta canónica.
+//
+// Nota sobre dev_mode: no es un campo del ignition_spec.json ni del health
+// check. La detección de perfil dev usa la presencia de harness/index.html
+// en el extensionDir como señal canónica (ver writeHarnessConfig en
+// ignition_identity.go). No se requiere ningún flag adicional en el spec.
+func checkHarness(ctx context.Context, s *Supervisor, appDataDir string, validate bool) ComponentHealth {
+	health := ComponentHealth{}
+
+	onboardingDone := loadOnboardingCompleted(appDataDir)
+
+	if !onboardingDone {
+		// Pre-onboarding: Harness corre siempre en STUB mode.
+		// bootHarness() garantiza esto — es non-fatal e incondicional en el boot.
+		// No hay condición de fallo aquí: si nucleus service está vivo, Harness está en STUB.
+		health.Healthy = true
+		health.State = "STUB"
+		return health
+	}
+
+	// Post-onboarding: verificar que .ownership.json existe en la ruta canónica.
+	ownershipPath := getOwnershipPath(false, true)
+	if ownershipPath == "" || !fileExists(ownershipPath) {
+		health.Healthy = true // non-critical — migración puede estar en progreso
+		health.State = "DEGRADED"
+		health.Error = "Harness: .ownership.json not found at expected governance path"
+		return health
+	}
+
+	health.Healthy = true
+	health.State = "GOVERNANCE"
 	return health
 }
 

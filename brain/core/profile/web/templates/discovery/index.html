@@ -154,6 +154,75 @@
     </div>
 
     <!-- ═══════════════════════════════════════════
+         GITHUB AUTH SCREENS
+    ═══════════════════════════════════════════ -->
+
+    <!-- Step 1: Instrucciones + botón de apertura -->
+    <div id="screen-github-login" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 25%"></div></div>
+      <div class="step-indicator">Step 1 of 4</div>
+      <div class="status-icon">🐙</div>
+      <h1>Connect GitHub</h1>
+      <p>Generate a Personal Access Token to link your GitHub account. The token is detected automatically when copied.</p>
+
+      <div class="info-box">
+        <h3>Instructions</h3>
+        <ol>
+          <li>Click <strong style="color: var(--color-accent); text-transform: none; font-size: inherit; letter-spacing: 0;">Open GitHub</strong> — the token page opens with scopes pre-selected</li>
+          <li>Click <strong style="color: var(--color-accent); text-transform: none; font-size: inherit; letter-spacing: 0;">Generate token</strong> and copy it</li>
+          <li>Return here — detection is automatic</li>
+        </ol>
+      </div>
+
+      <div class="key-format-hint">
+        <strong>Expected format</strong> &nbsp; <code>ghp_...</code>
+      </div>
+
+      <div id="github-waiting-message" style="display: none; font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); letter-spacing: 0.10em; text-align: center; margin: var(--space-sm) 0;">
+        Waiting for token — copy it from GitHub...
+      </div>
+
+      <button class="btn" id="btn-open-github-tokens">Open GitHub</button>
+    </div>
+
+    <!-- Step 2: Recibo de confirmación del token detectado -->
+    <div id="screen-github-confirm" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 60%"></div></div>
+      <div class="step-indicator">Step 2 of 4</div>
+      <div class="status-icon">🔍</div>
+      <h1>Token Detected</h1>
+      <p>Review the token before it is stored. The raw value is never transmitted outside this device.</p>
+
+      <div class="info-box">
+        <p><strong>Preview</strong> &nbsp; <span id="github-token-preview">—</span></p>
+        <p><strong>Fingerprint</strong> &nbsp; <span id="github-token-fingerprint">—</span></p>
+        <p><strong>Storage</strong> &nbsp; <span id="github-storage-location">—</span></p>
+        <p><strong>Encryption</strong> &nbsp; <span id="github-os-encryption">—</span></p>
+        <p><strong>Bloom sees</strong> &nbsp; <span id="github-bloom-sees">—</span></p>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn" id="btn-confirm-github-token">Confirm &amp; Store</button>
+        <button class="btn-secondary" id="btn-reject-github-token">Use different token</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Confirmación de token guardado -->
+    <div id="screen-github-stored" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+      <div class="step-indicator">Step 4 of 4</div>
+      <div class="success-checkmark">✓</div>
+      <h1>GitHub Connected</h1>
+      <p>Your token is stored and encrypted. Profile registration will continue automatically.</p>
+
+      <div class="info-box">
+        <p><strong>Account</strong> &nbsp; <span id="github-stored-user">—</span></p>
+        <p><strong>Token</strong> &nbsp; <span id="github-stored-preview">—</span></p>
+        <p><strong>Status</strong> &nbsp; Persistent</p>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
          ONBOARDING SCREENS
     ═══════════════════════════════════════════ -->
 

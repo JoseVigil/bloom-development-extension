@@ -44,7 +44,14 @@ function validateConfig(mode) {
   
   let requiredDiscovery = ['register'];
   if (config.register === true) {
-    requiredDiscovery.push('email');
+    // FIX (v3.1): Email no está disponible en el flujo de GitHub al momento
+    // del boot — GithubAuthFlow todavía no tiene email del usuario.
+    // Solo requerir email cuando el service NO es 'github'.
+    // Para todos los demás providers (google, gemini) sigue siendo obligatorio.
+    const isGithubFlow = config.service === 'github';
+    if (!isGithubFlow) {
+      requiredDiscovery.push('email');
+    }
   }
   
   const requiredLanding = ['total_launches', 'uptime', 'intents_done', 'last_synch'];
@@ -311,69 +318,88 @@ async function loadConfig() {
 /**
  * loadHarnessConfig()
  *
- * Intenta cargar harness.synapse.config.js via fetch.
+ * Carga harness.synapse.config.js — generado por Sentinel en launch con
+ * self.HARNESS_CONFIG = { profileId, launchId, profileAlias, generatedAt }.
  * Si el archivo no existe (perfil sin Harness) falla silenciosamente.
- * Si existe, expone self.HARNESS_CONFIG y lo almacena en config.harness
- * para que el Harness pueda leerlo.
+ * Si existe, almacena el config en config.harness y emite HARNESS_CONFIG_READY.
  *
- * NOTA: importScripts no se usa aquí porque en Service Workers post-instalación
- * falla con el mismo error que el config principal. fetch es el camino seguro.
+ * Mismo patrón que loadConfig(): importScripts primero, fetch+regex como fallback.
+ * NUNCA usar eval() ni new Function() — violan la CSP de Chrome Extensions.
+ * "harness.synapse.config.js" debe estar en web_accessible_resources del manifest.
  */
 async function loadHarnessConfig() {
+  // El archivo es .js — generado por Sentinel en launch con self.HARNESS_CONFIG = {...}
+  // Mismo patrón que loadConfig(): importScripts primero, fetch como fallback.
+  // NUNCA usar eval() ni new Function() — violan la CSP de Chrome Extensions.
   const harnessFile = 'harness.synapse.config.js';
 
+  // ── Intento 1: importScripts ──────────────────────────────────────────────
+  try {
+    importScripts(harnessFile);
+
+    if (self.HARNESS_CONFIG) {
+      config.harness = { ...self.HARNESS_CONFIG };
+      console.log('[Harness] ✓ HARNESS_CONFIG loaded via importScripts:', config.harness);
+
+      chrome.runtime.sendMessage({
+        event: 'HARNESS_CONFIG_READY',
+        harness: config.harness
+      }).catch(() => {});
+
+      return;
+    }
+  } catch (importError) {
+    // 404 o CSP — intentar fetch fallback
+    if (importError.message?.includes('Failed to fetch') || importError.message?.includes('404')) {
+      // Archivo no existe — Harness inactivo en este perfil, no es un error.
+      console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
+      return;
+    }
+    console.warn('[Harness] importScripts failed, attempting fetch fallback:', importError.message);
+  }
+
+  // ── Intento 2: fetch fallback ─────────────────────────────────────────────
   try {
     const url = chrome.runtime.getURL(harnessFile);
     const resp = await fetch(url);
 
     if (!resp.ok) {
-      // 404 esperado en perfiles sin harness/index.html — no es un error.
       console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
       return;
     }
 
+    // El archivo es JS con self.HARNESS_CONFIG = {...}
+    // No se puede eval() — parsear las claves que necesitamos con regex,
+    // igual que el fetch fallback de loadConfig().
     const text = await resp.text();
-    console.log('[Harness] ✓ harness.synapse.config.js found — activating Harness');
 
-    // Evaluar el script para que registre self.HARNESS_CONFIG
-    try {
-      // eslint-disable-next-line no-new-func
-      new Function(text)();
-    } catch (evalErr) {
-      console.warn('[Harness] Could not eval harness config, attempting regex parse:', evalErr.message);
+    const harnessConfig = {};
+    const matchers = {
+      profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
+      launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
+      profileAlias: /["']?profileAlias["']?\s*:\s*["']([^"']+)["']/,
+      generatedAt:  /["']?generatedAt["']?\s*:\s*["']([^"']+)["']/
+    };
+
+    for (const [key, regex] of Object.entries(matchers)) {
+      const match = text.match(regex);
+      if (match) harnessConfig[key] = match[1];
     }
 
-    // Si eval funcionó, self.HARNESS_CONFIG está disponible.
-    // Si no, hacer parse manual de los campos críticos.
-    if (self.HARNESS_CONFIG) {
-      config.harness = { ...self.HARNESS_CONFIG };
-      console.log('[Harness] ✓ HARNESS_CONFIG loaded via self:', config.harness);
-    } else {
-      // Fallback: regex parse de profileId y launchId para el Harness Feed
-      const harnessConfig = {};
-      const harnessMatchers = {
-        profileId: /"profileId"\s*:\s*"([^"]+)"/,
-        launchId:  /"launchId"\s*:\s*"([^"]+)"/,
-        bridge_name: /"bridge_name"\s*:\s*"([^"]+)"/
-      };
-      for (const [key, regex] of Object.entries(harnessMatchers)) {
-        const m = text.match(regex);
-        if (m) harnessConfig[key] = m[1];
-      }
-      config.harness = harnessConfig;
-      console.log('[Harness] ✓ HARNESS_CONFIG loaded via regex fallback:', config.harness);
+    if (!harnessConfig.profileId) {
+      console.warn('[Harness] Could not parse profileId from harness config — Harness inactive');
+      return;
     }
 
-    // Notificar a cualquier página del Harness que ya esté abierta
+    config.harness = harnessConfig;
+    console.log('[Harness] ✓ HARNESS_CONFIG loaded via fetch fallback:', config.harness);
+
     chrome.runtime.sendMessage({
       event: 'HARNESS_CONFIG_READY',
       harness: config.harness
-    }).catch(() => {
-      // Silently fail — el Harness puede no estar abierto aún
-    });
+    }).catch(() => {});
 
   } catch (err) {
-    // Red error distinto de 404 — loguear pero no interrumpir el boot
     console.warn('[Harness] Could not load harness config:', err.message);
   }
 }
@@ -1373,6 +1399,15 @@ const API_KEY_PATTERNS = {
     regex: /^xai-[A-Za-z0-9_-]{32,}$/,
     name: 'Grok',
     console_url: 'https://console.x.ai/keys'
+  },
+  // FIX (v3.1): GitHub Personal Access Tokens — formato ghp_ + 36 chars mínimo.
+  // Sin esta entrada el clipboard monitor nunca detectaba tokens GitHub
+  // aunque el monitor estuviera corriendo; el regex de los otros providers
+  // no matcheaba ghp_ y detectAPIKeyProvider() siempre devolvía null.
+  github: {
+    regex: /^ghp_[A-Za-z0-9]{36,}$/,
+    name: 'GitHub',
+    console_url: 'https://github.com/settings/tokens'
   }
 };
 
@@ -1451,13 +1486,34 @@ function startClipboardMonitoring() {
         clipboardMonitor.detectedKeys.add(keyHash);
         console.log('[Clipboard] ✓ API Key detected:', detected.name);
 
-        // Send to host via Native Messaging
-        sendToHost({
-          event: 'API_KEY_DETECTED',
-          provider: detected.provider,
-          key: detected.key,
-          timestamp: Date.now()
-        });
+        // FIX (v3.1): GitHub PATs usan un evento dedicado (GITHUB_PAT_DETECTED)
+        // que el handler de background.js en línea ~1078 forwardea al host con
+        // el campo 'token' (no 'key'). Los demás providers siguen usando
+        // API_KEY_DETECTED con el campo 'key'.
+        if (detected.provider === 'github') {
+          sendToHost({
+            event:      'GITHUB_PAT_DETECTED',
+            token:      detected.key,
+            profile_id: config?.profileId,
+            launch_id:  config?.launchId,
+            timestamp:  Date.now()
+          });
+
+          // Notificar también a discovery.js para que actualice su UI
+          chrome.runtime.sendMessage({
+            event:  'GITHUB_PAT_DETECTED',
+            token:  detected.key,
+            timestamp: Date.now()
+          }).catch(() => {});
+        } else {
+          // Send to host via Native Messaging
+          sendToHost({
+            event:     'API_KEY_DETECTED',
+            provider:  detected.provider,
+            key:       detected.key,
+            timestamp: Date.now()
+          });
+        }
 
         // Show notification to user
         chrome.notifications.create({

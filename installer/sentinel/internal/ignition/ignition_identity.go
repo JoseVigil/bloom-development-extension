@@ -401,10 +401,15 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 	return os.WriteFile(profilesPath, updatedData, 0644)
 }
 
-// writeHarnessConfig escribe harness.synapse.config.js en extensionDir.
+// writeHarnessConfig escribe harness.synapse.config.json en extensionDir.
 //
 // Es un no-op silencioso si harness/index.html no existe en extensionDir,
 // lo que garantiza que solo actúa en perfiles creados con `sentinel seed --dev`.
+//
+// El archivo de salida es JSON puro (no JS) para evitar que el Service Worker
+// de Chrome lo evalúe con new Function() / eval(), lo que viola la CSP de
+// Chrome Extensions ("unsafe-eval" no permitido en Service Workers).
+// background.js lo carga con fetch() + JSON.parse(), que es CSP-safe.
 //
 // No es fatal: un error solo emite Warning y no interrumpe el launch.
 func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) error {
@@ -416,23 +421,20 @@ func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) 
 		return nil
 	}
 
-	config := fmt.Sprintf(
-		`// harness.synapse.config.js — generado por Sentinel en launch
-// No editar manualmente — se sobreescribe en cada launch
-self.HARNESS_CONFIG = {
-  profileId:    %q,
-  launchId:     %q,
-  profileAlias: %q,
-  generatedAt:  %q
-};`,
-		profileID,
-		launchID,
-		profileAlias,
-		time.Now().UTC().Format(time.RFC3339),
-	)
+	harnessData := map[string]string{
+		"profileId":    profileID,
+		"launchId":     launchID,
+		"profileAlias": profileAlias,
+		"generatedAt":  time.Now().UTC().Format(time.RFC3339),
+	}
 
-	configPath := filepath.Join(extensionDir, "harness.synapse.config.js")
-	return os.WriteFile(configPath, []byte(config), 0644)
+	configJSON, err := json.MarshalIndent(harnessData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("error serializando harness config: %v", err)
+	}
+
+	configPath := filepath.Join(extensionDir, "harness.synapse.config.json")
+	return os.WriteFile(configPath, configJSON, 0644)
 }
 
 // ========== HELPER FUNCTIONS ==========

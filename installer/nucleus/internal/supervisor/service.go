@@ -1108,43 +1108,53 @@ func (s *Supervisor) verifyWorkerRunning(ctx context.Context) error {
 	return nil
 }
 
+// bootGovernance validates the governance layer (.ownership.json) when
+// onboarding is complete. During onboarding (pre-github) the file is
+// legitimately absent and governance is a no-op — Harness is handled
+// separately by bootHarness, which is ALWAYS called before this function.
+//
+// Path resolution (via getOwnershipPath — single source of truth):
+//   SIMULATION:      installer/nucleus/scripts/simulation_env/.bloom/.ownership.json
+//   PRE-ONBOARDING:  skipped (no file required — Harness runs in stub mode)
+//   POST-ONBOARDING: <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
 func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error {
-	var ownershipPath string
+	onboardingDone := isOnboardingCompleted()
 
-	if simulation {
-		ownershipPath = filepath.Join("installer", "nucleus", "scripts",
-			"simulation_env", ".bloom", ".ownership.json")
-	} else {
-		bloomDir := getBloomDir()
-		if bloomDir == "" {
-			fmt.Fprintln(os.Stderr, "[INFO] ⚠️  BLOOM_DIR not resolvable - skipping governance (onboarding mode)")
-			return nil
-		}
-		if strings.ContainsAny(bloomDir, "<>|?*") {
-			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  BLOOM_DIR contains invalid characters (%q) - skipping governance (onboarding mode)\n", bloomDir)
-			return nil
-		}
-		ownershipPath = filepath.Join(bloomDir, ".ownership.json")
+	// Pre-onboarding: governance is skipped; Harness is managed by bootHarness.
+	if !simulation && !onboardingDone {
+		fmt.Fprintln(os.Stderr, "[INFO] ⚙️  governance: pre-onboarding mode — skipping (Harness handles debug layer)")
+		return nil
 	}
 
-	// Durante onboarding, si .ownership.json no existe, skip validation
+	ownershipPath := getOwnershipPath(simulation, onboardingDone)
+	if ownershipPath == "" {
+		// BLOOM_DIR unresolvable after onboarding — degrade gracefully.
+		fmt.Fprintln(os.Stderr, "[INFO] ⚠️  governance: cannot resolve .ownership.json path — skipping")
+		return nil
+	}
+
+	// Validate path characters (Windows guard)
+	if strings.ContainsAny(ownershipPath, "<>|?*") {
+		fmt.Fprintf(os.Stderr, "[INFO] ⚠️  governance: .ownership.json path contains invalid characters (%q) — skipping\n", ownershipPath)
+		return nil
+	}
+
 	if _, err := os.Stat(ownershipPath); err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, "[INFO] ⚠️  .ownership.json not found - skipping governance (onboarding mode)")
+			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  governance: .ownership.json not found at %s\n", ownershipPath)
 			return nil
 		}
-		// En Windows, un path con sintaxis inválida devuelve ERROR_INVALID_NAME,
-		// que no es ErrNotExist. Lo tratamos igual: skip en modo onboarding.
+		// En Windows, un path con sintaxis inválida devuelve ERROR_INVALID_NAME.
 		if strings.Contains(err.Error(), "syntax is incorrect") ||
 			strings.Contains(err.Error(), "invalid") {
-			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  .ownership.json path invalid (%v) - skipping governance (onboarding mode)\n", err)
+			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  governance: .ownership.json path invalid (%v) — skipping\n", err)
 			return nil
 		}
-		// Otro tipo de error (permisos, disco, etc) — sí es un error real
+		// Otro tipo de error (permisos, disco, etc) — sí es un error real.
 		return fmt.Errorf("ownership.json access error: %w", err)
 	}
 
-	// Si existe, governance OK
+	// Si existe, governance OK.
 	return nil
 }
 
@@ -1504,6 +1514,17 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			defer bootCancel()
 			result := &ServiceStartResult{Timestamp: time.Now().Unix()}
 
+			// ── Harness (siempre — independiente del estado de governance) ──────
+			// bootHarness es non-fatal y DEBE correr antes de governance para que
+			// Harness esté disponible durante el onboarding para debugging.
+			harnessResult := sup.bootHarness(bootCtx, simulation)
+			if !harnessResult.Healthy {
+				sup.slog("WARN", "Harness failed to start (mode=%s): %s", harnessResult.Mode, harnessResult.Error)
+			} else {
+				sup.slog("INFO", "✓ Harness started (mode=%s)", harnessResult.Mode)
+			}
+
+			// ── Governance (skipped automáticamente pre-onboarding) ─────────────
 			if err := sup.bootGovernance(bootCtx, simulation); err != nil {
 				result.Success = false
 				result.State = "FAILED"

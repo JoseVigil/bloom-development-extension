@@ -439,9 +439,13 @@ class DiscoveryFlow {
       // case 'xai':
 
       default:
-        // Sin service definido → el usuario elige el provider
-        console.log('[Discovery] No service specified, routing to provider-select');
-        this.showScreen('provider-select');
+        // Sin service definido → GitHub es el primer paso de registro
+        console.log('[Discovery] No service specified, defaulting to github_auth');
+        this.showScreen('github-login');
+        if (!window.GITHUB_FLOW) {
+          window.GITHUB_FLOW = new GithubAuthFlow(this);
+          window.GITHUB_FLOW.init();
+        }
         break;
     }
   }
