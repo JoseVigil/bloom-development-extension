@@ -21,7 +21,7 @@ type metamorphAppConfig struct {
 
 // defaultHostPath is the compile-time fallback used only when metamorph-config.json
 // cannot be read or does not contain paths.host_exe.
-const defaultHostPath = "native/bloom-host.exe"
+const defaultHostPath = "bin/native/bloom-host.exe"
 
 // loadMetamorphAppConfig reads metamorph-config.json from the same directory as
 // the running executable.  Returns a zero-value struct (no error) if the file is
@@ -85,10 +85,15 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 	if hostPath == "" {
 		hostPath = defaultHostPath
 	}
+	// All paths are relative to basePath and include the "bin/" prefix that
+	// reflects the real on-disk layout: BloomNucleus/bin/<component>/...
+	// hostPath comes from metamorph-config.json and is already a full relative
+	// path (e.g. "bin/host/bloom-host.exe"); if absent the defaultHostPath
+	// constant below must also carry the "bin/" prefix.
 	return []managedBinaryDefinition{
 		{
 			name:         "Brain",
-			path:         "brain/brain.exe",
+			path:         "bin/brain/brain.exe",
 			versionArgs:  []string{"--json", "--version"},
 			infoArgs:     []string{"--json", "--info"},
 			versionField: "data.app_release",
@@ -96,7 +101,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Nucleus",
-			path:         "nucleus/nucleus.exe",
+			path:         "bin/nucleus/nucleus.exe",
 			versionArgs:  []string{"--json", "version"},
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
@@ -104,7 +109,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Sentinel",
-			path:         "sentinel/sentinel.exe",
+			path:         "bin/sentinel/sentinel.exe",
 			versionArgs:  []string{"--json", "version"},
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
@@ -112,7 +117,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			// Path is resolved at runtime from paths.host_exe in metamorph-config.json.
-			// Falls back to defaultHostPath ("native/bloom-host.exe") if the config is
+			// Falls back to defaultHostPath ("bin/native/bloom-host.exe") if the config is
 			// absent or the field is empty.
 			name:         "Host",
 			path:         hostPath,
@@ -123,7 +128,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Conductor",
-			path:         "conductor/bloom-conductor.exe",
+			path:         "bin/conductor/bloom-conductor.exe",
 			versionArgs:  []string{}, // interrogated via .ps1 — see inspectConductor()
 			infoArgs:     []string{},
 			versionField: "version",
@@ -131,7 +136,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Cortex",
-			path:         "cortex/bloom-cortex.blx",
+			path:         "bin/cortex/bloom-cortex.blx",
 			versionArgs:  []string{}, // not executable — read from cortex.meta.json inside ZIP
 			infoArgs:     []string{},
 			versionField: "",
@@ -139,7 +144,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Metamorph",
-			path:         "metamorph/metamorph.exe",
+			path:         "bin/metamorph/metamorph.exe",
 			versionArgs:  []string{"--json", "version"},
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
@@ -152,7 +157,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			// --json info   → JSON: {version, channel, capabilities, requires} — no build field.
 			// inspectSensor uses --json version for version+build, --json info for SensorInfo metadata.
 			name:         "Sensor",
-			path:         "sensor/bloom-sensor.exe",
+			path:         "bin/sensor/bloom-sensor.exe",
 			versionArgs:  []string{"--json", "version"}, // → JSON with version/build/channel
 			infoArgs:     []string{"--json", "info"},     // → JSON with capabilities/requires
 			versionField: "version",
@@ -160,7 +165,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Setup",
-			path:         "setup/bloom-setup.exe",
+			path:         "bin/setup/bloom-setup.exe",
 			versionArgs:  []string{}, // Electron — interrogated via .ps1, see inspectElectronBinary()
 			infoArgs:     []string{},
 			versionField: "version",

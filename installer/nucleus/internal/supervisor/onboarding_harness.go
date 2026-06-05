@@ -28,13 +28,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // HarnessMode describes how Harness was started.
 type HarnessMode string
 
 const (
-	HarnessModeStub       HarnessMode = "STUB"        // onboarding — no ownership file
+	HarnessModeStub       HarnessMode = "STUB"       // onboarding — no ownership file
 	HarnessModeGovernance HarnessMode = "GOVERNANCE"  // post-onboarding — full governance
 	HarnessModeSimulation HarnessMode = "SIMULATION"  // --simulation flag
 )
@@ -188,12 +189,13 @@ func resolveHarnessMode(simulation, onboardingDone bool) HarnessMode {
 func (s *Supervisor) bootHarnessStub(ctx context.Context, result *HarnessResult) *HarnessResult {
 	s.slog("INFO", "⚙️  Harness: starting in STUB mode (onboarding — no .ownership.json required)")
 
-	// Register the harness telemetry stream so it appears in nucleus health
-	// and the Harness debug panel is usable during onboarding.
-	s.registerHarnessTelemetry("STUB")
+	hlog := s.registerHarnessTelemetry("STUB")
+	hlogf(hlog, "INFO", "starting in STUB mode — onboarding not completed, no .ownership.json required")
 
 	result.Healthy = true
 	result.OwnershipOK = false // expected in stub mode
+
+	hlogf(hlog, "SUCCESS", "✓ STUB mode ready — debug endpoints available")
 	s.slog("SUCCESS", "✓ Harness running in STUB mode — debug endpoints available")
 	return result
 }
@@ -211,8 +213,16 @@ func (s *Supervisor) bootHarnessSimulation(ctx context.Context, result *HarnessR
 		result.OwnershipOK = true
 	}
 
-	s.registerHarnessTelemetry("SIMULATION")
+	hlog := s.registerHarnessTelemetry("SIMULATION")
+	hlogf(hlog, "INFO", "starting in SIMULATION mode (fixture: %s)", ownershipPath)
+	if result.Error != "" {
+		hlogf(hlog, "WARN", result.Error)
+	} else {
+		hlogf(hlog, "INFO", ".ownership.json validated at %s", ownershipPath)
+	}
+
 	result.Healthy = true
+	hlogf(hlog, "SUCCESS", "✓ SIMULATION mode ready")
 	s.slog("SUCCESS", "✓ Harness running in SIMULATION mode")
 	return result
 }
@@ -229,7 +239,8 @@ func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessR
 		// Can happen if org is empty and bloom_dir unresolvable — degrade gracefully.
 		result.Error = "cannot resolve .ownership.json path (org slug absent from nucleus.json and BLOOM_DIR unset)"
 		s.slog("WARN", "Harness GOVERNANCE: %s", result.Error)
-		s.registerHarnessTelemetry("DEGRADED")
+		hlog := s.registerHarnessTelemetry("DEGRADED")
+		hlogf(hlog, "WARN", result.Error)
 		result.Healthy = true // non-fatal; Harness still registers
 		return result
 	}
@@ -243,7 +254,8 @@ func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessR
 			// Onboarding completed but file missing — migration in progress.
 			result.Error = fmt.Sprintf(".ownership.json not found at %s (migration pending?)", ownershipPath)
 			s.slog("WARN", "Harness GOVERNANCE: %s — running in degraded mode", result.Error)
-			s.registerHarnessTelemetry("DEGRADED")
+			hlog := s.registerHarnessTelemetry("DEGRADED")
+			hlogf(hlog, "WARN", "%s — running in degraded mode", result.Error)
 			result.Healthy = true // non-fatal
 			return result
 		}
@@ -258,13 +270,17 @@ func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessR
 	if err := validateOwnershipFile(ownershipPath); err != nil {
 		result.Error = fmt.Sprintf("ownership validation failed: %v", err)
 		s.slog("WARN", "Harness GOVERNANCE: %s", result.Error)
-		s.registerHarnessTelemetry("DEGRADED")
+		hlog := s.registerHarnessTelemetry("DEGRADED")
+		hlogf(hlog, "WARN", result.Error)
 		result.Healthy = true // schema errors are non-fatal
 		return result
 	}
 
 	result.OwnershipOK = true
-	s.registerHarnessTelemetry("GOVERNANCE")
+	hlog := s.registerHarnessTelemetry("GOVERNANCE")
+	hlogf(hlog, "INFO", "starting in GOVERNANCE mode (org=%s, path=%s)", org, ownershipPath)
+	hlogf(hlog, "INFO", ".ownership.json validated — owner and created_at present")
+	hlogf(hlog, "SUCCESS", "✓ GOVERNANCE mode ready (org=%s)", org)
 	result.Healthy = true
 	s.slog("SUCCESS", "✓ Harness running in GOVERNANCE mode (org=%s)", org)
 	return result
@@ -289,14 +305,36 @@ func validateOwnershipFile(path string) error {
 	return nil
 }
 
-// registerHarnessTelemetry registers the Harness debug stream in telemetry.json.
-// The stream ID is "harness" and the label encodes the current mode so the
-// Harness panel can display the right badge (STUB / SIMULATION / GOVERNANCE).
-func (s *Supervisor) registerHarnessTelemetry(mode string) {
+// registerHarnessTelemetry registers the Harness debug stream in telemetry.json
+// and creates the physical harness.log file so the declared stream has a real
+// file on disk from the first boot.
+//
+// Returns an open *os.File pointing to harness.log (append mode) so the caller
+// can write boot-time entries via hlogf.  The file is left open intentionally —
+// the OS will close it when the process exits, and the Supervisor does not need
+// to track it beyond the boot sequence.  Returns nil if the file cannot be
+// created (non-fatal — callers must guard with hlogf which is nil-safe).
+func (s *Supervisor) registerHarnessTelemetry(mode string) *os.File {
 	logsBase := getBloomNucleusBase()
 	logPath := filepath.Join(logsBase, "logs", "nucleus", "harness", "harness.log")
+
 	// Ensure log directory exists (best-effort — harness is non-fatal)
 	_ = os.MkdirAll(filepath.Dir(logPath), 0755)
+
+	// Open (or create) the physical log file.  This is the step that was
+	// previously missing: the directory was created and the stream was
+	// registered in telemetry.json, but no file descriptor was ever opened,
+	// so harness.log never appeared on disk.
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		s.slog("WARN", "Harness: could not open harness.log — %v", err)
+		// Continue: registerStream still runs so telemetry stays consistent.
+		f = nil
+	} else {
+		// Write session header — marks each boot attempt in the log.
+		fmt.Fprintf(f, "======== [%s] Harness session started — mode: %s ========\n",
+			time.Now().UTC().Format(time.RFC3339), mode)
+	}
 
 	s.registerStream(
 		"harness",
@@ -307,4 +345,17 @@ func (s *Supervisor) registerHarnessTelemetry(mode string) {
 		1,
 		[]string{"nucleus", "harness", "debug"},
 	)
+
+	return f
+}
+
+// hlogf writes a timestamped log line to the harness log file.
+// It is nil-safe: if f is nil (file could not be opened) it does nothing.
+// Format mirrors the supervisor's own slog output for easy cross-referencing.
+func hlogf(f *os.File, level, format string, args ...interface{}) {
+	if f == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(f, "[%s] [%s] %s\n", time.Now().UTC().Format(time.RFC3339), level, msg)
 }

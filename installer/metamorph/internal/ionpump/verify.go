@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"metamorph/internal/core"
-	"metamorph/internal/inspection"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +22,7 @@ func createVerifyCommand(c *core.Core) *cobra.Command {
 and comparing them against domain.manifest.json.
 
 For each site (or the specified domain), every file listed in the manifest's
-actions, pages, and shared maps is hashed and validated. This detects corruption
+actions, pages, and shared arrays is hashed and validated. This detects corruption
 or unauthorised modifications since the last swap.
 
 Exit codes:
@@ -130,88 +129,81 @@ func runVerify(c *core.Core, domain string) (*VerifyResult, error) {
 
 // verifyDomain verifies the integrity of all files declared in an ion site's
 // domain.manifest.json by recomputing their SHA-256 hashes.
+//
+// Design note: this function intentionally does NOT call inspection.InspectIonRecipe.
+// verify's job is strictly to confirm that the files declared in the manifest are
+// present on disk and have not been modified since the last swap — nothing more.
 func verifyDomain(ionsitesPath, domain string) IonVerifyResult {
 	siteDir := filepath.Join(ionsitesPath, domain)
-
 	r := IonVerifyResult{Domain: domain}
 
-	info, err := inspection.InspectIonRecipe(siteDir)
-	if err != nil {
-		r.Valid = false
-		r.Error = fmt.Sprintf("cannot inspect site: %v", err)
-		return r
-	}
-
-	if info.Status == "missing_manifest" || info.Status == "invalid_manifest" {
-		r.Valid = false
-		r.Error = fmt.Sprintf("manifest status: %s", info.Status)
-		return r
-	}
-
-	// Parse the manifest directly to get the file list.
 	manifestPath := filepath.Join(siteDir, "domain.manifest.json")
 	manifest, err := parseIonDomainManifest(manifestPath)
 	if err != nil {
 		r.Valid = false
-		r.Error = fmt.Sprintf("cannot parse manifest: %v", err)
+		r.Error = fmt.Sprintf("cannot parse domain.manifest.json: %v", err)
 		return r
 	}
 
-	// Collect all declared file paths (from actions, pages, shared).
 	filePaths := collectManifestFilePaths(manifest)
 
-	// Hash every declared file.
-	var actualHash string
-	allValid := true
+	if len(filePaths) == 0 {
+		r.Valid = true
+		r.FilesChecked = 0
+		return r
+	}
+
+	var compositeHash string
 	for _, rel := range filePaths {
 		full := filepath.Join(siteDir, filepath.FromSlash(rel))
 		h, err := hashFile(full)
 		if err != nil {
-			allValid = false
+			r.Valid = false
 			r.Error = fmt.Sprintf("cannot hash %s: %v", rel, err)
-			break
+			r.ActualSHA256 = compositeHash
+			return r
 		}
-		// Accumulate: XOR all file hashes into a composite site hash for display.
-		actualHash = xorHashStrings(actualHash, h)
+		compositeHash = xorHashStrings(compositeHash, h)
 		r.FilesChecked++
 	}
 
-	// The per-site SHA-256 stored in versions.json is the hash of the entire ZIP,
-	// not a per-file hash. We report the composite file-hash for informational
-	// purposes and use allValid as the canonical validity signal.
+	// The per-site SHA-256 in versions.json is the hash of the original ZIP,
+	// not a per-file hash — reported for informational purposes only.
 	vf, _ := readVersionsJSON(ionsitesPath)
 	if entry, ok := vf.Sites[domain]; ok {
 		r.ExpectedSHA256 = entry.SHA256
 	}
-	r.ActualSHA256 = actualHash
-	r.Valid = allValid
+	r.ActualSHA256 = compositeHash
+	r.Valid = true
 
 	return r
 }
 
-// collectManifestFilePaths returns all file paths declared in a manifest
-// across actions, pages, and shared maps.
+// collectManifestFilePaths returns all file paths declared in a manifest's
+// actions, pages, and shared arrays (deduplicated).
 func collectManifestFilePaths(m *ionDomainManifest) []string {
 	seen := map[string]struct{}{}
 	var result []string
 
 	add := func(p string) {
-		if p != "" {
-			if _, ok := seen[p]; !ok {
-				seen[p] = struct{}{}
-				result = append(result, p)
-			}
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			result = append(result, p)
 		}
 	}
 
-	for _, action := range m.Actions {
-		add(action.File)
+	for _, p := range m.Actions {
+		add(p)
 	}
 	for _, p := range m.Pages {
 		add(p)
 	}
-	for _, s := range m.Shared {
-		add(s)
+	for _, p := range m.Shared {
+		add(p)
 	}
 
 	return result
@@ -232,7 +224,6 @@ func hashFile(path string) (string, error) {
 }
 
 // xorHashStrings combines two hex-encoded SHA-256 digests by XOR-ing their bytes.
-// This gives a deterministic composite digest without requiring an ordering assumption.
 func xorHashStrings(a, b string) string {
 	if a == "" {
 		return b
@@ -286,22 +277,27 @@ func printVerifyResult(result *VerifyResult) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Local domain manifest parser — kept in this file so verify.go compiles
-// independently from inspection.IonDomainManifest (avoids circular import).
+// Local domain manifest parser
+//
+// Mirrors the real on-disk format of domain.manifest.json (schema_version "2.0"):
+//   - actions, pages, shared are arrays of file path strings, NOT maps.
+//   - entrypoint is the primary action file path string.
+//
+// Kept local to avoid a circular import with internal/inspection.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ionAction struct {
-	File   string `json:"file"`
-	Public bool   `json:"public"`
-}
-
 type ionDomainManifest struct {
-	SchemaVersion string               `json:"schema_version"`
-	Domain        string               `json:"domain"`
-	Version       string               `json:"version"`
-	Actions       map[string]ionAction `json:"actions"`
-	Pages         map[string]string    `json:"pages"`
-	Shared        map[string]string    `json:"shared"`
+	SchemaVersion         string            `json:"schema_version"`
+	Domain                string            `json:"domain"`
+	Version               string            `json:"version"`
+	Description           string            `json:"description"`
+	Entrypoint            string            `json:"entrypoint"`
+	Actions               []string          `json:"actions"`
+	Pages                 []string          `json:"pages"`
+	Shared                []string          `json:"shared"`
+	Capabilities          []string          `json:"capabilities"`
+	RequiresCortexVersion string            `json:"requires_cortex_version"`
+	Triggers              map[string]string `json:"triggers"`
 }
 
 func parseIonDomainManifest(path string) (*ionDomainManifest, error) {

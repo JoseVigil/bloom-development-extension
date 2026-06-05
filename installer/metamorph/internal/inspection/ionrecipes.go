@@ -101,22 +101,25 @@ func InspectIonRecipe(sitePath string) (*IonRecipeInfo, error) {
 	}
 
 	// Collect public action names.
-	var publicActions []string
-	for name, action := range manifest.Actions {
-		if action.Public {
-			publicActions = append(publicActions, name)
-		}
+	// Schema v2: actions is a []string of file paths; all listed actions are
+	// considered public.  We derive the display name from the file basename.
+	publicActions := make([]string, 0, len(manifest.Actions))
+	for _, actionPath := range manifest.Actions {
+		publicActions = append(publicActions, actionPath)
 	}
 
-	// Verify that every entry_action file exists on disk.
+	// Resolve the effective entry actions list.
+	// Prefer the explicit entry_actions array; fall back to the single
+	// "entrypoint" field that most real manifests use instead.
+	entryActions := manifest.EntryActions
+	if len(entryActions) == 0 && manifest.Entrypoint != "" {
+		entryActions = []string{manifest.Entrypoint}
+	}
+
+	// Verify that every entry action file exists on disk.
 	status := "healthy"
-	for _, actionName := range manifest.EntryActions {
-		action, ok := manifest.Actions[actionName]
-		if !ok {
-			status = "missing_entrypoint"
-			break
-		}
-		if _, err := os.Stat(filepath.Join(sitePath, action.File)); os.IsNotExist(err) {
+	for _, actionFile := range entryActions {
+		if _, err := os.Stat(filepath.Join(sitePath, actionFile)); os.IsNotExist(err) {
 			status = "missing_entrypoint"
 			break
 		}
@@ -129,7 +132,7 @@ func InspectIonRecipe(sitePath string) (*IonRecipeInfo, error) {
 		Version:               manifest.Version,
 		Description:           manifest.Description,
 		SchemaVersion:         manifest.SchemaVersion,
-		EntryActions:          manifest.EntryActions,
+		EntryActions:          entryActions,
 		PublicActions:         publicActions,
 		PageCount:             len(manifest.Pages),
 		SharedCount:           len(manifest.Shared),

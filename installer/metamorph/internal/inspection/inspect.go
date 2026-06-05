@@ -131,16 +131,22 @@ func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeI
 		return err
 	}
 
-	// Inspect Bootstrap — uses bootstrapBase (cross-platform, no platform subfolder)
-	bootstrap, err := inspectBootstrap(bootstrapBase)
+	// Bootstrap and VSCode live under bin/ within bootstrapBase.
+	// In AppData mode bootstrapBase == BloomNucleus/, so we append "bin/" here
+	// so that inspectBootstrap resolves bin/bootstrap/version-bootstrap.py and
+	// inspectVSCodeExtension resolves bin/vscode/bloom-extension.vsix correctly.
+	bootstrapBinBase := filepath.Join(bootstrapBase, "bin")
+
+	// Inspect Bootstrap — uses bootstrapBinBase (cross-platform, no platform subfolder)
+	bootstrap, err := inspectBootstrap(bootstrapBinBase)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not inspect bootstrap: %v\n", err)
 	} else {
 		managed = append(managed, bootstrap)
 	}
 
-	// Inspect VSCode extension — uses bootstrapBase (cross-platform, no platform subfolder)
-	vsix, err := inspectVSCodeExtension(bootstrapBase)
+	// Inspect VSCode extension — uses bootstrapBinBase (cross-platform, no platform subfolder)
+	vsix, err := inspectVSCodeExtension(bootstrapBinBase)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not inspect vscode extension: %v\n", err)
 	} else {

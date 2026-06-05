@@ -95,7 +95,7 @@ func runList(c *core.Core, source string) (*ListResult, error) {
 func discoverLocalManifests(c *core.Core) ([]ManifestEntry, error) {
 	var entries []ManifestEntry
 
-	searchDirs := localManifestSearchDirs()
+	searchDirs := localManifestSearchDirs(c)
 	for _, dir := range searchDirs {
 		found, err := scanManifestDir(dir)
 		if err != nil {
@@ -108,7 +108,13 @@ func discoverLocalManifests(c *core.Core) ([]ManifestEntry, error) {
 }
 
 // localManifestSearchDirs returns candidate directories to search for manifests.
-func localManifestSearchDirs() []string {
+// Search order (highest to lowest priority):
+//  1. BLOOM_REPO_ROOT / installer / native / ionpump  — developer / CI override
+//  2. Relative to executable                           — packaged installer
+//  3. Current working directory                        — running from repo tree
+//  4. Canonical AppData ionpump path                   — deployed via `rollout --only ionpump`
+//  5. Legacy platform-specific paths                   — older installs
+func localManifestSearchDirs(c *core.Core) []string {
 	var dirs []string
 
 	// 1. BLOOM_REPO_ROOT / installer / native / ionpump
@@ -133,7 +139,12 @@ func localManifestSearchDirs() []string {
 		)
 	}
 
-	// 4. Platform-specific installer default.
+	// 4. Canonical AppData ionpump path — populated by `metamorph rollout --only ionpump`.
+	//    This is the path that `rollout` writes to, so it works regardless of whether
+	//    BLOOM_REPO_ROOT is set (e.g. on a production machine or after a fresh install).
+	dirs = append(dirs, filepath.Join(core.GetBaseAppDataPath(), "bin", "cortex", "ionpump"))
+
+	// 5. Legacy platform-specific installer defaults (older installs that pre-date rollout).
 	switch runtime.GOOS {
 	case "windows":
 		if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
@@ -209,6 +220,7 @@ func printManifestList(result *ListResult) {
 		fmt.Println("No manifests found.")
 		fmt.Println()
 		fmt.Println("Expected location: installer/native/ionpump/bootstrap-ions.json")
+		fmt.Println("Run 'metamorph rollout --only ionpump' to deploy the bundled manifests.")
 		return
 	}
 

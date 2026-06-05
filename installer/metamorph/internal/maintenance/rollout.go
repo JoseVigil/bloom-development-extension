@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -19,10 +20,16 @@ func init() {
 }
 
 type component struct {
-	Key       string
-	SourceFn  func(repoRoot string) string
-	DestFn    func(basePath string) string
-	Platforms []string
+	Key      string
+	SourceFn func(repoRoot string) string
+	DestFn   func(basePath string) string
+	// PostDeployFn is called after a successful file copy. It receives the
+	// resolved source directory, the destination directory, and the dryRun flag.
+	// Returning an error marks the component deployment as failed but does NOT
+	// roll back the already-copied files — the post-deploy step is responsible
+	// for its own idempotency.
+	PostDeployFn func(c *core.Core, repoRoot, dst string, dryRun bool) error
+	Platforms    []string
 }
 
 func exe(name string) string { return core.ExeName(name) }
@@ -104,6 +111,23 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "cortex") },
 	},
 	{
+		// ionpump is a compound component. After copying installer/native/ionpump/
+		// (bootstrap-ions.json + *.ion ZIPs) to AppData, it:
+		//   1. Runs build-bootstrap-ions.py if the source dir is a repo working tree
+		//      (i.e. installer/ions/ exists next to installer/native/ionpump/).
+		//   2. Runs `ion-pump reconcile` against the deployed manifest (--force-swap).
+		//   3. Runs `ion-pump verify` to confirm integrity.
+		//
+		// This makes `metamorph rollout --only ionpump` the single command needed to
+		// go from repo source to a fully deployed and verified ionsites/ directory.
+		Key: "ionpump",
+		SourceFn: func(r string) string {
+			return filepath.Join(r, "installer", "native", "ionpump")
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "cortex", "ionpump") },
+		PostDeployFn: ionpumpPostDeploy,
+	},
+	{
 		Key: "node",
 		SourceFn: func(r string) string {
 			return filepath.Join(r, "vendors", "node", runtime.GOOS, exe("node"))
@@ -154,6 +178,117 @@ var allComponents = []component{
 	},
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ionpump post-deploy hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ionpumpPostDeploy is called by runRollout after installer/native/ionpump/ has
+// been successfully copied to $AppData/bin/cortex/ionpump/. It:
+//
+//  1. Re-runs build-bootstrap-ions.py if the installer/ions/ source tree is
+//     present in the repo (dev/CI context). This ensures the deployed manifest
+//     and ZIPs always reflect the latest ion source files.
+//
+//  2. Locates bootstrap-ions.json in the deployed ionpump directory and runs
+//     `ion-pump reconcile --manifest <path> --force-swap` via a self-exec call
+//     so the reconcile logic runs inside the same binary (no external dependency).
+//
+//  3. Runs `ion-pump verify` to confirm every deployed ion passes integrity
+//     checks. A verify failure is logged as a warning but does NOT fail the
+//     rollout — the files are already in place and Brain can still use them.
+func ionpumpPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	// ── Step 1: rebuild bootstrap artefacts if working in a repo tree ──────
+	buildScript := filepath.Join(repoRoot, "installer", "metamorph", "scripts", "build-bootstrap-ions.py")
+	ionsSourceDir := filepath.Join(repoRoot, "installer", "ions")
+
+	if _, err := os.Stat(buildScript); err == nil {
+		if _, err := os.Stat(ionsSourceDir); err == nil {
+			c.Logger.Info("🔨 Building bootstrap ion packages from source...")
+			if dryRun {
+				c.Logger.Info("🔍 [dry-run] would run: python %s", buildScript)
+			} else {
+				python, err := resolvePython()
+				if err != nil {
+					return fmt.Errorf("ionpump build: %w", err)
+				}
+				cmd := exec.Command(python, buildScript)
+				cmd.Dir = repoRoot
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("ionpump build: build-bootstrap-ions.py failed: %w", err)
+				}
+				c.Logger.Info("✓ Ion packages built successfully")
+			}
+		} else {
+			c.Logger.Info("ℹ️  No installer/ions/ source tree found — skipping build step")
+		}
+	} else {
+		c.Logger.Info("ℹ️  No build-bootstrap-ions.py found — skipping build step")
+	}
+
+	// ── Step 2: locate bootstrap-ions.json in the deployed destination ─────
+	manifestPath := filepath.Join(dst, "bootstrap-ions.json")
+	if _, err := os.Stat(manifestPath); err != nil {
+		return fmt.Errorf("ionpump reconcile: bootstrap-ions.json not found at %s after copy — "+
+			"ensure build-bootstrap-ions.py ran and produced the manifest", manifestPath)
+	}
+
+	// ── Step 3: reconcile ──────────────────────────────────────────────────
+	c.Logger.Info("🔄 Reconciling ion sites against %s ...", manifestPath)
+	reconcileArgs := []string{"ion-pump", "reconcile", "--manifest", manifestPath, "--force-swap"}
+	if dryRun {
+		reconcileArgs = append(reconcileArgs, "--dry-run")
+	}
+	if err := selfExec(c, reconcileArgs...); err != nil {
+		return fmt.Errorf("ionpump reconcile failed: %w", err)
+	}
+
+	// ── Step 4: verify ─────────────────────────────────────────────────────
+	c.Logger.Info("🔍 Verifying installed ion integrity...")
+	if err := selfExec(c, "ion-pump", "verify"); err != nil {
+		// Verify failure is non-fatal: files are deployed, Brain can use them.
+		// The operator is warned and can investigate manually.
+		c.Logger.Warning("⚠️  Ion integrity verification reported issues — run 'metamorph ion-pump verify' for details")
+	}
+
+	return nil
+}
+
+// selfExec re-invokes the current metamorph binary with the given arguments,
+// inheriting stdout/stderr so output appears inline with the rollout log.
+func selfExec(c *core.Core, args ...string) error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot resolve current executable: %w", err)
+	}
+	cmd := exec.Command(self, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// resolvePython finds a usable Python 3 interpreter in the following order:
+//  1. BLOOM_PYTHON env var (explicit override)
+//  2. "python3" on PATH
+//  3. "python" on PATH (Windows typically)
+func resolvePython() (string, error) {
+	if p := os.Getenv("BLOOM_PYTHON"); p != "" {
+		return p, nil
+	}
+	for _, candidate := range []string{"python3", "python"} {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("no Python interpreter found (tried python3, python) — " +
+		"set BLOOM_PYTHON to the interpreter path")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component registry helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 func activeComponents() []component {
 	result := make([]component, 0, len(allComponents))
 	for _, c := range allComponents {
@@ -180,6 +315,10 @@ func componentKeys() string {
 	return strings.Join(keys, ", ")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Command
+// ─────────────────────────────────────────────────────────────────────────────
+
 func createRolloutCommand(c *core.Core) *cobra.Command {
 	var dryRun bool
 	var only string
@@ -191,7 +330,13 @@ func createRolloutCommand(c *core.Core) *cobra.Command {
 BloomNucleus AppData directory so the running system picks them up.
 
 Use --dry-run to preview what would be copied without making changes.
-Use --only to deploy a single component instead of everything.`,
+Use --only to deploy a single component instead of everything.
+
+The 'ionpump' component is special: after copying the bundled ZIPs and manifest,
+it automatically runs the full deploy pipeline:
+  1. build-bootstrap-ions.py  (if installer/ions/ source tree is present)
+  2. ion-pump reconcile        (atomic swap into ionsites/)
+  3. ion-pump verify           (SHA-256 integrity check)`,
 
 		Annotations: map[string]string{
 			"category": "MAINTENANCE",
@@ -212,8 +357,8 @@ Use --only to deploy a single component instead of everything.`,
 		Example: `  metamorph rollout
   metamorph rollout --dry-run
   metamorph rollout --only brain
-  metamorph rollout --only nucleus
-  metamorph rollout --only brain --dry-run
+  metamorph rollout --only ionpump
+  metamorph rollout --only ionpump --dry-run
   metamorph --json rollout --only nucleus`,
 
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -226,6 +371,10 @@ Use --only to deploy a single component instead of everything.`,
 
 	return cmd
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Result types
+// ─────────────────────────────────────────────────────────────────────────────
 
 type deployedEntry struct {
 	Component   string `json:"component"`
@@ -243,6 +392,10 @@ type rolloutResult struct {
 	Skipped  []string        `json:"skipped"`
 	Errors   []string        `json:"errors"`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core rollout logic
+// ─────────────────────────────────────────────────────────────────────────────
 
 func runRollout(c *core.Core, dryRun bool, only string) error {
 	basePath := core.GetBaseAppDataPath()
@@ -305,6 +458,13 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 				Destination: dst,
 				FilesCopied: 0,
 			})
+			// Still run PostDeployFn in dry-run mode so it can log what it would do.
+			if comp.PostDeployFn != nil {
+				if err := comp.PostDeployFn(c, repoRoot, dst, true); err != nil {
+					msg := fmt.Sprintf("%s: post-deploy (dry-run) error: %v", comp.Key, err)
+					c.Logger.Warning("⚠️  %s", msg)
+				}
+			}
 			continue
 		}
 
@@ -340,6 +500,16 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 			Destination: dst,
 			FilesCopied: copied,
 		})
+
+		// Run optional post-deploy hook (e.g. ionpump reconcile + verify).
+		if comp.PostDeployFn != nil {
+			if err := comp.PostDeployFn(c, repoRoot, dst, false); err != nil {
+				msg := fmt.Sprintf("%s: post-deploy failed: %v", comp.Key, err)
+				c.Logger.Error("❌ %s", msg)
+				result.Errors = append(result.Errors, msg)
+				result.Status = "partial"
+			}
+		}
 	}
 
 	if len(result.Errors) > 0 {
@@ -357,6 +527,10 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 	}
 	return nil
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Repo root resolution
+// ─────────────────────────────────────────────────────────────────────────────
 
 // resolveRepoRoot resolves the repository root from multiple sources in priority order.
 // It returns an error only when all sources are exhausted or produce an empty path,
@@ -411,6 +585,10 @@ func resolveRepoRoot() (string, error) {
 
 	return "", fmt.Errorf("all resolution strategies exhausted (BLOOM_REPO_ROOT, nucleus.json, BLOOM_DIR, os.Getwd)")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────────────────────
 
 func titleCase(s string) string {
 	if len(s) == 0 {

@@ -63,7 +63,7 @@
       "resources": [
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
-        "harness.synapse.config.json",
+        "harness.synapse.config.js",
         "discovery/*",
         "landing/*",
         "discovery/index.html",

@@ -303,7 +303,7 @@ async function loadConfig() {
 
     // Enforce window dimensions for discovery mode
     if (mode === 'discovery') {
-      enforceDiscoveryWindowSize();
+      await enforceDiscoveryWindowSize(); // FIX: await para evitar concurrencia con loadHarnessConfig
     }
 
     // ── HARNESS SIEMPRE ACTIVO ────────────────────────────────────────────
@@ -326,37 +326,67 @@ async function loadConfig() {
 /**
  * loadHarnessConfig()
  *
- * Carga harness.synapse.config.js — generado por Sentinel en launch con
- * self.HARNESS_CONFIG = { profileId, launchId, profileAlias, generatedAt }.
- * Si el archivo no existe (perfil sin Harness) falla silenciosamente.
- * Si existe, almacena el config en config.harness y emite HARNESS_CONFIG_READY.
+ * Carga harness.synapse.config.js (formato: self.HARNESS_CONFIG = {...}).
+ * Si el archivo no existe → Harness inactivo, sin romper nada.
+ * Si existe → parsea config, abre harness/index.html en una tab background.
  *
- * Mismo patrón que loadConfig(): importScripts primero, fetch+regex como fallback.
- * NUNCA usar eval() ni new Function() — violan la CSP de Chrome Extensions.
- * "harness.synapse.config.js" debe estar en web_accessible_resources del manifest.
+ * NUNCA eval() ni new Function() — violan CSP de Chrome Extensions.
+ * El archivo debe estar en web_accessible_resources del manifest.
+ *
+ * FIX v4: Control flow lineal sin returns intermedios en la rama de éxito.
+ * Todo el flujo (fetch → parse → open tab) ocurre dentro de un único bloque
+ * try/catch principal. Los returns solo existen en casos de error real.
  */
 async function loadHarnessConfig() {
-  // El archivo es .js con self.HARNESS_CONFIG = {...} — generado por Go.
-  // harness/index.html lo carga via <script src> y lee self.HARNESS_CONFIG.
-  // background.js lo carga con fetch() + regex (importScripts falla en MV3
-  // post-instalacion, pero fetch funciona correctamente).
-  // NUNCA eval() ni new Function() — violan la CSP de Chrome Extensions.
+  console.log('[Harness] >>>>>> loadHarnessConfig v4 EJECUTANDO <<<<<<');
+
   const harnessFile = 'harness.synapse.config.js';
+  let harnessConfig = null;
 
-  // ── fetch fallback ────────────────────────────────────────────────────────
+  // ── Intento 1: importScripts (falla en MV3 post-install, se ignora) ───────
   try {
-    const url = chrome.runtime.getURL(harnessFile);
-    const resp = await fetch(url);
+    importScripts(harnessFile);
+    if (self.HARNESS_CONFIG) {
+      console.log('[Harness] ✓ Loaded via importScripts');
+      const hc = self.HARNESS_CONFIG;
+      harnessConfig = {
+        profileId:    hc.profileId,
+        launchId:     hc.launchId,
+        profileAlias: hc.profileAlias,
+        generatedAt:  hc.generatedAt
+      };
+    }
+  } catch (importErr) {
+    console.log('[Harness] importScripts failed (esperado en MV3), usando fetch:', importErr.message);
+  }
 
-    if (!resp.ok) {
-      console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
+  // ── Intento 2: fetch + regex ───────────────────────────────────────────────
+  if (!harnessConfig) {
+    console.log('[Harness] Intentando fetch fallback...');
+    let text = null;
+
+    try {
+      const url = chrome.runtime.getURL(harnessFile);
+      console.log('[Harness] Fetching:', url);
+      const resp = await fetch(url);
+      console.log('[Harness] Fetch response status:', resp.status, resp.ok ? 'OK' : 'NOT OK');
+
+      if (!resp.ok) {
+        console.log('[Harness] Archivo no encontrado (HTTP ' + resp.status + ') — Harness inactivo');
+        return;
+      }
+
+      text = await resp.text();
+      console.log('[Harness] Contenido recibido, length:', text.length);
+      console.log('[Harness] Primeros 150 chars:', text.substring(0, 150));
+
+    } catch (fetchErr) {
+      console.error('[Harness] ✗ Fetch error:', fetchErr.message);
       return;
     }
 
-    const text = await resp.text();
-
-    // Parsear las claves con regex — igual que el fetch fallback de loadConfig().
-    const harnessConfig = {};
+    // Parsear con regex — igual que loadConfig()
+    harnessConfig = {};
     const matchers = {
       profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
       launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
@@ -365,33 +395,76 @@ async function loadHarnessConfig() {
     };
     for (const [key, regex] of Object.entries(matchers)) {
       const match = text.match(regex);
-      if (match) harnessConfig[key] = match[1];
+      if (match) {
+        harnessConfig[key] = match[1];
+        console.log('[Harness] ✓ Parsed', key + ':', match[1]);
+      } else {
+        console.warn('[Harness] ✗ No match para:', key);
+      }
     }
 
     if (!harnessConfig.profileId) {
-      console.warn('[Harness] Could not parse profileId from harness config — Harness inactive');
+      console.error('[Harness] ✗ profileId no parseado — Harness inactivo. Contenido del archivo:', text);
       return;
     }
 
-    config.harness = harnessConfig;
-    console.log('[Harness] ✓ HARNESS_CONFIG loaded:', config.harness);
+    console.log('[Harness] ✓ Config parseado correctamente:', JSON.stringify(harnessConfig));
+  }
 
-    // Abrir harness/index.html directamente — background no puede recibir
-    // sus propios sendMessage, así que la apertura de tab va aquí mismo.
+  // ── Guardar en config global ──────────────────────────────────────────────
+  config.harness = harnessConfig;
+  console.log('[Harness] ✓ config.harness seteado. Procediendo a abrir tab...');
+
+  // ── Abrir harness/index.html ── DENTRO del mismo bloque de éxito ──────────
+  // FIX v4: openHarnessTab() se llama inline aquí, no como función separada,
+  // para garantizar que no haya corte de control flow entre el parse y la apertura.
+  try {
     const harnessUrl = chrome.runtime.getURL('harness/index.html');
-    chrome.tabs.query({ url: harnessUrl }, (tabs) => {
-      if (tabs && tabs.length > 0) {
-        // Ya está abierta — traerla al frente
-        chrome.tabs.update(tabs[0].id, { active: true });
-        console.log('[Harness] ✓ Tab already open — brought to front');
-      } else {
-        chrome.tabs.create({ url: harnessUrl, active: false });
-        console.log('[Harness] ✓ Tab created:', harnessUrl);
-      }
-    });
+    console.log('[Harness] URL a abrir:', harnessUrl);
 
-  } catch (err) {
-    console.warn('[Harness] Could not load harness config:', err.message);
+    const allTabs = await chrome.tabs.query({});
+    console.log('[Harness] Total tabs en el browser:', allTabs.length);
+
+    const existingTab = allTabs.find(t => t.url && t.url.startsWith(harnessUrl));
+
+    if (existingTab) {
+      console.log('[Harness] Tab existente encontrada (id:', existingTab.id + ') — trayendo al frente');
+      await chrome.tabs.update(existingTab.id, { active: true });
+      console.log('[Harness] ✓ Tab traída al frente');
+    } else {
+      console.log('[Harness] No existe tab de harness — creando nueva...');
+      const newTab = await chrome.tabs.create({ url: harnessUrl, active: false });
+      console.log('[Harness] ✓ Tab creada exitosamente — id:', newTab.id, '| url:', harnessUrl);
+    }
+  } catch (tabErr) {
+    console.error('[Harness] ✗ Error abriendo tab:', tabErr.message);
+    console.error('[Harness] Stack:', tabErr.stack);
+  }
+
+  console.log('[Harness] >>>>>> loadHarnessConfig v4 COMPLETADO <<<<<<');
+}
+
+/**
+ * openHarnessTab()
+ * Versión standalone — para llamadas externas (ej: desde mensajes IPC).
+ */
+async function openHarnessTab() {
+  try {
+    const harnessUrl = chrome.runtime.getURL('harness/index.html');
+    console.log('[Harness] openHarnessTab() — URL:', harnessUrl);
+
+    const allTabs = await chrome.tabs.query({});
+    const existingTab = allTabs.find(t => t.url && t.url.startsWith(harnessUrl));
+
+    if (existingTab) {
+      await chrome.tabs.update(existingTab.id, { active: true });
+      console.log('[Harness] ✓ Tab existente traída al frente (id:', existingTab.id + ')');
+    } else {
+      const newTab = await chrome.tabs.create({ url: harnessUrl, active: false });
+      console.log('[Harness] ✓ Tab creada (id:', newTab.id + ')');
+    }
+  } catch (tabErr) {
+    console.error('[Harness] ✗ openHarnessTab error:', tabErr.message, tabErr.stack);
   }
 }
 

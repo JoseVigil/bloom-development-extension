@@ -20,7 +20,7 @@ func GetVersionInfo() VersionInfo {
 	
 	return VersionInfo{
 		Version:     version,
-		BuildNumber: BuildNumber,
+		BuildNumber: BuildNumberInt(),
 		BuildDate:   BuildDate,
 		BuildTime:   BuildTime,
 	}

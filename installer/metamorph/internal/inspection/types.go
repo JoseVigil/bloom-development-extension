@@ -80,18 +80,24 @@ type IonAction struct {
 
 // IonDomainManifest is the parsed representation of domain.manifest.json
 // at the root of every .ion ZIP (schema_version "2.0").
+//
+// Schema v2.0 (ION SDK Developer Guide v1.0) uses flat string arrays for
+// actions, pages and shared — NOT the map[string]IonAction form that was
+// used internally in earlier drafts.  The single Entrypoint field replaces
+// the EntryActions list in manifests that ship only one entry point.
 type IonDomainManifest struct {
-	SchemaVersion string               `json:"schema_version"` // "2.0"
-	Domain        string               `json:"domain"`
-	Version       string               `json:"version"`
-	Description   string               `json:"description"`
-	Author        IonAuthor            `json:"author"`
-	Actions       map[string]IonAction `json:"actions"`
-	Pages         map[string]string    `json:"pages"`
-	Shared        map[string]string    `json:"shared"`
-	EntryActions  []string             `json:"entry_actions"`
-	Capabilities  []string             `json:"capabilities"`
-	RequiresCortexVersion string       `json:"requires_cortex_version"`
+	SchemaVersion         string   `json:"schema_version"` // "2.0"
+	Domain                string   `json:"domain"`
+	Version               string   `json:"version"`
+	Description           string   `json:"description"`
+	Author                IonAuthor `json:"author"`
+	Entrypoint            string   `json:"entrypoint"`             // primary entry action file path
+	Actions               []string `json:"actions"`                // all action file paths
+	Pages                 []string `json:"pages"`                  // all page file paths
+	Shared                []string `json:"shared"`                 // shared helper file paths
+	EntryActions          []string `json:"entry_actions,omitempty"` // optional explicit list
+	Capabilities          []string `json:"capabilities"`
+	RequiresCortexVersion string   `json:"requires_cortex_version"`
 }
 
 // IonAuthor holds package authorship metadata.
