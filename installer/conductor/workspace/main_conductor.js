@@ -184,7 +184,7 @@ function setupNucleusHandlers() {
     }
     try {
       const result = await execNucleus(
-        ['--json', 'synapse', 'launch', profileId], 30000
+        ['--json', 'synapse', 'launch', profileId, '--mode', 'discovery'], 30000
       );
       return { success: result.success !== false, profileId, result };
     } catch (err) {
