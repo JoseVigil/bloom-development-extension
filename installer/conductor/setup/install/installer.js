@@ -80,10 +80,71 @@ const {
 // ============================================================================
 
 async function installVSCodeExtension(win) {
-  // TODO: instalar bloom-extension.vsix en VS Code via CLI
-  // `code --install-extension <path>/bloom-extension.vsix`
-  logger.warn('⚠️ installVSCodeExtension: not yet implemented, skipping');
-  return { success: true, skipped: true };
+  const vsixPath = path.join(paths.vscodeDir, 'bloom-extension.vsix');
+
+  if (!await fs.pathExists(vsixPath)) {
+    logger.warn('⚠️ installVSCodeExtension: bloom-extension.vsix not found in bin/vscode, skipping');
+    return { success: false, skipped: true };
+  }
+
+  // En macOS el CLI 'code' no siempre está en el PATH del sistema.
+  // Buscamos en el PATH primero, luego en la ubicación canónica del .app bundle.
+  const VSCODE_CLI_CANDIDATES = process.platform === 'darwin'
+    ? [
+        'code',
+        '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+        '/usr/local/bin/code',
+      ]
+    : ['code'];
+
+  const { execFile } = require('child_process');
+  const { promisify } = require('util');
+  const execFileAsync = promisify(execFile);
+
+  // Detectar cuál candidato está disponible
+  let codeCliPath = null;
+  for (const candidate of VSCODE_CLI_CANDIDATES) {
+    try {
+      await execFileAsync(candidate, ['--version'], { timeout: 5000 });
+      codeCliPath = candidate;
+      logger.info(`✔ VS Code CLI found: ${candidate}`);
+      break;
+    } catch (_) {
+      // candidato no disponible, probar el siguiente
+    }
+  }
+
+  if (!codeCliPath) {
+    logger.warn('⚠️ installVSCodeExtension: VS Code CLI (code) not found — extension not installed');
+    logger.warn('   Install VS Code and add the CLI to PATH, or run: code --install-extension manually');
+    return { success: false, skipped: true };
+  }
+
+  return new Promise((resolve) => {
+    logger.info(`📦 Installing bloom-extension.vsix via: ${codeCliPath} --install-extension ${vsixPath} --force`);
+
+    const proc = spawn(codeCliPath, ['--install-extension', vsixPath, '--force'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    proc.stdout.on('data', d => logger.info(d.toString().trim()));
+    proc.stderr.on('data', d => logger.warn(d.toString().trim()));
+
+    proc.on('close', code => {
+      if (code === 0) {
+        logger.success('✅ bloom-extension installed in VS Code');
+        resolve({ success: true });
+      } else {
+        logger.warn(`⚠️ code --install-extension exited with code ${code} — non-critical, continuing`);
+        resolve({ success: false, non_critical: true });
+      }
+    });
+
+    proc.on('error', err => {
+      logger.warn(`⚠️ Failed to spawn VS Code CLI: ${err.message} — non-critical, continuing`);
+      resolve({ success: false, non_critical: true });
+    });
+  });
 }
 
 async function runMetamorphAudit(win) {

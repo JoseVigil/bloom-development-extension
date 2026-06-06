@@ -171,11 +171,72 @@ var allComponents = []component{
 	{
 		Key: "vsix",
 		SourceFn: func(r string) string {
-			return filepath.Join(r, "bloom-development-extension", "dist", "bloom.vsix")
+			return filepath.Join(r, "bloom-development-extension", "installer", "vscode", "bloom-extension.vsix")
 		},
-		DestFn:    func(b string) string { return filepath.Join(b, "bin", "vsix") },
-		Platforms: []string{"windows"},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "vscode") },
+		// No Platforms filter — the VS Code extension is deployed on all supported OSes.
+		PostDeployFn: vsixPostDeploy,
 	},
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// vsix post-deploy hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+// vsixPostDeploy installs the staged bloom-extension.vsix into VS Code using
+// the `code` CLI. It is non-critical: any failure is logged as a warning and
+// the rollout continues — the .vsix file is already in place and the user can
+// install it manually if needed.
+//
+// Resolution order for the `code` CLI:
+//  1. `code` on PATH  (works on Windows, Linux, and macOS when Shell Command is installed)
+//  2. macOS fallback: /Applications/Visual Studio Code.app/Contents/Resources/app/bin/code
+func vsixPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	vsixPath := filepath.Join(dst, "bloom-extension.vsix")
+
+	codeCLI, err := resolveCodeCLI()
+	if err != nil {
+		c.Logger.Warning("⚠️  vsix: VS Code CLI not found — extension staged at %s but not installed: %v", vsixPath, err)
+		return nil // non-critical
+	}
+
+	args := []string{"--install-extension", vsixPath, "--force"}
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] vsix: would run: %s %s", codeCLI, strings.Join(args, " "))
+		return nil
+	}
+
+	c.Logger.Info("🧩 Installing VS Code extension from %s ...", vsixPath)
+	cmd := exec.Command(codeCLI, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		// Non-critical: log and continue.
+		c.Logger.Warning("⚠️  vsix: installation returned an error (non-critical): %v", err)
+		c.Logger.Warning("    You can install manually: %s --install-extension %s --force", codeCLI, vsixPath)
+		return nil
+	}
+
+	c.Logger.Info("✓ VS Code extension installed — active on next VS Code window")
+	return nil
+}
+
+// resolveCodeCLI returns the path to the VS Code `code` CLI executable.
+// It checks PATH first (covers Windows, Linux, and macOS with Shell Command installed),
+// then falls back to the well-known macOS bundle location.
+func resolveCodeCLI() (string, error) {
+	if path, err := exec.LookPath("code"); err == nil {
+		return path, nil
+	}
+	if runtime.GOOS == "darwin" {
+		fallback := "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+		if _, err := os.Stat(fallback); err == nil {
+			return fallback, nil
+		}
+		return "", fmt.Errorf("'code' not found in PATH and VS Code bundle not found at /Applications/Visual Studio Code.app")
+	}
+	return "", fmt.Errorf("'code' not found in PATH — ensure VS Code is installed and 'code' is in PATH")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
