@@ -171,7 +171,9 @@ var allComponents = []component{
 	{
 		Key: "vsix",
 		SourceFn: func(r string) string {
-			return filepath.Join(r, "bloom-development-extension", "installer", "vscode", "bloom-extension.vsix")
+			// r is the root of the bloom-development-extension repo itself,
+			// so the .vsix lives directly at <r>/installer/vscode/.
+			return filepath.Join(r, "installer", "vscode", "bloom-extension.vsix")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "vscode") },
 		// No Platforms filter — the VS Code extension is deployed on all supported OSes.
