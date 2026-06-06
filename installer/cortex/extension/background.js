@@ -413,35 +413,21 @@ async function loadHarnessConfig() {
 
   // ── Guardar en config global ──────────────────────────────────────────────
   config.harness = harnessConfig;
-  console.log('[Harness] ✓ config.harness seteado. Procediendo a abrir tab...');
+  console.log('[Harness] ✓ config.harness seteado.');
 
-  // ── Abrir harness/index.html ── DENTRO del mismo bloque de éxito ──────────
-  // FIX v4: openHarnessTab() se llama inline aquí, no como función separada,
-  // para garantizar que no haya corte de control flow entre el parse y la apertura.
-  try {
-    const harnessUrl = chrome.runtime.getURL('harness/index.html');
-    console.log('[Harness] URL a abrir:', harnessUrl);
-
-    const allTabs = await chrome.tabs.query({});
-    console.log('[Harness] Total tabs en el browser:', allTabs.length);
-
-    const existingTab = allTabs.find(t => t.url && t.url.startsWith(harnessUrl));
-
-    if (existingTab) {
-      console.log('[Harness] Tab existente encontrada (id:', existingTab.id + ') — trayendo al frente');
-      await chrome.tabs.update(existingTab.id, { active: true });
-      console.log('[Harness] ✓ Tab traída al frente');
-    } else {
-      console.log('[Harness] No existe tab de harness — creando nueva...');
-      const newTab = await chrome.tabs.create({ url: harnessUrl, active: false });
-      console.log('[Harness] ✓ Tab creada exitosamente — id:', newTab.id, '| url:', harnessUrl);
-    }
-  } catch (tabErr) {
-    console.error('[Harness] ✗ Error abriendo tab:', tabErr.message);
-    console.error('[Harness] Stack:', tabErr.stack);
-  }
-
-  console.log('[Harness] >>>>>> loadHarnessConfig v4 COMPLETADO <<<<<<');
+  // ── Apertura de tab delegada al handler host_ready ────────────────────────
+  // FIX v5: No abrir la tab aquí. loadHarnessConfig() es llamada desde
+  // loadConfig() → initialize() → top-level del script, fuera de cualquier
+  // event handler de Chrome. En MV3, el service worker puede suspenderse entre
+  // awaits cuando no hay un event handle activo que lo mantenga vivo.
+  // chrome.tabs.query / chrome.tabs.create ejecutados en ese gap desaparecen
+  // silenciosamente sin logs ni errores — el SW ya está suspendido cuando
+  // la Promise resuelve.
+  //
+  // La apertura real ocurre en handleHostMessage() cuando llega host_ready,
+  // que sí corre dentro de nativePort.onMessage — un event handler activo
+  // garantizado por Chrome hasta que retorna.
+  console.log('[Harness] >>>>>> loadHarnessConfig v5 COMPLETADO — apertura de tab pendiente de host_ready <<<<<<');
 }
 
 /**
@@ -650,7 +636,17 @@ function handleHostMessage(msg) {
       console.log('[HANDSHAKE] Applying window layout from host payload:', msg.window);
       applyWindowLayout(msg.window);
     }
-    
+
+    // FIX v5: Abrir harness/index.html aquí, dentro del event handler
+    // nativePort.onMessage, donde el service worker está garantizadamente vivo.
+    // config.harness fue seteado por loadHarnessConfig() antes de llegar aquí.
+    if (config?.harness) {
+      console.log('[Harness] host_ready → abriendo harness tab (SW activo)');
+      openHarnessTab();
+    } else {
+      console.warn('[Harness] host_ready → config.harness no disponible, tab no abierta');
+    }
+
     // Notificar a discovery/landing que el handshake está completo
     chrome.runtime.sendMessage({
       event: 'HANDSHAKE_CONFIRMED',

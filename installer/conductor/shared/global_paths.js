@@ -266,6 +266,19 @@ const paths = {
     ? '/Applications/Bloom Nucleus Workspace.app/Contents/MacOS/Bloom Nucleus Workspace'
     : null,
 
+  // Bloom Workspace (replaces Conductor - deployed by installer)
+  workspaceDir: platform === 'darwin'
+    ? '/Applications/Bloom Nucleus Workspace.app'
+    : path.join(baseDir, 'bin', 'workspace'),
+  workspaceExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'workspace', 'bloom-workspace.exe')
+    : platform === 'darwin'
+      ? '/Applications/Bloom Nucleus Workspace.app/Contents/MacOS/Bloom Nucleus Workspace'
+      : path.join(baseDir, 'bin', 'workspace', 'bloom-workspace'),
+  workspaceBin: platform === 'darwin'
+    ? '/Applications/Bloom Nucleus Workspace.app/Contents/MacOS/Bloom Nucleus Workspace'
+    : null,
+
   // Bloom Sensor (Session Agent - replaces bloom-launcher)
   sensorDir: path.join(baseDir, 'bin', 'sensor'),
   sensorExe: platform === 'win32'
@@ -347,6 +360,7 @@ const paths = {
   ollamaSource: getResourcePath('ollama'),
   nodeSource: getResourcePath('node'),
   conductorSource: getResourcePath('conductor'),
+  workspaceSource: getResourcePath('workspace'),
   launcherSource: getResourcePath('launcher'),
   sensorSource: getResourcePath('sensor'),
   setupSource:  getResourcePath('setup'),
@@ -427,6 +441,7 @@ const criticalPaths = [
   'nodeDir', 'nodeExe',
   'temporalDir', 'temporalExe',
   'conductorDir', 'cortexDir',
+  'workspaceDir', 'workspaceExe',
   'chromeDir',
   'extensionDir', 'engineDir', 'runtimeDir', 
   'configDir', 'profilesDir', 'logsDir'
@@ -448,6 +463,7 @@ console.log(`🔗 Host binary: ${hostBinary}`);
 console.log(`🦙 Ollama binary: ${paths.ollamaExe}`);
 console.log(`⏱️ Temporal binary: ${paths.temporalExe}`);
 console.log(`🎮 Conductor binary: ${paths.conductorExe}`);
+console.log(`🖥️ Workspace binary: ${paths.workspaceExe}`);
 console.log(`📦 Cortex package: ${paths.cortexBlx}`);
 console.log(`👤 Profiles directory: ${paths.profilesDir}`);
 console.log(`⚙️ Config directory: ${paths.configDir}`);
