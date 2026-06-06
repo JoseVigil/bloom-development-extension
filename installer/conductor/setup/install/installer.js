@@ -359,7 +359,7 @@ async function createDirectories(win) {
       paths.hostDir,
       paths.ollamaDir,
       paths.cortexDir,
-      paths.conductorDir,
+      paths.workspaceDir,
       paths.chromeDir,
       paths.configDir,
       paths.engineDir,
@@ -370,8 +370,8 @@ async function createDirectories(win) {
       paths.vscodeDir,          // bin/vscode — bloom-extension.vsix
       paths.bootstrapDir,       // bin/bootstrap — bootstrap files
       paths.bootstrapStaticDir, // bin/bootstrap/static — static assets (logo.svg, etc.)
-      path.join(paths.logsDir, 'conductor'),        // logs/conductor
-      path.join(paths.logsDir, 'conductor', 'setup'), // logs/conductor/setup
+      path.join(paths.logsDir, 'workspace'),        // logs/workspace
+      path.join(paths.logsDir, 'workspace', 'setup'), // logs/workspace/setup
       path.join(paths.logsDir, 'install'),           // logs/install
     ];
 
@@ -802,50 +802,52 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 10. CONDUCTOR (Workspace)
+    // 10. WORKSPACE (ex-Conductor)
     // ========================================================================
-    logger.info('\n🎮 CONDUCTOR WORKSPACE');
+    logger.info('\n🖥️ WORKSPACE');
     if (process.platform === 'darwin') {
-      // En darwin: copiar el .app completo a /Applications/
-      const appSrc = paths.conductorSource; // .../mac_x64/conductor/mac/ o mac-arm64/
-      const appName = 'Bloom Nucleus Workspace.app';
-      const appSrcPath = path.join(appSrc, appName);
-      const appDest = path.join('/Applications', appName);
+      const arch       = process.arch === 'arm64' ? 'darwin_arm64' : 'darwin_x64';
+      const macSubdir  = process.arch === 'arm64' ? 'mac-arm64'    : 'mac';
+      // SourceFn apunta al ejecutable dentro del .app, no al bundle completo.
+      // El .app es el contenedor de distribución; el binario real vive en Contents/MacOS/.
+      const appName    = 'bloom-workspace.app';
+      const appSrcDir  = path.join(paths.installerDir, 'native', 'bin', arch, 'workspace', macSubdir);
+      const appSrcPath = path.join(appSrcDir, appName);
+      const appDest    = path.join('/Applications', appName);
+
       if (await fs.pathExists(appSrcPath)) {
         logger.info(`📦 Installing ${appName} to /Applications/...`);
         logger.debug(`   Source: ${appSrcPath}`);
-        logger.debug(`   Dest: ${appDest}`);
-        // execSync hoisted: usado tanto para rm -rf como para cp -R
+        logger.debug(`   Dest:   ${appDest}`);
         const { execSync } = require('child_process');
-        // Remover versión anterior si existe
+        // CRÍTICO: fs.remove falla con ENOTEMPTY en .app bundles profundos en macOS
         if (await fs.pathExists(appDest)) {
-          // CRÍTICO: fs.remove falla con ENOTEMPTY en .app bundles profundos en macOS
           execSync(`rm -rf "${appDest}"`, { stdio: 'ignore' });
           logger.info('  Removed previous version');
         }
         // CRÍTICO: fs.copy conflicta con el handler asar de Electron cuando el proceso
         // tiene archivos .asar mapeados en memoria — usar cp nativo evita el problema
         execSync(`cp -R "${appSrcPath}" "${appDest}"`, { stdio: 'ignore' });
-        await fs.chmod(path.join(appDest, 'Contents', 'MacOS', 'Bloom Nucleus Workspace'), 0o755);
-        logger.success(`✅ Bloom Nucleus Workspace.app installed to /Applications/`);
-        results.conductor = { success: true, dest: appDest };
+        await fs.chmod(path.join(appDest, 'Contents', 'MacOS', 'bloom-workspace'), 0o755);
+        logger.success(`✅ bloom-workspace.app installed to /Applications/`);
+        results.workspace = { success: true, dest: appDest };
       } else {
-        logger.warn(`⚠️ Conductor .app not found at: ${appSrcPath}`);
-        results.conductor = { success: false, skipped: true };
+        logger.warn(`⚠️ bloom-workspace.app not found at: ${appSrcPath}`);
+        results.workspace = { success: false, skipped: true };
       }
     } else {
-      // Windows — comportamiento original intacto
-      const conductorExeName = 'bloom-conductor.exe';
-      const conductorExeSrc  = path.join(paths.conductorSource, conductorExeName);
-      if (await fs.pathExists(conductorExeSrc)) {
-        results.conductor = await copyFileSafe(
-          conductorExeSrc,
-          paths.conductorExe,
-          conductorExeName
+      // Windows
+      const workspaceExeName = 'bloom-workspace.exe';
+      const workspaceExeSrc  = path.join(paths.installerDir, 'native', 'bin', 'win64', 'workspace', workspaceExeName);
+      if (await fs.pathExists(workspaceExeSrc)) {
+        results.workspace = await copyFileSafe(
+          workspaceExeSrc,
+          paths.workspaceExe,
+          workspaceExeName
         );
       } else {
-        logger.warn('⚠️ bloom-conductor binary not found, skipping');
-        results.conductor = { success: false, skipped: true };
+        logger.warn('⚠️ bloom-workspace.exe not found, skipping');
+        results.workspace = { success: false, skipped: true };
       }
     }
 

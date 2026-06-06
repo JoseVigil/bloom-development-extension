@@ -1,8 +1,8 @@
 {
-  "name": "bloom-conductor",
-  "productName": "Bloom Nucleus Workspace",
+  "name": "bloom-workspace",
+  "productName": "Bloom Workspace",
   "version": "1.0.0",
-  "description": "Bloom Nucleus Conductor - Post-installation workspace",
+  "description": "Bloom Nucleus Workspace - Post-installation workspace",
   "main": "main_conductor.js",
   "author": {
     "name": "BTIP Studio",
@@ -13,8 +13,8 @@
     "prebuild": "node ../shared/bump-version.js",
     "build": "electron-builder --win --x64",
     "build:darwin": "npm run build:darwin:x64 && npm run build:darwin:arm",
-    "build:darwin:x64": "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/conductor",
-    "build:darwin:arm": "electron-builder --mac --arm64 -c.directories.output=../../native/bin/darwin_arm64/conductor",
+    "build:darwin:x64": "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/workspace",
+    "build:darwin:arm": "electron-builder --mac --arm64 -c.directories.output=../../native/bin/darwin_arm64/workspace",
     "dev": "electron .",
     "dev:darwin": "electron .",
     "version:bump": "node ../shared/bump-version.js",
@@ -24,8 +24,9 @@
     "version:info": "node -e \"const i=require('./build_info.json'); console.log(i.product_name, i.full_version, '|', i.built_at);\""
   },
   "build": {
-    "appId": "com.bloom.nucleus.conductor",
-    "productName": "Bloom Nucleus Workspace",
+    "appId": "com.bloom.nucleus.workspace",
+    "productName": "Bloom Workspace",
+    "executableName": "bloom-workspace",
     "win": {
       "target": [
         {
@@ -37,7 +38,7 @@
       ],
       "icon": "assets/bloom.ico",
       "requestedExecutionLevel": "asInvoker",
-      "artifactName": "bloom-conductor.exe",
+      "artifactName": "bloom-workspace.exe",
       "extraFiles": [
         {
           "from": "bloom-conductor-version.ps1",
@@ -66,7 +67,7 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.plist",
       "entitlementsInherit": "entitlements.plist",
-      "artifactName": "bloom-conductor-${arch}.dmg",
+      "artifactName": "bloom-workspace-${arch}.dmg",
       "extraFiles": [
         {
           "from": "../shared/logger.js",
@@ -83,11 +84,11 @@
       ]
     },
     "dmg": {
-      "artifactName": "bloom-conductor-${arch}.dmg",
+      "artifactName": "bloom-workspace-${arch}.dmg",
       "sign": false
     },
     "portable": {
-      "artifactName": "bloom-conductor.exe"
+      "artifactName": "bloom-workspace.exe"
     },
     "files": [
       "main_conductor.js",
@@ -110,7 +111,7 @@
       }
     ],
     "directories": {
-      "output": "../../native/bin/win64/conductor",
+      "output": "../../native/bin/win64/workspace",
       "buildResources": "assets"
     },
     "compression": "maximum",

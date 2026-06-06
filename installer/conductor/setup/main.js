@@ -142,7 +142,9 @@ function handleCLIOutput(onDone) {
       brain:     path.join(bloomBase, 'bin', 'brain',      'brain.exe'),
       host:      path.join(bloomBase, 'bin', 'host',      'bloom-host.exe'),
       ollama:    path.join(bloomBase, 'bin', 'ollama',     'ollama.exe'),
-      conductor: path.join(bloomBase, 'bin', 'conductor',  'bloom-conductor.exe'),
+      workspaceExe: process.platform === 'darwin'
+        ? path.join('/Applications', 'bloom-workspace.app', 'Contents', 'MacOS', 'bloom-workspace')
+        : path.join(bloomBase, 'bin', 'workspace', 'bloom-workspace.exe'),
       chromium:  path.join(bloomBase, 'bin', 'chrome-win', 'chrome.exe')
     };
     const result = {};
@@ -1022,23 +1024,23 @@ function registerInstallHandlers() {
   // Este handler solo abre la UI del conductor, no relanza el perfil.
   ipcMain.handle('launcher:open', async (event, options = {}) => {
     try {
-      let conductorExe = paths.conductorExe;
+      let workspaceExe = paths.workspaceExe;
 
       if (fs.existsSync(paths.configFile)) {
         const nucleusData = JSON.parse(fs.readFileSync(paths.configFile, 'utf8'));
-        if (nucleusData?.system_map?.conductor_exe) {
-          conductorExe = nucleusData.system_map.conductor_exe;
+        if (nucleusData?.system_map?.workspace_exe) {
+          workspaceExe = nucleusData.system_map.workspace_exe;
         }
       }
 
-      if (!fs.existsSync(conductorExe)) {
-        error(`❌ bloom-conductor.exe not found: ${conductorExe}`);
-        return { success: false, error: `bloom-conductor.exe not found: ${conductorExe}` };
+      if (!fs.existsSync(workspaceExe)) {
+        error(`❌ bloom-workspace not found: ${workspaceExe}`);
+        return { success: false, error: `bloom-workspace not found: ${workspaceExe}` };
       }
 
-      log(`🚀 [launcher:open] Spawning conductor: ${conductorExe}`);
+      log(`🚀 [launcher:open] Spawning workspace: ${workspaceExe}`);
 
-      const child = spawn(conductorExe, [], {
+      const child = spawn(workspaceExe, [], {
         detached: true,
         stdio: 'ignore',
         windowsHide: false

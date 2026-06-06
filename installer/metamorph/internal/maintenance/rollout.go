@@ -34,6 +34,8 @@ type component struct {
 
 func exe(name string) string { return core.ExeName(name) }
 
+func isARM64() bool { return runtime.GOARCH == "arm64" }
+
 var allComponents = []component{
 	{
 		Key: "brain",
@@ -76,14 +78,18 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "metamorph") },
 	},
 	{
-		Key: "conductor",
+		Key: "workspace",
 		SourceFn: func(r string) string {
 			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "conductor", "dist", "Bloom Conductor.app")
+				subdir := "mac"
+				if isARM64() {
+					subdir = "mac-arm64"
+				}
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "workspace", subdir, "bloom-workspace.app", "Contents", "MacOS", "bloom-workspace")
 			}
 			return filepath.Join(r, "conductor", "dist", exe("bloom-conductor"))
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "conductor") },
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "workspace") },
 	},
 	{
 		Key: "setup",
@@ -93,7 +99,12 @@ var allComponents = []component{
 			}
 			return filepath.Join(r, "setup", "dist", "BloomSetup.exe")
 		},
-		DestFn:    func(b string) string { return filepath.Join(b, "bin", "setup") },
+		DestFn: func(b string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(b, "bin", "setup", "BloomSetup.pkg")
+			}
+			return filepath.Join(b, "bin", "setup", "BloomSetup.exe")
+		},
 		Platforms: []string{"windows", "darwin"},
 	},
 	{
@@ -686,6 +697,9 @@ func copyFile(src, dst string) error {
 
 func copyDir(src, dst string) (int, error) {
 	count := 0
+	// filepath.Walk does not follow symlinks but reports them with lstat info.
+	// Electron .app bundles contain many symlinks inside Frameworks — we must
+	// preserve them instead of trying to open them as regular files.
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -695,9 +709,30 @@ func copyDir(src, dst string) (int, error) {
 			return err
 		}
 		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
+
+		// Use Lstat to reliably detect symlinks.
+		linfo, lerr := os.Lstat(path)
+		if lerr != nil {
+			return lerr
 		}
+
+		if linfo.Mode()&os.ModeSymlink != 0 {
+			linkTarget, lerr := os.Readlink(path)
+			if lerr != nil {
+				return lerr
+			}
+			_ = os.Remove(target)
+			if err := os.Symlink(linkTarget, target); err != nil {
+				return err
+			}
+			count++
+			return nil
+		}
+
+		if linfo.IsDir() {
+			return os.MkdirAll(target, linfo.Mode())
+		}
+
 		if err := copyFile(path, target); err != nil {
 			return err
 		}

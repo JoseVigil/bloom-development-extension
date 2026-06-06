@@ -25,6 +25,7 @@ Estructura esperada:
 USO:
   python3 build-all.py                   # build completo
   python3 build-all.py --only nucleus    # solo un componente Go
+  python3 build-all.py --only workspace  # solo Conductor/workspace
   python3 build-all.py --skip host       # saltar host (C++)
 """
 
@@ -1125,7 +1126,7 @@ def _print_summary(results: list[StepResult]) -> None:
 
 ALL_STEP_NAMES = [
     "brain", "host", "nucleus", "sentinel", "metamorph",
-    "sensor", "conductor", "conductor_pkg", "cortex", "bootstrap", "vsix",
+    "sensor", "setup", "workspace", "cortex", "bootstrap", "vsix",
 ]
 
 
@@ -1139,6 +1140,7 @@ def _parse_args() -> argparse.Namespace:
             Ejemplos:
               python3 build-all.py
               python3 build-all.py --only nucleus
+              python3 build-all.py --only workspace
               python3 build-all.py --only nucleus sentinel
               python3 build-all.py --skip host brain
         """),
