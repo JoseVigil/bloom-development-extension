@@ -266,7 +266,6 @@ datas = [
 
     (str(templates_src / 'harness' / '__init__.py'), 'brain/core/profile/web/templates/harness'),
     (str(templates_src / 'harness' / 'index.html'), 'brain/core/profile/web/templates/harness'),
-    (str(templates_src / 'harness' / 'ion.manifest.json'), 'brain/core/profile/web/templates/harness'),
     (str(templates_src / 'harness' / 'ionpump_protocol.js'), 'brain/core/profile/web/templates/harness'),
 
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
