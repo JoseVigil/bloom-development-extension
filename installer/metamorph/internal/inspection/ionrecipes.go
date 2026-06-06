@@ -65,6 +65,18 @@ func InspectAllIonRecipes(ionsitesPath string) (*IonRecipesResult, error) {
 		result.Recipes = append(result.Recipes, *info)
 	}
 
+	result.BasePath = ionsitesPath
+	result.TotalSites = len(result.Recipes)
+
+	// TotalFlows = total number of entry actions across all healthy sites.
+	totalFlows := 0
+	for _, r := range result.Recipes {
+		if r.Status == "healthy" {
+			totalFlows += len(r.EntryActions)
+		}
+	}
+	result.TotalFlows = totalFlows
+
 	return result, nil
 }
 

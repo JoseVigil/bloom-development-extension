@@ -278,68 +278,105 @@ type BootstrapMeta struct {
 	Info      string `json:"info"`
 }
 
+// resolvePythonExecutable returns the path to the Python interpreter to use
+// for running bootstrap scripts.
+//
+// Lookup order:
+//  1. BloomNucleus/bin/engine/runtime/python3  (deployed runtime, preferred)
+//  2. BloomNucleus/bin/engine/runtime/python   (alternate name in same runtime)
+//  3. "python3" on $PATH                       (system Python 3)
+//  4. "python"  on $PATH                       (legacy fallback)
+//
+// basePath is BloomNucleus/ (the bloom_base directory).
+func resolvePythonExecutable(basePath string) string {
+	runtimeDir := filepath.Join(basePath, "bin", "engine", "runtime")
+	candidates := []string{
+		filepath.Join(runtimeDir, "python3"),
+		filepath.Join(runtimeDir, "python"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	// Fall back to system Python; prefer python3 to avoid Python 2.
+	for _, name := range []string{"python3", "python"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path
+		}
+	}
+	return "python3" // last resort — will fail with a clear error message
+}
+
 // inspectBootstrap runs bin/bootstrap/version-bootstrap.py and returns a
 // ManagedBinary entry. The script is executed from its own directory so that
 // any relative imports inside it resolve correctly.
-func inspectBootstrap(basePath string) (ManagedBinary, error) {
-	scriptDir := filepath.Join(basePath, "bootstrap")
+//
+// bootstrapBinBase is BloomNucleus/bin/ (the bin/ subdirectory of bloom_base).
+// basePath (bloom_base) is needed to locate the deployed Python runtime.
+func inspectBootstrap(bootstrapBinBase string) (ManagedBinary, error) {
+	scriptDir := filepath.Join(bootstrapBinBase, "bootstrap")
 	scriptPath := filepath.Join(scriptDir, "version-bootstrap.py")
 
 	stat, err := os.Stat(scriptPath)
 	if err != nil {
 		return ManagedBinary{
-			Name:                 "Bootstrap",
-			Path:                 scriptPath,
-			Version:              "unknown",
-			Status:               "unhealthy",
+			Name:    "Bootstrap",
+			Path:    scriptPath,
+			Version: "unknown",
+			Status:  "unhealthy",
 		}, fmt.Errorf("script not found: %w", err)
 	}
 
+	// Resolve bloom_base (one level up from bootstrapBinBase = BloomNucleus/bin/)
+	bloomBase := filepath.Dir(bootstrapBinBase)
+	pythonExe := resolvePythonExecutable(bloomBase)
+
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("python", "version-bootstrap.py")
+	cmd := exec.Command(pythonExe, "version-bootstrap.py")
 	cmd.Dir = scriptDir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
 		return ManagedBinary{
-			Name:                 "Bootstrap",
-			Path:                 scriptPath,
-			Version:              "unknown",
-			Status:               "unhealthy",
+			Name:    "Bootstrap",
+			Path:    scriptPath,
+			Version: "unknown",
+			Status:  "unhealthy",
 		}, fmt.Errorf("script execution failed: %v — stderr: %s", err, stderr.String())
 	}
 
 	var out bootstrapVersionOutput
 	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
 		return ManagedBinary{
-			Name:                 "Bootstrap",
-			Path:                 scriptPath,
-			Version:              "unknown",
-			Status:               "unhealthy",
+			Name:    "Bootstrap",
+			Path:    scriptPath,
+			Version: "unknown",
+			Status:  "unhealthy",
 		}, fmt.Errorf("could not parse script output: %w", err)
 	}
 
 	if !out.Success {
 		return ManagedBinary{
-			Name:                 "Bootstrap",
-			Path:                 scriptPath,
-			Version:              "unknown",
-			Status:               "unhealthy",
+			Name:    "Bootstrap",
+			Path:    scriptPath,
+			Version: "unknown",
+			Status:  "unhealthy",
 		}, fmt.Errorf("script reported success=false")
 	}
 
 	hash, _ := sha256File(scriptPath)
 
 	return ManagedBinary{
-		Name:                 "Bootstrap",
-		Path:                 scriptPath,
-		Version:              out.Version,
-		BuildNumber:          out.BuildNumber,
-		Hash:                 hash,
-		SizeBytes:            stat.Size(),
-		LastModified:         stat.ModTime().UTC().Format(time.RFC3339),
-		Status:               "healthy",
+		Name:        "Bootstrap",
+		Path:        scriptPath,
+		Version:     out.Version,
+		BuildNumber: out.BuildNumber,
+		Hash:        hash,
+		SizeBytes:   stat.Size(),
+		LastModified: stat.ModTime().UTC().Format(time.RFC3339),
+		Status:      "healthy",
 		BootstrapMeta: &BootstrapMeta{
 			BuildDate: out.BuildDate,
 			Info:      out.Info,

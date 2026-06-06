@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+
+	"metamorph/internal/core"
 )
 
 // metamorphAppConfig represents the subset of metamorph-config.json that inspection
@@ -19,9 +22,38 @@ type metamorphAppConfig struct {
 	} `json:"paths"`
 }
 
-// defaultHostPath is the compile-time fallback used only when metamorph-config.json
-// cannot be read or does not contain paths.host_exe.
-const defaultHostPath = "bin/native/bloom-host.exe"
+// defaultHostPath is the compile-time fallback used only when neither
+// metamorph-config.json nor nucleus.json can supply the real path.
+// Uses core.ExeName so it is correct on all platforms (no .exe on macOS/Linux).
+var defaultHostPath = filepath.Join("bin", "host", core.ExeName("bloom-host"))
+
+// nucleusSystemMap is the subset of nucleus.json that inspection cares about.
+// The file lives at BloomNucleus/config/nucleus.json and is the authoritative
+// record of installed binary locations written by the installer.
+type nucleusSystemMap struct {
+	SystemMap struct {
+		HostExe   string `json:"host_exe"`
+		BloomBase string `json:"bloom_base"`
+	} `json:"system_map"`
+}
+
+// loadNucleusSystemMap reads BloomNucleus/config/nucleus.json.
+// Returns a zero-value struct (no error) if the file is absent.
+func loadNucleusSystemMap(basePath string) (nucleusSystemMap, error) {
+	configPath := filepath.Join(basePath, "config", "nucleus.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nucleusSystemMap{}, nil
+		}
+		return nucleusSystemMap{}, fmt.Errorf("could not read nucleus.json: %w", err)
+	}
+	var cfg nucleusSystemMap
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nucleusSystemMap{}, fmt.Errorf("could not parse nucleus.json: %w", err)
+	}
+	return cfg, nil
+}
 
 // loadMetamorphAppConfig reads metamorph-config.json from the same directory as
 // the running executable.  Returns a zero-value struct (no error) if the file is
@@ -65,35 +97,41 @@ type managedBinaryDefinition struct {
 //
 // Contracts verified on 2026-02-18:
 //
-//	Brain:     brain.exe --json --version   → data.app_release / data.build_counter
-//	Nucleus:   nucleus.exe --json version   → version / build_number
-//	Sentinel:  sentinel.exe --json version  → version / build
-//	Host:      bloom-host.exe --version --json → version / build
-//	Conductor: bloom-conductor-version.ps1 --json → version / build
-//	Metamorph: metamorph.exe --json version → version / build_number
+//	Brain:     brain --json --version      → data.app_release / data.build_counter
+//	Nucleus:   nucleus --json version      → version / build_number
+//	Sentinel:  sentinel --json version     → version / build
+//	Host:      bloom-host --version --json → version / build
+//	Conductor: platform-specific (macOS .app / Windows .ps1)
+//	Metamorph: metamorph --json version    → version / build_number
 //	Cortex:    reads cortex.meta.json from inside .blx ZIP (not executable)
-//	Setup:     bloom-setup-version.ps1 --json → version / build
+//	Setup:     bloom-setup-version.ps1 --json → version / build  (Windows only)
 //
 // NOTE ON PATHS:
 //
-//	Host path is read from paths.host_exe in metamorph-config.json at runtime.
-//	The config-supplied value is passed in as hostPath; if the config is absent
-//	or the field is empty, defaultHostPath ("native/bloom-host.exe") is used.
-//	Conductor and Setup are Electron apps; their version .ps1 scripts live
-//	inside win-unpacked/ within their respective directories.
+//	All paths use core.ExeName() so they are correct on every platform
+//	(no .exe suffix on macOS/Linux).
+//	Host path is read from nucleus.json system_map.host_exe at runtime, then
+//	metamorph-config.json paths.host_exe as secondary fallback, then defaultHostPath.
+//	nucleus.json values are absolute paths; all others are relative to basePath.
 func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 	if hostPath == "" {
 		hostPath = defaultHostPath
 	}
-	// All paths are relative to basePath and include the "bin/" prefix that
-	// reflects the real on-disk layout: BloomNucleus/bin/<component>/...
-	// hostPath comes from metamorph-config.json and is already a full relative
-	// path (e.g. "bin/host/bloom-host.exe"); if absent the defaultHostPath
-	// constant below must also carry the "bin/" prefix.
+
+	// Conductor path depends on the platform:
+	//   macOS  — installed as an .app bundle in /Applications/
+	//   others — exe inside bin/conductor/
+	// On macOS we set the path to the .app bundle; the inspector stats the bundle
+	// root (it's a directory) rather than the inner Mach-O.
+	conductorPath := filepath.Join("bin", "conductor", core.ExeName("bloom-conductor"))
+	if runtime.GOOS == "darwin" {
+		conductorPath = "/Applications/Bloom Nucleus Workspace.app"
+	}
+
 	return []managedBinaryDefinition{
 		{
 			name:         "Brain",
-			path:         "bin/brain/brain.exe",
+			path:         filepath.Join("bin", "brain", core.ExeName("brain")),
 			versionArgs:  []string{"--json", "--version"},
 			infoArgs:     []string{"--json", "--info"},
 			versionField: "data.app_release",
@@ -101,7 +139,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Nucleus",
-			path:         "bin/nucleus/nucleus.exe",
+			path:         filepath.Join("bin", "nucleus", core.ExeName("nucleus")),
 			versionArgs:  []string{"--json", "version"},
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
@@ -109,16 +147,16 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Sentinel",
-			path:         "bin/sentinel/sentinel.exe",
+			path:         filepath.Join("bin", "sentinel", core.ExeName("sentinel")),
 			versionArgs:  []string{"--json", "version"},
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
 			buildField:   "build",
 		},
 		{
-			// Path is resolved at runtime from paths.host_exe in metamorph-config.json.
-			// Falls back to defaultHostPath ("bin/native/bloom-host.exe") if the config is
-			// absent or the field is empty.
+			// Path resolved at runtime: nucleus.json system_map.host_exe →
+			// metamorph-config.json paths.host_exe → defaultHostPath fallback.
+			// nucleus.json supplies an absolute path on dev/macOS installs.
 			name:         "Host",
 			path:         hostPath,
 			versionArgs:  []string{"--version", "--json"},
@@ -128,15 +166,15 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Conductor",
-			path:         "bin/conductor/bloom-conductor.exe",
-			versionArgs:  []string{}, // interrogated via .ps1 — see inspectConductor()
+			path:         conductorPath,
+			versionArgs:  []string{}, // platform-specific — see inspectConductor()
 			infoArgs:     []string{},
 			versionField: "version",
 			buildField:   "build",
 		},
 		{
 			name:         "Cortex",
-			path:         "bin/cortex/bloom-cortex.blx",
+			path:         filepath.Join("bin", "cortex", "bloom-cortex.blx"),
 			versionArgs:  []string{}, // not executable — read from cortex.meta.json inside ZIP
 			infoArgs:     []string{},
 			versionField: "",
@@ -144,7 +182,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		},
 		{
 			name:         "Metamorph",
-			path:         "bin/metamorph/metamorph.exe",
+			path:         filepath.Join("bin", "metamorph", core.ExeName("metamorph")),
 			versionArgs:  []string{"--json", "version"},
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
@@ -155,17 +193,16 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			// --json version → JSON: {"build": "57", "channel": "stable", "version": "1.0.0"}
 			// Note: build is a string in the JSON output, _parse_build handles str→int conversion.
 			// --json info   → JSON: {version, channel, capabilities, requires} — no build field.
-			// inspectSensor uses --json version for version+build, --json info for SensorInfo metadata.
 			name:         "Sensor",
-			path:         "bin/sensor/bloom-sensor.exe",
-			versionArgs:  []string{"--json", "version"}, // → JSON with version/build/channel
-			infoArgs:     []string{"--json", "info"},     // → JSON with capabilities/requires
+			path:         filepath.Join("bin", "sensor", core.ExeName("bloom-sensor")),
+			versionArgs:  []string{"--json", "version"},
+			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
-			buildField:   "build", // string in JSON — handled by extractVersionAndBuild via fmt.Sprintf→int
+			buildField:   "build",
 		},
 		{
 			name:         "Setup",
-			path:         "bin/setup/bloom-setup.exe",
+			path:         filepath.Join("bin", "setup", core.ExeName("bloom-setup")),
 			versionArgs:  []string{}, // Electron — interrogated via .ps1, see inspectElectronBinary()
 			infoArgs:     []string{},
 			versionField: "version",
@@ -427,15 +464,29 @@ func inspectSensor(binary *ManagedBinary, exePath string) (*ManagedBinary, error
 
 // InspectAllManagedBinaries inspects all managed binaries in parallel.
 func InspectAllManagedBinaries(basePath string) ([]ManagedBinary, error) {
-	// Load metamorph-config.json to resolve paths that can vary per installation.
-	// A missing config file is non-fatal; each binary falls back to its default.
-	appCfg, err := loadMetamorphAppConfig()
+	// Resolve host path — precedence:
+	//   1. nucleus.json system_map.host_exe   (absolute path, written by installer)
+	//   2. metamorph-config.json paths.host_exe (relative or absolute)
+	//   3. defaultHostPath compile-time fallback (relative)
+	hostPath := ""
+
+	nucleusCfg, err := loadNucleusSystemMap(basePath)
 	if err != nil {
-		// Non-fatal: log to stderr and proceed with defaults.
-		fmt.Fprintf(os.Stderr, "warning: could not load metamorph-config.json: %v\n", err)
+		fmt.Fprintf(os.Stderr, "warning: could not load nucleus.json: %v\n", err)
+	}
+	if nucleusCfg.SystemMap.HostExe != "" {
+		hostPath = nucleusCfg.SystemMap.HostExe
 	}
 
-	definitions := getManagedBinaries(appCfg.Paths.HostExe)
+	if hostPath == "" {
+		appCfg, err := loadMetamorphAppConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not load metamorph-config.json: %v\n", err)
+		}
+		hostPath = appCfg.Paths.HostExe
+	}
+
+	definitions := getManagedBinaries(hostPath)
 	results := make([]ManagedBinary, len(definitions))
 
 	var wg sync.WaitGroup
@@ -448,7 +499,16 @@ func InspectAllManagedBinaries(basePath string) ([]ManagedBinary, error) {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			fullPath := buildPath(basePath, definition.path)
+			// If the path is already absolute (e.g. from nucleus.json system_map
+			// or the macOS Conductor .app path) use it directly; otherwise join
+			// with basePath.
+			var fullPath string
+			if filepath.IsAbs(definition.path) {
+				fullPath = definition.path
+			} else {
+				fullPath = buildPath(basePath, definition.path)
+			}
+
 			binary, err := InspectManagedBinary(definition.name, fullPath, definition)
 			if err != nil {
 				results[index] = ManagedBinary{
@@ -470,7 +530,7 @@ func InspectAllManagedBinaries(basePath string) ([]ManagedBinary, error) {
 
 // InspectSelfBinary inspects the currently running Metamorph binary.
 func InspectSelfBinary() (*ManagedBinary, error) {
-	exePath, err := filepath.Abs(filepath.Join(filepath.Dir("."), "metamorph.exe"))
+	exePath, err := filepath.Abs(filepath.Join(filepath.Dir("."), core.ExeName("metamorph")))
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine executable path: %w", err)
 	}
