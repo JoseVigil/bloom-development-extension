@@ -103,7 +103,7 @@ func parseSinceDuration(since string) (time.Duration, error) {
 
 // parseLineTimestamp tries to extract a timestamp from a log line.
 //
-// Handles four layouts found across Bloom log streams:
+// Handles several layouts found across Bloom log streams:
 //
 //  1. Go logger prefix (nucleus, sentinel):
 //     "2006/01/02 15:04:05 ..."
@@ -115,11 +115,20 @@ func parseSinceDuration(since string) (time.Duration, error) {
 //     "[2006-01-02T15:04:05.000Z] ..."
 //     "[2006-01-02T15:04:05Z] ..."
 //
-//  4. Chromium engine log (MMDD/HHMMss.mmm inside square-bracket process header):
+//  4. Sentinel stdout wrapper (bracketed space-separated, local time):
+//     "[2006-01-02 15:04:05] [stdout] ..."
+//
+//  5. Chromium engine log (MMDD/HHMMss.mmm inside square-bracket process header):
 //     "[PID:TID:MMDD/HHMMss.mmm:LEVEL:source] ..."
 //     e.g. "[14012:19908:0223/000150.567:VERBOSE1:...]"
 //     Month+day = 0223 → Feb 23; time = 000150.567 → 00:01:50.567
 //     The year is inferred from the current UTC year since Chromium omits it.
+//
+//  6. Harness banner (timestamp bracketed inline, not at line start):
+//     "======== [2006-01-02T15:04:05Z] Harness session started ..."
+//
+//  7. Pino/nucleus_control_plane JSON logger (epoch milliseconds in "time" field):
+//     {"level":30,"time":1780841595866,"msg":"..."}
 //
 // Returns zero time on failure.
 func parseLineTimestamp(line string) time.Time {
@@ -288,6 +297,10 @@ func parseLineTimestamp(line string) time.Time {
 		{"[2006-01-02T15:04:05Z]", 22, false},
 		// Bracketed ISO8601 with offset: [2026-02-23T02:08:37.849-03:00]
 		{"[2006-01-02T15:04:05.000Z07:00]", 31, true},
+		// BUG 1 FIX — Sentinel stdout wrapper: [2026-06-07 11:13:34] [stdout] ...
+		// The bracket format with space-separated date was missing from the table.
+		// hasZone=false: wall clock reinterpreted as local time (Argentina).
+		{"[2006-01-02 15:04:05]", 21, false},
 		// Plain ISO8601 with milliseconds: 2026-02-23T02:08:37.849Z
 		{"2006-01-02T15:04:05.000Z", 24, true},
 		// Plain ISO8601 with ms and offset: 2026-02-23T02:08:37.849+00:00
@@ -306,34 +319,82 @@ func parseLineTimestamp(line string) time.Time {
 
 	candidate := strings.TrimSpace(line)
 
-	for _, e := range formats {
-		if len(candidate) >= e.length {
-			substr := candidate[:e.length]
-			var t time.Time
-			var err error
-			if e.hasZone {
-				t, err = time.Parse(e.format, substr)
-			} else {
-				// hasZone=false: the format may contain a literal 'Z' in the layout
-				// (e.g. build_all writes local time with a bogus 'Z' suffix).
-				// Parse it with time.Parse to accept the Z, then reinterpret the
-				// wall-clock components as local time — discarding the false UTC offset.
-				var parsed time.Time
-				parsed, err = time.Parse(e.format, substr)
+	tryFormats := func(s string) time.Time {
+		for _, e := range formats {
+			if len(s) >= e.length {
+				substr := s[:e.length]
+				var t time.Time
+				var err error
+				if e.hasZone {
+					t, err = time.Parse(e.format, substr)
+				} else {
+					// hasZone=false: the format may contain a literal 'Z' in the layout
+					// (e.g. build_all writes local time with a bogus 'Z' suffix).
+					// Parse it with time.Parse to accept the Z, then reinterpret the
+					// wall-clock components as local time — discarding the false UTC offset.
+					var parsed time.Time
+					parsed, err = time.Parse(e.format, substr)
+					if err == nil {
+						// Re-parse wall clock in local timezone
+						t, err = time.ParseInLocation(
+							"2006-01-02 15:04:05",
+							parsed.Format("2006-01-02 15:04:05"),
+							time.Local,
+						)
+					}
+				}
 				if err == nil {
-					// Re-parse wall clock in local timezone
-					t, err = time.ParseInLocation(
-						"2006-01-02 15:04:05",
-						parsed.Format("2006-01-02 15:04:05"),
-						time.Local,
-					)
+					return t
 				}
 			}
-			if err == nil {
-				return t
+		}
+		return time.Time{}
+	}
+
+	// First attempt: match from the start of the (trimmed) line.
+	if t := tryFormats(candidate); !t.IsZero() {
+		return t
+	}
+
+	// BUG 2 FIX — Harness banner: "======== [2026-06-07T14:12:54Z] Harness session ..."
+	// The timestamp is bracketed but NOT at the start of the line, so the
+	// formats table never matched it.  Find the first '[' and re-run the
+	// format search against the substring starting there.
+	if idx := strings.Index(candidate, "["); idx > 0 {
+		if t := tryFormats(candidate[idx:]); !t.IsZero() {
+			return t
+		}
+	}
+
+	// BUG 3 FIX — Pino / nucleus_control_plane JSON logger.
+	// Lines look like: {"level":30,"time":1780841595866,"pid":...,"msg":"..."}
+	// The "time" field is Unix epoch in milliseconds.
+	if strings.HasPrefix(candidate, "{") {
+		const timeKey = `"time":`
+		if idx := strings.Index(candidate, timeKey); idx >= 0 {
+			rest := candidate[idx+len(timeKey):]
+			// Extract the numeric value (digits only, no quotes)
+			end := 0
+			for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+				end++
+			}
+			if end >= 10 { // at least 10 digits → plausible epoch
+				if ms, err := strconv.ParseInt(rest[:end], 10, 64); err == nil {
+					// Distinguish seconds (10 digits) from milliseconds (13 digits)
+					var t time.Time
+					if end <= 11 {
+						// Unix seconds
+						t = time.Unix(ms, 0).UTC()
+					} else {
+						// Unix milliseconds
+						t = time.Unix(ms/1000, (ms%1000)*int64(time.Millisecond)).UTC()
+					}
+					return t
+				}
 			}
 		}
 	}
+
 	return time.Time{}
 }
 

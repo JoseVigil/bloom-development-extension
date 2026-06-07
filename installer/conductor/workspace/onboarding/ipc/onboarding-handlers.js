@@ -4,6 +4,7 @@
 'use strict';
 
 const fs   = require('fs');
+const path = require('path');
 const { ipcMain, dialog } = require('electron');
 const { spawn } = require('child_process');
 const { getLogger } = require('../../../shared/logger');
@@ -39,6 +40,23 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       const profileId = nucleusData.master_profile;
       if (!profileId) throw new Error('master_profile not found');
 
+      // Detectar si el perfil ya tiene una sesión activa en profiles.json.
+      // Si status === 'open' y handshake_confirmed, el pre-flight de nucleus
+      // detecta la sesión existente y devuelve success:false. En ese caso
+      // usamos --skip-preflight para hacer re-attach a la sesión corriendo.
+      let skipPreflight = false;
+      try {
+        const profilesPath = path.join(path.dirname(NUCLEUS_JSON), 'profiles.json');
+        const profilesData = JSON.parse(fs.readFileSync(profilesPath, 'utf8'));
+        const profile = (profilesData.profiles || []).find(p => p.id === profileId);
+        if (profile?.runtime_state?.status === 'open' && profile?.runtime_state?.handshake_confirmed) {
+          skipPreflight = true;
+          log.info('[IPC] onboarding:launch-discovery — session already open, using --skip-preflight');
+        }
+      } catch (e) {
+        log.warn('[IPC] onboarding:launch-discovery — could not read profiles.json:', e.message);
+      }
+
       const args = [
         '--json', 'synapse', 'launch', profileId,
         '--mode', 'discovery',
@@ -47,6 +65,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
         '--override-service',   'github',
         '--override-step',      'github_auth',
       ];
+      if (skipPreflight) args.push('--skip-preflight');
       if (email) args.push('--override-email', email);
 
       const result = await execNucleus(args, 30000);

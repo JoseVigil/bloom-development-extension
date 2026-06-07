@@ -25,6 +25,7 @@ bloom-development-extension/
     ├── onboarding/
     │   ├── .DS_Store
     │   ├── ipc/
+    │   │   ├── .DS_Store
     │   │   └── onboarding-handlers.js
     │   ├── onboarding.html
     │   ├── onboarding.js

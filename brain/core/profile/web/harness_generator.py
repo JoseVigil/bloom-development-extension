@@ -50,6 +50,7 @@ def _copy_static_assets(harness_dir: Path) -> None:
 
     files_to_copy = [
         "index.html",
+        "harness.js",
         "ionpump_protocol.js",
         "ion.manifest.json",
     ]

@@ -282,7 +282,10 @@ const Simulator = {
 
   send() {
     const msg = this.currentMessage;
-    if (!msg) return;
+    if (!msg) {
+      Harness.notify('Seleccioná un mensaje primero', 'error');
+      return;
+    }
 
     const payload = this._buildPayload();
     const statusEl = document.getElementById('send-status');
@@ -303,17 +306,23 @@ const Simulator = {
       }
 
       const target = extensionId || chrome.runtime.id;
-      Logger.log('SEND', `→ ${msg.id} [${channel}] ${JSON.stringify(payload)}`);
+      Logger.log('SEND', `→ ${msg.id} [${channel}] target=${target} ${JSON.stringify(payload)}`);
 
       try {
-        chrome.runtime.sendMessage(target, payload, (response) => {
-          if (chrome.runtime.lastError) {
-            Logger.log('ERR', chrome.runtime.lastError.message);
+        // No pasar extensionId explícito: desde una página interna de la extensión,
+        // sendMessage sin target ya enruta al propio background.
+        // Con target explícito Chrome trata el mensaje como cross-extension y lo rechaza
+        // a menos que manifest.json declare externally_connectable.
+        chrome.runtime.sendMessage(payload, (response) => {
+          const err = chrome.runtime.lastError; // consumir sincrónicamente
+          if (err) {
+            Logger.log('ERR', err.message);
             statusEl.textContent = '✗ Error';
             statusEl.className = 'error';
-            Harness.notify(chrome.runtime.lastError.message, 'error');
+            Harness.notify(err.message, 'error');
           } else {
-            Logger.log('ACK', JSON.stringify(response));
+            const responseStr = response !== undefined ? JSON.stringify(response) : 'null (fire-and-forget)';
+            Logger.log('ACK', responseStr);
             statusEl.textContent = '✓ Sent';
             statusEl.className = 'ok';
             Harness.notify(`${msg.id} sent`, 'success');

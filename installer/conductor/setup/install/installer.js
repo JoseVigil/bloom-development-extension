@@ -806,33 +806,34 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🖥️ WORKSPACE');
     if (process.platform === 'darwin') {
-      const arch       = process.arch === 'arm64' ? 'darwin_arm64' : 'darwin_x64';
-      const macSubdir  = process.arch === 'arm64' ? 'mac-arm64'    : 'mac';
-      // SourceFn apunta al ejecutable dentro del .app, no al bundle completo.
-      // El .app es el contenedor de distribución; el binario real vive en Contents/MacOS/.
-      const appName    = 'bloom-workspace.app';
-      const appSrcDir  = path.join(paths.installerDir, 'native', 'bin', arch, 'workspace', macSubdir);
-      const appSrcPath = path.join(appSrcDir, appName);
-      const appDest    = path.join('/Applications', appName);
+      // CRÍTICO: metamorph rollout siempre usa 'darwin_x64' como directorio
+      // fuente (ver rollout.go SourceFn workspace), independientemente de la
+      // arquitectura real de la máquina. El installer DEBE hacer lo mismo para
+      // que el path de origen sea idéntico al que usa metamorph.
+      // El binario real vive dentro del .app bundle; se copia sólo el ejecutable
+      // a bin/workspace/ — destino canónico: ~/Library/BloomNucleus/bin/workspace/bloom-workspace
+      const macSubdir  = process.arch === 'arm64' ? 'mac-arm64' : 'mac';
+      const binarySrc  = path.join(
+        paths.installerDir,
+        'native', 'bin', 'darwin_x64',   // igual que metamorph — siempre x64
+        'workspace', macSubdir,
+        'bloom-workspace.app', 'Contents', 'MacOS', 'bloom-workspace'
+      );
+      const destBin = path.join(paths.workspaceDir, 'bloom-workspace');
 
-      if (await fs.pathExists(appSrcPath)) {
-        logger.info(`📦 Installing ${appName} to /Applications/...`);
-        logger.debug(`   Source: ${appSrcPath}`);
-        logger.debug(`   Dest:   ${appDest}`);
+      if (await fs.pathExists(binarySrc)) {
+        logger.info(`📦 Deploying bloom-workspace to bin/workspace/...`);
+        logger.debug(`   Source: ${binarySrc}`);
+        logger.debug(`   Dest:   ${destBin}`);
+        await fs.ensureDir(paths.workspaceDir);
         const { execSync } = require('child_process');
-        // CRÍTICO: fs.remove falla con ENOTEMPTY en .app bundles profundos en macOS
-        if (await fs.pathExists(appDest)) {
-          execSync(`rm -rf "${appDest}"`, { stdio: 'ignore' });
-          logger.info('  Removed previous version');
-        }
-        // CRÍTICO: fs.copy conflicta con el handler asar de Electron cuando el proceso
-        // tiene archivos .asar mapeados en memoria — usar cp nativo evita el problema
-        execSync(`cp -R "${appSrcPath}" "${appDest}"`, { stdio: 'ignore' });
-        await fs.chmod(path.join(appDest, 'Contents', 'MacOS', 'bloom-workspace'), 0o755);
-        logger.success(`✅ bloom-workspace.app installed to /Applications/`);
-        results.workspace = { success: true, dest: appDest };
+        // Usar cp nativo para evitar conflictos del handler asar de Electron
+        execSync(`cp "${binarySrc}" "${destBin}"`, { stdio: 'ignore' });
+        await fs.chmod(destBin, 0o755);
+        logger.success(`✅ bloom-workspace deployed to bin/workspace/`);
+        results.workspace = { success: true, dest: destBin };
       } else {
-        logger.warn(`⚠️ bloom-workspace.app not found at: ${appSrcPath}`);
+        logger.warn(`⚠️ bloom-workspace binary not found at: ${binarySrc}`);
         results.workspace = { success: false, skipped: true };
       }
     } else {
