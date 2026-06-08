@@ -179,3 +179,9 @@ native/bin/
 native/bin/
 .DS_Store
 installer/temporal/darwin/temporal
+
+
+# lo que ya está, por ejemplo:
+webview/app/src/lib
+# excepción para el debug panel:
+!webview/app/src/lib/components/debug/
