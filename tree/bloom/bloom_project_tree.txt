@@ -13,8 +13,8 @@
     │
     ├── .intents/
     │   ├── .dev/
-    │   │   └── .{intent-name-uuid3}/	
-    │   │       ├── .dev_state.json
+    │   │   └── .{intent-name-uuid3}/
+    │   │       ├── .dev_state.json         ← incluye mandate_id y gene_id activo
     │   │       ├── .briefing/
     │   │       │   ├── .briefing.json
     │   │       │   ├── .context_dev_plan.json
@@ -47,14 +47,14 @@
     │   │           ├── .briefing/
     │   │           │   ├── .payload.json
     │   │           │   ├── .index.json
-    │   │           │   └── .response/ 
+    │   │           │   └── .response/
     │   │           │       ├── .raw_output.txt
     │   │           │       ├── .report.json
     │   │           │       └── .staging/
     │   │           ├── .execution/
     │   │           │   ├── .payload.json
     │   │           │   ├── .index.json
-    │   │           │   └── .response/ 
+    │   │           │   └── .response/
     │   │           │       ├── .raw_output.txt
     │   │           │       ├── .report.json
     │   │           │       └── .staging/
@@ -62,7 +62,7 @@
     │   │               └── .turn_X/
     │   │                   ├── .payload.json
     │   │                   ├── .index.json
-    │   │                   └── .response/ 
+    │   │                   └── .response/
     │   │                       ├── .raw_output.txt
     │   │                       ├── .report.json
     │   │                       └── .staging/
@@ -88,7 +88,7 @@
     │               ├── .context/
     │               │   ├── .payload.json
     │               │   ├── .index.json
-    │               │   └── .response/ 
+    │               │   └── .response/
     │               │       ├── .raw_output.txt
     │               │       ├── .report.json
     │               │       └── .staging/
@@ -96,7 +96,7 @@
     │                   └── .turn_X/
     │                       ├── .payload.json
     │                       ├── .index.json
-    │                       └── .response/ 
+    │                       └── .response/
     │                           ├── .raw_output.txt
     │                           ├── .report.json
     │                           └── .staging/

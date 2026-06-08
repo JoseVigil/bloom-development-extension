@@ -174,16 +174,27 @@
     │                       ├── .report.json
     │                       └── .staging/
 	│
-	├── .mandates/                          
+	├── .mandates/
     │   └── .{mandate-id-uuid}/
-    │       ├── mandate.json
-    │       └── mandate_state.json
+    │       ├── mandate.json                ← incluye parent_mandates y own_genes
+    │       ├── mandate_state.json
+    │       └── .genes/                     ← ADN del mandate
+    │           └── .{gen-id-uuid}/
+    │               ├── gen.json            ← identidad, función semántica, embedding_ref
+    │               ├── gen_state.json      ← scope vivo: archivos actuales con md5
+    │               └── .history/
+    │                   └── .delta_{N}/
+    │                       ├── delta.json      ← qué cambió, cuándo, bajo qué intent
+    │                       └── snapshot.json   ← estado completo del scope en ese momento
     │
     ├── .cache/
     │   ├── .projects-snapshot.json
     │   ├── .semantic-index.json
     │   ├── .dependency-graph.json
-    │   └── .last-sync.json
+    │   ├── .last-sync.json
+    │   └── chroma/                         ← ChromaDB persiste aquí (BISP + Genes)
+    │       ├── {collection-per-project}/   ← intents vectorizados por proyecto
+    │       └── {nucleus-genes}/            ← funciones de genes vectorizadas (cross-mandate)
     │
     ├── .relations/
     │   ├── .project-links.json
@@ -199,7 +210,7 @@
     │       └── data.json
     │
     └── reports/
-        ├── health-dashboard.json
+        ├── health-dashboard.json           ← incluye genes huérfanos y deltas recientes
         ├── statistics.json
         └── exports/
             └── {timestamp}-report.pdf
