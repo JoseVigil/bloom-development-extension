@@ -33,6 +33,24 @@ interface AIExecutionProcess {
   client: ExtendedWebSocket;
 }
 
+// ── System Event envelope ────────────────────────────────────────────────────
+// El debug panel (debug.html) escucha mensajes con esta forma exacta:
+//   { type: 'system:event', payload: { category, event, data, profile_id, timestamp } }
+//
+// broadcastSystemEvent() es el único punto de emisión de este envelope.
+// Todos los subsistemas (bootstrap, file watcher, API handlers) deben
+// llamar a este método en lugar de broadcast() directo para que los
+// eventos aparezcan en el feed del debug panel.
+//
+// Categorías conocidas: 'nucleus' | 'synapse' | 'temporal' | 'brain' | 'sentinel' | 'health'
+export interface SystemEventPayload {
+  category: 'nucleus' | 'synapse' | 'temporal' | 'brain' | 'sentinel' | 'health';
+  event: string;
+  data: Record<string, any>;
+  profile_id: string | null;
+  timestamp: number;
+}
+
 export class WebSocketManager extends EventEmitter {
   private static instance: WebSocketManager;
   private wss: WebSocketServer | null = null;
@@ -368,6 +386,47 @@ Explain and derive, don't implement`
       'AI_EXECUTION_OLLAMA_NOT_RUNNING'
     ];
     return recoverable.includes(code);
+  }
+
+  // ── broadcastSystemEvent ───────────────────────────────────────────────────
+  // Emite un event envelope que el debug panel (debug.html) consume directamente.
+  //
+  // Formato wire: { type: 'system:event', payload: SystemEventPayload }
+  //
+  // El debug panel filtra por msg.type === 'system:event' en su ws.onmessage.
+  // Todos los subsistemas deben usar este método en lugar de broadcast() para
+  // que sus eventos aparezcan en el feed en tiempo real.
+  //
+  // Uso desde server-bootstrap.js (JS puro, no TypeScript):
+  //   wsManager.broadcastSystemEvent('nucleus', 'BOOTSTRAP_READY', { ws_port: 4124, api_port: 48215 });
+  //
+  // Uso desde código TypeScript:
+  //   wsManager.broadcastSystemEvent('synapse', 'GITHUB_PAT_DETECTED', { token_fingerprint: '...' }, profileId);
+  broadcastSystemEvent(
+    category: SystemEventPayload['category'],
+    event: string,
+    data: Record<string, any> = {},
+    profile_id: string | null = null
+  ): void {
+    const payload: SystemEventPayload = {
+      category,
+      event,
+      data,
+      profile_id,
+      timestamp: Date.now()
+    };
+
+    const message = JSON.stringify({ type: 'system:event', payload });
+    let sent = 0;
+
+    this.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+        sent++;
+      }
+    });
+
+    console.log(`[WebSocketManager] broadcastSystemEvent '${category}:${event}' → ${sent} clients`);
   }
 
   broadcast(event: string, payload?: any): void {

@@ -14,6 +14,7 @@ import { projectRoutes } from './routes/project.routes';
 import { profileRoutes } from './routes/profile.routes';
 import { authRoutes } from './routes/auth.routes';
 import { explorerRoutes } from './routes/explorer.routes';
+import { internalRoutes } from './routes/internal.routes';
 
 // ✅ FIX: Import GitHubOAuthServer class (not singleton instance)
 import { GitHubOAuthServer } from '../auth/GitHubOAuthServer';
@@ -201,6 +202,8 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   await fastify.register(profileRoutes, { prefix: '/api/v1/profile' });
   await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
   await fastify.register(explorerRoutes, { prefix: '/api/v1/explorer' });
+  await fastify.register(internalRoutes, { prefix: '/api/internal' });
+
 
   // Error handler (must be last)
   fastify.setErrorHandler(errorHandler);

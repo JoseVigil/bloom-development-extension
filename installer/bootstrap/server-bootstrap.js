@@ -168,21 +168,7 @@ function isPortOpen(port) {
 // El orden de boot corregido en service.go garantiza que Go arranque Svelte
 // (startSvelteDev → waitForSvelteReady) ANTES de lanzar bundle.js. Cuando
 // bundle.js arranca, el puerto 5173 ya está listo.
-//
-// Sin esta corrección, existía una race condition:
-//   1. Go spawneaba bundle.js (bootControlPlane)
-//   2. bundle.js hacía isPortOpen(5173) → false (Vite todavía iniciando)
-//   3. bundle.js spawneaba su propio npm run dev → dos procesos Vite en paralelo
-//   4. El proceso de Go perdía track del proceso JS y viceversa
-//   5. health check reportaba UNREACHABLE porque el supervisor Go no conocía
-//      el PID del proceso que realmente estaba escuchando
-//
-// SVELTE_MANAGED_BY_GO=true es la señal explícita de que Go ya gestionó el
-// arranque. Incluso sin la variable (dev local sin service start), fallamos
-// safe: si el puerto está libre, logueamos un warning en lugar de spawnar.
 async function startSvelteDevServer() {
-  // Señal explícita de Go: Svelte ya fue arrancado y confirmado por el supervisor.
-  // No intentar ningún spawn desde aquí.
   if (process.env.SVELTE_MANAGED_BY_GO === 'true') {
     const isRunning = await isPortOpen(5173);
     if (isRunning) {
@@ -193,8 +179,6 @@ async function startSvelteDevServer() {
     return null;
   }
 
-  // Modo desarrollo local: service start no está corriendo, se puede intentar
-  // el spawn como fallback. Pero loguear claramente que este no es el camino normal.
   console.warn('[Bootstrap] ⚠️  SVELTE_MANAGED_BY_GO not set — running outside nucleus service start?');
 
   const svelteRunning = await isPortOpen(5173);
@@ -203,8 +187,6 @@ async function startSvelteDevServer() {
     return null;
   }
 
-  // En producción (bajo NSSM / nucleus service start) nunca debería llegar aquí.
-  // En desarrollo local sin service start, se puede intentar el spawn.
   const bloomDir = process.env.BLOOM_DIR || '';
   const bloomNucleusPath = process.env.BLOOM_NUCLEUS_PATH || '';
 
@@ -299,11 +281,23 @@ function startHeadlessFileWatcher(wsManager) {
   watcher
     .on('change', (filePath) => {
       console.log(`[FileWatcher] btip:updated → ${filePath}`);
+      // Mantener broadcast legacy para consumidores existentes del evento btip:updated
       wsManager.broadcast('btip:updated', { path: filePath });
+      // Emitir también como system event para que aparezca en el debug panel
+      wsManager.broadcastSystemEvent('nucleus', 'BTIP_UPDATED', { path: filePath });
     })
-    .on('add', (filePath) => wsManager.broadcast('btip:updated', { path: filePath }))
-    .on('unlink', (filePath) => wsManager.broadcast('btip:deleted', { path: filePath }))
-    .on('error', (err) => console.error('[FileWatcher] Error:', err));
+    .on('add', (filePath) => {
+      wsManager.broadcast('btip:updated', { path: filePath });
+      wsManager.broadcastSystemEvent('nucleus', 'BTIP_ADDED', { path: filePath });
+    })
+    .on('unlink', (filePath) => {
+      wsManager.broadcast('btip:deleted', { path: filePath });
+      wsManager.broadcastSystemEvent('nucleus', 'BTIP_DELETED', { path: filePath });
+    })
+    .on('error', (err) => {
+      console.error('[FileWatcher] Error:', err);
+      wsManager.broadcastSystemEvent('nucleus', 'FILEWATCHER_ERROR', { message: err.message });
+    });
 
   console.log(`[Bootstrap] ✅ FileWatcher active on ${bloomDir}`);
   return watcher;
@@ -351,9 +345,19 @@ async function bootstrap() {
 
   const fileWatcher = startHeadlessFileWatcher(wsManager);
 
-  // startSvelteDevServer es ahora async (usa await isPortOpen).
-  // bootstrap() ya es async — podemos await acá sin cambiar la firma externa.
   const svelteServer = await startSvelteDevServer();
+
+  // ── Emitir BOOTSTRAP_READY como system event ────────────────────────────
+  // Este es el primer evento que el debug panel recibe cuando el Control Plane
+  // arranca. Permite confirmar visualmente que el WebSocket está vivo y que
+  // los puertos están asignados correctamente.
+  wsManager.broadcastSystemEvent('nucleus', 'BOOTSTRAP_READY', {
+    ws_port:    4124,
+    api_port:   48215,
+    svelte_pid: svelteServer?.pid || null,
+    role:       process.env.BLOOM_USER_ROLE,
+    pid:        process.pid,
+  });
 
   console.log('[Bootstrap] ✅ Control Plane ready');
   console.log('[Bootstrap]    WebSocket: ws://localhost:4124');
@@ -365,6 +369,7 @@ async function bootstrap() {
 
   process.on('SIGINT', async () => {
     console.log('[Bootstrap] 🛑 Shutting down...');
+    wsManager.broadcastSystemEvent('nucleus', 'BOOTSTRAP_SHUTDOWN', { reason: 'SIGINT' });
     if (fileWatcher) fileWatcher.close();
     if (svelteServer) svelteServer.kill();
     await wsManager.stop();

@@ -1,3 +1,5 @@
+'use strict';
+
 // ============================================================================
 // SYNAPSE THIN CLIENT - ROUTER CON HANDSHAKE DE 3 FASES
 // ============================================================================
@@ -11,6 +13,42 @@ let isInitialized = false;
 
 const MAX_RECONNECT = 10;
 const BASE_DELAY = 2000;
+
+// ============================================================================
+// DEBUG PANEL BRIDGE
+// Reenvía eventos del harness al feed del debug panel (debug.html / Control Plane).
+//
+// Canal: POST http://localhost:48215/api/internal/system-event
+// Envelope: { category, event, data, profile_id, timestamp }
+//
+// forwardToDebugPanel() es fire-and-forget: nunca bloquea el flujo principal.
+// Si la API no está disponible o el panel no está abierto, falla silenciosamente.
+//
+// Categorías usadas desde background.js:
+//   'synapse'  — eventos del protocolo Synapse (handshake, token, discovery)
+//   'sentinel' — eventos de la extensión Chrome (loaded, actuator_ready)
+//   'brain'    — respuestas desde el host nativo (IonPump, profile)
+// ============================================================================
+
+const DEBUG_API_URL = 'http://localhost:48215';
+
+function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
+  // No await — fire and forget para no bloquear el event handler de Chrome.
+  fetch(`${DEBUG_API_URL}/api/internal/system-event`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      category,
+      event,
+      data,
+      profile_id: profile_id || config?.profileId || null,
+      timestamp:  Date.now()
+    })
+  }).catch(() => {
+    // Silencioso — el debug panel puede no estar abierto o la API puede estar
+    // arrancando. No loguear para no contaminar la consola del service worker.
+  });
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -101,11 +139,6 @@ async function initialize() {
   await loadConfig();
 
   // FIX: Verificar que profileId y launchId existen antes de conectar.
-  // Si el config file usa snake_case (profile_id/launch_id) en vez de
-  // camelCase (profileId/launchId), los regex matchers fallan silenciosamente
-  // y estos campos quedan undefined. En JSON.stringify, undefined se omite,
-  // por lo que el host recibe el mensaje sin esos campos y profile.empty()
-  // devuelve true — el logger nunca se inicializa.
   if (!config) {
     console.error('[Synapse] ✗ Config failed to load — aborting connection');
     isInitialized = false;
@@ -148,15 +181,11 @@ async function loadConfig() {
     };
 
     // step: paso de onboarding activo inyectado por Ignition (Gap 2)
-    // FIX Bug 1 (v3.0): step es un string ("" o "github_auth"), no un entero.
-    // La regex anterior (\d+) fallaba silenciosamente con cualquier valor string.
     const stepMatcher = {
       step: /"step"\s*:\s*"([^"]*)"/
     };
 
     // service: providers de registro activos inyectados por Ignition
-    // FIX Bug 2 (v3.0): [^"]+ requería al menos un carácter — fallaba con service:"".
-    // Cambiado a [^"]* para aceptar string vacío.
     const serviceMatcher = {
       service: /"service"\s*:\s*"([^"]*)"/
     };
@@ -182,9 +211,6 @@ async function loadConfig() {
         config = { ...self.SYNAPSE_CONFIG, mode };
         console.log(`[Synapse] ✓ Config loaded via importScripts (${mode} mode):`, config);
 
-        // FIX: Normalizar claves snake_case a camelCase por si el config
-        // file usa profile_id / launch_id en lugar de profileId / launchId.
-        // Esto cubre el caso donde Ignition genera el config con snake_case.
         if (!config.profileId && config.profile_id) {
           console.warn('[Synapse] ⚠️  profileId not found — falling back to profile_id (snake_case)');
           config.profileId = config.profile_id;
@@ -197,7 +223,6 @@ async function loadConfig() {
         await chrome.storage.local.set({ synapseMode: mode });
         validateConfig(mode);
 
-        // Enforce window dimensions for discovery mode
         if (mode === 'discovery') {
           enforceDiscoveryWindowSize();
         }
@@ -242,7 +267,6 @@ async function loadConfig() {
             if (key === 'register') {
               value = match[1] === 'true';
             } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
-              // FIX (v3.0): 'step' removido de esta lista — es string, no entero.
               value = parseInt(match[1], 10);
             } else {
               value = match[1];
@@ -255,8 +279,6 @@ async function loadConfig() {
           }
         }
 
-        // FIX: Si los matchers camelCase fallaron (el config usa snake_case),
-        // intentar también con snake_case para profileId y launchId.
         if (!config.profileId) {
           const snakeMatch = text.match(/"profile_id"\s*:\s*"([^"]+)"/);
           if (snakeMatch) {
@@ -273,8 +295,6 @@ async function loadConfig() {
         }
         
         if (mode === 'discovery' && config.register === true) {
-          // FIX (v3.2): Misma excepción que validateConfig() — GitHub no tiene
-          // email en este step (se resuelve después via api.github.com/user).
           const isGithubFlow = config.service === 'github';
           if (!isGithubFlow) {
             const emailMatch = text.match(emailMatcher.email);
@@ -301,16 +321,10 @@ async function loadConfig() {
     await chrome.storage.local.set({ synapseMode: mode });
     validateConfig(mode);
 
-    // Enforce window dimensions for discovery mode
     if (mode === 'discovery') {
-      await enforceDiscoveryWindowSize(); // FIX: await para evitar concurrencia con loadHarnessConfig
+      await enforceDiscoveryWindowSize();
     }
 
-    // ── HARNESS SIEMPRE ACTIVO ────────────────────────────────────────────
-    // Intentar cargar harness.synapse.config.js independientemente del modo
-    // y del flag --dev. Si el archivo no existe la extensión simplemente
-    // omite el Harness sin romper nada. Si existe, el Harness queda operativo
-    // en cualquier perfil, incluyendo producción.
     await loadHarnessConfig();
 
   } catch (e) {
@@ -323,27 +337,12 @@ async function loadConfig() {
 // HARNESS CONFIG — siempre activo (no requiere --dev)
 // ============================================================================
 
-/**
- * loadHarnessConfig()
- *
- * Carga harness.synapse.config.js (formato: self.HARNESS_CONFIG = {...}).
- * Si el archivo no existe → Harness inactivo, sin romper nada.
- * Si existe → parsea config, abre harness/index.html en una tab background.
- *
- * NUNCA eval() ni new Function() — violan CSP de Chrome Extensions.
- * El archivo debe estar en web_accessible_resources del manifest.
- *
- * FIX v4: Control flow lineal sin returns intermedios en la rama de éxito.
- * Todo el flujo (fetch → parse → open tab) ocurre dentro de un único bloque
- * try/catch principal. Los returns solo existen en casos de error real.
- */
 async function loadHarnessConfig() {
   console.log('[Harness] >>>>>> loadHarnessConfig v4 EJECUTANDO <<<<<<');
 
   const harnessFile = 'harness.synapse.config.js';
   let harnessConfig = null;
 
-  // ── Intento 1: importScripts (falla en MV3 post-install, se ignora) ───────
   try {
     importScripts(harnessFile);
     if (self.HARNESS_CONFIG) {
@@ -360,7 +359,6 @@ async function loadHarnessConfig() {
     console.log('[Harness] importScripts failed (esperado en MV3), usando fetch:', importErr.message);
   }
 
-  // ── Intento 2: fetch + regex ───────────────────────────────────────────────
   if (!harnessConfig) {
     console.log('[Harness] Intentando fetch fallback...');
     let text = null;
@@ -385,7 +383,6 @@ async function loadHarnessConfig() {
       return;
     }
 
-    // Parsear con regex — igual que loadConfig()
     harnessConfig = {};
     const matchers = {
       profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
@@ -411,29 +408,11 @@ async function loadHarnessConfig() {
     console.log('[Harness] ✓ Config parseado correctamente:', JSON.stringify(harnessConfig));
   }
 
-  // ── Guardar en config global ──────────────────────────────────────────────
   config.harness = harnessConfig;
   console.log('[Harness] ✓ config.harness seteado.');
-
-  // ── Apertura de tab delegada al handler host_ready ────────────────────────
-  // FIX v5: No abrir la tab aquí. loadHarnessConfig() es llamada desde
-  // loadConfig() → initialize() → top-level del script, fuera de cualquier
-  // event handler de Chrome. En MV3, el service worker puede suspenderse entre
-  // awaits cuando no hay un event handle activo que lo mantenga vivo.
-  // chrome.tabs.query / chrome.tabs.create ejecutados en ese gap desaparecen
-  // silenciosamente sin logs ni errores — el SW ya está suspendido cuando
-  // la Promise resuelve.
-  //
-  // La apertura real ocurre en handleHostMessage() cuando llega host_ready,
-  // que sí corre dentro de nativePort.onMessage — un event handler activo
-  // garantizado por Chrome hasta que retorna.
   console.log('[Harness] >>>>>> loadHarnessConfig v5 COMPLETADO — apertura de tab pendiente de host_ready <<<<<<');
 }
 
-/**
- * openHarnessTab()
- * Versión standalone — para llamadas externas (ej: desde mensajes IPC).
- */
 async function openHarnessTab() {
   try {
     const harnessUrl = chrome.runtime.getURL('harness/index.html');
@@ -454,22 +433,6 @@ async function openHarnessTab() {
   }
 }
 
-
-
-/**
- * applyWindowLayout(layout)
- *
- * Applies a window layout descriptor to the current Chromium window.
- * This is the single point of truth for window sizing/positioning in the
- * extension. All callers funnel through here.
- *
- * IMPORTANT: `left` and `top` must be pre-resolved by the caller.
- * background.js runs as a service worker — `screen` / `window.screen`
- * are not available here. Coordinate resolution happens in
- * discoveryProtocol.getWindowLayout(), which runs in page context.
- *
- * @param {object} layout — { width, height, left, top, state }
- */
 async function applyWindowLayout(layout = {}) {
   const {
     width  = 600,
@@ -489,8 +452,6 @@ async function applyWindowLayout(layout = {}) {
 
     const updateProps = { width, height, state };
 
-    // Only set position if the caller resolved coordinates.
-    // Without screen access, we can't compute a fallback here.
     if (typeof left === 'number') updateProps.left = left;
     if (typeof top  === 'number') updateProps.top  = top;
 
@@ -503,14 +464,6 @@ async function applyWindowLayout(layout = {}) {
   }
 }
 
-/**
- * enforceDiscoveryWindowSize()
- *
- * Fallback called from loadConfig when mode === 'discovery'.
- * Only sets dimensions — no position, since screen is unavailable in a
- * service worker. The protocol's requestWindowLayout() will follow
- * shortly with fully-resolved coordinates from page context.
- */
 async function enforceDiscoveryWindowSize() {
   await applyWindowLayout({ width: 600, height: 800, state: 'normal' });
 }
@@ -539,11 +492,6 @@ function connectNative() {
     nativePort.onMessage.addListener(handleHostMessage);
     nativePort.onDisconnect.addListener(handleDisconnect);
 
-    // � FASE 1: Extension → Host (extension_ready)
-    // FIX: Construir el mensaje explícitamente y loguearlo antes de enviarlo.
-    // Si profile_id o launch_id son undefined, JSON.stringify los omite
-    // silenciosamente y el host recibe un objeto sin esos campos —
-    // profile.empty() devuelve true y el logger nunca se inicializa.
     const extensionReadyMsg = {
       command:       "extension_ready",
       profile_id:    config.profileId,
@@ -577,6 +525,11 @@ function handleDisconnect() {
   const error = chrome.runtime.lastError;
   console.warn('[Synapse] ⚠️ Native host disconnected:', error?.message || 'Unknown');
 
+  // Notificar al debug panel que el canal nativo se desconectó
+  forwardToDebugPanel('synapse', 'NATIVE_DISCONNECTED', {
+    reason: error?.message || 'Unknown'
+  });
+
   connectionState = 'DISCONNECTED';
   handshakeState = 'NONE';
   nativePort = null;
@@ -596,7 +549,7 @@ function scheduleReconnect() {
   console.log(`[Synapse] ⏱️ Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
 
   setTimeout(() => {
-    console.log('[Synapse] � Attempting reconnect...');
+    console.log('[Synapse] 🔄 Attempting reconnect...');
     connectNative();
   }, delay);
 }
@@ -609,13 +562,13 @@ function handleHostMessage(msg) {
   const label = msg.event || msg.command || msg.type || '(unknown)';
   console.log(`[Host → Synapse] [${new Date().toISOString()}] ${label}`, msg);
 
-  // � FASE 2: Host → Extension (host_ready)
+  // FASE 2: Host → Extension (host_ready)
   if (msg.command === 'host_ready' || msg.event === 'host_ready') {
 
     console.log('[HANDSHAKE] FASE 2: Host → Extension (host_ready) ✓');
     handshakeState = 'HOST_READY';
     
-    // � FASE 3: Extension → Host (handshake_confirm)
+    // FASE 3: Extension → Host (handshake_confirm)
     console.log('[HANDSHAKE] FASE 3: Extension → Host (handshake_confirm)');
     
     nativePort.postMessage({
@@ -629,17 +582,17 @@ function handleHostMessage(msg) {
     handshakeState = 'CONFIRMED';
     console.log('[HANDSHAKE] ✓✓✓ HANDSHAKE COMPLETADO - Canal seguro establecido');
 
-    // If the host_ready payload includes a window layout override, apply it now.
-    // This is the Cortex API path — the native host can control window
-    // dimensions/position at launch time without changing the extension code.
+    // Notificar al debug panel que el handshake está completo
+    forwardToDebugPanel('synapse', 'HANDSHAKE_CONFIRMED', {
+      extension_id: config.extension_id || chrome.runtime.id,
+      profile_alias: config.profile_alias
+    }, config.profileId);
+
     if (msg.window) {
       console.log('[HANDSHAKE] Applying window layout from host payload:', msg.window);
       applyWindowLayout(msg.window);
     }
 
-    // FIX v5: Abrir harness/index.html aquí, dentro del event handler
-    // nativePort.onMessage, donde el service worker está garantizadamente vivo.
-    // config.harness fue seteado por loadHarnessConfig() antes de llegar aquí.
     if (config?.harness) {
       console.log('[Harness] host_ready → abriendo harness tab (SW activo)');
       openHarnessTab();
@@ -647,13 +600,10 @@ function handleHostMessage(msg) {
       console.warn('[Harness] host_ready → config.harness no disponible, tab no abierta');
     }
 
-    // Notificar a discovery/landing que el handshake está completo
     chrome.runtime.sendMessage({
       event: 'HANDSHAKE_CONFIRMED',
       timestamp: Date.now()
-    }).catch(() => {
-      // Silently fail if no listeners
-    });
+    }).catch(() => {});
     
     return;
   }
@@ -672,7 +622,6 @@ function handleHostMessage(msg) {
   }
 
   // Landing responses — forward a la landing page
-  // .catch(() => {}) es intencional: la landing puede no estar abierta cuando llega la respuesta.
   if (['PROFILE_LOADED', 'HEALTH_CHECK_RESULT',
        'NUCLEUS_SYNC_RESULT', 'INTENT_LIST_RESULT'].includes(msg.event)) {
     console.log('[Synapse] Landing response → forwarding to landing page:', msg.event);
@@ -681,10 +630,7 @@ function handleHostMessage(msg) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Categoría 3: IonPump events — forward al Harness y landing
-  //
-  // Brain emite estos eventos cuando IonPump completa un flujo, recarga
-  // recipes o responde a un inspect. El Harness los escucha en su Feed.
+  // IonPump events — forward al Harness y al debug panel
   // ─────────────────────────────────────────────────────────────────────
   const IONPUMP_EVENTS = [
     'ION_FLOW_STARTED',
@@ -698,25 +644,30 @@ function handleHostMessage(msg) {
   if (IONPUMP_EVENTS.includes(msg.event)) {
     console.log('[IonPump] ←', msg.event, msg.site || '');
     chrome.runtime.sendMessage(msg).catch(() => {});
+
+    // Nivel semántico para el debug panel
+    const level = msg.event.endsWith('_ERROR') || msg.event.endsWith('_FAILED') ? 'error' : 'info';
+    forwardToDebugPanel('brain', msg.event, {
+      site:      msg.site      || null,
+      flow:      msg.flow      || null,
+      launch_id: msg.launch_id || null,
+      error:     msg.error     || null,
+      _level:    level
+    }, msg.profile_id || config?.profileId);
+
     return;
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Categoría 4: IonPump DOM commands — forward a content.js en la tab
-  //
-  // IonPump genera estos comandos para operar el DOM de una tab concreta.
-  // background los recibe via Native Messaging y los despacha al
-  // content script correcto con chrome.tabs.sendMessage (NO runtime).
-  // El ACK de content.js se reenvía de vuelta al host para que IonPump
-  // pueda continuar el flujo.
+  // IonPump DOM commands — forward a content.js en la tab
   // ─────────────────────────────────────────────────────────────────────
   const DOM_COMMANDS = [
     'DOM_CLICK', 'DOM_TYPE', 'DOM_WAIT',
     'DOM_FOCUS', 'DOM_SCROLL', 'DOM_EXTRACT',
-    'DOM_NAVIGATE',   // navega a una URL
-    'DOM_WATCH',      // registra MutationObserver para signals
-    'DOM_WATCH_URL',  // intercepta pushState/popstate
-    'DOM_UNWATCH'     // desconecta observers al salir de página
+    'DOM_NAVIGATE',
+    'DOM_WATCH',
+    'DOM_WATCH_URL',
+    'DOM_UNWATCH'
   ];
 
   if (DOM_COMMANDS.includes(msg.command)) {
@@ -730,8 +681,6 @@ function handleHostMessage(msg) {
     console.log('[IonPump] DOM →', msg.command, 'tab:', tabId);
 
     chrome.tabs.sendMessage(tabId, msg, (response) => {
-      // Forwarda el ACK de content.js de vuelta al host para que IonPump lo reciba.
-      // Best-effort: si content.js no responde, no bloquear.
       if (response) {
         sendToHost({
           event:     'DOM_COMMAND_ACK',
@@ -746,27 +695,7 @@ function handleHostMessage(msg) {
     return;
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // ACCOUNT_REGISTERED — confirmación de cuenta registrada desde Sentinel
-  //
-  // Flujo: discovery.js → ACCOUNT_REGISTERED → background.js (aquí)
-  //        → sendToHost → bloom-host → Sentinel → Nucleus
-  //        → nucleus synapse status devuelve identity con la cuenta activa
-  //
-  // El mensaje que llega desde discovery.js tiene la forma:
-  // {
-  //   event: 'ACCOUNT_REGISTERED',
-  //   profile_id: string,   // REQUERIDO para correlación en Nucleus
-  //   launch_id:  string,   // REQUERIDO para correlación en Nucleus
-  //   service:    string,   // 'google' | 'gemini' | 'github'
-  //   email:      string,   // dirección de la cuenta registrada
-  //   timestamp:  number
-  // }
-  //
-  // NOTA: Si profile_id o launch_id están ausentes, Nucleus no puede
-  // correlacionar el registro. Se loguea un warning pero se forwardea
-  // igual para no bloquear el flujo — Nucleus debe tolerar este caso.
-  // ─────────────────────────────────────────────────────────────────────
+  // ACCOUNT_REGISTERED
   if (msg.event === 'ACCOUNT_REGISTERED') {
     if (!msg.profile_id || !msg.launch_id) {
       console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED recibido sin profile_id/launch_id — forwarding de todas formas');
@@ -802,25 +731,19 @@ function handleHostMessage(msg) {
     return;
   }
 
-  // Onboarding navigate — señal remota desde nucleus CLI
-  // Ruta: Brain TCP → bloom-host → Native Messaging → background.js → discovery.js
-  // Usar `return` para prevenir reenvío al Brain (loop prevention).
+  // Onboarding navigate
   if (msg.command === 'onboarding_navigate') {
-    // FIX: La URL real de la tab es discovery/index.html, no discovery.html.
-    // getURL('discovery.html') resuelve a una ruta que no existe — la query
-    // devolvía array vacío en todos los casos y el navigate se perdía silenciosamente.
     chrome.tabs.query({ url: chrome.runtime.getURL('discovery/index.html') }, (tabs) => {
       if (!tabs || tabs.length === 0) {
         console.warn('[BG] onboarding_navigate: no discovery tab found');
         return;
       }
-      // Enviar solo a la primera tab de discovery activa
       chrome.tabs.sendMessage(tabs[0].id, {
         command: 'onboarding_navigate',
         payload: msg.payload || msg
       });
     });
-    return; // ← CRÍTICO: previene reenvío al Brain
+    return;
   }
 
   // Generic commands
@@ -960,12 +883,7 @@ async function forwardToContent(msg) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
 
-  // ─────────────────────────────────────────────────────────────────────
-  // LANDING COMMAND HANDLERS — Contrato explícito Landing ↔ Brain
-  // Estos handlers deben ir ANTES del fallback genérico executeBrainCommand.
-  // ─────────────────────────────────────────────────────────────────────
-
-  // Landing: profile_load — carga el perfil completo al abrir el dashboard
+  // Landing: profile_load
   if (command === 'profile_load') {
     console.log('[Synapse] Landing → PROFILE_LOAD');
     sendToHost({
@@ -978,7 +896,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Landing: health_check — estado de salud del sistema
+  // Landing: health_check
   if (command === 'health_check') {
     console.log('[Synapse] Landing → HEALTH_CHECK (scope:', msg.scope || 'full-stack', ')');
     sendToHost({
@@ -992,7 +910,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Landing: nucleus_sync — fuerza sincronización con Nucleus
+  // Landing: nucleus_sync
   if (command === 'nucleus_sync') {
     console.log('[Synapse] Landing → NUCLEUS_SYNC');
     sendToHost({
@@ -1005,7 +923,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Landing: intent_list — lista de intents activos del perfil
+  // Landing: intent_list
   if (command === 'intent_list') {
     console.log('[Synapse] Landing → INTENT_LIST');
     sendToHost({
@@ -1018,7 +936,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Handler genérico para landing — fallback para comandos no reconocidos
+  // Handler genérico para landing — fallback
   if (msg.action === 'executeBrainCommand') {
     console.log('[Synapse] Brain command received (fallback):', msg.command);
     
@@ -1037,7 +955,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Handler para ping desde landing
   if (msg.action === 'ping') {
     sendResp({ 
       status: 'pong',
@@ -1047,7 +964,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Handler para check host desde landing
   if (msg.action === 'checkHost') {
     sendResp({ 
       hostConnected: connectionState === 'CONNECTED',
@@ -1058,7 +974,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Handler para cambio de modo
   if (event === 'SET_MODE') {
     console.log('[Synapse] Mode switch requested:', msg.mode);
     
@@ -1079,11 +994,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       tab_id: sender.tab?.id,
       url: msg.url
     });
+    // Notificar al debug panel que Sentinel está activo en una tab
+    forwardToDebugPanel('sentinel', 'EXTENSION_LOADED', {
+      tab_id: sender.tab?.id,
+      url:    msg.url
+    }, config?.profileId);
     sendResp({ received: true });
     return true;
   }
 
-  // Slave mode notifications
+  // Slave mode
   if (event === 'slave_mode_changed') {
     console.log('[Synapse] Slave mode changed:', msg.enabled);
     sendToHost({
@@ -1096,7 +1016,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Slave mode timeout
   if (event === 'slave_mode_timeout') {
     console.warn('[Synapse] ⚠️ Slave mode timeout on tab:', sender.tab?.id);
     sendToHost({
@@ -1116,28 +1035,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       event: "DISCOVERY_COMPLETE",
       payload: msg.payload || msg
     });
+    forwardToDebugPanel('synapse', 'DISCOVERY_COMPLETE', {
+      steps_done: msg.payload?.steps_done || msg.steps_done || null
+    }, config?.profileId);
     sendResp({ received: true });
     return true;
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // ACCOUNT_REGISTERED — originado en discovery.js tras completar el
-  // registro de una cuenta (Google, Gemini, GitHub, etc.)
-  //
-  // Este handler recibe el evento desde la discovery page y lo reenvía
-  // al native host vía sendToHost. El bloque espejo en handleHostMessage
-  // (arriba) procesa la confirmación de vuelta desde Sentinel.
-  //
-  // Contrato del payload esperado:
-  // {
-  //   event:      'ACCOUNT_REGISTERED',
-  //   profile_id: string,   // UUID del perfil — del SYNAPSE_CONFIG inyectado por Ignition
-  //   launch_id:  string,   // ID del launch activo — del SYNAPSE_CONFIG
-  //   service:    string,   // 'google' | 'gemini' | 'github'
-  //   email:      string,   // cuenta registrada
-  //   timestamp:  number
-  // }
-  // ─────────────────────────────────────────────────────────────────────
+  // ACCOUNT_REGISTERED
   if (event === 'ACCOUNT_REGISTERED') {
     if (!msg.profile_id || !msg.launch_id) {
       console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED enviado sin profile_id/launch_id');
@@ -1159,17 +1064,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   }
 
   // ── GITHUB_PAT_DETECTED ────────────────────────────────────────────────────
-  // Recibido desde el Harness (simulación) o desde discovery.js cuando el
-  // clipboard monitor detecta un GitHub Personal Access Token (formato ghp_...).
   if (event === 'GITHUB_PAT_DETECTED') {
     console.log('[Synapse] 📥 GITHUB_PAT_DETECTED recibido');
 
-    // Validar que el token existe y tiene el prefijo correcto
     if (!msg.token || !msg.token.startsWith('ghp_')) {
       console.warn('[Synapse] ⚠️  GITHUB_PAT_DETECTED — token inválido o ausente:', msg.token);
     }
 
-    // Forwardear a Brain vía Native Messaging
     sendToHost({
       event:      'GITHUB_PAT_DETECTED',
       token:      msg.token,
@@ -1178,18 +1079,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       timestamp:  msg.timestamp   || Date.now()
     });
 
+    // Notificar al debug panel — token fingerprint solamente (nunca el token completo)
+    forwardToDebugPanel('synapse', 'GITHUB_PAT_DETECTED', {
+      token_fingerprint: msg.token ? msg.token.substring(0, 10) + '…' : null
+    }, msg.profile_id || config?.profileId);
+
     console.log('[Synapse] ✓ GITHUB_PAT_DETECTED → forwarding to native host');
     sendResp({ received: true });
     return true;
   }
 
   // ── GITHUB_TOKEN_STORED ────────────────────────────────────────────────────
-  // Emitido por discovery.js cuando el usuario confirma el token GitHub en la
-  // UI de onboarding y Brain lo almacena en Nucleus.
   if (event === 'GITHUB_TOKEN_STORED') {
     console.log('[Synapse] 📥 GITHUB_TOKEN_STORED recibido');
 
-    // Forwardear a Brain — Brain registra el token en Nucleus
     sendToHost({
       event:             'GITHUB_TOKEN_STORED',
       token_fingerprint: msg.token_fingerprint,
@@ -1197,6 +1100,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       launch_id:         msg.launch_id   || config?.launchId,
       timestamp:         msg.timestamp   || Date.now()
     });
+
+    forwardToDebugPanel('synapse', 'GITHUB_TOKEN_STORED', {
+      vault_key: msg.vault_key || 'sk_bloom_pat'
+    }, msg.profile_id || config?.profileId);
 
     console.log('[Synapse] ✓ GITHUB_TOKEN_STORED → forwarding to native host');
     sendResp({ received: true });
@@ -1215,7 +1122,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Window layout request — from discoveryProtocol.requestWindowLayout()
+  // Window layout request
   if (command === 'window_layout_request' && msg.layout) {
     console.log('[Synapse] Window layout request received:', msg.layout);
     applyWindowLayout(msg.layout).then(() => {
@@ -1247,7 +1154,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Manual start/stop monitoring
   if (msg.action === 'startClipboardMonitoring') {
     startClipboardMonitoring();
     sendResp({ monitoring: true });
@@ -1262,12 +1168,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
   // ─────────────────────────────────────────────────────────────────────
   // IONPUMP COMMAND HANDLERS — Harness → background → Brain/IonPump
-  //
-  // Estos handlers reciben comandos IonPump simulados desde el Harness
-  // y los forwadean al host nativo para que SynapseManager los enrute
-  // al proceso IonPump via TCP IPC.
-  //
-  // Categoría 1: Flow execution
   // ─────────────────────────────────────────────────────────────────────
 
   if (command === 'ION_EXECUTE_FLOW') {
@@ -1282,11 +1182,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       context:   msg.context   || {}
     });
 
+    // Registrar en el debug panel que se disparó un flow
+    forwardToDebugPanel('brain', 'ION_FLOW_STARTED', {
+      site:      msg.site,
+      flow:      msg.flow,
+      tab_id:    msg.tab_id,
+      launch_id: msg.launch_id || config?.launchId
+    }, config?.profileId);
+
     sendResp({ received: true });
     return true;
   }
-
-  // Categoría 2: Admin commands (debug/dev)
 
   if (command === 'ION_RELOAD') {
     console.log('[IonPump] 🔄 ION_RELOAD:', msg.site);
@@ -1324,7 +1230,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
 function sendToHost(msg) {
   if (nativePort && connectionState === 'CONNECTED') {
-    // Validar handshake antes de enviar mensajes críticos
     if (handshakeState !== 'CONFIRMED' && handshakeState !== 'HOST_READY') {
       console.warn('[Synapse] ⚠️ Message blocked - Handshake not confirmed:', msg.event || msg.type);
       return;
@@ -1348,7 +1253,6 @@ function respondToHost(msgId, payload) {
 }
 
 function setupKeepalive() {
-  // Alarm cada 1 minuto para mantener el service worker vivo
   chrome.alarms.create('keepalive', { periodInMinutes: 1 });
 
   chrome.alarms.onAlarm.addListener((a) => {
@@ -1356,9 +1260,6 @@ function setupKeepalive() {
 
     console.log(`[Synapse] [${new Date().toISOString()}] Keepalive tick - Handshake: ${handshakeState} | Connection: ${connectionState}`);
 
-    // Enviar heartbeat real al host solo si el canal está establecido.
-    // El host (bloom-host / Sentinel) forwardea esto como SignalHeartbeat al workflow de Temporal.
-    // Sin esto, el ProfileLifecycleWorkflow degrada a DEGRADED a los 2 minutos por heartbeat timeout.
     if (handshakeState === 'CONFIRMED' && connectionState === 'CONNECTED') {
       sendToHost({
         event: 'HEARTBEAT',
@@ -1375,70 +1276,9 @@ function setupKeepalive() {
 }
 
 // ============================================================================
-// STARTUP
-// ============================================================================
-
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Synapse] � Extension installed/updated');
-  initialize();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  console.log('[Synapse] � Browser startup');
-  initialize();
-});
-
-// FIX: Cold-start activation.
-//
-// onInstalled and onStartup only fire on first install or browser restart.
-// When Chrome launches a profile that already has the extension installed,
-// the Service Worker is activated in the background without firing either
-// event. In that case initialize() was never called, nativePort stayed null,
-// and the host waited forever for extension_ready on stdin → STDIN_EOF.
-//
-// Calling initialize() at the top level of the script guarantees it runs
-// on every Service Worker activation, including cold-start activations
-// triggered by Native Messaging. The isInitialized guard inside initialize()
-// prevents duplicate execution when onInstalled or onStartup also fires.
-initialize();
-
-chrome.runtime.onSuspend?.addListener(() => {
-  console.log('[Synapse] � Service worker suspending');
-});
-
-// ============================================================================
-// DEBUGGING HELPERS
-// ============================================================================
-
-if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) {
-  console.log('[Synapse] � Debug mode enabled');
-  
-  self.SYNAPSE_DEBUG = {
-    getState: () => ({
-      initialized: isInitialized,
-      connectionState,
-      handshakeState,
-      hasPort: nativePort !== null,
-      config: config ? { ...config, bridge_name: '***' } : null,
-      mode: config?.mode
-    }),
-    forceReconnect: () => {
-      if (nativePort) {
-        nativePort.disconnect();
-      }
-      isInitialized = false;
-      initialize();
-    }
-  };
-}
-
-// ============================================================================
 // CLIPBOARD API KEY DETECTOR
 // ============================================================================
 
-/**
- * API Key pattern matchers for all supported providers
- */
 const API_KEY_PATTERNS = {
   gemini: {
     regex: /^AIzaSy[A-Za-z0-9_-]{33}$/,
@@ -1460,10 +1300,6 @@ const API_KEY_PATTERNS = {
     name: 'Grok',
     console_url: 'https://console.x.ai/keys'
   },
-  // FIX (v3.1): GitHub Personal Access Tokens — formato ghp_ + 36 chars mínimo.
-  // Sin esta entrada el clipboard monitor nunca detectaba tokens GitHub
-  // aunque el monitor estuviera corriendo; el regex de los otros providers
-  // no matcheaba ghp_ y detectAPIKeyProvider() siempre devolvía null.
   github: {
     regex: /^ghp_[A-Za-z0-9]{36,}$/,
     name: 'GitHub',
@@ -1471,18 +1307,13 @@ const API_KEY_PATTERNS = {
   }
 };
 
-/**
- * Detect which provider an API key belongs to
- */
 function detectAPIKeyProvider(text) {
   if (!text || typeof text !== 'string') {
     return null;
   }
 
-  // Clean whitespace
   const cleaned = text.trim();
 
-  // Test against each provider
   for (const [provider, config] of Object.entries(API_KEY_PATTERNS)) {
     if (config.regex.test(cleaned)) {
       return {
@@ -1497,9 +1328,6 @@ function detectAPIKeyProvider(text) {
   return null;
 }
 
-/**
- * State management for clipboard monitoring
- */
 let clipboardMonitor = {
   isMonitoring: false,
   intervalId: null,
@@ -1507,9 +1335,6 @@ let clipboardMonitor = {
   detectedKeys: new Set()
 };
 
-/**
- * Start monitoring clipboard for API keys
- */
 function startClipboardMonitoring() {
   if (clipboardMonitor.isMonitoring) {
     console.log('[Clipboard] Already monitoring');
@@ -1519,25 +1344,20 @@ function startClipboardMonitoring() {
   console.log('[Clipboard] Starting monitoring...');
   clipboardMonitor.isMonitoring = true;
 
-  // Poll clipboard every 1 second
   clipboardMonitor.intervalId = setInterval(async () => {
     try {
-      // Read clipboard (requires clipboardRead permission in manifest)
       const text = await navigator.clipboard.readText();
 
-      // Skip if clipboard hasn't changed
       if (text === clipboardMonitor.lastClipboard) {
         return;
       }
 
       clipboardMonitor.lastClipboard = text;
 
-      // Detect provider
       const detected = detectAPIKeyProvider(text);
 
       if (detected) {
-        // Avoid duplicate detections
-        const keyHash = detected.key.substring(0, 20); // First 20 chars as hash
+        const keyHash = detected.key.substring(0, 20);
         if (clipboardMonitor.detectedKeys.has(keyHash)) {
           console.log('[Clipboard] Key already detected, skipping');
           return;
@@ -1546,10 +1366,6 @@ function startClipboardMonitoring() {
         clipboardMonitor.detectedKeys.add(keyHash);
         console.log('[Clipboard] ✓ API Key detected:', detected.name);
 
-        // FIX (v3.1): GitHub PATs usan un evento dedicado (GITHUB_PAT_DETECTED)
-        // que el handler de background.js en línea ~1078 forwardea al host con
-        // el campo 'token' (no 'key'). Los demás providers siguen usando
-        // API_KEY_DETECTED con el campo 'key'.
         if (detected.provider === 'github') {
           sendToHost({
             event:      'GITHUB_PAT_DETECTED',
@@ -1559,14 +1375,19 @@ function startClipboardMonitoring() {
             timestamp:  Date.now()
           });
 
-          // Notificar también a discovery.js para que actualice su UI
           chrome.runtime.sendMessage({
             event:  'GITHUB_PAT_DETECTED',
             token:  detected.key,
             timestamp: Date.now()
           }).catch(() => {});
+
+          // Notificar al debug panel — fingerprint solamente
+          forwardToDebugPanel('synapse', 'GITHUB_PAT_DETECTED', {
+            token_fingerprint: detected.key.substring(0, 10) + '…',
+            source: 'clipboard_monitor'
+          }, config?.profileId);
+
         } else {
-          // Send to host via Native Messaging
           sendToHost({
             event:     'API_KEY_DETECTED',
             provider:  detected.provider,
@@ -1575,7 +1396,6 @@ function startClipboardMonitoring() {
           });
         }
 
-        // Show notification to user
         chrome.notifications.create({
           type: 'basic',
           iconUrl: 'icons/icon128.png',
@@ -1585,18 +1405,14 @@ function startClipboardMonitoring() {
         });
       }
     } catch (error) {
-      // Silently fail (clipboard API can throw if no permission)
       if (error.message.includes('clipboard-read')) {
         console.error('[Clipboard] Missing clipboard-read permission');
         stopClipboardMonitoring();
       }
     }
-  }, 1000); // Poll every second
+  }, 1000);
 }
 
-/**
- * Stop monitoring clipboard
- */
 function stopClipboardMonitoring() {
   if (!clipboardMonitor.isMonitoring) {
     return;
@@ -1608,16 +1424,12 @@ function stopClipboardMonitoring() {
   clipboardMonitor.intervalId = null;
 }
 
-/**
- * Handle API key registration response from host
- */
 function handleAPIKeyResponse(message) {
   const { event, provider, profile_name, error, status } = message;
 
   if (event === 'API_KEY_REGISTERED' && status === 'success') {
     console.log('[Clipboard] ✓ Key registered:', provider, profile_name);
 
-    // Show success notification
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon128.png',
@@ -1626,7 +1438,6 @@ function handleAPIKeyResponse(message) {
       priority: 2
     });
 
-    // Notify discovery page if open
     chrome.runtime.sendMessage({
       event: 'API_KEY_REGISTERED',
       provider: provider,
@@ -1636,7 +1447,6 @@ function handleAPIKeyResponse(message) {
   else if (event === 'API_KEY_REGISTRATION_FAILED') {
     console.error('[Clipboard] ✗ Registration failed:', error);
 
-    // Show error notification
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon128.png',
@@ -1647,21 +1457,62 @@ function handleAPIKeyResponse(message) {
   }
 }
 
-/**
- * Listen for onboarding state changes to start/stop monitoring
- */
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.onboarding_state) {
     const state = changes.onboarding_state.newValue;
 
-    // Start monitoring when user is waiting for API key
     if (state?.currentStep?.includes('api_waiting') || 
         state?.currentStep?.includes('gemini_api_waiting')) {
       startClipboardMonitoring();
     }
-    // Stop monitoring when onboarding is complete
     else if (state?.completed === true) {
       stopClipboardMonitoring();
     }
   }
 });
+
+// ============================================================================
+// STARTUP
+// ============================================================================
+
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('[Synapse] 🔧 Extension installed/updated');
+  initialize();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  console.log('[Synapse] 🚀 Browser startup');
+  initialize();
+});
+
+initialize();
+
+chrome.runtime.onSuspend?.addListener(() => {
+  console.log('[Synapse] 💤 Service worker suspending');
+});
+
+// ============================================================================
+// DEBUGGING HELPERS
+// ============================================================================
+
+if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) {
+  console.log('[Synapse] 🐛 Debug mode enabled');
+  
+  self.SYNAPSE_DEBUG = {
+    getState: () => ({
+      initialized: isInitialized,
+      connectionState,
+      handshakeState,
+      hasPort: nativePort !== null,
+      config: config ? { ...config, bridge_name: '***' } : null,
+      mode: config?.mode
+    }),
+    forceReconnect: () => {
+      if (nativePort) {
+        nativePort.disconnect();
+      }
+      isInitialized = false;
+      initialize();
+    }
+  };
+}

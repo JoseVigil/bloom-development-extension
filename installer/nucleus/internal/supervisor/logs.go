@@ -1022,34 +1022,118 @@ func isLaunchDedicatedStream(streamID, launchID string) bool {
 	return strings.Contains(streamID, launchID)
 }
 
+// isSessionDayStream reports whether a stream is a per-session or per-day file
+// that started within the launch window and whose lines do NOT carry individual
+// timestamps (e.g. conductor_onboarding, nucleus_control_plane, temporal_server,
+// metamorph_*). These streams are safe to read in full because the file was
+// created for this session; time-window filtering would silently drop all their
+// lines since parseLineTimestamp returns zero for every line.
+//
+// Detection rule: first_seen is within [windowStart-2m, windowEnd] AND the
+// stream is not a persistent cross-launch log (i.e. does not belong to the set
+// of known accumulating streams).
+func isSessionDayStream(streamID string, stream telemetryStream, windowStart, windowEnd time.Time) bool {
+	// Persistent multi-launch streams — always filter by window, never read full.
+	persistentPrefixes := []string{
+		"brain_core", "brain_profile", "brain_server", "brain_service",
+		"sentinel_core",
+		"nucleus_synapse", "nucleus_orchestration", "nucleus_temporal",
+		"nucleus_brain_poller", "worker_manager",
+		"nucleus_hook_", // hooks accumulate across launches in the same day
+		"nucleus_service",
+	}
+	for _, p := range persistentPrefixes {
+		if strings.HasPrefix(streamID, p) {
+			return false
+		}
+	}
+
+	// Parse first_seen from telemetry. Telemetry writes RFC3339 (with offset),
+	// so time.Parse handles it correctly regardless of local timezone.
+	if stream.FirstSeen == "" {
+		return false
+	}
+	var firstSeen time.Time
+	if t, err := time.Parse(time.RFC3339, stream.FirstSeen); err == nil {
+		firstSeen = t
+	} else if t, err := time.Parse("2006-01-02T15:04:05.000Z", stream.FirstSeen); err == nil {
+		firstSeen = t
+	} else {
+		return false
+	}
+
+	// Accept streams whose session started within a 2-minute look-back before
+	// windowStart (covers race between telemetry registration and launch event)
+	// and no later than windowEnd.
+	return !firstSeen.Before(windowStart.Add(-2*time.Minute)) && !firstSeen.After(windowEnd)
+}
+
 // collectWindowLines collects lines from all streams for the given launch.
 //
-// Two strategies are applied depending on the stream type:
+// Three strategies are applied depending on the stream type:
 //
 //  1. Launch-dedicated streams (stream ID contains launchID):
-//     The file is read in full — every line belongs to this launch by
-//     construction, so time filtering would only risk dropping lines whose
-//     timestamps fall slightly outside the computed window.
+//     The file was created exclusively for this launch — read it completely.
 //
-//  2. Persistent streams (brain_*, sentinel_core, nucleus_synapse, …):
-//     These accumulate logs from every launch, so we apply the [start, end]
-//     time window to isolate only the lines that belong to this launch.
+//  2. Session-day streams (started within the launch window, lines lack timestamps):
+//     Streams like conductor_onboarding, nucleus_control_plane, temporal_server,
+//     and metamorph_* write report-style content without per-line timestamps.
+//     readStreamWindow would silently drop all their lines (every ts = zero →
+//     sticky anchor never set → only pre-header lines included, all with ??:??:??).
+//     Instead we read them in full and stamp every line with first_seen so they
+//     sort correctly in the unified timeline.
+//
+//  3. Persistent streams (brain_*, sentinel_core, nucleus_synapse, …):
+//     These accumulate logs from every launch — apply the [start, end] window.
 func collectWindowLines(tf *telemetryFile, launchID string, start, end time.Time) []timedLine {
+	// Parse telemetry first_seen for a stream, returning zero on failure.
+	parseTelemetryTS := func(s string) time.Time {
+		if s == "" {
+			return time.Time{}
+		}
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t
+		}
+		if t, err := time.Parse("2006-01-02T15:04:05.000Z", s); err == nil {
+			return t
+		}
+		return time.Time{}
+	}
+
 	var all []timedLine
 	for streamID, stream := range tf.ActiveStreams {
 		var lines []timedLine
-		if isLaunchDedicatedStream(streamID, launchID) {
-			// Stream is exclusive to this launch — read it completely.
+		switch {
+		case isLaunchDedicatedStream(streamID, launchID):
+			// Strategy 1: file is exclusive to this launch — read completely.
 			lines = readStreamFull(stream.Path, false)
-		} else {
-			// Persistent stream — filter by time window to isolate this launch.
+
+		case isSessionDayStream(streamID, stream, start, end):
+			// Strategy 2: session-day stream whose lines lack per-line timestamps.
+			// Read fully and backfill any zero-ts line with first_seen so the
+			// unified timeline places them at the right moment instead of sorting
+			// them to the front as ??:??:??.
+			lines = readStreamFull(stream.Path, false)
+			anchor := parseTelemetryTS(stream.FirstSeen)
+			if !anchor.IsZero() {
+				for i := range lines {
+					if lines[i].ts.IsZero() {
+						lines[i].ts = anchor
+					}
+				}
+			}
+
+		default:
+			// Strategy 3: persistent stream — filter by time window.
 			lines = readStreamWindow(stream.Path, start, end, false)
 		}
+
 		for _, tl := range lines {
 			tl.stream = streamID
 			all = append(all, tl)
 		}
 	}
+
 	// Sort by timestamp, then by stream name for stability.
 	// Lines with zero timestamp (true pre-header lines) sort to the front.
 	sort.SliceStable(all, func(i, j int) bool {
