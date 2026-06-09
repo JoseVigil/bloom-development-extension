@@ -16,19 +16,19 @@
 //   await fastify.register(internalRoutes, { prefix: '/api/internal' });
 
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import type { WebSocketManager } from '../../server/WebSocketManager';
+import type { WebSocketManager, SystemEventPayload } from '../../server/WebSocketManager';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 /**
  * Categorías de eventos que background.js puede enviar.
- * Deben coincidir con los valores usados en forwardToDebugPanel() del background.
+ * Subconjunto de SystemEventPayload['category'] definido en WebSocketManager.
  *
  *   'synapse'  — protocolo Synapse (handshake, token PAT, discovery, disconnect)
  *   'sentinel' — extensión Chrome (actuator_ready → EXTENSION_LOADED)
  *   'brain'    — respuestas del host nativo (IonPump flows, profile)
  */
-type SystemEventCategory = 'synapse' | 'sentinel' | 'brain';
+type SystemEventCategory = SystemEventPayload['category'];
 
 interface SystemEventBody {
   /** Categoría del evento — usada por el debug panel para filtrar/colorear */
@@ -39,7 +39,7 @@ interface SystemEventBody {
   data?: Record<string, unknown>;
   /** profileId del perfil activo en el momento del evento */
   profile_id?: string | null;
-  /** Timestamp Unix en ms — si no viene, se usa Date.now() */
+  /** Timestamp Unix en ms — ignorado, broadcastSystemEvent usa Date.now() internamente */
   timestamp?: number;
 }
 
@@ -78,7 +78,7 @@ export async function internalRoutes(
           properties: {
             category: {
               type: 'string',
-              enum: ['synapse', 'sentinel', 'brain']
+              enum: ['nucleus', 'synapse', 'temporal', 'brain', 'sentinel', 'health']
             },
             event: {
               type: 'string',
@@ -107,25 +107,17 @@ export async function internalRoutes(
       }
     },
     async (request, reply) => {
-      const { category, event, data = {}, profile_id = null, timestamp } = request.body;
+      const { category, event, data = {}, profile_id = null } = request.body;
 
-      const envelope = {
-        type:       'system_event' as const,
-        category,
-        event,
-        data,
-        profile_id,
-        timestamp:  timestamp ?? Date.now()
-      };
-
-      // broadcast() es fire-and-forget — si no hay clientes WS conectados
+      // broadcastSystemEvent() es fire-and-forget — si no hay clientes WS conectados
       // simplemente no pasa nada. No lanzar error al caller.
+      // Emite el envelope { type: 'system:event', payload: ... } que el debug panel consume.
       try {
-        deps.wsManager.broadcast(envelope);
+        deps.wsManager.broadcastSystemEvent(category, event, data, profile_id);
       } catch (broadcastErr) {
         // Loguear pero no propagar — background.js no maneja respuestas de error
         // y un 500 aquí contaminaría silenciosamente el flujo del service worker.
-        fastify.log.warn({ err: broadcastErr, envelope }, '[internal] broadcast failed');
+        fastify.log.warn({ err: broadcastErr, category, event }, '[internal] broadcastSystemEvent failed');
       }
 
       return reply.send({ ok: true });

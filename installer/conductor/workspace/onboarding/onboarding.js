@@ -95,6 +95,50 @@ let identityPollTimer   = null;
 let identityTimeoutId   = null;
 let userEmail           = null;
 
+// ── STEPPER API ────────────────────────────────────────────────────────────
+// Mapa de nombre de nodo → índice del .step-node en el sidebar
+const STEPPER_NODES = { identity: 0, vault: 1, nucleus: 2, project: 3, mandate: 4 };
+
+// Texto de status que aparece bajo el label cuando el nodo está established
+const STEPPER_STATUSES = {
+  identity: 'Active',
+  vault:    'Secured',
+  nucleus:  'Established',
+  project:  'Active',
+  mandate:  'Persistent'
+};
+
+// Mapa screen → nodo activo (screen 0 = entry, sin nodo activo)
+const STEPPER_MAP = {
+  1: 'identity',
+  2: 'vault',
+  3: 'nucleus',
+  4: 'nucleus',
+  5: 'project',
+  6: 'mandate',
+  7: 'mandate'
+};
+
+function setStepperActive(nodeName) {
+  const idx = STEPPER_NODES[nodeName];
+  if (idx === undefined) return;
+  const nodes = document.querySelectorAll('.step-node');
+  nodes.forEach(n => n.classList.remove('active'));
+  if (nodes[idx]) nodes[idx].classList.add('active');
+  log('info', `stepper: active → ${nodeName}`);
+}
+
+function setStepperEstablished(nodeName) {
+  const idx = STEPPER_NODES[nodeName];
+  if (idx === undefined) return;
+  const nodes = document.querySelectorAll('.step-node');
+  if (nodes[idx]) {
+    nodes[idx].classList.remove('active');
+    nodes[idx].classList.add('established');
+  }
+  log('info', `stepper: established → ${nodeName}`);
+}
+
 // ── SCREEN MAP ─────────────────────────────────────────────────────────────
 const SCREEN_IDS = [
   'entry',        // 0
@@ -119,34 +163,26 @@ async function goTo(n) {
     log('error', `screen-${SCREEN_IDS[n]} NOT FOUND in DOM`);
   }
 
-  document.querySelectorAll('.step-node').forEach((node, i) => {
-    node.classList.toggle('active', i === n);
-    node.classList.toggle('done', i < n);
-  });
+  // Actualizar stepper usando el mapa correcto (screen index ≠ node index)
+  const activeNode = STEPPER_MAP[n];
+  if (activeNode) setStepperActive(activeNode);
 
   // Efectos por pantalla
-  if (n === 1) {
-    // Hacer visible el system-layer lateral (opacity 0 → 1)
-    document.getElementById('system-layer')?.classList.add('visible');
-    // Activar el nodo Identity
-    setTimeout(() => {
-      document.getElementById('sn-identity')?.classList.add('active');
-    }, 400);
-    // kickoffDiscovery() se llama desde handleIdentityBtn(), no aquí
-  }
-  if (n === 3) loadOrgs();
-
-  // Fix 4: faltaba este case — el terminal nunca arrancaba
+  if (n === 2) setStepperEstablished('identity');
+  if (n === 3) { setStepperEstablished('vault'); loadOrgs(); }
   if (n === 4) runNucleusTerminal();
-
-  if (n === 5) loadRepos();
-  if (n === 6) runLaunchSequence();
+  if (n === 5) { setStepperEstablished('nucleus'); loadRepos(); }
   if (n === 6) {
-    // Revelar el botón Enter System después de que los nodos animaron
+    setStepperEstablished('project');
+    runMilestoneSequence();
     setTimeout(() => {
       const enterBtn = document.getElementById('enter-btn');
       if (enterBtn) enterBtn.style.opacity = '1';
     }, 1200);
+  }
+  if (n === 7) {
+    setStepperEstablished('mandate');
+    runLaunchSequence();
   }
 }
 
@@ -270,7 +306,7 @@ function checkIdentityReady() {
   identityTimeoutId = null;
 
   log('info', 'github confirmed — identity ready');
-  document.getElementById('sn-identity')?.classList.add('established');
+  setStepperEstablished('identity');
   showCortex("GitHub connected. Vault layer next.");
 
   const btn = document.getElementById('btn-continue-identity');
@@ -465,6 +501,15 @@ async function createMandateAndContinue() {
   }
 }
 
+// ── SCREEN 6 — Milestone ───────────────────────────────────────────────────
+function runMilestoneSequence() {
+  document.getElementById('ambient')?.classList.add('milestone');
+  const nodes = document.querySelectorAll('#milestone-nodes .m-node');
+  nodes.forEach((node, i) => {
+    setTimeout(() => node.classList.add('show'), 200 + i * 180);
+  });
+}
+
 // ── SCREEN 7 — Launch ──────────────────────────────────────────────────────
 function enterSystem() {
   log('info', 'click — btn-enter-system');
@@ -473,8 +518,6 @@ function enterSystem() {
 
 function runLaunchSequence() {
   document.getElementById('ambient')?.classList.remove('milestone');
-  const sysLayer = document.getElementById('system-layer');
-  if (sysLayer) sysLayer.style.opacity = '0';
 
   const lines = document.querySelectorAll('#launch-lines .launch-line');
   lines.forEach((line, i) => {
@@ -505,8 +548,36 @@ async function completeOnboarding() {
   // Si success: Electron redimensiona y carga la URL — el renderer no hace nada más.
 }
 
+// ── DEBUG PANEL ────────────────────────────────────────────────────────────
+let debugPanelOpen = false;
+
+function toggleDebugPanel() {
+  const container = document.getElementById('debug-panel-container');
+  const btn       = document.getElementById('debug-toggle');
+  if (!container || !btn) return;
+
+  debugPanelOpen = !debugPanelOpen;
+
+  if (debugPanelOpen) {
+    // Lazy load: asignar src solo la primera vez
+    const frame = document.getElementById('debug-frame');
+    if (frame && !frame.src) {
+      frame.src = 'debug.html';
+    }
+    container.classList.remove('hidden');
+    btn.classList.add('active');
+    log('info', 'debug panel opened');
+  } else {
+    container.classList.add('hidden');
+    btn.classList.remove('active');
+    log('info', 'debug panel closed');
+  }
+}
+
 // ── INIT ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   log('info', 'DOM ready — initialized');
   document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
+  // Screen 0 = entry, stepper vacío. Al navegar a screen 1 se activa Identity.
+  // El sidebar ya es visible desde el inicio.
 });

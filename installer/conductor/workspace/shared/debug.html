@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' ws://localhost:4124 http://localhost:48215 https://fonts.googleapis.com https://fonts.gstatic.com; font-src https://fonts.gstatic.com; connect-src ws://localhost:4124 http://localhost:48215;">
+<title>Bloom — Debug</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:             #080A0E;
+  --surface:        #0D1117;
+  --surface-hover:  #131820;
+  --border:         rgba(255,255,255,0.06);
+  --border-active:  rgba(255,255,255,0.18);
+  --text-primary:   #E8EAF0;
+  --text-secondary: rgba(232,234,240,0.55);
+  --text-dim:       rgba(232,234,240,0.25);
+  --accent:         #C8F55A;
+  --accent-dim:     rgba(200,245,90,0.10);
+  --error:          #FF5555;
+  --warn:           #F0A040;
+  --success:        #4ADE80;
+  --font-head:      'Syne', sans-serif;
+  --font-mono:      'DM Mono', monospace;
+}
+
+html, body {
+  width: 100%; height: 100vh;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-head);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── TITLEBAR ── */
+#titlebar {
+  height: 40px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar-logo {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.titlebar-sep {
+  width: 1px; height: 14px;
+  background: var(--border);
+}
+.titlebar-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+#ws-indicator {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  -webkit-app-region: no-drag;
+}
+#ws-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.4s, box-shadow 0.4s;
+}
+#ws-dot.live {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+#ws-dot.error { background: var(--error); }
+#ws-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  transition: color 0.4s;
+}
+#ws-label.live { color: var(--text-secondary); }
+
+/* ── MAIN LAYOUT ── */
+#layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ── */
+#sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-section {
+  padding: 14px 16px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-section-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+/* Health grid */
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.h-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.h-dot.ok     { background: var(--success); }
+.h-dot.err    { background: var(--error); }
+.h-dot.warn   { background: var(--warn); }
+.h-dot.stub   { background: var(--warn); box-shadow: 0 0 5px var(--warn); }
+.h-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+.h-state {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.h-stub { color: var(--warn); }
+
+#health-summary {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--success);
+}
+#health-summary.degraded { color: var(--warn); }
+
+/* Filters */
+#sidebar-filters {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+.filter-row:hover { background: var(--surface-hover); }
+.filter-check {
+  width: 12px; height: 12px;
+  border: 1px solid var(--border-active);
+  border-radius: 2px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s;
+}
+.filter-check.on { background: var(--accent); border-color: var(--accent); }
+.filter-check.on::after {
+  content: '';
+  width: 6px; height: 4px;
+  border-left: 1.5px solid #080A0E;
+  border-bottom: 1.5px solid #080A0E;
+  transform: rotate(-45deg) translate(1px, -1px);
+  display: block;
+}
+.filter-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+.filter-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+#sidebar-actions {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+}
+.action-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 7px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.action-btn:hover {
+  border-color: var(--border-active);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+.action-btn.accent {
+  border-color: rgba(200,245,90,0.3);
+  color: var(--accent);
+}
+.action-btn.accent:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* ── MAIN FEED ── */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#feed-header {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+#feed-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+#event-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+#pause-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+#pause-btn:hover { border-color: var(--border-active); color: var(--text-secondary); }
+#pause-btn.paused { border-color: var(--warn); color: var(--warn); }
+
+#feed {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 0;
+}
+#feed::-webkit-scrollbar { width: 3px; }
+#feed::-webkit-scrollbar-track { background: transparent; }
+#feed::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 2px; }
+
+#feed-empty {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.entry {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+  cursor: default;
+}
+.entry:hover { background: var(--surface); }
+.entry.success { border-left-color: var(--success); }
+.entry.error   { border-left-color: var(--error); }
+.entry.warn    { border-left-color: var(--warn); }
+
+.e-gutter {
+  width: 6px;
+  flex-shrink: 0;
+}
+.e-time {
+  color: var(--text-dim);
+  padding: 3px 10px 3px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  line-height: 1.8;
+}
+.e-cat {
+  padding: 3px 8px 3px 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 400;
+  line-height: 1.8;
+  font-size: 11px;
+}
+.e-event {
+  color: var(--text-primary);
+  padding: 3px 8px 3px 0;
+  flex-shrink: 0;
+  line-height: 1.8;
+}
+.e-pid {
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 3px 8px 3px 0;
+  flex-shrink: 0;
+  line-height: 1.8;
+}
+.e-data {
+  color: var(--text-secondary);
+  padding: 3px 16px 3px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  line-height: 1.8;
+}
+
+/* Entry detail expand */
+.entry.expanded .e-data {
+  white-space: pre-wrap;
+  overflow: visible;
+}
+
+/* ── DETAIL DRAWER ── */
+#detail {
+  width: 280px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+#detail.open { transform: translateX(0); }
+
+#detail-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+#detail-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+#detail-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.2s;
+}
+#detail-close:hover { color: var(--text-secondary); }
+#detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+.detail-field {
+  margin-bottom: 14px;
+}
+.detail-field-key {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.detail-field-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  line-height: 1.6;
+}
+.detail-json {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 10px 12px;
+}
+
+/* ── SIMULATE BAR ── */
+#sim-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+#sim-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+#sim-select {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+  min-width: 0;
+}
+#sim-select:focus { border-color: var(--border-active); }
+#sim-fire {
+  background: var(--accent-dim);
+  border: 1px solid rgba(200,245,90,0.3);
+  border-radius: 2px;
+  padding: 5px 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+}
+#sim-fire:hover { background: rgba(200,245,90,0.18); border-color: var(--accent); }
+#sim-auto {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+#sim-auto.running {
+  border-color: rgba(200,245,90,0.3);
+  color: var(--accent);
+}
+
+/* ── GRAIN ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1000;
+}
+
+@keyframes entry-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.entry { animation: entry-in 0.12s ease both; }
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div id="titlebar">
+  <span class="titlebar-logo">Bloom</span>
+  <div class="titlebar-sep"></div>
+  <span class="titlebar-title">Debug</span>
+  <div id="ws-indicator">
+    <div id="ws-dot"></div>
+    <span id="ws-label">connecting</span>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div id="layout">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <!-- Health -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">System health</div>
+      <div id="health-grid">
+        <div class="health-row"><div class="h-dot"></div><span class="h-name">loading…</span></div>
+      </div>
+      <div id="health-summary">—</div>
+    </div>
+
+    <!-- Filters -->
+    <div class="sidebar-section-label" style="padding: 14px 16px 6px;">Filters</div>
+    <div id="sidebar-filters"></div>
+
+    <!-- Actions -->
+    <div id="sidebar-actions">
+      <button class="action-btn" onclick="clearFeed()">Clear</button>
+      <button class="action-btn accent" onclick="refreshHealth()">Health ↺</button>
+    </div>
+  </div>
+
+  <!-- FEED -->
+  <div id="main">
+    <div id="feed-header">
+      <span id="feed-title">Event feed</span>
+      <span id="event-count">0 events</span>
+      <button id="pause-btn" onclick="togglePause()">Pause</button>
+    </div>
+    <div id="feed" role="log" aria-live="polite">
+      <div id="feed-empty">Connecting to ws://localhost:4124…</div>
+    </div>
+    <div id="sim-bar">
+      <span id="sim-label">Simulate →</span>
+      <select id="sim-select">
+        <optgroup label="synapse">
+          <option value='{"category":"synapse","event":"GITHUB_PAT_DETECTED","data":{"token_fingerprint":"ghp_...abc"},"profile_id":"2183af25"}'>synapse · GITHUB_PAT_DETECTED</option>
+          <option value='{"category":"synapse","event":"GITHUB_TOKEN_STORED","data":{"vault_key":"sk_bloom_pat"},"profile_id":"2183af25"}'>synapse · GITHUB_TOKEN_STORED</option>
+          <option value='{"category":"synapse","event":"DISCOVERY_COMPLETE","data":{"steps_done":5},"profile_id":"2183af25"}'>synapse · DISCOVERY_COMPLETE</option>
+          <option value='{"category":"synapse","event":"HANDSHAKE_CONFIRMED","data":{"extension_id":"bloom-ext"},"profile_id":"2183af25"}'>synapse · HANDSHAKE_CONFIRMED</option>
+        </optgroup>
+        <optgroup label="temporal">
+          <option value='{"category":"temporal","event":"WORKFLOW_STATE_CHANGED","data":{"from":"PENDING","to":"RUNNING"},"profile_id":"2183af25"}'>temporal · WORKFLOW_STATE_CHANGED</option>
+          <option value='{"category":"temporal","event":"INTENT_COMPLETED","data":{"intent":"navigate_to_pr"},"profile_id":"2183af25"}'>temporal · INTENT_COMPLETED</option>
+          <option value='{"category":"temporal","event":"INTENT_FAILED","data":{"intent":"click_merge","error":"element_not_found"},"profile_id":"2183af25"}'>temporal · INTENT_FAILED</option>
+        </optgroup>
+        <optgroup label="brain">
+          <option value='{"category":"brain","event":"PROFILE_LAUNCHED","data":{"chrome_pid":14392,"debug_port":9222},"profile_id":"2183af25"}'>brain · PROFILE_LAUNCHED</option>
+        </optgroup>
+        <optgroup label="health">
+          <option value='{"category":"health","event":"COMPONENT_STATE_CHANGED","data":{"component":"brain_service","state":"UNREACHABLE"},"profile_id":null}'>health · COMPONENT_STATE_CHANGED</option>
+        </optgroup>
+        <optgroup label="nucleus">
+          <option value='{"category":"nucleus","event":"BOOTSTRAP_READY","data":{"ws_port":4124,"api_port":48215},"profile_id":null}'>nucleus · BOOTSTRAP_READY</option>
+        </optgroup>
+        <optgroup label="sentinel">
+          <option value='{"category":"sentinel","event":"EXTENSION_LOADED","data":{"manifest_version":3},"profile_id":"2183af25"}'>sentinel · EXTENSION_LOADED</option>
+        </optgroup>
+      </select>
+      <button id="sim-fire" onclick="fireSimEvent()">POST →</button>
+      <button id="sim-auto" onclick="toggleAuto()">Auto</button>
+    </div>
+  </div>
+
+  <!-- DETAIL DRAWER -->
+  <div id="detail">
+    <div id="detail-header">
+      <span id="detail-label">Event detail</span>
+      <button id="detail-close" onclick="closeDetail()" aria-label="Close detail">×</button>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const WS_URL  = 'ws://localhost:4124';
+const API_URL = 'http://localhost:48215';
+const MAX_ENTRIES = 500;
+
+// ── STATE ───────────────────────────────────────────────────────────────────
+let ws            = null;
+let wsReconnTimer = null;
+let reconnDelay   = 1500;
+let entries       = [];
+let paused        = false;
+let autoInterval  = null;
+let autoIdx       = 0;
+let selectedEntry = null;
+
+const filters = {
+  synapse:  { on: true, count: 0, color: '#378ADD' },
+  brain:    { on: true, count: 0, color: '#4ADE80' },
+  sentinel: { on: true, count: 0, color: '#F0A040' },
+  nucleus:  { on: true, count: 0, color: '#E8EAF0' },
+  temporal: { on: true, count: 0, color: '#7F77DD' },
+  health:   { on: true, count: 0, color: '#888780' },
+};
+
+const EVENT_LEVELS = {
+  DISCOVERY_COMPLETE:      'success',
+  GITHUB_TOKEN_STORED:     'success',
+  PROFILE_LAUNCHED:        'success',
+  HANDSHAKE_CONFIRMED:     'success',
+  EXTENSION_LOADED:        'success',
+  BOOTSTRAP_READY:         'success',
+  INTENT_COMPLETED:        'success',
+  WORKFLOW_STATE_CHANGED:  'info',
+  GITHUB_PAT_DETECTED:     'info',
+  COMPONENT_STATE_CHANGED: 'warn',
+  INTENT_FAILED:           'error',
+};
+
+const AUTO_EVENTS = [
+  {category:'temporal', event:'WORKFLOW_STATE_CHANGED', data:{from:'PENDING',to:'RUNNING'}, profile_id:'2183af25'},
+  {category:'synapse',  event:'GITHUB_PAT_DETECTED',    data:{token_fingerprint:'ghp_...abc'}, profile_id:'2183af25'},
+  {category:'synapse',  event:'GITHUB_TOKEN_STORED',    data:{vault_key:'sk_bloom_pat'}, profile_id:'2183af25'},
+  {category:'brain',    event:'PROFILE_LAUNCHED',       data:{chrome_pid:14392,debug_port:9222}, profile_id:'2183af25'},
+  {category:'sentinel', event:'EXTENSION_LOADED',       data:{manifest_version:3}, profile_id:'2183af25'},
+  {category:'synapse',  event:'DISCOVERY_COMPLETE',     data:{steps_done:5}, profile_id:'2183af25'},
+  {category:'temporal', event:'INTENT_COMPLETED',       data:{intent:'navigate_to_pr'}, profile_id:'2183af25'},
+  {category:'nucleus',  event:'BOOTSTRAP_READY',        data:{ws_port:4124,api_port:48215}, profile_id:null},
+];
+
+// ── WEBSOCKET ────────────────────────────────────────────────────────────────
+function connectWS() {
+  if (ws) { try { ws.close(); } catch(_) {} }
+  setWsState('connecting');
+
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    setWsState('live');
+    reconnDelay = 1500;
+    document.getElementById('feed-empty').textContent = 'Waiting for events…';
+    log('info', 'WebSocket connected to ' + WS_URL);
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+    // Wire: Control Plane emits { type: 'system_event', payload: {...} }
+    // Discriminator matches internal.routes broadcast envelope.
+    if (msg.type === 'system_event' && msg.payload) {
+      ingestEvent(msg.payload);
+    }
+  };
+
+  ws.onclose = () => {
+    setWsState('error');
+    wsReconnTimer = setTimeout(() => {
+      reconnDelay = Math.min(reconnDelay * 1.5, 10000);
+      connectWS();
+    }, reconnDelay);
+  };
+
+  ws.onerror = () => setWsState('error');
+}
+
+function setWsState(state) {
+  const dot   = document.getElementById('ws-dot');
+  const label = document.getElementById('ws-label');
+  dot.className   = state === 'live' ? 'live' : state === 'error' ? 'error' : '';
+  label.className = state === 'live' ? 'live' : '';
+  label.textContent = state === 'live' ? 'live' : state === 'error' ? 'reconnecting' : 'connecting';
+}
+
+// ── HEALTH ───────────────────────────────────────────────────────────────────
+const HEALTH_COMPONENTS = [
+  { key: 'temporal',      label: 'Temporal' },
+  { key: 'worker',        label: 'Worker' },
+  { key: 'brain_service', label: 'Brain' },
+  { key: 'bloom_api',     label: 'API' },
+  { key: 'control_plane', label: 'Control Plane' },
+  { key: 'svelte_dev',    label: 'Svelte' },
+  { key: 'harness',       label: 'Harness' },
+  { key: 'vault',         label: 'Vault' },
+  { key: 'worker_manager',label: 'Profiles' },
+];
+
+async function refreshHealth() {
+  try {
+    const res = await fetch(API_URL + '/api/health');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderHealth(data);
+  } catch(e) {
+    document.getElementById('health-grid').innerHTML =
+      '<div class="health-row"><div class="h-dot err"></div><span class="h-name" style="color:var(--error)">API unreachable</span></div>';
+    document.getElementById('health-summary').textContent = 'UNKNOWN';
+    document.getElementById('health-summary').className = 'degraded';
+  }
+}
+
+function renderHealth(data) {
+  const grid = document.getElementById('health-grid');
+  const comps = data.components || {};
+  grid.innerHTML = HEALTH_COMPONENTS.map(({ key, label }) => {
+    const c = comps[key];
+    if (!c) return '';
+    const isStub = c.state === 'STUB' || c.state === 'PRE_ONBOARDING';
+    const dotClass = isStub ? 'stub' : c.healthy ? 'ok' : 'err';
+    const stateClass = isStub ? 'h-stub' : '';
+    const port = c.port ? `<span class="h-state">:${c.port}</span>` : '';
+    return `<div class="health-row">
+      <div class="h-dot ${dotClass}"></div>
+      <span class="h-name">${label}</span>
+      <span class="h-state ${stateClass}">${c.state}</span>
+      ${port}
+    </div>`;
+  }).join('');
+
+  const summary = document.getElementById('health-summary');
+  summary.textContent = data.state || '—';
+  summary.className   = data.state === 'HEALTHY' ? '' : 'degraded';
+}
+
+// ── FILTERS ──────────────────────────────────────────────────────────────────
+function renderFilters() {
+  const el = document.getElementById('sidebar-filters');
+  el.innerHTML = Object.entries(filters).map(([cat, f]) => `
+    <div class="filter-row" onclick="toggleFilter('${cat}')">
+      <div class="filter-check ${f.on ? 'on' : ''}" id="fc-${cat}"></div>
+      <span class="filter-label" style="color:${f.on ? f.color : 'var(--text-dim)'};">${cat}</span>
+      <span class="filter-count" id="fcount-${cat}">${f.count}</span>
+    </div>
+  `).join('');
+}
+
+function toggleFilter(cat) {
+  filters[cat].on = !filters[cat].on;
+  renderFilters();
+  renderFeed();
+}
+
+// ── FEED ─────────────────────────────────────────────────────────────────────
+function levelFor(event, data) {
+  if (EVENT_LEVELS[event]) return EVENT_LEVELS[event];
+  if (data?.error || data?.state === 'FAILED') return 'error';
+  return 'info';
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString('es-AR', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3
+  });
+}
+
+function ingestEvent(payload) {
+  if (paused) return;
+  const entry = {
+    id:         `${Date.now()}-${Math.random()}`,
+    category:   payload.category || 'nucleus',
+    event:      payload.event || '?',
+    data:       payload.data || {},
+    profile_id: payload.profile_id || null,
+    timestamp:  payload.timestamp || Date.now(),
+    level:      levelFor(payload.event, payload.data),
+  };
+
+  entries.unshift(entry);
+  if (entries.length > MAX_ENTRIES) entries = entries.slice(0, MAX_ENTRIES);
+
+  if (filters[entry.category] !== undefined) filters[entry.category].count++;
+  renderFilters();
+  prependEntry(entry);
+  updateCount();
+}
+
+function prependEntry(entry) {
+  const feed  = document.getElementById('feed');
+  const empty = document.getElementById('feed-empty');
+  if (empty.style.display !== 'none') empty.style.display = 'none';
+
+  if (!filters[entry.category]?.on) return;
+
+  const div = document.createElement('div');
+  div.className = `entry ${entry.level}`;
+  div.dataset.id = entry.id;
+
+  const dataStr = Object.keys(entry.data).length
+    ? JSON.stringify(entry.data)
+    : '';
+  const catColor = filters[entry.category]?.color || 'var(--text-secondary)';
+
+  div.innerHTML = `
+    <div class="e-time">${fmtTime(entry.timestamp)}</div>
+    <div class="e-cat" style="color:${catColor}">[${entry.category}]</div>
+    <div class="e-event">${entry.event}</div>
+    ${entry.profile_id ? `<div class="e-pid">${entry.profile_id.slice(0,8)}</div>` : ''}
+    ${dataStr ? `<div class="e-data">${dataStr}</div>` : '<div class="e-data"></div>'}
+  `;
+
+  div.addEventListener('click', () => openDetail(entry));
+  feed.insertBefore(div, feed.children[0] || null);
+
+  // Cap rendered rows
+  while (feed.children.length > MAX_ENTRIES + 1) {
+    feed.removeChild(feed.lastChild);
+  }
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  // Remove all entry nodes, keep empty msg
+  Array.from(feed.querySelectorAll('.entry')).forEach(el => el.remove());
+  const filtered = entries.filter(e => filters[e.category]?.on);
+  if (filtered.length === 0) {
+    document.getElementById('feed-empty').style.display = '';
+    document.getElementById('feed-empty').textContent = entries.length
+      ? 'All categories filtered out'
+      : 'Waiting for events…';
+    return;
+  }
+  document.getElementById('feed-empty').style.display = 'none';
+  filtered.forEach(e => {
+    const div = document.createElement('div');
+    div.className = `entry ${e.level}`;
+    div.dataset.id = e.id;
+    const dataStr = Object.keys(e.data).length ? JSON.stringify(e.data) : '';
+    const catColor = filters[e.category]?.color || 'var(--text-secondary)';
+    div.innerHTML = `
+      <div class="e-time">${fmtTime(e.timestamp)}</div>
+      <div class="e-cat" style="color:${catColor}">[${e.category}]</div>
+      <div class="e-event">${e.event}</div>
+      ${e.profile_id ? `<div class="e-pid">${e.profile_id.slice(0,8)}</div>` : ''}
+      ${dataStr ? `<div class="e-data">${dataStr}</div>` : '<div class="e-data"></div>'}
+    `;
+    div.addEventListener('click', () => openDetail(e));
+    feed.appendChild(div);
+  });
+  updateCount();
+}
+
+function clearFeed() {
+  entries = [];
+  Object.values(filters).forEach(f => f.count = 0);
+  renderFilters();
+  const feed = document.getElementById('feed');
+  Array.from(feed.querySelectorAll('.entry')).forEach(el => el.remove());
+  document.getElementById('feed-empty').style.display = '';
+  document.getElementById('feed-empty').textContent = 'Waiting for events…';
+  updateCount();
+  closeDetail();
+}
+
+function updateCount() {
+  const filtered = entries.filter(e => filters[e.category]?.on).length;
+  document.getElementById('event-count').textContent =
+    filtered + (filtered !== entries.length ? `/${entries.length}` : '') + ' events';
+}
+
+// ── PAUSE ────────────────────────────────────────────────────────────────────
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pause-btn');
+  btn.textContent = paused ? 'Resume' : 'Pause';
+  btn.className   = paused ? 'paused' : '';
+}
+
+// ── DETAIL DRAWER ─────────────────────────────────────────────────────────────
+function openDetail(entry) {
+  selectedEntry = entry;
+  const drawer = document.getElementById('detail');
+  const body   = document.getElementById('detail-body');
+  const catColor = filters[entry.category]?.color || 'var(--text-secondary)';
+  body.innerHTML = `
+    <div class="detail-field">
+      <div class="detail-field-key">Category</div>
+      <div class="detail-field-val" style="color:${catColor}">${entry.category}</div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-field-key">Event</div>
+      <div class="detail-field-val">${entry.event}</div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-field-key">Level</div>
+      <div class="detail-field-val">${entry.level}</div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-field-key">Timestamp</div>
+      <div class="detail-field-val">${new Date(entry.timestamp).toISOString()}</div>
+    </div>
+    ${entry.profile_id ? `
+    <div class="detail-field">
+      <div class="detail-field-key">Profile ID</div>
+      <div class="detail-field-val">${entry.profile_id}</div>
+    </div>` : ''}
+    <div class="detail-field">
+      <div class="detail-field-key">Data</div>
+      <div class="detail-json">${JSON.stringify(entry.data, null, 2)}</div>
+    </div>
+  `;
+  drawer.classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail').classList.remove('open');
+  selectedEntry = null;
+}
+
+// ── SIMULATE ─────────────────────────────────────────────────────────────────
+async function fireSimEvent() {
+  const val = document.getElementById('sim-select').value;
+  let payload;
+  try { payload = JSON.parse(val); } catch { return; }
+
+  // POST to real endpoint. On success the WS broadcast brings the event
+  // back via system_event — skip local ingest to avoid duplicates.
+  // On failure (endpoint not yet wired), fall back to local ingest.
+  let serverReceived = false;
+  try {
+    const res = await fetch(API_URL + '/api/internal/system-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) serverReceived = true;
+  } catch(_) {}
+
+  if (!serverReceived) {
+    ingestEvent({ ...payload, timestamp: Date.now() });
+  }
+}
+
+function toggleAuto() {
+  const btn = document.getElementById('sim-auto');
+  if (autoInterval) {
+    clearInterval(autoInterval);
+    autoInterval = null;
+    btn.textContent = 'Auto';
+    btn.className   = '';
+  } else {
+    btn.textContent = 'Auto on';
+    btn.classList.add('running');
+    autoInterval = setInterval(() => {
+      const ev = AUTO_EVENTS[autoIdx % AUTO_EVENTS.length];
+      ingestEvent({ ...ev, timestamp: Date.now() });
+      autoIdx++;
+    }, 1000);
+  }
+}
+
+// ── LOGGING ───────────────────────────────────────────────────────────────────
+function log(level, msg) {
+  const ts = new Date().toISOString();
+  const fn = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log';
+  console[fn](`[${ts}] [${level.toUpperCase()}] [DEBUG-PANEL] ${msg}`);
+  if (window.debugPanel?.log) {
+    window.debugPanel.log(level, msg).catch(() => {});
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  renderFilters();
+  refreshHealth();
+  setInterval(refreshHealth, 10000);
+  connectWS();
+  log('info', 'Debug panel initialized');
+});
+</script>
+</body>
+</html>

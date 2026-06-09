@@ -80,32 +80,47 @@ body::after {
   50% { transform: translate(-50%,-50%) scale(1.07); }
 }
 
-/* ── SYSTEM PERSISTENCE LAYER ── */
-#system-layer {
-  position: fixed;
-  left: 40px; top: 50%;
-  transform: translateY(-50%);
+/* ── SIDEBAR + STEPPER ── */
+#app-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+#onboarding-sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 0 24px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  z-index: 10;
+  position: relative;
+}
+
+#stepper {
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px;
+}
+
+.step-node {
   display: flex;
   flex-direction: column;
   gap: 0;
-  z-index: 100;
-  opacity: 0;
-  transition: opacity 0.8s ease;
+  position: relative;
+  padding-bottom: 0;
 }
-#system-layer.visible { opacity: 1; }
 
-.sys-node {
+.step-node-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 0;
-  opacity: 0;
-  transform: translateX(-12px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  padding: 8px 0;
 }
-.sys-node.active { opacity: 1; transform: translateX(0); }
 
-.sys-node-dot {
+.step-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--border-active);
@@ -113,13 +128,17 @@ body::after {
   flex-shrink: 0;
   transition: background 0.4s, box-shadow 0.4s, border-color 0.4s;
 }
-.sys-node.established .sys-node-dot {
+.step-node.active .step-dot {
+  background: var(--text-dim);
+  border-color: var(--text-dim);
+}
+.step-node.established .step-dot {
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent);
   border-color: var(--accent);
 }
 
-.sys-node-label {
+.step-label {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -128,27 +147,67 @@ body::after {
   white-space: nowrap;
   transition: color 0.4s;
 }
-.sys-node.established .sys-node-label { color: var(--text-secondary); }
+.step-node.active .step-label { color: var(--text-secondary); }
+.step-node.established .step-label { color: var(--text-secondary); }
 
-.sys-node-status {
+.step-status {
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--accent);
   opacity: 0;
   transition: opacity 0.4s;
-  margin-left: 2px;
+  padding-left: 16px;
+  padding-bottom: 4px;
 }
-.sys-node.established .sys-node-status { opacity: 1; }
+.step-node.established .step-status { opacity: 1; }
 
-.sys-connector {
-  width: 1px; height: 20px;
+.step-connector {
+  width: 1px;
+  height: 16px;
   background: linear-gradient(to bottom, var(--border), transparent);
-  margin-left: 2px;
-  opacity: 0;
-  transition: opacity 0.4s;
+  margin-left: 26px;
+  opacity: 0.5;
 }
-.sys-connector.visible { opacity: 1; }
+
+#sidebar-spacer { flex: 1; }
+
+#debug-toggle {
+  margin: 0 24px;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  text-align: left;
+}
+#debug-toggle:hover { border-color: var(--border-active); color: var(--text-secondary); }
+#debug-toggle.active { border-color: var(--accent); color: var(--accent); }
+
+#content-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+#debug-panel-container {
+  width: 100%; height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+}
+#debug-panel-container.hidden { display: none; }
+
+#debug-frame {
+  width: 100%; height: 100%;
+  border: none;
+}
 
 /* ── STAGE ── */
 #stage {
@@ -157,6 +216,7 @@ body::after {
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: hidden;
 }
 
 /* ── SCREENS ── */
@@ -894,39 +954,6 @@ body::after {
 <div id="progress-thread"></div>
 <div id="ambient"></div>
 
-<!-- System Persistence Layer -->
-<div id="system-layer">
-  <div class="sys-node" id="sn-identity">
-    <div class="sys-node-dot"></div>
-    <div class="sys-node-label">Identity</div>
-    <div class="sys-node-status">Active</div>
-  </div>
-  <div class="sys-connector" id="sc-1"></div>
-  <div class="sys-node" id="sn-vault">
-    <div class="sys-node-dot"></div>
-    <div class="sys-node-label">Vault</div>
-    <div class="sys-node-status">Secured</div>
-  </div>
-  <div class="sys-connector" id="sc-2"></div>
-  <div class="sys-node" id="sn-nucleus">
-    <div class="sys-node-dot"></div>
-    <div class="sys-node-label">Nucleus</div>
-    <div class="sys-node-status">Established</div>
-  </div>
-  <div class="sys-connector" id="sc-3"></div>
-  <div class="sys-node" id="sn-project">
-    <div class="sys-node-dot"></div>
-    <div class="sys-node-label">Project</div>
-    <div class="sys-node-status">Active</div>
-  </div>
-  <div class="sys-connector" id="sc-4"></div>
-  <div class="sys-node" id="sn-mandate">
-    <div class="sys-node-dot"></div>
-    <div class="sys-node-label">Mandate</div>
-    <div class="sys-node-status">Persistent</div>
-  </div>
-</div>
-
 <!-- Cortex Bar (Synapse) -->
 <div id="cortex-bar">
   <div class="cortex-inner">
@@ -959,8 +986,66 @@ body::after {
   </div>
 </div>
 
-<!-- STAGE -->
-<div id="stage">
+<!-- APP LAYOUT -->
+<div id="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside id="onboarding-sidebar">
+    <div id="stepper">
+      <div class="step-node" id="sn-identity" data-step="0">
+        <div class="step-node-row">
+          <div class="step-dot"></div>
+          <div class="step-label">Identity</div>
+        </div>
+        <div class="step-status">Active</div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" id="sn-vault" data-step="1">
+        <div class="step-node-row">
+          <div class="step-dot"></div>
+          <div class="step-label">Vault</div>
+        </div>
+        <div class="step-status">Secured</div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" id="sn-nucleus" data-step="2">
+        <div class="step-node-row">
+          <div class="step-dot"></div>
+          <div class="step-label">Nucleus</div>
+        </div>
+        <div class="step-status">Established</div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" id="sn-project" data-step="3">
+        <div class="step-node-row">
+          <div class="step-dot"></div>
+          <div class="step-label">Project</div>
+        </div>
+        <div class="step-status">Active</div>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-node" id="sn-mandate" data-step="4">
+        <div class="step-node-row">
+          <div class="step-dot"></div>
+          <div class="step-label">Mandate</div>
+        </div>
+        <div class="step-status">Persistent</div>
+      </div>
+    </div>
+    <div id="sidebar-spacer"></div>
+    <button id="debug-toggle" onclick="toggleDebugPanel()">Debug</button>
+  </aside>
+
+  <!-- CONTENT AREA -->
+  <div id="content-area">
+
+    <!-- DEBUG PANEL (lazy-loaded) -->
+    <div id="debug-panel-container" class="hidden">
+      <iframe id="debug-frame" src=""></iframe>
+    </div>
+
+    <!-- STAGE -->
+    <div id="stage">
 
   <!-- SCREEN 0: Entry -->
   <div class="screen active" id="screen-entry">
@@ -1208,6 +1293,20 @@ body::after {
   </div>
 
 </div><!-- /stage -->
+
+      <!-- DEBUG PANEL — oculto por defecto -->
+      <div id="debug-panel-container" class="hidden">
+        <iframe
+          id="debug-frame"
+          src="../shared/debug.html"
+          frameborder="0"
+          title="Bloom Debug Panel"
+        ></iframe>
+      </div>
+
+  </div><!-- /content-area -->
+
+</div><!-- /app-layout -->
 
 <script src="onboarding.js"></script>
 </body>

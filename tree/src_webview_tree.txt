@@ -1,10 +1,6 @@
 bloom-development-extension/
 ├── src/
-│   ├── UNKNOWN.egg-info/
-│   │   ├── PKG-INFO
-│   │   ├── SOURCES.txt
-│   │   ├── dependency_links.txt
-│   │   └── top_level.txt
+│   ├── .DS_Store
 │   ├── ai/
 │   │   ├── AiAccountChecker.ts
 │   │   ├── adapters/
@@ -15,6 +11,7 @@ bloom-development-extension/
 │   │   │   └── OllamaNativeAdapter.ts
 │   │   └── index.ts
 │   ├── api/
+│   │   ├── .DS_Store
 │   │   ├── adapters/
 │   │   │   ├── AIRuntimeAdapter.ts
 │   │   │   ├── BrainApiAdapter.ts
@@ -29,6 +26,7 @@ bloom-development-extension/
 │   │   │   ├── explorer.routes.ts
 │   │   │   ├── health.routes.ts
 │   │   │   ├── intent.routes.ts
+│   │   │   ├── internal.routes.ts
 │   │   │   ├── nucleus.routes.ts
 │   │   │   ├── profile.routes.ts
 │   │   │   └── project.routes.ts
@@ -146,6 +144,7 @@ bloom-development-extension/
 │   │   ├── brain-schemas.ts
 │   │   └── ws-events.ts
 │   ├── ui/
+│   │   ├── .DS_Store
 │   │   ├── ClaudeBridgePanel.ts
 │   │   ├── intent/
 │   │   │   ├── intentForm.css
@@ -173,14 +172,18 @@ bloom-development-extension/
 │       ├── tokenEstimator.ts
 │       └── uriHelper.ts
 └── webview/
+    ├── .DS_Store
     └── app/
+        ├── .DS_Store
         ├── .svelte-kit/ [... svelte build]
         ├── node_modules/ [... dependencies]
         ├── package-lock.json
         ├── package.json
         ├── src/
+        │   ├── .DS_Store
         │   ├── app.html
         │   ├── lib/
+        │   │   ├── .DS_Store
         │   │   ├── api.ts
         │   │   ├── components/
         │   │   │   ├── BriefingEditor.svelte
@@ -193,8 +196,12 @@ bloom-development-extension/
         │   │   │   ├── OnboardingWizard.svelte
         │   │   │   ├── ProjectsPanel.svelte
         │   │   │   ├── SystemStatus.svelte
-        │   │   │   ├── TipsChat.svelte
-        │   │   │   └── TokenEstimator.svelte
+        │   │   │   ├── TokenEstimator.svelte
+        │   │   │   └── debug/
+        │   │   │       ├── DebugDetail.svelte
+        │   │   │       ├── DebugFeed.svelte
+        │   │   │       ├── DebugSidebar.svelte
+        │   │   │       └── DebugSimBar.svelte
         │   │   ├── stores/
         │   │   │   ├── auth.ts
         │   │   │   ├── intents.ts
@@ -208,6 +215,9 @@ bloom-development-extension/
         │   └── routes/
         │       ├── +layout.svelte
         │       ├── +page.svelte
+        │       ├── .DS_Store
+        │       ├── debug/
+        │       │   └── +page.svelte
         │       ├── genesis/
         │       │   └── +page.svelte
         │       ├── home/
