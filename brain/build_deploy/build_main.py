@@ -10,7 +10,6 @@ import os
 import sys
 import shutil
 import subprocess
-import platform
 from pathlib import Path
 
 # Forzar UTF-8 en Windows
@@ -27,47 +26,19 @@ PROJECT_ROOT = SCRIPT_DIR.parent.parent       # raíz del proyecto
 
 # ========================================
 # DETECCIÓN DE PLATAFORMA
+# Delegamos en platform_detector.py (fuente de verdad compartida).
+# build_main.py tenia su propia detect_platform_dir() con "linux64"
+# hardcodeado, lo que causaba que el ejecutable se copiara a la
+# carpeta incorrecta en Linux x64.
 # ========================================
-def detect_platform_dir():
-    """Detecta el directorio de plataforma correcto."""
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    
-    if system == "windows":
-        # En Windows, detectar arquitectura real
-        if machine in ("amd64", "x86_64"):
-            return "win64"
-        elif machine in ("x86", "i386", "i686"):
-            return "win32"
-        else:
-            return "win64"  # Default moderno
-    
-    elif system == "linux":
-        if machine in ("x86_64", "amd64"):
-            return "linux64"
-        elif machine in ("aarch64", "arm64"):
-            return "linux_arm64"
-        else:
-            return "linux64"
-    
-    elif system == "darwin":
-        if machine in ("x86_64", "amd64"):
-            return "darwin_x64"
-        elif machine in ("arm64", "aarch64"):
-            return "darwin_arm64"
-        else:
-            return "darwin_arm64"  # Default Apple Silicon
-    
-    else:
-        raise RuntimeError(f"Sistema no soportado: {system}")
+try:
+    from shared.platform_detector import PLATFORM as _PLATFORM
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent / "build_multiplatform"))
+    from shared.platform_detector import PLATFORM as _PLATFORM
 
-def get_executable_name():
-    """Retorna el nombre del ejecutable según plataforma."""
-    return "brain.exe" if sys.platform == "win32" else "brain"
-
-# Detectar plataforma
-PLATFORM_DIR = detect_platform_dir()
-EXE_NAME = get_executable_name()
+PLATFORM_DIR = _PLATFORM.platform_dir
+EXE_NAME     = _PLATFORM.get_executable_name()
 
 print(f"[INFO] Plataforma detectada: {PLATFORM_DIR}")
 print(f"[INFO] Ejecutable: {EXE_NAME}")
