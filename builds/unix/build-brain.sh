@@ -6,7 +6,7 @@ set -euo pipefail
 # Equivalente de: builds/windows/brain.ps1
 #
 # Uso (llamado por build-all.py):
-#   bash builds/darwin/build-brain.sh
+#   bash builds/unix/build-brain.sh
 #
 # Variables de entorno inyectadas por build-all.py:
 #   BLOOM_PROJECT_ROOT   → raíz del repo
@@ -19,24 +19,41 @@ DETECTED_OS=$(uname -s)
 DETECTED_ARCH=$(uname -m)
 
 # ───────────────────────────────────────────────────────────────
+# RESOLUCIÓN DE PLATAFORMA Y ARQUITECTURA
+# ───────────────────────────────────────────────────────────────
+
+case "${DETECTED_OS}" in
+    Darwin)
+        case "${DETECTED_ARCH}" in
+            arm64)   BIN_ARCH="darwin_arm64" ;;
+            x86_64)  BIN_ARCH="darwin_x64"   ;;
+            *)        BIN_ARCH="darwin_x64"   ;;
+        esac
+        ;;
+    Linux)
+        case "${DETECTED_ARCH}" in
+            x86_64|amd64)  BIN_ARCH="linux_x64"   ;;
+            aarch64|arm64) BIN_ARCH="linux_arm64"  ;;
+            *)              BIN_ARCH="linux_x64"    ;;
+        esac
+        ;;
+    *)
+        echo "❌ Error: sistema operativo no soportado: ${DETECTED_OS}"
+        exit 1
+        ;;
+esac
+
+# ───────────────────────────────────────────────────────────────
 # RESOLUCIÓN DE RUTAS
 # ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# builds/darwin/ → repo root es ../..
+# builds/unix/ → repo root es ../..
 # BLOOM_PROJECT_ROOT tiene precedencia si build-all.py lo inyecta
 PROJECT_ROOT="${BLOOM_PROJECT_ROOT:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 
 BRAIN_DIR="${PROJECT_ROOT}/brain"
 BUILD_SCRIPT="${BRAIN_DIR}/build_multiplatform/build.py"
-
-# Arquitectura → carpeta de output del binario
-# Nombres alineados con build-all.py y build_main.py
-case "${DETECTED_ARCH}" in
-    arm64)   BIN_ARCH="darwin_arm64" ;;
-    x86_64)  BIN_ARCH="darwin_x64"   ;;
-    *)        BIN_ARCH="linux_x64"    ;;
-esac
 
 # ───────────────────────────────────────────────────────────────
 # LOGGING
@@ -90,7 +107,11 @@ fi
 
 if ! command -v python3 &>/dev/null; then
     echo "❌ Error: python3 no encontrado en PATH."
-    echo "   Instalar con: brew install python@3.11"
+    if [[ "${DETECTED_OS}" == "Darwin" ]]; then
+        echo "   Instalar con: brew install python@3.11"
+    else
+        echo "   Instalar con: sudo apt install python3 python3-venv python3-pip"
+    fi
     echo "❌ python3 no encontrado" >> "${LOG_FILE}"
     exit 1
 fi

@@ -1,8 +1,8 @@
-// File: internal/supervisor/health_resources_unix.go
-// Platform-specific memory check for Linux and macOS.
-// Reads /proc/meminfo on Linux, vm_stat on macOS.
+// File: internal/supervisor/health_resources_darwin.go
+// Platform-specific memory check for macOS.
+// Reads vm_stat for free memory and hw.memsize sysctl for total memory.
 //
-//go:build !windows
+//go:build darwin
 
 package supervisor
 
@@ -11,44 +11,32 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 )
 
-// memoryThresholds returns platform-appropriate memory thresholds in MB.
+// memoryThresholds returns macOS memory thresholds in MB.
+// Darwin's memory compression (Compressed Memory) and unified memory architecture
+// make the kernel a much better steward of RAM than Windows. Temporal on darwin
+// runs comfortably with less headroom. VSCode and other dev tools regularly consume
+// RAM that macOS reclaims on demand, so a strict 2000 MB threshold produces false
+// PRESSURE alerts during normal dev work.
 //
-// Windows: high thresholds — Temporal's VirtualAlloc is aggressive and crashes
-// under low memory. 2000/1000 MB are the safe minimums observed in production.
-//
-// macOS: lower thresholds — darwin's memory compression (Compressed Memory) and
-// unified memory architecture make the kernel a much better steward of RAM than
-// Windows. Temporal on darwin runs comfortably with less headroom. VSCode and
-// other dev tools regularly consume RAM that macOS reclaims on demand, so a
-// strict 2000 MB threshold produces false PRESSURE alerts during normal dev work.
-//
-// On darwin the DEGRADED threshold defaults to 512 MB but can be overridden via
+// The DEGRADED threshold defaults to 512 MB but can be overridden via
 // BLOOM_MEMORY_THRESHOLD_MB to accommodate different dev environments.
-//
-// Linux: conservative thresholds, same as Windows — Linux does not compress
-// memory by default and server workloads expect headroom.
 func memoryThresholds() (degradedMB, pressureMB int64) {
-	if runtime.GOOS == "darwin" {
-		degraded := int64(512)
-		if v := os.Getenv("BLOOM_MEMORY_THRESHOLD_MB"); v != "" {
-			if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
-				degraded = parsed
-			}
+	degraded := int64(512)
+	if v := os.Getenv("BLOOM_MEMORY_THRESHOLD_MB"); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			degraded = parsed
 		}
-		return degraded, degraded / 2 // PRESSURE at half the DEGRADED threshold
 	}
-	return 2000, 1000 // linux: DEGRADED < 2GB, PRESSURE < 1GB
+	return degraded, degraded / 2 // PRESSURE at half the DEGRADED threshold
 }
 
 // checkMemory reads available RAM and returns a MemoryHealth.
-// On Linux uses /proc/meminfo (MemAvailable — correct metric since kernel 3.14+).
-// On macOS uses vm_stat (pages free + inactive) for free memory,
+// Uses vm_stat (pages free + inactive) for free memory,
 // and hw.memsize sysctl for total memory.
 // Falls back to UNKNOWN if the read fails — never panics.
 func checkMemory() MemoryHealth {
@@ -101,36 +89,13 @@ func darwinTotalMemoryMB() int64 {
 	return int64(binary.LittleEndian.Uint64(b)) / 1024 / 1024
 }
 
+// readFreeMemoryMB reads available memory via vm_stat and total via hw.memsize sysctl.
 func readFreeMemoryMB() (freeMB, totalMB int64, err error) {
-	// Linux: /proc/meminfo
-	if data, readErr := os.ReadFile("/proc/meminfo"); readErr == nil {
-		var available, total int64
-		for _, line := range strings.Split(string(data), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				continue
-			}
-			val, parseErr := strconv.ParseInt(fields[1], 10, 64)
-			if parseErr != nil {
-				continue
-			}
-			switch fields[0] {
-			case "MemAvailable:":
-				available = val / 1024 // kB → MB
-			case "MemTotal:":
-				total = val / 1024
-			}
-		}
-		if available > 0 {
-			return available, total, nil
-		}
-	}
-
-	// macOS: vm_stat for free memory + hw.memsize sysctl for total.
 	out, vmErr := exec.Command("vm_stat").Output()
 	if vmErr != nil {
-		return 0, 0, fmt.Errorf("neither /proc/meminfo nor vm_stat available: %v", vmErr)
+		return 0, 0, fmt.Errorf("vm_stat not available: %v", vmErr)
 	}
+
 	pageSize := int64(4096)
 	var freePages int64
 	for _, line := range strings.Split(string(out), "\n") {
@@ -154,6 +119,7 @@ func readFreeMemoryMB() (freeMB, totalMB int64, err error) {
 			}
 		}
 	}
+
 	freeMB = (freePages * pageSize) / (1024 * 1024)
 	totalMB = darwinTotalMemoryMB()
 	return freeMB, totalMB, nil

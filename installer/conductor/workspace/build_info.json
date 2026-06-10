@@ -1,15 +1,14 @@
 {
-  "name": "bloom-conductor",
-  "product_name": "Bloom Nucleus Workspace",
+  "name": "bloom-nucleus-installer",
+  "product_name": "Bloom Nucleus Installer",
   "version": "1.0.0",
-  "build": 130,
-  "full_version": "1.0.0+build.130",
+  "build": 138,
+  "full_version": "1.0.0+build.138",
   "channel": "stable",
-  "built_at": "2026-05-04T01:07:30.648Z",
-  "git_commit": "unknown",
-  "platform": "win32",
+  "built_at": "2026-06-10T20:18:40.888Z",
+  "git_commit": "b0d3f5d",
+  "platform": "linux",
   "arch": "win64",
-  "node_version": "v22.11.0",
-  "electron_version": "^28.3.3",
-  "buildNumber": 2
+  "node_version": "v18.19.1",
+  "electron_version": "^28.0.0"
 }

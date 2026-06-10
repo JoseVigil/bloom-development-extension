@@ -6,7 +6,7 @@ set -euo pipefail
 # Equivalente de: builds/windows/build-component.bat
 #
 # Uso (llamado por build-all.py):
-#   bash builds/darwin/build-component.sh <component>
+#   bash builds/unix/build-component.sh <component>
 #
 #   <component> es uno de: nucleus | sentinel | metamorph | sensor
 #
@@ -28,7 +28,7 @@ if [[ -z "${COMPONENT}" ]]; then
 fi
 
 # ───────────────────────────────────────────────────────────────
-# RESOLUCIÓN DE PLATAFORMA
+# RESOLUCIÓN DE PLATAFORMA Y ARQUITECTURA
 # ───────────────────────────────────────────────────────────────
 
 DETECTED_OS=$(uname -s)
@@ -43,7 +43,11 @@ case "${DETECTED_OS}" in
         esac
         ;;
     Linux)
-        BIN_ARCH="linux_x64"
+        case "${DETECTED_ARCH}" in
+            x86_64|amd64)  BIN_ARCH="linux_x64"   ;;
+            aarch64|arm64) BIN_ARCH="linux_arm64"  ;;
+            *)              BIN_ARCH="linux_x64"    ;;
+        esac
         ;;
     *)
         echo "❌ Error: sistema operativo no soportado: ${DETECTED_OS}"
@@ -56,7 +60,7 @@ esac
 # ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# builds/darwin/ → repo root es ../..
+# builds/unix/ → repo root es ../..
 # BLOOM_PROJECT_ROOT tiene precedencia si build-all.py lo inyecta
 PROJECT_ROOT="${BLOOM_PROJECT_ROOT:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 
@@ -123,7 +127,11 @@ fi
 if ! command -v go &>/dev/null; then
     echo "❌ Error: go no encontrado en PATH."
     echo "   Instalar desde: https://go.dev/dl/"
-    echo "   O con brew: brew install go"
+    if [[ "${DETECTED_OS}" == "Darwin" ]]; then
+        echo "   O con brew: brew install go"
+    else
+        echo "   O con: sudo apt install golang-go"
+    fi
     echo "❌ go no encontrado en PATH" >> "${LOG_FILE}"
     exit 1
 fi
@@ -261,7 +269,7 @@ echo "✅ Help generado: ${COMPONENT}_help.json + ${COMPONENT}_help.txt" >> "${L
 # REGISTRAR STREAM EN TELEMETRY
 # Stream_id y label idénticos a Windows (build-component.bat) para
 # permitir análisis cross-platform. Nucleus se busca en PATH igual
-# que en brain.ps1 — en Darwin no hay un .exe en bin/ hasta que
+# que en brain.ps1 — en Darwin/Linux no hay un .exe en bin/ hasta que
 # nucleus mismo fue compilado, así que PATH es la fuente correcta.
 # ───────────────────────────────────────────────────────────────
 

@@ -158,7 +158,7 @@ def _ensure_build_number_files(scripts_dir: Path, component: str) -> None:
                 rel = base_file
             log(f"  📄 Creado {rel} (valor inicial: 0)")
 
-    for platform_suffix in ("windows", "darwin"):
+    for platform_suffix in ("windows", "darwin", "linux"):
         offset_file = scripts_dir / f"build_number.{platform_suffix}.txt"
         if not offset_file.exists():
             offset_file.write_text("0", encoding="utf-8")
@@ -254,7 +254,7 @@ NUCLEUS_EXE  = NUCLEUS_HOME / "bin" / "nucleus" / _exe("nucleus")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CORRECCIÓN 2 — _DEV_BIN_BASE: detectar arquitectura en macOS
+# CORRECCIÓN 2 — _DEV_BIN_BASE: detectar arquitectura en macOS y Linux
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_dev_bin_base() -> Path:
@@ -265,7 +265,9 @@ def _get_dev_bin_base() -> Path:
         folder = "darwin_arm64" if arch == "arm64" else "darwin_x64"
         return ROOT / "installer/native/bin" / folder
     else:  # Linux
-        return ROOT / "installer/native/bin/linux_x64"
+        arch = _platform.machine()  # 'x86_64', 'aarch64', 'arm64'
+        folder = "linux_arm64" if arch in ("aarch64", "arm64") else "linux_x64"
+        return ROOT / "installer/native/bin" / folder
 
 
 _DEV_BIN_BASE  = _get_dev_bin_base()
@@ -278,7 +280,8 @@ _PROD_BIN_BASE = NUCLEUS_HOME / "bin"
 
 def _build_script_dir() -> Path:
     """Carpeta de scripts de build para la plataforma actual."""
-    return ROOT / "builds" / ("windows" if IS_WINDOWS else "darwin")
+    if IS_WINDOWS: return ROOT / "builds" / "windows"
+    return             ROOT / "builds" / "unix"
 
 
 _BUILD_DIR = _build_script_dir()
@@ -291,7 +294,7 @@ BUILDS: dict[str, Path | None] = {
     "brain": (
         ROOT / "builds/windows/brain.ps1"
         if IS_WINDOWS
-        else ROOT / "builds/darwin/build-brain.sh"
+        else ROOT / "builds/unix/build-brain.sh"
     ),
 
     # Host (C++): solo macOS/Linux — None en Windows indica skip explícito
@@ -539,7 +542,7 @@ def build_go_component(component: str) -> StepResult:
 
     # BUG FIX 2 — inyectar BLOOM_PROJECT_ROOT además de BLOOM_BUILD_NUMBER.
     # Sin esta variable, build-component.sh no puede resolver PROJECT_ROOT
-    # correctamente cuando es invocado desde build-all.py (cwd = builds/darwin/),
+    # correctamente cuando es invocado desde build-all.py (cwd = builds/unix/),
     # y cae al fallback cd "${SCRIPT_DIR}/../.." que puede apuntar a un path incorrecto.
     env = inject_build_number_env(component)
     env["BLOOM_PROJECT_ROOT"] = str(ROOT)
@@ -651,6 +654,28 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
         if build_num is not None:
             env["BLOOM_BUILD_NUMBER"] = str(build_num)
 
+    # Garantizar node_modules antes de correr el script.
+    # Necesario para comandos que dependen de binarios locales (ej: vsce en VSIX)
+    # que npm resuelve desde node_modules/.bin/ al ejecutar `npm run`.
+    # Sin este paso, la primera ejecución en una máquina nueva falla con
+    # "sh: 1: <comando>: not found" aunque el paquete esté en devDependencies.
+    node_modules = project_dir / "node_modules"
+    lock_file    = node_modules / ".package-lock.json"
+    needs_install = (
+        not node_modules.exists() or
+        not lock_file.exists() or
+        pkg_json.stat().st_mtime > lock_file.stat().st_mtime
+    )
+    if needs_install:
+        log(f"Instalando dependencias de {project_dir.name}/ (npm install) ...")
+        code_i, out_i = run_streaming([_NPM, "install"], cwd=project_dir, env=env)
+        if code_i != 0:
+            tail = "\n".join(out_i.splitlines()[-20:]) if out_i else "(sin output)"
+            return StepResult(name, False, error=f"npm install en {project_dir.name}/ falló:\n{tail}")
+        log(f"  {project_dir.name}/ node_modules instalados")
+    else:
+        log(f"{project_dir.name}/ node_modules up-to-date - skipping npm install")
+
     log(f"Ejecutando npm run {npm_script} en {project_dir.name}/ ...")
 
     if name == "VSIX":
@@ -698,6 +723,23 @@ def rollout_component(component: str) -> StepResult:
     log(f"Copiando {component}: {src} → {dst}")
     try:
         dst.mkdir(parents=True, exist_ok=True)
+
+        # En Linux, sobreescribir un ejecutable en uso falla con [Errno 26] Text file busy.
+        # La solucion estandar es unlink (borrar) el archivo destino antes de copiar:
+        # el proceso que lo tiene abierto sigue usando el inodo viejo, y el nuevo
+        # binario ocupa un inodo nuevo. Ambos coexisten sin conflicto hasta que
+        # el proceso viejo termine.
+        # En Windows y macOS esto no es necesario (copytree lo maneja solo).
+        if IS_LINUX:
+            for src_file in src.rglob("*"):
+                if src_file.is_file():
+                    dst_file = dst / src_file.relative_to(src)
+                    if dst_file.exists():
+                        try:
+                            dst_file.unlink()
+                        except OSError:
+                            pass  # Si no se puede borrar, copytree fallara con el error real
+
         _shutil.copytree(src, dst, dirs_exist_ok=True)
     except OSError as exc:
         return StepResult(f"Rollout:{component}", False, error=f"Error copiando {component}: {exc}")
@@ -759,8 +801,17 @@ def ensure_path_in_zshrc() -> None:
         f'export PATH="{NUCLEUS_HOME / "bin" / comp}:$PATH"'
         for comp in _PATH_COMPONENTS
     ]
-    _write_path_block(Path.home() / ".zshrc")
-    _write_path_block(Path.home() / ".zshenv")
+    if IS_MACOS:
+        _write_path_block(Path.home() / ".zshrc")
+        _write_path_block(Path.home() / ".zshenv")
+    else:  # Linux
+        _write_path_block(Path.home() / ".bashrc")
+        _write_path_block(Path.home() / ".bash_profile")
+        # También escribir en .zshrc/.zshenv si el usuario usa zsh en Linux
+        zshrc = Path.home() / ".zshrc"
+        if zshrc.exists():
+            _write_path_block(zshrc)
+            _write_path_block(Path.home() / ".zshenv")
     log(f"  📋 Entradas registradas:")
     for p in path_lines:
         log(f"     {p}")
@@ -885,6 +936,32 @@ def build_bootstrap() -> StepResult:
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult("Bootstrap", False, error=f"version-bootstrap.py falló:\n{tail}")
+
+    # Paso 1.5: garantizar node_modules en ROOT (donde está tsconfig.json y @types/*)
+    # npm install solo corre si node_modules no existe o package.json es más nuevo.
+    # Sin esto, tsc falla con TS2688 (@types/node, @types/mocha, @types/vscode no encontrados)
+    # en máquinas donde nunca se corrió npm install en la raíz (ej: primera migración a Linux).
+    root_node_modules = ROOT / "node_modules"
+    root_pkg          = ROOT / "package.json"
+    if root_pkg.exists():
+        root_lock = root_node_modules / ".package-lock.json"
+        needs_root_install = (
+            not root_node_modules.exists() or
+            not root_lock.exists() or
+            root_pkg.stat().st_mtime > root_lock.stat().st_mtime
+        )
+        if needs_root_install:
+            log("Paso 1.5/5: Instalando dependencias de ROOT (npm install) ...")
+            cmd_root = [_NPM, "install"]
+            code_root, out_root = run_streaming(cmd_root, cwd=ROOT)
+            if code_root != 0:
+                tail = "\n".join(out_root.splitlines()[-20:]) if out_root else "(sin output)"
+                return StepResult("Bootstrap", False, error=f"npm install en ROOT falló:\n{tail}")
+            log("  ROOT node_modules instalados")
+        else:
+            log("Paso 1.5/5: ROOT node_modules up-to-date - skipping npm install")
+    else:
+        log(f"Paso 1.5/5: ROOT/package.json no encontrado en {ROOT} - skipping")
 
     # Paso 2: compilar TypeScript (bundle.js depende de out/)
     log("Paso 2/5: Compilando TypeScript (npm run compile) ...")
@@ -1236,8 +1313,13 @@ def _build_conductor_subproject(name: str, target: Path) -> StepResult:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult(name, False, error=f"npm install falló en {target.name}/:\n{tail}")
 
-    # ── npm run build:darwin / build ───────────────────────────────────────
-    npm_script = "build:darwin" if IS_MACOS else "build"
+    # ── npm run build:darwin / build:linux / build:win ────────────────────
+    if IS_MACOS:
+        npm_script = "build:darwin"
+    elif IS_LINUX:
+        npm_script = "build:linux"
+    else:
+        npm_script = "build:win"
     log(f"Ejecutando npm run {npm_script} en {target.name}/ ...")
     code, out = run_streaming([_NPM, "run", npm_script], cwd=target, env=env)
 
@@ -1412,6 +1494,15 @@ def main() -> None:
                 log(f"  {comp:<12} {effective} → {effective + 1}{offset_str}  ← este build")
             else:
                 log(f"  {comp:<12} {effective}{offset_str}")
+
+    # vsix no tiene build_number propio (artefacto npm), pero se muestra
+    # para que el operador sepa si entra en este build o no.
+    vsix_will_build = (
+        (_only_set_preview is None or "vsix" in _only_set_preview)
+        and "vsix" not in _skip_set_preview
+    )
+    vsix_status = "← este build" if vsix_will_build else "(skipped)"
+    log(f"  {'vsix':<12} —  {vsix_status}")
     log("")
 
     # Definir todos los pasos en orden.
