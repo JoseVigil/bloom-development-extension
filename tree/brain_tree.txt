@@ -32,6 +32,7 @@ bloom-development-extension/
     │       ├── platform_detector.py
     │       └── telemetry_helper.py
     ├── build_number.darwin.txt
+    ├── build_number.effective.txt
     ├── build_number.txt
     ├── build_number.windows.txt
     ├── cli/
@@ -345,8 +346,8 @@ bloom-development-extension/
     │   │           ├── harness/
     │   │           │   ├── __init__.py
     │   │           │   ├── __pycache__/ [... cache]
+    │   │           │   ├── harness.js
     │   │           │   ├── index.html
-    │   │           │   ├── ion.manifest.json
     │   │           │   └── ionpump_protocol.js
     │   │           └── landing/
     │   │               ├── __init__.py

@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── conductor/
-    ├── .DS_Store
     ├── .gitignore
     ├── app.manifest
     ├── config-loader.js
@@ -18,7 +17,6 @@ bloom-development-extension/
     │   ├── make_icns.sh
     │   └── sanitize_manifest.py
     ├── setup/
-    │   ├── .DS_Store
     │   ├── app.manifest
     │   ├── assets/
     │   │   ├── bloom.ico
@@ -34,8 +32,8 @@ bloom-development-extension/
     │   │   ├── admin-utils.js
     │   │   ├── menu-builder.js
     │   │   └── window-manager.js
+    │   ├── dist/ [... build output]
     │   ├── install/
-    │   │   ├── .DS_Store
     │   │   ├── chromium-installer.js
     │   │   ├── diagnose/
     │   │   │   ├── diagnose-service.js
@@ -80,7 +78,6 @@ bloom-development-extension/
     │   │   ├── uninstall-brain-service.bat
     │   │   └── uninstall-nucleus-service.bat
     │   ├── src/
-    │   │   ├── .DS_Store
     │   │   ├── index.html
     │   │   ├── renderer.js
     │   │   └── styles.css
@@ -89,15 +86,15 @@ bloom-development-extension/
     │   │   └── repair-tools.js
     │   └── version.json
     ├── shared/
-    │   ├── .DS_Store
     │   ├── build-info.js
     │   ├── bump-version.js
     │   ├── global_paths.js
     │   ├── logger.js
     │   ├── preload-synapse.js
     │   └── synapse-bridge.js
+    ├── tree/
+    │   └── src_webview_tree.txt
     └── workspace/
-        ├── .DS_Store
         ├── assets/
         │   ├── bloom.icns
         │   └── bloom.ico
@@ -126,4 +123,6 @@ bloom-development-extension/
         │   └── preload_onboarding.js
         ├── package-lock.json
         ├── package.json
+        ├── shared/
+        │   └── debug.html
         └── version.json

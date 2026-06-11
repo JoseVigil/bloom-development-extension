@@ -7,7 +7,18 @@ https://nodejs.org/en/download
 
 Python Build Standalone (Astral) — macOS Runtime para Bloom
 Runtime embebido de Python 3.10 para macOS, equivalente al embeddable package de Windows. Dos tarballs install_only_stripped: uno para aarch64 (Apple Silicon) y otro para x86_64 (Intel). Release activa: 20260414 → CPython 3.10.20.
-https://github.com/astral-sh/python-build-standalone/releases/download
+MacOS
+https://github.com/astral-sh/python-build-standalone/releases/
+Linux 
+Linux x86_64 — cpython-3.10.20+20260414
+https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.10.20+20260414-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+Para Linux ARM64:
+https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.10.20+20260414-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz
+
+
+⚠️ Nota importante para Linux que no aplica a macOS: existen variantes gnu (glibc) y musl. La gnu es la correcta para distros estándar (Ubuntu, Debian, Fedora, etc.) — usá musl solo si vas a correr sobre Alpine. También hay variantes con sufijo de CPU microarquitectura (-v2, -v3, -v4 para AVX) pero la base sin sufijo es la más compatible y la recomendada para distribución general.
+Misma estructura que macOS al descomprimir: carpeta python/bin/python3.10, python/lib/, etc. — mapea igual a installer/resources/runtime-linux/x86_64/.
+
 uitool
 https://claude.ai/chat/2894c85a-4e31-4ef3-bd00-6915b24335a2
 

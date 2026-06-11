@@ -185,3 +185,4 @@ installer/temporal/darwin/temporal
 webview/app/src/lib
 # excepción para el debug panel:
 !webview/app/src/lib/components/debug/
+F

@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── workspace/
-    ├── .DS_Store
     ├── assets/
     │   ├── bloom.icns
     │   └── bloom.ico
@@ -11,7 +10,6 @@ bloom-development-extension/
     ├── build_number.txt
     ├── build_number.windows.txt
     ├── core/
-    │   ├── .DS_Store
     │   ├── core.html
     │   ├── ipc/
     │   │   ├── health-handlers.js
@@ -23,13 +21,13 @@ bloom-development-extension/
     ├── main_conductor.js
     ├── node_modules/ [... dependencies]
     ├── onboarding/
-    │   ├── .DS_Store
     │   ├── ipc/
-    │   │   ├── .DS_Store
     │   │   └── onboarding-handlers.js
     │   ├── onboarding.html
     │   ├── onboarding.js
     │   └── preload_onboarding.js
     ├── package-lock.json
     ├── package.json
+    ├── shared/
+    │   └── debug.html
     └── version.json
