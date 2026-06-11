@@ -26,11 +26,50 @@ const path = require('path');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const { BrowserWindow } = require('electron');
+const sudo = require('sudo-prompt');
 
 const { paths } = require('../config/paths');
 const { getLogger } = require('../../shared/logger');
 const { nucleusManager } = require('./nucleus_manager');
 const logger = getLogger('installer');
+
+// ============================================================================
+// PRIVILEGED EXECUTION HELPER
+// ============================================================================
+
+/**
+ * Ejecuta un comando shell con privilegios elevados via sudo-prompt.
+ * Muestra un diálogo nativo al usuario pidiendo su contraseña.
+ * Electron nunca corre como root — solo este comando lo hace.
+ *
+ * @param {string} command  - Comando a ejecutar con privilegios
+ * @param {string} reason   - Descripción corta que ve el usuario en el diálogo
+ * @returns {Promise<string>} stdout del comando
+ */
+function runPrivileged(command, reason = 'Bloom Nucleus Installer') {
+  return new Promise((resolve, reject) => {
+    const options = {
+      name: reason,  // Aparece en el diálogo de autenticación del sistema
+    };
+
+    logger.info(`🔐 Requesting elevated privileges for: ${reason}`);
+    logger.debug(`   Command: ${command}`);
+
+    sudo.exec(command, options, (error, stdout, stderr) => {
+      if (error) {
+        logger.error(`❌ Privileged command failed: ${error.message}`);
+        return reject(error);
+      }
+      if (stderr) {
+        logger.warn(`⚠️ Privileged command stderr: ${stderr}`);
+      }
+      if (stdout) {
+        logger.info(`✔ Privileged command output: ${stdout.toString().trim()}`);
+      }
+      resolve(stdout ? stdout.toString() : '');
+    });
+  });
+}
 
 const { preInstallCleanup } = require('./pre-install-cleanup.js');
 
@@ -43,6 +82,8 @@ const {
   NEW_SERVICE_NAME
 } = process.platform === 'darwin'
   ? require('./service-installer-brain-darwin.js')
+  : process.platform === 'linux'
+  ? require('./service-installer-brain-linux.js')
   : require('./service-installer-brain.js');
 
 const { installRuntime } = require('./runtime-installer');
@@ -56,11 +97,15 @@ const {
   OLLAMA_DISPLAY_NAME
 } = process.platform === 'darwin'
   ? require('./service-installer-ollama-darwin.js')
+  : process.platform === 'linux'
+  ? require('./service-installer-ollama-linux.js')
   : require('./service-installer-ollama');
 
 // ── Sensor installer — condicional por plataforma ─────────────────────────────
 const { installSensor } = process.platform === 'darwin'
   ? require('./service-installer-sensor-darwin.js')
+  : process.platform === 'linux'
+  ? require('./service-installer-sensor-linux.js')
   : require('./service-installer-sensor');
 
 const {
@@ -286,7 +331,11 @@ async function launchMasterProfile(win) {
   }
 }
 
-const SENSOR_EXE_NAME = process.platform === 'darwin' ? 'sensor' : 'bloom-sensor.exe';
+const SENSOR_EXE_NAME = process.platform === 'darwin'
+  ? 'sensor'
+  : process.platform === 'linux'
+  ? 'bloom-sensor'
+  : 'bloom-sensor.exe';
 const SETUP_EXE_NAME  = process.platform === 'darwin' ? 'bloom-setup'  : 'bloom-setup.exe';
 
 // ============================================================================
@@ -988,6 +1037,8 @@ async function installNucleusService(win) {
       startNucleusService
     } = process.platform === 'darwin'
       ? require('./service-installer-nucleus-darwin.js')
+      : process.platform === 'linux'
+      ? require('./service-installer-nucleus-linux.js')
       : require('./service-installer-nucleus');
 
     logger.info('Installing service...');
@@ -1334,5 +1385,6 @@ async function installService(win) {
 }
 
 module.exports = {
-  installService
+  installService,
+  runPrivileged,
 };
