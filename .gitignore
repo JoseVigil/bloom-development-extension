@@ -1,162 +1,28 @@
-out
-dist
-node_modules
-.vscode-test/
-*.vsix
-
-# Entornos virtuales
-.venv/
-venv/
-env/
-
-# Python
-__pycache__/
-*.pyc
-
-# BTIP Explorer Webview
-webview/build/
-webview/node_modules/
-webview/.svelte-kit/
-webview/package-lock.json
-
-# Entorno virtual de Python
-venv/
-env/
-ENV/
-venv*/
-env*/
-ENV*/
-
-# Directorio de librerías personalizadas (si no quieres subirlo)
-libs/
-# O si solo quieres ignorar el contenido pero mantener la carpeta:
-# libs/*
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Python runtime binaries darwin
-installer/resources/runtime-darwin/
-
-# Entornos virtuales
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Archivos de configuración local
-*.local
-.env
-.env.local
-
-# Python Runtime (se descarga en build-time)
-installer/resources/runtime/
-.cache/
-
-# Host dependencies
-installer/host/mingw-deps
-
-# SvelteKit
-**/.svelte-kit/
-
-
-# PyInstaller build artifacts
-build/
-dist/
-*.spec.bak
-
-# Runtime Libs
-brain/runtime_libs
-
-# Python cache
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Virtual environments
-venv/
-env/
-ENV/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
+# ============================================================================
 # OS
+# ============================================================================
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
+# ============================================================================
+# IDE
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Compiled executable and dependencies
-installer/native/bin/win32/brain/_internal
-!installer/native/bin/win32/brain/.gitkeep
-installer/native/bin/win64/brain/_internal
-!installer/native/bin/win64/brain/.gitkeep
-
-# Chrome Installer
-installer/chrome/chrome-win.zip  
-installer/chrome/chrome-mac.zip  
-
-# Ollama
-installer/ollama/ollama.exe  
-installer/ollama/lib
-installer/ollama/
-
-# Temporal
-installer/temporal/temporal.exe
-
+# ============================================================================
 # Node
-installer/node/node.exe
+# ============================================================================
+node_modules/
+out/
+dist/
+build/
 
-# Binarios grandes
-installer/node/node
-installer/termporal/temporal
-
-# opcional más general
-installer/node/
-installer/termporal/
-
-# ===============================
-# Electron / Native artifacts
-# ===============================
-# Ignorar todo binario nativo
-installer/native/bin/**
-!installer/native/bin/win64/host/bloom-host.exe
-!installer/native/bin/win64/host/help/
-!installer/native/bin/linux/host/bloom-host
-!installer/native/bin/linux/host/help/
-!installer/native/bin/win64/host/libgcc_s_seh-1.dll
-!installer/native/bin/win64/host/libstdc++-6.dll
-!installer/native/bin/win64/host/libwinpthread-1.dll
-!installer/native/bin/linux/host/bloom-host
-
- 
-# Electron builder outputs
+# ============================================================================
+# Electron / Builder outputs
+# ============================================================================
 **/win-unpacked/
 **/*.exe
 **/*.dll
@@ -164,25 +30,96 @@ installer/native/bin/**
 **/*.asar
 **/*.bin
 **/*.node
+*.vsix
 
-# Logs
-*.log
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+MANIFEST
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+sdist/
+var/
+wheels/
+.installed.cfg
 
-# OS
-.DS_Store
-Thumbs.db
+# Virtual environments
+.venv/
+venv/
+venv*/
+env/
+env*/
+ENV/
+ENV*/
 
-# Native Electron build outputs
+# ============================================================================
+# Python runtimes (se descargan en build-time, no van al repo)
+# ============================================================================
+installer/resources/runtime/
+installer/resources/runtime-darwin/
+installer/resources/runtime-linux/
+
+# ============================================================================
+# Native binaries
+# ============================================================================
+# Ignorar todo — excepciones abajo
+installer/native/bin/**
+
+# Windows brain
+!installer/native/bin/win32/brain/.gitkeep
+!installer/native/bin/win64/brain/.gitkeep
+
+# Host binaries (sí se versionar)
+!installer/native/bin/win64/host/bloom-host.exe
+!installer/native/bin/win64/host/libgcc_s_seh-1.dll
+!installer/native/bin/win64/host/libstdc++-6.dll
+!installer/native/bin/win64/host/libwinpthread-1.dll
+!installer/native/bin/win64/host/help/
+!installer/native/bin/linux/host/bloom-host
+!installer/native/bin/linux/host/help/
+
+# Runtime libs
+brain/runtime_libs/
 native/bin/
 
-# Native Electron build outputs
-native/bin/
-.DS_Store
-installer/temporal/darwin/temporal
+# ============================================================================
+# Installers y dependencias grandes
+# ============================================================================
+installer/chrome/chrome-win.zip
+installer/chrome/chrome-mac.zip
+installer/ollama/
+installer/node/
+installer/temporal/
+installer/host/mingw-deps/
 
+# ============================================================================
+# Webview
+# ============================================================================
+webview/build/
+webview/node_modules/
+webview/.svelte-kit/
+webview/package-lock.json
+**/.svelte-kit/
 
-# lo que ya está, por ejemplo:
-webview/app/src/lib
-# excepción para el debug panel:
+# Excepción: debug panel
+webview/app/src/lib/
 !webview/app/src/lib/components/debug/
-F
+
+# ============================================================================
+# Misc
+# ============================================================================
+*.log
+*.local
+.env
+.env.local
+.cache/
+libs/
