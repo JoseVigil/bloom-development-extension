@@ -2,9 +2,9 @@
 #ifndef BUILD_INFO_H
 #define BUILD_INFO_H
 
-#define BUILD_NUMBER 169
-#define BUILD_DATE "2026-06-10"
-#define BUILD_TIME "18:32:51"
+#define BUILD_NUMBER 0
+#define BUILD_DATE "1970-01-01"
+#define BUILD_TIME "00:00:00"
 #define VERSION_STRING "2.2.0"
 
 #endif // BUILD_INFO_H
