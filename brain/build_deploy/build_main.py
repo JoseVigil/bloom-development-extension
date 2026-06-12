@@ -261,7 +261,7 @@ def compile_with_pyinstaller(clean=False):
         print_error(f"No existe: {spec_file}")
         return False
     
-    cmd = ["pyinstaller", str(spec_file), "--noconfirm"]
+    cmd = [sys.executable, "-m", "PyInstaller", str(spec_file), "--noconfirm"]
     if clean:
         cmd.append("--clean")
     
