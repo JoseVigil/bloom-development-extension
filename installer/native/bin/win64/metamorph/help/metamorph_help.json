@@ -21,7 +21,7 @@
     "short": "Display detailed system information",
     "category": "SYSTEM",
     "example": "  metamorph info\n  metamorph --json info",
-    "json_response": "{\n  \"name\": \"Metamorph\",\n  \"version\": \"1.0.0\",\n  \"build_number\": 2,\n  \"capabilities\": [\"state_inspection\", \"manifest_reconciliation\"],\n  \"paths\": {...}\n}"
+    "json_response": "{\n  \"name\": \"Metamorph\",\n  \"version\": \"1.0.0\",\n  \"build_number\": 2,\n  \"os\": \"darwin\",\n  \"arch\": \"arm64\",\n  \"go_version\": \"go1.22.0\",\n  \"capabilities\": [\"state_inspection\", \"manifest_reconciliation\"],\n  \"paths\": {\n    \"base\":    \"~/Library/BloomNucleus\",\n    \"bin\":     \"~/Library/BloomNucleus/bin\",\n    \"config\":  \"~/Library/BloomNucleus/config\",\n    \"staging\": \"~/Library/BloomNucleus/staging\"\n  }\n}"
   },
   {
     "name": "inspect",
@@ -42,7 +42,7 @@
       },
       {
         "name": "native",
-        "usage": "Inspect native/bin/\u003cplatform\u003e/ build output instead of AppData",
+        "usage": "Inspect native/bin/<platform>/ build output instead of AppData",
         "default": "false"
       },
       {
@@ -60,44 +60,100 @@
     "json_response": "{\n  \"managed_binaries\": [\n    {\n      \"name\": \"Brain\",\n      \"version\": \"3.2.0\",\n      \"hash\": \"a3f1c2...\",\n      \"size_bytes\": 18432000,\n      \"last_modified\": \"2026-03-15T14:00:00Z\",\n      \"status\": \"healthy\",\n      \"updatable_by_metamorph\": true\n    }\n  ],\n  \"summary\": {\n    \"total_binaries\": 11,\n    \"managed_count\": 11,\n    \"healthy_count\": 11,\n    \"missing_count\": 0\n  },\n  \"timestamp\": \"2026-03-15T14:16:43Z\"\n}\n\n  Written to (default):  %LOCALAPPDATA%\\\\BloomNucleus\\\\config\\\\metamorph.json\n  Written to (--native): %LOCALAPPDATA%\\\\BloomNucleus\\\\config\\\\native\\\\native_metamorph.json"
   },
   {
-    "name": "reconcile",
-    "use": "reconcile",
-    "short": "Reconcile system against manifest",
-    "category": "RECONCILIATION",
-    "options": [
+    "name": "list",
+    "use": "list [source]",
+    "short": "List available ion reconciliation manifests",
+    "category": "IONPUMP",
+    "args": [
       {
-        "name": "manifest",
-        "shorthand": "m",
-        "usage": "Path to manifest file"
+        "name": "source",
+        "required": false
       }
     ],
-    "example": "  metamorph reconcile --manifest manifest.json\n  metamorph --json reconcile --manifest manifest.json",
-    "json_response": "{\"status\": \"success\", \"changes\": []}"
+    "options": [
+      {
+        "name": "source",
+        "shorthand": "s",
+        "usage": "Filter by source: local | remote | all",
+        "default": "all"
+      }
+    ],
+    "example": "  metamorph ion-pump list\n  metamorph ion-pump list local\n  metamorph ion-pump list --source remote\n  metamorph --json ion-pump list",
+    "json_response": "{\n  \"manifests\": [\n    {\n      \"source\": \"local\",\n      \"path\": \"installer/native/ionpump/bootstrap-ions.json\",\n      \"ions_count\": 1,\n      \"schema_version\": \"2.0\"\n    }\n  ]\n}"
   },
   {
-    "name": "reconcile-ion-recipes",
-    "use": "reconcile-ion-recipes",
-    "short": "Reconcile ion recipe packages from manifest",
-    "category": "GOVERNANCE",
+    "name": "reconcile",
+    "use": "reconcile",
+    "short": "Reconcile installed ions against a manifest",
+    "category": "IONPUMP",
     "options": [
       {
         "name": "dry-run",
-        "usage": "Inspect and verify without swapping",
+        "usage": "Simulate reconciliation without writing to ionsites/",
         "default": "false"
       },
       {
         "name": "force-swap",
-        "usage": "Swap without waiting for Brain quiesce (unsafe)",
+        "usage": "Bypass Brain signal — for bootstrap/testing without Nucleus",
         "default": "false"
       },
       {
         "name": "manifest",
         "shorthand": "m",
-        "usage": "Path to reconciliation manifest JSON file (reads stdin if omitted)"
+        "usage": "Path to ion reconciliation manifest (required)"
       }
     ],
-    "example": "  metamorph reconcile-ion-recipes --manifest manifest.json\n  metamorph reconcile-ion-recipes --dry-run\n  metamorph reconcile-ion-recipes --manifest manifest.json --force-swap\n  metamorph --json reconcile-ion-recipes --manifest manifest.json\n  echo '{\"ion_recipes\":[...]}' | metamorph reconcile-ion-recipes",
-    "json_response": "{\n  \"reconcile_results\": [\n    {\n      \"site\": \"github.com\",\n      \"previous_version\": \"1.0.0\",\n      \"new_version\": \"1.1.0\",\n      \"action\": \"swapped\",\n      \"phase\": \"\",\n      \"duration_ms\": 342,\n      \"swapped_at\": \"2026-05-02T12:00:00Z\"\n    }\n  ],\n  \"summary\": {\n    \"total_sites\": 1,\n    \"skipped\": 0,\n    \"swapped\": 1,\n    \"rolled_back\": 0,\n    \"failed\": 0\n  },\n  \"timestamp\": \"2026-05-02T12:00:00Z\"\n}"
+    "example": "  metamorph ion-pump reconcile --manifest installer/native/ionpump/bootstrap-ions.json --force-swap\n  metamorph ion-pump reconcile --manifest /path/to/batcave-manifest.json\n  metamorph ion-pump reconcile --manifest bootstrap-ions.json --force-swap --dry-run\n  metamorph --json ion-pump reconcile --manifest bootstrap-ions.json --force-swap",
+    "json_response": "{\n  \"success\": true,\n  \"manifest\": \"installer/native/ionpump/bootstrap-ions.json\",\n  \"ions_processed\": 1,\n  \"ions_swapped\": 1,\n  \"ions_skipped\": 0,\n  \"ions_failed\": 0,\n  \"force_swap\": true,\n  \"results\": [\n    {\n      \"domain\": \"github.com\",\n      \"status\": \"swapped\",\n      \"version_before\": null,\n      \"version_after\": \"1.0.0\",\n      \"backup_path\": null\n    }\n  ]\n}"
+  },
+  {
+    "name": "rollback",
+    "use": "rollback <domain>",
+    "short": "Rollback ion site to previous backup version",
+    "category": "IONPUMP",
+    "args": [
+      {
+        "name": "<domain>",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "force-swap",
+        "usage": "Bypass Brain signal — for recovery without Nucleus",
+        "default": "false"
+      }
+    ],
+    "example": "  metamorph ion-pump rollback github.com\n  metamorph ion-pump rollback github.com --force-swap\n  metamorph --json ion-pump rollback github.com",
+    "json_response": "{\n  \"success\": true,\n  \"domain\": \"github.com\",\n  \"version_before\": \"1.1.0\",\n  \"version_after\": \"1.0.0\",\n  \"backup_consumed\": true\n}"
+  },
+  {
+    "name": "status",
+    "use": "status [domain]",
+    "short": "Show installed ion site status",
+    "category": "IONPUMP",
+    "args": [
+      {
+        "name": "domain",
+        "required": false
+      }
+    ],
+    "example": "  metamorph ion-pump status\n  metamorph ion-pump status github.com\n  metamorph --json ion-pump status\n  metamorph --json ion-pump status github.com",
+    "json_response": "{\n  \"ionsites_path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\cortex\\\\ionsites\",\n  \"ions\": [\n    {\n      \"domain\": \"github.com\",\n      \"version\": \"1.0.0\",\n      \"sha256\": \"a3f1c2d4e5b6...\",\n      \"deployed_at\": \"2026-05-15T10:30:00Z\",\n      \"source\": \"bootstrap\",\n      \"has_backup\": false,\n      \"manifest_valid\": true\n    }\n  ]\n}"
+  },
+  {
+    "name": "verify",
+    "use": "verify [domain]",
+    "short": "Verify SHA-256 integrity of installed ions",
+    "category": "IONPUMP",
+    "args": [
+      {
+        "name": "domain",
+        "required": false
+      }
+    ],
+    "example": "  metamorph ion-pump verify\n  metamorph ion-pump verify github.com\n  metamorph --json ion-pump verify\n  metamorph --json ion-pump verify github.com",
+    "json_response": "{\n  \"valid\": true,\n  \"ions_checked\": 1,\n  \"ions_valid\": 1,\n  \"ions_invalid\": 0,\n  \"results\": [\n    {\n      \"domain\": \"github.com\",\n      \"valid\": true,\n      \"expected_sha256\": \"a3f1c2d4e5b6...\",\n      \"actual_sha256\": \"a3f1c2d4e5b6...\",\n      \"files_checked\": 5\n    }\n  ]\n}"
   },
   {
     "name": "rollback",
@@ -109,7 +165,7 @@
   },
   {
     "name": "rollout",
-    "use": "rollout [--only \u003ccomponent\u003e] [--dry-run]",
+    "use": "rollout [--only <component>] [--dry-run]",
     "short": "Deploy built binaries from repo to AppData",
     "category": "MAINTENANCE",
     "args": [
@@ -118,7 +174,7 @@
         "required": true
       },
       {
-        "name": "\u003ccomponent\u003e]",
+        "name": "<component>]",
         "required": true
       },
       {
@@ -134,11 +190,11 @@
       },
       {
         "name": "only",
-        "usage": "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook, config)"
+        "usage": "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, host, workspace, setup, sensor, cortex, ionpump, vsix, bootstrap, hooks, config, nssm, ollama, temporal, node, runtime, chrome)"
       }
     ],
-    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph rollout --only brain\n  metamorph rollout --only nucleus\n  metamorph rollout --only sentinel\n  metamorph rollout --only metamorph\n  metamorph rollout --only conductor\n  metamorph rollout --only setup\n  metamorph rollout --only host\n  metamorph rollout --only cortex\n  metamorph rollout --only nssm\n  metamorph rollout --only bootstrap\n  metamorph rollout --only vsix\n  metamorph rollout --only node\n  metamorph rollout --only hook\n  metamorph rollout --only config\n  metamorph rollout --only brain --dry-run\n  metamorph --json rollout --only nucleus",
-    "json_response": "{\n  \"status\": \"success\",\n  \"dry_run\": false,\n  \"only\": \"\",\n  \"deployed\": [\n    {\"component\": \"Brain\",     \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 12},\n    {\"component\": \"Nucleus\",   \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 4}\n  ],\n  \"skipped\": [],\n  \"errors\": []\n}"
+    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph rollout --only brain\n  metamorph rollout --only ionpump\n  metamorph rollout --only ionpump --dry-run\n  metamorph --json rollout --only nucleus",
+    "json_response": "{\n  \"status\": \"success\",\n  \"dry_run\": false,\n  \"only\": \"\",\n  \"repo_root\": \"...\",\n  \"deployed\": [\n    {\"component\": \"Brain\",   \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 1},\n    {\"component\": \"Nucleus\", \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 1}\n  ],\n  \"skipped\": [],\n  \"errors\": []\n}"
   },
   {
     "name": "status",
@@ -156,7 +212,7 @@
     "options": [
       {
         "name": "native",
-        "usage": "Verify native/bin/\u003cplatform\u003e/ build output instead of AppData (reads native_metamorph.json)",
+        "usage": "Verify native/bin/<platform>/ build output instead of AppData (reads native_metamorph.json)",
         "default": "false"
       }
     ],

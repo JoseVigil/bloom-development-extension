@@ -30,9 +30,10 @@
 
   SYSTEM            System information and version details                   2 cmds
   INSPECTION        Binary and state inspection tools                        3 cmds
-  RECONCILIATION    Manifest-driven state reconciliation                     2 cmds
+  RECONCILIATION    Manifest-driven state reconciliation                     1 cmd
   ROLLBACK          Snapshot restoration and rollback                        1 cmd
   MAINTENANCE       System cleanup and maintenance                           2 cmds
+  IONPUMP           Ion site deployment and reconciliation                   1 cmd
   --------------------------------------------------------------------------  Total: 10 commands
 
 
@@ -52,8 +53,16 @@
         "name": "Metamorph",
         "version": "1.0.0",
         "build_number": 2,
+        "os": "darwin",
+        "arch": "arm64",
+        "go_version": "go1.22.0",
         "capabilities": ["state_inspection", "manifest_reconciliation"],
-        "paths": {...}
+        "paths": {
+          "base":    "~/Library/BloomNucleus",
+          "bin":     "~/Library/BloomNucleus/bin",
+          "config":  "~/Library/BloomNucleus/config",
+          "staging": "~/Library/BloomNucleus/staging"
+        }
       }
 
     --------------------------------------------------------------------------------
@@ -205,23 +214,6 @@
 
     --------------------------------------------------------------------------------
 
-  > RECONCILE
-    Reconcile system against manifest
-
-    Usage: metamorph reconcile
-
-    Flags:
-      --manifest, -m             Path to manifest file
-
-    Example:
-        metamorph reconcile --manifest manifest.json
-        metamorph --json reconcile --manifest manifest.json
-
-    JSON Response:
-      {"status": "success", "changes": []}
-
-    --------------------------------------------------------------------------------
-
 
 ======================================================[ ROLLBACK ]======================================================
 
@@ -268,26 +260,14 @@
 
     Flags:
       --dry-run                  Preview what would be copied without making changes
-      --only                     Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook, config)
+      --only                     Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, host, workspace, setup, sensor, cortex, ionpump, vsix, bootstrap, hooks, config, nssm, ollama, temporal, node, runtime, chrome)
 
     Example:
         metamorph rollout
         metamorph rollout --dry-run
         metamorph rollout --only brain
-        metamorph rollout --only nucleus
-        metamorph rollout --only sentinel
-        metamorph rollout --only metamorph
-        metamorph rollout --only conductor
-        metamorph rollout --only setup
-        metamorph rollout --only host
-        metamorph rollout --only cortex
-        metamorph rollout --only nssm
-        metamorph rollout --only bootstrap
-        metamorph rollout --only vsix
-        metamorph rollout --only node
-        metamorph rollout --only hook
-        metamorph rollout --only config
-        metamorph rollout --only brain --dry-run
+        metamorph rollout --only ionpump
+        metamorph rollout --only ionpump --dry-run
         metamorph --json rollout --only nucleus
 
     JSON Response:
@@ -295,13 +275,199 @@
         "status": "success",
         "dry_run": false,
         "only": "",
+        "repo_root": "...",
         "deployed": [
-          {"component": "Brain",     "source": "...", "destination": "...", "files_copied": 12},
-          {"component": "Nucleus",   "source": "...", "destination": "...", "files_copied": 4}
+          {"component": "Brain",   "source": "...", "destination": "...", "files_copied": 1},
+          {"component": "Nucleus", "source": "...", "destination": "...", "files_copied": 1}
         ],
         "skipped": [],
         "errors": []
       }
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ IONPUMP ]=======================================================
+
+  > ION-PUMP
+    Ion site deployment and reconciliation
+
+    Usage: metamorph ion-pump
+
+    Subcommands:
+      list                  List available ion reconciliation manifests
+        metamorph ion-pump list [source]
+      reconcile             Reconcile installed ions against a manifest
+        metamorph ion-pump reconcile
+      rollback              Rollback ion site to previous backup version
+        metamorph ion-pump rollback <domain>
+      status                Show installed ion site status
+        metamorph ion-pump status [domain]
+      verify                Verify SHA-256 integrity of installed ions
+        metamorph ion-pump verify [domain]
+
+    Subcommand Details:
+
+      └─ LIST
+        List available ion reconciliation manifests
+
+        Usage: metamorph ion-pump list [source]
+
+        Arguments:
+          source                optional
+
+        Flags:
+          --source, -s               Filter by source: local | remote | all [default: all]
+
+        Example:
+            metamorph ion-pump list
+            metamorph ion-pump list local
+            metamorph ion-pump list --source remote
+            metamorph --json ion-pump list
+
+        JSON Response:
+          {
+            "manifests": [
+              {
+                "source": "local",
+                "path": "installer/native/ionpump/bootstrap-ions.json",
+                "ions_count": 1,
+                "schema_version": "2.0"
+              }
+            ]
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ RECONCILE
+        Reconcile installed ions against a manifest
+
+        Usage: metamorph ion-pump reconcile
+
+        Flags:
+          --dry-run                  Simulate reconciliation without writing to ionsites/
+          --force-swap               Bypass Brain signal — for bootstrap/testing without Nucleus
+          --manifest, -m             Path to ion reconciliation manifest (required)
+
+        Example:
+            metamorph ion-pump reconcile --manifest installer/native/ionpump/bootstrap-ions.json --force-swap
+            metamorph ion-pump reconcile --manifest /path/to/batcave-manifest.json
+            metamorph ion-pump reconcile --manifest bootstrap-ions.json --force-swap --dry-run
+            metamorph --json ion-pump reconcile --manifest bootstrap-ions.json --force-swap
+
+        JSON Response:
+          {
+            "success": true,
+            "manifest": "installer/native/ionpump/bootstrap-ions.json",
+            "ions_processed": 1,
+            "ions_swapped": 1,
+            "ions_skipped": 0,
+            "ions_failed": 0,
+            "force_swap": true,
+            "results": [
+              {
+                "domain": "github.com",
+                "status": "swapped",
+                "version_before": null,
+                "version_after": "1.0.0",
+                "backup_path": null
+              }
+            ]
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ ROLLBACK
+        Rollback ion site to previous backup version
+
+        Usage: metamorph ion-pump rollback <domain>
+
+        Arguments:
+          <domain>              required
+
+        Flags:
+          --force-swap               Bypass Brain signal — for recovery without Nucleus
+
+        Example:
+            metamorph ion-pump rollback github.com
+            metamorph ion-pump rollback github.com --force-swap
+            metamorph --json ion-pump rollback github.com
+
+        JSON Response:
+          {
+            "success": true,
+            "domain": "github.com",
+            "version_before": "1.1.0",
+            "version_after": "1.0.0",
+            "backup_consumed": true
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Show installed ion site status
+
+        Usage: metamorph ion-pump status [domain]
+
+        Arguments:
+          domain                optional
+
+        Example:
+            metamorph ion-pump status
+            metamorph ion-pump status github.com
+            metamorph --json ion-pump status
+            metamorph --json ion-pump status github.com
+
+        JSON Response:
+          {
+            "ionsites_path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\cortex\\ionsites",
+            "ions": [
+              {
+                "domain": "github.com",
+                "version": "1.0.0",
+                "sha256": "a3f1c2d4e5b6...",
+                "deployed_at": "2026-05-15T10:30:00Z",
+                "source": "bootstrap",
+                "has_backup": false,
+                "manifest_valid": true
+              }
+            ]
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ VERIFY
+        Verify SHA-256 integrity of installed ions
+
+        Usage: metamorph ion-pump verify [domain]
+
+        Arguments:
+          domain                optional
+
+        Example:
+            metamorph ion-pump verify
+            metamorph ion-pump verify github.com
+            metamorph --json ion-pump verify
+            metamorph --json ion-pump verify github.com
+
+        JSON Response:
+          {
+            "valid": true,
+            "ions_checked": 1,
+            "ions_valid": 1,
+            "ions_invalid": 0,
+            "results": [
+              {
+                "domain": "github.com",
+                "valid": true,
+                "expected_sha256": "a3f1c2d4e5b6...",
+                "actual_sha256": "a3f1c2d4e5b6...",
+                "files_checked": 5
+              }
+            ]
+          }
+
+        ----------------------------------------------------------------------
 
     --------------------------------------------------------------------------------
 
