@@ -33,7 +33,7 @@
   },
   "build": {
     "appId": "com.bloom.nucleus.installer",
-    "productName": "Bloom Nucleus Installer",
+    "productName": "bloom-setup", 
     "copyright": "Copyright © 2024 BTIP Studio",
     "linux": {
       "target": [
