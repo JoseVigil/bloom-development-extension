@@ -105,48 +105,56 @@ if [[ ! -f "${BUILD_SCRIPT}" ]]; then
     exit 1
 fi
 
-if ! command -v python3 &>/dev/null; then
-    echo "❌ Error: python3 no encontrado en PATH."
-    if [[ "${DETECTED_OS}" == "Darwin" ]]; then
-        echo "   Instalar con: brew install python@3.11"
-    else
-        echo "   Instalar con: sudo apt install python3 python3-venv python3-pip"
+# ───────────────────────────────────────────────────────────────
+# DETECCIÓN DE PYTHON COMPATIBLE (>=3.11, <3.14)
+# onnxruntime (dep de chromadb) no tiene wheel para Python 3.14+
+# Se busca el primer candidato disponible en orden de preferencia.
+# ───────────────────────────────────────────────────────────────
+PYTHON_BIN=""
+for candidate in python3.13 python3.12 python3.11 python3; do
+    if command -v "${candidate}" &>/dev/null; then
+        _ver=$(${candidate} -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
+        _major=$(echo "${_ver}" | cut -d. -f1)
+        _minor=$(echo "${_ver}" | cut -d. -f2)
+        if [[ "${_major}" -eq 3 && "${_minor}" -ge 11 && "${_minor}" -le 13 ]]; then
+            PYTHON_BIN="${candidate}"
+            break
+        fi
     fi
-    echo "❌ python3 no encontrado" >> "${LOG_FILE}"
+done
+
+if [[ -z "${PYTHON_BIN}" ]]; then
+    echo "❌ Error: no se encontró Python 3.11–3.13 en PATH."
+    if [[ "${DETECTED_OS}" == "Darwin" ]]; then
+        echo "   Instalar con: brew install python@3.12"
+    else
+        echo "   Instalar con: sudo apt install python3.12 python3-venv python3-pip"
+    fi
+    echo "❌ Python 3.11-3.13 no encontrado" >> "${LOG_FILE}"
     exit 1
 fi
 
-PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-echo "Python: ${PYTHON_VERSION}"
-echo "Python: ${PYTHON_VERSION}" >> "${LOG_FILE}"
+PYTHON_VERSION=$(${PYTHON_BIN} -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+echo "Python: ${PYTHON_VERSION} (${PYTHON_BIN})"
+echo "Python: ${PYTHON_VERSION} (${PYTHON_BIN})" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
 # VIRTUALENV — aislado en brain/.venv
 # ───────────────────────────────────────────────────────────────
 
-VENV_DIR="${BRAIN_DIR}/.venv"
-
-echo ""
-echo "Configurando entorno virtual..."
-echo "Configurando entorno virtual..." >> "${LOG_FILE}"
-
-python3 -m venv "${VENV_DIR}" >> "${LOG_FILE}" 2>&1
-source "${VENV_DIR}/bin/activate"
-
-echo "✅ venv: ${VENV_DIR}"
-echo "✅ venv: ${VENV_DIR}" >> "${LOG_FILE}"
-
 # ───────────────────────────────────────────────────────────────
-# DEPENDENCIAS
+# DEPENDENCIAS — sin venv, directo con python3 del sistema
 # ───────────────────────────────────────────────────────────────
 
 echo ""
 echo "Instalando dependencias..."
 echo "Instalando dependencias..." >> "${LOG_FILE}"
 
+PIP_FLAGS="--quiet --break-system-packages"
+
 REQUIREMENTS="${BRAIN_DIR}/requirements.txt"
 if [[ -f "${REQUIREMENTS}" ]]; then
-    pip install --quiet -r "${REQUIREMENTS}" >> "${LOG_FILE}" 2>&1
+    ${PYTHON_BIN} -m pip install ${PIP_FLAGS} -r "${REQUIREMENTS}" >> "${LOG_FILE}" 2>&1
     echo "✅ requirements.txt instalado"
     echo "✅ requirements.txt instalado" >> "${LOG_FILE}"
 else
@@ -154,7 +162,7 @@ else
     echo "⚠️  requirements.txt no encontrado" >> "${LOG_FILE}"
 fi
 
-pip install --quiet pyinstaller >> "${LOG_FILE}" 2>&1
+${PYTHON_BIN} -m pip install ${PIP_FLAGS} pyinstaller >> "${LOG_FILE}" 2>&1
 echo "✅ PyInstaller instalado"
 echo "✅ PyInstaller instalado" >> "${LOG_FILE}"
 
@@ -170,11 +178,9 @@ echo ""
 echo "Ejecutando brain/build_multiplatform/build.py..."
 echo "Ejecutando build.py..." >> "${LOG_FILE}"
 
-python3 "${BUILD_SCRIPT}" >> "${LOG_FILE}" 2>&1
+${PYTHON_BIN} "${BUILD_SCRIPT}" >> "${LOG_FILE}" 2>&1
 
 BUILD_RC=$?
-
-deactivate
 
 if [[ ${BUILD_RC} -ne 0 ]]; then
     echo ""
