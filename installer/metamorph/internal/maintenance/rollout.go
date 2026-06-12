@@ -1021,16 +1021,35 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, inInfo.Mode())
+	// Write to a temp file in the same directory, then rename over dst.
+	// This avoids ETXTBSY on Linux when dst is a running executable (the
+	// kernel keeps the old inode alive in memory; the rename replaces only
+	// the directory entry). It also gives atomic replacement on all platforms:
+	// readers never see a half-written file.
+	dir := filepath.Dir(dst)
+	tmp, err := os.CreateTemp(dir, ".rollout-*")
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	tmpName := tmp.Name()
+	// Best-effort cleanup if we return an error before the rename.
+	defer func() { _ = os.Remove(tmpName) }()
 
-	if _, err = io.Copy(out, in); err != nil {
+	if err := tmp.Chmod(inInfo.Mode()); err != nil {
+		tmp.Close()
 		return err
 	}
-	return out.Sync()
+	if _, err = io.Copy(tmp, in); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+
+	return os.Rename(tmpName, dst)
 }
 
 func copyDir(src, dst string) (int, error) {
