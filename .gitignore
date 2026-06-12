@@ -184,7 +184,6 @@ installer/cortex/build-cortex/cortex.meta.json
 installer/metamorph/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt
 installer/metamorph/scripts/build_number.txt
-installer/native/bin/win64/metamorph/help/metamorph_help.json
 installer/nucleus/scripts/build_number.effective.txt
 installer/sensor/internal/core/build_info.go
 installer/sensor/scripts/build_number.effective.txt
