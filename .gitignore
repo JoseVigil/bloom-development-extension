@@ -143,7 +143,6 @@ installer/host/build_number.effective.txt
 installer/host/build_number.txt
 installer/metamorph/scripts/build_number.effective.txt
 installer/metamorph/scripts/build_number.txt
-installer/native/bin/win64/host/help/help.txt
 installer/nucleus/scripts/build_number.effective.txt
 installer/sensor/scripts/build_number.effective.txt
 installer/sensor/scripts/build_number.txt
@@ -164,7 +163,6 @@ installer/host/build_number.effective.txt
 installer/host/build_number.txt
 installer/metamorph/scripts/build_number.effective.txt
 installer/metamorph/scripts/build_number.txt
-installer/native/bin/win64/host/help/help.txt
 installer/nucleus/scripts/build_number.effective.txt
 installer/sensor/scripts/build_number.effective.txt
 installer/sensor/scripts/build_number.txt
