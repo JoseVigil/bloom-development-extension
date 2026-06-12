@@ -45,7 +45,7 @@ func GetSystemInfo() SystemInfo {
 	return SystemInfo{
 		AppName:             "nucleus",
 		AppRelease:          version,
-		BuildCounter:        BuildNumberInt(),
+		BuildCounter:        BuildNumberInt,
 		CompileDate:         BuildDate,
 		CompileTime:         BuildTime,
 		CurrentTime:         time.Now().Format("2006-01-02 15:04:05"),

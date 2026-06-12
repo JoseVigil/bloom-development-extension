@@ -707,3 +707,11 @@ https://claude.ai/chat/3211ba4e-327a-441e-9c84-89ea935ddd47
 roamtouch 
 genes
 https://claude.ai/chat/fbf851a9-2c62-4da3-84b1-cf6511e0652c
+
+
+Resolución de paths y componentes en Metamorph
+cognituum
+https://claude.ai/chat/9cd58249-5992-4604-8631-61515e53bca5
+bloomaut
+https://claude.ai/chat/fcd7c8c3-c277-4251-a5ba-219931177e36
+

@@ -29,6 +29,7 @@ bloom-development-extension/
     │   │   ├── metadata.go
     │   │   ├── paths.go
     │   │   ├── paths_darwin.go
+    │   │   ├── paths_linux.go
     │   │   ├── paths_windows.go
     │   │   ├── telemetry.go
     │   │   └── version_reader.go
@@ -81,6 +82,7 @@ bloom-development-extension/
     │   ├── build-linux.sh
     │   ├── build_number.darwin.txt
     │   ├── build_number.effective.txt
+    │   ├── build_number.linux.txt
     │   ├── build_number.txt
     │   ├── build_number.windows.txt
     │   └── extract_go_files.py

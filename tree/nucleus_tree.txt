@@ -89,7 +89,8 @@ bloom-development-extension/
     │   ├── supervisor/
     │   │   ├── dev_start.go
     │   │   ├── health.go
-    │   │   ├── health_resources_unix.go
+    │   │   ├── health_resources_darwin.go
+    │   │   ├── health_resources_linux.go
     │   │   ├── health_resources_windows.go
     │   │   ├── health_unix.go
     │   │   ├── health_windows.go
@@ -110,6 +111,7 @@ bloom-development-extension/
         ├── build-linux.sh
         ├── build_number.darwin.txt
         ├── build_number.effective.txt
+        ├── build_number.linux.txt
         ├── build_number.txt
         ├── build_number.windows.txt
         ├── extract_go_files.py

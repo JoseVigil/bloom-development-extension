@@ -18,7 +18,8 @@ bloom-development-extension/
     │   │   ├── build_info.go
     │   │   └── core.go
     │   ├── input/
-    │   │   └── idle.go
+    │   │   ├── idle.go
+    │   │   └── idle_unix.go
     │   ├── logger/
     │   │   └── logger.go
     │   ├── metrics/
@@ -29,8 +30,12 @@ bloom-development-extension/
     │   │   ├── loop.go
     │   │   └── scheduler.go
     │   ├── session/
+    │   │   ├── session_darwin.go
+    │   │   ├── session_unix.go
     │   │   └── windows.go
     │   ├── startup/
+    │   │   ├── startup_darwin.go
+    │   │   ├── startup_unix.go
     │   │   └── startup_windows.go
     │   └── transport/
     │       └── sentinel_client.go
@@ -40,5 +45,6 @@ bloom-development-extension/
     └── scripts/
         ├── build_number.darwin.txt
         ├── build_number.effective.txt
+        ├── build_number.linux.txt
         ├── build_number.txt
         └── build_number.windows.txt
