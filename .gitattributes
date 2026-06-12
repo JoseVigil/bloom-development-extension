@@ -1,0 +1,46 @@
+# =============================================================================
+# BUILD ARTIFACT FILTERS
+# Prevents cross-platform build collisions on Darwin / Linux / Windows.
+# Setup: bash scripts/git-filters/setup.sh   (once per clone)
+# =============================================================================
+
+# --- build_number / build_number.effective -----------------------------------
+brain/build_number.txt                                    filter=bloom-stamp
+brain/build_number.effective.txt                          filter=bloom-stamp
+installer/bootstrap/VERSION                               filter=bloom-stamp
+installer/cortex/build-cortex/build_number.txt            filter=bloom-stamp
+installer/cortex/build-cortex/build_number.effective.txt  filter=bloom-stamp
+installer/host/build_number.txt                           filter=bloom-stamp
+installer/host/build_number.effective.txt                 filter=bloom-stamp
+installer/metamorph/scripts/build_number.txt              filter=bloom-stamp
+installer/metamorph/scripts/build_number.effective.txt    filter=bloom-stamp
+installer/nucleus/scripts/build_number.effective.txt      filter=bloom-stamp
+installer/sensor/scripts/build_number.txt                 filter=bloom-stamp
+installer/sensor/scripts/build_number.effective.txt       filter=bloom-stamp
+installer/sentinel/scripts/build_number.txt               filter=bloom-stamp
+installer/sentinel/scripts/build_number.effective.txt     filter=bloom-stamp
+
+# --- JSON metadata with volatile fields (build_date, built_at, platform…) ---
+installer/bootstrap/bootstrap.meta.json                   filter=bloom-meta
+installer/cortex/build-cortex/cortex.meta.json            filter=bloom-meta
+installer/conductor/setup/build_info.json                 filter=bloom-meta
+installer/conductor/setup/version.json                    filter=bloom-meta
+installer/conductor/setup/package.json                    filter=bloom-meta
+
+# --- C header with BUILD_NUMBER / BUILD_DATE / BUILD_TIME --------------------
+installer/host/build_info.h                               filter=bloom-header
+
+# --- Python auto-generated build module --------------------------------------
+brain/__build__.py                                        filter=bloom-pymod
+
+# --- PyInstaller spec (platform paths change per OS) ------------------------
+brain/build_deploy/brain.spec                             filter=bloom-spec
+
+# --- package-lock.json (npm rewrites hashes per platform) -------------------
+package-lock.json                                         filter=bloom-lockfile
+
+# --- Misc generated text files -----------------------------------------------
+installer/native/bin/win64/host/help/help.txt                       filter=bloom-stamp
+installer/native/bin/win64/metamorph/help/metamorph_help.txt        filter=bloom-stamp
+installer/native/bin/win64/metamorph/help/metamorph_help.json       filter=bloom-meta
+tree/metamorph_tree.txt                                             filter=bloom-tree
