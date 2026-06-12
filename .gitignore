@@ -64,7 +64,7 @@ ENV*/
 # ============================================================================
 # Python runtimes (se descargan en build-time, no van al repo)
 # ============================================================================
-installer/resources/runtime/
+installer/resources/runtime-windows/
 installer/resources/runtime-darwin/
 installer/resources/runtime-linux/
 
@@ -96,6 +96,7 @@ native/bin/
 # ============================================================================
 installer/chrome/chrome-win.zip
 installer/chrome/chrome-mac.zip
+installer/chrome/chrome-linux.tar.xz
 installer/ollama/
 installer/node/
 installer/temporal/

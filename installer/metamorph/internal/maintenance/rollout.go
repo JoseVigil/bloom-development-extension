@@ -1,6 +1,8 @@
 package maintenance
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,90 +31,123 @@ type component struct {
 	// roll back the already-copied files — the post-deploy step is responsible
 	// for its own idempotency.
 	PostDeployFn func(c *core.Core, repoRoot, dst string, dryRun bool) error
-	Platforms    []string
+	// ExtractFn, when non-nil, is called instead of copyFile/copyDir.
+	// src is the source archive path; dstDir is the destination directory.
+	ExtractFn func(src, dstDir string) error
+	Platforms []string
 }
 
 func exe(name string) string { return core.ExeName(name) }
 
 func isARM64() bool { return runtime.GOARCH == "arm64" }
 
+// nativePlatformDir resolves the subdirectory of native/bin/ by OS + ARCH.
+func nativePlatformDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "win64"
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			return "darwin_arm64"
+		}
+		return "darwin_x64"
+	case "linux":
+		if runtime.GOARCH == "arm64" {
+			return "linux_arm64"
+		}
+		return "linux_x64"
+	}
+	return runtime.GOOS
+}
+
+// nativeBin builds the source path inside installer/native/bin/{platform}/{comp}/
+func nativeBin(r, comp string) string {
+	return filepath.Join(r, "installer", "native", "bin", nativePlatformDir(), comp)
+}
+
 var allComponents = []component{
 	{
 		Key: "brain",
 		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "brain")
-			}
-			return filepath.Join(r, "brain", "dist", exe("brain"))
+			return nativeBin(r, "brain")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "brain") },
 	},
 	{
 		Key: "nucleus",
 		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "nucleus")
-			}
-			return filepath.Join(r, "nucleus", "dist", exe("nucleus"))
+			return nativeBin(r, "nucleus")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "nucleus") },
 	},
 	{
 		Key: "sentinel",
 		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "sentinel")
-			}
-			return filepath.Join(r, "sentinel", "dist", exe("sentinel"))
+			return nativeBin(r, "sentinel")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "sentinel") },
 	},
 	{
 		Key: "metamorph",
 		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "metamorph")
-			}
-			return filepath.Join(r, "metamorph", exe("metamorph"))
+			return nativeBin(r, "metamorph")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "metamorph") },
 	},
 	{
+		Key: "host",
+		SourceFn: func(r string) string {
+			return nativeBin(r, "host")
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "host") },
+	},
+	{
 		Key: "workspace",
 		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "native", "bin", "win64", "workspace", "bloom-workspace.exe")
+			case "darwin":
 				subdir := "mac"
 				if isARM64() {
 					subdir = "mac-arm64"
 				}
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "workspace", subdir, "bloom-workspace.app", "Contents", "MacOS", "bloom-workspace")
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "workspace", subdir, "bloom-workspace.app")
+			default: // linux
+				return filepath.Join(nativeBin(r, "workspace"), "linux-unpacked")
 			}
-			return filepath.Join(r, "conductor", "dist", exe("bloom-conductor"))
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "workspace") },
 	},
 	{
 		Key: "setup",
 		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "setup", "dist", "BloomSetup.pkg")
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "native", "bin", "win64", "setup", "bloom-setup.exe")
+			case "darwin":
+				subdir := "mac"
+				if isARM64() {
+					subdir = "mac-arm64"
+				}
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "setup", subdir, "bloom-setup.app")
+			default: // linux
+				return filepath.Join(nativeBin(r, "setup"), "linux-unpacked")
 			}
-			return filepath.Join(r, "setup", "dist", "BloomSetup.exe")
 		},
-		DestFn: func(b string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(b, "bin", "setup", "BloomSetup.pkg")
-			}
-			return filepath.Join(b, "bin", "setup", "BloomSetup.exe")
-		},
-		Platforms: []string{"windows", "darwin"},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "setup") },
 	},
 	{
-		Key: "host",
+		Key: "sensor",
 		SourceFn: func(r string) string {
-			return filepath.Join(r, "host", "bin", runtime.GOOS, exe("bloom-host"))
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "native", "bin", "win64", "sensor", "bloom-sensor.exe")
+			default:
+				return filepath.Join(nativeBin(r, "sensor"), "bloom-sensor")
+			}
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "native") },
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "sensor") },
 	},
 	{
 		Key: "cortex",
@@ -135,49 +170,8 @@ var allComponents = []component{
 		SourceFn: func(r string) string {
 			return filepath.Join(r, "installer", "native", "ionpump")
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "cortex", "ionpump") },
+		DestFn:       func(b string) string { return filepath.Join(b, "bin", "cortex", "ionpump") },
 		PostDeployFn: ionpumpPostDeploy,
-	},
-	{
-		Key: "node",
-		SourceFn: func(r string) string {
-			return filepath.Join(r, "vendors", "node", runtime.GOOS, exe("node"))
-		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "node") },
-	},
-	{
-		Key: "hook",
-		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "hook")
-			}
-			return filepath.Join(r, "hook", "dist", exe("hook"))
-		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "hook") },
-	},
-	{
-		Key:      "config",
-		SourceFn: func(r string) string { return filepath.Join(r, "config") },
-		DestFn:   func(b string) string { return filepath.Join(b, "config") },
-	},
-	{
-		Key: "nssm",
-		SourceFn: func(r string) string {
-			return filepath.Join(r, "vendors", "nssm", "nssm.exe")
-		},
-		DestFn:    func(b string) string { return filepath.Join(b, "bin", "nssm") },
-		Platforms: []string{"windows"},
-	},
-	{
-		Key: "bootstrap",
-		SourceFn: func(r string) string {
-			if runtime.GOOS == "darwin" {
-				return filepath.Join(r, "installer", "native", "bin", "bootstrap")
-			}
-			return filepath.Join(r, "bootstrap", "dist", "bootstrap.exe")
-		},
-		DestFn:    func(b string) string { return filepath.Join(b, "bin", "bootstrap") },
-		Platforms: []string{"windows", "darwin"},
 	},
 	{
 		Key: "vsix",
@@ -190,6 +184,344 @@ var allComponents = []component{
 		// No Platforms filter — the VS Code extension is deployed on all supported OSes.
 		PostDeployFn: vsixPostDeploy,
 	},
+	{
+		Key:      "bootstrap",
+		SourceFn: func(r string) string { return filepath.Join(r, "installer", "native", "bin", "bootstrap") },
+		DestFn:   func(b string) string { return filepath.Join(b, "bin", "bootstrap") },
+		Platforms: []string{"windows", "darwin"},
+	},
+	{
+		Key:      "hooks",
+		SourceFn: func(r string) string { return filepath.Join(r, "installer", "native", "hooks") },
+		DestFn:   func(b string) string { return filepath.Join(b, "hooks") },
+	},
+	{
+		Key:      "config",
+		SourceFn: func(r string) string { return filepath.Join(r, "config") },
+		DestFn:   func(b string) string { return filepath.Join(b, "config") },
+	},
+	{
+		Key: "nssm",
+		SourceFn: func(r string) string {
+			return filepath.Join(r, "installer", "native", "bin", "win64", "nssm", "nssm.exe")
+		},
+		DestFn:    func(b string) string { return filepath.Join(b, "bin", "nssm") },
+		Platforms: []string{"windows"},
+	},
+	// ── Generic components ──────────────────────────────────────────────────
+	{
+		Key: "ollama",
+		SourceFn: func(r string) string {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "ollama", "windows", "ollama.exe")
+			case "darwin":
+				return filepath.Join(r, "installer", "ollama", "darwin", "ollama")
+			default:
+				return filepath.Join(r, "installer", "ollama", "linux", "ollama")
+			}
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "ollama") },
+		PostDeployFn: func(c *core.Core, repoRoot, dst string, dryRun bool) error {
+			if runtime.GOOS == "windows" {
+				return nil
+			}
+			target := filepath.Join(dst, "ollama")
+			if runtime.GOOS == "windows" {
+				target = filepath.Join(dst, "ollama.exe")
+			}
+			if dryRun {
+				c.Logger.Info("🔍 [dry-run] ollama: would chmod 0755 %s", target)
+				return nil
+			}
+			return os.Chmod(target, 0o755)
+		},
+	},
+	{
+		Key: "temporal",
+		SourceFn: func(r string) string {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "temporal", "win64", "temporal.exe")
+			case "darwin":
+				return filepath.Join(r, "installer", "temporal", "darwin", "temporal")
+			default:
+				return filepath.Join(r, "installer", "temporal", "linux", "temporal")
+			}
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "temporal") },
+		PostDeployFn: func(c *core.Core, repoRoot, dst string, dryRun bool) error {
+			if runtime.GOOS == "windows" {
+				return nil
+			}
+			target := filepath.Join(dst, "temporal")
+			if dryRun {
+				c.Logger.Info("🔍 [dry-run] temporal: would chmod 0755 %s", target)
+				return nil
+			}
+			return os.Chmod(target, 0o755)
+		},
+	},
+	{
+		Key: "node",
+		SourceFn: func(r string) string {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "node", "win64", "node.exe")
+			case "darwin":
+				return filepath.Join(r, "installer", "node", "darwin", "node")
+			default: // linux — binary extracted from tar.xz at deploy time via ExtractFn
+				return filepath.Join(r, "installer", "node", "linux_x64", "linux-x64.tar.xz")
+			}
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "node") },
+		ExtractFn: func() func(src, dstDir string) error {
+			// Only active on Linux; on other platforms SourceFn returns a plain
+			// binary and ExtractFn is bypassed because the file is not a .tar.xz.
+			return func(src, dstDir string) error {
+				if !strings.HasSuffix(src, ".tar.xz") {
+					// Plain binary — fall through to regular copy.
+					return copyFile(src, filepath.Join(dstDir, filepath.Base(src)))
+				}
+				// Extract the tar.xz to a temp dir, then grab the node binary.
+				tmp, err := os.MkdirTemp("", "node-extract-*")
+				if err != nil {
+					return fmt.Errorf("node: mktemp: %w", err)
+				}
+				defer os.RemoveAll(tmp)
+				if err := extractTarXz(src, tmp); err != nil {
+					return fmt.Errorf("node: extractTarXz: %w", err)
+				}
+				// The archive extracts to node-v*-linux-x64/bin/node.
+				var nodeBin string
+				_ = filepath.Walk(tmp, func(p string, fi os.FileInfo, e error) error {
+					if e != nil || fi.IsDir() {
+						return e
+					}
+					if filepath.Base(p) == "node" && strings.Contains(p, "/bin/") {
+						nodeBin = p
+						return io.EOF // stop early
+					}
+					return nil
+				})
+				if nodeBin == "" {
+					return fmt.Errorf("node: could not find 'node' binary inside archive")
+				}
+				dst := filepath.Join(dstDir, "node")
+				if err := copyFile(nodeBin, dst); err != nil {
+					return fmt.Errorf("node: copy binary: %w", err)
+				}
+				return os.Chmod(dst, 0o755)
+			}
+		}(),
+	},
+	{
+		Key: "runtime",
+		SourceFn: func(r string) string {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "resources", "runtime-windows")
+			case "darwin":
+				return filepath.Join(r, "installer", "resources", "runtime-darwin")
+			default:
+				return filepath.Join(r, "installer", "resources", "runtime-linux")
+			}
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "engine", "runtime") },
+	},
+	{
+		Key: "chrome",
+		SourceFn: func(r string) string {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(r, "installer", "chrome", "chrome-win.zip")
+			case "darwin":
+				return filepath.Join(r, "installer", "chrome", "chrome-mac.zip")
+			default:
+				return filepath.Join(r, "installer", "chrome", "chrome-linux.tar.xz")
+			}
+		},
+		DestFn: func(b string) string {
+			switch runtime.GOOS {
+			case "windows":
+				return filepath.Join(b, "bin", "chrome-win")
+			case "darwin":
+				return filepath.Join(b, "bin", "chrome-mac")
+			default:
+				return filepath.Join(b, "bin", "chrome-linux")
+			}
+		},
+		ExtractFn: func(src, dstDir string) error {
+			// Clean destination for idempotency.
+			if err := os.RemoveAll(dstDir); err != nil {
+				return fmt.Errorf("chrome: clean dst: %w", err)
+			}
+			tmp, err := os.MkdirTemp("", "chrome-extract-*")
+			if err != nil {
+				return fmt.Errorf("chrome: mktemp: %w", err)
+			}
+			defer os.RemoveAll(tmp)
+
+			if strings.HasSuffix(src, ".tar.xz") {
+				if err := extractTarXz(src, tmp); err != nil {
+					return fmt.Errorf("chrome: extractTarXz: %w", err)
+				}
+			} else {
+				if err := extractZip(src, tmp); err != nil {
+					return fmt.Errorf("chrome: extractZip: %w", err)
+				}
+			}
+
+			// Flatten single top-level directory if present.
+			entries, err := os.ReadDir(tmp)
+			if err != nil {
+				return fmt.Errorf("chrome: readdir tmp: %w", err)
+			}
+			srcDir := tmp
+			if len(entries) == 1 && entries[0].IsDir() {
+				srcDir = filepath.Join(tmp, entries[0].Name())
+			}
+
+			if err := os.MkdirAll(dstDir, 0o755); err != nil {
+				return fmt.Errorf("chrome: mkdirall dst: %w", err)
+			}
+			if _, err := copyDir(srcDir, dstDir); err != nil {
+				return fmt.Errorf("chrome: copyDir: %w", err)
+			}
+			return chromePostExtract(dstDir)
+		},
+		PostDeployFn: func(c *core.Core, repoRoot, dst string, dryRun bool) error {
+			// Permissions are applied inside ExtractFn; nothing extra needed here.
+			return nil
+		},
+	},
+}
+
+// chromePostExtract applies platform-specific permissions after extraction.
+func chromePostExtract(dst string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		main := filepath.Join(dst, "Chromium.app", "Contents", "MacOS", "Chromium")
+		if err := os.Chmod(main, 0o755); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		helpersDir := filepath.Join(dst, "Chromium.app", "Contents", "Helpers")
+		entries, _ := os.ReadDir(helpersDir)
+		for _, e := range entries {
+			_ = os.Chmod(filepath.Join(helpersDir, e.Name()), 0o755)
+		}
+	case "linux":
+		// chmod 0755 the main executable (first non-directory file named 'chrome' or 'chromium').
+		_ = filepath.Walk(dst, func(p string, fi os.FileInfo, err error) error {
+			if err != nil || fi.IsDir() {
+				return err
+			}
+			name := filepath.Base(p)
+			if name == "chrome" || name == "chromium" {
+				_ = os.Chmod(p, 0o755)
+			}
+			return nil
+		})
+		// chrome-sandbox requires setuid root.
+		sandbox := filepath.Join(dst, "chrome-sandbox")
+		if _, err := os.Stat(sandbox); err == nil {
+			if err := os.Chown(sandbox, 0, 0); err != nil {
+				// Non-fatal: log via stderr and document --no-sandbox.
+				fmt.Fprintf(os.Stderr, "⚠️  chrome: chown chrome-sandbox failed (run as root or use --no-sandbox): %v\n", err)
+			} else {
+				_ = os.Chmod(sandbox, 0o4755)
+			}
+		}
+	}
+	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Extraction helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// extractZip extracts a ZIP archive to dstDir, preserving internal structure.
+func extractZip(src, dstDir string) error {
+	fi, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("extractZip: stat %s: %w", src, err)
+	}
+	const minSize = 50 * 1024 * 1024 // 50 MB sanity check
+	if fi.Size() < minSize {
+		return fmt.Errorf("extractZip: %s is suspiciously small (%d bytes, expected >50 MB)", src, fi.Size())
+	}
+
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return fmt.Errorf("extractZip: open %s: %w", src, err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		target := filepath.Join(dstDir, filepath.FromSlash(f.Name))
+		// Guard against zip-slip.
+		if !strings.HasPrefix(target, filepath.Clean(dstDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("extractZip: illegal path %q", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, f.Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		_, copyErr := io.Copy(out, rc)
+		rc.Close()
+		out.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+	}
+	return nil
+}
+
+// extractTarXz extracts a .tar.xz archive to dstDir using the system tar command.
+// Falls back to a pure-Go path using github.com/ulikunitz/xz if tar is unavailable.
+func extractTarXz(src, dstDir string) error {
+	// Try the system tar first — it's faster and handles edge cases well.
+	if path, err := exec.LookPath("tar"); err == nil {
+		cmd := exec.Command(path, "-xJf", src, "-C", dstDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("extractTarXz: tar: %w", err)
+		}
+		return nil
+	}
+
+	// Pure-Go fallback using archive/tar with a raw xz reader.
+	// This requires github.com/ulikunitz/xz; if not linked it will fail at
+	// compile time and the operator should add the dependency.
+	f, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("extractTarXz: open %s: %w", src, err)
+	}
+	defer f.Close()
+
+	// NOTE: import "github.com/ulikunitz/xz" must be added to go.mod.
+	// xzReader, err := xz.NewReader(f)
+	// if err != nil { return err }
+	// tr := tar.NewReader(xzReader)
+	//
+	// For now we surface a clear error rather than silently fail.
+	_ = tar.NewReader(f) // keep archive/tar imported
+	return fmt.Errorf("extractTarXz: system 'tar' not found and pure-Go xz fallback not linked; add github.com/ulikunitz/xz to go.mod")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -551,7 +883,13 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 		}
 
 		var copied int
-		if info.IsDir() {
+		if comp.ExtractFn != nil {
+			// Archive-based component: delegate entirely to ExtractFn.
+			err = comp.ExtractFn(src, dst)
+			if err == nil {
+				copied = 1 // treat the extracted tree as a single logical unit
+			}
+		} else if info.IsDir() {
 			copied, err = copyDir(src, dst)
 		} else {
 			err = copyFile(src, filepath.Join(dst, filepath.Base(src)))

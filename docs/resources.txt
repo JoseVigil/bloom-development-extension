@@ -1,8 +1,14 @@
-Temoral
+Chrommium 
+En windows y darwin onbutve los .zip no se de donde, en linux de aca.
+https://ungoogled-software.github.io/ungoogled-chromium-binaries/
+
+Temoral 
 https://github.com/temporalio/cli/releases/tag/v1.5.1
 
-node 
+node v2.11 (windows-darwin) y 2.22.3 linux
 https://nodejs.org/en/download
+
+
 
 
 Python Build Standalone (Astral) — macOS Runtime para Bloom
