@@ -124,3 +124,73 @@ webview/app/src/lib/
 .env.local
 .cache/
 libs/
+
+# ============================================================================
+# Versioning
+# ============================================================================
+
+# Linux:
+brain/__build__.py
+brain/build_number.txt
+brain/build_number.effective.txt
+installer/bootstrap/VERSION
+installer/bootstrap/bootstrap.meta.json
+installer/cortex/build-cortex/build_number.effective.txt
+installer/cortex/build-cortex/build_number.txt
+installer/cortex/build-cortex/cortex.meta.json
+installer/host/build_info.h
+installer/host/build_number.effective.txt
+installer/host/build_number.txt
+installer/metamorph/scripts/build_number.effective.txt
+installer/metamorph/scripts/build_number.txt
+installer/native/bin/win64/host/help/help.txt
+installer/nucleus/scripts/build_number.effective.txt
+installer/sensor/scripts/build_number.effective.txt
+installer/sensor/scripts/build_number.txt
+installer/sentinel/scripts/build_number.effective.txt
+installer/sentinel/scripts/build_number.txt
+
+# Darwin:
+brain/__build__.py
+brain/build_number.effective.txt
+brain/build_number.txt
+installer/bootstrap/VERSION
+installer/bootstrap/bootstrap.meta.json
+installer/cortex/build-cortex/build_number.effective.txt
+installer/cortex/build-cortex/build_number.txt
+installer/cortex/build-cortex/cortex.meta.json
+installer/host/build_info.h
+installer/host/build_number.effective.txt
+installer/host/build_number.txt
+installer/metamorph/scripts/build_number.effective.txt
+installer/metamorph/scripts/build_number.txt
+installer/native/bin/win64/host/help/help.txt
+installer/nucleus/scripts/build_number.effective.txt
+installer/sensor/scripts/build_number.effective.txt
+installer/sensor/scripts/build_number.txt
+installer/sentinel/scripts/build_number.effective.txt
+installer/sentinel/scripts/build_number.txt
+
+# Windows:
+brain/__build__.py
+brain/build_number.effective.txt
+brain/build_number.txt
+installer/bootstrap/VERSION
+installer/bootstrap/bootstrap.meta.json
+installer/conductor/setup/build_info.json
+installer/conductor/setup/package.json
+installer/conductor/setup/version.json
+installer/cortex/build-cortex/build_number.effective.txt
+installer/cortex/build-cortex/build_number.txt
+installer/cortex/build-cortex/cortex.meta.json
+installer/metamorph/internal/core/build_info.go
+installer/metamorph/scripts/build_number.effective.txt
+installer/metamorph/scripts/build_number.txt
+installer/native/bin/win64/metamorph/help/metamorph_help.json
+installer/nucleus/scripts/build_number.effective.txt
+installer/sensor/internal/core/build_info.go
+installer/sensor/scripts/build_number.effective.txt
+installer/sensor/scripts/build_number.txt
+installer/sentinel/internal/core/build_info.go
+installer/sentinel/scripts/build_number.effective.txt
+installer/sentinel/scripts/build_number.txt

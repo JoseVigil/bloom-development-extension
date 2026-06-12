@@ -43,6 +43,7 @@ import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from scripts.capture_versions import capture_versions
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTES DE PLATAFORMA
@@ -1584,6 +1585,12 @@ def main() -> None:
     _register_build_telemetry()
 
     _print_summary(results)
+
+    log("")
+    log(_sep())
+    log(f"Capturando versiones → {_PLATFORM_SUFFIX}_versions.txt ...")
+    log(_sep())
+    capture_versions()
 
 
 if __name__ == "__main__":
