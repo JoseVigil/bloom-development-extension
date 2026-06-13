@@ -1,8 +1,8 @@
 {
-  "name": "bloom-nucleus-installer",
-  "productName": "Bloom Nucleus Installer",
+  "name": "bloom-setup",
+  "productName": "Bloom Conductor Setup",
   "version": "1.0.0",
-  "description": "Bloom Nucleus Setup - Complete system installer",
+  "description": "Bloom Conductor Setup - Complete system installer",
   "main": "main.js",
   "author": {
     "name": "BTIP Studio",
@@ -32,7 +32,7 @@
     "version:info": "node -e \"const i=require('./build_info.json'); console.log(i.product_name, i.full_version, '|', i.built_at);\""
   },
   "build": {
-    "appId": "com.bloom.nucleus.installer",
+    "appId": "com.bloom.conductor.installer",
     "productName": "bloom-setup", 
     "copyright": "Copyright © 2024 BTIP Studio",
     "linux": {

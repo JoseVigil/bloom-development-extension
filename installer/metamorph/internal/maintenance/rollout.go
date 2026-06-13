@@ -138,14 +138,12 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "setup") },
 	},
 	{
+		// sensor source must point to the component directory (not the binary
+		// directly) so that subdirectories such as help/ are copied alongside
+		// the executable.  runRollout detects a directory and calls copyDir.
 		Key: "sensor",
 		SourceFn: func(r string) string {
-			switch runtime.GOOS {
-			case "windows":
-				return filepath.Join(r, "installer", "native", "bin", "win64", "sensor", "bloom-sensor.exe")
-			default:
-				return filepath.Join(nativeBin(r, "sensor"), "bloom-sensor")
-			}
+			return nativeBin(r, "sensor")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "sensor") },
 	},
@@ -830,6 +828,14 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 			}
 		}
 		if !found {
+			// Check whether the component exists but is restricted to other
+			// platforms, so we can give a more helpful error than "unknown".
+			for _, comp := range allComponents {
+				if comp.Key == only && len(comp.Platforms) > 0 {
+					return fmt.Errorf("component %q is only supported on: %s (current platform: %s)",
+						only, strings.Join(comp.Platforms, ", "), runtime.GOOS)
+				}
+			}
 			return fmt.Errorf("unknown component %q for platform %s — valid: %s", only, runtime.GOOS, componentKeys())
 		}
 	}
