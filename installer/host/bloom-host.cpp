@@ -118,6 +118,19 @@ uint64_t get_timestamp_ms() {
     return static_cast<uint64_t>(ms.count());
 }
 
+static std::string get_default_base_dir() {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    const char* appdata = std::getenv("LOCALAPPDATA");
+    return appdata ? std::string(appdata) + "\\BloomNucleus" : "";
+#elif defined(__APPLE__)
+    const char* home = std::getenv("HOME");
+    return home ? std::string(home) + "/Library/BloomNucleus" : "";
+#else  // Linux y cualquier otro Unix
+    const char* home = std::getenv("HOME");
+    return home ? std::string(home) + "/.local/share/BloomNucleus" : "";
+#endif
+}
+
 // ============================================================================
 // FUNCIONES DE COMUNICACIÓN - CON VALIDACIÓN DE TAMAÑO
 // ============================================================================
@@ -1036,15 +1049,7 @@ int main(int argc, char* argv[]) {
                         ? pre_user_base
                         : strip_last(strip_last(strip_last(exe_path)));
                     if (base.empty() || base == exe_path) {
-#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-                        const char* appdata = std::getenv("LOCALAPPDATA");
-                        if (appdata && appdata[0] != '\0')
-                            base = std::string(appdata) + "\\BloomNucleus";
-#else
-                        const char* home = std::getenv("HOME");
-                        if (home && home[0] != '\0')
-                            base = std::string(home) + "/Library/BloomNucleus";
-#endif
+                        base = get_default_base_dir();
                     }
                     if (!base.empty()) {
 #ifdef _WIN32
@@ -1330,15 +1335,7 @@ int main(int argc, char* argv[]) {
             } else if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
                 std::string base = !cli_user_base_dir.empty()
                     ? cli_user_base_dir
-                    : ([]() -> std::string {
-#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-                        const char* a = std::getenv("LOCALAPPDATA");
-                        return a ? std::string(a) + "\\BloomNucleus" : "";
-#else
-                        const char* h = std::getenv("HOME");
-                        return h ? std::string(h) + "/Library/BloomNucleus" : "";
-#endif
-                      })();
+                    : get_default_base_dir();
                 if (!base.empty()) {
 #ifdef _WIN32
                     path = base + "\\logs\\host\\profiles\\"

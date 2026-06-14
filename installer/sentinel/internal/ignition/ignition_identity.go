@@ -269,17 +269,21 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		return nil, fmt.Errorf("error escribiendo manifiesto nativo: %v", err)
 	}
 
-	// === 6.1 REGISTRAR CLAVE DE WINDOWS ===
-	// registerNativeHost es una función multiplataforma definida en:
-	//   ignition_registry_windows.go  → implementación real (solo Windows)
-	//   ignition_registry_unix.go     → no-op (Darwin / Linux)
+	// === 6.1 REGISTRAR NATIVE HOST SEGÚN PLATAFORMA ===
+	// installNativeHostManifest está definido en:
+	//   ignition_registry_windows.go → escribe registry HKCU (solo Windows)
+	//   ignition_registry_unix.go    → copia manifest al path del sistema:
+	//                                  macOS: ~/Library/Application Support/Chromium/NativeMessagingHosts/
+	//                                  Linux: ~/.config/chromium/NativeMessagingHosts/
+	// Se llama en CADA launch (no solo en seed) porque prepareSessionFiles
+	// actualiza el manifest con --launch-id y --user-base-dir antes de este punto.
 	hostName   := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	regKeyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
 
-	if err := registerNativeHostHKCU(regKeyPath, manifestPath, ig.Core.Logger); err != nil {
-		ig.Core.Logger.Error("[IGNITION] No se pudo registrar HKCU: %v", err)
+	if err := installNativeHostManifest(regKeyPath, manifestPath, ig.Core.Logger); err != nil {
+		ig.Core.Logger.Error("[IGNITION] No se pudo instalar Native Host manifest: %v", err)
 	} else {
-		ig.Core.Logger.Info("[IGNITION] ✅ Registry key registrada en HKCU: %s", regKeyPath)
+		ig.Core.Logger.Info("[IGNITION] ✅ Native Host manifest instalado: %s", hostName)
 	}
 
 	// cleanupHKLM elimina la clave HKLM residual si existe.

@@ -55,19 +55,32 @@ function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
 // ============================================================================
 
 async function detectActiveMode() {
+  // Fuente primaria: config files generados por Sentinel antes de lanzar Chrome.
+  // Existen aunque la tab haya fallado con ERR_BLOCKED_BY_CLIENT al arrancar.
+  try {
+    const r = await fetch(chrome.runtime.getURL('discovery.synapse.config.js'));
+    if (r.ok) return 'discovery';
+  } catch (_) {}
+
+  try {
+    const r = await fetch(chrome.runtime.getURL('landing.synapse.config.js'));
+    if (r.ok) return 'landing';
+  } catch (_) {}
+
+  // Fuente secundaria: tabs abiertas (boot sin ERR_BLOCKED, reinicios).
   const tabs = await chrome.tabs.query({});
-  
-  const hasDiscovery = tabs.some(t => 
+
+  const hasDiscovery = tabs.some(t =>
     t.url?.includes(chrome.runtime.id) && t.url?.includes('discovery')
   );
-  
-  const hasLanding = tabs.some(t => 
+  const hasLanding = tabs.some(t =>
     t.url?.includes(chrome.runtime.id) && t.url?.includes('landing')
   );
-  
+
   if (hasDiscovery) return 'discovery';
-  if (hasLanding) return 'landing';
-  
+  if (hasLanding)   return 'landing';
+
+  // Fallback: último modo conocido.
   const { synapseMode } = await chrome.storage.local.get(['synapseMode']);
   return synapseMode || 'discovery';
 }
@@ -433,6 +446,29 @@ async function openHarnessTab() {
   }
 }
 
+// ── NUEVO: abrir discovery tab desde el SW, igual que harness ─────────────
+async function openDiscoveryTab() {
+  try {
+    const discoveryUrl = chrome.runtime.getURL('discovery/index.html');
+    console.log('[Discovery] openDiscoveryTab() — URL:', discoveryUrl);
+
+    const allTabs = await chrome.tabs.query({});
+    const existingTab = allTabs.find(t => t.url && t.url.startsWith(discoveryUrl));
+
+    if (existingTab) {
+      // La tab existe pero probablemente tiene ERR_BLOCKED_BY_CLIENT.
+      // Recargarla ahora que la extensión está lista.
+      await chrome.tabs.update(existingTab.id, { url: discoveryUrl, active: true });
+      console.log('[Discovery] ✓ Tab existente recargada (id:', existingTab.id + ')');
+    } else {
+      const newTab = await chrome.tabs.create({ url: discoveryUrl, active: true });
+      console.log('[Discovery] ✓ Tab creada (id:', newTab.id + ')');
+    }
+  } catch (tabErr) {
+    console.error('[Discovery] ✗ openDiscoveryTab error:', tabErr.message, tabErr.stack);
+  }
+}
+
 async function applyWindowLayout(layout = {}) {
   const {
     width  = 600,
@@ -598,6 +634,15 @@ function handleHostMessage(msg) {
       openHarnessTab();
     } else {
       console.warn('[Harness] host_ready → config.harness no disponible, tab no abierta');
+    }
+
+    // Abrir/recargar discovery tab ahora que el SW está listo y el host conectado.
+    // Esto resuelve ERR_BLOCKED_BY_CLIENT en ungoogled-chromium: Chrome abre la tab
+    // antes del boot del SW como arg CLI; cuando llegamos aquí la extensión ya está
+    // completamente inicializada y la tab puede cargar correctamente.
+    if (config?.mode === 'discovery') {
+      console.log('[Discovery] host_ready → abriendo/recargando discovery tab (SW activo)');
+      openDiscoveryTab();
     }
 
     chrome.runtime.sendMessage({

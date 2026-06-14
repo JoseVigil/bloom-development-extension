@@ -559,10 +559,12 @@ function toggleDebugPanel() {
   debugPanelOpen = !debugPanelOpen;
 
   if (debugPanelOpen) {
-    // Lazy load: asignar src solo la primera vez
+    // Lazy load: asignar src solo la primera vez.
+    // Ruta canónica idéntica al atributo src del HTML estático de respaldo
+    // (onboarding.html línea ~1301) para que funcione en dev y en producción.
     const frame = document.getElementById('debug-frame');
     if (frame && !frame.src) {
-      frame.src = 'debug.html';
+      frame.src = '../shared/debug.html';
     }
     container.classList.remove('hidden');
     btn.classList.add('active');
@@ -580,4 +582,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
   // Screen 0 = entry, stepper vacío. Al navegar a screen 1 se activa Identity.
   // El sidebar ya es visible desde el inicio.
+
+  // Bind del botón Harness — el onclick en el HTML llama toggleDebugPanel()
+  // pero por seguridad también lo bindeamos acá para que funcione aunque
+  // el atributo se pierda en algún rebuild del template.
+  const debugBtn = document.getElementById('debug-toggle');
+  if (debugBtn) debugBtn.onclick = toggleDebugPanel;
 });
