@@ -29,23 +29,27 @@ class SynapseManager:
         # Aquí registramos qué función maneja cada tipo de mensaje.
         # Esto permite escalar a cientos de comandos sin llenar de if/else el código.
         self._action_map: Dict[str, Callable] = {
-            "SYSTEM_HELLO":     self._handle_handshake,
-            "HEARTBEAT":        self._handle_heartbeat,
-            "LOG_ENTRY":        self._handle_log_entry,
+            "SYSTEM_HELLO":       self._handle_handshake,
+            "HEARTBEAT":          self._handle_heartbeat,
+            "LOG_ENTRY":          self._handle_log_entry,
+            # Synapse handshake — Fase 3: extensión confirma host_ready
+            "handshake_confirm":  self._handle_handshake_confirm,
+            # Notificación del host C++ (bloom-host) — informativa, sin respuesta
+            "PROFILE_CONNECTED":  self._handle_profile_connected,
             # Comandos DOM para IonPump:
-            "DOM_FOCUS":        self._handle_dom_passthrough,
-            "DOM_TYPE":         self._handle_dom_passthrough,
-            "DOM_CLICK":        self._handle_dom_passthrough,
-            "DOM_WAIT":         self._handle_dom_passthrough,
-            "DOM_SCROLL":       self._handle_dom_passthrough,
-            "DOM_EXTRACT":      self._handle_dom_passthrough,
-            "EVENT_EMIT":       self._handle_dom_passthrough,
-            "STATE_TRANSITION": self._handle_state_transition,
+            "DOM_FOCUS":          self._handle_dom_passthrough,
+            "DOM_TYPE":           self._handle_dom_passthrough,
+            "DOM_CLICK":          self._handle_dom_passthrough,
+            "DOM_WAIT":           self._handle_dom_passthrough,
+            "DOM_SCROLL":         self._handle_dom_passthrough,
+            "DOM_EXTRACT":        self._handle_dom_passthrough,
+            "EVENT_EMIT":         self._handle_dom_passthrough,
+            "STATE_TRANSITION":   self._handle_state_transition,
             # Landing Dashboard commands
-            "PROFILE_LOAD":     self._handle_profile_load,
-            "HEALTH_CHECK":     self._handle_health_check,
-            "NUCLEUS_SYNC":     self._handle_nucleus_sync,
-            "INTENT_LIST":      self._handle_intent_list,
+            "PROFILE_LOAD":       self._handle_profile_load,
+            "HEALTH_CHECK":       self._handle_health_check,
+            "NUCLEUS_SYNC":       self._handle_nucleus_sync,
+            "INTENT_LIST":        self._handle_intent_list,
         }
 
     def run_host_loop(self) -> None:
@@ -133,6 +137,35 @@ class SynapseManager:
         level = message.get("level", "INFO")
         text = message.get("message", "")
         self.logger.info(f"[EXT-LOG] {level}: {text}")
+
+    def _handle_handshake_confirm(self, message: Dict[str, Any]) -> None:
+        """
+        Fase 3 del handshake Synapse: la extensión confirma que recibió host_ready.
+        Brain responde con HANDSHAKE_CONFIRMED para que Electron y la UI
+        puedan transicionar de "SIN SEÑAL" a estado operativo.
+        """
+        profile_id = message.get("profile_id", "")
+        launch_id  = message.get("launch_id", "")
+        self.logger.info(f"🤝 handshake_confirm recibido — profile={profile_id} launch={launch_id}")
+        self.protocol.send_message({
+            "event":      "HANDSHAKE_CONFIRMED",
+            "profile_id": profile_id,
+            "launch_id":  launch_id,
+            "status":     "connected",
+            "timestamp":  time.time()
+        })
+        self.logger.info("✅ HANDSHAKE_CONFIRMED emitido — canal Synapse establecido")
+
+    def _handle_profile_connected(self, message: Dict[str, Any]) -> None:
+        """
+        Notificación interna del host C++ (bloom-host) que indica que el
+        handshake de 3 fases del host está completo. Es informativa — Brain
+        ya emitió HANDSHAKE_CONFIRMED vía _handle_handshake_confirm.
+        No requiere respuesta.
+        """
+        profile_id = message.get("profile_id", "")
+        launch_id  = message.get("launch_id", "")
+        self.logger.info(f"🔌 PROFILE_CONNECTED recibido del host — profile={profile_id} launch={launch_id}")
 
     def _handle_dom_passthrough(self, message: Dict[str, Any]) -> None:
         """Reenvía comandos DOM de IonPump hacia Chrome. No modifica el mensaje."""

@@ -570,6 +570,10 @@ function handleDisconnect() {
   handshakeState = 'NONE';
   nativePort = null;
 
+  // Limpiar estado persistido: si discovery abre después de una desconexión,
+  // no debe leer un synapseStatus stale y creer que el sistema está listo.
+  chrome.storage.local.remove('synapseStatus');
+
   scheduleReconnect();
 }
 
@@ -617,6 +621,22 @@ function handleHostMessage(msg) {
     
     handshakeState = 'CONFIRMED';
     console.log('[HANDSHAKE] ✓✓✓ HANDSHAKE COMPLETADO - Canal seguro establecido');
+
+    // Persistir estado en storage para que discovery pueda resolverlo aunque el
+    // SW haya sido suspendido y reiniciado entre el handshake y la apertura de la tab.
+    // discovery.js lo lee en dos lugares: lectura inicial (chrome.storage.local.get)
+    // y listener onChanged. Ambos consumen synapseStatus.command === 'system_ready'.
+    chrome.storage.local.set({
+      synapseStatus: {
+        command: 'system_ready',
+        payload: {
+          handshake_confirmed: true,
+          profile_id: config.profileId,
+          launch_id:  config.launchId,
+          timestamp:  Date.now()
+        }
+      }
+    });
 
     // Notificar al debug panel que el handshake está completo
     forwardToDebugPanel('synapse', 'HANDSHAKE_CONFIRMED', {
