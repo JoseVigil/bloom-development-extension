@@ -559,12 +559,13 @@ function toggleDebugPanel() {
   debugPanelOpen = !debugPanelOpen;
 
   if (debugPanelOpen) {
-    // Lazy load: asignar src solo la primera vez.
-    // Ruta canónica idéntica al atributo src del HTML estático de respaldo
-    // (onboarding.html línea ~1301) para que funcione en dev y en producción.
+    // Lazy load: usar dataset.loaded en lugar de !frame.src porque
+    // el browser normaliza src="" a la URL base del documento, por lo
+    // que !frame.src siempre es false y nunca se asigna la ruta real.
     const frame = document.getElementById('debug-frame');
-    if (frame && !frame.src) {
+    if (frame && !frame.dataset.loaded) {
       frame.src = '../shared/debug.html';
+      frame.dataset.loaded = '1';
     }
     container.classList.remove('hidden');
     btn.classList.add('active');

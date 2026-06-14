@@ -26,6 +26,7 @@
 
     "dev":                "electron .",
     "dev:darwin":         "electron .",
+    "dev:linux":          "electron . --no-sandbox",
 
     "version:bump":   "node ../shared/bump-version.js",
     "version:patch":  "node ../shared/bump-version.js --patch",

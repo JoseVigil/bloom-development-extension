@@ -105,7 +105,7 @@ html, body {
 
 /* ── SIDEBAR ── */
 #sidebar {
-  width: 220px;
+  width: 180px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   display: flex;
@@ -114,7 +114,7 @@ html, body {
 }
 
 .sidebar-section {
-  padding: 14px 16px 8px;
+  padding: 10px 14px 6px;
   border-bottom: 1px solid var(--border);
 }
 .sidebar-section-label {
@@ -123,15 +123,28 @@ html, body {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
 }
+.sidebar-section-label .collapse-arrow {
+  font-size: 8px;
+  transition: transform 0.2s;
+  opacity: 0.5;
+}
+.sidebar-section.collapsed .collapse-arrow { transform: rotate(-90deg); }
+.sidebar-section.collapsed #health-grid,
+.sidebar-section.collapsed #health-summary { display: none; }
 
 /* Health grid */
 .health-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 0;
+  gap: 6px;
+  padding: 3px 0;
 }
 .h-dot {
   width: 5px; height: 5px;
@@ -383,16 +396,19 @@ html, body {
 
 /* ── DETAIL DRAWER ── */
 #detail {
-  width: 280px;
-  border-left: 1px solid var(--border);
+  width: 0;
+  border-left: 0px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   flex-shrink: 0;
-  transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+  transition: width 0.25s cubic-bezier(0.4,0,0.2,1),
+              border-left-width 0.25s;
 }
-#detail.open { transform: translateX(0); }
+#detail.open {
+  width: 260px;
+  border-left-width: 1px;
+}
 
 #detail-header {
   padding: 12px 16px;
@@ -461,11 +477,12 @@ html, body {
 #sim-bar {
   background: var(--surface);
   border-top: 1px solid var(--border);
-  padding: 8px 18px;
+  padding: 7px 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
+  min-width: 0;
 }
 #sim-label {
   font-family: var(--font-mono);
@@ -558,8 +575,11 @@ body::after {
   <!-- SIDEBAR -->
   <div id="sidebar">
     <!-- Health -->
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">System health</div>
+    <div class="sidebar-section" id="health-section">
+      <div class="sidebar-section-label" onclick="toggleHealthSection()">
+        System health
+        <span class="collapse-arrow">▼</span>
+      </div>
       <div id="health-grid">
         <div class="health-row"><div class="h-dot"></div><span class="h-name">loading…</span></div>
       </div>
@@ -724,6 +744,15 @@ function setWsState(state) {
 }
 
 // ── HEALTH ───────────────────────────────────────────────────────────────────
+// Candidate routes to try in order — nucleus doesn't expose /api/health,
+// the real route is discovered at runtime or falls back to IPC.
+const HEALTH_ROUTES = [
+  '/health',
+  '/api/health',
+  '/internal/health',
+  '/status',
+];
+
 const HEALTH_COMPONENTS = [
   { key: 'temporal',      label: 'Temporal' },
   { key: 'worker',        label: 'Worker' },
@@ -737,17 +766,48 @@ const HEALTH_COMPONENTS = [
 ];
 
 async function refreshHealth() {
+  // 1. Try Electron IPC (nucleus:health handler) — most reliable, same as
+  //    what the rest of Conductor uses. Available when loaded via loadFile().
   try {
-    const res = await fetch(API_URL + '/api/health');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    renderHealth(data);
-  } catch(e) {
-    document.getElementById('health-grid').innerHTML =
-      '<div class="health-row"><div class="h-dot err"></div><span class="h-name" style="color:var(--error)">API unreachable</span></div>';
-    document.getElementById('health-summary').textContent = 'UNKNOWN';
-    document.getElementById('health-summary').className = 'degraded';
+    const ipc = window.electronAPI || window.nucleus || window.onboarding;
+    if (ipc && typeof ipc.health === 'function') {
+      const data = await ipc.health();
+      if (data && (data.components || data.state)) {
+        renderHealth(data);
+        return;
+      }
+    }
+  } catch(_) {}
+
+  // 2. Probe REST routes in order — the exact path depends on the Fastify
+  //    router registration; /api/health is NOT registered, try candidates.
+  for (const route of HEALTH_ROUTES) {
+    try {
+      const res = await fetch(API_URL + route, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && (data.components || data.state)) {
+          // Remember the working route for next polls to skip the probe loop
+          HEALTH_ROUTES.length = 0;
+          HEALTH_ROUTES.push(route);
+          renderHealth(data);
+          log('info', 'Health route resolved: ' + route);
+          return;
+        }
+      }
+    } catch(_) {}
   }
+
+  // 3. All candidates failed — show actionable error
+  document.getElementById('health-grid').innerHTML =
+    '<div class="health-row"><div class="h-dot err"></div>' +
+    '<span class="h-name" style="color:var(--error)">nucleus:48215 — no health route</span></div>' +
+    '<div class="health-row" style="padding-top:4px">' +
+    '<span class="h-name" style="color:var(--text-dim);font-size:10px">' +
+    'Run: nucleus --json health</span></div>';
+  document.getElementById('health-summary').textContent = 'UNKNOWN';
+  document.getElementById('health-summary').className = 'degraded';
+  log('warn', 'Health endpoint not found on :48215 — tried: ' + HEALTH_ROUTES.join(', '));
 }
 
 function renderHealth(data) {
@@ -968,7 +1028,7 @@ async function fireSimEvent() {
   // On failure (endpoint not yet wired), fall back to local ingest.
   let serverReceived = false;
   try {
-    const res = await fetch(API_URL + '/api/internal/system-event', {
+    const res = await fetch(API_URL + '/internal/system-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -997,6 +1057,11 @@ function toggleAuto() {
       autoIdx++;
     }, 1000);
   }
+}
+
+// ── HEALTH SECTION COLLAPSE ───────────────────────────────────────────────────
+function toggleHealthSection() {
+  document.getElementById('health-section').classList.toggle('collapsed');
 }
 
 // ── LOGGING ───────────────────────────────────────────────────────────────────

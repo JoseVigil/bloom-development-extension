@@ -38,5 +38,9 @@ contextBridge.exposeInMainWorld('onboarding', {
   markStepComplete: (params) => ipcRenderer.invoke('onboarding:mark-step-complete', params),
 
   // Logger bridge — renderer → main → archivo de log
-  log: (level, message) => ipcRenderer.invoke('onboarding:log', { level, message })
+  log: (level, message) => ipcRenderer.invoke('onboarding:log', { level, message }),
+
+  // System health — ejecuta nucleus --json health en el main process
+  // y devuelve el JSON parseado. El debug panel lo usa para el sidebar.
+  health: () => ipcRenderer.invoke('onboarding:health'),
 });

@@ -166,6 +166,29 @@ function setupNucleusHandlers() {
     }
   });
 
+  // ── ONBOARDING HEALTH (ipc_health_handler.js integrado) ─────────────────
+  // Usa execNucleus (ruta absoluta via NUCLEUS_EXE) en lugar de execFileAsync('nucleus')
+  // para garantizar compatibilidad con builds empaquetados donde nucleus no está en PATH.
+  // Devuelve una estructura normalizada para que renderHealth() no rompa.
+  ipcMain.handle('onboarding:health', async () => {
+    try {
+      const raw = await execNucleus(['--json', 'health'], 5000);
+      return {
+        success:    raw.success !== false,
+        state:      raw.state      || 'UNKNOWN',
+        components: raw.components || {},
+        error:      raw.error      || null,
+      };
+    } catch (err) {
+      return {
+        success:    false,
+        state:      'UNKNOWN',
+        components: {},
+        error:      err.message,
+      };
+    }
+  });
+
   ipcMain.handle('nucleus:list-profiles', async () => {
     try {
       const result = await execNucleus(['--json', 'profile', 'list'], 10000);
