@@ -13,7 +13,7 @@ const homeDir = os.homedir();
 function getPlatformArch() {
   if (platform === 'win32') return os.arch() === 'x64' ? 'win64' : 'win32';
   if (platform === 'darwin') return os.arch() === 'x64' ? 'darwin_x64' : 'darwin_arm64';
-  return os.arch(); // linux fallback
+  return os.arch() === 'arm64' ? 'linux_arm64' : 'linux_x64';
 }
 const arch = getPlatformArch();
 
@@ -64,7 +64,11 @@ const getResourcePath = (resourceName) => {
         const darwinArch = os.arch() === 'arm64' ? 'arm64' : 'x86_64';
         return path.join(workspaceRoot, '..', 'resources', 'runtime-darwin', darwinArch);
       }
-      return path.join(workspaceRoot, '..', 'resources', 'runtime');
+      if (platform === 'linux') {
+        return path.join(workspaceRoot, '..', 'resources', 'runtime-linux');
+      }
+      // Windows
+      return path.join(workspaceRoot, '..', 'resources', 'runtime-windows');
     case 'nucleus': {
       const primaryNucleus = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
       if (platform === 'darwin') {
@@ -118,7 +122,10 @@ const getResourcePath = (resourceName) => {
       if (platform === 'darwin') {
         return path.join(workspaceRoot, '..', 'ollama', 'darwin');
       }
-      return path.join(workspaceRoot, '..', 'ollama', arch);
+      if (platform === 'linux') {
+        return path.join(workspaceRoot, '..', 'ollama', 'linux');
+      }
+      return path.join(workspaceRoot, '..', 'ollama', 'windows');
     case 'node':
       if (platform === 'darwin') {
         return path.join(workspaceRoot, '..', 'node', 'darwin');
@@ -141,7 +148,10 @@ const getResourcePath = (resourceName) => {
       if (platform === 'darwin') {
         return path.join(workspaceRoot, '..', 'temporal', 'darwin');
       }
-      return path.join(workspaceRoot, '..', 'temporal', arch);
+      if (platform === 'linux') {
+        return path.join(workspaceRoot, '..', 'temporal', 'linux');
+      }
+      return path.join(workspaceRoot, '..', 'temporal', 'win64');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'bootstrap':
@@ -157,7 +167,7 @@ const getResourcePath = (resourceName) => {
     case 'chrome-mac':
       return path.join(workspaceRoot, '..', 'chrome', 'chrome-mac.zip');
     case 'chrome-linux':
-      return path.join(workspaceRoot, '..', 'chrome', 'chrome-linux.zip');
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-linux.tar.xz');
     case 'nucleus-governance':
       return path.join(workspaceRoot, '..', 'nucleus', 'nucleus-governance.json');
     case 'assets':
@@ -310,10 +320,14 @@ const paths = {
   // Chrome
   chromeDir: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win')
-    : path.join(baseDir, 'bin', 'chrome-mac'),
+    : platform === 'linux'
+      ? path.join(baseDir, 'bin', 'chrome-linux')
+      : path.join(baseDir, 'bin', 'chrome-mac'),
   chromeExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win', 'chrome.exe')
-    : path.join(baseDir, 'bin', 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+    : platform === 'linux'
+      ? path.join(baseDir, 'bin', 'chrome-linux', 'chrome')
+      : path.join(baseDir, 'bin', 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
   
   // Extension template (copied per-profile by Brain)
   extensionDir: path.join(baseDir, 'bin', 'extension'),
@@ -334,7 +348,9 @@ const paths = {
 
   // Logs
   logsDir: path.join(baseDir, 'logs'),
-  installLog: path.join(baseDir, 'logs', 'install.log'),
+  conductorLogsDir: path.join(baseDir, 'logs', 'conductor'),
+  conductorSetupLogsDir: path.join(baseDir, 'logs', 'conductor', 'setup'),
+  installLog: path.join(baseDir, 'logs', 'conductor', 'setup', 'install.log'),
   runtimeLog: path.join(baseDir, 'logs', 'runtime.log'),
   profileLogsDir: path.join(baseDir, 'logs', 'profiles'),
 
@@ -368,6 +384,8 @@ const paths = {
   temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),
   chromeWinSource: getResourcePath('chrome-win'),
+  chromeMacSource: getResourcePath('chrome-mac'),
+  chromeLinuxSource: getResourcePath('chrome-linux'),
   hooksSource: getResourcePath('hooks'),
   hooksDir: path.join(baseDir, 'hooks'),
   bootstrapDir:       path.join(baseDir, 'bin', 'bootstrap'),

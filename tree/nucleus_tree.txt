@@ -99,13 +99,11 @@ bloom-development-extension/
     │   │   ├── service.go
     │   │   └── workers.go
     │   ├── system/
-    │   │   ├── info.go
-    │   │   └── version.go
+    │   │   └── info.go
     │   └── vault/
     │       └── vault.go
     ├── main.go
     ├── nucleus-governance.json
-    ├── nucleus.exe
     └── scripts/
         ├── build-darwin.sh
         ├── build-linux.sh
@@ -119,7 +117,6 @@ bloom-development-extension/
         └── simulation_env/
             └── .bloom/
                 └── .nucleus-bloom-labs/
-                    ├── .cache/
                     ├── .core/
                     │   ├── .ai_bot.governance.bl
                     │   ├── .ai_bot.plane.bl

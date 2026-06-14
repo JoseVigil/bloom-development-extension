@@ -49,7 +49,8 @@ function getChromiumPaths() {
       zipPath: getResourcePath('chrome-linux'),
       destDir: path.join(paths.binDir, 'chrome-linux'),
       exePath: path.join(paths.binDir, 'chrome-linux', 'chrome'),
-      zipName: 'chrome-linux.zip'
+      zipName: 'chrome-linux.tar.xz',
+      isTarXz: true
     };
   }
 }
@@ -100,12 +101,29 @@ async function extractWithNative(zipPath, destDir) {
   console.log('✅ Native extraction completed');
 }
 
+async function extractWithTarXz(archivePath, destDir) {
+  console.log('📦 Extracting with tar xz...');
+  const { execFile } = require('child_process');
+  const { promisify } = require('util');
+  const execFileAsync = promisify(execFile);
+  await execFileAsync('tar', ['-xJf', archivePath, '-C', destDir], {
+    maxBuffer: 500 * 1024 * 1024
+  });
+  console.log('✅ tar.xz extraction completed');
+}
+
 async function extractChromiumZip(zipPath, tempDir) {
   console.log(`\n🌐 EXTRACTING CHROMIUM`);
   console.log(`   Source: ${zipPath}`);
   console.log(`   Temp: ${tempDir}`);
   
   await fs.ensureDir(tempDir);
+
+  // Linux usa tar.xz; win/mac usan zip
+  if (platform === 'linux') {
+    await extractWithTarXz(zipPath, tempDir);
+    return;
+  }
   
   try {
     if (extract) {
@@ -138,6 +156,25 @@ async function setExecutablePermissions(exePath) {
   try {
     await fs.chmod(exePath, 0o755);
     
+    if (platform === 'linux') {
+      // Asset map: chrome-sandbox requiere chmod 4755 (setuid root) para sandbox.
+      // Si falla (sin privilegios), loggear warning y continuar — el browser puede
+      // arrancar con --no-sandbox como fallback documentado.
+      const sandboxPath = path.join(path.dirname(exePath), 'chrome-sandbox');
+      if (await fs.pathExists(sandboxPath)) {
+        try {
+          const { execFile } = require('child_process');
+          const { promisify } = require('util');
+          const execFileAsync = promisify(execFile);
+          await execFileAsync('sudo', ['chown', 'root:root', sandboxPath]);
+          await execFileAsync('sudo', ['chmod', '4755', sandboxPath]);
+          console.log('✅ chrome-sandbox setuid root applied');
+        } catch (e) {
+          console.warn('⚠️ chrome-sandbox chmod 4755 failed (no sudo?) — browser will require --no-sandbox:', e.message);
+        }
+      }
+    }
+
     if (platform === 'darwin') {
       const helpersDir = path.join(path.dirname(exePath), '..', '..', 'Helpers');
       
@@ -293,7 +330,7 @@ async function installChromium() {
   const { zipPath, destDir, exePath, zipName } = chromiumPaths;
   
   console.log(`\n📋 Platform: ${platform}`);
-  console.log(`📋 ZIP: ${zipName}`);
+  console.log(`📋 Archive: ${zipName}`);
   
   try {
     // STEP 1: Locate source ZIP
@@ -333,17 +370,27 @@ async function installChromium() {
       const extractedContents = await fs.readdir(tempDir);
       console.log(`   Extracted contents: ${extractedContents.join(', ')}`);
       
-      // Handle nested folder structure (chrome-win/chrome.exe inside zip)
-      const platformFolder = platform === 'win32' ? 'chrome-win' : 'chrome-mac';
-      const nestedPath = path.join(tempDir, platformFolder);
-      
-      if (await fs.pathExists(nestedPath)) {
-        console.log(`   Found nested folder: ${platformFolder}`);
-        await fs.move(nestedPath, destDir, { overwrite: true });
+      // Detect the actual root folder dynamically — tar archives (especially
+      // ungoogled-chromium) use versioned names like
+      // "ungoogled-chromium-146.0.7680.177-1-x86_64_linux/" instead of
+      // the generic "chrome-linux/" we used to hardcode.
+      const subDirs = [];
+      for (const item of extractedContents) {
+        const itemStat = await fs.stat(path.join(tempDir, item));
+        if (itemStat.isDirectory()) subDirs.push(item);
+      }
+
+      if (subDirs.length === 1) {
+        // Normal case: archive has exactly one root folder (e.g. ungoogled-chromium-*)
+        console.log(`   Found single root folder: ${subDirs[0]}`);
+        await fs.move(path.join(tempDir, subDirs[0]), destDir, { overwrite: true });
       } else {
-        // Files are directly in temp, move all
-        console.log(`   No nested folder, moving all contents`);
-        await fs.move(tempDir, destDir, { overwrite: true });
+        // Files/multiple dirs sitting directly in temp — move each item individually
+        // (avoids fs.move(tempDir→destDir) swapping the directory node itself)
+        console.log(`   No single root folder, moving ${extractedContents.length} items individually`);
+        for (const item of extractedContents) {
+          await fs.move(path.join(tempDir, item), path.join(destDir, item), { overwrite: true });
+        }
       }
       
       // Clean temp
@@ -393,11 +440,9 @@ async function installChromium() {
     
     await cleanupOnFailure(destDir);
     
-    return {
-      success: false,
-      error: error.message,
-      chromiumPath: null
-    };
+    // Re-throw so installer.js failMilestone() catches it and doesn't mark
+    // chromium milestone as completed when it actually failed.
+    throw error;
   }
 }
 

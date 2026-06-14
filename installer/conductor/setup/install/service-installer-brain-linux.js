@@ -180,7 +180,22 @@ async function removeService() {
 
 async function cleanupOldServices() {
   await removeService();
+  // Kill any brain process by name
   try { execSync('pkill -f "brain service"', { stdio: 'ignore' }); } catch (_) {}
+  try { execSync('pkill -x brain',           { stdio: 'ignore' }); } catch (_) {}
+  // Kill whatever is holding port 5678 (previous brain instance)
+  try {
+    const out = execSync("ss -tlnp 'sport = :5678' 2>/dev/null || true", {
+      shell: true, encoding: 'utf8', stdio: 'pipe',
+    });
+    const match = out.match(/pid=(\d+)/);
+    if (match) {
+      execSync(`kill ${match[1]}`, { stdio: 'ignore' });
+      console.log(`   ✓ Killed stale brain process on port 5678 (PID ${match[1]})`);
+    }
+  } catch (_) {}
+  // Give OS time to release the port
+  await new Promise(r => setTimeout(r, 1500));
 }
 
 module.exports = {

@@ -261,6 +261,10 @@ var allComponents = []component{
 		},
 	},
 	{
+		// node ships as a pre-extracted binary in the repo on all platforms.
+		// The tar.xz mentioned in earlier documentation was the upstream
+		// download artefact; it was already unpacked before being committed.
+		// Conductor simply copies the binary and ensures it is executable on Linux.
 		Key: "node",
 		SourceFn: func(r string) string {
 			switch runtime.GOOS {
@@ -268,50 +272,20 @@ var allComponents = []component{
 				return filepath.Join(r, "installer", "node", "win64", "node.exe")
 			case "darwin":
 				return filepath.Join(r, "installer", "node", "darwin", "node")
-			default: // linux — binary extracted from tar.xz at deploy time via ExtractFn
-				return filepath.Join(r, "installer", "node", "linux_x64", "linux-x64.tar.xz")
+			default: // linux
+				return filepath.Join(r, "installer", "node", "linux_x64", "node")
 			}
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "node") },
-		ExtractFn: func() func(src, dstDir string) error {
-			// Only active on Linux; on other platforms SourceFn returns a plain
-			// binary and ExtractFn is bypassed because the file is not a .tar.xz.
-			return func(src, dstDir string) error {
-				if !strings.HasSuffix(src, ".tar.xz") {
-					// Plain binary — fall through to regular copy.
-					return copyFile(src, filepath.Join(dstDir, filepath.Base(src)))
-				}
-				// Extract the tar.xz to a temp dir, then grab the node binary.
-				tmp, err := os.MkdirTemp("", "node-extract-*")
-				if err != nil {
-					return fmt.Errorf("node: mktemp: %w", err)
-				}
-				defer os.RemoveAll(tmp)
-				if err := extractTarXz(src, tmp); err != nil {
-					return fmt.Errorf("node: extractTarXz: %w", err)
-				}
-				// The archive extracts to node-v*-linux-x64/bin/node.
-				var nodeBin string
-				_ = filepath.Walk(tmp, func(p string, fi os.FileInfo, e error) error {
-					if e != nil || fi.IsDir() {
-						return e
-					}
-					if filepath.Base(p) == "node" && strings.Contains(p, "/bin/") {
-						nodeBin = p
-						return io.EOF // stop early
-					}
-					return nil
-				})
-				if nodeBin == "" {
-					return fmt.Errorf("node: could not find 'node' binary inside archive")
-				}
-				dst := filepath.Join(dstDir, "node")
-				if err := copyFile(nodeBin, dst); err != nil {
-					return fmt.Errorf("node: copy binary: %w", err)
-				}
-				return os.Chmod(dst, 0o755)
+		PostDeployFn: func(_ *core.Core, _, dst string, dryRun bool) error {
+			if runtime.GOOS != "linux" {
+				return nil
 			}
-		}(),
+			if dryRun {
+				return nil
+			}
+			return os.Chmod(filepath.Join(dst, "node"), 0o755)
+		},
 	},
 	{
 		Key: "runtime",
@@ -719,6 +693,22 @@ func componentKeys() string {
 	return strings.Join(keys, ", ")
 }
 
+// componentKeysDetailed returns the full component list for --help display,
+// including platform restrictions for components that are not cross-platform.
+// This is consumed by the --only flag usage string so help_renderer shows
+// every valid value with its platform note inline.
+func componentKeysDetailed() string {
+	var lines []string
+	for _, comp := range allComponents {
+		entry := comp.Key
+		if len(comp.Platforms) > 0 {
+			entry += " [" + strings.Join(comp.Platforms, ", ") + " only]"
+		}
+		lines = append(lines, entry)
+	}
+	return strings.Join(lines, ", ")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Command
 // ─────────────────────────────────────────────────────────────────────────────
@@ -761,7 +751,25 @@ it automatically runs the full deploy pipeline:
 		Example: `  metamorph rollout
   metamorph rollout --dry-run
   metamorph rollout --only brain
+  metamorph rollout --only nucleus
+  metamorph rollout --only sentinel
+  metamorph rollout --only metamorph
+  metamorph rollout --only host
+  metamorph rollout --only workspace
+  metamorph rollout --only setup
+  metamorph rollout --only sensor
+  metamorph rollout --only cortex
   metamorph rollout --only ionpump
+  metamorph rollout --only vsix
+  metamorph rollout --only bootstrap
+  metamorph rollout --only hooks
+  metamorph rollout --only config
+  metamorph rollout --only nssm
+  metamorph rollout --only ollama
+  metamorph rollout --only temporal
+  metamorph rollout --only node
+  metamorph rollout --only runtime
+  metamorph rollout --only chrome
   metamorph rollout --only ionpump --dry-run
   metamorph --json rollout --only nucleus`,
 
@@ -771,7 +779,7 @@ it automatically runs the full deploy pipeline:
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would be copied without making changes")
-	cmd.Flags().StringVar(&only, "only", "", "Deploy a single component instead of all ("+componentKeys()+")")
+	cmd.Flags().StringVar(&only, "only", "", "Deploy a single component instead of all. Valid values: "+componentKeysDetailed())
 
 	return cmd
 }

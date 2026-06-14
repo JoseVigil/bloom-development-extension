@@ -412,9 +412,13 @@ func getBloomNucleusBase() string {
 		}
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, "BloomNucleus")
-	default: // linux
+	default: // linux — XDG Base Directory spec
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "BloomNucleus")
+		xdgDataHome := os.Getenv("XDG_DATA_HOME")
+		if xdgDataHome == "" {
+			xdgDataHome = filepath.Join(home, ".local", "share")
+		}
+		return filepath.Join(xdgDataHome, "BloomNucleus")
 	}
 }
 

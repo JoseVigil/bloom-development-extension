@@ -213,6 +213,9 @@ async function installBrainService(win) {
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
 
+    logger.info('Cleaning up previous Brain Service instances...');
+    await cleanupOldServices();
+
     logger.info('Installing Brain LaunchAgent...');
     await installWindowsService();
 
@@ -237,6 +240,36 @@ async function installBrainService(win) {
   }
 }
 
+async function waitForTemporal(timeoutMs = 120000, intervalMs = 3000) {
+  const net = require('net');
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+
+  logger.info(`⏳ Waiting for Temporal on :7233 (timeout ${timeoutMs / 1000}s)...`);
+
+  while (Date.now() < deadline) {
+    attempt++;
+    const ready = await new Promise(resolve => {
+      const sock = net.createConnection({ host: '127.0.0.1', port: 7233 });
+      sock.setTimeout(2000);
+      sock.on('connect', () => { sock.destroy(); resolve(true); });
+      sock.on('error',   () => { sock.destroy(); resolve(false); });
+      sock.on('timeout', () => { sock.destroy(); resolve(false); });
+    });
+
+    if (ready) {
+      logger.success(`✅ Temporal ready after ${attempt} attempt(s)`);
+      return;
+    }
+
+    const elapsed = Math.round((Date.now() - deadline + timeoutMs) / 1000);
+    logger.info(`  Temporal not ready yet (${elapsed}s elapsed), retrying in ${intervalMs / 1000}s...`);
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+
+  throw new Error(`Temporal did not become ready within ${timeoutMs / 1000}s`);
+}
+
 async function seedMasterProfile(win) {
   const MILESTONE = 'nucleus_seed';
 
@@ -249,6 +282,10 @@ async function seedMasterProfile(win) {
   emitProgress(win, 12, 12, 'Seeding master profile...');
 
   try {
+    // Esperar que Temporal este efectivamente escuchando antes de intentar el seed.
+    // La certificacion no bloquea aunque Temporal no este listo; este polling si.
+    await waitForTemporal(120000, 3000);
+
     const { seedMasterProfile: _seed } = require('./installer_nucleus');
     const result = await _seed();
 
@@ -454,6 +491,11 @@ async function runChromiumInstall(win) {
 
   try {
     const result = await installChromium(win);
+
+    if (!result || !result.success) {
+      throw new Error(result?.error || 'Chromium installation failed with no error message');
+    }
+
     await nucleusManager.completeMilestone(MILESTONE, result);
     return result;
 
@@ -671,31 +713,23 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 3. NATIVE HOST + DLLs
+    // 3. NATIVE HOST (directorio completo — incluye exe + DLLs/libs)
     // ========================================================================
     logger.info('\n🔗 NATIVE HOST');
 
-    if (process.platform === 'win32') {
-      const hostExeSrc = path.join(paths.hostSource, 'bloom-host.exe');
-      results.nativeHost = await copyFileSafe(
-        hostExeSrc,
-        paths.hostBinary,
-        'bloom-host.exe'
-      );
-      results.hostDLLs = await copyDLLs(
-        paths.hostSource,
-        paths.hostDir,
-        'Host DLLs'
-      );
-    } else {
-      const hostExeSrc = path.join(paths.hostSource, 'bloom-host');
-      results.nativeHost = await copyFileSafe(
-        hostExeSrc,
-        paths.hostBinary,
-        'bloom-host'
-      );
-      await fs.chmod(paths.hostBinary, 0o755);
-      logger.success('✅ bloom-host deployed and marked executable');
+    // Asset map: copiar el directorio completo para capturar bloom-host(.exe) +
+    // todas las DLLs/libs necesarias en cualquier plataforma.
+    results.host = await copyDirectorySafe(
+      paths.hostSource,
+      paths.hostDir,
+      'Native Host'
+    );
+
+    if (process.platform !== 'win32') {
+      if (await fs.pathExists(paths.hostBinary)) {
+        await fs.chmod(paths.hostBinary, 0o755);
+        logger.success('✅ bloom-host marked executable');
+      }
     }
 
         // ========================================================================
@@ -802,87 +836,164 @@ async function deployAllSystemBinaries(win) {
     );
     
     // ========================================================================
+    // 6b. IONPUMP (Ion pipeline bootstrap — bin/cortex/ionpump/)
+    // ========================================================================
+    logger.info('\n⚡ IONPUMP');
+
+    // Asset map: installer/native/ionpump/ → bin/cortex/ionpump/ (DIR completo).
+    // Contiene bootstrap-ions.json + archivos *.ion (ZIPs).
+    // Conductor solo copia — metamorph ejecuta el pipeline de reconcile en runtime.
+    {
+      const ionpumpSrc  = path.join(paths.installerDir, 'native', 'ionpump');
+      const ionpumpDest = path.join(paths.cortexDir, 'ionpump');
+
+      if (await fs.pathExists(ionpumpSrc)) {
+        results.ionpump = await copyDirectorySafe(ionpumpSrc, ionpumpDest, 'Ionpump');
+      } else {
+        logger.warn(`⚠️ ionpump source not found at: ${ionpumpSrc}, skipping`);
+        results.ionpump = { success: false, skipped: true };
+      }
+    }
+
+    // ========================================================================
     // 7. OLLAMA (LLM Server)
     // ========================================================================
     logger.info('\n🦙 OLLAMA LLM SERVER');
-    
-    if (await fs.pathExists(paths.ollamaSource)) {
-      results.ollama = await copyDirectorySafe(
-        paths.ollamaSource,
-        paths.ollamaDir,
-        'Ollama'
-      );
-    } else {
-      logger.warn('⚠️ Ollama source not found, skipping');
-      results.ollama = { success: false, skipped: true };
+
+    // Asset map: FILE único — ollama(.exe) — sin subdirectorio de arch propio.
+    {
+      const ollamaExeName = process.platform === 'win32' ? 'ollama.exe' : 'ollama';
+      const ollamaExeSrc  = path.join(paths.ollamaSource, ollamaExeName);
+      const ollamaExeDest = path.join(paths.ollamaDir, ollamaExeName);
+
+      if (await fs.pathExists(ollamaExeSrc)) {
+        await fs.ensureDir(paths.ollamaDir);
+        results.ollama = await copyFileSafe(ollamaExeSrc, ollamaExeDest, ollamaExeName);
+        if (process.platform !== 'win32') await fs.chmod(ollamaExeDest, 0o755);
+      } else {
+        logger.warn(`⚠️ Ollama binary not found at: ${ollamaExeSrc}, skipping`);
+        results.ollama = { success: false, skipped: true };
+      }
     }
     
     // ========================================================================
     // 8. NODE.JS (para Nucleus dev-start y API services)
     // ========================================================================
     logger.info('\n🟢 NODE.JS RUNTIME');
-    
-    const nodeExeName  = process.platform === 'win32' ? 'node.exe' : 'node';
-    const nodeExeSrc   = path.join(paths.nodeSource, nodeExeName);
-    const nodeExeDest  = path.join(paths.nodeDir, nodeExeName);
 
-    if (await fs.pathExists(nodeExeSrc)) {
-      results.node = await copyFileSafe(nodeExeSrc, nodeExeDest, nodeExeName);
-      if (process.platform === 'darwin') await fs.chmod(nodeExeDest, 0o755);
-    } else {
-      logger.warn('⚠️ node binary source not found, skipping');
-      results.node = { success: false, skipped: true };
+    // Asset map: FILE único en todas las plataformas.
+    // El binario ya está extraído en el repo (el tar.xz original de Node.js
+    // fue procesado antes del commit — Conductor solo copia y aplica chmod).
+    //   win   → installer/node/win64/node.exe
+    //   darwin → installer/node/darwin/node
+    //   linux  → installer/node/linux_x64/node  (o linux_arm64/node)
+    {
+      const nodeExeName = process.platform === 'win32' ? 'node.exe' : 'node';
+      const nodeExeSrc  = path.join(paths.nodeSource, nodeExeName);
+      const nodeExeDest = path.join(paths.nodeDir, nodeExeName);
+
+      if (await fs.pathExists(nodeExeSrc)) {
+        await fs.ensureDir(paths.nodeDir);
+        results.node = await copyFileSafe(nodeExeSrc, nodeExeDest, nodeExeName);
+        if (process.platform !== 'win32') await fs.chmod(nodeExeDest, 0o755);
+      } else {
+        logger.warn(`⚠️ node binary not found at: ${nodeExeSrc}, skipping`);
+        results.node = { success: false, skipped: true };
+      }
     }
     
     // ========================================================================
     // 9. TEMPORAL (Workflow Orchestration Engine)
     // ========================================================================
     logger.info('\n⏱️ TEMPORAL WORKFLOW ENGINE');
-    
-    if (await fs.pathExists(paths.temporalSource)) {
-      results.temporal = await copyDirectorySafe(
-        paths.temporalSource,
-        paths.temporalDir,
-        'Temporal'
-      );
-    } else {
-      logger.warn('⚠️ Temporal source not found, skipping');
-      results.temporal = { success: false, skipped: true };
+
+    // Asset map: FILE único — temporal(.exe).
+    {
+      const temporalExeName = process.platform === 'win32' ? 'temporal.exe' : 'temporal';
+      const temporalExeSrc  = path.join(paths.temporalSource, temporalExeName);
+      const temporalExeDest = path.join(paths.temporalDir, temporalExeName);
+
+      if (await fs.pathExists(temporalExeSrc)) {
+        await fs.ensureDir(paths.temporalDir);
+        results.temporal = await copyFileSafe(temporalExeSrc, temporalExeDest, temporalExeName);
+        if (process.platform !== 'win32') await fs.chmod(temporalExeDest, 0o755);
+      } else {
+        logger.warn(`⚠️ Temporal binary not found at: ${temporalExeSrc}, skipping`);
+        results.temporal = { success: false, skipped: true };
+      }
     }
     
     // ========================================================================
     // 10. WORKSPACE (ex-Conductor)
     // ========================================================================
     logger.info('\n🖥️ WORKSPACE');
-    if (process.platform === 'darwin') {
-      // CRÍTICO: metamorph rollout siempre usa 'darwin_x64' como directorio
-      // fuente (ver rollout.go SourceFn workspace), independientemente de la
-      // arquitectura real de la máquina. El installer DEBE hacer lo mismo para
-      // que el path de origen sea idéntico al que usa metamorph.
-      // El binario real vive dentro del .app bundle; se copia sólo el ejecutable
-      // a bin/workspace/ — destino canónico: ~/Library/BloomNucleus/bin/workspace/bloom-workspace
-      const macSubdir  = process.arch === 'arm64' ? 'mac-arm64' : 'mac';
-      const binarySrc  = path.join(
-        paths.installerDir,
-        'native', 'bin', 'darwin_x64',   // igual que metamorph — siempre x64
-        'workspace', macSubdir,
-        'bloom-workspace.app', 'Contents', 'MacOS', 'bloom-workspace'
-      );
-      const destBin = path.join(paths.workspaceDir, 'bloom-workspace');
 
-      if (await fs.pathExists(binarySrc)) {
-        logger.info(`📦 Deploying bloom-workspace to bin/workspace/...`);
-        logger.debug(`   Source: ${binarySrc}`);
-        logger.debug(`   Dest:   ${destBin}`);
+    // Asset map:
+    //   darwin amd64 → DIR bloom-workspace.app (desde darwin_x64/workspace/mac/)
+    //   darwin arm64 → DIR bloom-workspace.app (desde darwin_x64/workspace/mac-arm64/)
+    //   windows      → FILE bloom-workspace.exe
+    //   linux        → DIR linux-unpacked/
+    //
+    // CRÍTICO Darwin: copiar el .app bundle COMPLETO (no solo el ejecutable interno)
+    // porque Electron necesita Frameworks/, Resources/, helpers, etc.
+    // Preservar symlinks (dereference: false) — Frameworks/ los usa intensivamente.
+    // metamorph rollout siempre usa 'darwin_x64' como directorio fuente.
+    if (process.platform === 'darwin') {
+      const macSubdir = process.arch === 'arm64' ? 'mac-arm64' : 'mac';
+      const appSrc    = path.join(
+        paths.installerDir,
+        'native', 'bin', 'darwin_x64',
+        'workspace', macSubdir,
+        'bloom-workspace.app'
+      );
+      const appDest   = path.join(paths.workspaceDir, 'bloom-workspace.app');
+
+      if (await fs.pathExists(appSrc)) {
+        logger.info(`📦 Deploying bloom-workspace.app bundle to bin/workspace/...`);
+        logger.debug(`   Source: ${appSrc}`);
+        logger.debug(`   Dest:   ${appDest}`);
         await fs.ensureDir(paths.workspaceDir);
         const { execSync } = require('child_process');
-        // Usar cp nativo para evitar conflictos del handler asar de Electron
-        execSync(`cp "${binarySrc}" "${destBin}"`, { stdio: 'ignore' });
-        await fs.chmod(destBin, 0o755);
-        logger.success(`✅ bloom-workspace deployed to bin/workspace/`);
-        results.workspace = { success: true, dest: destBin };
+        // cp -R preserva symlinks (Frameworks/); fs.copy con dereference:false
+        // falla en algunos setups de Electron porque el asar intercepta rutas .app.
+        execSync(`cp -R "${appSrc}" "${appDest}"`, { stdio: 'ignore' });
+        const innerBin = path.join(appDest, 'Contents', 'MacOS', 'bloom-workspace');
+        if (await fs.pathExists(innerBin)) await fs.chmod(innerBin, 0o755);
+        logger.success(`✅ bloom-workspace.app bundle deployed to bin/workspace/`);
+        results.workspace = { success: true, dest: appDest };
       } else {
-        logger.warn(`⚠️ bloom-workspace binary not found at: ${binarySrc}`);
+        logger.warn(`⚠️ bloom-workspace.app not found at: ${appSrc}`);
+        results.workspace = { success: false, skipped: true };
+      }
+    } else if (process.platform === 'linux') {
+      const linuxUnpacked = path.join(
+        paths.installerDir,
+        'native', 'bin',
+        process.arch === 'arm64' ? 'linux_arm64' : 'linux_x64',
+        'workspace', 'linux-unpacked'
+      );
+      if (await fs.pathExists(linuxUnpacked)) {
+        // CRÍTICO: fs-extra no puede copiar directorios que contienen app.asar porque
+        // Electron intercepta cualquier acceso a rutas /.../resources/app.asar y las
+        // trata como paquetes virtuales, lanzando "Invalid package".
+        // Solución: cp -r nativo bypasea el handler de Electron por completo.
+        logger.info(`📦 Deploying workspace linux-unpacked via cp -r (asar-safe)...`);
+        logger.debug(`   Source: ${linuxUnpacked}`);
+        logger.debug(`   Dest:   ${paths.workspaceDir}`);
+        await fs.ensureDir(paths.workspaceDir);
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFileAsync = promisify(execFile);
+        // cp -r src/. dest/ copia el contenido de linux-unpacked directamente en workspaceDir
+        await execFileAsync('cp', ['-r', linuxUnpacked + '/.', paths.workspaceDir], {
+          maxBuffer: 500 * 1024 * 1024
+        });
+        const workspaceBin = path.join(paths.workspaceDir, 'bloom-workspace');
+        if (await fs.pathExists(workspaceBin)) await fs.chmod(workspaceBin, 0o755);
+        logger.success('✅ workspace linux-unpacked deployed (asar-safe)');
+        results.workspace = { success: true, dest: paths.workspaceDir };
+      } else {
+        logger.warn(`⚠️ workspace linux-unpacked not found at: ${linuxUnpacked}`);
         results.workspace = { success: false, skipped: true };
       }
     } else {
@@ -906,17 +1017,20 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🌉 BLOOM SENSOR (SESSION AGENT)');
 
-    const sensorExeSrc = path.join(paths.sensorSource, SENSOR_EXE_NAME);
-
-    if (await fs.pathExists(sensorExeSrc)) {
-      results.sensor = await copyFileSafe(
-        sensorExeSrc,
-        paths.sensorExe,
-        SENSOR_EXE_NAME
+    // Asset map: copiar el directorio completo para incluir subdirectorios
+    // como help/ que el sensor necesita en runtime.
+    if (await fs.pathExists(paths.sensorSource)) {
+      results.sensor = await copyDirectorySafe(
+        paths.sensorSource,
+        paths.sensorDir,
+        'Bloom Sensor'
       );
-      if (process.platform === 'darwin') await fs.chmod(paths.sensorExe, 0o755);
+      if (process.platform !== 'win32' && await fs.pathExists(paths.sensorExe)) {
+        await fs.chmod(paths.sensorExe, 0o755);
+        logger.success('✅ bloom-sensor marked executable');
+      }
     } else {
-      logger.warn('⚠️ bloom-sensor binary not found, skipping');
+      logger.warn(`⚠️ Sensor source directory not found: ${paths.sensorSource}, skipping`);
       results.sensor = { success: false, skipped: true };
     }
 
@@ -925,18 +1039,66 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🔧 SETUP INSTALLER');
 
-    const setupExeSrc = path.join(paths.setupSource, SETUP_EXE_NAME);
-
-    if (await fs.pathExists(setupExeSrc)) {
-      results.setup = await copyFileSafe(
-        setupExeSrc,
-        paths.setupExe,
-        SETUP_EXE_NAME
+    // Asset map:
+    //   darwin → DIR bloom-setup.app bundle completo (darwin_x64/setup/mac[-arm64]/)
+    //   linux  → DIR linux-unpacked/ (ejecutable principal: bloom-nucleus-installer)
+    //   windows → FILE bloom-setup.exe
+    if (process.platform === 'darwin') {
+      const macSubdir = process.arch === 'arm64' ? 'mac-arm64' : 'mac';
+      const setupAppSrc  = path.join(
+        paths.installerDir,
+        'native', 'bin', 'darwin_x64',
+        'setup', macSubdir,
+        'bloom-setup.app'
       );
-      if (process.platform === 'darwin') await fs.chmod(paths.setupExe, 0o755);
+      const setupAppDest = path.join(paths.setupDir, 'bloom-setup.app');
+
+      if (await fs.pathExists(setupAppSrc)) {
+        await fs.ensureDir(paths.setupDir);
+        const { execSync } = require('child_process');
+        execSync(`cp -R "${setupAppSrc}" "${setupAppDest}"`, { stdio: 'ignore' });
+        const innerBin = path.join(setupAppDest, 'Contents', 'MacOS', 'bloom-setup');
+        if (await fs.pathExists(innerBin)) await fs.chmod(innerBin, 0o755);
+        logger.success('✅ bloom-setup.app bundle deployed to bin/setup/');
+        results.setup = { success: true, dest: setupAppDest };
+      } else {
+        logger.warn(`⚠️ bloom-setup.app not found at: ${setupAppSrc}`);
+        results.setup = { success: false, skipped: true };
+      }
+    } else if (process.platform === 'linux') {
+      const linuxUnpacked = path.join(
+        paths.installerDir,
+        'native', 'bin',
+        process.arch === 'arm64' ? 'linux_arm64' : 'linux_x64',
+        'setup', 'linux-unpacked'
+      );
+      if (await fs.pathExists(linuxUnpacked)) {
+        // Misma restricción que workspace: cp -r nativo para evitar "Invalid package" en app.asar
+        logger.info(`📦 Deploying setup linux-unpacked via cp -r (asar-safe)...`);
+        await fs.ensureDir(paths.setupDir);
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFileAsync = promisify(execFile);
+        await execFileAsync('cp', ['-r', linuxUnpacked + '/.', paths.setupDir], {
+          maxBuffer: 500 * 1024 * 1024
+        });
+        const setupMainBin = path.join(paths.setupDir, 'bloom-nucleus-installer');
+        if (await fs.pathExists(setupMainBin)) await fs.chmod(setupMainBin, 0o755);
+        logger.success('✅ setup linux-unpacked deployed (asar-safe)');
+        results.setup = { success: true, dest: paths.setupDir };
+      } else {
+        logger.warn(`⚠️ setup linux-unpacked not found at: ${linuxUnpacked}`);
+        results.setup = { success: false, skipped: true };
+      }
     } else {
-      logger.warn(`⚠️ ${SETUP_EXE_NAME} not found, skipping`);
-      results.setup = { success: false, skipped: true };
+      // Windows
+      const setupExeSrc = path.join(paths.setupSource, 'bloom-setup.exe');
+      if (await fs.pathExists(setupExeSrc)) {
+        results.setup = await copyFileSafe(setupExeSrc, paths.setupExe, 'bloom-setup.exe');
+      } else {
+        logger.warn('⚠️ bloom-setup.exe not found, skipping');
+        results.setup = { success: false, skipped: true };
+      }
     }
 
     // ========================================================================
@@ -944,29 +1106,17 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🪝 PYTHON HOOKS');
 
+    // Asset map: installer/native/hooks/ → hooks/ (DIR completo, sin filtros).
+    // Copiar todo — subdirectorios Y archivos sueltos en la raíz (scripts .py, etc.).
     if (await fs.pathExists(paths.hooksSource)) {
       if (await fs.pathExists(paths.hooksDir)) {
         await fs.remove(paths.hooksDir);
         logger.info('  Cleaned existing hooks directory');
       }
-      await fs.ensureDir(paths.hooksDir);
-
-      const entries = await fs.readdir(paths.hooksSource, { withFileTypes: true });
-      const hookFolders = entries.filter(e => e.isDirectory());
-
-      if (hookFolders.length === 0) {
-        logger.warn('⚠️ No hook folders found in source, skipping');
-        results.hooks = { success: false, skipped: true };
-      } else {
-        for (const folder of hookFolders) {
-          const folderSrc  = path.join(paths.hooksSource, folder.name);
-          const folderDest = path.join(paths.hooksDir, folder.name);
-          await fs.copy(folderSrc, folderDest, { overwrite: true });
-          logger.info(`  ✓ ${folder.name}`);
-        }
-        logger.success(`✅ Hooks deployed (${hookFolders.length} hooks)`);
-        results.hooks = { success: true };
-      }
+      await fs.copy(paths.hooksSource, paths.hooksDir, { overwrite: true });
+      const entries = await fs.readdir(paths.hooksDir, { withFileTypes: true });
+      logger.success(`✅ Hooks deployed (${entries.length} entries)`);
+      results.hooks = { success: true };
     } else {
       logger.warn('⚠️ Hooks source not found, skipping');
       results.hooks = { success: false, skipped: true };
@@ -1005,6 +1155,25 @@ async function deployAllSystemBinaries(win) {
     } else {
       logger.warn('⚠️ Bootstrap source not found, skipping');
       results.bootstrap = { success: false, skipped: true };
+    }
+
+    // ========================================================================
+    // 15b. CONFIG (config/ del repo → config/)
+    // ========================================================================
+    logger.info('\n📁 CONFIG DIRECTORY');
+
+    // Asset map: {repo}/config/ → {base}/config/ (DIR completo, todas las plataformas).
+    // El installer copia el directorio base de configuración del repo; los archivos
+    // de config individuales generados en runtime (profiles.json, etc.) se escriben
+    // después encima sin pisar la estructura base.
+    {
+      const configSrc = paths.configSource ?? path.join(paths.repoDir ?? paths.installerDir, '..', 'config');
+      if (await fs.pathExists(configSrc)) {
+        results.config = await copyDirectorySafe(configSrc, paths.configDir, 'Config');
+      } else {
+        logger.warn(`⚠️ config source not found at: ${configSrc}, skipping`);
+        results.config = { success: false, skipped: true };
+      }
     }
 
     await nucleusManager.setOriginPath(paths.nucleusSource);
@@ -1280,7 +1449,9 @@ async function deployBootstrapIonSites(win) {
       const deploy = spawn(
         paths.metamorphExe,
         ['ion-pump', 'reconcile', '--manifest', manifest, '--force-swap'],
-        { stdio: ['ignore', 'pipe', 'pipe'], cwd: paths.installerDir }
+        // cwd debe ser la raiz del repo para que metamorph resuelva los paths
+        // de los ZIPs relativos a ella (evita el path duplicado installer/installer/).
+        { stdio: ['ignore', 'pipe', 'pipe'], cwd: path.join(paths.installerDir, '..') }
       );
 
       let stderr = '';

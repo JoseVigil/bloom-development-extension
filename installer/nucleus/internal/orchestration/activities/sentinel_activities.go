@@ -299,8 +299,132 @@ func (a *SentinelActivities) StartOllama(ctx context.Context, input types.Ollama
 // ACTIVITY: SeedProfile
 // ═══════════════════════════════════════════════════════════════════════════
 
+// waitForBrainReady espera hasta que Brain esté listo para procesar comandos,
+// no solo que acepte conexiones TCP.
+//
+// El health check TCP (checkBrainService) es condición necesaria pero no
+// suficiente: Brain puede aceptar el socket mientras su event bus interno
+// todavía se está inicializando, causando que sentinel seed falle con
+// exit status 1 ("Brain server no está corriendo").
+//
+// Usa el protocolo length-prefixed 4-byte BigEndian del codebase: conecta,
+// envía REGISTER_CLI y espera REGISTER_ACK. Si Brain responde ACK, el event
+// bus está activo y sentinel seed puede operar.
+//
+// CONTEXTO INDEPENDIENTE: El temporalCtx se cancela cuando el nucleus
+// supervisor reinicia el worker con SIGINT durante el boot (señal de
+// interrupción normal, no un error). Usar context.Background() propio evita
+// que ese restart mate el wait. El temporalCtx solo se respeta para shutdown
+// real del workflow.
+//
+// heartbeatFn: llamar con activity.RecordHeartbeat para que Temporal sepa
+// que la activity sigue viva durante el wait.
+func waitForBrainReady(temporalCtx context.Context, timeout time.Duration, heartbeatFn func(string)) error {
+	const addr = "127.0.0.1:5678"
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Propagar cancelación explícita del workflow (shutdown real, no restart)
+	go func() {
+		select {
+		case <-temporalCtx.Done():
+			cancel()
+		case <-waitCtx.Done():
+		}
+	}()
+
+	for {
+		if waitCtx.Err() != nil {
+			if temporalCtx.Err() != nil {
+				return temporalCtx.Err()
+			}
+			return fmt.Errorf("brain not ready after %s", timeout)
+		}
+
+		if heartbeatFn != nil {
+			heartbeatFn("waiting_for_brain")
+		}
+
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err != nil {
+			select {
+			case <-waitCtx.Done():
+			case <-time.After(2 * time.Second):
+			}
+			continue
+		}
+
+		// TCP conectó — verificar con REGISTER_CLI → REGISTER_ACK
+		ready := func() bool {
+			defer conn.Close()
+			conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+			payload, _ := json.Marshal(map[string]interface{}{
+				"type":      "REGISTER_CLI",
+				"timestamp": time.Now().UnixNano(),
+				"data":      map[string]interface{}{"source": "nucleus_seed_probe"},
+			})
+			header := make([]byte, 4)
+			binary.BigEndian.PutUint32(header, uint32(len(payload)))
+			if _, err := conn.Write(header); err != nil {
+				return false
+			}
+			if _, err := conn.Write(payload); err != nil {
+				return false
+			}
+			respHeader := make([]byte, 4)
+			if _, err := io.ReadFull(conn, respHeader); err != nil {
+				return false
+			}
+			size := binary.BigEndian.Uint32(respHeader)
+			if size == 0 || size > 10*1024*1024 {
+				return false
+			}
+			buf := make([]byte, size)
+			if _, err := io.ReadFull(conn, buf); err != nil {
+				return false
+			}
+			var event struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(buf, &event); err != nil {
+				return false
+			}
+			return event.Type == "REGISTER_ACK"
+		}()
+
+		if ready {
+			return nil
+		}
+
+		select {
+		case <-waitCtx.Done():
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
 // SeedProfile activity para crear un nuevo perfil vía Sentinel
 func (a *SentinelActivities) SeedProfile(ctx context.Context, input types.SeedProfileInput) (types.SeedProfileResult, error) {
+	// Esperar que Brain esté genuinamente listo antes de invocar sentinel seed.
+	//
+	// Race condition documentada (Linux): el nucleus supervisor reinicia el worker
+	// con SIGINT durante el boot (~21s después del arranque). Ese restart cancela
+	// el temporalCtx de cualquier activity en vuelo. waitForBrainReady usa un
+	// contexto independiente para sobrevivir el restart y solo falla ante
+	// shutdown real del workflow.
+	//
+	// Heartbeat cada ~2s para que Temporal no cancele la activity por timeout.
+	if err := waitForBrainReady(ctx, 30*time.Second, func(detail string) {
+		activity.RecordHeartbeat(ctx, detail)
+	}); err != nil {
+		return types.SeedProfileResult{
+			Success: false,
+			Error:   fmt.Sprintf("brain not ready for seeding: %v", err),
+		}, fmt.Errorf("brain not ready for seeding: %w", err)
+	}
+
 	isMasterStr := "false"
 	if input.IsMaster {
 		isMasterStr = "true"

@@ -29,25 +29,28 @@ func InitPaths() (*Paths, error) {
 	binDir := filepath.Dir(sentinelDir)
 
 	// Resolve appDataDir cross-platform: BLOOM_APPDATA_DIR overrides everything.
-	// On Windows use LOCALAPPDATA; on macOS use ~/Library/BloomNucleus; on Linux ~/.bloom-nucleus.
+	// On Windows use LOCALAPPDATA; on macOS use ~/Library/BloomNucleus;
+	// on Linux use ~/.local/share/BloomNucleus (XDG Base Directory spec).
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
 		home, _ := os.UserHomeDir()
-		if runtime.GOOS == "windows" {
+		switch runtime.GOOS {
+		case "windows":
 			localAppData := os.Getenv("LOCALAPPDATA")
 			if localAppData == "" {
 				localAppData = filepath.Join(home, "AppData", "Local")
 			}
 			appDataDir = filepath.Join(localAppData, "BloomNucleus")
-		} else {
-			// macOS: ~/Library/BloomNucleus
-			// Linux: ~/.bloom-nucleus (fallback)
-			macOSPath := filepath.Join(home, "Library", "BloomNucleus")
-			if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
-				appDataDir = macOSPath
-			} else {
-				appDataDir = filepath.Join(home, ".bloom-nucleus")
+		case "darwin":
+			appDataDir = filepath.Join(home, "Library", "BloomNucleus")
+		default:
+			// Linux — XDG Base Directory spec: $XDG_DATA_HOME/BloomNucleus
+			// Falls back to ~/.local/share/BloomNucleus if XDG_DATA_HOME is not set.
+			xdgDataHome := os.Getenv("XDG_DATA_HOME")
+			if xdgDataHome == "" {
+				xdgDataHome = filepath.Join(home, ".local", "share")
 			}
+			appDataDir = filepath.Join(xdgDataHome, "BloomNucleus")
 		}
 	}
 
