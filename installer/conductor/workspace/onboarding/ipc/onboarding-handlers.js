@@ -77,9 +77,45 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
     }
   });
 
+  // ── HELPER: Poll hasta que el perfil esté conectado a Brain ────────────
+  // launch-discovery retorna ok cuando Brain confirma el spawn de Chrome,
+  // NO cuando Chrome completa el handshake de 3 fases y registra el host
+  // en profile_registry. Hay que esperar ese registro antes de llamar
+  // nucleus synapse onboarding, o Brain responde "Profile not connected"
+  // y SendOnboardingNavigateActivity falla por timeout.
+  // Ver BLOOM_ONBOARDING_WORKFLOW_SPEC_v2_0.md §2 prerequisito "Host conectado a Brain".
+  async function waitForProfileConnected(profileId, { timeoutMs = 30_000, intervalMs = 1_500 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    log.info(`[IPC] waitForProfileConnected — polling profile ${profileId} (timeout: ${timeoutMs}ms)`);
+    while (Date.now() < deadline) {
+      try {
+        const status = await execNucleus(
+          ['--json', 'synapse', 'status', profileId],
+          5_000
+        );
+        if (status?.connected === true || status?.state === 'CONNECTED') {
+          log.info(`[IPC] waitForProfileConnected — profile ${profileId} is connected`);
+          return true;
+        }
+        log.info(`[IPC] waitForProfileConnected — not yet connected (state: ${status?.state ?? 'unknown'}), retrying...`);
+      } catch (e) {
+        // Brain puede estar ocupado arrancando — reintentar silenciosamente
+        log.info(`[IPC] waitForProfileConnected — status check failed (${e.message}), retrying...`);
+      }
+      await new Promise(r => setTimeout(r, intervalMs));
+    }
+    log.warn(`[IPC] waitForProfileConnected — timeout after ${timeoutMs}ms, profile ${profileId} never connected`);
+    return false;
+  }
+
   // ── HANDLER: Enviar step de onboarding a Chrome ─────────────────────────
   // nucleus --json synapse onboarding <profileId> --step <step>
   // Retorna { success, profile_id, step, request_id, status: "routed" }
+  //
+  // IMPORTANTE: Espera a que el perfil esté conectado a Brain antes de llamar
+  // nucleus synapse onboarding. launch-discovery ok ≠ profile connected.
+  // Sin este gate, SendOnboardingNavigateActivity falla con routing timeout
+  // porque Brain no tiene profile_registry[profileId] todavía.
   ipcMain.handle('onboarding:navigate', async (event, { step, email, service }) => {
     log.info('[IPC] onboarding:navigate — step:', step);
 
@@ -105,11 +141,27 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       const profileId = nucleusData.master_profile;
       if (!profileId) throw new Error('master_profile not found');
 
+      // Gate: esperar a que el perfil esté conectado antes de navegar.
+      // Chrome necesita completar el handshake de 3 fases con Brain para que
+      // profile_registry[profileId] exista y el routing del mensaje funcione.
+      const connected = await waitForProfileConnected(profileId, {
+        timeoutMs: 30_000,
+        intervalMs: 1_500,
+      });
+
+      if (!connected) {
+        log.warn(`[IPC] onboarding:navigate — profile ${profileId} not connected after timeout, skipping nucleus call`);
+        // navigate es no-fatal: Chrome ya está abierto con el step correcto
+        // desde los flags --override-service / --override-step del launch.
+        persistStep(step);
+        return { success: true, step, status: 'skipped_not_connected' };
+      }
+
       // NOTA: nucleus synapse onboarding solo acepta --step. El flag --service no existe.
       // El routing al provider lo determina el step ID. Ver log: "unknown flag: --service"
       const result = await execNucleus(
         ['--json', 'synapse', 'onboarding', profileId, '--step', step],
-        10000
+        15_000
       );
 
       const success = result.success !== false && result.status === 'routed';
