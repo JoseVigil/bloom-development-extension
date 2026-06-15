@@ -128,6 +128,9 @@ body::after {
   flex-shrink: 0;
   transition: background 0.4s, box-shadow 0.4s, border-color 0.4s;
 }
+.step-node.established,
+.step-node.active { cursor: pointer; }
+
 .step-node.active .step-dot {
   background: var(--text-dim);
   border-color: var(--text-dim);
