@@ -448,15 +448,25 @@ class ProfileLauncher:
                     {"path": str(extension_path)}
                 )
 
+            engine_flags = spec.get('engine_flags', [])
+
+            extension_page_url = spec.get('target_url')
+            if not extension_page_url:
+                logger.warning("⚠️  target_url ausente en spec — IonPump no podrá navegar (§2.2)")
+                raise LaunchError(
+                    "target_url requerido en spec para GitHub registration",
+                    self.ERROR_SPEC_INVALID,
+                    {"missing_field": "target_url"}
+                )
+
+            logger.info(f"   Extension page : {extension_page_url}  ← handshake → IonExecutor navega via DOM_NAVIGATE")
+
             args = [
                 str(exec_path),
                 f"--user-data-dir={user_data_path}",
                 f"--load-extension={extension_path}",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-sync",
-                "--disable-session-crashed-bubble",
-                github_token_url,
+                *engine_flags,
+                extension_page_url,  # extension page → background.js → Native Messaging → IonExecutor
             ]
 
             launch_id = spec.get('launch_id')
