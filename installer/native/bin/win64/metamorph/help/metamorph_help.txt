@@ -260,13 +260,31 @@
 
     Flags:
       --dry-run                  Preview what would be copied without making changes
-      --only                     Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, host, workspace, setup, sensor, cortex, ionpump, vsix, bootstrap, hooks, config, nssm, ollama, temporal, node, runtime, chrome)
+      --only                     Deploy a single component instead of all. Valid values: brain, nucleus, sentinel, metamorph, host, workspace, setup, sensor, cortex, ionpump, vsix, bootstrap [windows, darwin only], hooks, config, nssm [windows only], ollama, temporal, node, runtime, chrome
 
     Example:
         metamorph rollout
         metamorph rollout --dry-run
         metamorph rollout --only brain
+        metamorph rollout --only nucleus
+        metamorph rollout --only sentinel
+        metamorph rollout --only metamorph
+        metamorph rollout --only host
+        metamorph rollout --only workspace
+        metamorph rollout --only setup
+        metamorph rollout --only sensor
+        metamorph rollout --only cortex
         metamorph rollout --only ionpump
+        metamorph rollout --only vsix
+        metamorph rollout --only bootstrap
+        metamorph rollout --only hooks
+        metamorph rollout --only config
+        metamorph rollout --only nssm
+        metamorph rollout --only ollama
+        metamorph rollout --only temporal
+        metamorph rollout --only node
+        metamorph rollout --only runtime
+        metamorph rollout --only chrome
         metamorph rollout --only ionpump --dry-run
         metamorph --json rollout --only nucleus
 

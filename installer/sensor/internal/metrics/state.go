@@ -70,3 +70,62 @@ func (rb *RingBuffer) Since(d time.Duration) []events.HumanState {
 	}
 	return result
 }
+
+// ─── Detección de patrones cognitivos ────────────────────────────────────────
+
+// minWindowForPattern es la cantidad mínima de snapshots necesarios para
+// inferir un patrón cognitivo. Con menos muestras se retorna UNKNOWN.
+const minWindowForPattern = 3
+
+// DetectPattern analiza una ventana de snapshots y retorna el CognitiveState
+// dominante inferido del comportamiento de idle y energy_index.
+//
+// Lógica de clasificación (en orden de precedencia):
+//
+//  1. Si la mayoría de samples tiene sesión inactiva → ABSENT
+//  2. Si avgEnergy >= 0.80 y avgIdle < 5 min → FLOW
+//  3. Si avgEnergy >= 0.55 y avgIdle < 15 min → FOCUSED
+//  4. Si avgEnergy < 0.40 y avgIdle >= 10 min → FATIGUED
+//  5. Si avgEnergy < 0.55 y avgIdle >= 15 min → IDLE
+//  6. Cualquier otro caso → FOCUSED (fallback conservador)
+//
+// Sin ML, sin estado externo. Determinista y testeable.
+func DetectPattern(window []events.HumanState) events.CognitiveState {
+	if len(window) < minWindowForPattern {
+		return events.CognitiveStateUnknown
+	}
+
+	var sumEnergy float64
+	var sumIdleSeconds float64
+	inactiveSamples := 0
+
+	for _, s := range window {
+		sumEnergy += s.EnergyIndex
+		sumIdleSeconds += float64(s.IdleSeconds)
+		if !s.SessionActive {
+			inactiveSamples++
+		}
+	}
+
+	n := float64(len(window))
+	avgEnergy := sumEnergy / n
+	avgIdleMinutes := (sumIdleSeconds / n) / 60.0
+
+	// Mayoría inactiva → ausente
+	if float64(inactiveSamples)/n > 0.5 {
+		return events.CognitiveStateAbsent
+	}
+
+	switch {
+	case avgEnergy >= 0.80 && avgIdleMinutes < 5.0:
+		return events.CognitiveStateFlow
+	case avgEnergy >= 0.55 && avgIdleMinutes < 15.0:
+		return events.CognitiveStateFocused
+	case avgEnergy < 0.40 && avgIdleMinutes >= 10.0:
+		return events.CognitiveStateFatigued
+	case avgEnergy < 0.55 && avgIdleMinutes >= 15.0:
+		return events.CognitiveStateIdle
+	default:
+		return events.CognitiveStateFocused // fallback conservador
+	}
+}

@@ -42,7 +42,7 @@
       },
       {
         "name": "native",
-        "usage": "Inspect native/bin/<platform>/ build output instead of AppData",
+        "usage": "Inspect native/bin/\u003cplatform\u003e/ build output instead of AppData",
         "default": "false"
       },
       {
@@ -108,12 +108,12 @@
   },
   {
     "name": "rollback",
-    "use": "rollback <domain>",
+    "use": "rollback \u003cdomain\u003e",
     "short": "Rollback ion site to previous backup version",
     "category": "IONPUMP",
     "args": [
       {
-        "name": "<domain>",
+        "name": "\u003cdomain\u003e",
         "required": true
       }
     ],
@@ -165,7 +165,7 @@
   },
   {
     "name": "rollout",
-    "use": "rollout [--only <component>] [--dry-run]",
+    "use": "rollout [--only \u003ccomponent\u003e] [--dry-run]",
     "short": "Deploy built binaries from repo to AppData",
     "category": "MAINTENANCE",
     "args": [
@@ -174,7 +174,7 @@
         "required": true
       },
       {
-        "name": "<component>]",
+        "name": "\u003ccomponent\u003e]",
         "required": true
       },
       {
@@ -190,10 +190,10 @@
       },
       {
         "name": "only",
-        "usage": "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, host, workspace, setup, sensor, cortex, ionpump, vsix, bootstrap, hooks, config, nssm, ollama, temporal, node, runtime, chrome)"
+        "usage": "Deploy a single component instead of all. Valid values: brain, nucleus, sentinel, metamorph, host, workspace, setup, sensor, cortex, ionpump, vsix, bootstrap [windows, darwin only], hooks, config, nssm [windows only], ollama, temporal, node, runtime, chrome"
       }
     ],
-    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph rollout --only brain\n  metamorph rollout --only ionpump\n  metamorph rollout --only ionpump --dry-run\n  metamorph --json rollout --only nucleus",
+    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph rollout --only brain\n  metamorph rollout --only nucleus\n  metamorph rollout --only sentinel\n  metamorph rollout --only metamorph\n  metamorph rollout --only host\n  metamorph rollout --only workspace\n  metamorph rollout --only setup\n  metamorph rollout --only sensor\n  metamorph rollout --only cortex\n  metamorph rollout --only ionpump\n  metamorph rollout --only vsix\n  metamorph rollout --only bootstrap\n  metamorph rollout --only hooks\n  metamorph rollout --only config\n  metamorph rollout --only nssm\n  metamorph rollout --only ollama\n  metamorph rollout --only temporal\n  metamorph rollout --only node\n  metamorph rollout --only runtime\n  metamorph rollout --only chrome\n  metamorph rollout --only ionpump --dry-run\n  metamorph --json rollout --only nucleus",
     "json_response": "{\n  \"status\": \"success\",\n  \"dry_run\": false,\n  \"only\": \"\",\n  \"repo_root\": \"...\",\n  \"deployed\": [\n    {\"component\": \"Brain\",   \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 1},\n    {\"component\": \"Nucleus\", \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 1}\n  ],\n  \"skipped\": [],\n  \"errors\": []\n}"
   },
   {
@@ -212,7 +212,7 @@
     "options": [
       {
         "name": "native",
-        "usage": "Verify native/bin/<platform>/ build output instead of AppData (reads native_metamorph.json)",
+        "usage": "Verify native/bin/\u003cplatform\u003e/ build output instead of AppData (reads native_metamorph.json)",
         "default": "false"
       }
     ],

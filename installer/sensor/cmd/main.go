@@ -31,6 +31,11 @@ func main() {
 	startup.RegisterCommands(c)
 	registerExportCommand(c)
 
+	// Comandos cognitivos — viven en internal/cli
+	cli.RegisterDiagnosticCommands(c)
+	cli.RegisterReplayCommands(c)
+	cli.RegisterHCUCommands(c)
+
 	root := buildRootCommand(c)
 
 	if err := root.Execute(); err != nil {

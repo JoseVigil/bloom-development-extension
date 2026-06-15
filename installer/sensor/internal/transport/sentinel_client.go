@@ -94,6 +94,53 @@ func (c *Client) Close() {
 	c.connected = false
 }
 
+// PublishCognitiveState serializa y envía un CognitiveStateChangedEvent a Sentinel.
+// Usa el mismo protocolo de framing que Publish: 4 bytes big-endian + JSON.
+// Nunca bloquea más allá del write timeout. Si falla, señaliza reconexión.
+func (c *Client) PublishCognitiveState(evt events.CognitiveStateChangedEvent) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.connected || c.conn == nil {
+		return net.ErrClosed
+	}
+
+	// Envolver en envelope estándar para que Sentinel pueda rutear por Type
+	envelope := struct {
+		Type      string                        `json:"type"`
+		Source    string                        `json:"source"`
+		Timestamp interface{}                   `json:"timestamp"`
+		Payload   events.CognitiveStateChangedEvent `json:"payload"`
+	}{
+		Type:      events.EventCognitiveStateChanged,
+		Source:    evt.Source,
+		Timestamp: evt.Timestamp,
+		Payload:   evt,
+	}
+
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return err
+	}
+
+	header := make([]byte, 4)
+	binary.BigEndian.PutUint32(header, uint32(len(payload)))
+
+	c.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if _, err := c.conn.Write(append(header, payload...)); err != nil {
+		c.connected = false
+		c.conn.Close()
+		c.conn = nil
+		select {
+		case c.reconnectCh <- struct{}{}:
+		default:
+		}
+		return err
+	}
+
+	return nil
+}
+
 // reconnectLoop intenta reconectarse a Sentinel con backoff exponencial.
 // Corre siempre en background; nunca interfiere con el runtime principal.
 func (c *Client) reconnectLoop() {

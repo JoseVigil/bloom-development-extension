@@ -23,12 +23,14 @@ func DefaultSensorConfig() HelpConfig {
 			"RUNTIME",
 			"LIFECYCLE",
 			"TELEMETRY",
+			"COGNITION",
 		},
 		CategoryDescs: map[string]string{
 			"SYSTEM":    "Version, identity and Metamorph contract",
 			"RUNTIME":   "Start and inspect the human presence detection loop",
 			"LIFECYCLE": "Manage automatic startup registration (HKCU)",
 			"TELEMETRY": "Export and inspect collected presence snapshots",
+			"COGNITION": "Cognitive state inference, replay and Human Cognitive Units",
 		},
 	}
 }

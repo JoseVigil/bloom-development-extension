@@ -10,6 +10,7 @@ import (
 	"bloom-sensor/internal/cmdregistry"
 	"bloom-sensor/internal/core"
 	"bloom-sensor/internal/input"
+	"bloom-sensor/internal/metrics"
 	"bloom-sensor/pkg/events"
 	"github.com/spf13/cobra"
 )
@@ -19,9 +20,10 @@ func nowUTC() time.Time { return time.Now().UTC() }
 const defaultTickInterval = 60 * time.Second
 
 type Engine struct {
-	core         *core.Core
-	tickInterval time.Duration
-	loop         *Loop
+	core               *core.Core
+	tickInterval       time.Duration
+	loop               *Loop
+	lastCognitiveState events.CognitiveState // árbitro: detecta cambios entre ticks
 }
 
 func NewEngine(c *core.Core) *Engine {
@@ -65,15 +67,37 @@ func (e *Engine) onTick() {
 	switch {
 	case !state.SessionActive:
 		eventType = events.EventHumanSessionLocked
-	case state.IdleSeconds > 30*60:
-		eventType = events.EventHumanIdle
 	case state.IdleSeconds > 60*60:
 		eventType = events.EventHumanAbsent
+	case state.IdleSeconds > 30*60:
+		eventType = events.EventHumanIdle
 	}
 
 	c.PublishHumanState(eventType, state)
-	c.Logger.Info("tick seq=%d event=%s energy=%.2f idle=%ds",
-		state.Sequence, eventType, state.EnergyIndex, state.IdleSeconds)
+	c.Logger.Info("tick seq=%d event=%s energy=%.2f idle=%ds focus=%.2f cognitive=%s",
+		state.Sequence, eventType, state.EnergyIndex, state.IdleSeconds,
+		state.FocusScore, state.CognitiveState)
+
+	// Árbitro cognitivo: publicar COGNITIVE_STATE_CHANGED si el estado cambió.
+	// Se omite UNKNOWN para no generar ruido en los primeros ticks (buffer vacío).
+	if state.CognitiveState != events.CognitiveStateUnknown &&
+		state.CognitiveState != e.lastCognitiveState {
+		prev := e.lastCognitiveState
+		e.lastCognitiveState = state.CognitiveState
+
+		evt := events.CognitiveStateChangedEvent{
+			Timestamp:   state.Timestamp,
+			Source:      "bloom-sensor",
+			Previous:    prev,
+			Current:     state.CognitiveState,
+			FocusScore:  state.FocusScore,
+			EnergyIndex: state.EnergyIndex,
+			Sequence:    state.Sequence,
+		}
+		c.PublishCognitiveStateChanged(evt)
+		c.Logger.Info("cognitive state changed: %s → %s focus=%.2f",
+			prev, state.CognitiveState, state.FocusScore)
+	}
 }
 
 func (e *Engine) collectState() events.HumanState {
@@ -83,13 +107,21 @@ func (e *Engine) collectState() events.HumanState {
 	idleSeconds := input.IdleSeconds()
 	energy := c.MetricsEngine.ComputeEnergyIndex(idleSeconds, sessionActive)
 
+	// Ventana de los últimos 5 snapshots para focus y estado cognitivo.
+	// En el primer tick el buffer puede estar vacío — ambos valores quedan en zero/UNKNOWN.
+	window := c.Buffer.Last(5)
+	focusScore := c.MetricsEngine.ComputeFocusScore(window)
+	cognitiveState := metrics.DetectPattern(window)
+
 	state := events.HumanState{
-		Timestamp:     nowUTC(),
-		SessionActive: sessionActive,
-		SessionLocked: !sessionActive,
-		IdleSeconds:   idleSeconds,
-		EnergyIndex:   energy,
-		Sequence:      seq,
+		Timestamp:      nowUTC(),
+		SessionActive:  sessionActive,
+		SessionLocked:  !sessionActive,
+		IdleSeconds:    idleSeconds,
+		EnergyIndex:    energy,
+		FocusScore:     focusScore,
+		CognitiveState: cognitiveState,
+		Sequence:       seq,
 	}
 	*c.CurrentState = state
 	return state
