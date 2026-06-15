@@ -708,10 +708,12 @@ roamtouch
 genes
 https://claude.ai/chat/fbf851a9-2c62-4da3-84b1-cf6511e0652c
 
-
 Resolución de paths y componentes en Metamorph
 cognituum
 https://claude.ai/chat/9cd58249-5992-4604-8631-61515e53bca5
 bloomaut
 https://claude.ai/chat/fcd7c8c3-c277-4251-a5ba-219931177e36
 
+BSIP vs Open Knowledge Format
+noti gmail
+https://claude.ai/chat/97d23580-b023-483a-aeee-665c45911d6b
