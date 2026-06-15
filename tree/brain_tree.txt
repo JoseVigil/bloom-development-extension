@@ -33,6 +33,7 @@ bloom-development-extension/
     │       └── telemetry_helper.py
     ├── build_number.darwin.txt
     ├── build_number.effective.txt
+    ├── build_number.linux.txt
     ├── build_number.txt
     ├── build_number.windows.txt
     ├── cli/

@@ -7,9 +7,13 @@ import shutil
 import json
 from typing import List, Dict, Any, Optional
 from brain.shared.paths import Paths
+from brain.shared.logger import get_logger
 from brain.core.profile.profile_create import ProfileCreator
 from brain.core.profile.profile_launcher import ProfileLauncher
 from brain.core.profile.profile_accounts import ProfileAccountManager
+from brain.core.ionpump.ionpump_manager import IonPumpManager
+
+logger = get_logger(__name__)
 
 
 class ProfileManager:
@@ -18,12 +22,56 @@ class ProfileManager:
     Delegates specialized tasks to Creator, Launcher, and AccountManager.
     """
 
-    def __init__(self):
-        """Initialize Paths and specialized sub-managers."""
+    def __init__(self, ion_pump_manager=None):
+        """
+        Initialize Paths and specialized sub-managers.
+
+        Args:
+            ion_pump_manager: IonPumpManager instance (opcional).
+                              Se pasa a ProfileLauncher para que los lanzamientos
+                              basados en dominio (e.g. GitHub registration) obtengan
+                              la URL de entrada desde el ion en lugar de hardcodearla.
+                              Cumple §2.2 del IONPUMP MASTER SPEC.
+                              Si None, se construye internamente usando las rutas
+                              resueltas por el singleton de Paths.
+        """
         self.paths = Paths()
+
+        if ion_pump_manager is None:
+            ion_pump_manager = self._build_ion_pump_manager()
+
         self.creator = ProfileCreator(self.paths)
-        self.launcher = ProfileLauncher(self.paths, None)
+        self.launcher = ProfileLauncher(self.paths, None, ion_pump_manager=ion_pump_manager)
         self.accounts = ProfileAccountManager(self.paths)
+
+    def _build_ion_pump_manager(self) -> Optional[IonPumpManager]:
+        """
+        Construye un IonPumpManager interno usando las rutas del singleton de Paths.
+
+        Returns:
+            IonPumpManager listo para usar, o None si la construcción falla.
+            En caso de fallo se emite un warning: ProfileLauncher usará su
+            fallback hardcodeado y la operación continuará degradada.
+        """
+        try:
+            manager = IonPumpManager(
+                ionsites_path=str(self.paths.ionsites_path),
+                run_dir=self.paths.run_dir,
+            )
+            logger.debug(
+                "✅ IonPumpManager construido internamente en ProfileManager "
+                "(ionsites=%s, run_dir=%s)",
+                self.paths.ionsites_path,
+                self.paths.run_dir,
+            )
+            return manager
+        except Exception as exc:
+            logger.warning(
+                "⚠️  ProfileManager: no se pudo construir IonPumpManager — "
+                "ProfileLauncher usará fallback de URL hardcodeada. Error: %s",
+                exc,
+            )
+            return None
 
     def list_profiles(self) -> List[Dict[str, Any]]:
         """

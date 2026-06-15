@@ -9,27 +9,27 @@
       "version": "1.0.0",
       "zip_path": "installer/native/ionpump/github.com.ion.zip",
       "download_url": "",
-      "sha256": "ec95d1c26dca5aba8343bac30edf96263f14f3b3259affce6b8983642c4c9f92",
+      "sha256": "c66c76f2045ef80123212131c6bfb2588810905201e9766d9410cc70c5607d2c",
       "files": [
         {
           "path": "actions/generate_pat.ion",
-          "sha256": "6917800505d3f9fd5b70761a9298a015dc35f2cabcd0487544c735f927b1bc31"
+          "sha256": "7ebbc811d349c9f1830998fe97590422b5079a803f00e161a0c280a4dc86dd2d"
         },
         {
           "path": "domain.manifest.json",
-          "sha256": "e0c5d5e06d312bc2ad50eb6b9942ea68d215ee832baa74d4d47a3e80fc8f0339"
+          "sha256": "29fe4bbfd75a2d1316b7f1a8bdc6451fe47dd11844dbe66bd9527241d1b9d938"
         },
         {
           "path": "pages/new_token_page.page.ion",
-          "sha256": "079a9bbe87245856bb965b117c86c0788ec3c86c80fb34922d691e38b4cdde83"
+          "sha256": "defd9fbe617f3624f597f858e8229f8d99e5eddbc24bc25f6a6b24149a32bb3d"
         },
         {
           "path": "pages/tokens_page.page.ion",
-          "sha256": "242b31ff11a9a56abc1a9f90bdd225e00612e317b62c5415d0e338025639b084"
+          "sha256": "946065517c858fc77cebd38b994090609509a32af6688f2fbffc237a2cd03091"
         },
         {
           "path": "shared/session_guard.ion",
-          "sha256": "0c0245cadf9624e3dec9131f4910fdb726c7c544b61e67493a2456992557beb1"
+          "sha256": "e6d0f22a64f39baa4301da4730a742098a6db361a663d143702eea95e81585ea"
         }
       ]
     }

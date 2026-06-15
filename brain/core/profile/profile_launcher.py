@@ -76,15 +76,24 @@ class ProfileLauncher:
     ERROR_PORT_IN_USE = "PORT_IN_USE"                       # Recuperable
     ERROR_LAUNCH_FAILED = "LAUNCH_FAILED"                   # Fatal
     
-    def __init__(self, paths, chrome_resolver):
+    def __init__(self, paths, chrome_resolver, ion_pump_manager=None):
         """
         Args:
-            paths: Paths instance
-            chrome_resolver: ChromeResolver instance (unused en spec-driven)
+            paths:            Paths instance
+            chrome_resolver:  ChromeResolver instance (unused en spec-driven)
+            ion_pump_manager: IonPumpManager instance (opcional).
+                              Si se provee, los lanzamientos basados en dominio
+                              (e.g. GitHub registration) obtienen la URL de
+                              entrada desde el ion en lugar de usarla hardcodeada.
+                              Cumple el constraint §2.2 del IONPUMP MASTER SPEC.
         """
         self.paths = paths
         self.resolver = chrome_resolver
-        logger.debug("ProfileLauncher inicializado (spec-driven only)")
+        self._ion_pump = ion_pump_manager
+        logger.debug(
+            "ProfileLauncher inicializado (spec-driven only) — "
+            "IonPump: %s", "disponible" if ion_pump_manager else "no inyectado"
+        )
 
     def cleanup_profile_locks(self) -> int:
         """
@@ -337,7 +346,9 @@ class ProfileLauncher:
 
         Diferencias respecto a _launch_human_registration (Google):
         ────────────────────────────────────────────────────────────
-        • URL destino: github.com/settings/tokens/new (con scopes pre-seteados)
+        • URL destino: obtenida desde el ion github.com/generate_pat via
+          IonPumpManager.get_ion_entry_url() — cumple §2.2 del IONPUMP MASTER SPEC.
+          Si IonPump no está disponible o el ion no existe, cae a fallback local.
         • No requiere bypass anti-bot (GitHub no bloquea por User-Agent/flags)
         • SÍ se permite agregar --remote-debugging-port si el spec lo indica,
           ya que GitHub no penaliza el fingerprint de Chrome como Google.
@@ -349,12 +360,48 @@ class ProfileLauncher:
         """
         logger.info("🐙 Ejecutando lanzamiento MODO HUMANO (GitHub Registration)")
 
-        # Scopes requeridos por Bloom: repo + read:org (igual que GithubAuthFlow.init())
-        GITHUB_TOKEN_URL = (
+        # ── RESOLUCIÓN DE URL DESDE EL ION ──────────────────────────────────
+        # §2.2: la URL vive en el ion, no aquí. Se consulta al IonPumpManager.
+        # context mínimo para resolver $CONTEXT.* en el navigate del ion:
+        _ION_CONTEXT = {
+            "required_scopes":    "repo,read:org",
+            "token_description":  "Bloom+Conductor",
+        }
+        # Fallback local — solo se usa si IonPump no está disponible o el ion
+        # no tiene step navigate. Es una violación §2.2 temporal que se loguea
+        # explícitamente como warning para que sea visible en los logs.
+        _FALLBACK_URL = (
             "https://github.com/settings/tokens/new"
             "?scopes=repo,read:org"
             "&description=Bloom+Conductor"
         )
+
+        github_token_url: Optional[str] = None
+
+        if self._ion_pump is not None:
+            github_token_url = self._ion_pump.get_ion_entry_url(
+                domain="github.com",
+                action_name="generate_pat",
+                context=_ION_CONTEXT,
+            )
+            if github_token_url:
+                logger.info("🧬 URL obtenida desde ion github.com/generate_pat")
+                logger.debug(f"   Ion URL: {github_token_url}")
+            else:
+                logger.warning(
+                    "⚠️  IonPump disponible pero no retornó URL para "
+                    "github.com/generate_pat — usando fallback (§2.2 violation)"
+                )
+        else:
+            logger.warning(
+                "⚠️  IonPumpManager no inyectado en ProfileLauncher — "
+                "usando URL hardcodeada (§2.2 violation). "
+                "Inyectar ion_pump_manager en ProfileLauncher.__init__ para cumplir la spec."
+            )
+
+        if github_token_url is None:
+            github_token_url = _FALLBACK_URL
+        # ── FIN RESOLUCIÓN DE URL ────────────────────────────────────────────
 
         try:
             engine_config = spec.get('engine', {})
@@ -385,7 +432,7 @@ class ProfileLauncher:
             logger.debug(f"   Executable: {exec_path}")
             logger.debug(f"   User Data:  {user_data_path}")
             logger.debug(f"   Extension:  {extension_path}")
-            logger.info (f"   Target URL: {GITHUB_TOKEN_URL}")
+            logger.info (f"   Target URL: {github_token_url}")
 
             if not exec_path.exists():
                 raise LaunchError(
@@ -409,7 +456,7 @@ class ProfileLauncher:
                 "--no-default-browser-check",
                 "--disable-sync",
                 "--disable-session-crashed-bubble",
-                GITHUB_TOKEN_URL,
+                github_token_url,
             ]
 
             launch_id = spec.get('launch_id')

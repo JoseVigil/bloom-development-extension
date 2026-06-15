@@ -75,17 +75,18 @@ class IonPumpReloadCommand(BaseCommand):
                         continue
 
                     try:
-                        # Invalidate cached recipe → force re-parse from disk
-                        manager._registry.invalidate(s)
-                        recipe = manager._loader.load_recipe(s)
-                        # Store back in registry
-                        manager._registry.set_recipe(s, recipe)
+                        # Load the site directory and update the registry
+                        site_dir = manager._loader._ionsites / s
+                        new_package = manager._loader.load_site(site_dir)
+                        manager._registry.register_package(site=s, package=new_package)
 
                         reloaded.append(
                             {
                                 "site": s,
-                                "version": recipe.version,
-                                "flows": len(recipe.flows),
+                                "version": new_package.manifest.version,
+                                "actions": len(new_package.manifest.actions),
+                                "pages":   len(new_package.manifest.pages),
+                                "shared":  len(new_package.manifest.shared),
                             }
                         )
                     except Exception as exc:
@@ -119,7 +120,8 @@ class IonPumpReloadCommand(BaseCommand):
 
         for r in reloaded:
             typer.echo(
-                f"✅ {r['site']} recargado — v{r['version']}, {r['flows']} flows"
+                f"✅ {r['site']} recargado — v{r['version']}, "
+                f"{r['actions']} actions, {r['pages']} pages, {r['shared']} shared"
             )
         for e in errors:
             typer.echo(f"❌ {e['site']}: {e['error']}", err=True)

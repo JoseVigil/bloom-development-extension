@@ -1,33 +1,26 @@
-# shared/session_guard.ion
-# Verifica que el usuario está autenticado en GitHub antes de ejecutar cualquier action.
-# Si no hay sesión activa, emite SESSION_REQUIRED y detiene la ejecución.
-# Usado por generate_pat.ion como prerequisito.
+fragment: "session_guard"
+description: "Verifica sesión activa en GitHub. Si no hay sesión, hace login con credenciales de Vault."
 
-version: 1.0.0
-site: github.com
-type: shared
-description: "Guard que verifica sesión activa en GitHub"
+steps:
+  - check:
+      condition: "page_matches"
+      pattern: "*/login*"
+      if_true:
+        - type:
+            element: "username_input"
+            on_page: "login_page"
+            text: "$CONTEXT.github_username"
+        - type:
+            element: "password_input"
+            on_page: "login_page"
+            text: "$CONTEXT.github_password"
+        - click:
+            element: "submit_button"
+            on_page: "login_page"
+        - wait_signal:
+            signal: "login_success"
+            on_page: "login_page"
+            timeout: 12000
 
-flows:
-  check_session:
-    description: "Verifica si hay sesión GitHub activa"
-    steps:
-      # El avatar del usuario aparece en el header cuando hay sesión.
-      # VERIFICAR SELECTOR: inspeccionar github.com logueado.
-      # Candidatos conocidos: "img.avatar", "[data-login]", ".AppHeader-user"
-      - check_present:
-          selector: "img.avatar[alt^='@']"   # TODO: verificar en GitHub actual
-          timeout: 3s
-          on_missing:
-            - emit:
-                event: "SESSION_REQUIRED"
-                payload:
-                  domain: "github.com"
-                  reason: "no_active_session"
-            - abort:
-                message: "GitHub session required"
-          on_found:
-            - emit:
-                event: "SESSION_OK"
-                payload:
-                  domain: "github.com"
+  - emit:
+      event: "session_guard_passed"

@@ -314,6 +314,105 @@ class IonPumpManager:
         return self._registry.get_package(site)
 
     # ------------------------------------------------------------------
+    # Ion URL resolution — constraint §2.2
+    # ------------------------------------------------------------------
+
+    def get_ion_entry_url(
+        self,
+        domain: str,
+        action_name: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """
+        Retorna la URL de entrada de un action leyéndola del ion.
+
+        Implementa el constraint §2.2 del IONPUMP MASTER SPEC: ningún
+        componente externo (profile_launcher, conductor, etc.) debe
+        contener URLs de un dominio que tenga un ion. La URL vive
+        exclusivamente en el ion y se obtiene via este método.
+
+        Busca el primer step de tipo ``navigate`` en el action indicado
+        y resuelve las variables ``$CONTEXT.*`` con el ``context`` recibido.
+        Si alguna variable queda sin resolver (falta en context) la URL se
+        retorna con el placeholder intacto — el caller decide si abortar o
+        usar la URL parcialmente resuelta.
+
+        Args:
+            domain:      Dominio del ion (e.g. "github.com").
+            action_name: Nombre del action (e.g. "generate_pat").
+            context:     Dict opcional con valores para resolver $CONTEXT.*.
+                         Si None se usa dict vacío (sin resolución de vars).
+
+        Returns:
+            URL resuelta como string, o None si:
+              - El dominio no está registrado.
+              - El action no existe en el manifest.
+              - El action no tiene ningún step ``navigate``.
+
+        Example::
+
+            url = ion_pump_manager.get_ion_entry_url(
+                domain="github.com",
+                action_name="generate_pat",
+                context={
+                    "required_scopes": "repo,read:org",
+                    "token_description": "Bloom+Conductor",
+                },
+            )
+            # → "https://github.com/settings/tokens/new?scopes=repo,read:org&description=Bloom+Conductor"
+        """
+        ctx = context or {}
+
+        # 1. Obtener paquete del registry (no hace lazy-load aquí — el site
+        #    debe estar registrado desde initialize())
+        package = self._registry.get_package(domain)
+        if package is None:
+            logger.warning(
+                "IonPump.get_ion_entry_url: domain '%s' not registered — "
+                "cannot resolve entry URL for action '%s'",
+                domain, action_name,
+            )
+            return None
+
+        # 2. Verificar que el action existe en el manifest
+        if action_name not in package.manifest.actions:
+            logger.warning(
+                "IonPump.get_ion_entry_url: action '%s' not declared in manifest "
+                "for domain '%s'",
+                action_name, domain,
+            )
+            return None
+
+        # 3. Lazy-load del action para leer sus steps
+        try:
+            recipe = self._loader._load_action(package, action_name)
+        except Exception as exc:
+            logger.warning(
+                "IonPump.get_ion_entry_url: cannot load action '%s/%s': %s",
+                domain, action_name, exc,
+            )
+            return None
+
+        # 4. Buscar el primer step navigate y retornar su URL resuelta
+        for step in recipe.steps:
+            if step.step_type == "navigate":
+                raw_url = step.params.get("url", "")
+                if not raw_url:
+                    continue
+                resolved = self._executor._resolve_value(raw_url, {}, ctx)
+                logger.debug(
+                    "IonPump.get_ion_entry_url: '%s/%s' → '%s'",
+                    domain, action_name, resolved,
+                )
+                return resolved
+
+        logger.warning(
+            "IonPump.get_ion_entry_url: action '%s/%s' has no 'navigate' step",
+            domain, action_name,
+        )
+        return None
+
+    # ------------------------------------------------------------------
     # Active flow tracking (para quiesce)
     # ------------------------------------------------------------------
 

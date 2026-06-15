@@ -3,21 +3,31 @@
   "domain": "github.com",
   "version": "1.0.0",
   "description": "GitHub PAT authentication flow for Bloom onboarding",
-  "entrypoint": "actions/generate_pat.ion",
-  "actions": [
-    "actions/generate_pat.ion"
+  "author": { "name": "Bloom Platform", "contact": "platform@bloom.io" },
+
+  "actions": {
+    "generate_pat": {
+      "file": "actions/generate_pat.ion",
+      "public": true
+    }
+  },
+
+  "pages": {
+    "tokens_page":    "pages/tokens_page.page.ion",
+    "new_token_page": "pages/new_token_page.page.ion"
+  },
+
+  "shared": {
+    "session_guard": "shared/session_guard.ion"
+  },
+
+  "entry_actions": ["generate_pat"],
+
+  "capabilities": [
+    "dom_navigate", "dom_type", "dom_click",
+    "dom_extract", "dom_watch", "dom_select",
+    "clipboard_read"
   ],
-  "pages": [
-    "pages/tokens_page.page.ion",
-    "pages/new_token_page.page.ion"
-  ],
-  "shared": [
-    "shared/session_guard.ion"
-  ],
-  "capabilities": ["auth", "clipboard_monitor"],
-  "requires_cortex_version": ">=1.2.0",
-  "triggers": {
-    "on_load": "bootstrap",
-    "on_pat_clipboard": "handle_pat_detected"
-  }
+
+  "requires_cortex_version": ">=1.2.0"
 }

@@ -76,6 +76,20 @@ class Paths:
         return self.workers_dir / "brain"
 
     # -------------------------------------------------------------------------
+    # IonPump directories
+    # -------------------------------------------------------------------------
+
+    @property
+    def ionsites_path(self) -> Path:
+        """ionsites/ — Ion site packages directory (scanned by IonLoader on bootstrap)."""
+        return self._base_dir / "ionsites"
+
+    @property
+    def run_dir(self) -> Path:
+        """run/ — Runtime sockets and PID files (used by IonPumpIPCClient)."""
+        return self._base_dir / "run"
+
+    # -------------------------------------------------------------------------
     # Config files
     # -------------------------------------------------------------------------
 
@@ -234,7 +248,7 @@ class Paths:
             logger.info(f"🔍 [PATHS] Ejecutable: {exe_path}")
             logger.info(f"🔍 [PATHS] BASE CALCULADA: {base}")
 
-            for dirname in ['bin', 'config', 'profiles', 'workers', 'logs']:
+            for dirname in ['bin', 'config', 'profiles', 'workers', 'logs', 'ionsites', 'run']:
                 (base / dirname).mkdir(parents=True, exist_ok=True)
 
             return base
@@ -261,4 +275,7 @@ class Paths:
 
         logger.info(f"🔧 [PATHS] Modo Desarrollo: {base}")
         base.mkdir(parents=True, exist_ok=True)
+        # Crear subdirectorios de IonPump en modo desarrollo también
+        (base / "ionsites").mkdir(parents=True, exist_ok=True)
+        (base / "run").mkdir(parents=True, exist_ok=True)
         return base

@@ -1,0 +1,233 @@
+================================================================================
+BLOOM .BL FRONTMATTER SPECIFICATION
+OKF-inspired · Bloom v5.0
+================================================================================
+
+CONTEXTO
+--------
+Los archivos .bl (Bloom Language = markdown gobernado) son la representación
+legible de instrucciones, reglas, estrategias y bots dentro del ecosistema Bloom.
+
+El frontmatter YAML al inicio de cada .bl sirve como contrato mínimo de
+descubrimiento COMPLEMENTARIO al vector store (ChromaDB). No reemplaza ni
+compite con los embeddings — es la capa de metadatos estructurados que permite:
+
+  1. Filtrado rápido por campo antes de ir al vector store
+  2. Reconstrucción del árbol sin Brain ni Sentinel activos
+  3. Auditoría y governance humana sin herramientas especializadas
+  4. Pre-filtro semántico: el YAML reduce el espacio de búsqueda,
+     el vector confirma la relevancia dentro de ese espacio
+
+FILOSOFÍA DE DISEÑO
+-------------------
+- Mínimo necesario: no duplicar lo que ya está en el JSON asociado
+- Estable: campos que no cambian con cada ejecución del intent
+- Legible: un humano o cualquier agente puede parsear sin SDK
+- Complementario al vector: los tags y type son filtros pre-embedding,
+  no sustitutos del significado semántico completo
+
+================================================================================
+CAMPOS DEL FRONTMATTER
+================================================================================
+
+CAMPO           TIPO        REQUERIDO   DESCRIPCIÓN
+-----------     --------    ---------   ------------------------------------------
+type            enum        SI          Tipo de archivo .bl (ver enum abajo)
+scope           enum        SI          Nivel organizacional donde aplica
+bloom_version   string      SI          Versión del spec BTIPS (ej: "5.0")
+intent_stage    enum        NO          Stage del intent al que pertenece (si aplica)
+tags            string[]    NO          Etiquetas de filtrado semántico libre
+vector_ref      string      NO          ID de colección ChromaDB donde está indexado
+parent_mandate  string      NO          UUID del mandate que gobierna este archivo
+timestamp       ISO8601     SI          Fecha de creación o última modificación
+author          enum        NO          Quién lo generó (human | ai_bot | system)
+
+
+ENUM: type
+----------
+  dev_instruction     → Instrucciones para el bot dev
+  doc_instruction     → Instrucciones para el bot doc
+  dev_rule            → Reglas de ejecución dev
+  doc_rule            → Reglas de ejecución doc
+  ai_bot              → Definición de bot (genesis, bootstrap, sovereign, etc.)
+  strategy            → Estrategia de desarrollo o documentación del proyecto
+  governance          → Principios, patrones, decisiones de arquitectura
+  meta                → Archivos de descripción del árbol o del sistema
+
+ENUM: scope
+-----------
+  nucleus             → Aplica a toda la organización
+  project             → Aplica solo al proyecto que lo contiene
+  intent              → Aplica solo dentro del intent que lo contiene
+
+ENUM: intent_stage (solo si scope == intent)
+---------------------------------------------
+  briefing
+  execution
+  refinement
+  context
+  curation
+  inquiry
+  discovery
+  findings
+
+ENUM: author
+------------
+  human               → Escrito o editado manualmente
+  ai_bot              → Generado por un bot Bloom
+  system              → Generado automáticamente por Brain/Nucleus/Metamorph
+
+
+================================================================================
+EJEMPLOS POR TIPO DE ARCHIVO
+================================================================================
+
+── .core/.dev.instructions.bl ──────────────────────────────────────────────────
+
+---
+type: dev_instruction
+scope: project
+bloom_version: "5.0"
+tags: [instructions, dev, bot_context]
+vector_ref: "project-{name}-core"
+timestamp: 2026-06-13T00:00:00Z
+author: human
+---
+
+── .core/.ai_bot.genesis.bl ────────────────────────────────────────────────────
+
+---
+type: ai_bot
+scope: project
+bloom_version: "5.0"
+tags: [genesis, identity, bootstrap]
+vector_ref: "project-{name}-core"
+timestamp: 2026-06-13T00:00:00Z
+author: human
+---
+
+── .core/.dev.rules.bl ─────────────────────────────────────────────────────────
+
+---
+type: dev_rule
+scope: project
+bloom_version: "5.0"
+tags: [rules, constraints, dev_pipeline]
+vector_ref: "project-{name}-core"
+timestamp: 2026-06-13T00:00:00Z
+author: human
+---
+
+── .project/.dev.strategy.standards.bl ─────────────────────────────────────────
+
+---
+type: strategy
+scope: project
+bloom_version: "5.0"
+tags: [standards, dev_strategy, code_quality]
+vector_ref: "project-{name}-strategy"
+timestamp: 2026-06-13T00:00:00Z
+author: human
+---
+
+── nucleus/.core/.ai_bot.sovereign.bl ──────────────────────────────────────────
+
+---
+type: ai_bot
+scope: nucleus
+bloom_version: "5.0"
+tags: [sovereign, governance, nucleus_identity]
+vector_ref: "nucleus-{organization}-core"
+parent_mandate: null
+timestamp: 2026-06-13T00:00:00Z
+author: human
+---
+
+── nucleus/.governance/architecture/.principles.bl ─────────────────────────────
+
+---
+type: governance
+scope: nucleus
+bloom_version: "5.0"
+tags: [architecture, principles, ADR]
+vector_ref: "nucleus-{organization}-governance"
+timestamp: 2026-06-13T00:00:00Z
+author: human
+---
+
+
+================================================================================
+RELACIÓN CON EL VECTOR STORE
+================================================================================
+
+FLUJO DE INDEXACIÓN RECOMENDADO:
+─────────────────────────────────
+
+  .bl file leído por Brain
+        │
+        ▼
+  Parsear frontmatter YAML   ──→  metadatos estructurados (fields arriba)
+        │
+        ▼
+  Parsear cuerpo markdown    ──→  texto para embedding
+        │
+        ▼
+  ChromaDB.add(
+    documents = [cuerpo_markdown],
+    metadatas = [frontmatter_fields],   ← filtro pre-semántico
+    ids       = [path_relativo_al_bloom_root]
+  )
+
+QUERY CON PRE-FILTRO:
+─────────────────────
+
+  # Buscar solo instrucciones dev del proyecto X, sin tocar todos los vectores
+  collection.query(
+    query_texts = ["cómo manejar errores en el pipeline"],
+    where = {
+      "type": "dev_instruction",
+      "scope": "project"
+    },
+    n_results = 5
+  )
+
+  # Buscar todo el contexto governance del nucleus
+  collection.query(
+    query_texts = ["principios de arquitectura para microservicios"],
+    where = {
+      "type": {"$in": ["governance", "strategy"]},
+      "scope": "nucleus"
+    },
+    n_results = 3
+  )
+
+VENTAJA DEL MODELO DUAL (YAML + VECTOR):
+─────────────────────────────────────────
+  Sin YAML: el vector busca en TODO el corpus → más ruido, más costo
+  Con YAML: primero filtra por type/scope/tags → luego el vector
+            trabaja en un espacio reducido y relevante → más precisión,
+            menos tokens consumidos en el context window del bot
+
+
+================================================================================
+CONVENCIÓN DE UBICACIÓN DEL FRONTMATTER
+================================================================================
+
+  - SIEMPRE es el primer bloque del archivo .bl
+  - SIEMPRE delimitado por líneas --- (triple guión)
+  - El cuerpo markdown comienza DESPUÉS del segundo ---
+  - No hay contenido antes del frontmatter (ni títulos, ni comentarios)
+
+
+================================================================================
+NOTAS DE EVOLUCIÓN
+================================================================================
+
+  v5.0  → Spec inicial. Campos mínimos para indexación + vector_ref.
+  
+  PENDIENTE DE ANÁLISIS:
+  - Formato de exportación portátil de Mandates (bundle type protobuf-like)
+  - SDK o interfaz para consumo externo de intent packages sin Brain
+  - Relación entre parent_mandate en .bl y gene_id activo en dev_state.json
+
+================================================================================
