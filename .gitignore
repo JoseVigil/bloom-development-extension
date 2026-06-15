@@ -133,6 +133,8 @@ libs/
 brain/__build__.py
 brain/build_number.txt
 brain/build_number.effective.txt
+installer/conductor/setup/build_info.json
+installer/conductor/setup/version.json
 installer/bootstrap/VERSION
 installer/bootstrap/bootstrap.meta.json
 installer/cortex/build-cortex/build_number.effective.txt
@@ -141,6 +143,8 @@ installer/cortex/build-cortex/cortex.meta.json
 installer/host/build_info.h
 installer/host/build_number.effective.txt
 installer/host/build_number.txt
+installer/metamorph/internal/core/build_info.go
+installer/sentinel/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt
 installer/metamorph/scripts/build_number.txt
 installer/nucleus/scripts/build_number.effective.txt
@@ -153,6 +157,8 @@ installer/sentinel/scripts/build_number.txt
 brain/__build__.py
 brain/build_number.effective.txt
 brain/build_number.txt
+installer/conductor/setup/build_info.json
+installer/conductor/setup/version.json
 installer/bootstrap/VERSION
 installer/bootstrap/bootstrap.meta.json
 installer/cortex/build-cortex/build_number.effective.txt
@@ -161,6 +167,8 @@ installer/cortex/build-cortex/cortex.meta.json
 installer/host/build_info.h
 installer/host/build_number.effective.txt
 installer/host/build_number.txt
+installer/metamorph/internal/core/build_info.go
+installer/sentinel/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt
 installer/metamorph/scripts/build_number.txt
 installer/nucleus/scripts/build_number.effective.txt
@@ -182,6 +190,7 @@ installer/cortex/build-cortex/build_number.effective.txt
 installer/cortex/build-cortex/build_number.txt
 installer/cortex/build-cortex/cortex.meta.json
 installer/metamorph/internal/core/build_info.go
+installer/sentinel/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt
 installer/metamorph/scripts/build_number.txt
 installer/nucleus/scripts/build_number.effective.txt
