@@ -108,6 +108,59 @@ class ServerManager:
             return psutil.pid_exists(pid)
         except (ValueError, ImportError):
             return False
+
+    def get_status(self) -> dict:
+        """
+        Retorna estado del servicio con el wrapper que espera server.py.
+        Llamado por 'brain service status'.
+        """
+        running = self._is_running()
+        pid = None
+        if running and self.pid_file.exists():
+            try:
+                pid = int(self.pid_file.read_text().strip())
+            except (ValueError, OSError):
+                pass
+
+        return {
+            "status": "success",
+            "data": {
+                "running": running,
+                "pid": pid,
+                "host": self.host,
+                "port": self.port,
+                "active_clients": len(self.clients),
+                "profiles_connected": len(self.profile_registry),
+            }
+        }
+
+    def stop(self) -> dict:
+        """
+        Detiene el servicio enviando SIGTERM al PID registrado.
+        Llamado por 'brain service stop'.
+        """
+        import signal as _signal
+
+        if not self._is_running():
+            return {
+                "status": "success",
+                "data": {"reason": "not_running"}
+            }
+
+        try:
+            pid = int(self.pid_file.read_text().strip())
+            os.kill(pid, _signal.SIGTERM)
+            logger.info(f"🛑 SIGTERM enviado a PID {pid}")
+            return {
+                "status": "success",
+                "data": {"reason": "stopped", "pid": pid}
+            }
+        except (ValueError, OSError) as e:
+            logger.error(f"❌ stop() falló: {e}")
+            return {
+                "status": "error",
+                "data": {"reason": str(e)}
+            }
     
     def _get_sentinels(self):
         """Get list of CLI sentinel connections for event broadcasting"""

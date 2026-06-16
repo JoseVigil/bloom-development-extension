@@ -37,6 +37,7 @@ import json
 import logging
 import os
 import platform as _platform
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -470,8 +471,12 @@ def build_brain() -> StepResult:
     _increment_build_number("brain")
     brain_env = inject_build_number_env("brain")
 
-    # Garantizar que el directorio de output existe antes de compilar
+    # Limpiar output anterior antes de compilar para que PyInstaller no
+    # reutilice artefactos obsoletos (_internal/, módulos eliminados, etc.)
     brain_out = _DEV_BIN_BASE / "brain"
+    if brain_out.exists():
+        log(f"  🧹 Limpiando output anterior: {brain_out}")
+        shutil.rmtree(brain_out)
     brain_out.mkdir(parents=True, exist_ok=True)
 
     if IS_WINDOWS:

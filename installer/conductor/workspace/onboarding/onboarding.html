@@ -227,23 +227,30 @@ body::after {
   position: absolute;
   width: 100%; height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.7s ease;
+  scrollbar-width: none;
 }
+.screen::-webkit-scrollbar { display: none; }
 .screen.active { opacity: 1; pointer-events: all; }
 
 .screen-inner {
   width: 100%;
   max-width: 480px;
-  padding: 0 24px;
+  padding: 48px 24px 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 0;
+  /* centra verticalmente cuando el contenido es más corto que el viewport */
+  min-height: 100%;
+  justify-content: center;
 }
 
 /* ── TYPOGRAPHY ── */
@@ -950,6 +957,106 @@ body::after {
   to { opacity: 1; transform: translateY(0); }
 }
 .fade-up { animation: fadeUp 0.7s cubic-bezier(0.4,0,0.2,1) both; }
+
+/* ── STEPPER CURSOR ── */
+.step-node.established .step-node-row,
+.step-node.active .step-node-row {
+  cursor: pointer;
+}
+.step-node.pending .step-node-row {
+  cursor: default;
+}
+
+/* ── IDENTITY INSTRUCTION BLOCK ── */
+.identity-instruction {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+.instruction-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+}
+.step-num {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.instruction-step strong { color: var(--text-primary); font-weight: 400; }
+.instruction-step code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+/* ── POLL STATUS ── */
+.poll-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.poll-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  animation: cortex-blink 1.5s ease-in-out infinite;
+}
+.poll-status.confirmed { color: var(--accent); }
+.poll-status.confirmed .poll-dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: none;
+}
+
+/* ── NUCLEUS STEP LABELS ── */
+.nucleus-step-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  align-self: flex-start;
+  margin-bottom: 6px;
+  margin-top: 4px;
+}
+.folder-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  align-self: flex-start;
+  margin-top: -28px;
+  margin-bottom: 12px;
+}
 </style>
 </head>
 <body>
@@ -996,7 +1103,7 @@ body::after {
   <aside id="onboarding-sidebar">
     <div id="stepper">
       <div class="step-node" id="sn-identity" data-step="0">
-        <div class="step-node-row">
+        <div class="step-node-row" onclick="navigateToStep('identity')">
           <div class="step-dot"></div>
           <div class="step-label">Identity</div>
         </div>
@@ -1004,7 +1111,7 @@ body::after {
       </div>
       <div class="step-connector"></div>
       <div class="step-node" id="sn-vault" data-step="1">
-        <div class="step-node-row">
+        <div class="step-node-row" onclick="navigateToStep('vault')">
           <div class="step-dot"></div>
           <div class="step-label">Vault</div>
         </div>
@@ -1012,7 +1119,7 @@ body::after {
       </div>
       <div class="step-connector"></div>
       <div class="step-node" id="sn-nucleus" data-step="2">
-        <div class="step-node-row">
+        <div class="step-node-row" onclick="navigateToStep('nucleus')">
           <div class="step-dot"></div>
           <div class="step-label">Nucleus</div>
         </div>
@@ -1020,7 +1127,7 @@ body::after {
       </div>
       <div class="step-connector"></div>
       <div class="step-node" id="sn-project" data-step="3">
-        <div class="step-node-row">
+        <div class="step-node-row" onclick="navigateToStep('project')">
           <div class="step-dot"></div>
           <div class="step-label">Project</div>
         </div>
@@ -1028,7 +1135,7 @@ body::after {
       </div>
       <div class="step-connector"></div>
       <div class="step-node" id="sn-mandate" data-step="4">
-        <div class="step-node-row">
+        <div class="step-node-row" onclick="navigateToStep('mandate')">
           <div class="step-dot"></div>
           <div class="step-label">Mandate</div>
         </div>
@@ -1064,11 +1171,26 @@ body::after {
   <div class="screen" id="screen-identity">
     <div class="screen-inner">
       <div class="stage-label">Stage 1 — Identity</div>
-      <h2 class="stage-title">Establish your identity.</h2>
+      <h2 class="stage-title">Conectá tu cuenta<br>de GitHub.</h2>
 
-      <div class="identity-explain">
-        <span>Connect trusted accounts through your master Chromium profile.</span>
-        <button class="info-btn" onclick="openInfo('github')">i</button>
+      <p class="stage-body">Bloom necesita acceso a tus repositorios para funcionar.<br>Seguí los pasos en la ventana de Chrome que Bloom va a abrir.</p>
+
+      <div class="identity-instruction">
+        <div class="instruction-step">
+          <span class="step-num">1</span>
+          <span>En el Chrome que abrió Bloom, andá a
+            <strong>GitHub → Settings → Developer settings →
+            Personal access tokens → Tokens (classic)</strong>
+          </span>
+        </div>
+        <div class="instruction-step">
+          <span class="step-num">2</span>
+          <span>Creá un token con permisos: <code>repo</code> · <code>read:org</code> · <code>read:user</code></span>
+        </div>
+        <div class="instruction-step">
+          <span class="step-num">3</span>
+          <span>Pegá el token en el campo que aparece en Chrome. Bloom lo detecta automáticamente.</span>
+        </div>
       </div>
 
       <div class="account-icons">
@@ -1127,6 +1249,10 @@ body::after {
       </div>
 
       <button class="btn-primary" id="btn-continue-identity" style="min-width:200px;">Validate</button>
+      <div id="identity-poll-status" class="poll-status" style="display:none">
+        <div class="poll-dot"></div>
+        <span id="identity-poll-label">Esperando detección del token…</span>
+      </div>
     </div>
   </div>
 
@@ -1141,26 +1267,26 @@ body::after {
         </svg>
       </div>
       <div class="stage-label">Stage 2 — Vault</div>
-      <h2 class="stage-title">Sovereign Identity<br>Generated.</h2>
-      <p class="stage-body">Your authority has been anchored to this device through hardware encryption.<br><br>Credentials are secured by the browser vault. BTIPS never stores them.</p>
+      <h2 class="stage-title">Identidad anclada.</h2>
+      <p class="stage-body">Tu cuenta de GitHub quedó guardada de forma segura en el vault local. Bloom nunca sube tus credenciales a ningún servidor externo.</p>
       <div class="state-block" style="margin-bottom:40px;">
         <div class="state-line">
           <div class="state-dot"></div>
-          <span class="state-key">Identity</span>
-          <span class="state-val">Active</span>
+          <span class="state-key">Cuenta GitHub</span>
+          <span class="state-val" id="vault-username">—</span>
+        </div>
+        <div class="state-line">
+          <div class="state-dot"></div>
+          <span class="state-key">Org principal</span>
+          <span class="state-val" id="vault-org">—</span>
         </div>
         <div class="state-line">
           <div class="state-dot"></div>
           <span class="state-key">Vault</span>
-          <span class="state-val">Hardware encrypted</span>
-        </div>
-        <div class="state-line">
-          <div class="state-dot"></div>
-          <span class="state-key">Credentials</span>
-          <span class="state-val">Browser-secured — not stored by BTIPS</span>
+          <span class="state-val">activo · cifrado local</span>
         </div>
       </div>
-      <button class="btn-primary" onclick="goTo(3)">Continue</button>
+      <button class="btn-primary" onclick="goTo(3)">Configurar Nucleus →</button>
     </div>
   </div>
 
@@ -1174,10 +1300,11 @@ body::after {
         <div class="nucleus-core"></div>
       </div>
       <div class="stage-label">Stage 3 — Nucleus</div>
-      <h2 class="stage-title">Create your Nucleus.</h2>
-      <p class="stage-body" style="margin-bottom:32px;">The Nucleus is the governance layer of your system — the master repository and structural root of all projects.</p>
+      <h2 class="stage-title">Configurá el espacio<br>de trabajo.</h2>
+      <p class="stage-body" style="margin-bottom:32px;">Nucleus es el governance layer de Bloom. Necesita saber desde qué organización de GitHub vas a operar y dónde guardar los archivos de configuración en tu máquina.</p>
 
-      <div class="question-label">What is the name of your organization?</div>
+      <div class="nucleus-step-label">Paso 1 — Organización</div>
+      <div class="question-label">Elegí tu organización principal</div>
       <div class="select-list" id="org-list">
         <div class="select-item" onclick="selectOrg(this, 'personal')">
           <span>personal</span>
@@ -1193,13 +1320,14 @@ body::after {
         </div>
       </div>
 
-      <div class="question-label">Where do you want your Nucleus?</div>
+      <div class="nucleus-step-label">Paso 2 — Carpeta de trabajo</div>
+      <div class="question-label">Elegí dónde guardar los archivos de configuración</div>
       <div class="folder-picker" id="folder-picker" onclick="selectFolder()">
-        <span class="folder-picker-path" id="folder-path">~/Documents/systems/</span>
-        <span class="folder-picker-action">Select</span>
+        <span class="folder-picker-path" id="folder-path">Ninguna carpeta seleccionada</span>
+        <span class="folder-picker-action">Seleccionar</span>
       </div>
 
-      <button class="btn-primary" id="btn-init-nucleus" onclick="initNucleus()" disabled>Initialize Nucleus</button>
+      <button class="btn-primary" id="btn-init-nucleus" onclick="initNucleus()" disabled>Inicializar →</button>
     </div>
   </div>
 
@@ -1207,7 +1335,8 @@ body::after {
   <div class="screen" id="screen-nucleus-init">
     <div class="screen-inner">
       <div class="stage-label">Nucleus — Initializing</div>
-      <h2 class="stage-title" style="margin-bottom:32px;">Building the<br>governance layer.</h2>
+      <h2 class="stage-title" style="margin-bottom:8px;">Inicializando Nucleus…</h2>
+      <p class="stage-body" style="margin-bottom:32px;">Este proceso tarda entre 30 y 90 segundos.<br>No cerrés la ventana.</p>
       <div class="terminal" id="nucleus-terminal">
         <div class="terminal-line" id="tl-0">$ nucleus init --org btips-lab</div>
         <div class="terminal-line" id="tl-1">→ Creating repository structure...</div>
@@ -1223,15 +1352,15 @@ body::after {
   <div class="screen" id="screen-project">
     <div class="screen-inner">
       <div class="stage-label">Stage 4 — Project</div>
-      <h2 class="stage-title">Select your first project.</h2>
-      <p class="stage-body" style="margin-bottom:32px;">The system will create a Genesis Mandate from this project. This mandate becomes the first operational continuity of your workspace.</p>
+      <h2 class="stage-title">Elegí el proyecto<br>inicial.</h2>
+      <p class="stage-body" style="margin-bottom:24px;">Bloom va a crear un <strong style="color:var(--text-primary);font-weight:400;">Genesis Mandate</strong> para este repositorio. Un Genesis Mandate es el punto de partida del agente — define el contexto desde el que va a operar.</p>
 
-      <div class="question-label">Choose a repository from the organization</div>
+      <div class="question-label">Elegí un repositorio de la organización</div>
       <div class="project-grid" id="project-grid">
         <!-- Poblado dinámicamente por loadRepos() en onboarding.js -->
       </div>
 
-      <button class="btn-primary" id="btn-create-mandate" disabled>Create Mandate</button>
+      <button class="btn-primary" id="btn-create-mandate" disabled>Crear Mandate →</button>
     </div>
   </div>
 

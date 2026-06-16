@@ -166,6 +166,43 @@ ${PYTHON_BIN} -m pip install ${PIP_FLAGS} pyinstaller >> "${LOG_FILE}" 2>&1
 echo "✅ PyInstaller instalado"
 echo "✅ PyInstaller instalado" >> "${LOG_FILE}"
 
+OUTPUT_DIR="${PROJECT_ROOT}/installer/native/bin/${BIN_ARCH}/brain"
+
+# ───────────────────────────────────────────────────────────────
+# LIMPIEZA DE OUTPUTS ANTERIORES
+# Se eliminan antes de invocar PyInstaller para evitar que
+# artefactos obsoletos de _internal/ (módulos eliminados,
+# .pyc cacheados, etc.) queden mezclados con el build nuevo.
+#
+# Se limpian dos paths:
+#   1. Output primario  → installer/native/bin/<arch>/brain/
+#   2. Path legacy      → brain/dist/brain/  (fallback de verificación)
+#
+# build-all.py ya limpia el path primario desde Python antes de
+# invocar este script; la limpieza aquí actúa como red de seguridad
+# para builds directos (bash build-brain.sh sin build-all.py)
+# y para el dist/ legacy que build-all.py no toca.
+# ───────────────────────────────────────────────────────────────
+
+echo ""
+echo "Limpiando outputs anteriores..."
+echo "Limpiando outputs anteriores..." >> "${LOG_FILE}"
+
+# Path primario
+if [[ -d "${OUTPUT_DIR}" ]]; then
+    rm -rf "${OUTPUT_DIR}"
+    echo "  🧹 Eliminado: ${OUTPUT_DIR}"
+    echo "  🧹 Eliminado: ${OUTPUT_DIR}" >> "${LOG_FILE}"
+fi
+
+# Path legacy (dist/)
+LEGACY_DIST="${PROJECT_ROOT}/brain/dist/brain"
+if [[ -d "${LEGACY_DIST}" ]]; then
+    rm -rf "${LEGACY_DIST}"
+    echo "  🧹 Eliminado (legacy): ${LEGACY_DIST}"
+    echo "  🧹 Eliminado (legacy): ${LEGACY_DIST}" >> "${LOG_FILE}"
+fi
+
 # ───────────────────────────────────────────────────────────────
 # EJECUCIÓN DEL BUILD PRINCIPAL
 # Delegamos en brain/build_multiplatform/build.py, que a su vez
@@ -196,7 +233,6 @@ fi
 # y en el path legacy de dist/ como fallback.
 # ───────────────────────────────────────────────────────────────
 
-OUTPUT_DIR="${PROJECT_ROOT}/installer/native/bin/${BIN_ARCH}/brain"
 EXE_PATH=""
 
 for candidate in \

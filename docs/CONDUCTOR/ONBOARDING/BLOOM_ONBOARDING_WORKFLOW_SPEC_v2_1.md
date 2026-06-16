@@ -1,10 +1,10 @@
-# BLOOM — Onboarding Workflow Spec v2.0
+# BLOOM — Onboarding Workflow Spec v2.1
 ## `nucleus synapse onboarding` — Especificación de implementación
 
 > **Destinatario:** Claude instancia — implementación Go + Python + JavaScript  
-> **Versión anterior:** v1.0 (descartada — asumía `sentinelClient.SendMessage` inexistente)  
-> **Estado:** Arquitectura verificada en código fuente real  
-> **Fecha:** 2026-03-05
+> **Versión anterior:** v2.0 (2026-03-05)  
+> **Estado:** Arquitectura verificada en código fuente real · UX Conductor documentada  
+> **Fecha:** 2026-06-15
 
 ---
 
@@ -23,6 +23,48 @@ Este spec v2.0 está basado en lectura directa de:
 - `synapse_protocol.py` — confirma el manejo de mensajes en Brain
 
 **No se inventa ningún mecanismo. Todo lo que se propone existe hoy en el código.**
+
+---
+
+---
+
+## 0.5 Mapa del sistema — dos onboardings, dos capas
+
+Bloom tiene **dos flujos de onboarding independientes** que no deben confundirse:
+
+| Capa | Onboarding | Descripción | Spec de referencia |
+|---|---|---|---|
+| **Conductor (Electron)** | Onboarding del operador | GitHub token · Vault · Nucleus init · Genesis Mandate | `IMPL_PROMPT_ONBOARDING_UX_v1.md` |
+| **Synapse (Chrome)** | Onboarding de perfil | Google login · Gemini API · Provider connect | **Este documento** |
+
+**Relación entre capas:**
+- El onboarding de Conductor ocurre **una sola vez por instalación**. El operador conecta su cuenta GitHub, inicializa Nucleus y crea su primer mandate. Es el onboarding del usuario de Bloom.
+- El onboarding Synapse ocurre **una vez por perfil Chrome gestionado**. Conductor orquesta el flujo via `nucleus synapse onboarding` para conectar las cuentas del perfil (Google, Gemini, providers). Es el onboarding del agente.
+
+**El onboarding Conductor es prerequisito del onboarding Synapse.** Sin Conductor inicializado (Nucleus corriendo, Temporal activo, Worker arriba), los comandos `nucleus synapse *` no tienen donde ejecutarse.
+
+### Prerequisitos del stack completo antes de `nucleus synapse onboarding`
+
+```
+1. Conductor onboarding completo:
+   - GitHub autenticado (pollIdentity → github_auth: true)
+   - Vault inicializado
+   - Nucleus inicializado (nucleus init completado)
+   - Genesis Mandate creado
+
+2. Servicios corriendo:
+   - brain service start           → Brain TCP :5678
+   - nucleus temporal ensure       → Temporal server
+   - nucleus worker start -q ...   → Worker de Temporal
+   - nucleus synapse seed ...      → Perfil seeded en Temporal
+
+3. Perfil lanzado:
+   - nucleus synapse launch <profile_id> --mode discovery
+   - PROFILE_CONNECTED evento recibido de Brain
+```
+
+El onboarding de Conductor (capa 1) está documentado en `IMPL_PROMPT_ONBOARDING_UX_v1.md`.
+Este spec cubre exclusivamente la capa 2 (Synapse/Chrome).
 
 ---
 
@@ -967,16 +1009,14 @@ en una instancia separada:
 - Vault integration — cómo se guardan las keys registradas
 - Multi-session — qué pasa si se lanza el mismo profile_id dos veces simultáneamente
 - `sentinel listen` — si existe un mecanismo de polling para eventos de Brain
+- **Onboarding de Conductor (Electron)** — pantallas, copy, stepper, debug panel, IPC handlers → ver `IMPL_PROMPT_ONBOARDING_UX_v1.md`
 
 ---
 
-**Versión:** 2.0  
-**Fecha:** 2026-03-05  
+**Versión:** 2.1  
+**Fecha:** 2026-06-15  
 **Estado:** Listo para implementación  
-**Cambios vs v1.0:**
-- Eliminada referencia a `sentinelClient.SendMessage` (no existe)  
-- Arquitectura verificada en `bloom-host.cpp`, `server_manager.py`, `sentinel_activities.go`  
-- Agregado nuevo subcomando `sentinel send` (eslabón faltante)  
-- Framing TCP BigEndian documentado explícitamente  
-- Casos borde documentados con comportamiento verificado en código  
-- Checklist separado por componente
+**Cambios vs v2.0:**
+- Agregada sección §0.5 — Mapa del sistema con los dos onboardings diferenciados  
+- Documentada relación y prerequisitos entre Conductor onboarding y Synapse onboarding  
+- Sección §13 expandida con referencia a `IMPL_PROMPT_ONBOARDING_UX_v1.md`

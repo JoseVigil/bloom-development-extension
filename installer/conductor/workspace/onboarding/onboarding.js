@@ -95,6 +95,15 @@ let identityPollTimer   = null;
 let identityTimeoutId   = null;
 let userEmail           = null;
 
+// Variables de estado para copy dinámico (§7 del spec)
+const state = {
+  githubUsername: null,  // @username detectado en pollIdentity
+  githubOrg:      null,  // org principal detectada
+  selectedOrg:    null,  // org elegida en dropdown
+  selectedFolder: null,  // path local elegido
+  selectedRepo:   null,  // { name, full_name, private }
+};
+
 // ── STEPPER API ────────────────────────────────────────────────────────────
 // Mapa de nombre de nodo → índice del .step-node en el sidebar
 const STEPPER_NODES = { identity: 0, vault: 1, nucleus: 2, project: 3, mandate: 4 };
@@ -118,6 +127,29 @@ const STEPPER_MAP = {
   6: 'mandate',
   7: 'mandate'
 };
+
+// Mapa nodo → screen de destino (nunca navegar a screens 4 ni 7 desde stepper)
+const STEPPER_NAV = {
+  identity: 1,
+  vault:    2,
+  nucleus:  3,
+  project:  5,
+  mandate:  6,
+};
+
+function navigateToStep(nodeName) {
+  const idx = STEPPER_NODES[nodeName];
+  if (idx === undefined) return;
+  const nodes = document.querySelectorAll('.step-node');
+  const node = nodes[idx];
+  if (!node) return;
+  // Solo navegar si está established (ya completado) o active (pantalla actual)
+  if (!node.classList.contains('established') && !node.classList.contains('active')) return;
+  const target = STEPPER_NAV[nodeName];
+  if (target === undefined) return;
+  log('info', `stepper click → navigateToStep(${nodeName}) → goTo(${target})`);
+  goTo(target);
+}
 
 function setStepperActive(nodeName) {
   const idx = STEPPER_NODES[nodeName];
@@ -279,9 +311,11 @@ async function kickoffDiscovery() {
     );
   }, 3 * 60 * 1000);
 
-  // Fase 4: poll cada 3 segundos
+  // Fase 4: mostrar el indicador de poll y arrancar polling cada 3 segundos
   // Fix 3: era result.accounts[name] — ese campo no existe.
   // El handler devuelve result.steps con IDs del JSON (github_auth, google_auth…)
+  document.getElementById('identity-poll-status').style.display = 'flex';
+
   identityPollTimer = setInterval(async () => {
     const pollResult = await window.onboarding.pollIdentity();
     if (!pollResult.success) return;
@@ -290,6 +324,24 @@ async function kickoffDiscovery() {
       activeAccounts.add('github');
       document.getElementById('acc-github')?.classList.add('active');
       log('info', 'account confirmed: github');
+
+      // Capturar username/org para copy dinámico (§7 del spec)
+      if (pollResult.username) {
+        state.githubUsername = pollResult.username;
+        state.githubOrg      = pollResult.org || null;
+        // Actualizar vault screen con datos reales
+        const vaultUser = document.getElementById('vault-username');
+        const vaultOrg  = document.getElementById('vault-org');
+        if (vaultUser) vaultUser.textContent = '@' + pollResult.username;
+        if (vaultOrg)  vaultOrg.textContent  = pollResult.org || '—';
+      }
+
+      // Actualizar poll status a confirmado
+      const pollStatus = document.getElementById('identity-poll-status');
+      const pollLabel  = document.getElementById('identity-poll-label');
+      if (pollLabel)  pollLabel.textContent = '✓ Token detectado';
+      if (pollStatus) pollStatus.classList.add('confirmed');
+
       checkIdentityReady();
     }
   }, 3000);
@@ -349,6 +401,7 @@ function selectOrg(el, orgName) {
   document.querySelectorAll('#org-list .select-item').forEach(i => i.classList.remove('selected'));
   el.classList.add('selected');
   selectedOrg = orgName;
+  state.selectedOrg = orgName;
   checkNucleusReady();
 }
 
@@ -361,6 +414,7 @@ async function selectFolder() {
   document.getElementById('folder-picker')?.classList.add('selected');
   folderSelected     = true;
   selectedFolderPath = result.path;
+  state.selectedFolder = result.path;
   checkNucleusReady();
 }
 
@@ -461,6 +515,7 @@ function selectProject(el, repoObj) {
   el.classList.add('selected');
   selectedProjectEl = el;
   selectedProject   = repoObj;
+  state.selectedRepo = repoObj;
   const btn = document.getElementById('btn-create-mandate');
   if (btn) {
     btn.disabled = false;
@@ -503,8 +558,12 @@ async function createMandateAndContinue() {
 
 // ── SCREEN 6 — Milestone ───────────────────────────────────────────────────
 function runMilestoneSequence() {
-  document.getElementById('ambient')?.classList.add('milestone');
   const nodes = document.querySelectorAll('#milestone-nodes .m-node');
+  // Guard: si todos los nodos ya están visibles, no re-animar
+  const alreadyDone = Array.from(nodes).every(n => n.classList.contains('show'));
+  if (alreadyDone) return;
+
+  document.getElementById('ambient')?.classList.add('milestone');
   nodes.forEach((node, i) => {
     setTimeout(() => node.classList.add('show'), 200 + i * 180);
   });
@@ -584,9 +643,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // Screen 0 = entry, stepper vacío. Al navegar a screen 1 se activa Identity.
   // El sidebar ya es visible desde el inicio.
 
-  // Bind del botón Harness — el onclick en el HTML llama toggleDebugPanel()
+  // Bind del botón Debug — el onclick en el HTML llama toggleDebugPanel()
   // pero por seguridad también lo bindeamos acá para que funcione aunque
   // el atributo se pierda en algún rebuild del template.
   const debugBtn = document.getElementById('debug-toggle');
-  if (debugBtn) debugBtn.onclick = toggleDebugPanel;
+  if (debugBtn) {
+    debugBtn.onclick = toggleDebugPanel;
+    // Visible solo en desarrollo — oculto en builds empaquetados
+    const isDev = !!(window.__BLOOM_DEV__ ||
+                     window.location.href.includes('localhost') ||
+                     window.navigator.userAgent.includes('Electron'));
+    debugBtn.style.display = isDev ? 'flex' : 'none';
+  }
+
+  // Shortcut Ctrl+Shift+D (o Cmd+Shift+D en mac) — dev quality-of-life
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'D') {
+      e.preventDefault();
+      toggleDebugPanel();
+    }
+  });
 });

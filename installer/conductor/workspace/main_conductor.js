@@ -60,6 +60,95 @@ function execNucleus(args, timeoutMs = 15000) {
   });
 }
 
+// ── BOOT SERVICES ──────────────────────────────────────────────────────────
+// Llama a `nucleus dev-start` y espera a que todos los servicios estén listos.
+// - onboardingDone=false → flags mínimos: skip-control-plane + skip-vault
+// - onboardingDone=true  → boot completo
+//
+// CRÍTICO (Ubuntu/X11): hereda process.env completo para que DISPLAY,
+// DBUS_SESSION_BUS_ADDRESS y XDG_RUNTIME_DIR lleguen a Brain y a Chrome.
+// Sin esto, nucleus spawnado desde Electron (ej: .desktop / autostart)
+// arranca sin entorno gráfico y falla silenciosamente.
+//
+// Los logs de progreso de dev-start van a stderr (no contaminan stdout JSON).
+// stdout recibe únicamente el JSON final que parseamos aquí.
+function bootServices(onboardingDone) {
+  return new Promise((resolve) => {
+    const args = [
+      '--json', 'dev-start',
+      '--enable-harness-onboarding',   // siempre: bypasea Master role check
+    ];
+
+    if (!onboardingDone) {
+      args.push('--skip-control-plane'); // no hay proyecto todavía
+      args.push('--skip-vault');         // vault requiere proyecto inicializado
+    }
+
+    log.info('[BOOT] Spawning nucleus dev-start:', args.join(' '));
+
+    const child = spawn(NUCLEUS_EXE, args, {
+      env: { ...process.env }, // heredar DISPLAY, DBUS, XDG, HOME, PATH
+      windowsHide: true,
+      detached: false,         // Conductor es el proceso padre — si muere, mueren los hijos
+    });
+
+    let stdout = '';
+
+    child.stdout.on('data', d => { stdout += d.toString(); });
+
+    // Los logs de progreso de nucleus van a stderr — forwardearlos al logger
+    // de Conductor para que aparezcan en los devtools/log file del proceso main.
+    child.stderr.on('data', d => {
+      const lines = d.toString().split('\n').filter(l => l.trim());
+      for (const line of lines) log.info('[BOOT nucleus]', line);
+    });
+
+    // Timeout generoso: Temporal puede tardar en arrancar desde cero.
+    // 120s cubre el caso peor (Temporal cold start + Brain + Control Plane).
+    const timer = setTimeout(() => {
+      child.kill();
+      log.error('[BOOT] dev-start timeout after 120s');
+      resolve({ success: false, error: 'dev-start timeout after 120s' });
+    }, 120_000);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        log.error(`[BOOT] dev-start exited with code ${code}`);
+        resolve({ success: false, error: `dev-start exit code ${code}` });
+        return;
+      }
+      try {
+        // dev-start con --json escribe un único objeto JSON a stdout
+        const match = stdout.match(/(\{[\s\S]*\})/);
+        if (!match) {
+          log.warn('[BOOT] dev-start exited 0 but no JSON in stdout — assuming success');
+          resolve({ success: true });
+          return;
+        }
+        const result = JSON.parse(match[0]);
+        if (result.success === false) {
+          log.error('[BOOT] dev-start reported failure:', result.error, '| stage:', result.failed_stage);
+          resolve({ success: false, error: result.error, stage: result.failed_stage });
+          return;
+        }
+        log.info(`[BOOT] Services ready. Boot time: ${result.boot_time_seconds}s`);
+        resolve({ success: true, result });
+      } catch (e) {
+        log.error('[BOOT] Failed to parse dev-start JSON:', e.message, '| stdout:', stdout);
+        // Si el JSON falla pero el proceso salió 0, asumir éxito para no bloquear el UI.
+        resolve({ success: true, parseError: e.message });
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      log.error('[BOOT] Failed to spawn nucleus dev-start:', err.message);
+      resolve({ success: false, error: err.message });
+    });
+  });
+}
+
 // ── WINDOW FACTORIES ───────────────────────────────────────────────────────
 function createOnboardingWindow() {
   mainWindow = new BrowserWindow({
@@ -280,6 +369,33 @@ app.whenReady().then(async () => {
 
   const onboardingDone = nucleusData?.onboarding?.completed === true;
 
+  // ── ARRANQUE AUTOMÁTICO DE SERVICIOS ────────────────────────────────────
+  // Llama a nucleus dev-start antes de mostrar cualquier ventana.
+  // Si los servicios ya están corriendo (ej: segunda apertura), dev-start
+  // los detecta via TCP dial y retorna success sin re-spawnearlos.
+  // Un fallo de boot no bloquea el UI: mostramos la ventana con un warning
+  // para no dejar al usuario con una pantalla en negro sin explicación.
+  log.info('[BOOT] Starting services via nucleus dev-start...');
+  const bootResult = await bootServices(onboardingDone);
+
+  if (!bootResult.success) {
+    log.error('[BOOT] Service boot failed:', bootResult.error);
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Services Failed to Start',
+      message: 'Some Bloom services could not start automatically.',
+      detail: `Error: ${bootResult.error}${bootResult.stage ? `\nStage: ${bootResult.stage}` : ''}\n\nYou can continue and try to start services manually, or quit and check the logs.`,
+      buttons: ['Continue Anyway', 'Quit'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 1) {
+      app.quit(); return;
+    }
+    log.warn('[BOOT] User chose to continue despite boot failure');
+  }
+
+  // ── ABRIR VENTANA ────────────────────────────────────────────────────────
   if (onboardingDone) {
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:3000';
     createWorkspaceWindow(url);

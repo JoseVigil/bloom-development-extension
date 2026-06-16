@@ -3,6 +3,13 @@ Profile Launcher - Lógica aislada de lanzamiento de perfiles.
 Versión spec-driven pura: Solo acepta especificaciones JSON.
 Convention mode eliminado - deprecated desde v2.0.
 
+CHANGELOG v3.1:
+- Fix: DISPLAY detection via _detect_user_display() instead of hardcoded ':0' fallback.
+  Brain runs headless (no DISPLAY in its env). Previously the fallback ':0' was wrong
+  on systems where the interactive display is ':1' (Ubuntu/GNOME default).
+  Now detects the active X11 display at runtime by inspecting session processes and
+  /tmp/.X11-unix/. XAUTHORITY is also injected when missing.
+
 CHANGELOG v3.0:
 - Config file generation delegated to Sentinel (Go)
 - Brain now ONLY starts Chrome process with provided args
@@ -50,7 +57,73 @@ else:
 logger = get_logger("brain.profile.launcher")
 
 
-class LaunchError(Exception):
+# ---------------------------------------------------------------------------
+# Detección de display X11 en runtime
+# ---------------------------------------------------------------------------
+
+def _detect_user_display() -> Optional[str]:
+    """
+    Detecta el DISPLAY activo del usuario en sistemas Linux/X11.
+
+    Brain corre como servicio headless — su entorno no tiene DISPLAY.
+    Esta función lo detecta en runtime para poder pasárselo a Chrome.
+
+    Estrategia 1 (preferida): Leer /proc/<pid>/environ de procesos de sesión
+    gráfica conocidos (gnome-session, Xorg, etc.).
+
+    Estrategia 2 (fallback): Enumerar sockets en /tmp/.X11-unix/ y devolver
+    el primero disponible (":0", ":1", etc.).
+
+    Returns:
+        String de display (ej. ":1") o None si no se pudo detectar.
+    """
+    import re as _re
+
+    SESSION_PROCS = [
+        'gnome-session', 'gnome-session-b',
+        'xfce4-session', 'startxfce4',
+        'kwin_x11', 'kwin_wayland', 'plasmashell',
+        'openbox', 'i3', 'sway',
+        'lxsession', 'mate-session',
+        'Xorg', 'X',
+    ]
+
+    # Estrategia 1: buscar DISPLAY en el environ de procesos de sesión
+    try:
+        result = subprocess.run(
+            ['pgrep', '-f', '|'.join(SESSION_PROCS)],
+            capture_output=True, text=True, timeout=2
+        )
+        for pid_str in result.stdout.strip().splitlines():
+            pid_str = pid_str.strip()
+            if not pid_str:
+                continue
+            try:
+                env_bytes = Path(f'/proc/{pid_str}/environ').read_bytes()
+                for item in env_bytes.split(b'\x00'):
+                    if item.startswith(b'DISPLAY='):
+                        display = item[len(b'DISPLAY='):].decode('utf-8', errors='ignore').strip()
+                        if display:
+                            logger.debug(f"  _detect_user_display: encontrado via PID {pid_str} → '{display}'")
+                            return display
+            except (PermissionError, FileNotFoundError, ProcessLookupError):
+                continue
+    except Exception as exc:
+        logger.debug(f"  _detect_user_display: pgrep falló ({exc}), pasando a estrategia 2")
+
+    # Estrategia 2: enumerar sockets X11
+    x11_dir = Path('/tmp/.X11-unix')
+    if x11_dir.exists():
+        sockets = sorted(x11_dir.glob('X*'))
+        for sock in sockets:
+            match = _re.match(r'^X(\d+)$', sock.name)
+            if match:
+                display = f":{match.group(1)}"
+                logger.debug(f"  _detect_user_display: encontrado via socket → '{display}'")
+                return display
+
+    logger.debug("  _detect_user_display: no se pudo detectar DISPLAY")
+    return None
     """Base exception para errores de lanzamiento."""
     def __init__(self, message: str, code: str, data: Optional[Dict[str, Any]] = None):
         super().__init__(message)
@@ -892,6 +965,62 @@ class ProfileLauncher:
                     )
             else:
                 # macOS / Linux: Popen directo (no tienen Session 0 isolation).
+                #
+                # Brain corre como servicio headless — su propio entorno NO tiene
+                # DISPLAY ni XAUTHORITY. Hay que inyectarlas explícitamente para
+                # que Chrome pueda conectarse al servidor X del usuario.
+                # Sin esto Chrome falla con:
+                #   "Missing X server or $DISPLAY" → "The platform failed to initialize. Exiting."
+                #
+                # Solución: detectar DISPLAY en runtime inspeccionando procesos de
+                # sesión gráfica en /proc/<pid>/environ o sockets en /tmp/.X11-unix/.
+                launch_env = os.environ.copy()
+
+                # ── DISPLAY ─────────────────────────────────────────────────
+                if not launch_env.get('DISPLAY'):
+                    detected = _detect_user_display()
+                    if detected:
+                        launch_env['DISPLAY'] = detected
+                        logger.info(f"🖥️  DISPLAY detectado en runtime: {detected}")
+                    else:
+                        # Último recurso: en Ubuntu/GNOME el display activo suele
+                        # ser ':1' (LightDM/GDM reservan ':0' para el greeter).
+                        launch_env['DISPLAY'] = ':1'
+                        logger.warning(
+                            "⚠️  DISPLAY no detectado en runtime — usando fallback ':1'. "
+                            "Si Chrome sigue fallando, verificar el display con: "
+                            "echo $DISPLAY (en la sesión gráfica del usuario)"
+                        )
+                else:
+                    logger.debug(f"🖥️  DISPLAY heredado del entorno: {launch_env['DISPLAY']}")
+
+                # ── XAUTHORITY ───────────────────────────────────────────────
+                # Necesaria para que Chrome pueda autenticarse contra el servidor X.
+                # Omitirla puede causar "No protocol specified" + crash de X11.
+                if not launch_env.get('XAUTHORITY'):
+                    uid = os.getuid()
+                    candidates = [
+                        Path(f"/run/user/{uid}/Xauthority"),       # systemd/logind
+                        Path(f"/run/user/{uid}/.Xauthority"),      # variante
+                        Path.home() / ".Xauthority",               # clásico
+                    ]
+                    for candidate in candidates:
+                        if candidate.exists():
+                            launch_env['XAUTHORITY'] = str(candidate)
+                            logger.debug(f"🔑 XAUTHORITY inyectado: {candidate}")
+                            break
+                    else:
+                        logger.debug("🔑 XAUTHORITY no encontrado en ubicaciones estándar — omitiendo")
+                else:
+                    logger.debug(f"🔑 XAUTHORITY heredado: {launch_env['XAUTHORITY']}")
+
+                logger.debug(
+                    f"🌍 Entorno gráfico para Chrome: "
+                    f"DISPLAY={launch_env.get('DISPLAY')} "
+                    f"XAUTHORITY={launch_env.get('XAUTHORITY', '<no set>')} "
+                    f"DBUS={launch_env.get('DBUS_SESSION_BUS_ADDRESS', '<no set>')}"
+                )
+
                 proc = subprocess.Popen(
                     args,
                     creationflags=0,
@@ -900,6 +1029,7 @@ class ProfileLauncher:
                     stdin=subprocess.DEVNULL,
                     close_fds=True,
                     shell=False,
+                    env=launch_env,
                 )
 
             # ======================================================

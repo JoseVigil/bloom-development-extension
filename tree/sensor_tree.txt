@@ -10,8 +10,11 @@ bloom-development-extension/
     │   │   └── buildinfo.go
     │   ├── cli/
     │   │   ├── config.go
+    │   │   ├── diagnostic.go
+    │   │   ├── hcu.go
     │   │   ├── help_renderer.go
-    │   │   └── registry.go
+    │   │   ├── registry.go
+    │   │   └── replay.go
     │   ├── cmdregistry/
     │   │   └── cmdregistry.go
     │   ├── core/
