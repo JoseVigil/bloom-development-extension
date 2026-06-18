@@ -1,0 +1,166 @@
+.project-{name}/
+│
+└── .bloom/
+    │
+    ├── .core/
+    │   ├── .doc.instructions.bl
+    │   ├── .dev.instructions.bl
+    │   ├── .dev.rules.bl
+    │   ├── .doc.rules.bl
+    │   ├── .ai_bot.genesis.bl
+    │   ├── .ai_bot.bootstrap.bl
+    │   └── .core.meta.json
+    │
+    ├── .intents/
+    │   ├── .dev/
+    │   │   └── .{intent-name-uuid3}/
+    │   │       ├── .dev_state.json         ← incluye mandate_id y gene_id activo
+    │   │       ├── .briefing/
+    │   │       │   ├── .briefing.json
+    │   │       │   ├── .context_dev_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .codebase.json
+    │   │       │       ├── .codebase_index.json
+    │   │       │       ├── .docbase.json
+    │   │       │       ├── .docbase_index.json
+    │   │       │       └── [optional files]
+    │   │       ├── .execution/
+    │   │       │   ├── .answers.json
+    │   │       │   ├── .context_dev_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .codebase.json
+    │   │       │       ├── .codebase_index.json
+    │   │       │       ├── .docbase.json
+    │   │       │       ├── .docbase_index.json
+    │   │       │       └── [optional files]
+    │   │       ├── .refinement/
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_dev_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .codebase.json
+    │   │       │           ├── .codebase_index.json
+    │   │       │           ├── .docbase.json
+    │   │       │           ├── .docbase_index.json
+    │   │       │           └── [optional files]
+    │   │       └── .pipeline/
+    │   │           ├── .briefing/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .execution/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           └── .refinement/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   │
+    │   ├── .gen/
+    │   │   └── .{intent-name-uuid3}/
+    │   │       │
+    │   │       ├── .gen_state.json         ← fase activa, mandate_id, flags, resumable
+    │   │       │
+    │   │       ├── .ingest/                ← FASE 1: recepción de archivos raw
+    │   │       │   ├── .ingest_manifest.json   ← inventario: path, tipo, hash, tamaño, estado
+    │   │       │   ├── .ingest_index.json      ← texto extraído por archivo (fuente de embedding_source_text)
+    │   │       │   └── .raw/
+    │   │       │       └── [archivos originales del usuario — copia inmutable]
+    │   │       │           └── (.pdf / .md / .docx / .xlsx / .py / etc.)
+    │   │       │
+    │   │       ├── .analysis/              ← FASE 2: clustering semántico (Brain + ChromaDB)
+    │   │       │   ├── .domain_proposal.json   ← clusters detectados, nombres sugeridos, archivos por grupo
+    │   │       │   ├── .domain_confirmed.json  ← dominios validados por el usuario, nombres finales
+    │   │       │   └── .chroma_refs.json       ← referencias a colección ChromaDB: chroma://proj/gen/domain_N
+    │   │       │
+    │   │       ├── .scaffold/              ← FASE 4: construcción del gene + docbase por dominio
+    │   │       │   └── .domain_{name}/     ← una carpeta por dominio confirmado (× N dominios)
+    │   │       │       ├── .gen.json               ← identidad del gene: nombre, función semántica, archivos, mandate_id
+    │   │       │       ├── .gen_state.json         ← estado del gene individual: hashes, embedding version, seeded/live
+    │   │       │       ├── .semantic_scaffold.json ← andamiaje cognitivo: conceptos, relaciones, preguntas abiertas
+    │   │       │       ├── .context_gen_plan.json  ← plan de análisis: ranking semántico de archivos del dominio
+    │   │       │       └── .files/
+    │   │       │           ├── .docbase.json        ← docbase inicial del dominio (input para intents .doc futuros)
+    │   │       │           ├── .docbase_index.json  ← índice de la docbase inicial
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       └── .pipeline/              ← estructura BISP idéntica a .dev y .doc
+    │   │           ├── .ingest/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .analysis/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           └── .scaffold_{domain}/     ← una entrada por dominio confirmado
+    │   │               ├── .payload.json
+    │   │               ├── .index.json
+    │   │               └── .response/
+    │   │                   ├── .raw_output.txt
+    │   │                   ├── .report.json
+    │   │                   └── .staging/
+    │   │
+    │   └── .doc/
+    │       └── .{intent-name-uuid3}/
+    │           ├── .doc_state.json
+    │           ├── .context/
+    │           │   ├── .doc.json
+    │           │   ├── .context_doc_plan.json
+    │           │   └── .files/
+    │           │       ├── .docbase.json
+    │           │       ├── .docbase_index.json
+    │           │       └── [optional files]
+    │           ├── .curation/
+    │           │   └── .turn_X/
+    │           │       ├── .doc.json
+    │           │       ├── .context_doc_plan.json
+    │           │       └── .files/
+    │           │           ├── .docbase.json
+    │           │           ├── .docbase_index.json
+    │           │           └── [optional files]
+    │           └── .pipeline/
+    │               ├── .context/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               └── .curation/
+    │                   └── .turn_X/
+    │                       ├── .payload.json
+    │                       ├── .index.json
+    │                       └── .response/
+    │                           ├── .raw_output.txt
+    │                           ├── .report.json
+    │                           └── .staging/
+    │
+    └── .project/
+        ├── .tree.bl
+        ├── .dev.strategy.standards.bl
+        ├── .dev.strategy.context.bl
+        ├── .doc.app.architecture.bl
+        ├── .doc.app.workflow.bl
+        ├── .doc.app.implementation.bl
+        ├── .ai_bot.dev.intent.bl
+        ├── .ai_bot.doc.intent.bl
+        ├── .ai_bot.gen.intent.bl          ← nuevo: instrucciones del bot para el intent gen
+        └── .project.meta.json
