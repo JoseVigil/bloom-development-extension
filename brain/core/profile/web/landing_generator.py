@@ -56,13 +56,13 @@ def _copy_static_assets(landing_dir: Path) -> None:
     
     # Only static files - NO config files, NO data loaders
     files_to_copy = [
-        "landing/data-loader.js",
-        "landing/index.html",
-        "landing/landing.js",
-        "landing/landing.synapse.config.js",
-        "landing/landingProtocol.js",
-        "landing/script.js",
-        "landing/styles.css"
+        "data-loader.js",
+        "index.html",
+        "landing.js",
+        "landing.synapse.config.js",
+        "landingProtocol.js",
+        "script.js",
+        "styles.css"
     ]
     
     copied = 0

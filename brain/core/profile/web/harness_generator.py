@@ -52,7 +52,6 @@ def _copy_static_assets(harness_dir: Path) -> None:
         "index.html",
         "harness.js",
         "ionpump_protocol.js",
-        "ion.manifest.json",
     ]
 
     copied = 0
