@@ -200,10 +200,6 @@ async function goTo(n) {
   if (activeNode) setStepperActive(activeNode);
 
   // Efectos por pantalla
-  if (n === 1) {
-    showCortex('Bloom necesita acceso a tus repositorios para funcionar.');
-    showCortex('Seguí los pasos en la ventana de Chrome que Bloom va a abrir.');
-  }
   if (n === 2) setStepperEstablished('identity');
   if (n === 3) { setStepperEstablished('vault'); loadOrgs(); }
   if (n === 4) runNucleusTerminal();
@@ -222,55 +218,16 @@ async function goTo(n) {
   }
 }
 
-// ── NOTIFICATION RAIL (Synapse) ──────────────────────────────────────────
-// Reemplaza al viejo cortex-bar (un solo div fijo que pisaba su propio
-// texto y quedaba flotando encima de todo, incluido el debug panel).
-// Ahora cada llamado a showCortex() AGREGA una notificación nueva arriba
-// de la lista; las anteriores quedan apiladas debajo, atenuadas por CSS
-// (ver .notif-card:first-child en onboarding.html). El usuario puede
-// cerrar cualquiera individualmente. Sin límite de cantidad — el rail
-// scrollea internamente si se acumulan muchas.
-let notifSeq = 0;
-
+// ── CORTEX BAR ─────────────────────────────────────────────────────────────
 function showCortex(msg) {
-  const list = document.getElementById('notification-list');
-  if (!list) return;
-
-  const id = 'notif-' + (++notifSeq);
-
-  const card = document.createElement('div');
-  card.className = 'notif-card';
-  card.id = id;
-
-  const dot = document.createElement('div');
-  dot.className = 'notif-dot';
-
-  const text = document.createElement('div');
-  text.className = 'notif-text';
-  text.textContent = msg;
-
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'notif-close';
-  closeBtn.setAttribute('aria-label', 'Dismiss notification');
-  closeBtn.textContent = '×';
-  closeBtn.onclick = () => dismissNotification(id);
-
-  card.appendChild(dot);
-  card.appendChild(text);
-  card.appendChild(closeBtn);
-
-  // Insertar siempre arriba de todo — la más nueva queda en foco.
-  list.prepend(card);
-}
-
-function dismissNotification(id) {
-  document.getElementById(id)?.remove();
+  const el = document.getElementById('cortex-text');
+  if (!el) return;
+  el.textContent = msg;
+  document.getElementById('cortex-bar')?.classList.add('visible');
 }
 
 function hideCortex() {
-  // Compat: descarta todas las notificaciones acumuladas.
-  const list = document.getElementById('notification-list');
-  if (list) list.innerHTML = '';
+  document.getElementById('cortex-bar')?.classList.remove('visible');
 }
 
 // ── SCREEN 1 — Identity ────────────────────────────────────────────────────
@@ -656,7 +613,6 @@ let debugPanelOpen = false;
 function toggleDebugPanel() {
   const container = document.getElementById('debug-panel-container');
   const btn       = document.getElementById('debug-toggle');
-  const rail      = document.getElementById('notification-rail');
   if (!container || !btn) return;
 
   debugPanelOpen = !debugPanelOpen;
@@ -672,12 +628,18 @@ function toggleDebugPanel() {
     }
     container.classList.remove('hidden');
     btn.classList.add('active');
-    rail?.classList.add('hidden'); // el harness de debug ocupa toda la vista — el rail no aporta nada ahí
+    // Ocultar notification-rail y cortex-bar mientras debug esta abierto
+    const rail = document.getElementById('notification-rail');
+    if (rail) rail.style.display = 'none';
+    const cortex = document.getElementById('cortex-bar');
+    if (cortex) cortex.classList.remove('visible');
     log('info', 'debug panel opened');
   } else {
     container.classList.add('hidden');
     btn.classList.remove('active');
-    rail?.classList.remove('hidden');
+    // Restaurar notification-rail al cerrar debug
+    const rail2 = document.getElementById('notification-rail');
+    if (rail2) rail2.style.display = '';
     log('info', 'debug panel closed');
   }
 }
@@ -685,12 +647,6 @@ function toggleDebugPanel() {
 // ── INIT ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   log('info', 'DOM ready — initialized');
-
-  // Primeras notificaciones del rail — confirman al usuario que el sistema
-  // está activo apenas se abre la ventana, antes de cualquier acción.
-  showCortex('Inicializando onboarding…');
-  showCortex('Onboarding inicializado.');
-
   document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
   // Screen 0 = entry, stepper vacío. Al navegar a screen 1 se activa Identity.
   // El sidebar ya es visible desde el inicio.

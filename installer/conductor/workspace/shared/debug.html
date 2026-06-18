@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' ws://localhost:4124 http://localhost:48215 https://fonts.googleapis.com https://fonts.gstatic.com; font-src https://fonts.gstatic.com; connect-src ws://localhost:4124 http://localhost:48215;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' ws://localhost:4124 http://localhost:48215 https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; font-src https://fonts.gstatic.com; connect-src ws://localhost:4124 http://localhost:48215;">
 <title>Bloom — Debug</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
@@ -719,7 +719,7 @@ function connectWS() {
     try { msg = JSON.parse(evt.data); } catch { return; }
     // Wire: Control Plane emits { type: 'system_event', payload: {...} }
     // Discriminator matches internal.routes broadcast envelope.
-    if (msg.type === 'system_event' && msg.payload) {
+    if ((msg.type === 'system:event' || msg.type === 'system_event') && msg.payload) {
       ingestEvent(msg.payload);
     }
   };
@@ -748,9 +748,6 @@ function setWsState(state) {
 // the real route is discovered at runtime or falls back to IPC.
 const HEALTH_ROUTES = [
   '/health',
-  '/api/health',
-  '/internal/health',
-  '/status',
 ];
 
 const HEALTH_COMPONENTS = [
@@ -766,39 +763,63 @@ const HEALTH_COMPONENTS = [
 ];
 
 async function refreshHealth() {
-  // 1. Try Electron IPC (nucleus:health handler) — most reliable, same as
-  //    what the rest of Conductor uses. Available when loaded via loadFile().
+  // 0. postMessage bridge — cuando debug.html esta en iframe, window.onboarding
+  //    no existe. onboarding.js proxea el IPC y responde con HEALTH_RESPONSE.
+  if (window.parent !== window) {
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timeout')), 2500);
+        function h(evt) {
+          if (evt.data && evt.data.type === 'HEALTH_RESPONSE') {
+            clearTimeout(t);
+            window.removeEventListener('message', h);
+            if (evt.data.error) reject(new Error(evt.data.error));
+            else resolve(evt.data.data);
+          }
+        }
+        window.addEventListener('message', h);
+        window.parent.postMessage({ type: 'REQUEST_HEALTH' }, '*');
+      });
+      if (data && (data.components || data.state)) {
+        renderHealth(data);
+        log('info', 'Health via postMessage bridge (IPC)');
+        return;
+      }
+    } catch (err) {
+      log('warn', 'postMessage health bridge: ' + err.message);
+    }
+  }
+
+  // 1. Electron IPC directo (cuando debug.html se carga como documento raiz).
   try {
     const ipc = window.electronAPI || window.nucleus || window.onboarding;
     if (ipc && typeof ipc.health === 'function') {
       const data = await ipc.health();
-      if (data && (data.components || data.state)) {
-        renderHealth(data);
-        return;
-      }
+      if (data && (data.components || data.state)) { renderHealth(data); return; }
     }
   } catch(_) {}
 
-  // 2. Probe REST routes in order — the exact path depends on the Fastify
-  //    router registration; /api/health is NOT registered, try candidates.
+  // 2. REST probe — /health devuelve {status,timestamp,version} sin components.
   for (const route of HEALTH_ROUTES) {
     try {
       const res = await fetch(API_URL + route, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
         const data = await res.json();
         if (data && (data.components || data.state)) {
-          // Remember the working route for next polls to skip the probe loop
-          HEALTH_ROUTES.length = 0;
-          HEALTH_ROUTES.push(route);
           renderHealth(data);
-          log('info', 'Health route resolved: ' + route);
+          log('info', 'Health route (full): ' + route);
+          return;
+        }
+        if (data && data.status === 'ok') {
+          renderHealthSimple(data, route);
+          log('info', 'Health route (simple): ' + route);
           return;
         }
       }
     } catch(_) {}
   }
 
-  // 3. All candidates failed — show actionable error
+  // 3. All failed
   document.getElementById('health-grid').innerHTML =
     '<div class="health-row"><div class="h-dot err"></div>' +
     '<span class="h-name" style="color:var(--error)">nucleus:48215 — no health route</span></div>' +
@@ -807,7 +828,24 @@ async function refreshHealth() {
     'Run: nucleus --json health</span></div>';
   document.getElementById('health-summary').textContent = 'UNKNOWN';
   document.getElementById('health-summary').className = 'degraded';
-  log('warn', 'Health endpoint not found on :48215 — tried: ' + HEALTH_ROUTES.join(', '));
+  log('warn', 'Health not found on :48215');
+}
+
+function renderHealthSimple(data, route) {
+  document.getElementById('health-grid').innerHTML = `
+    <div class="health-row">
+      <div class="h-dot ok"></div>
+      <span class="h-name">nucleus API</span>
+      <span class="h-state">RUNNING</span>
+    </div>
+    <div class="health-row" style="padding-top:4px">
+      <span class="h-name" style="color:var(--text-dim);font-size:10px">
+        REST ${route} OK — full health via IPC only
+      </span>
+    </div>`;
+  const s = document.getElementById('health-summary');
+  s.textContent = data.status === 'ok' ? 'API OK' : 'DEGRADED';
+  s.className   = data.status === 'ok' ? '' : 'degraded';
 }
 
 function renderHealth(data) {
@@ -1027,16 +1065,42 @@ async function fireSimEvent() {
   // back via system_event — skip local ingest to avoid duplicates.
   // On failure (endpoint not yet wired), fall back to local ingest.
   let serverReceived = false;
+
+  // Fetch directo primero — nucleus escucha en :48215 y el iframe puede acceder.
   try {
-    const res = await fetch(API_URL + '/internal/system-event', {
+    const res = await fetch(API_URL + '/api/internal/system-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (res.ok) serverReceived = true;
-  } catch(_) {}
+    if (res.ok) {
+      serverReceived = true;
+      log('info', 'Sim dispatched → ' + JSON.stringify(payload));
+    }
+  } catch(err) {
+    log('warn', 'Sim direct fetch failed: ' + err.message);
+  }
+
+  // Fallback: postMessage al padre si el fetch directo falla (CSP restrictiva).
+  if (!serverReceived && window.parent !== window) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('sim timeout')), 3000);
+        function h(evt) {
+          if (evt.data && evt.data.type === 'SIM_RESPONSE') {
+            clearTimeout(t); window.removeEventListener('message', h); resolve(evt.data);
+          }
+        }
+        window.addEventListener('message', h);
+        window.parent.postMessage({ type: 'REQUEST_SIM', payload }, '*');
+      });
+      if (result.ok) { serverReceived = true; log('info', 'Sim via postMessage bridge'); }
+      else log('warn', 'Sim bridge error: ' + (result.error || JSON.stringify(result.body)));
+    } catch (err) { log('warn', 'Sim bridge failed: ' + err.message); }
+  }
 
   if (!serverReceived) {
+    log('warn', 'Sim: server not reached — UI only, not sent to Cortex');
     ingestEvent({ ...payload, timestamp: Date.now() });
   }
 }
