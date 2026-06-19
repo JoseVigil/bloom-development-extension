@@ -626,16 +626,31 @@ const Harness = {
 
 /**
  * Carga un script externo de forma condicional.
- * Si el archivo no existe (404) o falla, resuelve sin lanzar error —
- * el Harness arranca con lo que hay disponible en el filesystem.
+ * Primero verifica la existencia con fetch() para evitar errores de red
+ * en DevTools cuando el archivo no existe (post-onboarding only).
+ * Si el archivo no existe o falla, resuelve sin lanzar error.
  */
 function loadScriptOptional(src) {
   return new Promise((resolve) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload  = () => { console.log(`[Harness] ✓ Loaded: ${src}`); resolve(); };
-    s.onerror = () => { console.log(`[Harness] ↷ Not found (skipped): ${src}`); resolve(); };
-    document.head.appendChild(s);
+    // Resolve URL relativo al documento actual
+    const url = new URL(src, document.baseURI).href;
+
+    fetch(url, { method: 'HEAD' })
+      .then(res => {
+        if (!res.ok) {
+          console.log(`[Harness] ↷ Not found (skipped): ${src}`);
+          return resolve();
+        }
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload  = () => { console.log(`[Harness] ✓ Loaded: ${src}`); resolve(); };
+        s.onerror = () => { console.log(`[Harness] ↷ Load error (skipped): ${src}`); resolve(); };
+        document.head.appendChild(s);
+      })
+      .catch(() => {
+        console.log(`[Harness] ↷ Not found (skipped): ${src}`);
+        resolve();
+      });
   });
 }
 
