@@ -880,18 +880,17 @@
           <div class="payload-preview-header">
             Live Payload Preview
             <span id="preview-copy-btn"
-                  style="cursor:pointer; color: var(--accent); font-size:10px;"
-                  onclick="Harness.copyPayload()">Copy</span>
+                  style="cursor:pointer; color: var(--accent); font-size:10px;">Copy</span>
           </div>
           <div id="payload-preview-code">{}</div>
         </div>
       </div>
 
       <div class="simulate-footer">
-        <button class="btn btn-secondary" id="btn-reset" onclick="Harness.resetForm()">
+        <button class="btn btn-secondary" id="btn-reset">
           Reset
         </button>
-        <button class="btn btn-primary" id="btn-send" onclick="Harness.sendMessage()">
+        <button class="btn btn-primary" id="btn-send">
           ▶ Send
         </button>
         <span id="send-status"></span>
@@ -905,10 +904,10 @@
   ================================================================ -->
   <aside id="panel-right">
     <div class="tabs">
-      <div class="tab active" data-tab="config" onclick="Harness.switchTab('config')">Config</div>
-      <div class="tab" data-tab="log" onclick="Harness.switchTab('log')">
+      <div class="tab active" data-tab="config">Config</div>
+      <div class="tab" data-tab="log">
         Log <span id="log-badge" style="display:none; background:var(--accent); color:#0d1117;
-          border-radius:999px; padding:0 5px; font-size:9px; margin-left:4px;" id="log-count">0</span>
+          border-radius:999px; padding:0 5px; font-size:9px; margin-left:4px;">0</span>
       </div>
     </div>
 
@@ -958,7 +957,7 @@
         </div>
       </div>
 
-      <div id="config-raw-toggle" onclick="Harness.toggleRawConfig()">
+      <div id="config-raw-toggle">
         Show raw config
       </div>
       <pre id="config-raw"></pre>
@@ -968,9 +967,8 @@
     <!-- Log tab -->
     <div class="tab-panel" id="tab-log">
       <div id="log-toolbar">
-        <input id="log-filter" type="text" placeholder="Filter logs…"
-               oninput="Harness.filterLog(this.value)" />
-        <button id="log-clear" onclick="Harness.clearLog()">Clear</button>
+        <input id="log-filter" type="text" placeholder="Filter logs…" />
+        <button id="log-clear">Clear</button>
       </div>
       <div id="log-entries">
         <div id="log-empty">No messages yet.</div>

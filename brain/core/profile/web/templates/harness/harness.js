@@ -531,6 +531,29 @@ const Harness = {
       }
     }, 500);
 
+    // 4. Wire up all UI event listeners (replaces inline onclick= handlers, required by MV3 CSP).
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
+    });
+
+    const btnSend = document.getElementById('btn-send');
+    if (btnSend) btnSend.addEventListener('click', () => this.sendMessage());
+
+    const btnReset = document.getElementById('btn-reset');
+    if (btnReset) btnReset.addEventListener('click', () => this.resetForm());
+
+    const btnCopyPayload = document.getElementById('preview-copy-btn');
+    if (btnCopyPayload) btnCopyPayload.addEventListener('click', () => this.copyPayload());
+
+    const btnRawToggle = document.getElementById('config-raw-toggle');
+    if (btnRawToggle) btnRawToggle.addEventListener('click', () => this.toggleRawConfig());
+
+    const logFilter = document.getElementById('log-filter');
+    if (logFilter) logFilter.addEventListener('input', () => this.filterLog(logFilter.value));
+
+    const logClear = document.getElementById('log-clear');
+    if (logClear) logClear.addEventListener('click', () => this.clearLog());
+
     Logger.log('INFO', 'Harness ready.');
   },
 

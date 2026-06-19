@@ -217,118 +217,84 @@ async function loadConfig() {
     console.log('[Synapse] Loading config file:', configFile);
 
     try {
-      console.log('[Synapse] Attempting importScripts...');
-      importScripts(configFile);
+      const url = chrome.runtime.getURL(configFile);
+      console.log('[Synapse] Fetching from URL:', url);
+
+      const resp = await fetch(url);
       
-      if (self.SYNAPSE_CONFIG) {
-        config = { ...self.SYNAPSE_CONFIG, mode };
-        console.log(`[Synapse] ✓ Config loaded via importScripts (${mode} mode):`, config);
-
-        if (!config.profileId && config.profile_id) {
-          console.warn('[Synapse] ⚠️  profileId not found — falling back to profile_id (snake_case)');
-          config.profileId = config.profile_id;
-        }
-        if (!config.launchId && config.launch_id) {
-          console.warn('[Synapse] ⚠️  launchId not found — falling back to launch_id (snake_case)');
-          config.launchId = config.launch_id;
-        }
-        
-        await chrome.storage.local.set({ synapseMode: mode });
-        validateConfig(mode);
-
-        if (mode === 'discovery') {
-          enforceDiscoveryWindowSize();
-        }
-
-        return;
-      } else {
-        throw new Error('SYNAPSE_CONFIG not defined after importScripts');
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
       }
       
-    } catch (importError) {
-      console.warn('[Synapse] importScripts failed:', importError.message);
-      console.log('[Synapse] Attempting fetch fallback...');
+      const text = await resp.text();
+      console.log('[Synapse] Config file content length:', text.length);
+      console.log('[Synapse] First 200 chars:', text.substring(0, 200));
       
-      try {
-        const url = chrome.runtime.getURL(configFile);
-        console.log('[Synapse] Fetching from URL:', url);
+      config = { mode };
+      
+      const initialMatchers = {
+        ...baseMatchers,
+        ...(mode === 'discovery' ? registerMatcher : landingMatchers),
+        ...stepMatcher,
+        ...serviceMatcher
+      };
+      
+      for (const [key, regex] of Object.entries(initialMatchers)) {
+        const match = text.match(regex);
         
-        const resp = await fetch(url);
-        
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-        }
-        
-        const text = await resp.text();
-        console.log('[Synapse] Config file content length:', text.length);
-        console.log('[Synapse] First 200 chars:', text.substring(0, 200));
-        
-        config = { mode };
-        
-        const initialMatchers = {
-          ...baseMatchers,
-          ...(mode === 'discovery' ? registerMatcher : landingMatchers),
-          ...stepMatcher,
-          ...serviceMatcher
-        };
-        
-        for (const [key, regex] of Object.entries(initialMatchers)) {
-          const match = text.match(regex);
+        if (match) {
+          let value;
+          if (key === 'register') {
+            value = match[1] === 'true';
+          } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
+            value = parseInt(match[1], 10);
+          } else {
+            value = match[1];
+          }
           
-          if (match) {
-            let value;
-            if (key === 'register') {
-              value = match[1] === 'true';
-            } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
-              value = parseInt(match[1], 10);
-            } else {
-              value = match[1];
-            }
-            
-            config[key] = value;
-            console.log(`[Synapse] ✓ Parsed ${key}:`, value);
-          } else {
-            console.warn(`[Synapse] ✗ Could not parse ${key} with regex:`, regex);
-          }
+          config[key] = value;
+          console.log(`[Synapse] ✓ Parsed ${key}:`, value);
+        } else {
+          console.warn(`[Synapse] ✗ Could not parse ${key} with regex:`, regex);
         }
-
-        if (!config.profileId) {
-          const snakeMatch = text.match(/"profile_id"\s*:\s*"([^"]+)"/);
-          if (snakeMatch) {
-            config.profileId = snakeMatch[1];
-            console.warn('[Synapse] ⚠️  profileId parsed from snake_case key "profile_id":', config.profileId);
-          }
-        }
-        if (!config.launchId) {
-          const snakeMatch = text.match(/"launch_id"\s*:\s*"([^"]+)"/);
-          if (snakeMatch) {
-            config.launchId = snakeMatch[1];
-            console.warn('[Synapse] ⚠️  launchId parsed from snake_case key "launch_id":', config.launchId);
-          }
-        }
-        
-        if (mode === 'discovery' && config.register === true) {
-          const isGithubFlow = config.service === 'github';
-          if (!isGithubFlow) {
-            const emailMatch = text.match(emailMatcher.email);
-            if (emailMatch) {
-              config.email = emailMatch[1];
-              console.log(`[Synapse] ✓ Parsed email:`, config.email);
-            } else {
-              console.warn(`[Synapse] ✗ Could not parse email (required when register=true, service: ${config.service})`);
-            }
-          } else {
-            config.email = '';
-            console.log(`[Synapse] ℹ️  Email skipped for github flow (clipboard-based auth)`);
-          }
-        }
-
-        console.log(`[Synapse] ✓ Config loaded via fetch (${mode} mode):`, config);
-        
-      } catch (fetchError) {
-        console.error('[Synapse] ✗ Fetch failed:', fetchError);
-        throw fetchError;
       }
+
+      if (!config.profileId) {
+        const snakeMatch = text.match(/"profile_id"\s*:\s*"([^"]+)"/);
+        if (snakeMatch) {
+          config.profileId = snakeMatch[1];
+          console.warn('[Synapse] ⚠️  profileId parsed from snake_case key "profile_id":', config.profileId);
+        }
+      }
+      if (!config.launchId) {
+        const snakeMatch = text.match(/"launch_id"\s*:\s*"([^"]+)"/);
+        if (snakeMatch) {
+          config.launchId = snakeMatch[1];
+          console.warn('[Synapse] ⚠️  launchId parsed from snake_case key "launch_id":', config.launchId);
+        }
+      }
+      
+      if (mode === 'discovery' && config.register === true) {
+        const isGithubFlow = config.service === 'github';
+        if (!isGithubFlow) {
+          const emailMatch = text.match(emailMatcher.email);
+          if (emailMatch) {
+            config.email = emailMatch[1];
+            console.log(`[Synapse] ✓ Parsed email:`, config.email);
+          } else {
+            console.warn(`[Synapse] ✗ Could not parse email (required when register=true, service: ${config.service})`);
+          }
+        } else {
+          config.email = '';
+          console.log(`[Synapse] ℹ️  Email skipped for github flow (clipboard-based auth)`);
+        }
+      }
+
+      console.log(`[Synapse] ✓ Config loaded via fetch (${mode} mode):`, config);
+      
+    } catch (fetchError) {
+      console.error('[Synapse] ✗ Fetch failed:', fetchError);
+      throw fetchError;
     }
 
     await chrome.storage.local.set({ synapseMode: mode });
@@ -351,79 +317,59 @@ async function loadConfig() {
 // ============================================================================
 
 async function loadHarnessConfig() {
-  console.log('[Harness] >>>>>> loadHarnessConfig v4 EJECUTANDO <<<<<<');
+  console.log('[Harness] loadHarnessConfig ejecutando…');
 
   const harnessFile = 'harness.synapse.config.js';
   let harnessConfig = null;
+  let text = null;
 
   try {
-    importScripts(harnessFile);
-    if (self.HARNESS_CONFIG) {
-      console.log('[Harness] ✓ Loaded via importScripts');
-      const hc = self.HARNESS_CONFIG;
-      harnessConfig = {
-        profileId:    hc.profileId,
-        launchId:     hc.launchId,
-        profileAlias: hc.profileAlias,
-        generatedAt:  hc.generatedAt
-      };
-    }
-  } catch (importErr) {
-    console.log('[Harness] importScripts failed (esperado en MV3), usando fetch:', importErr.message);
-  }
+    const url = chrome.runtime.getURL(harnessFile);
+    console.log('[Harness] Fetching:', url);
+    const resp = await fetch(url);
+    console.log('[Harness] Fetch response status:', resp.status, resp.ok ? 'OK' : 'NOT OK');
 
-  if (!harnessConfig) {
-    console.log('[Harness] Intentando fetch fallback...');
-    let text = null;
-
-    try {
-      const url = chrome.runtime.getURL(harnessFile);
-      console.log('[Harness] Fetching:', url);
-      const resp = await fetch(url);
-      console.log('[Harness] Fetch response status:', resp.status, resp.ok ? 'OK' : 'NOT OK');
-
-      if (!resp.ok) {
-        console.log('[Harness] Archivo no encontrado (HTTP ' + resp.status + ') — Harness inactivo');
-        return;
-      }
-
-      text = await resp.text();
-      console.log('[Harness] Contenido recibido, length:', text.length);
-      console.log('[Harness] Primeros 150 chars:', text.substring(0, 150));
-
-    } catch (fetchErr) {
-      console.error('[Harness] ✗ Fetch error:', fetchErr.message);
+    if (!resp.ok) {
+      console.log('[Harness] Archivo no encontrado (HTTP ' + resp.status + ') — Harness inactivo');
       return;
     }
 
-    harnessConfig = {};
-    const matchers = {
-      profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
-      launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
-      profileAlias: /["']?profileAlias["']?\s*:\s*["']([^"']+)["']/,
-      generatedAt:  /["']?generatedAt["']?\s*:\s*["']([^"']+)["']/
-    };
-    for (const [key, regex] of Object.entries(matchers)) {
-      const match = text.match(regex);
-      if (match) {
-        harnessConfig[key] = match[1];
-        console.log('[Harness] ✓ Parsed', key + ':', match[1]);
-      } else {
-        console.warn('[Harness] ✗ No match para:', key);
-      }
-    }
+    text = await resp.text();
+    console.log('[Harness] Contenido recibido, length:', text.length);
+    console.log('[Harness] Primeros 150 chars:', text.substring(0, 150));
 
-    if (!harnessConfig.profileId) {
-      console.error('[Harness] ✗ profileId no parseado — Harness inactivo. Contenido del archivo:', text);
-      return;
-    }
-
-    console.log('[Harness] ✓ Config parseado correctamente:', JSON.stringify(harnessConfig));
+  } catch (fetchErr) {
+    console.error('[Harness] ✗ Fetch error:', fetchErr.message);
+    return;
   }
+
+  harnessConfig = {};
+  const matchers = {
+    profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
+    launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
+    profileAlias: /["']?profileAlias["']?\s*:\s*["']([^"']+)["']/,
+    generatedAt:  /["']?generatedAt["']?\s*:\s*["']([^"']+)["']/
+  };
+  for (const [key, regex] of Object.entries(matchers)) {
+    const match = text.match(regex);
+    if (match) {
+      harnessConfig[key] = match[1];
+      console.log('[Harness] ✓ Parsed', key + ':', match[1]);
+    } else {
+      console.warn('[Harness] ✗ No match para:', key);
+    }
+  }
+
+  if (!harnessConfig.profileId) {
+    console.error('[Harness] ✗ profileId no parseado — Harness inactivo. Contenido del archivo:', text);
+    return;
+  }
+
+  console.log('[Harness] ✓ Config parseado correctamente:', JSON.stringify(harnessConfig));
 
   config.harness = harnessConfig;
   console.log('[Harness] ✓ config.harness seteado.');
-  console.log('[Harness] >>>>>> loadHarnessConfig v5 COMPLETADO — apertura de tab pendiente de host_ready <<<<<<');
+  console.log('[Harness] loadHarnessConfig completado — apertura de tab pendiente de host_ready.');
 }
 
 async function openHarnessTab() {
