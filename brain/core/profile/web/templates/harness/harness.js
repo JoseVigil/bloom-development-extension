@@ -513,8 +513,61 @@ const Harness = {
           ConfigReader.harnessConfig = msg.harness;
           ConfigReader.render();
           Logger.log('INFO', `HARNESS_CONFIG_READY received — profile: ${msg.harness.profileId}`);
+          return;
+        }
+
+        // Espejo de messaging real: todo lo que background.js reporta al
+        // debug panel (Workspace) llega también acá vía forwardToDebugPanel.
+        // Esto es lo que cierra el punto ciego de Native Messaging / runtime
+        // — el Cortex Harness ahora ve el mismo feed que el Workspace Harness.
+        if (msg.event === 'HARNESS_LOG') {
+          const level = msg.data?._level === 'error' ? 'ERROR' : 'INFO';
+          const tag = `[${msg.category}] ${msg.sourceEvent}`;
+          Logger.log(level, `${tag} ${JSON.stringify(msg.data)}`);
         }
       });
+
+      // HARNESS_HELLO: pedirle a background.js todo lo que pasó antes de que
+      // esta tab existiera. Sin esto, cualquier evento emitido entre el boot
+      // del sistema y la apertura de esta página se pierde para siempre.
+      //
+      // Retry con backoff: el SW puede estar todavía procesando host_ready y
+      // abriendo tabs cuando esta página ya disparó DOMContentLoaded. En ese
+      // caso sendMessage falla con "Could not establish connection" aunque el
+      // handler exista — es pura condición de timing de boot. Reintentamos
+      // hasta 4 veces antes de rendirse.
+      const _HELLO_DELAYS = [0, 200, 500, 1000]; // ms antes de cada intento
+
+      const _sendHarnessHello = (attempt) => {
+        setTimeout(() => {
+          chrome.runtime.sendMessage({ event: 'HARNESS_HELLO' }, (resp) => {
+            const err = chrome.runtime.lastError; // consumir siempre
+            if (err) {
+              if (attempt < _HELLO_DELAYS.length - 1) {
+                // SW todavía arrancando — reintentar
+                _sendHarnessHello(attempt + 1);
+              } else {
+                Logger.log('INFO', 'HARNESS_HELLO: background no disponible (normal en standalone dev)');
+              }
+              return;
+            }
+            if (resp?.event === 'HARNESS_REPLAY' && Array.isArray(resp.entries)) {
+              if (resp.entries.length === 0) {
+                Logger.log('INFO', 'HARNESS_HELLO: sin eventos previos en buffer');
+              } else {
+                Logger.log('INFO', `HARNESS_HELLO: replay de ${resp.entries.length} evento(s) previos`);
+                for (const entry of resp.entries) {
+                  const level = entry.data?._level === 'error' ? 'ERROR' : 'INFO';
+                  const tag = `[${entry.category}] ${entry.sourceEvent}`;
+                  Logger.log(level, `${tag} ${JSON.stringify(entry.data)} (replay)`);
+                }
+              }
+            }
+          });
+        }, _HELLO_DELAYS[attempt] ?? 1000);
+      };
+
+      _sendHarnessHello(0);
     }
 
     // 2. Discover and render protocols

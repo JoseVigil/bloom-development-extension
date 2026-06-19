@@ -161,7 +161,7 @@ class DiscoveryFlow {
         this.launchMode           = flags?.mode || null;
         this.linkedAccounts       = flags?.linked_accounts || [];
 
-        console.warn('[Discovery] Fallback to SYNAPSE_CONFIG');
+        console.log('[Discovery] synapseConfig not in storage yet - using SYNAPSE_CONFIG defaults');
       }
     } catch (error) {
       console.error('[Discovery] Error loading config:', error);

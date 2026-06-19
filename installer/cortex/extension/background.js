@@ -32,6 +32,25 @@ const BASE_DELAY = 2000;
 
 const DEBUG_API_URL = 'http://localhost:48215';
 
+// ============================================================================
+// HARNESS LOG BUFFER
+// Buffer circular en memoria — mismo patrón que pending_queue en synapse_logger.h.
+// Resuelve la condición de carrera: muchos eventos (HANDSHAKE_CONFIRMED,
+// EXTENSION_LOADED, etc.) se emiten ANTES de que la tab del Harness exista
+// y esté escuchando. Sin buffer, esos sendMessage() se pierden en el aire.
+// Cuando el Harness abre y manda HARNESS_HELLO, le contestamos con todo
+// lo acumulado hasta ese momento.
+// ============================================================================
+const HARNESS_LOG_MAX = 100;
+const harnessLogBuffer = [];
+
+function pushHarnessLog(entry) {
+  harnessLogBuffer.push(entry);
+  if (harnessLogBuffer.length > HARNESS_LOG_MAX) {
+    harnessLogBuffer.shift();
+  }
+}
+
 function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
   // No await — fire and forget para no bloquear el event handler de Chrome.
   fetch(`${DEBUG_API_URL}/api/internal/system-event`, {
@@ -48,6 +67,25 @@ function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
     // Silencioso — el debug panel puede no estar abierto o la API puede estar
     // arrancando. No loguear para no contaminar la consola del service worker.
   });
+
+  // Espejo hacia el Cortex Harness (tab dentro de la extensión).
+  // Mismo dato, segundo destino. No reemplaza el POST de arriba — lo acompaña.
+  const harnessMsg = {
+    event: 'HARNESS_LOG',
+    category,
+    sourceEvent: event,
+    data,
+    profile_id: profile_id || config?.profileId || null,
+    timestamp: Date.now()
+  };
+
+  // Guardar siempre en el buffer — sin importar si hay alguien escuchando ahora.
+  // Esto es lo que permite que un Harness que abre tarde igual vea todo lo que pasó.
+  pushHarnessLog(harnessMsg);
+
+  // Intento de entrega en vivo. Si no hay tab escuchando, falla silencioso
+  // (catch vacío) — no pasa nada, el buffer ya lo tiene guardado igual.
+  chrome.runtime.sendMessage(harnessMsg).catch(() => {});
 }
 
 // ============================================================================
@@ -893,6 +931,15 @@ async function forwardToContent(msg) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
+
+  // Harness: handshake de buffer — la tab del Harness recién abierta pide
+  // "decime todo lo que me perdí" y le contestamos con harnessLogBuffer.
+  // Resuelve la condición de carrera donde HANDSHAKE_CONFIRMED, EXTENSION_LOADED,
+  // etc. se emiten antes de que openHarnessTab() haya terminado de cargar la página.
+  if (event === 'HARNESS_HELLO') {
+    sendResp({ event: 'HARNESS_REPLAY', entries: harnessLogBuffer.slice() });
+    return true;
+  }
 
   // Landing: profile_load
   if (command === 'profile_load') {

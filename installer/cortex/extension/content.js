@@ -346,17 +346,13 @@ function executeWatch({ selector, signal, once = true, priority = 'normal' }) {
   return { watching: signal };
 }
 
-/**
- * DOM_WATCH_URL
- * Intercepta pushState y el evento popstate para detectar navegaciones SPA
- * sin recarga de página completa.
- * Cuando la URL matchea uno de los patrones del page descriptor, emite PAGE_CHANGED.
- *
- * payload: {
- *   transitions: { [url_pattern: string]: page_name: string }
- *   — ej: { "*/settings/tokens*": "tokens_page", "*/login*": "login_page" }
- * }
- */
+// DOM_WATCH_URL
+// Intercepta pushState y el evento popstate para detectar navegaciones SPA
+// sin recarga de página completa.
+// Cuando la URL matchea uno de los patrones del page descriptor, emite PAGE_CHANGED.
+//
+// payload: { transitions: Object }
+// Ejemplo: { "*/settings/tokens*": "tokens_page", "*/login*": "login_page" }
 function executeWatchUrl({ transitions }) {
   // Limpiar watcher anterior si existe.
   if (urlWatcherCleanup) {
@@ -561,7 +557,16 @@ Object.assign(ribbon.style, {
   boxShadow: '0 0 8px rgba(0,255,136,0.6)',
   pointerEvents: 'none'
 });
-document.body.appendChild(ribbon);
+
+function appendRibbon() {
+  if (document.body) {
+    document.body.appendChild(ribbon);
+  } else {
+    // body not ready yet (e.g. script running at document_start) — wait for it
+    document.addEventListener('DOMContentLoaded', appendRibbon, { once: true });
+  }
+}
+appendRibbon();
 
 // ============================================================================
 // INICIALIZACIÓN
