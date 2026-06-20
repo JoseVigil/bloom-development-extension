@@ -6,6 +6,15 @@
 //   Fix 4: goTo(4) llama runNucleusTerminal()
 //   Fix 5: toggleAccount() desactivado — los íconos los activa solo el poll
 //   Fix 6: info popup dinámico por step, contenido desde STEP_INFO[]
+//
+// CAMBIOS (sesión 2026-06) — Cambio 7 de 8:
+//   - Listeners de milestone:reached y onboarding:step-ui-update registrados en DOMContentLoaded
+//   - handleMilestoneReached() maneja el avance automático por hito
+//   - setInterval en kickoffDiscovery se mantiene como FALLBACK (renombrado a _pollFallbackTimer)
+//     para el caso en que Brain no emita GITHUB_TOKEN_STORED. Se limpia cuando el milestone
+//     llega por el canal push o cuando el poll confirma github_auth.
+//   - STEP_TO_NODE: mapa stepId → nombre de nodo del stepper, para que los handlers
+//     de milestone puedan actualizar el stepper sin conocer los índices internos.
 
 // ── LOGGING ────────────────────────────────────────────────────────────────
 function log(level, msg) {
@@ -91,17 +100,30 @@ let selectedFolderPath  = null;
 let folderSelected      = false;
 let selectedProjectEl   = null;
 let selectedProject     = null; // { name, path }
-let identityPollTimer   = null;
+let _pollFallbackTimer  = null; // renombrado de identityPollTimer — es un fallback ahora
 let identityTimeoutId   = null;
 let userEmail           = null;
 
 // Variables de estado para copy dinámico (§7 del spec)
 const state = {
-  githubUsername: null,  // @username detectado en pollIdentity
+  githubUsername: null,  // @username detectado en pollIdentity o en milestone payload
   githubOrg:      null,  // org principal detectada
   selectedOrg:    null,  // org elegida en dropdown
   selectedFolder: null,  // path local elegido
   selectedRepo:   null,  // { name, full_name, private }
+};
+
+// ── MILESTONE → STEPPER mapping ────────────────────────────────────────────
+// Mapa stepId (onboarding_steps.json) → nombre de nodo del stepper (STEPPER_NODES).
+// Permite que handleMilestoneReached() actualice el stepper sin conocer los
+// índices internos ni acoplarse a la estructura del DOM.
+const STEP_TO_NODE = {
+  github_auth:       'identity',
+  nucleus_create:    'nucleus',
+  vault_init:        'vault',
+  google_auth:       'identity',    // google_auth pertenece al mismo nodo que identity
+  ai_provider_setup: 'identity',
+  project_create:    'project',
 };
 
 // ── STEPPER API ────────────────────────────────────────────────────────────
@@ -230,14 +252,113 @@ function hideCortex() {
   document.getElementById('cortex-bar')?.classList.remove('visible');
 }
 
+// ── MILESTONE HANDLERS (Cambio 7) ──────────────────────────────────────────
+//
+// handleMilestoneReached() es el punto único de entrada para todos los hitos
+// confirmados por Brain vía MilestoneReactor.
+//
+// Principio: cada handler es idempotente — verificar con activeAccounts.has()
+// o guardas equivalentes antes de modificar estado de UI.
+
+function handleMilestoneReached(stepId, data) {
+  log('info', `milestone:reached — stepId: ${stepId}`);
+
+  switch (stepId) {
+    case 'github_auth':
+      _onMilestoneGithubAuth(data);
+      break;
+
+    case 'vault_init':
+      _onMilestoneVaultInit(data);
+      break;
+
+    case 'google_auth':
+      _onMilestoneGoogleAuth(data);
+      break;
+
+    case 'ai_provider_setup':
+      _onMilestoneAiProviderSetup(data);
+      break;
+
+    case 'project_create':
+      _onMilestoneProjectCreate(data);
+      break;
+
+    case '__onboarding_complete__':
+      // Todos los steps bloqueantes terminaron.
+      // El renderer no hace nada aquí — el reactor ya llamó
+      // nucleus synapse onboarding --step success para navegar Chrome.
+      // El usuario completa el flujo en la UI de Conductor normalmente.
+      log('info', 'milestone: onboarding completo (todos los blocking steps ok)');
+      break;
+
+    default:
+      log('warn', `milestone:reached — stepId desconocido: ${stepId}`);
+  }
+}
+
+function _onMilestoneGithubAuth(data) {
+  if (activeAccounts.has('github')) return;  // idempotente
+
+  activeAccounts.add('github');
+  document.getElementById('acc-github')?.classList.add('active');
+  log('info', 'milestone: github_auth confirmado por Brain');
+
+  // Limpiar el poll de fallback — ya no necesitamos el setInterval
+  _clearPollFallback();
+
+  // Capturar username/org para copy dinámico si Brain los incluyó en el payload
+  if (data?.username) {
+    state.githubUsername = data.username;
+    state.githubOrg      = data.org || null;
+    const vaultUser = document.getElementById('vault-username');
+    const vaultOrg  = document.getElementById('vault-org');
+    if (vaultUser) vaultUser.textContent = '@' + data.username;
+    if (vaultOrg)  vaultOrg.textContent  = data.org || '—';
+  }
+
+  // Actualizar poll status a confirmado
+  const pollStatus = document.getElementById('identity-poll-status');
+  const pollLabel  = document.getElementById('identity-poll-label');
+  if (pollLabel)  pollLabel.textContent = '✓ Token detectado';
+  if (pollStatus) pollStatus.classList.add('confirmed');
+
+  checkIdentityReady();
+}
+
+function _onMilestoneVaultInit(_data) {
+  log('info', 'milestone: vault_init confirmado por Brain');
+  setStepperEstablished('vault');
+  showCortex('Vault initialized. Setting up workspace…');
+}
+
+function _onMilestoneGoogleAuth(_data) {
+  log('info', 'milestone: google_auth confirmado por Brain');
+  showCortex('Google connected.');
+}
+
+function _onMilestoneAiProviderSetup(data) {
+  log('info', `milestone: ai_provider_setup confirmado por Brain — provider: ${data?.provider || 'n/a'}`);
+  showCortex('AI provider configured.');
+}
+
+function _onMilestoneProjectCreate(_data) {
+  log('info', 'milestone: project_create confirmado por Brain');
+  // El reactor ya llamó nucleus synapse onboarding --step success para Chrome.
+  // El renderer avanza a la pantalla de milestone (screen 6) si no está ahí.
+  const milestoneScreen = document.getElementById('screen-milestone');
+  if (milestoneScreen && !milestoneScreen.classList.contains('active')) {
+    log('info', 'milestone: project_create — avanzando a screen 6 por push');
+    goTo(6);
+  }
+}
+
 // ── SCREEN 1 — Identity ────────────────────────────────────────────────────
 
-// Fix 5: toggleAccount() ya no hace nada — los íconos los activa solo el poll.
+// Fix 5: toggleAccount() ya no hace nada — los íconos los activa solo el poll/milestone.
 // El onclick en el HTML queda por compatibilidad pero no cambia estado.
 function toggleAccount(name) {
-  // No-op: el estado de las cuentas lo maneja exclusivamente el poll.
-  // Esta función existe solo para no romper los onclick del HTML.
-  log('info', `toggleAccount(${name}) ignorado — estado manejado por pollIdentity`);
+  log('info', `toggleAccount(${name}) ignorado — estado manejado por milestone/pollIdentity`);
 }
 
 async function handleIdentityBtn() {
@@ -273,11 +394,6 @@ async function kickoffDiscovery() {
   }
 
   // Fase 2: navegar a github_auth en Chrome
-  // NOTA: nucleus synapse onboarding solo acepta --step (sin --service).
-  // El step 'github_auth' es el identificador del config file de Cortex para el PAT de GitHub.
-  // Si este step ID no existe en el CLI, el navigate fallará con exit 1 — eso es no-fatal:
-  // Chrome ya está abierto desde el launch, el poll sigue corriendo.
-  // TODO: verificar step ID correcto con: nucleus synapse onboarding --help
   showCortex("Connecting to GitHub…");
   log('info', 'IPC → onboarding:navigate — step: github_auth');
 
@@ -288,74 +404,71 @@ async function kickoffDiscovery() {
   log(navResult.success ? 'info' : 'warn',
       `IPC ← onboarding:navigate — success: ${navResult.success}`);
 
-  // Navigate failure es NO-FATAL: Chrome puede ya estar abierto y en el step correcto.
-  // No se interrumpe el flujo — se continúa al poll y se muestra advertencia en cortex bar.
   if (!navResult.success) {
-    log('warn', 'navigate falló — Chrome puede ya estar activo, continuando con poll');
+    log('warn', 'navigate falló — Chrome puede ya estar activo, continuando');
     showCortex(
       "Chrome open — follow the (?) instructions to create your GitHub token and copy it."
     );
-    // No return — continúa al poll
   }
 
-  // Fase 3: instrucción al usuario — qué tiene que hacer en Chrome
+  // Fase 3: instrucción al usuario
   showCortex(
     "In Chrome: Settings → Developer Settings → Personal access tokens → Tokens (classic) → Generate → select repo & read:org → copy."
   );
 
   // Timeout de 3 minutos — mensaje de ayuda si el usuario tarda
   identityTimeoutId = setTimeout(() => {
-    if (activeAccounts.has('github')) return; // ya confirmado, no mostrar
+    if (activeAccounts.has('github')) return;
     showCortex(
       "Taking longer than expected. Click (?) for step-by-step instructions."
     );
   }, 3 * 60 * 1000);
 
-  // Fase 4: mostrar el indicador de poll y arrancar polling cada 3 segundos
-  // Fix 3: era result.accounts[name] — ese campo no existe.
-  // El handler devuelve result.steps con IDs del JSON (github_auth, google_auth…)
+  // Fase 4: mostrar el indicador de poll y arrancar el fallback poll
+  //
+  // El canal push (milestone:reached) es el mecanismo principal.
+  // El setInterval es un FALLBACK para el caso en que Brain no emita
+  // GITHUB_TOKEN_STORED (builds viejos, race condition, etc.).
+  // Se limpia automáticamente cuando llega el milestone o cuando el poll confirma.
   document.getElementById('identity-poll-status').style.display = 'flex';
 
-  identityPollTimer = setInterval(async () => {
+  _pollFallbackTimer = setInterval(async () => {
+    // Si el milestone ya llegó por el canal push, el timer ya se limpió.
+    // Esta guarda es por si hay un tick residual.
+    if (activeAccounts.has('github')) {
+      _clearPollFallback();
+      return;
+    }
+
     const pollResult = await window.onboarding.pollIdentity();
     if (!pollResult.success) return;
 
-    if (pollResult.steps?.github_auth && !activeAccounts.has('github')) {
-      activeAccounts.add('github');
-      document.getElementById('acc-github')?.classList.add('active');
-      log('info', 'account confirmed: github');
-
-      // Capturar username/org para copy dinámico (§7 del spec)
-      if (pollResult.username) {
-        state.githubUsername = pollResult.username;
-        state.githubOrg      = pollResult.org || null;
-        // Actualizar vault screen con datos reales
-        const vaultUser = document.getElementById('vault-username');
-        const vaultOrg  = document.getElementById('vault-org');
-        if (vaultUser) vaultUser.textContent = '@' + pollResult.username;
-        if (vaultOrg)  vaultOrg.textContent  = pollResult.org || '—';
-      }
-
-      // Actualizar poll status a confirmado
-      const pollStatus = document.getElementById('identity-poll-status');
-      const pollLabel  = document.getElementById('identity-poll-label');
-      if (pollLabel)  pollLabel.textContent = '✓ Token detectado';
-      if (pollStatus) pollStatus.classList.add('confirmed');
-
-      checkIdentityReady();
+    if (pollResult.steps?.github_auth) {
+      log('info', 'poll fallback: github_auth confirmado vía pollIdentity');
+      // Tratar igual que si hubiera llegado el milestone push
+      _onMilestoneGithubAuth({
+        username: pollResult.username || null,
+        org:      pollResult.org      || null,
+      });
     }
   }, 3000);
+}
+
+function _clearPollFallback() {
+  if (_pollFallbackTimer) {
+    clearInterval(_pollFallbackTimer);
+    _pollFallbackTimer = null;
+    log('info', 'poll fallback timer limpiado');
+  }
+  if (identityTimeoutId) {
+    clearTimeout(identityTimeoutId);
+    identityTimeoutId = null;
+  }
 }
 
 function checkIdentityReady() {
   const allDone = REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a));
   if (!allDone) return;
-
-  // Limpiar timers
-  clearInterval(identityPollTimer);
-  clearTimeout(identityTimeoutId);
-  identityPollTimer = null;
-  identityTimeoutId = null;
 
   log('info', 'github confirmed — identity ready');
   setStepperEstablished('identity');
@@ -424,7 +537,7 @@ function checkNucleusReady() {
 
 function initNucleus() {
   log('info', `initNucleus — org: ${selectedOrg} | path: ${selectedFolderPath}`);
-  goTo(4); // Fix 4 se activa aquí: goTo(4) llama runNucleusTerminal()
+  goTo(4); // Fix 4: goTo(4) llama runNucleusTerminal()
 }
 
 // ── SCREEN 4 — Nucleus Init Terminal ───────────────────────────────────────
@@ -502,7 +615,7 @@ async function loadRepos() {
     const fr = await window.onboarding.selectFolder();
     if (fr.success) {
       selectProject(local, {
-        name: fr.path.split(/[\\/]/).pop(),
+        name: fr.path.split(/[\\\/]/).pop(),
         path: fr.path
       });
     }
@@ -541,6 +654,10 @@ async function createMandateAndContinue() {
       `IPC ← onboarding:create-mandate — success: ${result.success}`);
 
   if (result.success) {
+    // El reactor en el main process recibirá PROJECT_CREATED de Brain
+    // y llamará nucleus synapse onboarding --step success.
+    // El IPC milestone:reached ('project_create') avanzará la UI vía _onMilestoneProjectCreate.
+    // La llamada a navigate() acá sigue siendo útil como fallback si Brain no emite el evento.
     log('info', 'IPC → onboarding:navigate — step: success');
     const navResult = await window.onboarding.navigate({ step: 'success' });
     log(navResult.success ? 'info' : 'error',
@@ -618,9 +735,6 @@ function toggleDebugPanel() {
   debugPanelOpen = !debugPanelOpen;
 
   if (debugPanelOpen) {
-    // Lazy load: usar dataset.loaded en lugar de !frame.src porque
-    // el browser normaliza src="" a la URL base del documento, por lo
-    // que !frame.src siempre es false y nunca se asigna la ruta real.
     const frame = document.getElementById('debug-frame');
     if (frame && !frame.dataset.loaded) {
       frame.src = '../shared/debug.html';
@@ -628,7 +742,6 @@ function toggleDebugPanel() {
     }
     container.classList.remove('hidden');
     btn.classList.add('active');
-    // Ocultar notification-rail y cortex-bar mientras debug esta abierto
     const rail = document.getElementById('notification-rail');
     if (rail) rail.style.display = 'none';
     const cortex = document.getElementById('cortex-bar');
@@ -637,7 +750,6 @@ function toggleDebugPanel() {
   } else {
     container.classList.add('hidden');
     btn.classList.remove('active');
-    // Restaurar notification-rail al cerrar debug
     const rail2 = document.getElementById('notification-rail');
     if (rail2) rail2.style.display = '';
     log('info', 'debug panel closed');
@@ -648,23 +760,45 @@ function toggleDebugPanel() {
 document.addEventListener('DOMContentLoaded', () => {
   log('info', 'DOM ready — initialized');
   document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
-  // Screen 0 = entry, stepper vacío. Al navegar a screen 1 se activa Identity.
-  // El sidebar ya es visible desde el inicio.
 
-  // Bind del botón Debug — el onclick en el HTML llama toggleDebugPanel()
-  // pero por seguridad también lo bindeamos acá para que funcione aunque
-  // el atributo se pierda en algún rebuild del template.
+  // ── Milestone listeners (Cambio 7) ─────────────────────────────────────
+  //
+  // Registrar los listeners de push del MilestoneReactor.
+  // onMilestone y onStepUpdate usan removeAllListeners internamente —
+  // registrar acá una sola vez es suficiente.
+
+  if (window.onboarding?.onMilestone) {
+    window.onboarding.onMilestone(({ stepId, ...data }) => {
+      log('info', `IPC ← milestone:reached — stepId: ${stepId}`);
+      handleMilestoneReached(stepId, data);
+    });
+    log('info', 'milestone:reached listener registrado');
+  } else {
+    log('warn', 'window.onboarding.onMilestone no disponible — solo modo poll fallback');
+  }
+
+  if (window.onboarding?.onStepUpdate) {
+    window.onboarding.onStepUpdate(({ stepId, phase }) => {
+      log('info', `IPC ← onboarding:step-ui-update — stepId: ${stepId} phase: ${phase}`);
+      // Actualizar el stepper si tenemos un nodo mapeado para el step
+      if (phase === 'ESTABLISHED') {
+        const nodeName = STEP_TO_NODE[stepId];
+        if (nodeName) setStepperEstablished(nodeName);
+      }
+    });
+    log('info', 'onboarding:step-ui-update listener registrado');
+  }
+
+  // ── Debug panel ─────────────────────────────────────────────────────────
   const debugBtn = document.getElementById('debug-toggle');
   if (debugBtn) {
     debugBtn.onclick = toggleDebugPanel;
-    // Visible solo en desarrollo — oculto en builds empaquetados
     const isDev = !!(window.__BLOOM_DEV__ ||
                      window.location.href.includes('localhost') ||
                      window.navigator.userAgent.includes('Electron'));
     debugBtn.style.display = isDev ? 'flex' : 'none';
   }
 
-  // Shortcut Ctrl+Shift+D (o Cmd+Shift+D en mac) — dev quality-of-life
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'D') {
       e.preventDefault();

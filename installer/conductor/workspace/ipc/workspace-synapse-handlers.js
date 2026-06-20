@@ -15,6 +15,13 @@
  *
  * El workspace generalmente lanza perfiles ya existentes (launch, no seed),
  * pero seedAndLaunch está disponible por completitud.
+ *
+ * CAMBIOS (sesión 2026-06):
+ *   - Integración con MilestoneRegistry y MilestoneReactor.
+ *   - bridge.on('message') conecta el bridge al reactor para eventos ONBOARDING_MILESTONE.
+ *   - registerSynapseHandlers acepta opts.registry y opts.reactor opcionales.
+ *   - getBridgeForWindow sigue disponible para código del main process que
+ *     necesite escuchar eventos directamente.
  */
 
 const { ipcMain, app } = require('electron');
@@ -28,10 +35,20 @@ const _bridges = new Map();
  * @param {object}  [opts]
  * @param {string}  [opts.nucleusBinary='nucleus']
  * @param {boolean} [opts.verbose=false]
- * @param {number}  [opts.nucleusTimeout=60000]  Timeout en ms para comandos nucleus
+ * @param {number}  [opts.nucleusTimeout=60000]      Timeout en ms para comandos nucleus
+ * @param {import('../onboarding/milestone-registry').MilestoneRegistry} [opts.registry]
+ *   Registry de hitos. Si se pasa, el bridge conecta los eventos ONBOARDING_MILESTONE al reactor.
+ * @param {import('../onboarding/milestone-reactor').MilestoneReactor}   [opts.reactor]
+ *   Reactor de hitos. Requiere que opts.registry también se pase.
  */
 function registerSynapseHandlers(getWindow, opts = {}) {
-  const { nucleusBinary = 'nucleus', verbose = false, nucleusTimeout = 60_000 } = opts;
+  const {
+    nucleusBinary  = 'nucleus',
+    verbose        = false,
+    nucleusTimeout = 60_000,
+    registry       = null,
+    reactor        = null,
+  } = opts;
 
   // ── seed + launch ────────────────────────────────────────────────────────
   ipcMain.handle('synapse:seedAndLaunch', async (_event, { alias, options = {} }) => {
@@ -42,6 +59,8 @@ function registerSynapseHandlers(getWindow, opts = {}) {
     const bridge = new SynapseBridge({ mainWindow: win, nucleusBinary, verbose, nucleusTimeout });
     _bridges.set(win.webContents.id, bridge);
     win.once('closed', () => _destroyBridgeForWindow(win));
+
+    _connectMilestoneReactor(bridge, registry, reactor);
 
     try {
       const result = await bridge.seedAndLaunch(alias, options);
@@ -64,6 +83,8 @@ function registerSynapseHandlers(getWindow, opts = {}) {
     _bridges.set(win.webContents.id, bridge);
     win.once('closed', () => _destroyBridgeForWindow(win));
 
+    _connectMilestoneReactor(bridge, registry, reactor);
+
     try {
       const result = await bridge.launch(profileIdOrAlias, options);
 
@@ -84,6 +105,42 @@ function registerSynapseHandlers(getWindow, opts = {}) {
   app.on('before-quit', () => {
     for (const bridge of _bridges.values()) bridge.destroy();
     _bridges.clear();
+  });
+}
+
+/**
+ * Conecta el EventEmitter del bridge al MilestoneReactor.
+ * Se llama una vez por bridge, justo después de crearlo.
+ *
+ * El bridge emite 'message' con cada mensaje de Brain ya clasificado.
+ * Solo procesamos los de tipo 'ONBOARDING_MILESTONE' — el resto los ignora
+ * el reactor y siguen su camino normal al renderer vía webContents.send().
+ *
+ * @param {import('../../shared/synapse-bridge').SynapseBridge} bridge
+ * @param {import('../onboarding/milestone-registry').MilestoneRegistry|null} registry
+ * @param {import('../onboarding/milestone-reactor').MilestoneReactor|null}   reactor
+ */
+function _connectMilestoneReactor(bridge, registry, reactor) {
+  if (!registry || !reactor) return;
+
+  bridge.on('message', (enriched) => {
+    if (enriched.type !== 'ONBOARDING_MILESTONE') return;
+
+    // El evento en el mensaje es el nombre del evento Cortex (ej: 'GITHUB_TOKEN_STORED').
+    // El registry resuelve ese nombre al stepId del onboarding (ej: 'github_auth').
+    const stepId = registry.resolveEvent(enriched.event);
+
+    if (!stepId) {
+      // Evento clasificado como ONBOARDING_MILESTONE pero sin mapeo en el registry.
+      // Puede pasar si ONBOARDING_EVENTS se extendió pero el JSON no tiene cortex_events para él.
+      console.warn(
+        '[workspace-synapse-handlers] ONBOARDING_MILESTONE sin mapeo en registry:',
+        enriched.event
+      );
+      return;
+    }
+
+    reactor.handleMilestone(stepId, enriched);
   });
 }
 

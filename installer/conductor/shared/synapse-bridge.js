@@ -30,6 +30,13 @@
  *   y así no quedarse esperando eternamente un evento que ya pasó.
  *   Ver: connectToBrain() y el handler install:start en main.js.
  *
+ * CAMBIOS v3 (sesión 2026-06):
+ *   1. ONBOARDING_EVENTS: Set exportado con los eventos de hitos del onboarding
+ *   2. _classifyMessage: nuevo case ONBOARDING_MILESTONE — captura todos los eventos
+ *      del Set antes del fallback genérico. El MilestoneRegistry puede extender el
+ *      Set en runtime sin tocar este archivo.
+ *   3. module.exports: agrega ONBOARDING_EVENTS para extensión externa.
+ *
  * CAMBIOS v2 (sesión 2025-05):
  *   1. _classifyMessage: maneja profile_id en top-level además de data.profile_id
  *   2. connectToBrain: delay inicial 200ms en lugar de 1500ms (Brain ya está corriendo)
@@ -88,6 +95,42 @@ function getBloomRoot() {
       );
   }
 }
+
+// ─── Set de eventos de onboarding conocidos ──────────────────────────────────
+//
+// Fuente de verdad: DISCOVERY_PROTOCOL_MANIFEST en discoveryProtocol.js (Cortex).
+// Este Set debe coincidir con los observable_events declarados en ese manifest.
+//
+// Para agregar un evento nuevo:
+//   1. Añadirlo al DISCOVERY_PROTOCOL_MANIFEST en discoveryProtocol.js
+//   2. Añadirlo aquí
+//   3. Añadir el handler correspondiente en MilestoneReactor (milestone-reactor.js)
+//
+// El MilestoneRegistry puede extender este Set en runtime para eventos
+// declarados en config/onboarding/milestone-config.json (ver milestone-registry.js).
+//
+const ONBOARDING_EVENTS = new Set([
+  // ── Discovery / GitHub ────────────────────────────────────────────────────
+  'GITHUB_PAT_DETECTED',        // Cortex detectó un PAT en clipboard — pre-confirmación
+  'GITHUB_TOKEN_STORED',        // Brain persistió el fingerprint del PAT en nucleus.json
+  'ACCOUNT_REGISTERED',         // Cuenta creada en Nucleus con el token validado
+
+  // ── Vault ────────────────────────────────────────────────────────────────
+  'VAULT_INITIALIZED',          // Vault creado y cifrado correctamente
+  'VAULT_INIT',                 // Alias alternativo que algunos builds de Brain emiten
+
+  // ── Google / AI providers ────────────────────────────────────────────────
+  'GOOGLE_AUTH_COMPLETE',       // OAuth Google completado
+  'AI_PROVIDER_CONFIGURED',     // API key de proveedor IA almacenada en vault
+
+  // ── Proyecto ─────────────────────────────────────────────────────────────
+  'PROJECT_CREATED',            // Primer proyecto creado en Nucleus
+
+  // ── Flujo completo ────────────────────────────────────────────────────────
+  'ONBOARDING_STEP_COMPLETE',   // Brain confirma un step genérico (incluye step ID en payload)
+  'DISCOVERY_COMPLETE',         // Todos los steps del onboarding completados — señal de cierre
+  'SITE_READY',                 // Señal auxiliar de ionsite — sitio listo para automatización
+]);
 
 // ─── SynapseBridge ───────────────────────────────────────────────────────────
 
@@ -447,6 +490,8 @@ class SynapseBridge extends EventEmitter {
    *   { event: 'HANDSHAKE_CONFIRMED', ... }
    *   { event: 'HOST_READY', ... }
    *   { event: 'INTENT_STARTED', ... }
+   *   { event: 'GITHUB_TOKEN_STORED', ... }   ← ahora → ONBOARDING_MILESTONE
+   *   { event: 'ONBOARDING_STEP_COMPLETE', ... } ← ahora → ONBOARDING_MILESTONE
    */
   _classifyMessage(msg) {
     const msgType = (msg.type    || '').toUpperCase();
@@ -485,6 +530,17 @@ class SynapseBridge extends EventEmitter {
     if (event.startsWith('INTENT_'))                  return { type: 'INTENT' };
     if (event.startsWith('ION_'))                     return { type: 'ION' };
     if (event.startsWith('PROFILE_'))                 return { type: 'PROFILE' };
+
+    // ── ONBOARDING_MILESTONE ─────────────────────────────────────────────────
+    //
+    // Captura todos los eventos de progreso del onboarding antes del fallback.
+    // El Set ONBOARDING_EVENTS (exportado) es la única fuente de clasificación:
+    // no se inspecciona el payload, no se hacen comparaciones de strings inline.
+    // El MilestoneRegistry puede extender este Set en runtime sin tocar este archivo.
+    //
+    if (ONBOARDING_EVENTS.has(event)) {
+      return { type: 'ONBOARDING_MILESTONE' };
+    }
 
     // ── Fallback ─────────────────────────────────────────────────────────────
     if (msg.type) return { type: msg.type };
@@ -545,4 +601,5 @@ module.exports = {
   SYNAPSE_EMITTER_EVENT,
   getBloomRoot,
   BRAIN_SERVER_PORT,
+  ONBOARDING_EVENTS,   // extensible en runtime por MilestoneRegistry
 };

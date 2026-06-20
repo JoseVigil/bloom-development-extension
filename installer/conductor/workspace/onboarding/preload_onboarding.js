@@ -1,5 +1,11 @@
 // preload_onboarding.js — Bloom Conductor
 // Integración Onboarding UI + Synapse Protocol v4.0
+//
+// CAMBIOS (sesión 2026-06):
+//   - onMilestone: listener para 'milestone:reached' emitido por MilestoneReactor
+//   - onStepUpdate: listener para 'onboarding:step-ui-update' para actualizaciones granulares de UI
+//   Ambos canales usan removeAllListeners antes de registrar el callback nuevo,
+//   consistente con el patrón ya establecido en onInitLine.
 
 'use strict';
 
@@ -43,4 +49,36 @@ contextBridge.exposeInMainWorld('onboarding', {
   // System health — ejecuta nucleus --json health en el main process
   // y devuelve el JSON parseado. El debug panel lo usa para el sidebar.
   health: () => ipcRenderer.invoke('onboarding:health'),
+
+  // ── Push del MilestoneReactor (Cambio 6) ──────────────────────────────
+  //
+  // onMilestone — emitido por MilestoneReactor cuando un hito se completa.
+  // Payload: { stepId: string, _ts: number, ...extra }
+  // stepId puede ser cualquier ID de onboarding_steps.json, o el especial
+  // '__onboarding_complete__' cuando todos los steps bloqueantes terminaron.
+  //
+  // Uso en onboarding.js:
+  //   window.onboarding.onMilestone(({ stepId, ...data }) => {
+  //     handleMilestoneReached(stepId, data);
+  //   });
+  //
+  onMilestone: (callback) => {
+    ipcRenderer.removeAllListeners('milestone:reached');
+    ipcRenderer.on('milestone:reached', (_, data) => callback(data));
+  },
+
+  // onStepUpdate — emitido por MilestoneReactor para actualizaciones granulares de UI.
+  // Payload: { stepId: string, phase: string, _ts: number }
+  // phase puede ser 'ESTABLISHED', 'IN_PROGRESS', 'ERROR', etc.
+  // Permite que el renderer actualice el stepper sin esperar al milestone completo.
+  //
+  // Uso en onboarding.js:
+  //   window.onboarding.onStepUpdate(({ stepId, phase }) => {
+  //     if (phase === 'ESTABLISHED') setStepperEstablished(STEP_TO_NODE[stepId]);
+  //   });
+  //
+  onStepUpdate: (callback) => {
+    ipcRenderer.removeAllListeners('onboarding:step-ui-update');
+    ipcRenderer.on('onboarding:step-ui-update', (_, data) => callback(data));
+  },
 });
