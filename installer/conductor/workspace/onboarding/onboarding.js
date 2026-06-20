@@ -814,4 +814,22 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleDebugPanel();
     }
   });
+
+  // ── Synapse raw event bridge (padre → iframe debug.html) ────────────────
+  // debug.html corre en un iframe sin preload propio, así que no tiene
+  // window.onboarding.onSynapseEvent. Lo recibimos acá (sí tenemos preload)
+  // y lo reenviamos por postMessage. El tipo 'SYNAPSE_RAW_EVENT' debe
+  // coincidir con el que escucha debug.html en initRawFeed().
+  if (window.onboarding?.onSynapseEvent) {
+    window.onboarding.onSynapseEvent((data) => {
+      const frame = document.getElementById('debug-frame');
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: 'SYNAPSE_RAW_EVENT', payload: data }, '*');
+        log('info', `onSynapseEvent — evento reenviado a debug-frame: ${data?.type || data?.event || '?'}`);
+      } else {
+        log('warn', 'onSynapseEvent — evento recibido pero no hay debug-frame en el DOM (panel cerrado?)');
+      }
+    });
+    log('info', 'onSynapseEvent listener registrado — reenvío a debug-frame activo');
+  }
 });

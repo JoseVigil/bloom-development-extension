@@ -93,11 +93,17 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
           ['--json', 'synapse', 'status', profileId],
           5_000
         );
-        if (status?.connected === true || status?.state === 'CONNECTED') {
+        // La respuesta real anida el estado bajo "status": { state, sentinel_running, ... }
+        // (ver types/orchestration.go ProfileStatus). "CONNECTED" no es un ProfileState
+        // válido — el estado real una vez que Sentinel está arriba y mandando heartbeats
+        // es "RUNNING". sentinel_running se chequea como señal de respaldo por si hay
+        // un estado transitorio (ej. DEGRADED/RECOVERING) con el sentinel igual activo.
+        const profileState = status?.status;
+        if (profileState?.state === 'RUNNING' || profileState?.sentinel_running === true) {
           log.info(`[IPC] waitForProfileConnected — profile ${profileId} is connected`);
           return true;
         }
-        log.info(`[IPC] waitForProfileConnected — not yet connected (state: ${status?.state ?? 'unknown'}), retrying...`);
+        log.info(`[IPC] waitForProfileConnected — not yet connected (state: ${profileState?.state ?? 'unknown'}, sentinel_running: ${profileState?.sentinel_running ?? 'unknown'}), retrying...`);
       } catch (e) {
         // Brain puede estar ocupado arrancando — reintentar silenciosamente
         log.info(`[IPC] waitForProfileConnected — status check failed (${e.message}), retrying...`);

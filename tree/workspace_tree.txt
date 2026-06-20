@@ -7,6 +7,7 @@ bloom-development-extension/
     ├── bloom-conductor-version.sh
     ├── build_info.json
     ├── build_number.darwin.txt
+    ├── build_number.linux.txt
     ├── build_number.txt
     ├── build_number.windows.txt
     ├── core/
@@ -23,6 +24,8 @@ bloom-development-extension/
     ├── onboarding/
     │   ├── ipc/
     │   │   └── onboarding-handlers.js
+    │   ├── milestone-reactor.js
+    │   ├── milestone-registry.js
     │   ├── onboarding.html
     │   ├── onboarding.js
     │   └── preload_onboarding.js
@@ -30,4 +33,6 @@ bloom-development-extension/
     ├── package.json
     ├── shared/
     │   └── debug.html
+    ├── tree/
+    │   └── btips_tree.txt
     └── version.json

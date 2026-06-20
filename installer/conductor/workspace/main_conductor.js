@@ -17,7 +17,14 @@ const _sharedDir = require('electron').app.isPackaged
 const { getLogger } = require(path.join(_sharedDir, 'logger'));
 const { paths } = require(path.join(_sharedDir, 'global_paths'));
 const { registerOnboardingHandlers } = require('./onboarding/ipc/onboarding-handlers');
+// synapse-bridge.js vive en conductor/shared/ — un nivel arriba de workspace/
+const { SynapseBridge } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
 const log = getLogger('onboarding');
+
+// Bridge de onboarding — instanciado una vez cuando se lanza Discovery.
+// Permite escuchar todos los mensajes de Brain durante el onboarding y
+// reemitirlos al renderer via synapse:raw-event para el debug panel.
+let _onboardingBridge = null;
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const BLOOM_BASE   = paths.bloomBase;
@@ -173,7 +180,13 @@ function createOnboardingWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'onboarding', 'onboarding.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    if (_onboardingBridge) {
+      _onboardingBridge.destroy();
+      _onboardingBridge = null;
+    }
+    mainWindow = null;
+  });
 }
 
 function createWorkspaceWindow(url) {
@@ -199,6 +212,49 @@ function createWorkspaceWindow(url) {
     mainWindow.maximize();
   });
   mainWindow.on('closed', () => { mainWindow = null; });
+}
+
+// ── SYNAPSE BRIDGE — ONBOARDING ────────────────────────────────────────────
+// Instancia el SynapseBridge para el onboarding y abre la conexión TCP con
+// Brain ServerManager (puerto 5678). Cada mensaje que Brain emite vía broadcast
+// llega a _onBrainMessage(), que dispara bridge.emit('message', enriched).
+// El listener reemite ese payload al renderer como 'synapse:raw-event' para
+// que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
+//
+// Requiere que el profileId exista en nucleus.json (master_profile).
+// Idempotente: si el bridge ya existe, no lo recrea.
+function initOnboardingBridge() {
+  if (_onboardingBridge) return;
+
+  // Leer el profileId para que connectToBrain pueda filtrar PROFILE_CONNECTED
+  // correctamente. Sin esto el bridge no sabe cuál es nuestro perfil.
+  let profileId = null;
+  try {
+    const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+    profileId = data.master_profile || null;
+  } catch (e) {
+    log.warn('[SYNAPSE] initOnboardingBridge: no se pudo leer nucleus.json —', e.message);
+  }
+
+  _onboardingBridge = new SynapseBridge({
+    mainWindow:     mainWindow,
+    nucleusBinary:  NUCLEUS_EXE,
+    verbose:        !app.isPackaged,
+    nucleusTimeout: 60_000,
+  });
+
+  _onboardingBridge.on('message', (enriched) => {
+    // Usar mainWindow directamente (variable del módulo) — siempre apunta
+    // a la ventana actual porque createOnboardingWindow() la reasigna.
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('synapse:raw-event', enriched);
+  });
+
+  // CRÍTICO: sin connectToBrain() el socket TCP nunca se abre y Brain
+  // nunca manda nada — el listener 'message' nunca dispara.
+  _onboardingBridge.connectToBrain(profileId);
+
+  log.info('[SYNAPSE] Onboarding bridge initialized — connected to Brain, raw event forwarding active');
 }
 
 // ── NUCLEUS IPC HANDLERS ───────────────────────────────────────────────────
@@ -405,6 +461,12 @@ app.whenReady().then(async () => {
     // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
     // para que los handlers siempre resuelvan la ventana actual
     registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow);
+    // Inicializar el bridge de synapse para el onboarding.
+    // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
+    // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
+    // Se inicializa aquí — después de crear la ventana — para que mainWindow
+    // esté disponible cuando el bridge intente hacer webContents.send().
+    initOnboardingBridge();
   }
 });
 
@@ -424,6 +486,7 @@ app.on('activate', () => {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
         registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow);
+        initOnboardingBridge();
       }
     }
   }

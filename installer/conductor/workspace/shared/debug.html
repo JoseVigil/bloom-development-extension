@@ -1167,12 +1167,15 @@ function updateRawCount() {
 function initRawFeed() {
   // Vía preload bridge (ventana Electron con contextBridge expuesto).
   if (window.onboarding?.onSynapseEvent) {
+    log('info', 'initRawFeed — tomó rama preload (window.onboarding.onSynapseEvent existe en este frame)');
     window.onboarding.onSynapseEvent((data) => ingestRawEvent(data));
     return;
   }
   // Fallback: debug.html embebido como iframe, padre reenvía el IPC
   // como postMessage (extensión futura del lado de onboarding.js).
+  log('info', 'initRawFeed — tomó rama postMessage (window.onboarding no existe en este frame)');
   window.addEventListener('message', (evt) => {
+    log('info', `initRawFeed — message recibido, type: ${evt.data?.type}`);
     if (evt.data && evt.data.type === 'SYNAPSE_RAW_EVENT') {
       ingestRawEvent(evt.data.payload);
     }

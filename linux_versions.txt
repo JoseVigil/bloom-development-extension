@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — linux
-# Generated: 2026-06-18 20:40:57
+# Generated: 2026-06-20 14:59:11
 
 ---
 brain/__build__.py
@@ -127,11 +127,11 @@ const BuildTime = "19:35:00"
 
 ---
 installer/metamorph/scripts/build_number.effective.txt
-10
+11
 
 ---
 installer/metamorph/scripts/build_number.txt
-10
+11
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
