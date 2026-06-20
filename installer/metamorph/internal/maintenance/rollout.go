@@ -194,9 +194,17 @@ var allComponents = []component{
 		DestFn:   func(b string) string { return filepath.Join(b, "hooks") },
 	},
 	{
-		Key:      "config",
-		SourceFn: func(r string) string { return filepath.Join(r, "config") },
-		DestFn:   func(b string) string { return filepath.Join(b, "config") },
+		// After the top-level config/ tree is copied, onboardingPostDeploy stages
+		// installer/native/config/onboarding/onboarding_steps.json into
+		// config/onboarding/ as well. That file lives outside the generic
+		// config/ source tree, so it would not be picked up by copyDir on its
+		// own. The hook is copy-once: if onboarding_steps.json already exists
+		// at the destination it is left untouched, so a user's recorded
+		// onboarding progress is never overwritten by a later rollout.
+		Key:          "config",
+		SourceFn:     func(r string) string { return filepath.Join(r, "config") },
+		DestFn:       func(b string) string { return filepath.Join(b, "config") },
+		PostDeployFn: onboardingPostDeploy,
 	},
 	{
 		Key: "nssm",
@@ -554,6 +562,53 @@ func resolveCodeCLI() (string, error) {
 		return "", fmt.Errorf("'code' not found in PATH and VS Code bundle not found at /Applications/Visual Studio Code.app")
 	}
 	return "", fmt.Errorf("'code' not found in PATH — ensure VS Code is installed and 'code' is in PATH")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// config / onboarding post-deploy hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+// onboardingPostDeploy stages installer/native/config/onboarding/onboarding_steps.json
+// into <dst>/onboarding/onboarding_steps.json after the generic config/ tree has
+// been copied. dst is config component's resolved destination (<BloomRoot>/config),
+// so the file ends up at <BloomRoot>/config/onboarding/onboarding_steps.json —
+// where MilestoneRegistry expects to find it at runtime.
+//
+// This is copy-once, not copy-always: if onboarding_steps.json is already present
+// at the destination, it is left untouched. A rollout must never clobber a user's
+// recorded onboarding progress.
+func onboardingPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	src := filepath.Join(repoRoot, "installer", "native", "config", "onboarding", "onboarding_steps.json")
+	destDir := filepath.Join(dst, "onboarding")
+	destFile := filepath.Join(destDir, "onboarding_steps.json")
+
+	if _, err := os.Stat(src); err != nil {
+		// Non-fatal: an older or partial checkout may not have the file yet.
+		// The config/ tree itself was still deployed successfully.
+		c.Logger.Warning("⚠️  onboarding: source not found at %s — skipping", src)
+		return nil
+	}
+
+	if _, err := os.Stat(destFile); err == nil {
+		c.Logger.Info("ℹ️  onboarding: %s already exists — leaving in place", destFile)
+		return nil
+	}
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] onboarding: would copy %s → %s", src, destFile)
+		return nil
+	}
+
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("onboarding: could not create %s: %w", destDir, err)
+	}
+
+	if err := copyFile(src, destFile); err != nil {
+		return fmt.Errorf("onboarding: copy failed: %w", err)
+	}
+
+	c.Logger.Success("✅ onboarding: onboarding_steps.json → %s", destFile)
+	return nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

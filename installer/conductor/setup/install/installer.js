@@ -1176,6 +1176,36 @@ async function deployAllSystemBinaries(win) {
       }
     }
 
+    // ========================================================================
+    // 15c. ONBOARDING STEPS (config para MilestoneRegistry de Conductor)
+    // ========================================================================
+    logger.info('\n🧭 ONBOARDING STEPS');
+
+    // Asset map: installer/native/config/onboarding/onboarding_steps.json -> config/onboarding/
+    // A diferencia de nucleus-governance.json y sentinel-config.json, este archivo
+    // NO se sobreescribe si ya existe en disco: puede contener progreso/estado
+    // de onboarding del usuario y no queremos pisarlo en reinstalaciones/updates.
+    {
+      const onboardingSrc = path.join(
+        paths.installerDir, 'native', 'config', 'onboarding', 'onboarding_steps.json'
+      );
+      const onboardingConfigDir = path.join(paths.configDir, 'onboarding');
+      const onboardingDest = path.join(onboardingConfigDir, 'onboarding_steps.json');
+
+      await fs.ensureDir(onboardingConfigDir);
+
+      if (await fs.pathExists(onboardingDest)) {
+        logger.info('⭐️ onboarding_steps.json already present in config/onboarding/, skipping (no overwrite)');
+        results.onboarding = { success: true, skipped: true, dest: onboardingDest };
+      } else if (await fs.pathExists(onboardingSrc)) {
+        results.onboarding = await copyFileSafe(onboardingSrc, onboardingDest, 'onboarding_steps.json');
+        logger.success('✅ onboarding_steps.json deployed to config/onboarding/');
+      } else {
+        logger.warn(`⚠️ onboarding_steps.json not found at: ${onboardingSrc}, skipping`);
+        results.onboarding = { success: false, skipped: true };
+      }
+    }
+
     await nucleusManager.setOriginPath(paths.nucleusSource);
     await nucleusManager.completeMilestone(MILESTONE, results);
     return { success: true, results };
