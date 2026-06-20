@@ -373,8 +373,7 @@ const Logger = {
       <span class="log-level ${level}">${level}</span>
       <span class="log-body">${this._escape(body)}</span>
     `;
-    container.appendChild(el);
-    container.scrollTop = container.scrollHeight;
+    container.prepend(el);
 
     // Update badge
     const badge = document.getElementById('log-badge');
@@ -408,6 +407,22 @@ const Logger = {
     if (badge) { badge.style.display = 'none'; badge.textContent = '0'; }
   }
 };
+
+// ============================================================================
+// _harnessLogLevel
+// Determina el nivel de display para un evento HARNESS_LOG recibido de
+// background.js. Diferencia mensajes entrantes del host (IN), salientes al
+// host o a content.js (OUT), errores (ERROR) e informativos genéricos (INFO).
+//
+// Usado tanto en el listener de HARNESS_LOG en tiempo real como en el
+// procesamiento del replay de HARNESS_HELLO, para que la UI sea consistente.
+// ============================================================================
+function _harnessLogLevel(data) {
+  if (data?._level === 'error') return 'ERROR';
+  if (data?._dir  === 'in')    return 'IN';
+  if (data?._dir  === 'out')   return 'OUT';
+  return 'INFO';
+}
 
 // ============================================================================
 // ConfigReader

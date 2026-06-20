@@ -526,6 +526,19 @@ function connectNative() {
 
     nativePort.postMessage(extensionReadyMsg);
 
+    // ── Harness: reportar FASE 1 del handshake ───────────────────────────────
+    // Este evento se emite antes de que openHarnessTab() corra, así que va
+    // directo al buffer. El replay de HARNESS_HELLO lo entregará al Harness
+    // cuando la tab abra.
+    forwardToDebugPanel('synapse', '→HOST:extension_ready', {
+      _dir:          'out',
+      _phase:        'handshake_1',
+      profile_id:    config.profileId,
+      launch_id:     config.launchId,
+      extension_id:  config.extension_id || chrome.runtime.id
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+
     handshakeState = 'EXTENSION_READY';
     connectionState = 'CONNECTED';
     reconnectAttempts = 0;
@@ -585,6 +598,21 @@ function scheduleReconnect() {
 function handleHostMessage(msg) {
   const label = msg.event || msg.command || msg.type || '(unknown)';
   console.log(`[Host → Synapse] [${new Date().toISOString()}] ${label}`, msg);
+
+  // ── Harness: reportar cada mensaje entrante del host ─────────────────────
+  // Excluir keepalive (ruido). Sanitizar tokens si los hubiera.
+  const _skipHarnessLog = label === 'keepalive';
+  if (!_skipHarnessLog) {
+    const _safeMsg = { ...msg };
+    if (_safeMsg.token) _safeMsg.token = _safeMsg.token.substring(0, 10) + '…';
+    if (_safeMsg.key)   _safeMsg.key   = _safeMsg.key.substring(0, 10) + '…';
+    forwardToDebugPanel(
+      'synapse',
+      `HOST→:${label}`,
+      { _dir: 'in', payload: _safeMsg }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // FASE 2: Host → Extension (host_ready)
   if (msg.command === 'host_ready' || msg.event === 'host_ready') {
@@ -1295,6 +1323,23 @@ function sendToHost(msg) {
 
     const label = msg.event || msg.command || msg.type || '(unknown)';
     console.log(`[Synapse → Host] [${new Date().toISOString()}] ${label}`, msg);
+
+    // ── Harness: reportar cada mensaje saliente al host ───────────────────────
+    // Excluir HEARTBEAT (ruido de keepalive) y tokens completos (seguridad).
+    // El Harness ve el label, la dirección, y el payload sanitizado.
+    const _skipHarnessLog = label === 'HEARTBEAT' || label === 'keepalive';
+    if (!_skipHarnessLog) {
+      const _safePayload = { ...msg };
+      if (_safePayload.token) _safePayload.token = _safePayload.token.substring(0, 10) + '…';
+      if (_safePayload.key)   _safePayload.key   = _safePayload.key.substring(0, 10) + '…';
+      forwardToDebugPanel(
+        'synapse',
+        `→HOST:${label}`,
+        { _dir: 'out', payload: _safePayload }
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     nativePort.postMessage(msg);
   } else {
     console.warn('[Synapse] ⚠ Cannot send - not connected:', msg.event || msg.type);

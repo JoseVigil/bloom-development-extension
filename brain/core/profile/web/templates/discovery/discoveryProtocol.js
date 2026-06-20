@@ -283,7 +283,7 @@ if (typeof self !== 'undefined') {
         type: "command",
         direction: "harness_to_background",
         channel: "runtime",
-        description: "Navigate Discovery to a specific onboarding step",
+        description: "Navigate Discovery to a specific onboarding step. NOTA (Jun 19 2026): vault_init y project_create todavía no tienen screen implementada en discovery/index.html — routeToStep() los acepta sin romper, pero no hay UI que mostrar. Ver IMPL_PROMPT_Discovery_VaultInit_ProjectCreate.md.",
         payload_template: {
           command: "onboarding_navigate",
           payload: { step: "$STEP" }
@@ -293,7 +293,9 @@ if (typeof self !== 'undefined') {
             name: "step",
             type: "enum",
             variable: "$STEP",
-            options: ["welcome", "github_auth", "github_confirm", "api_key", "complete"]
+            // Alineado 1:1 con SCREEN_IDS de onboarding.js (VSCode), salvo 'entry' y 'launch'
+            // que no son steps que Discovery rutee (son screens propias del stepper VSCode).
+            options: ["github_auth", "vault_init", "google_auth", "ai_provider_setup", "project_create"]
           }
         ]
       },
