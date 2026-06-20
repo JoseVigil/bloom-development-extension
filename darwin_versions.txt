@@ -1,0 +1,64 @@
+# Bloom Version Snapshot — darwin
+# Generated: 2026-06-20 19:28:51
+
+---
+installer/conductor/setup/build_info.json
+{
+  "name": "bloom-nucleus-installer",
+  "product_name": "Bloom Nucleus Installer",
+  "version": "1.0.0",
+  "build": 103,
+  "full_version": "1.0.0+build.103",
+  "channel": "stable",
+  "built_at": "2026-06-10T23:49:59.016Z",
+  "git_commit": "d32fbfa",
+  "platform": "linux",
+  "arch": "win64",
+  "node_version": "v18.19.1",
+  "electron_version": "^28.0.0"
+}
+
+---
+installer/conductor/setup/version.json
+{
+  "major": 1,
+  "minor": 0,
+  "patch": 0,
+  "build": 103,
+  "semver": "1.0.0",
+  "channel": "stable"
+}
+
+---
+installer/metamorph/internal/core/build_info.go
+package core
+
+// Auto-generated during build
+const BuildNumberInt = 4
+const BuildNumber    = BuildNumberInt
+const BuildDate = "2026 -Mon 06-15"
+const BuildTime = "12:19:00"
+
+---
+installer/sentinel/internal/core/build_info.go
+package core
+
+// Auto-generated during build
+const BuildNumberInt = 2
+const BuildNumber    = BuildNumberInt
+const BuildDate = "2026 -Fri 06-12"
+const BuildTime = "19:35:00"
+
+---
+installer/nucleus/scripts/build_number.effective.txt
+32
+
+---
+installer/sentinel/scripts/build_number.effective.txt
+1
+
+---
+installer/sentinel/scripts/build_number.txt
+1
+
+---
