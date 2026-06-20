@@ -22,6 +22,11 @@
  *   - registerSynapseHandlers acepta opts.registry y opts.reactor opcionales.
  *   - getBridgeForWindow sigue disponible para código del main process que
  *     necesite escuchar eventos directamente.
+ *   - Synapse raw event log (Camino C): si opts.verbose es true, cada bridge
+ *     reenvía TODOS los mensajes ('message') al renderer vía
+ *     'synapse:raw-event', sin pasar por el MilestoneReactor ni por
+ *     ningún filtro. Pensado exclusivamente para el panel de debug
+ *     (debug.html / window.onboarding.onSynapseEvent).
  */
 
 const { ipcMain, app } = require('electron');
@@ -62,6 +67,15 @@ function registerSynapseHandlers(getWindow, opts = {}) {
 
     _connectMilestoneReactor(bridge, registry, reactor);
 
+    if (verbose) {
+      bridge.on('message', (enriched) => {
+        const win = getWindow();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('synapse:raw-event', enriched);
+        }
+      });
+    }
+
     try {
       const result = await bridge.seedAndLaunch(alias, options);
       return { success: true, ...result };
@@ -84,6 +98,15 @@ function registerSynapseHandlers(getWindow, opts = {}) {
     win.once('closed', () => _destroyBridgeForWindow(win));
 
     _connectMilestoneReactor(bridge, registry, reactor);
+
+    if (verbose) {
+      bridge.on('message', (enriched) => {
+        const win = getWindow();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('synapse:raw-event', enriched);
+        }
+      });
+    }
 
     try {
       const result = await bridge.launch(profileIdOrAlias, options);

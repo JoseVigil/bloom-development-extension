@@ -287,6 +287,22 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
       child.on('close', code => {
         if (code === 0) {
           log.success('[IPC] onboarding:init-nucleus — ok');
+          // Fix C: persistir nucleus_create en completed_steps.
+          // El reactor nunca recibe un evento Cortex para este step (cortex_events: []),
+          // así que es responsabilidad del handler marcarlo al completar el proceso.
+          try {
+            const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+            data.onboarding = data.onboarding || {};
+            data.onboarding.completed_steps = data.onboarding.completed_steps || [];
+            if (!data.onboarding.completed_steps.includes('nucleus_create')) {
+              data.onboarding.completed_steps.push('nucleus_create');
+              data.onboarding.updated_at = new Date().toISOString();
+              fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+              log.success('[IPC] onboarding:init-nucleus — nucleus_create persisted in completed_steps');
+            }
+          } catch (e) {
+            log.warn('[IPC] onboarding:init-nucleus — could not persist nucleus_create:', e.message);
+          }
           resolve({ success: true, output: allOutput });
         } else {
           log.error('[IPC] onboarding:init-nucleus — FAILED: exit code', code);

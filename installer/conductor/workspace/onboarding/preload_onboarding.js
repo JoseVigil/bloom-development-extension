@@ -81,4 +81,13 @@ contextBridge.exposeInMainWorld('onboarding', {
     ipcRenderer.removeAllListeners('onboarding:step-ui-update');
     ipcRenderer.on('onboarding:step-ui-update', (_, data) => callback(data));
   },
+
+  // onSynapseEvent — feed raw de mensajes Synapse, sin filtrar ni clasificar.
+  // Solo se emite cuando el bridge corre en modo verbose (ver
+  // workspace-synapse-handlers.js). Pensado para el panel de debug.
+  // Payload: el mensaje 'enriched' tal cual lo emite SynapseBridge.
+  onSynapseEvent: (callback) => {
+    ipcRenderer.removeAllListeners('synapse:raw-event');
+    ipcRenderer.on('synapse:raw-event', (_, data) => callback(data));
+  },
 });
