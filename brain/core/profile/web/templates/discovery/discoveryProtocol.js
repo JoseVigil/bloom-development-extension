@@ -283,7 +283,7 @@ if (typeof self !== 'undefined') {
         type: "command",
         direction: "harness_to_background",
         channel: "runtime",
-        description: "Navigate Discovery to a specific onboarding step. NOTA (Jun 19 2026): vault_init y project_create todavía no tienen screen implementada en discovery/index.html — routeToStep() los acepta sin romper, pero no hay UI que mostrar. Ver IMPL_PROMPT_Discovery_VaultInit_ProjectCreate.md.",
+        description: "Navigate Discovery to a specific onboarding step. nucleus_create, vault_init y project_create son host-driven (no tienen UI propia en Discovery). ai_provider_setup → provider-select. success → onboarding-success.",
         payload_template: {
           command: "onboarding_navigate",
           payload: { step: "$STEP" }
@@ -295,7 +295,9 @@ if (typeof self !== 'undefined') {
             variable: "$STEP",
             // Alineado 1:1 con SCREEN_IDS de onboarding.js (VSCode), salvo 'entry' y 'launch'
             // que no son steps que Discovery rutee (son screens propias del stepper VSCode).
-            options: ["github_auth", "vault_init", "google_auth", "ai_provider_setup", "project_create"]
+            // nucleus_create, vault_init y project_create son host-driven: Discovery los acepta
+            // sin mostrar UI propia. success dispara onboarding-success. (Actualizado Jun 19 2026)
+            options: ["github_auth", "nucleus_create", "vault_init", "google_auth", "ai_provider_setup", "project_create", "success"]
           }
         ]
       },

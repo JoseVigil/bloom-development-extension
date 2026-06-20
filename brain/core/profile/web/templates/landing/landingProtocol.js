@@ -213,6 +213,9 @@ const PROTOCOL = {
     // Linked accounts
     this.renderAccounts(profile.accounts);
 
+    // Vaults
+    this.renderVaults(profile.vaults);
+
     // Quick actions
     this.renderActions();
 
@@ -259,6 +262,34 @@ const PROTOCOL = {
         <div class="account-status ${account.status || 'unknown'}"></div>
       </div>
     `).join('');
+  },
+
+  renderVaults(vaults) {
+    const container = document.getElementById('vaults-list');
+    if (!container) return;
+
+    const ALL_VAULTS = [
+      { provider: 'github', label: 'GitHub' },
+      { provider: 'google', label: 'Google' },
+      { provider: 'gemini', label: 'Gemini' }
+    ];
+
+    container.innerHTML = ALL_VAULTS.map(def => {
+      const vault = (vaults || []).find(v => v.provider === def.provider);
+      const status      = vault ? 'active'   : 'pending';
+      const statusLabel = vault ? '● activo' : '○ pendiente';
+      const fingerprint = vault ? vault.fingerprint : '—';
+      return `
+        <div class="account-item">
+          <div class="account-avatar">${def.label[0]}</div>
+          <div class="account-info">
+            <div class="account-provider">${def.label}</div>
+            <div class="account-email" style="font-family: var(--font-mono, monospace); font-size: 11px;">${fingerprint}</div>
+          </div>
+          <div class="account-status ${status}" title="${statusLabel}"></div>
+        </div>
+      `;
+    }).join('');
   },
 
   renderActions() {
@@ -553,7 +584,10 @@ if (typeof self !== 'undefined') {
       "SESSION_STATUS",
       "STATS_UPDATE",
       "PROFILE_LOADED",
-      "HEALTH_CHECK_RESULT"
+      "HEALTH_CHECK_RESULT",
+      "GITHUB_TOKEN_STORED",
+      "GITHUB_ACCOUNT_CREATED",
+      "ACCOUNT_REGISTERED"
     ]
   };
 }

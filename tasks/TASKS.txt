@@ -717,3 +717,18 @@ https://claude.ai/chat/fcd7c8c3-c277-4251-a5ba-219931177e36
 BSIP vs Open Knowledge Format
 noti gmail
 https://claude.ai/chat/97d23580-b023-483a-aeee-665c45911d6b
+
+daxes
+genesis ollama chromadb bsips
+https://claude.ai/chat/8417f468-0722-4f30-84e8-2e2255124b98
+
+roamingpads
+Implementación de comandos SENSOR con documentación
+https://claude.ai/chat/f85df1d8-bb1c-43bb-9c9b-469820757a78
+
+uitool
+Onboarding notifications synapse issue
+https://claude.ai/chat/a94c77ee-5560-40dc-9511-b1b43b9f25c8
+btips
+ionProgressBridge.ts
+https://claude.ai/chat/0d2f23cb-5afe-4b17-a18f-5ae661f5b0eb

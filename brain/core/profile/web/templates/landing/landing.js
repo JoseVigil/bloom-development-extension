@@ -78,7 +78,7 @@ class LandingFlow {
 
     // Priority 2: Storage
     try {
-      const result = await chrome.storage.local.get(['synapseConfig', 'profileData']);
+      const result = await chrome.storage.local.get(['synapseConfig', 'profileData', 'bloom_profile_state']);
       
       if (result.profileData && !this.profileData) {
         this.profileData = result.profileData;
@@ -104,6 +104,13 @@ class LandingFlow {
         this.launchMode           = flags.mode || null;
         this.linkedAccounts       = flags.linked_accounts || [];
         console.log('[Landing] ✓ Flags loaded - register:', this.requiresRegistration, '| heartbeat:', this.heartbeatMode, '| service:', this.serviceTarget, '| step:', this.stepCurrent);
+      }
+
+      // bloom_profile_state — escrito por discovery.js durante el onboarding.
+      // Landing solo lee. Si existe, tiene prioridad sobre profileData legacy.
+      if (result.bloom_profile_state) {
+        this.bloomProfileState = result.bloom_profile_state;
+        console.log('[Landing] ✓ bloom_profile_state loaded');
       }
     } catch (error) {
       console.warn('[Landing] Storage read failed:', error);
@@ -151,7 +158,71 @@ class LandingFlow {
     }
 
     console.log('[Landing] ✅ Transitioning to ready');
+
+    // Si tenemos bloom_profile_state, enriquecemos el perfil con accounts y vaults reales
+    if (this.bloomProfileState) {
+      this.profileData = this.mergeProfileState(this.profileData, this.bloomProfileState);
+    }
+
     this.protocol.executePhase('ready', { profile: this.profileData });
+
+    // Emitir LANDING_READY al host
+    try {
+      chrome.runtime.sendMessage({
+        event:      'LANDING_READY',
+        profile_id: self.SYNAPSE_CONFIG?.profileId || this.bloomProfileState?.profile_id || null,
+        timestamp:  Date.now()
+      });
+      console.log('[Landing] LANDING_READY emitido');
+    } catch (e) {
+      console.warn('[Landing] LANDING_READY emit failed (non-fatal):', e.message);
+    }
+
+    // Escuchar eventos del host para actualizar el panel en tiempo real
+    this.setupMessageListener();
+  }
+
+  mergeProfileState(profileData, bloomState) {
+    return {
+      ...profileData,
+      accounts: (bloomState.accounts || []).map(a => ({
+        provider: a.provider,
+        username: a.username || null,
+        email:    a.email    || null,
+        status:   a.status   || 'pending'
+      })),
+      vaults: bloomState.vaults || [],
+      onboarding_complete: bloomState.onboarding_complete || false
+    };
+  }
+
+  setupMessageListener() {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (!msg?.event) return;
+      console.log('[Landing] Mensaje recibido:', msg.event);
+
+      switch (msg.event) {
+        case 'GITHUB_TOKEN_STORED':
+        case 'GITHUB_ACCOUNT_CREATED':
+        case 'ACCOUNT_REGISTERED':
+          // Recargar bloom_profile_state y re-renderizar el panel
+          chrome.storage.local.get('bloom_profile_state', (result) => {
+            if (result.bloom_profile_state) {
+              this.bloomProfileState = result.bloom_profile_state;
+              this.profileData = this.mergeProfileState(this.profileData, this.bloomProfileState);
+              this.protocol.executePhase('ready', { profile: this.profileData });
+            }
+          });
+          break;
+
+        case 'PROFILE_LOADED':
+          if (msg.profile) {
+            this.profileData = this.mergeProfileState(msg.profile, this.bloomProfileState || {});
+            this.protocol.executePhase('ready', { profile: this.profileData });
+          }
+          break;
+      }
+    });
   }
 
   transitionToError(message, details = {}) {

@@ -1,5 +1,5 @@
 # Bloom — Harness + IonPump: Fuente de Verdad
-## Versión consolidada · Junio 2026
+## Versión consolidada · Junio 2026 — revisión Jun 19 (verificación contra código fuente)
 ### Supersede: todos los documentos del directorio `/docs/HARNESS/`
 
 > **Jerarquía de versiones usada para producir este documento:**
@@ -10,6 +10,8 @@
 > 5. `IMPL_PROMPT_METAMORPH_IonRecipes.md` — May 24 · Inspect/reconcile Metamorph
 > 6. `BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md` — May 11 · Master de integración (v1, parcialmente supersedido por v2s)
 > 7. `INVESTIGACION_Harness_Protocol_Autodiscovery.md` — Abr 1 · Investigación de diseño original
+>
+> **Revisión Jun 19 2026:** se contrastaron las secciones 1, 6, 9, 12, 15 y 18 contra el código fuente real (`discoveryProtocol.js`, `discovery.js`, `onboarding.js`, `harness.js`, `landingProtocol.js`, `landing.js`, `ionpump_protocol.js`). Las correcciones quedan marcadas inline con bloques `>` y resumidas en la nueva §19. Esta revisión NO tocó las secciones 2-5, 7-8, 10-11, 13-14, 16-17 más allá de notas puntuales — esas siguen siendo lo heredado de la consolidación de junio, sin re-verificar contra Brain/Sentinel/Metamorph.
 
 ---
 
@@ -33,6 +35,7 @@
 16. [Restricciones absolutas](#16-restricciones-absolutas)
 17. [Invariantes del sistema a preservar](#17-invariantes-del-sistema-a-preservar)
 18. [Preguntas abiertas](#18-preguntas-abiertas)
+19. [Adenda — verificación contra código fuente real (Jun 19 2026)](#19-adenda--verificación-contra-código-fuente-real-jun-19-2026)
 
 ---
 
@@ -54,12 +57,26 @@ IonPump es un **runtime de automatización web** que vive dentro de Brain. Ejecu
 
 **IonPump no es un módulo CLI de usuario. Es un runtime interno invocado por IntentExecutor.**
 
-### Relación entre ambos
+### Las tres páginas que el Harness puede observar/simular
+
+Cortex no es una sola página — son tres, cada una atada a un momento distinto del ciclo de vida del perfil. El Harness lee el manifest de las que estén presentes en el boot:
+
+| Página | Cuándo corre | Manifest | Estado del manifest |
+|---|---|---|---|
+| **Discovery** (`discovery/index.html`) | Handshake inicial; si `register=true`, todo el onboarding | `DISCOVERY_PROTOCOL_MANIFEST` | Implementado — 8 mensajes (ver §6.4) |
+| **Landing** (`landing/index.html`, antes "Cockpit") | Post-onboarding, en cada uso normal del perfil | `LANDING_PROTOCOL_MANIFEST` | **Implementado — 6 mensajes** (ver §6.4b). Las versiones anteriores de este documento lo listaban como pendiente; ya no lo es. |
+| **Harness** (`harness/index.html`) | Solo en builds `--dev` | No tiene manifest propio | Lee los tres de arriba en runtime |
+
+`harness.js` intenta cargar los tres protocolos en el boot (`discoveryProtocol.js`, `ionpump_protocol.js`, `landingProtocol.js`) usando `loadScriptOptional()`, que resuelve sin error si el archivo no existe todavía — por eso Discovery e IonPump están "siempre presentes desde seed --dev" mientras que Landing solo aparece "post-onboarding" (no porque falte implementar, sino porque el archivo físicamente no existe hasta que el perfil completó el alta).
+
+### Relación entre Harness e IonPump
 
 Son problemas ortogonales que comparten infraestructura. La superficie compartida es que ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump define el `IONPUMP_PROTOCOL_MANIFEST`. El Harness lo lee. Relación unidireccional: IonPump produce, Harness consume.
 
 **La regla de oro que gobierna ambas features:**
 > La fuente de verdad es el protocolo. El Harness la lee. IonPump la alimenta. Nadie la duplica.
+
+Esta misma regla se extiende a Landing: Landing produce `LANDING_PROTOCOL_MANIFEST`, el Harness lo lee. No hay tratamiento especial por ser la tercera página — el patrón es idéntico al de Discovery e IonPump.
 
 ---
 
@@ -69,7 +86,7 @@ Son problemas ortogonales que comparten infraestructura. La superficie compartid
 
 **El manifest es el contrato.** Cada protocolo expone un `*_PROTOCOL_MANIFEST` autodescriptivo. El Harness genera UI desde ese manifest. Agregar features al protocolo actualiza el Harness automáticamente.
 
-**Los canales son tipos, no hardcoding.** El manifest diferencia mensajes de `runtime` y de `tabs`. El Harness selecciona el mecanismo de dispatch correcto según el tipo.
+**Los canales son tipos, no hardcoding.** El manifest diferencia mensajes de `runtime` y de `tabs`. El Harness selecciona el mecanismo de dispatch correcto según el tipo. *(Nota Jun 19 2026: este es el principio de diseño; en la implementación actual de `ionpump_protocol.js` el canal `"tabs"` todavía no aparece — los 10 mensajes existentes son todos `"runtime"`. Ver §6.5 y §15 para el detalle. El principio sigue siendo correcto como objetivo; el código todavía no lo materializa para canal tabs.)*
 
 **Dev/prod por construcción, no por flags.** El Harness existe en builds dev porque Brain lo genera en seed. No existe en prod porque Brain no lo genera. No hay flags de feature, no hay builds separados de Cortex.
 
@@ -359,15 +376,17 @@ Cada protocolo agrega al **final** de su archivo un bloque `*_PROTOCOL_MANIFEST`
 | `channel: "runtime"` | `chrome.runtime.sendMessage` |
 | `channel: "tabs"` | `chrome.tabs.sendMessage(selectedTabId, ...)` |
 
-### 6.4 DISCOVERY_PROTOCOL_MANIFEST — completo
+### 6.4 DISCOVERY_PROTOCOL_MANIFEST — completo (verificado contra fuente, Jun 19 2026)
 
-Agrega al **final** de `templates/discovery/discoveryProtocol.js`. 6 mensajes del milestone GitHub:
+> **Corrección respecto a versiones anteriores de este documento:** el manifest listado antes acá no coincide con el código real en `discoveryProtocol.js`. Diferencias: el real tiene **8 mensajes**, no 6 — incluye `api_key_registered` y `handshake_confirmed`, que no estaban documentados. `host_ready` es un `event` (`{event:"HOST_READY", profile_id, launch_id}`), no un `command` sin payload. No existe ningún mensaje con `payload_template: {command:"host_ready"}`. El bloque de abajo es transcripción literal del archivo fuente.
+
+Agregado al **final** de `discoveryProtocol.js` (línea 269 en adelante), sin tocar el objeto `PROTOCOL` que ocupa el resto del archivo:
 
 ```javascript
 self.DISCOVERY_PROTOCOL_MANIFEST = {
   version: "1.0.0",
   protocol: "discovery",
-  description: "Onboarding flow — GitHub auth, API key detection, account registration",
+  description: "Onboarding flow — extension handshake, GitHub auth, API key detection, account registration",
 
   messages: [
     {
@@ -376,17 +395,10 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
       direction: "harness_to_background",
       channel: "runtime",
       description: "Navigate Discovery to a specific onboarding step",
-      payload_template: {
-        command: "onboarding_navigate",
-        payload: { step: "$STEP" }
-      },
+      payload_template: { command: "onboarding_navigate", payload: { step: "$STEP" } },
       parameters: [
-        {
-          name: "step",
-          type: "enum",
-          variable: "$STEP",
-          options: ["welcome", "github_auth", "github_confirm", "api_key", "complete"]
-        }
+        { name: "step", type: "enum", variable: "$STEP",
+          options: ["welcome", "github_auth", "github_confirm", "api_key", "complete"] }
       ]
     },
     {
@@ -395,10 +407,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
       direction: "harness_to_background",
       channel: "runtime",
       description: "Simulate clipboard monitor detecting a GitHub PAT",
-      payload_template: {
-        event: "GITHUB_PAT_DETECTED",
-        token: "$TOKEN"
-      },
+      payload_template: { event: "GITHUB_PAT_DETECTED", token: "$TOKEN" },
       parameters: [
         { name: "token", type: "string", variable: "$TOKEN", default: "ghp_simulatedToken123456789" }
       ]
@@ -408,15 +417,29 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
       type: "event",
       direction: "harness_to_background",
       channel: "runtime",
-      description: "Simulate user confirming GitHub token in Discovery",
+      description: "Simulate user confirming GitHub token storage",
       payload_template: {
         event: "GITHUB_TOKEN_STORED",
-        token_fingerprint: "$FINGERPRINT",
-        profile_id: "$PROFILE_ID",
-        launch_id: "$LAUNCH_ID"
+        token_fingerprint: "$FINGERPRINT", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID"
       },
       parameters: [
         { name: "token_fingerprint", type: "string", variable: "$FINGERPRINT", default: "ghp_...abc123" },
+        { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+        { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
+      ]
+    },
+    {
+      id: "api_key_registered",
+      type: "event",
+      direction: "harness_to_background",
+      channel: "runtime",
+      description: "Simulate successful API key registration",
+      payload_template: {
+        event: "API_KEY_REGISTERED",
+        key_fingerprint: "$KEY_FINGERPRINT", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID"
+      },
+      parameters: [
+        { name: "key_fingerprint", type: "string", variable: "$KEY_FINGERPRINT", default: "sk-...xyz789" },
         { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
         { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
       ]
@@ -426,13 +449,32 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
       type: "event",
       direction: "harness_to_background",
       channel: "runtime",
-      description: "Simulate GitHub account registered in Nucleus",
-      payload_template: {
-        event: "ACCOUNT_REGISTERED",
-        service: "github",
-        profile_id: "$PROFILE_ID",
-        launch_id: "$LAUNCH_ID"
-      },
+      description: "Simulate account registration completion",
+      payload_template: { event: "ACCOUNT_REGISTERED", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" },
+      parameters: [
+        { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+        { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
+      ]
+    },
+    {
+      id: "discovery_complete",
+      type: "event",
+      direction: "harness_to_background",
+      channel: "runtime",
+      description: "Simulate full discovery/onboarding flow completion",
+      payload_template: { event: "DISCOVERY_COMPLETE", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" },
+      parameters: [
+        { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+        { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
+      ]
+    },
+    {
+      id: "handshake_confirmed",
+      type: "event",
+      direction: "harness_to_background",
+      channel: "runtime",
+      description: "Simulate extension handshake confirmation",
+      payload_template: { event: "HANDSHAKE_CONFIRMED", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" },
       parameters: [
         { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
         { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
@@ -440,23 +482,11 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     },
     {
       id: "host_ready",
-      type: "command",
-      direction: "harness_to_background",
-      channel: "runtime",
-      description: "Manually complete the 3-phase handshake",
-      payload_template: { command: "host_ready" },
-      parameters: []
-    },
-    {
-      id: "discovery_complete",
       type: "event",
       direction: "harness_to_background",
       channel: "runtime",
-      description: "Simulate Discovery flow completion",
-      payload_template: {
-        event: "DISCOVERY_COMPLETE",
-        payload: { profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" }
-      },
+      description: "Simulate bloom-host signaling it is ready to receive commands",
+      payload_template: { event: "HOST_READY", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" },
       parameters: [
         { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
         { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
@@ -465,81 +495,118 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
   ],
 
   observable_events: [
+    "HOST_READY",
     "HANDSHAKE_CONFIRMED",
     "API_KEY_REGISTERED",
     "ACCOUNT_REGISTERED",
-    "DISCOVERY_COMPLETE",
-    "GITHUB_PAT_DETECTED",
-    "GITHUB_TOKEN_STORED"
+    "DISCOVERY_COMPLETE"
   ]
 };
 ```
 
-### 6.5 IONPUMP_PROTOCOL_MANIFEST — estructura
+**Gap real (no documental) detectado en `routeToStep()` de `discovery.js`:** el manifest ofrece `onboarding_navigate` con el enum `["welcome", "github_auth", "github_confirm", "api_key", "complete"]`, pero ese enum **no refleja los steps que el flujo real usa**. El lado VSCode (`onboarding.js`) navega a steps `vault_init`, `ai_provider_setup` y `project_create` (ver §9.4), y `routeToStep()` en `discovery.js` solo tiene cases para `github_auth` y `google_auth` — cualquier otro step cae al `default` y se resuelve como `routeToServiceFlow`, no como el step pedido. El enum del manifest debería actualizarse junto con el `switch`, o el Harness va a ofrecer para simular steps que Discovery no sabe rutear.
 
-El manifest de IonPump diferencia dos tipos de mensaje por el campo `channel`. Los mensajes `runtime` van de content scripts a background. Los mensajes `tabs` van de background a content scripts (Harness necesita `tabId` para estos).
+### 6.4b LANDING_PROTOCOL_MANIFEST — completo (no documentado en versiones anteriores)
+
+> Las versiones anteriores de este documento (incluida la entrada del checklist §15) trataban a Landing como pendiente o fuera de alcance. Es incorrecto: `landingProtocol.js` ya tiene el manifest completo, agregado al final del archivo (línea 380 en adelante) con el mismo patrón append-only que Discovery e IonPump.
+
+```javascript
+self.LANDING_PROTOCOL_MANIFEST = {
+  version: "1.0.0",
+  protocol: "landing",
+  description: "Profile cockpit — session state, stats, linked accounts, quick actions",
+
+  messages: [
+    {
+      id: "profile_load", type: "command", direction: "harness_to_background", channel: "runtime",
+      description: "Request a full profile data reload",
+      payload_template: { command: "profile_load", profile_id: "$PROFILE_ID" },
+      parameters: [{ name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" }]
+    },
+    {
+      id: "health_check", type: "command", direction: "harness_to_background", channel: "runtime",
+      description: "Trigger a full-stack health check",
+      payload_template: { command: "health_check", scope: "$SCOPE" },
+      parameters: [{ name: "scope", type: "enum", variable: "$SCOPE", options: ["extension", "host", "full-stack"] }]
+    },
+    {
+      id: "nucleus_sync", type: "command", direction: "harness_to_background", channel: "runtime",
+      description: "Trigger a nucleus project sync",
+      payload_template: { command: "nucleus_sync", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" },
+      parameters: [
+        { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+        { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
+      ]
+    },
+    {
+      id: "intent_list", type: "command", direction: "harness_to_background", channel: "runtime",
+      description: "Request the list of active intents for this profile",
+      payload_template: { command: "intent_list", profile_id: "$PROFILE_ID" },
+      parameters: [{ name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" }]
+    },
+    {
+      id: "session_status", type: "event", direction: "harness_to_background", channel: "runtime",
+      description: "Simulate a session status update from the host",
+      payload_template: { event: "SESSION_STATUS", status: "$STATUS", profile_id: "$PROFILE_ID", launch_id: "$LAUNCH_ID" },
+      parameters: [
+        { name: "status", type: "enum", variable: "$STATUS", options: ["active", "idle", "disconnected", "error"] },
+        { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+        { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
+      ]
+    },
+    {
+      id: "stats_update", type: "event", direction: "harness_to_background", channel: "runtime",
+      description: "Simulate a stats update payload (launches, uptime, intents)",
+      payload_template: {
+        event: "STATS_UPDATE", profile_id: "$PROFILE_ID",
+        stats: { totalLaunches: "$TOTAL_LAUNCHES", uptime: "$UPTIME", intentsCompleted: "$INTENTS_COMPLETED" }
+      },
+      parameters: [
+        { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+        { name: "total_launches", type: "string", variable: "$TOTAL_LAUNCHES", default: "42" },
+        { name: "uptime", type: "string", variable: "$UPTIME", default: "3600" },
+        { name: "intents_completed", type: "string", variable: "$INTENTS_COMPLETED", default: "7" }
+      ]
+    }
+  ],
+
+  observable_events: ["SESSION_STATUS", "STATS_UPDATE", "PROFILE_LOADED", "HEALTH_CHECK_RESULT"]
+};
+```
+
+Landing solo aparece en el Harness cuando `landing/landingProtocol.js` existe en el `extensionDir` — es decir, post-onboarding. `harness.js` lo intenta cargar al final de su secuencia de boot (§10.5) y no falla si no está.
+
+### 6.5 IONPUMP_PROTOCOL_MANIFEST — estructura real (verificado contra fuente, Jun 19 2026)
+
+> **Corrección respecto a versiones anteriores de este documento:** la estructura documentada acá antes (un array `messages` con `site_ready`/`response_ready` por `chrome.runtime.sendMessage`, más un array separado `tab_messages` con `dom_focus`/`dom_type` por `chrome.tabs.sendMessage`) **no existe en el código real**. El archivo fuente (`ionpump_protocol.js`) usa un único array `messages` con **10 comandos**, todos `channel: "runtime"` — no hay segundo array `tab_messages` ni canal `"tabs"` implementado. Si la intención original (background → content vía `chrome.tabs.sendMessage`) sigue siendo válida, todavía no está en el manifest; lo que el Harness puede simular hoy son comandos DOM dirigidos por `tab_id` como parámetro de texto, no por canal de tabs real.
+
+Los 10 mensajes reales, en orden de aparición en el archivo:
+
+| id | type | Resumen |
+|---|---|---|
+| `dom_click` | command | `DOM_CLICK` en un selector CSS, dado `tab_id` |
+| `dom_type` | command | `DOM_TYPE` — foco + tipeo de `value` en `selector` |
+| `dom_wait` | command | `DOM_WAIT` — espera a que `selector` aparezca, con `timeout_ms` |
+| `dom_focus` | command | `DOM_FOCUS` en `selector` |
+| `dom_scroll` | command | `DOM_SCROLL` a `selector`, con `behavior` enum (`smooth`/`instant`/`auto`) |
+| `dom_extract` | command | `DOM_EXTRACT` de `selector`, con `attribute` enum (`textContent`/`value`/`href`/`data-id`/`innerText`) |
+| `event_emit` | event | `EVENT_EMIT` — dispara un evento nombrado en una tab; `event_name` enum incluye `GITHUB_PAT_DETECTED`, `GITHUB_TOKEN_STORED`, `ION_FLOW_STARTED`, `ION_FLOW_COMPLETED`, `ION_FLOW_ERROR` |
+| `ion_execute_flow` | command | `ION_EXECUTE_FLOW` — ejecuta un flow registrado (`site` enum: `github.com`/`claude.ai`/`anthropic.com`; `flow` enum: `bootstrap`/`handle_pat_detected`/`await_confirmation`/`send_prompt`) |
+| `ion_reload` | command | `ION_RELOAD` — hot-reload de recipes (`site` enum incluye `--all`) |
+| `ion_inspect` | command | `ION_INSPECT` — pide el estado actual del registro IonPump |
+
+`tab_id` aparece como parámetro `type: "string"` con default `"1"` en los comandos DOM — es texto libre que el operador del Harness completa a mano, no se resuelve automáticamente contra la tab activa. `launch_id` sí es `type: "auto"`, resuelto desde `SYNAPSE_CONFIG.launchId`.
 
 ```javascript
 self.IONPUMP_PROTOCOL_MANIFEST = {
   version: "1.0.0",
   protocol: "ionpump",
-  description: "Web automation commands — DOM actions via IonPump",
-
-  // Mensajes POR chrome.runtime.sendMessage
-  messages: [
-    {
-      id: "site_ready",
-      type: "event",
-      direction: "content_to_background",
-      channel: "runtime",
-      description: "Content script signals the site is loaded and ready",
-      payload_template: { event: "SITE_READY", site: "$SITE", tab_id: "$TAB_ID" },
-      parameters: [
-        { name: "site", type: "enum", variable: "$SITE",
-          options: ["claude.ai", "chatgpt.com", "grok.com", "aistudio.google.com"] },
-        { name: "tab_id", type: "auto", variable: "$TAB_ID", source: "selectedTabId" }
-      ]
-    },
-    {
-      id: "response_ready",
-      type: "event",
-      direction: "content_to_background",
-      channel: "runtime",
-      description: "Content script signals that the AI response is complete",
-      payload_template: { event: "RESPONSE_READY", site: "$SITE", tab_id: "$TAB_ID" },
-      parameters: [
-        { name: "site", type: "enum", variable: "$SITE",
-          options: ["claude.ai", "chatgpt.com", "grok.com", "aistudio.google.com"] },
-        { name: "tab_id", type: "auto", variable: "$TAB_ID", source: "selectedTabId" }
-      ]
-    }
-  ],
-
-  // Mensajes POR chrome.tabs.sendMessage (requieren tabId)
-  tab_messages: [
-    {
-      id: "dom_focus",
-      type: "command",
-      direction: "background_to_content",
-      channel: "tabs",
-      description: "Focus a DOM element in the active ion tab",
-      payload_template: { command: "DOM_FOCUS", selector: "$SELECTOR" },
-      parameters: [
-        { name: "selector", type: "string", variable: "$SELECTOR", default: "#chat-input" }
-      ]
-    },
-    {
-      id: "dom_type",
-      type: "command",
-      direction: "background_to_content",
-      channel: "tabs",
-      description: "Type text into a DOM element",
-      payload_template: { command: "DOM_TYPE", selector: "$SELECTOR", text: "$TEXT", delay: 50 },
-      parameters: [
-        { name: "selector", type: "string", variable: "$SELECTOR", default: "#chat-input" },
-        { name: "text", type: "string", variable: "$TEXT", default: "Test prompt from Harness" }
-      ]
-    }
+  description: "IonPump runtime — web automation DOM commands and event triggers for registered ion sites",
+  messages: [ /* dom_click, dom_type, dom_wait, dom_focus, dom_scroll, dom_extract,
+                  event_emit, ion_execute_flow, ion_reload, ion_inspect — ver tabla arriba */ ],
+  observable_events: [
+    "ION_FLOW_STARTED", "ION_FLOW_COMPLETED", "ION_FLOW_ERROR",
+    "ION_RELOAD_DONE", "ION_RELOAD_FAILED"
   ]
 };
 ```
@@ -846,6 +913,69 @@ Total: 2 sites
 - NO abrir un segundo `chrome.runtime.connectNative()` en el Harness
 - NO agregar lógica de negocio al Harness
 
+### 9.3 HARNESS_HELLO / HARNESS_REPLAY / HARNESS_LOG — canal de broadcast (no documentado en versiones anteriores)
+
+> Este mecanismo existe y funciona en `harness/harness.js` (líneas ~510-571). Ninguna versión anterior de este documento lo menciona, incluyendo el manual de Jun 6 que esta consolidación usó como fuente primaria. Resuelve directamente la pregunta abierta histórica *"¿el Log del Harness puede extenderse para capturar mensajes broadcast de background.js?"* — la respuesta es que ya está resuelto, no es trabajo pendiente.
+
+El flujo Simulate → Send → ACK (§4.2, panel central) solo captura la respuesta directa a un mensaje que el propio Harness disparó. Es un canal punto a punto. `HARNESS_HELLO` es un canal aparte, de broadcast, que corre en paralelo:
+
+1. **Al bootear**, antes de terminar `Harness.init()`, el Harness manda `chrome.runtime.sendMessage({event: 'HARNESS_HELLO'})`.
+2. Si `background.js` todavía no está listo (el service worker puede seguir procesando `host_ready` y abriendo tabs cuando el Harness ya disparó `DOMContentLoaded`), el `sendMessage` falla con `"Could not establish connection"` aunque el handler exista del lado de background — es una condición de timing de boot, no un error real. El Harness reintenta con backoff: `[0, 200, 500, 1000]` ms, hasta 4 intentos, y si todos fallan asume modo standalone sin loggear error.
+3. Si `background.js` responde, lo hace con `{event: 'HARNESS_REPLAY', entries: [...]}` — un buffer de todo lo que pasó **antes** de que esta pestaña del Harness existiera. Sin este replay, cualquier evento emitido entre el boot del sistema y la apertura del Harness se perdería para siempre, porque el Harness no estaba escuchando todavía.
+4. Después del hello/replay inicial, el Harness queda con un listener activo (`chrome.runtime.onMessage`) para mensajes `{event: 'HARNESS_LOG', category, sourceEvent, data}` — un broadcast genérico que `background.js` emite hacia cualquier observador, no solo como respuesta a algo que el Harness despachó. Cada uno se renderea en el Log con nivel `INFO` o `ERROR` según `data._level`.
+
+**Implicación arquitectónica:** el comentario en el código fuente dice textualmente que esto *"cierra el punto ciego de Native Messaging / runtime — el Cortex Harness ahora ve el mismo feed que el Workspace Harness"*. Esto confirma la existencia de un **Workspace Harness** (lado VSCode/Electron) que comparte el mismo feed de `HARNESS_LOG` — una pieza del sistema que no aparece documentada en ningún archivo de este repositorio. Queda como pregunta abierta nueva (ver §18).
+
+**Consecuencia práctica para el §12.2 (Caso A — Observar el flujo real):** la limitación documentada ahí — *"el Harness actualmente solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener... mensajes que `background.js` consume internamente sin broadcast pueden no aparecer"* — ya no aplica tal como está escrita. Si `background.js` emite `HARNESS_LOG` para un evento, el Harness lo va a ver aunque no haya sido el origen del mensaje. La limitación real pasó a ser más angosta: solo quedan invisibles los eventos que `background.js` **ni siquiera reporta como `HARNESS_LOG`** — que es una decisión de instrumentación del lado de background, no un límite de MV3.
+
+### 9.4 Gap real entre `onboarding.js` (VSCode) y `routeToStep()` (Discovery) — no es deuda documental, es código
+
+> Esto no es un caso de "la documentación está desactualizada" — es una discrepancia real entre dos componentes implementados que deberían estar sincronizados y no lo están.
+
+`onboarding.js` (el stepper de VSCode, contexto Electron — corre en un Webview sin `chrome.runtime`, se comunica con Brain vía `window.onboarding.*` IPC preload, y no puede interactuar directamente con el Harness ni con `discovery.js`) define una secuencia de 8 screens (`SCREEN_IDS`) que mapea 1:1 contra los steps de `onboarding_steps.json`:
+
+```
+entry → github_auth → nucleus_create → vault_init → google_auth → ai_provider_setup → project_create → launch
+```
+
+Para tres de esos steps, `onboarding.js` llama explícitamente a `window.onboarding.navigate({step: ...})`, que viaja por IPC → Brain → TCP → `bloom-host` → Native Messaging → `background.js` → `chrome.runtime.onMessage` en `discovery.js`, donde el listener de `onboarding_navigate` (línea 670 de `discovery.js`) llama a `window.BLOOM_VALIDATOR.routeToStep(msg.payload.step)`:
+
+| Step pedido desde VSCode | Dónde se llama en `onboarding.js` |
+|---|---|
+| `vault_init` | `runNucleusTerminal()`, tras completar `nucleus init` |
+| `google_auth` | `handleGoogleBtn()` |
+| `ai_provider_setup` | `handleProviderBtn()` |
+| `project_create` | `createMandateAndContinue()` |
+
+`routeToStep()` en `discovery.js` (línea 397) solo tiene cases para `github_auth` y `google_auth`. **`vault_init`, `ai_provider_setup` y `project_create` no tienen case** — caen al `default`, que llama a `routeToServiceFlow(this.serviceTarget)`, una función diseñada para el flujo de *primer arranque* (decidir entre Google o GitHub como service inicial), no para resolver un step específico del onboarding ya en curso. El resultado funcional: si Discovery recibe `onboarding_navigate` con cualquiera de esos tres steps, no muestra la screen correspondiente — reinterpreta el step como si fuera la selección de service inicial.
+
+Esto también significa que el `step` enum del `DISCOVERY_PROTOCOL_MANIFEST` (§6.4) está incompleto en ambas direcciones: le faltan los tres steps de arriba para reflejar lo que `onboarding.js` realmente puede pedir, y al Harness lo que le falta es la capacidad de simular un `onboarding_navigate` hacia esos steps y ver que Discovery los maneja — porque hoy no los maneja.
+
+**No confundir con un problema de IPC ni de Harness.** El camino IPC → background.js → discovery.js funciona; el corte está puntualmente en el `switch` de `routeToStep()`. Pendiente de implementación, no de documentación (consistente con el checklist §15 — Cortex, ítem *"completar `routeToStep()`"*, que en esta versión sigue sin marcar).
+
+### 9.5 Secuencia de boot real de `harness/harness.js` (verificado contra fuente)
+
+```javascript
+document.addEventListener('DOMContentLoaded', async () => {
+  // --- Siempre presentes desde seed --dev ---
+  await loadScriptOptional('../harness.synapse.config.js');
+  await loadScriptOptional('../discovery.synapse.config.js');
+  await loadScriptOptional('../discovery/discoveryProtocol.js');
+  await loadScriptOptional('ionpump_protocol.js');
+
+  // --- Solo existen post-onboarding ---
+  await loadScriptOptional('../landing.synapse.config.js');
+  await loadScriptOptional('../landing/landingProtocol.js');
+
+  // Todos los scripts que van a llegar, llegaron. Arrancar.
+  Harness.init();
+});
+```
+
+`loadScriptOptional()` no usa simplemente `<script>` con `onerror` — primero hace un `fetch(url, {method: 'HEAD'})` para confirmar que el archivo existe antes de inyectar el tag. Esto evita que DevTools muestre errores de red 404 para los archivos que legítimamente no existen todavía (los de Landing, antes del onboarding). Si el `HEAD` falla o el `<script>` falla al cargar, la promesa igual resuelve — nunca rechaza — por lo que el boot del Harness nunca se cuelga esperando un archivo ausente.
+
+`Harness.init()` corre recién después de que los 6 `loadScriptOptional` resolvieron (no necesariamente cargaron — resolvieron). Esto significa que el orden de aparición en `ProtocolReader.discover()` (`DISCOVERY_PROTOCOL_MANIFEST`, `LANDING_PROTOCOL_MANIFEST`, `IONPUMP_PROTOCOL_MANIFEST` — ver candidates array en `harness.js`) es independiente del orden de boot; el discover barre los tres globals en `self`/`window` después de que terminó toda la carga, más una segunda pasada 500ms después para scripts que llegaron tarde (`§4.2` ya documenta esta segunda pasada como "late discovery").
+
 ---
 
 ## 10. Implementación — Sentinel
@@ -1025,7 +1155,7 @@ complete
 3. Interactuar con Discovery normalmente (generar PAT en GitHub, pegarlo, confirmar).
 4. Cada evento que `background.js` procesa aparece en el **Log** del Harness.
 
-**Nota:** el Harness actualmente solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener. Mensajes que `background.js` consume internamente sin broadcast pueden no aparecer. Esto es un límite de la arquitectura MV3.
+**Nota (corregida — ver §9.3 para el detalle completo):** versiones anteriores de este documento decían que el Harness *"actualmente solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener"* y que esto era *"un límite de la arquitectura MV3"*. Eso ya no es así: el canal `HARNESS_HELLO`/`HARNESS_REPLAY`/`HARNESS_LOG` (§9.3) hace que el Log capture también broadcasts de `background.js` que no fueron disparados por el propio Harness, incluyendo los emitidos antes de que la pestaña del Harness existiera (vía replay). Lo único que sigue sin aparecer es lo que `background.js` directamente no instrumenta como `HARNESS_LOG`.
 
 ### 12.3 Caso B — Simular un evento
 
@@ -1196,15 +1326,19 @@ landing/landingProtocol.js (LANDING_PROTOCOL_MANIFEST: no es requerido para mile
 
 ### Cortex
 
-- [ ] `DISCOVERY_PROTOCOL_MANIFEST` agregado al **final** de `templates/discovery/discoveryProtocol.js`
-- [ ] 6 mensajes del milestone GitHub presentes en el manifest
-- [ ] `ionpump_protocol.js` creado en `templates/discovery/` (copiado por Brain via discovery_generator)
-- [ ] `manifest.json` actualizado: `harness.synapse.config.js`, `harness/*`, `discovery/ionpump_protocol.js`
-- [ ] `harness/index.html` implementado con ProtocolReader y UI dinámica
-- [ ] Harness dispatcher diferencia `channel: "runtime"` vs `channel: "tabs"`
-- [ ] Harness listener es pasivo — no interfiere con routing de `background.js`
-- [ ] Boot del Harness es async con `loadScriptOptional()`
-- [ ] No hay JS inline en `harness/index.html` (CSP MV3)
+> Estado actualizado Jun 19 2026 contra código fuente real (`discoveryProtocol.js`, `discovery.js`, `harness.js`, `landingProtocol.js`, `ionpump_protocol.js`, `onboarding.js`). Ítems marcados `[x]` fueron leídos directamente del archivo, no inferidos. Ítems sin checkbox de archivo disponible quedan `[ ]` con nota — no se asume completo lo que no se pudo ver.
+
+- [x] `DISCOVERY_PROTOCOL_MANIFEST` agregado al **final** de `discoveryProtocol.js` — confirmado, línea 269 en adelante, no toca el objeto `PROTOCOL` previo
+- [x] Mensajes del milestone GitHub presentes en el manifest — son **8**, no 6 (ver §6.4 para la corrección completa, incluye `api_key_registered` y `handshake_confirmed` que no estaban listados antes)
+- [ ] `ionpump_protocol.js` creado en `templates/discovery/` — el archivo de IonPump que sí se verificó vive junto a `harness/`, no se pudo confirmar si también existe una copia en `discovery/` como pide el generator (ver duda abierta histórica, sigue sin resolver)
+- [ ] `manifest.json` actualizado — no fue provisto en esta ronda de archivos, no se puede confirmar ni objetar
+- [ ] `harness/index.html` implementado con ProtocolReader y UI dinámica — `harness.js` (la lógica) está confirmado completo y operativo; el `index.html` del Harness en sí no fue provisto en esta ronda, no se puede confirmar el marcado/CSP
+- [x] Boot del Harness es async con `loadScriptOptional()` — confirmado, incluye preflight `fetch HEAD` antes de inyectar el `<script>` (ver §9.5)
+- [x] **Nuevo, no estaba en el checklist:** Landing (`landingProtocol.js` → `LANDING_PROTOCOL_MANIFEST`) implementado completo — 6 mensajes, mismo patrón append-only (ver §6.4b)
+- [ ] **Nuevo, no estaba en el checklist:** `routeToStep()` en `discovery.js` cubre `vault_init`, `ai_provider_setup`, `project_create` — confirmado que NO los cubre; gap real de código, no documental (ver §9.4)
+- [ ] Harness dispatcher diferencia `channel: "runtime"` vs `channel: "tabs"` — **este ítem ya no aplica tal como está escrito**: el canal `"tabs"` no existe en el `IONPUMP_PROTOCOL_MANIFEST` real, todo es `channel: "runtime"` (ver §6.5). O se implementa el canal `tabs` que esta entrada asume, o se reescribe el ítem para reflejar que no es parte del diseño actual.
+- [x] Harness listener es pasivo — confirmado: el listener de `HARNESS_LOG`/`HARNESS_REPLAY` en `harness.js` solo loggea y renderiza, nunca devuelve una respuesta con lógica de negocio ni intercepta el mensaje antes de que otros listeners lo procesen
+- [ ] No hay JS inline en `harness/index.html` (CSP MV3) — no se puede confirmar, el archivo no fue provisto
 
 ### Sentinel
 
@@ -1278,9 +1412,12 @@ landing/landingProtocol.js (LANDING_PROTOCOL_MANIFEST: no es requerido para mile
 |---|---|---|---|
 | 1 | ¿El archivo `intent_executor.py` existe en `brain/core/intent/`? Confirmar antes de Fase 3. | Abierta | Fase 3 |
 | 2 | ¿`watchdog` library está ya en `requirements.txt` de Brain? | Abierta | Fase 4 |
-| 3 | ¿`LANDING_PROTOCOL_MANIFEST` se requiere para milestone GitHub? | Abierta | No |
+| 3 | ¿`LANDING_PROTOCOL_MANIFEST` se requiere para milestone GitHub? | **Resuelta Jun 19 2026** — no es que se requiera, ya existe implementado y completo (6 mensajes, ver §6.4b). No es trabajo pendiente, es estado actual. | No |
 | 4 | ¿Qué versión mínima de Cortex requiere el ion de `github.com`? | Abierta | Semana 2 |
 | 5 | Bartcave — ¿cuándo estará desplegado para desbloquear Fase 6b (reconcile)? | Abierta | Fase 6b |
+| 6 | **Nueva.** ¿Qué es el "Workspace Harness" que menciona el comentario de `harness.js` (§9.3) como receptor del mismo feed `HARNESS_LOG`? ¿Vive del lado VSCode/Electron? ¿Comparte código con el Harness de Cortex o es una implementación paralela? | Abierta | No bloqueante, pero afecta el diseño de cualquier cambio al formato de `HARNESS_LOG` — si hay un segundo consumidor, cambiar el shape del mensaje rompe a los dos. |
+| 7 | **Nueva.** ¿El canal `"tabs"` (principio de diseño §2, tabla §6.3) sigue siendo un objetivo de roadmap para IonPump, o quedó descartado en favor de pasar `tab_id` como parámetro string dentro de mensajes `"runtime"` (que es lo que el código real hace hoy)? Afecta si hay que implementar `channel: "tabs"` o reescribir el principio de diseño. | Abierta | Bloquea poder marcar el ítem de checklist correspondiente (§15, Cortex) en cualquier dirección. |
+| 8 | **Nueva.** ¿`routeToStep()` en `discovery.js` (§9.4) tiene un owner/timeline para agregar los cases de `vault_init`, `ai_provider_setup`, `project_create`? Sin esos cases, el onboarding completo vía VSCode (steps 3, 5 y 6 de `SCREEN_IDS`) no puede probarse end-to-end ni con el sistema real ni simulando desde el Harness. | Abierta | Sí — bloquea poder usar el Harness para validar el onboarding completo, no solo `github_auth`. |
 
 ---
 
@@ -1288,3 +1425,23 @@ landing/landingProtocol.js (LANDING_PROTOCOL_MANIFEST: no es requerido para mile
 *Fuente primaria: estado operativo de sesión Jun 6 (`HARNESS_Manual_Onboarding_Debug.md`)*  
 *Correcciones arquitectónicas: `IMPL_PROMPT_CORTEX_SENTINEL_Harness_v2.md` + `IMPL_PROMPT_BRAIN_IonPump_Harness_v2.md` (Abr 25)*  
 *Los documentos anteriores en `/docs/HARNESS/` pueden archivarse.*
+
+---
+
+## 19. Adenda — verificación contra código fuente real (Jun 19 2026)
+
+Esta sección documenta el proceso de la revisión que generó las correcciones de este documento, para que quien retome el trabajo sepa qué se verificó y contra qué.
+
+**Archivos fuente leídos directamente para esta adenda:**
+`discoveryProtocol.js`, `discovery.js` (completo, 1166 líneas), `onboarding.js` (completo, 438 líneas), `harness.js` (completo, 731 líneas), `landingProtocol.js`, `landing.js`, `ionpump_protocol.js`, `discovery/index.html`, `landing/index.html`.
+
+**No se pudo verificar en esta ronda** (no provistos): `harness/index.html`, `manifest.json`, `background.js`, `bloom-host`, cualquier archivo de Brain (`harness_generator.py`, `discovery_generator.py`, `synapse_manager.py`), `seed.go`, `ignition_identity.go`. Todo lo que este documento afirma sobre esos archivos sigue siendo lo heredado de versiones anteriores — **no re-verificado**, no asumir que está confirmado solo porque aparece en este documento.
+
+**Resumen de hallazgos:**
+
+1. Landing (`landingProtocol.js` → `LANDING_PROTOCOL_MANIFEST`) está completo e implementado — las versiones previas de este documento lo trataban como pendiente o fuera de alcance. Corregido en §1 y §6.4b.
+2. `DISCOVERY_PROTOCOL_MANIFEST` real tiene 8 mensajes, no 6 — el manifest documentado en versiones previas no coincidía con el archivo fuente. Corregido en §6.4.
+3. `IONPUMP_PROTOCOL_MANIFEST` real no tiene canal `"tabs"` ni array `tab_messages` — la estructura documentada en versiones previas no existe en el código. Corregido en §6.5, abierto como pregunta #7 en §18.
+4. Existe un mecanismo `HARNESS_HELLO`/`HARNESS_REPLAY`/`HARNESS_LOG` en `harness.js` que resuelve la pregunta histórica sobre captura de broadcasts — no documentado en ninguna versión anterior. Nuevo §9.3. Revela la existencia de un "Workspace Harness" no documentado en ningún archivo — pregunta #6 en §18.
+5. Gap de código real (no documental) entre `onboarding.js` (VSCode) y `routeToStep()` en `discovery.js`: tres steps (`vault_init`, `ai_provider_setup`, `project_create`) que el lado VSCode pide navegar no tienen case en Discovery. Nuevo §9.4, pregunta #8 en §18.
+6. La nota de limitación en §12.2 sobre mensajes invisibles para el Harness por "límite de arquitectura MV3" ya no es precisa dado el mecanismo de §9.3 — corregida.

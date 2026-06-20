@@ -379,6 +379,8 @@ class DiscoveryFlow {
     console.log('[Discovery] stepCurrent:', this.stepCurrent);
     console.log('[Discovery] serviceTarget:', this.serviceTarget);
 
+    this._initProfileState();
+
     chrome.runtime.sendMessage({
       event: 'onboarding_started'
     });
@@ -408,6 +410,27 @@ class DiscoveryFlow {
         break;
       case 'google_auth':
         this.showScreen('google-login');
+        break;
+      case 'nucleus_create':
+        console.log('[Discovery] nucleus_create — paso gestionado por host, esperando siguiente step');
+        // No hay UI propia; el host emite el siguiente step cuando termina
+        break;
+      case 'vault_init':
+        console.log('[Discovery] vault_init — mostrando recibo de vault');
+        this.showScreen('vault-created');
+        this._populateVaultReceipt();
+        break;
+      case 'ai_provider_setup':
+        console.log('[Discovery] Routing to ai_provider_setup flow');
+        this.showScreen('provider-select');
+        break;
+      case 'project_create':
+        console.log('[Discovery] project_create — paso gestionado por host, esperando siguiente step');
+        break;
+      case 'success':
+        console.log('[Discovery] Onboarding completo → success');
+        this._markOnboardingComplete();
+        this.showScreen('onboarding-success');
         break;
       default:
         console.log('[Discovery] Unknown step, falling back to serviceFlow:', step);
@@ -605,6 +628,108 @@ class DiscoveryFlow {
   
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ============================================================================
+  // BLOOM PROFILE STATE — escritura de chrome.storage.local.bloom_profile_state
+  // Landing solo lee este objeto; Discovery es el único que escribe.
+  // ============================================================================
+
+  _initProfileState() {
+    const initial = {
+      profile_id:          self.SYNAPSE_CONFIG?.profileId || null,
+      onboarding_complete: false,
+      last_updated:        Date.now(),
+      accounts: [
+        { provider: 'github', status: 'pending', username: null, email: null, created_at: null },
+        { provider: 'google', status: 'pending', username: null, email: null, created_at: null },
+        { provider: 'gemini', status: 'pending', username: null, email: null, created_at: null }
+      ],
+      vaults: []
+    };
+    chrome.storage.local.set({ bloom_profile_state: initial });
+    console.log('[Discovery] bloom_profile_state inicializado');
+  }
+
+  _updateVaultState(fingerprint) {
+    chrome.storage.local.get('bloom_profile_state', (result) => {
+      const state = result.bloom_profile_state || { vaults: [] };
+      if (!Array.isArray(state.vaults)) state.vaults = [];
+      state.vaults.push({
+        provider:    'github',
+        fingerprint: fingerprint,
+        storage:     'chrome.storage.local',
+        status:      'active',
+        created_at:  Date.now()
+      });
+      state.last_updated = Date.now();
+      chrome.storage.local.set({ bloom_profile_state: state });
+      console.log('[Discovery] bloom_profile_state — vault agregado, fingerprint:', fingerprint);
+    });
+  }
+
+  _updateAccountState(provider, username) {
+    chrome.storage.local.get('bloom_profile_state', (result) => {
+      const state = result.bloom_profile_state || { accounts: [] };
+      if (!Array.isArray(state.accounts)) state.accounts = [];
+      const account = state.accounts.find(a => a.provider === provider);
+      if (account) {
+        account.status     = 'active';
+        account.username   = username;
+        account.created_at = Date.now();
+      } else {
+        state.accounts.push({
+          provider:   provider,
+          status:     'active',
+          username:   username,
+          email:      null,
+          created_at: Date.now()
+        });
+      }
+      state.last_updated = Date.now();
+      chrome.storage.local.set({ bloom_profile_state: state });
+      console.log('[Discovery] bloom_profile_state — cuenta actualizada:', provider, username);
+    });
+  }
+
+  _populateVaultReceipt() {
+    chrome.storage.local.get(['bloom_profile_state', 'bloom_vault_temp'], (result) => {
+      const state = result.bloom_profile_state || {};
+      const vault = result.bloom_vault_temp || {};
+
+      const latestVault = Array.isArray(state.vaults) && state.vaults.length > 0
+        ? state.vaults[state.vaults.length - 1]
+        : null;
+
+      const elUsername    = document.getElementById('vault-username');
+      const elFingerprint = document.getElementById('vault-fingerprint');
+
+      if (elUsername) elUsername.textContent = vault.github_user || '—';
+      if (elFingerprint) elFingerprint.textContent = latestVault?.fingerprint || '—';
+
+      // Botón continuar → avanza al siguiente step (el host lo emitirá vía onboarding_navigate,
+      // pero también habilitamos un avance manual para el caso de dev/fallback)
+      const btnContinue = document.getElementById('btn-vault-continue');
+      if (btnContinue && !btnContinue._bound) {
+        btnContinue._bound = true;
+        btnContinue.addEventListener('click', () => {
+          console.log('[Discovery] vault-created continue → esperando siguiente step del host');
+          // El host enviará onboarding_navigate con el step siguiente.
+          // Si en dev querés avanzar sin host, descomentá la línea siguiente:
+          // this.routeToStep('google_auth');
+        });
+      }
+    });
+  }
+
+  _markOnboardingComplete() {
+    chrome.storage.local.get('bloom_profile_state', (result) => {
+      const state = result.bloom_profile_state || {};
+      state.onboarding_complete = true;
+      state.last_updated        = Date.now();
+      chrome.storage.local.set({ bloom_profile_state: state });
+      console.log('[Discovery] bloom_profile_state — onboarding_complete: true');
+    });
   }
 }
 
@@ -943,6 +1068,23 @@ class GithubAuthFlow {
       profile_id:        self.SYNAPSE_CONFIG?.profileId,
       launch_id:         self.SYNAPSE_CONFIG?.launchId,
     });
+
+    // Actualizar bloom_profile_state con el vault recién creado
+    this.discovery._updateVaultState(fingerprint);
+
+    // Emitir GITHUB_ACCOUNT_CREATED si tenemos username (best-effort)
+    if (vault.github_user) {
+      chrome.runtime.sendMessage({
+        event:      'GITHUB_ACCOUNT_CREATED',
+        username:   vault.github_user,
+        profile_id: self.SYNAPSE_CONFIG?.profileId,
+        launch_id:  self.SYNAPSE_CONFIG?.launchId,
+      });
+      console.log('[GithubAuthFlow] GITHUB_ACCOUNT_CREATED emitido para:', vault.github_user);
+
+      // Actualizar bloom_profile_state con la cuenta de GitHub
+      this.discovery._updateAccountState('github', vault.github_user);
+    }
 
     // Actualizar onboarding_state local
     await chrome.storage.local.set({

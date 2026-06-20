@@ -223,6 +223,30 @@
     </div>
 
     <!-- ═══════════════════════════════════════════
+         VAULT CREATED SCREEN
+    ═══════════════════════════════════════════ -->
+    <div id="screen-vault-created" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 75%"></div></div>
+      <div class="step-indicator">Step 3 of 4</div>
+      <div class="status-icon">🔐</div>
+      <h1>Key Stored Securely</h1>
+      <p>Your token is encrypted in the Chrome shield. Only a fingerprint leaves this device.</p>
+
+      <div class="info-box">
+        <p><strong>Provider</strong> &nbsp; GitHub</p>
+        <p><strong>Account</strong> &nbsp; <span id="vault-username">—</span></p>
+        <p><strong>Stored in</strong> &nbsp; chrome.storage.local</p>
+        <p><strong>Fingerprint</strong> &nbsp; <span id="vault-fingerprint" style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;">—</span></p>
+      </div>
+
+      <p style="font-family: var(--font-mono); font-size: 10px; color: var(--color-text-secondary); letter-spacing: 0.10em; text-align: center; margin-top: var(--space-sm);">
+        Your key never leaves Chrome. Only the fingerprint travels to the system.
+      </p>
+
+      <button class="btn" id="btn-vault-continue">Continue →</button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
          ONBOARDING SCREENS
     ═══════════════════════════════════════════ -->
 

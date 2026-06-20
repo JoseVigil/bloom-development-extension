@@ -1196,6 +1196,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // ── GITHUB_ACCOUNT_CREATED ─────────────────────────────────────────────────
+  if (event === 'GITHUB_ACCOUNT_CREATED') {
+    console.log('[Synapse] 📥 GITHUB_ACCOUNT_CREATED recibido — username:', msg.username);
+
+    sendToHost({
+      event:      'GITHUB_ACCOUNT_CREATED',
+      username:   msg.username,
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id:  msg.launch_id  || config?.launchId,
+      timestamp:  Date.now()
+    });
+
+    forwardToDebugPanel('synapse', 'GITHUB_ACCOUNT_CREATED', {
+      username: msg.username
+    }, msg.profile_id || config?.profileId);
+
+    console.log('[Synapse] ✓ GITHUB_ACCOUNT_CREATED → forwarding to native host');
+    sendResp({ received: true });
+    return true;
+  }
+
   // Heartbeat success
   if (event === 'HEARTBEAT_SUCCESS') {
     console.log('[Synapse] ✓ Heartbeat validation successful');
