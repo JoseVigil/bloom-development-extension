@@ -128,7 +128,10 @@ const STEP_TO_NODE = {
 
 // ── STEPPER API ────────────────────────────────────────────────────────────
 // Mapa de nombre de nodo → índice del .step-node en el sidebar
-const STEPPER_NODES = { identity: 0, vault: 1, nucleus: 2, project: 3, mandate: 4 };
+// Fix D: nucleus va antes que vault (índice 1 y 2) para reflejar el orden real
+// de dependencias: nucleus_create requiere [github_token], vault_init requiere
+// [github_token, nucleus_path]. El stepper visual debe coincidir con ese orden.
+const STEPPER_NODES = { identity: 0, nucleus: 1, vault: 2, project: 3, mandate: 4 };
 
 // Texto de status que aparece bajo el label cuando el nodo está established
 const STEPPER_STATUSES = {
@@ -140,11 +143,13 @@ const STEPPER_STATUSES = {
 };
 
 // Mapa screen → nodo activo (screen 0 = entry, sin nodo activo)
+// Fix D: screen 2 = nucleus (antes era vault), screen 3/4 = vault (antes era nucleus)
+// porque el orden de ejecución es: identity → nucleus → vault → project → mandate
 const STEPPER_MAP = {
   1: 'identity',
-  2: 'vault',
+  2: 'nucleus',
   3: 'nucleus',
-  4: 'nucleus',
+  4: 'vault',
   5: 'project',
   6: 'mandate',
   7: 'mandate'
@@ -153,8 +158,8 @@ const STEPPER_MAP = {
 // Mapa nodo → screen de destino (nunca navegar a screens 4 ni 7 desde stepper)
 const STEPPER_NAV = {
   identity: 1,
-  vault:    2,
-  nucleus:  3,
+  nucleus:  2,
+  vault:    3,
   project:  5,
   mandate:  6,
 };
@@ -222,10 +227,14 @@ async function goTo(n) {
   if (activeNode) setStepperActive(activeNode);
 
   // Efectos por pantalla
+  // Fix D: al llegar a screen 2 (nucleus-create) identity queda established;
+  // al llegar a screen 3 (vault) nucleus queda established; al llegar a screen 4
+  // (nucleus-init terminal) se corre el terminal; al llegar a screen 5 (project)
+  // vault queda established. Orden alineado con dependencias reales del onboarding.
   if (n === 2) setStepperEstablished('identity');
-  if (n === 3) { setStepperEstablished('vault'); loadOrgs(); }
+  if (n === 3) { setStepperEstablished('nucleus'); loadOrgs(); }
   if (n === 4) runNucleusTerminal();
-  if (n === 5) { setStepperEstablished('nucleus'); loadRepos(); }
+  if (n === 5) { setStepperEstablished('vault'); loadRepos(); }
   if (n === 6) {
     setStepperEstablished('project');
     runMilestoneSequence();
