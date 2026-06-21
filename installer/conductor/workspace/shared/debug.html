@@ -1172,12 +1172,16 @@ function initRawFeed() {
     return;
   }
   // Fallback: debug.html embebido como iframe, padre reenvía el IPC
-  // como postMessage (extensión futura del lado de onboarding.js).
+  // como postMessage desde onboarding.js.
   log('info', 'initRawFeed — tomó rama postMessage (window.onboarding no existe en este frame)');
   window.addEventListener('message', (evt) => {
-    log('info', `initRawFeed — message recibido, type: ${evt.data?.type}`);
-    if (evt.data && evt.data.type === 'SYNAPSE_RAW_EVENT') {
+    if (!evt.data) return;
+    if (evt.data.type === 'SYNAPSE_RAW_EVENT') {
+      log('info', `initRawFeed — SYNAPSE_RAW_EVENT: ${evt.data.payload?.type || evt.data.payload?.event || '?'}`);
       ingestRawEvent(evt.data.payload);
+    } else if (evt.data.type === 'SYNAPSE_EVENT') {
+      log('info', `initRawFeed — SYNAPSE_EVENT: ${evt.data.payload?.event || '?'}`);
+      ingestEvent(evt.data.payload);
     }
   });
 }

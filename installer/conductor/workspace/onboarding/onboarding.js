@@ -733,8 +733,38 @@ async function completeOnboarding() {
   // Si success: Electron redimensiona y carga la URL — el renderer no hace nada más.
 }
 
+// ── SYNAPSE CATEGORY ───────────────────────────────────────────────────────
+// Mapea el tipo clasificado por SynapseBridge a la categoría que usa el
+// Event Feed de debug.html (filters: synapse, brain, sentinel, nucleus, temporal, health).
+function _synapseCategory(data) {
+  const t = (data.type || '').toUpperCase();
+  const e = (data.event || '').toUpperCase();
+  if (t === 'HANDSHAKE' || t === 'ONBOARDING_MILESTONE' || t === 'HOST_READY') return 'synapse';
+  if (t === 'INTENT')    return 'temporal';
+  if (t === 'ION')       return 'sentinel';
+  if (t === 'PROFILE' || t === 'PROFILE_LAUNCHED' || t === 'PROFILE_CONNECTED') return 'brain';
+  if (t === 'STATUS' || t === 'HEARTBEAT') return 'nucleus';
+  if (e.startsWith('INTENT_'))  return 'temporal';
+  if (e.startsWith('ION_'))     return 'sentinel';
+  if (e.startsWith('PROFILE_')) return 'brain';
+  return 'synapse';
+}
+
 // ── DEBUG PANEL ────────────────────────────────────────────────────────────
 let debugPanelOpen = false;
+
+// Buffer de eventos Synapse recibidos antes de que el iframe esté listo.
+// Se vacía (flush) cuando el iframe termina de cargar.
+const _synapseEventBuffer = [];
+
+function _flushSynapseBuffer(frame) {
+  if (!_synapseEventBuffer.length) return;
+  log('info', `debug-frame: flush de ${_synapseEventBuffer.length} eventos bufferizados`);
+  for (const data of _synapseEventBuffer) {
+    frame.contentWindow.postMessage({ type: 'SYNAPSE_RAW_EVENT', payload: data }, '*');
+  }
+  _synapseEventBuffer.length = 0;
+}
 
 function toggleDebugPanel() {
   const container = document.getElementById('debug-panel-container');
@@ -748,6 +778,10 @@ function toggleDebugPanel() {
     if (frame && !frame.dataset.loaded) {
       frame.src = '../shared/debug.html';
       frame.dataset.loaded = '1';
+      frame.addEventListener('load', () => {
+        log('info', 'debug-frame: load event — iframe listo');
+        _flushSynapseBuffer(frame);
+      }, { once: true });
     }
     container.classList.remove('hidden');
     btn.classList.add('active');
@@ -820,14 +854,29 @@ document.addEventListener('DOMContentLoaded', () => {
   // window.onboarding.onSynapseEvent. Lo recibimos acá (sí tenemos preload)
   // y lo reenviamos por postMessage. El tipo 'SYNAPSE_RAW_EVENT' debe
   // coincidir con el que escucha debug.html en initRawFeed().
+  //
+  // Si el panel todavía no se abrió (frame sin src / sin contentWindow listo),
+  // acumulamos en _synapseEventBuffer y lo vaciamos en el evento 'load' del iframe
+  // (registrado en toggleDebugPanel cuando se asigna el src por primera vez).
   if (window.onboarding?.onSynapseEvent) {
     window.onboarding.onSynapseEvent((data) => {
       const frame = document.getElementById('debug-frame');
-      if (frame && frame.contentWindow) {
+      const frameReady = frame && frame.dataset.loaded && frame.contentWindow;
+      if (frameReady) {
+        // Feed raw — mensaje enriquecido tal cual sale del bridge
         frame.contentWindow.postMessage({ type: 'SYNAPSE_RAW_EVENT', payload: data }, '*');
-        log('info', `onSynapseEvent — evento reenviado a debug-frame: ${data?.type || data?.event || '?'}`);
+        // Event Feed — formato que espera ingestEvent() en debug.html
+        frame.contentWindow.postMessage({ type: 'SYNAPSE_EVENT', payload: {
+          category:   _synapseCategory(data),
+          event:      data.event || data.type || '?',
+          data:       data.data || {},
+          profile_id: data._profileId || data.profile_id || null,
+          timestamp:  data._ts || data.timestamp || Date.now(),
+        }}, '*');
+        log('info', `onSynapseEvent — reenviado a debug-frame: ${data?.type || data?.event || '?'}`);
       } else {
-        log('warn', 'onSynapseEvent — evento recibido pero no hay debug-frame en el DOM (panel cerrado?)');
+        _synapseEventBuffer.push(data);
+        log('info', `onSynapseEvent — panel cerrado, bufferizado (total: ${_synapseEventBuffer.length}): ${data?.type || data?.event || '?'}`);
       }
     });
     log('info', 'onSynapseEvent listener registrado — reenvío a debug-frame activo');
