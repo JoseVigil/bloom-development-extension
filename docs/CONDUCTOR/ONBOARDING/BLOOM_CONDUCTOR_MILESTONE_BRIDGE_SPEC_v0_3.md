@@ -1,7 +1,7 @@
 # Bloom — Conductor Milestone Event Bridge
-## Especificación de investigación · v0.1 · 20 de junio de 2026
+## Especificación de investigación · v0.3 · 20 de junio de 2026
 
-> **Estado de este documento:** implementación en curso — Cambio 1/8 aplicado. Ver §8 para el estado actualizado de incógnitas y tabla de cambios.
+> **Estado de este documento:** pre-implementación. No codear hasta cerrar las incógnitas de la §3.
 >
 > **Propósito:** diseñar el canal robusto entre Cortex (extensión de Chrome) y Conductor (Electron) para que Workspace reaccione a los hitos del onboarding en tiempo real, sin hardcodear eventos ni lógica de negocio en el frontend.
 >
@@ -90,14 +90,27 @@ Estas son las preguntas que bloquean el diseño. Para cada una se indica dónde 
 
 ---
 
-### ~~Incógnita 1~~ — ⚠️ PARCIALMENTE RESUELTA — ¿Dónde vive la fuente de verdad de los hitos?
+### Incógnita 1 — ¿Dónde vive la fuente de verdad de los hitos?
 
-**Respuesta:** es el **Escenario D** del spec original — no hay fuente dinámica en runtime. `nucleus onboarding steps` no existe como comando CLI. El archivo `onboarding_steps.json` existe en el repo bajo `bloom-development-extension/installer/native/config/onboarding/` pero no se deploya durante el setup, por lo que no está disponible en `~/.local/share/BloomNucleus/config/onboarding/` en producción.
+**La pregunta:** `ONBOARDING_STEP_IDS` está hardcodeado en `onboarding-handlers.js`. ¿Existe en algún lugar del sistema un archivo o endpoint que declare los hitos canónicos con metadata (nombre legible, descripción, dependencias, si es bloqueante)?
 
-**Decisión tomada:**
-- **(a) Requerimiento de setup:** copiar `onboarding_steps.json` al BloomRoot durante la instalación — pendiente de implementar en el proceso de setup.
-- **(b) MilestoneRegistry con fallback:** leer el archivo de disco si existe; caer a una constante hardcoded centralizada si no — seguro tanto en instalaciones correctas como en entornos de desarrollo sin deploy.
-- **(c) Requerimiento futuro no bloqueante:** agregar `nucleus --json onboarding steps` al CLI para que consumidores futuros no accedan al disco directamente.
+**Escenario A — Archivo en disco:**
+Los hitos están en `~/.local/share/BloomNucleus/config/onboarding/onboarding_steps.json` o similar. Conductor podría leerlo al arrancar y construir el sistema de reacciones dinámicamente.
+
+**Escenario B — Endpoint del control plane:**
+El control plane (Go) expone `GET /api/internal/onboarding/steps` que devuelve los hitos con metadata. Conductor consulta este endpoint al iniciar el onboarding.
+
+**Escenario C — Definidos en el binario de Nucleus:**
+`nucleus --json onboarding steps` devuelve los steps disponibles. Conductor los obtiene ejecutando el binario.
+
+**Escenario D — No existe fuente dinámica:**
+Los hitos solo están en `ONBOARDING_STEP_IDS`. En ese caso, la solución no es eliminar el hardcodeo todavía — es centralizarlo en un solo lugar y agregar metadata.
+
+**Qué necesitamos para responder:**
+- El archivo `onboarding_steps.json` si existe en disco
+- Las rutas de `internal.routes.ts` (o equivalente en Go) para ver si hay endpoints de onboarding
+- El output de `nucleus --json onboarding steps` o `nucleus --json onboarding --help`
+- Cualquier archivo `.ion` o `bootstrap-ions.json` del directorio `ionpump/`
 
 ---
 
@@ -113,11 +126,15 @@ Estas son las preguntas que bloquean el diseño. Para cada una se indica dónde 
 
 ---
 
-### ~~Incógnita 3~~ — ✅ RESUELTA — ¿Existe ya un mecanismo de push de eventos hacia Conductor?
+### Incógnita 3 — ¿Existe ya un mecanismo de push de eventos hacia Conductor?
 
-**Respuesta:** sí. `SynapseBridge` hereda de `EventEmitter` y emite `bridge.on('message', enriched)` en cada mensaje de Brain via `_onBrainMessage()`. El canal push ya existía — lo que faltaba era clasificar los eventos de onboarding correctamente, que es exactamente lo que resuelve el Cambio 1 (patch de `_classifyMessage()`).
+**La pregunta:** ¿Brain o Temporal tienen algún mecanismo para notificar a Conductor cuando un hito completa, sin esperar a que Conductor haga polling?
 
-La **Opción C** del §4.4 es la correcta y ya es implementable. `workspace-synapse-handlers.js` se conecta con `bridge.on('message', ...)` y filtra por `type === 'ONBOARDING_MILESTONE'`.
+**Escenario posible:** el `SynapseBridge` en `workspace-synapse-handlers.js` podría ya estar recibiendo eventos de Nucleus via algún canal. `SynapseBridge` tiene métodos `seedAndLaunch` y `launch` — ¿tiene también algún listener de eventos?
+
+**Qué necesitamos para responder:**
+- El código de `shared/synapse-bridge.js` — mencionado en `workspace-synapse-handlers.js` pero no adjuntado
+- Si `SynapseBridge` tiene métodos de suscripción a eventos (`on()`, `subscribe()`, etc.)
 
 ---
 
@@ -136,15 +153,17 @@ Si los hitos no tienen esta metadata, habrá que agregarla — y eso define dón
 
 ---
 
-### ~~Incógnita 5~~ — ✅ RESUELTA — ¿Cuál es el momento correcto para abrir Landing?
+### Incógnita 5 — ¿Cuál es el momento correcto para abrir Landing?
 
-**Respuesta:** `nucleus synapse tab.create` no existe, pero existe `nucleus synapse onboarding <profile_id> --step <screen>`, que envía una señal de navegación al onboarding de un perfil en ejecución. El método `_openLandingTab()` del MilestoneReactor no debe abrir una tab — debe llamar:
+**La pregunta:** el spec §4 dice que Landing se abre cuando el step `success` se emite. Pero `success` no está en `ONBOARDING_STEP_IDS` de `onboarding-handlers.js` — solo los 6 steps de onboarding están ahí. ¿Cómo sabe Conductor que el onboarding completó?
 
-```javascript
-await this._nucleus(['synapse', 'onboarding', this._profileId, '--step', 'success']);
-```
+**Hoy:** `onboarding:complete` en `onboarding-handlers.js` escribe `completed: true` en `nucleus.json` y carga `workspaceUrl` en la ventana de Electron. Eso funciona para el caso nominal — pero Landing como tab de Chrome no se abre en ese momento. ¿Quién la abre?
 
-No hace falta construir ningún mecanismo de apertura de Chrome. El canal ya existe en el CLI.
+**Lo que dijimos en §4 del spec:** "Conductor ejecuta `nucleus synapse tab.create landing/index.html`". ¿Existe ese comando en el CLI de Nucleus? ¿O es algo que hay que implementar?
+
+**Qué necesitamos para responder:**
+- `nucleus --json synapse --help` para ver los subcomandos disponibles
+- O el código del comando `synapse` en el binario de Nucleus
 
 ---
 
@@ -291,18 +310,16 @@ client.on('data', (data) => {
 Ventaja: push real, sin latencia.
 Desventaja: requiere que el host/Brain exponga un socket.
 
-**Opción C — SynapseBridge ✅ CONFIRMADA — canal correcto:**
+**Opción C — SynapseBridge (si ya tiene suscripción a eventos):**
 ```javascript
-// workspace-synapse-handlers.js — implementación real
-// SynapseBridge hereda de EventEmitter y emite 'message' en cada mensaje de Brain
-bridge.on('message', (enriched) => {
-  if (enriched.type === 'ONBOARDING_MILESTONE') {
-    const stepId = milestoneRegistry.resolveEvent(enriched.event);
-    if (stepId) milestoneReactor.handleMilestone(stepId);
-  }
+// Si SynapseBridge tiene un método on()
+const bridge = getBridgeForWindow(mainWindow);
+bridge.on('ONBOARDING_STEP_COMPLETE', (event) => {
+  handleCortexEvent(event);
 });
 ```
-El bridge ya tenía esta capacidad. El Cambio 1 (patch) habilita que los eventos de onboarding lleguen con `type: 'ONBOARDING_MILESTONE'` en lugar de caer al fallback `SYNAPSE_EVENT`.
+Ventaja: reutiliza infraestructura existente.
+Desventaja: no sabemos si `SynapseBridge` tiene esta capacidad.
 
 **Opción D — Polling mejorado con fs.watch sobre nucleus.json:**
 ```javascript
@@ -430,10 +447,8 @@ class MilestoneReactor {
   }
 
   async _openLandingTab() {
-    // nucleus synapse onboarding --step success envía la señal de navegación
-    // al perfil en ejecución. No hace falta abrir una tab manualmente.
-    await this._nucleus(['synapse', 'onboarding', this._profileId, '--step', 'success']);
-    console.log('[MilestoneReactor] Señal de navegación a success enviada via nucleus synapse onboarding');
+    // TODO: implementar cuando se resuelva Incógnita 5
+    console.log('[MilestoneReactor] Abriendo Landing — pendiente de nucleus synapse tab.create');
   }
 }
 ```
@@ -481,11 +496,13 @@ window.onboarding.onStepUpdate(({ stepId, action, node, label }) => {
 
 ## 5. Preguntas de investigación — checklist
 
+Para la próxima sesión de análisis, necesitamos responder estas preguntas en orden:
+
 **Bloque 1 — Fuente de verdad de hitos (Incógnita 1)**
-- [x] ¿Existe `onboarding_steps.json` en `~/.local/share/BloomNucleus/config/onboarding/`? → **No en runtime. Existe en el repo bajo `installer/native/config/onboarding/`. Requerimiento de setup pendiente.**
-- [ ] ¿Tiene metadata más allá del ID? (label, blocking, requires, cortex_events) → **Pendiente de revisar el schema del archivo en el repo**
-- [x] ¿`nucleus --json onboarding steps` devuelve algo? → **No. El comando no existe.**
-- [x] ¿Hay un endpoint en el control plane para obtener los steps? → **No confirmado. No bloqueante dado el approach de archivo en disco.**
+- [ ] ¿Existe `onboarding_steps.json` en `~/.local/share/BloomNucleus/config/onboarding/`?
+- [ ] ¿Tiene metadata más allá del ID? (label, blocking, requires, cortex_events)
+- [ ] ¿`nucleus --json onboarding steps` devuelve algo?
+- [ ] ¿Hay un endpoint en el control plane para obtener los steps?
 
 **Bloque 2 — El host nativo (Incógnita 2)**
 - [ ] ¿Qué hace `bloom-host` cuando recibe `GITHUB_TOKEN_STORED`?
@@ -493,28 +510,34 @@ window.onboarding.onStepUpdate(({ stepId, action, node, label }) => {
 - [ ] ¿Existe un archivo de runtime events en `~/.local/share/BloomNucleus/runtime/`?
 
 **Bloque 3 — SynapseBridge (Incógnita 3)**
-- [x] ¿`shared/synapse-bridge.js` tiene métodos de suscripción a eventos (`on()`, `subscribe()`, etc.)? → **Sí. Hereda de EventEmitter. Emite `bridge.on('message', enriched)` en cada mensaje de Brain.**
-- [x] ¿Qué eventos emite `SynapseBridge` hacia `mainWindow` hoy? → **Todos los tipos, incluyendo ahora `ONBOARDING_MILESTONE` tras el Cambio 1.**
+- [ ] ¿`shared/synapse-bridge.js` tiene métodos de suscripción a eventos (`on()`, `subscribe()`, etc.)?
+- [ ] ¿Qué eventos emite `SynapseBridge` hacia `mainWindow` hoy?
 
 **Bloque 4 — Apertura de Landing (Incógnita 5)**
-- [x] ¿`nucleus --json synapse --help` lista un subcomando `tab.create`? → **No existe `tab.create`. Existe `nucleus synapse onboarding <profile_id> --step <screen>` que reemplaza esa necesidad.**
+- [ ] ¿`nucleus --json synapse --help` lista un subcomando `tab.create` o `tab create`?
+- [ ] Si no existe, ¿cuál es el mecanismo para abrir una tab en el Chrome del perfil desde el sistema?
 
 **Bloque 5 — Metadata de hitos (Incógnita 4)**
-- [ ] ¿El `onboarding_steps.json` del repo tiene los campos necesarios? (label, blocking, requires, cortex_events) → **Pendiente de revisar.**
+- [ ] Si los hitos no tienen metadata en la fuente de verdad, ¿dónde es el mejor lugar para definirla?
+  - Opción A: extender `onboarding_steps.json` con campos nuevos
+  - Opción B: archivo nuevo `milestone_metadata.json` en `config/`
+  - Opción C: constante en código del conductor, centralizada y documentada
 
 ---
 
-## 6. Archivos adjuntados y pendientes
+## 6. Archivos a adjuntar en la próxima sesión
 
-| Archivo / Output | Responde | Estado |
+Para responder las incógnitas y pasar a implementación:
+
+| Archivo / Output | Responde | Prioridad |
 |---|---|---|
-| `shared/synapse-bridge.js` | Incógnita 3 — canal de push de eventos | ✅ Adjuntado — resuelta |
-| `nucleus_help.txt` | Incógnita 5 — subcomandos synapse disponibles | ✅ Adjuntado — resuelta |
-| `onboarding_steps.json` (del repo) | Incógnita 1 y 4 — schema de hitos y metadata | ⏳ Pendiente de revisar |
-| `workspace-synapse-handlers.js` | Estructura actual del handler — necesario para Cambio 2 | ⏳ Pendiente |
-| `onboarding.js` (renderer) | Lógica de polling actual — necesario para Cambio 7 | ⏳ Pendiente |
-| `preload_onboarding.js` | Canales IPC ya expuestos — necesario para Cambio 6 | ⏳ Pendiente |
-| Setup installer (script de copia a BloomRoot) | Dónde agregar el deploy de `onboarding_steps.json` | ⏳ Pendiente |
+| `shared/synapse-bridge.js` | Incógnita 3 — si existe canal de push de eventos | Alta |
+| `onboarding_steps.json` (si existe) | Incógnita 1 — fuente de verdad de hitos | Alta |
+| Código del host nativo (`bloom-host`) o su README | Incógnita 2 — qué pasa con los eventos después del host | Alta |
+| Output de `nucleus --json synapse --help` | Incógnita 5 — si existe tab.create | Media |
+| Output de `nucleus --json onboarding --help` | Incógnita 1 — si hay subcomando steps | Media |
+| `internal.routes.ts` o equivalente Go | Incógnita 1 — endpoints del control plane | Media |
+| Cualquier archivo `.ion` o `bootstrap-ions.json` | Incógnita 1 — manifests del ionpump | Baja |
 
 ---
 
@@ -536,36 +559,6 @@ Estas decisiones están tomadas independientemente de cómo se resuelvan las inc
 
 ---
 
----
-
-## 8. Estado de implementación — tabla de cambios actualizada
-
-*Agregado post análisis de `synapse-bridge.js` y `nucleus_help.txt` — 20 de junio de 2026.*
-
-| # | Archivo / Componente | Tipo | Estado | Descripción |
-|---|---|---|---|---|
-| 1 | `shared/synapse-bridge.js` | Modificación | ✅ **Aplicado** | `ONBOARDING_EVENTS` Set + case `ONBOARDING_MILESTONE` + export |
-| 2 | Setup — proceso de instalación | Requerimiento | ⏳ Pendiente | Copiar `onboarding_steps.json` a `BloomRoot/config/onboarding/` durante el setup |
-| 3 | `milestone-registry.js` | Archivo nuevo | ⏳ Pendiente | Lee `onboarding_steps.json` del disco; fallback a constante si no existe |
-| 4 | `milestone-reactor.js` | Archivo nuevo | ⏳ Pendiente | Handlers por hito; usa `nucleus synapse onboarding --step success` en lugar de abrir tab |
-| 5 | `workspace-synapse-handlers.js` | Modificación | ⏳ Pendiente | Handler para `ONBOARDING_MILESTONE` → MilestoneReactor |
-| 6 | `preload_onboarding.js` | Modificación | ⏳ Pendiente | Exponer `onMilestone` y `onStepUpdate` al renderer |
-| 7 | `onboarding.js` (renderer) | Modificación | ⏳ Pendiente | Reemplazar setInterval por listeners de milestone |
-| 8 | nucleus CLI | Requerimiento futuro | 🔵 No bloqueante | Agregar `nucleus --json onboarding steps` para acceso sin lectura directa de disco |
-
-**Dependencias de implementación:**
-```
-Cambio 1 (bridge)            ✅ APLICADO
-    ↓
-Cambio 2 (setup deploy)      ← habilita el registry en runtime
-Cambio 3 (registry)          ← base de datos de hitos
-    ↓
-Cambio 4 (reactor)           ← consume registry, emite IPC al renderer
-    ↓
-Cambio 5 (synapse-handlers)  ← conecta bridge → reactor
-    ↓
-Cambios 6+7 (renderer)       ← consume IPC del reactor, elimina polling
-```
-
 *Documento de investigación — 20 de junio de 2026.*
-*Versión 0.2 — implementación en curso. Cambio 1/8 aplicado.*
+*Versión 0.1 — pre-implementación. No codear hasta cerrar §3.*
+*Próxima acción: adjuntar los archivos de §6 y responder el checklist de §5.*
