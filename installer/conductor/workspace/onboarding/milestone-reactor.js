@@ -136,6 +136,14 @@ class MilestoneReactor {
       org:      enriched.data?.org      || null,
     });
     this._emitStepUiUpdate('github_auth', { phase: 'ESTABLISHED' });
+
+    // ACCOUNT_REGISTERED = el usuario completó el login de GitHub y la cuenta
+    // está creada. En este punto Landing puede abrirse para mostrar el workspace.
+    // GITHUB_PAT_DETECTED y GITHUB_TOKEN_STORED llegan después (clipboard),
+    // para esos eventos solo marcamos el step — Landing ya está abierta.
+    if (enriched.event === 'ACCOUNT_REGISTERED') {
+      await this._openLandingTab();
+    }
   }
 
   async _onNucleusCreateComplete(enriched) {
@@ -201,12 +209,8 @@ class MilestoneReactor {
 
   /**
    * Se llama cuando todos los steps bloqueantes completan.
-   * Navega el onboarding de Chrome a la pantalla 'success' vía nucleus CLI.
-   *
-   * NOTA (Incógnita 5 resuelta, 2026-06-20):
-   *   nucleus synapse onboarding <profileId> --step <screen>
-   *   envía una señal de navegación al onboarding de un perfil en ejecución.
-   *   No es necesario abrir una tab nueva.
+   * Navega Discovery a la pantalla 'success' vía nucleus synapse onboarding.
+   * Landing ya está abierta desde _onGithubAuthComplete (ACCOUNT_REGISTERED).
    */
   async _onOnboardingSuccess() {
     this._log('_onOnboardingSuccess: todos los steps bloqueantes completos');
@@ -224,11 +228,37 @@ class MilestoneReactor {
         ['--json', 'synapse', 'onboarding', profileId, '--step', 'success'],
         15_000
       );
-      this._log('_onOnboardingSuccess: nucleus synapse onboarding --step success ok');
+      this._log('_onOnboardingSuccess: ok');
     } catch (err) {
-      // No-fatal: el renderer puede igual mostrar la pantalla de éxito
-      // porque ya recibió el IPC milestone:reached para __onboarding_complete__
+      // No-fatal: el renderer ya recibió __onboarding_complete__ por IPC
       console.warn('[MilestoneReactor] _onOnboardingSuccess: nucleus call falló —', err.message);
+    }
+  }
+
+  /**
+   * Abre Landing en Chrome para el master profile.
+   * Llamado desde _onGithubAuthComplete cuando el evento es ACCOUNT_REGISTERED.
+   *
+   * Comando: nucleus synapse launch <profileId> --mode landing
+   * Es el único mecanismo del CLI para abrir una tab de Landing.
+   * (nucleus synapse onboarding --step <screen> solo navega Discovery,
+   * no abre una tab nueva.)
+   */
+  async _openLandingTab() {
+    try {
+      const data      = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
+      const profileId = data.master_profile;
+      if (!profileId) throw new Error('master_profile not found in nucleus.json');
+
+      this._log(`_openLandingTab: nucleus synapse launch ${profileId} --mode landing`);
+      await this._execNucleus(
+        ['--json', 'synapse', 'launch', profileId, '--mode', 'landing'],
+        15_000
+      );
+      this._log('_openLandingTab: landing lanzada ok');
+    } catch (err) {
+      // No-fatal: el usuario puede abrir Landing manualmente si este comando falla.
+      console.warn('[MilestoneReactor] _openLandingTab falló —', err.message);
     }
   }
 

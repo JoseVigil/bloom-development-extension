@@ -18,7 +18,9 @@ const { getLogger } = require(path.join(_sharedDir, 'logger'));
 const { paths } = require(path.join(_sharedDir, 'global_paths'));
 const { registerOnboardingHandlers } = require('./onboarding/ipc/onboarding-handlers');
 // synapse-bridge.js vive en conductor/shared/ — un nivel arriba de workspace/
-const { SynapseBridge } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
+const { SynapseBridge, ONBOARDING_EVENTS } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
+const { MilestoneRegistry } = require('./onboarding/milestone-registry');
+const { MilestoneReactor }  = require('./onboarding/milestone-reactor');
 const log = getLogger('onboarding');
 
 // Bridge de onboarding — instanciado una vez cuando se lanza Discovery.
@@ -243,18 +245,57 @@ function initOnboardingBridge() {
     nucleusTimeout: 60_000,
   });
 
-  _onboardingBridge.on('message', (enriched) => {
-    // Usar mainWindow directamente (variable del módulo) — siempre apunta
-    // a la ventana actual porque createOnboardingWindow() la reasigna.
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('synapse:raw-event', enriched);
+  // ── MilestoneRegistry + MilestoneReactor ──────────────────────────────────
+  // El registry carga los steps desde disco (o cae al fallback hardcoded) y
+  // extiende ONBOARDING_EVENTS con cualquier cortex_event nuevo del JSON.
+  // El reactor escucha el EventEmitter del bridge y reacciona a cada hito:
+  //   - persiste el step en nucleus.json
+  //   - emite milestone:reached al renderer
+  //   - en ACCOUNT_REGISTERED: abre Landing vía `nucleus synapse launch --mode landing`
+  //   - cuando todos los steps bloqueantes completan: llama _onOnboardingSuccess()
+  const bloomRoot = path.join(NUCLEUS_EXE, '..', '..'); // BloomNucleus root relativo al binario
+  const registry = new MilestoneRegistry({ bloomRoot, ONBOARDING_EVENTS });
+  registry.loadSteps();
+
+  const reactor = new MilestoneReactor({
+    registry,
+    getWindow:    () => mainWindow,
+    execNucleus,
+    NUCLEUS_JSON,
+    verbose:      !app.isPackaged,
   });
 
+  // Rehidratar desde disco para no re-ejecutar steps ya completados en
+  // sesiones anteriores (ej: si Conductor se reinicia durante el onboarding).
+  reactor.rehydrateFromDisk();
+
+  // Conectar el bridge al reactor: solo procesamos mensajes ONBOARDING_MILESTONE.
+  // El listener de raw-event (debug panel) sigue recibiendo TODO vía el segundo listener.
+  _onboardingBridge.on('message', (enriched) => {
+    if (enriched.type !== 'ONBOARDING_MILESTONE') return;
+
+    const stepId = registry.resolveEvent(enriched.event);
+    if (!stepId) {
+      log.warn('[SYNAPSE] ONBOARDING_MILESTONE sin mapeo en registry:', enriched.event);
+      return;
+    }
+    reactor.handleMilestone(stepId, enriched);
+  });
+
+  // Raw event forwarding para el panel de debug (synapse:raw-event).
+  // Se registra después del reactor para no interferir con el flujo principal.
+  if (!app.isPackaged) {
+    _onboardingBridge.on('message', (enriched) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send('synapse:raw-event', enriched);
+    });
+  }
+
   // CRÍTICO: sin connectToBrain() el socket TCP nunca se abre y Brain
-  // nunca manda nada — el listener 'message' nunca dispara.
+  // nunca manda nada — los listeners 'message' nunca disparan.
   _onboardingBridge.connectToBrain(profileId);
 
-  log.info('[SYNAPSE] Onboarding bridge initialized — connected to Brain, raw event forwarding active');
+  log.info('[SYNAPSE] Onboarding bridge initialized — MilestoneRegistry + MilestoneReactor activos');
 }
 
 // ── NUCLEUS IPC HANDLERS ───────────────────────────────────────────────────
