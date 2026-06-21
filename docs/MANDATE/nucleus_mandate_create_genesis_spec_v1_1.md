@@ -3,20 +3,11 @@
 
 | Campo | Valor |
 |---|---|
-| Alcance | Comando `nucleus mandate create` con foco en el Mandate Genesis |
-| Fuentes | Mandate Domain Spec v1.0.0 · BLOOM Genesis Intent `.gen` Design v1.0 (parcial — pendiente) · BTIPS v5.0 · GENESIS_INTENT_CREATE.md |
+| Alcance | Comando `nucleus mandate create` con foco en el Mandate Genesis y su extensión incremental |
+| Fuentes | Mandate Domain Spec v1.0.0 · BLOOM Genesis Intent `.gen` Design v1.0 · BTIPS v5.0 · GENESIS_INTENT_CREATE.md |
 | Estado | Especificación — Pendiente Implementación |
-| Decisión de modelo CLI | Modelo B (create unificado con `--source`) — **confirmado** |
-
-### Changelog v1.0 → v1.1
-
-Esta revisión cierra tres de los cinco pendientes bloqueantes de la v1.0, a partir de evidencia provista por `GENESIS_INTENT_CREATE.md`:
-
-- **11.1 resuelto** — Opción B confirmada: un único intent `.gen` por proyecto, con subfases de scaffold. Se corrigieron las secciones 5.2, 5.3, 7.3 y 9, que en la v1.0 describían (de forma contradictoria) un modelo de N intents independientes.
-- **11.2 resuelto** — Extensión trivial de `intentType`, aplicada.
-- **11.4 resuelto** — Contrato de `waitIntentResult` para `.gen`: observa `report.json` por subfase de dominio, dentro del único intent. Se descarta el mecanismo alternativo de `genes_created` en `gen_state.json`.
-- **Corrección estructural no prevista en la v1.0** — La cadena de invocación de Brain no es `Nucleus → Brain` directo. Es `Nucleus → Sentinel → Brain`. Sentinel no es solo un bus de notificación de estado: es el relay activo que dispara la ejecución de Brain. Se corrigieron las secciones 4.3, 6 y 7.2 en consecuencia, y se incorporó el spec de `brain intent create --type gen` (Modelo B de `GENESIS_INTENT_CREATE.md`) como sección 7.4.
-- **11.3 y 11.5 siguen abiertos.** Dependen del Genesis Design v1.0, que todavía no fue provisto.
+| Decisión de modelo CLI | Modelo B (create unificado con `--source`) — pendiente confirmación |
+| Cambios v1.1 | Soporte para genesis incremental (`domain_expansion`) · Spec de `brain intent create --type gen` |
 
 ---
 
@@ -32,7 +23,8 @@ Esta revisión cierra tres de los cinco pendientes bloqueantes de la v1.0, a par
 8. [Modificaciones al contrato de datos del Mandate](#8-modificaciones-al-contrato-de-datos-del-mandate)
 9. [Flujo completo de creación y ejecución](#9-flujo-completo-de-creación-y-ejecución)
 10. [Condiciones de error y recuperación](#10-condiciones-de-error-y-recuperación)
-11. [Decisiones tomadas y pendientes abiertos](#11-decisiones-tomadas-y-pendientes-abiertos)
+11. [Pendientes bloqueantes antes de implementar](#11-pendientes-bloqueantes-antes-de-implementar)
+12. [Genesis incremental — `domain_expansion`](#12-genesis-incremental--domain_expansion)
 
 ---
 
@@ -111,17 +103,6 @@ nucleus genesis start <workspace_path>
 
 **Veredicto:** Destino final de UX. A implementar cuando el CLI tenga más madurez. El Modelo B es el camino hacia él.
 
-### 3.4 Aclaración — esta decisión no es la misma que la de `GENESIS_INTENT_CREATE.md`
-
-`GENESIS_INTENT_CREATE.md` evalúa los mismos tres modelos, pero para un comando distinto, en una capa distinta: `brain intent create --type gen`, sin mención de Mandate. Son dos decisiones de capas diferentes que comparten forma pero no comparten actor:
-
-| Capa | Comando | Quién lo ejecuta | Responsabilidad |
-|---|---|---|---|
-| Mandate (este documento) | `nucleus mandate create --type genesis --source <path>` | El usuario, vía CLI | Crear el contrato estratégico firmado. Punto de entrada único y gobernado. |
-| Intent (`GENESIS_INTENT_CREATE.md`) | `brain intent create --type gen --source <path>` | Brain, invocado por Sentinel — **nunca directamente por el usuario** | Instanciar el intent `.gen` y disparar la Fase 1 (ingest). |
-
-El Modelo B se adopta en ambas capas, pero con un orden de dependencia: el Mandate Genesis existe antes de que Brain ejecute `brain intent create --type gen`. Esto resuelve la pregunta que dejaba abierta `GENESIS_INTENT_CREATE.md` ("¿lo crea Brain automáticamente o tiene que existir antes?") — el Mandate Genesis siempre existe primero, porque Nucleus lo crea en el Paso 2 de la Sección 4.3, antes de que Sentinel dispare a Brain en el Paso 3. `brain intent create --type gen` no es un comando que el usuario tipee en una terminal en el flujo de genesis — es la operación interna que Brain ejecuta cuando Sentinel lo invoca. El detalle completo de esa invocación está en la Sección 7.4.
-
 ---
 
 ## 4. Spec del comando `nucleus mandate create`
@@ -157,9 +138,15 @@ nucleus mandate create --type genesis \
 **Paso 1 — Validación previa (antes de crear nada):**
 
 ```
-1. Verificar que no existe un intent .gen previo para este proyecto
-   → Si existe: error + "Genesis ya ejecutado. Usar nucleus mandate status <genesis-id>"
-   → Si existe un genesis incompleto: error + "Genesis en progreso. Usar nucleus mandate resume <genesis-id>"
+1. Verificar el estado del genesis fundacional para este proyecto
+   → No existe ningún genesis previo: proceder con --type genesis (fundacional)
+   → Existe un genesis fundacional completado: 
+       → Si el comando es --type genesis: error + "Genesis fundacional ya ejecutado.
+         Para agregar dominios usar --type domain_expansion"
+       → Si el comando es --type domain_expansion: proceder (ver Sección 12)
+   → Existe un genesis fundacional incompleto (status: "building" o "running"):
+       → error + "Genesis en progreso. Usar nucleus mandate resume <genesis-id>"
+       → domain_expansion no puede iniciarse mientras el fundacional no cerró
 
 2. Verificar accesibilidad de --source
    → Path local: verificar que existe y es legible
@@ -171,6 +158,8 @@ nucleus mandate create --type genesis \
    → mandate-orchestration-worker registrado
    → Si no: error descriptivo con estado actual del runtime
 ```
+
+> El genesis fundacional sigue ejecutándose **una sola vez por proyecto** — eso no cambia. Lo que cambia es que un genesis fundacional completado deja de ser un callejón sin salida: habilita `--type domain_expansion` como camino legítimo para crecer el proyecto. Ver Sección 12 para el diseño completo.
 
 **Paso 2 — Creación del estado intermedio (pre-firma):**
 
@@ -185,26 +174,20 @@ nucleus mandate create --type genesis \
    → "Genesis iniciado. Brain comenzará la ingestión en background."
 ```
 
-**Paso 3 — Invocación de Brain vía Sentinel (no es delegación directa):**
+**Paso 3 — Delegación a Brain:**
 
 ```
-Nucleus emite evento Sentinel: MANDATE_GENESIS_INITIATED
-  payload: { mandate_id, source, project_name, nucleus_path }
+Nucleus delega a Brain:
+  - mandate_id
+  - source (path o URL)
+  - project_name
+  - nucleus_path
 
-Sentinel recibe el evento y:
-  a) Notifica a Conductor (informativo — progreso visible al usuario)
-  b) Invoca a Brain (acción — dispara el trabajo real)
-
-Brain, invocado por Sentinel, ejecuta el equivalente de
-"brain intent create --type gen" (spec completa en Sección 7.4):
+Brain instancia el intent .gen:
   - Crea .intents/.gen/.genesis-{name}-{uuid3}/
   - Escribe gen_state.json con phase: "ingest"
   - Inicia Fase 1 (ingest) en background
 ```
-
-> ⚠️ **Corrección respecto a versiones anteriores de este documento**
->
-> Nucleus **no** delega directamente a Brain. Crear intents no es responsabilidad de Nucleus — es responsabilidad de Brain, y la cadena de invocación es `Nucleus → Sentinel → Brain`. Sentinel no es un bus pasivo de notificación en este paso: es el componente que efectivamente dispara la ejecución de Brain. Ver Sección 6.2.
 
 **Paso 4 — Firma diferida del mandate.json (post-validación de dominios):**
 
@@ -275,63 +258,49 @@ El contrato del Mandate Domain Spec v1.0.0 define `intentType` como `exp | cor |
 | `mandateType` | `"genesis"` — identifica que es un Mandate Genesis. Permite que MandateWorkflow sepa cómo procesarlo. | Sí |
 | `genesisSource` | Path o URL original del workspace del usuario. Para auditoría y resumabilidad. | Sí |
 
-### 5.2 Un único intent `.gen` con N subfases de scaffold (Opción B — confirmada)
+### 5.2 Un intent `.gen` por acción, no uno global
 
-> ✅ **Pendiente 11.1 resuelto en v1.1.** La v1.0 de este documento describía este punto de forma contradictoria: esta sección decía que el MandateWorkflow crea N intents independientes (Opción A), mientras que la Sección 7.3 decía lo opuesto (Opción B). Se adopta formalmente la Opción B, reforzada por evidencia de `GENESIS_INTENT_CREATE.md`: su condición de error ("ya existe un intent `.gen` en este proyecto") está formulada en singular, por proyecto — el modelo mental de esa fuente nunca contempla N intents `.gen` por dominio.
-
-La jerarquía real es:
+La jerarquía del Genesis Design v1.0 establece:
 
 ```
 Mandate Genesis
-    └── Un único intent .gen (genesisIntentId)
-            └── N subfases de scaffold, una por dominio confirmado
+    └── N Actions de tipo .gen
+            └── Un intent .gen por dominio
+                    └── scaffold individual del dominio
 ```
 
-El MandateWorkflow **no crea intents nuevos** durante su ejecución. El único intent `.gen` del genesis ya fue creado por Brain (vía Sentinel) en el Paso 3 de la Sección 4.3, antes de que el MandateWorkflow exista. Lo que el MandateWorkflow orquesta, por cada acción `gen-action-{domain}`, es una subfase de scaffold dentro de ese intent ya existente.
+Esto implica que el MandateWorkflow crea **N intents `.gen` secuencialmente** (o en paralelo si el diseño lo permite), uno por dominio confirmado. Cada intent `.gen` ejecuta la Fase 4 (scaffold) de un único dominio. Las Fases 1 (ingest), 2 (cluster) y 3 (validate) ocurren antes de que el MandateWorkflow esté activo — son parte de la creación del mandate, no de su ejecución.
 
-**Activities nuevas requeridas para `mandateType: genesis`:**
-
-| Activity | Input | Output / Responsabilidad |
-|---|---|---|
-| `triggerGenesisDomain(action, genesisIntentId)` | La acción del mandate + el `genesisIntentId` (de `mandate_state.json`, Sección 8.3) | Delega a Brain la Fase 4 (scaffold) para el dominio específico, dentro del intent existente. Retorna `{ accepted: boolean }` — no crea un `intentId` nuevo porque ya existe. |
-| `waitIntentResult(genesisIntentId, domain)` | El `genesisIntentId` + el nombre del dominio | Observa `.pipeline/.scaffold_{domain}/.response/.report.json` dentro del intent `.gen` único, hasta estado final. Retorna `{ success, summary, ref }`. |
-
-`triggerGenesisDomain` es una activity nueva, separada de `createIntent`. El `MandateWorkflow` rama su lógica según `mandate.mandateType`: si es `"genesis"`, llama a `triggerGenesisDomain` en vez de `createIntent` para cada acción de tipo `gen`. El contrato genérico de `createIntent` (Mandate Domain Spec v1.0.0, Sección 5.1) queda intacto para mandates estándar — no se sobrecarga su semántica.
-
-`waitIntentResult` se extiende con un parámetro `domain` opcional. Cuando `domain` está presente, observa el `report.json` de esa subfase específica en vez del intent completo. Esto resuelve el pendiente 11.4: se descarta la alternativa de un campo `genes_created` en `gen_state.json` (propuesta en la v1.0 de este documento) porque duplica un mecanismo de observación que el patrón de pipeline (`report.json`) ya resuelve, y que es consistente con el resto del sistema (Mandate Domain Spec v1.0.0, Sección 2.3).
-
-El path del `resultRef` para una subfase de scaffold completada es:
+**Consecuencia para `waitIntentResult`:** La activity `waitIntentResult` del MandateWorkflow debe saber observar el `report.json` del pipeline de un intent `.gen`. El path del `resultRef` para un intent `.gen` completado es:
 
 ```
-.intents/.gen/.{genesisIntentId}/.pipeline/.scaffold_{domain}/.response/.report.json
+.intents/.gen/.{intent-uuid}/.pipeline/.scaffold_{domain}/.response/.report.json
 ```
 
-### 5.3 El `resultRef` en `mandate_state.json` para acciones `.gen`
+### 5.3 El `resultRef` en `mandate_state.json` para intents `.gen`
 
 ```json
 {
   "actionId":   "gen-action-authentication",
-  "intentId":   "gen-genesis-my-project-x9y8z7",
+  "intentId":   "gen-authentication-x9y8z7",
   "intentType": "gen",
   "status":     "completed",
-  "resultRef":  ".intents/.gen/.gen-genesis-my-project-x9y8z7/.pipeline/.scaffold_authentication/.response/.report.json",
+  "resultRef":  ".intents/.gen/.gen-authentication-x9y8z7/.pipeline/.scaffold_authentication/.response/.report.json",
   "resolvedAt": "2026-06-18T11:30:00Z"
 }
 ```
-
-Nótese que `intentId` es el mismo (`genesisIntentId`) para todas las acciones del mandate — a diferencia del modelo estándar, donde cada acción tiene un `intentId` distinto. Lo que varía entre acciones es el segmento `.scaffold_{domain}` del `resultRef`, no el intent.
 
 ---
 
 ## 6. Rol de Sentinel en la creación del Mandate Genesis
 
-Sentinel actúa como bus de eventos en el ecosistema Bloom. En el flujo del Mandate Genesis, Sentinel es el canal de comunicación entre los tres actores principales (Nucleus, Brain, Conductor). Pero no es solo un canal de notificación: en el momento de arranque del genesis, Sentinel tiene responsabilidad activa — es quien dispara la ejecución de Brain, no un observador pasivo que solo retransmite estado.
+Sentinel actúa como bus de eventos en el ecosistema Bloom. En el flujo del Mandate Genesis, Sentinel es el canal de comunicación entre los tres actores principales (Nucleus, Brain, Conductor) y el mecanismo que permite que el punto de sincronización humana (validación de dominios) sea asíncrono y no bloqueante para el proceso completo.
 
 ### 6.1 Eventos que Sentinel debe gestionar
 
 | Evento | Emisor | Receptores | Momento |
 |---|---|---|---|
-| `MANDATE_GENESIS_INITIATED` | Nucleus | Conductor (informativo) · Brain (invocación — ver 6.2) | Al crear el estado intermedio |
+| `MANDATE_GENESIS_INITIATED` | Nucleus | Conductor, Brain | Al crear el estado intermedio |
 | `GENESIS_INGEST_STARTED` | Brain | Conductor | Al iniciar Fase 1 |
 | `GENESIS_INGEST_PROGRESS` | Brain | Conductor | Periódico durante ingestión |
 | `GENESIS_INGEST_COMPLETE` | Brain | Conductor, Nucleus | Al completar vectorización |
@@ -342,17 +311,7 @@ Sentinel actúa como bus de eventos en el ecosistema Bloom. En el flujo del Mand
 | `GENESIS_COMPLETE` | Nucleus (MandateWorkflow) | Conductor | Al completar todos los dominios |
 | `GENESIS_ERROR` | Brain o Nucleus | Conductor | En cualquier error recuperable o fatal |
 
-### 6.2 Sentinel como relay de invocación de Brain — no solo bus de notificación
-
-> ✅ **Corrección estructural resuelta en v1.1.** Las versiones anteriores de este documento asumían que Nucleus delega directamente a Brain (Sección 4.3, Paso 3). Es incorrecto: crear intents no es responsabilidad de Nucleus — es responsabilidad de Brain, y Brain es invocado por Sentinel, que a su vez actúa por instrucción de Nucleus. La cadena es `Nucleus → Sentinel → Brain`.
-
-Cuando Nucleus emite `MANDATE_GENESIS_INITIATED`, Sentinel hace dos cosas en paralelo: notifica a Conductor (para que el usuario vea progreso), e invoca a Brain para que ejecute el equivalente de `brain intent create --type gen` (spec completa en Sección 7.4).
-
-**Decisión de mecanismo — invocación interna, no shell-out de CLI:** Sentinel no ejecuta el comando `brain intent create --type gen` como si fuera un usuario tipeándolo en una terminal. Sentinel emite la invocación como una llamada/evento interno con el mismo contrato de payload y comportamiento que ese comando define (`mandate_id`, `source`, `project_name`, `nucleus_path`), y un listener de Brain lo traduce a la misma lógica. Se adopta este mecanismo, en vez de un shell-out literal, por consistencia con el resto de la arquitectura de Sentinel como bus de eventos (Sección 6.1) — todo lo demás en este flujo es evento, no invocación de proceso externo. Esto sigue siendo un punto a confirmar contra la implementación real de Sentinel cuando esté disponible; no es un pendiente bloqueante para el diseño, pero sí algo a validar antes de escribir código.
-
-Esta corrección también resuelve una pregunta que dejaba abierta `GENESIS_INTENT_CREATE.md`: si el Mandate Genesis lo crea Brain automáticamente al recibir el comando, o si tiene que existir antes. La respuesta es que el Mandate Genesis **siempre existe antes**: Nucleus lo crea en el Paso 2 de la Sección 4.3, y solo después de eso Sentinel invoca a Brain. Brain nunca crea un Mandate Genesis por su cuenta.
-
-### 6.3 Sentinel como coordinador del punto de sincronización
+### 6.2 Sentinel como coordinador del punto de sincronización
 
 El punto de sincronización entre la Fase 3 (validate) y la Fase 4 (scaffold) es el momento más crítico del genesis. El flujo es:
 
@@ -378,7 +337,7 @@ Nucleus arranca MandateWorkflow en Temporal
 
 **Invariante:** El evento `GENESIS_DOMAINS_CONFIRMED` es el único trigger que habilita a Nucleus para firmar el `mandate.json`. Sin ese evento, el mandate no existe formalmente. Sin ese evento, Brain no puede iniciar la Fase 4.
 
-### 6.4 Eventos de configuración — si Sentinel gestiona configuración
+### 6.3 Eventos de configuración — si Sentinel gestiona configuración
 
 El Genesis Design v1.0 no especifica si Sentinel debe crear configuración al inicio del genesis. Sin embargo, hay dos casos donde Sentinel puede necesitar actuar para la configuración del proyecto:
 
@@ -413,7 +372,7 @@ Brain es el único componente que ejecuta lógica de transformación en el genes
 
 ### 7.2 Instanciación del intent `.gen` por Brain
 
-Cuando Sentinel invoca a Brain — por instrucción de Nucleus, en el Paso 3 del comando `nucleus mandate create` (Sección 4.3) — Brain instancia el intent `.gen` con la siguiente estructura inicial:
+Cuando Nucleus delega a Brain en el Paso 3 del comando `nucleus mandate create`, Brain instancia el intent `.gen` con la siguiente estructura inicial:
 
 ```
 .intents/.gen/.genesis-{name}-{uuid3}/
@@ -427,11 +386,9 @@ Cuando Sentinel invoca a Brain — por instrucción de Nucleus, en el Paso 3 del
 └── .pipeline/              ← estructura BISP vacía
 ```
 
-Esta es exactamente la estructura que crea `brain intent create --type gen` (Sección 7.4), ejecutado internamente por Brain cuando Sentinel lo invoca.
-
 ### 7.3 Cómo Brain sabe qué dominio scaffoldear (recibe del MandateWorkflow)
 
-En la Fase 4, el MandateWorkflow itera las acciones del `mandate.json` y por cada acción de tipo `gen` llama a `triggerGenesisDomain(action, genesisIntentId)` — no a `createIntent` (Sección 5.2). El `payload` de la acción contiene:
+En la Fase 4, el MandateWorkflow itera las acciones del `mandate.json` y por cada acción de tipo `gen` llama a `createIntent(action, mandateId)`. El `payload` de la acción contiene:
 
 ```json
 {
@@ -441,38 +398,76 @@ En la Fase 4, el MandateWorkflow itera las acciones del `mandate.json` y por cad
 }
 ```
 
-Brain recibe este payload y ejecuta el scaffold del dominio específico. No ejecuta el intent `.gen` completo desde cero — las Fases 1, 2 y 3 ya ocurrieron. Brain lee el estado existente del intent `.gen` del genesis y ejecuta **únicamente la Fase 4** para el dominio indicado, dentro de la carpeta `.scaffold/.domain_{name}/` del intent ya existente.
+Brain recibe este payload y ejecuta el scaffold del dominio específico. No ejecuta el intent `.gen` completo desde cero — las Fases 1, 2 y 3 ya ocurrieron. Brain lee el estado existente del intent `.gen` del genesis y ejecuta **únicamente la Fase 4** para el dominio indicado.
 
-> ✅ **Resuelto en v1.1.** La v1.0 de este documento dejaba esto como decisión pendiente, y de hecho se contradecía con la Sección 5.2 de esa misma versión (que describía N intents independientes). Queda confirmado: el MandateWorkflow no crea intents nuevos para el genesis. Hay un único intent `.gen` que contiene todas las fases y subfases, y el MandateWorkflow orquesta las subfases de scaffold dentro de él vía `triggerGenesisDomain`. Ver Sección 5.2 para el detalle completo del contrato de activities.
+**Implicación de implementación:** El intent `.gen` creado en el Paso 3 es **un único intent** que contiene todas las fases. Cuando el MandateWorkflow llama a `createIntent` para el scaffold del dominio `authentication`, Brain no crea un nuevo intent `.gen` — ejecuta la Fase 4 de la carpeta `.scaffold/.domain_authentication/` dentro del intent `.gen` ya existente.
+
+Esta es una diferencia respecto al modelo genérico de Mandate donde cada `createIntent` crea un nuevo intent. El genesis reutiliza el mismo intent `.gen` para todas las acciones de scaffold, porque las Fases 1-3 son compartidas.
+
+**Decisión pendiente:** ¿El MandateWorkflow crea N intents `.gen` independientes (uno por dominio, cada uno autónomo) o llama N veces a Brain sobre el mismo intent `.gen` del genesis? La arquitectura más limpia crea un único intent `.gen` que contiene todas las fases y subfases. El MandateWorkflow orquesta las subfases de scaffold dentro de ese único intent. Esto requiere que `waitIntentResult` pueda observar el estado de un subfase de scaffold individual, no solo el estado final del intent completo.
 
 ### 7.4 Spec adoptada — `brain intent create --type gen`
 
-Adaptado de `GENESIS_INTENT_CREATE.md` (Modelo B). Esta es la operación que Brain ejecuta cuando Sentinel lo invoca en el Paso 3 de la Sección 4.3. No es un comando que el usuario tipee en el flujo de genesis — es la lógica interna de Brain, expuesta también como comando de CLI para uso directo de Brain fuera del flujo de Mandate (debugging, recovery manual).
+El resto de los tipos de intent (`dev`, `doc`, `exp`, `cor`) tienen su comando de creación dentro de Brain: `brain intent create --type <tipo>`. El intent `.gen` necesita el mismo comando, manteniendo la misma lógica de invocación — esto **no es un comando nuevo de Nucleus**, es la pieza de Brain que Nucleus invoca cuando delega la instanciación del intent `.gen` (Sección 4.3, Paso 3).
 
-```
+**Forma del comando:**
+
+```bash
 brain intent create --type gen \
-  --name "genesis" \
-  --source <path_or_url> \
-  --nucleus-path <nucleus_root>
-
-Comportamiento:
-1. Valida que el proyecto no tenga un intent .gen previo (el genesis se ejecuta una vez)
-2. Crea la estructura de directorios completa del intent .gen (Sección 7.2)
-3. Escribe gen_state.json con phase: "ingest"
-4. Si --source es una URL: clona el repo a .raw/
-5. Si --source es un path local: copia los archivos a .raw/ con verificación de hashes
-6. Escribe ingest_manifest.json inicial con status: "pending" para cada archivo
-7. Inicia la ingestión en background
-8. Retorna intent_id (= genesisIntentId, persistido por Nucleus en mandate_state.json)
-
-Condiciones de error:
-- Ya existe un intent .gen en este proyecto → error + sugerencia de nucleus mandate status
-- --source no existe o no es accesible → error antes de crear nada (ya validado en
-  el Paso 1 de Nucleus, Sección 4.3 — esta validación es redundante pero se mantiene
-  por si Brain se invoca fuera del flujo de Mandate)
+  --name <nombre-del-proyecto> \
+  --source <path_local_o_url> \
+  --mandate-id <genesis-mandate-id> \
+  [--nucleus-path <ruta_al_nucleus>]
 ```
 
-**Diferencia respecto a la fuente original:** `GENESIS_INTENT_CREATE.md` deja como pendiente si Brain crea el Mandate Genesis automáticamente o si tiene que pre-existir. En el contexto de este documento esa pregunta no aplica — el Mandate Genesis siempre pre-existe, porque Nucleus lo crea en el Paso 2 de la Sección 4.3 antes de que Sentinel invoque a Brain (Sección 6.2). La condición "el Mandate Genesis no existe" de la fuente original nunca debería ocurrir en este flujo; si ocurre, es un error de orquestación, no un caso a manejar como flujo normal.
+**Qué hace, paso a paso:**
+
+```
+1. Valida que no exista ya un intent .gen para este mandate_id
+   → Invariante: un intent .gen por Mandate Genesis (fundacional o domain_expansion)
+
+2. Crea la estructura completa de directorios del intent .gen
+   (todas las carpetas del tree: .ingest/, .analysis/, .scaffold/, .pipeline/)
+
+3. Escribe gen_state.json inicial:
+   → intent_id: "gen-{name}-{uuid3}"
+   → mandate_id: <recibido por flag>
+   → phase: "ingest"
+   → todos los campos del schema Sección 4.1 del Genesis Design v1.0
+
+4. Resuelve --source:
+   → Si es URL: clona el repo a .raw/ (reutiliza brain github clone)
+   → Si es path local: copia los archivos a .raw/ con verificación de hashes
+   → Si --source no existe o no es accesible: error antes de crear nada (ver paso 1 del nivel superior)
+
+5. Escribe ingest_manifest.json inicial: status "pending" por cada archivo copiado
+
+6. Dispara la Fase 1 (ingest) en background
+   → Brain no bloquea el retorno del comando esperando a que termine la ingestión
+   → El comando retorna apenas el intent está creado y la ingestión arrancó
+
+7. Retorna al invocador (Nucleus, vía la delegación del Paso 3):
+   → intent_id
+   → status inicial ("ingest" en curso)
+```
+
+**Quién invoca este comando:**
+
+Este comando **no lo tipea el usuario directamente** en el flujo normal — es invocado por Nucleus internamente como parte de la delegación descrita en la Sección 4.3 (`nucleus mandate create --type genesis` → Paso 3 → Brain instancia el intent). Queda disponible como comando de Brain independiente por dos razones:
+
+- **Consistencia con el patrón existente** — todos los tipos de intent se crean vía `brain intent create --type <tipo>`. Romper ese patrón solo para `.gen` introduce una excepción innecesaria.
+- **Debugging y recovery manual** — si Nucleus necesita re-disparar la creación del intent `.gen` durante un recovery (Sección 10.1), invoca este mismo comando con el `mandate_id` existente en vez de tener un mecanismo de recovery paralelo.
+
+**Diferencia respecto a `.dev` y `.doc`:** En esos tipos, `brain intent create` crea el intent vacío y un comando separado lo hidrata (`brain intent hydrate`). En `.gen`, no hay paso de hidratación posterior — `--source` es obligatorio en la creación misma, porque el intent `.gen` no tiene razón de existir sin material para ingerir. Esto es consistente con la discusión del Modelo B en la Sección 3: el `create` de `.gen` concentra más responsabilidad que el `create` genérico, y eso es una decisión de diseño aceptada, no un descuido.
+
+**Error conditions:**
+
+| Condición | Comportamiento |
+|---|---|
+| Ya existe un intent `.gen` para este `mandate_id` | Error + sugerencia de usar el intent existente o `brain intent recover` |
+| `--source` no existe o no es accesible | Error antes de crear cualquier estructura de directorios |
+| `--mandate-id` no corresponde a un mandate en estado `building` | Error — el intent `.gen` no puede crearse sin un mandate Genesis que lo respalde |
+| Falla la copia de archivos a mitad de proceso | `ingest_manifest.json` registra qué se copió; `gen_state.json` queda `resumable: true` |
 
 ---
 
@@ -486,7 +481,7 @@ Condiciones de error:
 
 - `standard` es el caso genérico (todos los mandates existentes).
 - `genesis` activa el flujo especial de creación diferida.
-- El MandateWorkflow usa este campo para decidir cómo procesar las acciones: si es `"genesis"`, usa `triggerGenesisDomain` en vez de `createIntent` para las acciones `gen` (Sección 5.2).
+- El MandateWorkflow usa este campo para decidir cómo procesar las acciones.
 
 **Alternativa sin campo nuevo:** Detectar el tipo por la presencia de acciones de tipo `gen` en `actions[]`. Más simple pero menos explícito.
 
@@ -572,15 +567,13 @@ Nucleus — Creación del estado intermedio
   • Retorna al usuario: mandate_id + mensaje de progreso
           │
           ▼
-Sentinel — recibe MANDATE_GENESIS_INITIATED
-  • Notifica a Conductor (informativo)
-  • Invoca a Brain con: mandate_id, source, project_name, nucleus_path
+Nucleus delega a Brain
+  • mandate_id, source, project_name
           │
           ▼
-Brain — ejecuta brain intent create --type gen (Sección 7.4)
+Brain — Instancia el intent .gen
   • Crea .intents/.gen/.genesis-my-project-x9y8z7/
   • Escribe gen_state.json: phase: "ingest"
-  • Persiste genesisIntentId en mandate_state.json (vía Nucleus)
   • Emite: GENESIS_INGEST_STARTED → Sentinel → Conductor
           │
           ▼
@@ -625,12 +618,13 @@ Brain — recibe confirmación              Nucleus — recibe confirmación
           │
           ▼
 MandateWorkflow (Temporal) — por cada dominio confirmado
-  • triggerGenesisDomain(action, genesisIntentId) → Brain
-  • Brain ejecuta Fase 4 (scaffold) del dominio, dentro del intent .gen único
+  • createIntent(gen-action-{domain}, mandateId) → Brain
+  • Brain ejecuta Fase 4 (scaffold) del dominio
   • Brain crea .scaffold/.domain_{name}/ completo
-  • Brain escribe report.json de la subfase .pipeline/.scaffold_{domain}/.response/
-  • waitIntentResult(genesisIntentId, domain) detecta report.json: completed
-  • MandateWorkflow registra en history[] (intentId = genesisIntentId para todas las acciones)
+  • Brain actualiza gen_state.json del intent
+  • Brain escribe report.json del pipeline
+  • waitIntentResult detecta report.json: completed
+  • MandateWorkflow registra en history[]
   • MandateWorkflow avanza al siguiente dominio
           │
           ▼
@@ -665,9 +659,9 @@ Heredados del modelo estándar del Mandate Domain Spec v1.0.0:
 | Crash de Temporal | Recovery automático. MandateWorkflow lee `completedActions`, salta lo hecho |
 | Pausa manual | `nucleus mandate pause genesis-{id}` — señal Temporal estándar |
 
-### 10.3 El genesis se ejecuta exactamente una vez
+### 10.3 El genesis fundacional se ejecuta exactamente una vez — pero el proyecto puede crecer
 
-La validación en el Paso 1 del comando garantiza que no puede existir más de un genesis por proyecto. Si un genesis falló y el usuario quiere reintentar, el camino es:
+La validación en el Paso 1 del comando garantiza que no puede existir más de un genesis **fundacional** por proyecto. Si un genesis falló y el usuario quiere reintentar, el camino es:
 
 ```bash
 # Si el genesis está en estado "building" (pre-firma, recuperable):
@@ -678,34 +672,169 @@ nucleus mandate status genesis-{id}    # revisar qué dominio falló
 nucleus mandate resume genesis-{id}    # retomar desde el dominio fallido
 ```
 
-No existe un "re-genesis" completo. Si el usuario quiere empezar de cero, debe eliminar el mandate fallido explícitamente (comando a definir fuera del alcance de este spec) y crear uno nuevo.
+No existe un "re-genesis fundacional" completo. Si el usuario quiere empezar de cero, debe eliminar el mandate fallido explícitamente (comando a definir fuera del alcance de este spec) y crear uno nuevo.
+
+Esto es distinto de **agregar dominios a un proyecto cuyo genesis fundacional ya completó** — ese caso no es un reintento ni un parche con `dev`/`doc`, es una operación de primera clase: `nucleus mandate create --type domain_expansion`. Ver Sección 12.
 
 ---
 
-## 11. Decisiones tomadas y pendientes abiertos
+## 11. Pendientes bloqueantes antes de implementar
 
-### 11.A Resuelto en esta revisión (v1.1)
+### 11.1 Decisión pendiente crítica — ¿Un intent `.gen` o N intents `.gen`?
 
-**11.1 — ¿Un intent `.gen` o N intents `.gen`?** Resuelto: Opción B. Un único intent `.gen` por proyecto, con N subfases de scaffold. Confirmado con evidencia de `GENESIS_INTENT_CREATE.md` (su condición de error sobre intent previo está formulada en singular, por proyecto). Detalle completo: Sección 5.2.
+**La pregunta:** Cuando el MandateWorkflow llama a `createIntent` para cada dominio, ¿crea un nuevo intent `.gen` independiente por dominio, o ejecuta una subfase dentro del único intent `.gen` del genesis?
 
-**11.2 — Extensión de `intentType` en `mandate.json`.** Resuelto. El schema pasa de `exp | cor | dev | doc` a `exp | cor | dev | doc | gen`. Sin impacto adicional más allá de actualizar la validación del campo donde exista.
+**Opción A — N intents independientes:**
+- Un intent `.gen` por dominio confirmado
+- Cada intent `.gen` contiene solo la Fase 4 (scaffold) del dominio específico
+- El intent `.gen` "madre" (con las Fases 1-3) queda como artefacto de ingestión/análisis, no como intent ejecutable del MandateWorkflow
+- Ventaja: Sigue el modelo estándar de Mandate (cada action crea un intent nuevo)
+- Desventaja: Los N intents no tienen Fases 1-3 propias — son intents incompletos por diseño
 
-**11.4 — Contrato de `waitIntentResult` para intents `.gen`.** Resuelto: observa `report.json` por subfase de dominio (`.pipeline/.scaffold_{domain}/.response/.report.json`) dentro del único intent `.gen`. Se descarta la alternativa de un campo `genes_created` en `gen_state.json`. Requiere una activity nueva, `triggerGenesisDomain`, separada de `createIntent`. Detalle completo: Sección 5.2.
+**Opción B — Un único intent `.gen` con subfases:**
+- Un único intent `.gen` para todo el genesis
+- El MandateWorkflow no crea intents nuevos — orquesta subfases dentro del intent existente
+- `waitIntentResult` observa el estado de cada subfase de scaffold, no del intent completo
+- Ventaja: La estructura del tree refleja la realidad (un genesis = un intent)
+- Desventaja: Requiere que `waitIntentResult` sea más sofisticada — observar subfases, no solo el intent completo
 
-**Corrección no listada en la v1.0 — cadena de invocación Nucleus → Sentinel → Brain.** No era un pendiente declarado, pero se detectó y corrigió en esta revisión: Nucleus no delega directamente a Brain. Sentinel es el relay activo. Detalle completo: Sección 6.2 y Sección 7.4.
+**Recomendación:** Opción B. El genesis es conceptualmente un único proceso con N subfases de scaffold. Crear N intents independientes sin Fases 1-3 crea intents estructuralmente incompletos que el resto del sistema no puede procesar correctamente.
 
-### 11.B Pendientes que siguen abiertos
+### 11.2 Extensión de `intentType` en `mandate.json`
 
-**11.3 — Schema completo de `domain_proposal.json`.** Sigue pendiente del Genesis Design v1.0, Sección 10, que todavía no fue provisto en esta sesión. Necesario antes de implementar la Fase 2 y la pantalla de validación del Conductor.
+El schema del Mandate Domain Spec v1.0.0 define `intentType: "exp | cor | dev | doc"`. Agregar `gen` requiere actualizar el schema y cualquier validación que exista sobre ese campo.
 
-**11.5 — Diseño de la pantalla de validación de dominios en Conductor.** Sigue pendiente, por el mismo motivo que 11.3. Las cuatro operaciones disponibles (renombrar, fusionar, mover, confirmar) necesitan diseño de UX antes de que Sentinel pueda especificar qué payload lleva `GENESIS_DOMAINS_CONFIRMED`.
+### 11.3 Schema completo de `domain_proposal.json`
 
-**Pendiente heredado, no específico del genesis — estructura real de `report.json`.** El Mandate Domain Spec v1.0.0 (Sección 9.1, 10.3) identifica como bloqueante crítico para *todo* el dominio Mandate — no solo para el genesis — que nunca se vio un `report.json` o `*_state.json` real de un intent existente (`.exp`, `.cor`), ni código de cómo Synapse dispara un intent hoy. Las activities `waitIntentResult` y `triggerGenesisDomain` de este documento están diseñadas sobre la forma que esos archivos *deberían* tener, no sobre la que tienen. Esto aplica con la misma fuerza al caso genesis que al caso estándar.
+Definido como pendiente en el Genesis Design v1.0, Sección 10. Necesario antes de implementar la Fase 2 y la pantalla de validación del Conductor.
 
-**Mecanismo exacto de la invocación Sentinel → Brain.** Se adoptó en la Sección 6.2 que Sentinel invoca a Brain como llamada/evento interno, no como shell-out del comando CLI. Es la decisión de diseño más razonable dada la arquitectura event-driven de Sentinel, pero no fue confirmada contra una implementación real de Sentinel — vale la pena validarla antes de escribir código.
+### 11.4 Contrato de observación de `waitIntentResult` para intents `.gen`
+
+El Mandate Domain Spec v1.0.0 identifica `waitIntentResult` como el bloqueante crítico de toda la implementación. Para el genesis en Opción B (un único intent):
+
+- ¿Qué path observa `waitIntentResult` para saber que el scaffold del dominio `authentication` completó?
+- ¿El `report.json` de `.pipeline/.scaffold_authentication/.response/` es suficiente?
+- ¿O se necesita un campo en `gen_state.json` del intent que Brain actualiza por dominio?
+
+**Propuesta:** Brain actualiza el campo `genes_created` en `gen_state.json` del intent después de cada scaffold completado. `waitIntentResult` observa ese campo (polling sobre el archivo) para el dominio específico.
+
+### 11.5 Diseño de la pantalla de validación de dominios en Conductor
+
+UX crítica del genesis. El Genesis Design v1.0 la identifica como pendiente en la Sección 10. Las cuatro operaciones disponibles (renombrar, fusionar, mover, confirmar) necesitan diseño de UX antes de que Sentinel pueda especificar qué payload lleva el evento `GENESIS_DOMAINS_CONFIRMED`.
 
 ---
 
-*`nucleus mandate create` — Especificación del Comando Genesis · Bloom / Nucleus · v1.1 · Junio 2026*
-*Fuentes: Mandate Domain Spec v1.0.0 · Genesis Intent Design v1.0 (parcial) · BTIPS v5.0 · GENESIS_INTENT_CREATE.md*
+## 12. Genesis incremental — `domain_expansion`
+
+### 12.1 El problema que resuelve
+
+El genesis fundacional estructura el proyecto una vez, en el momento cero. Pero un proyecto vive: aparece un subproyecto nuevo, se incorpora un módulo que no existía, el usuario suma una carpeta entera de material que no formaba parte del corpus original. La pregunta de origen es legítima: **¿cómo entra ese material nuevo al sistema de genes sin romper la inmutabilidad del Mandate Genesis original ni recurrir a un parche con `dev`/`doc`?**
+
+La respuesta corta es: **`dev` y `doc` no sirven para esto.** Ambos asumen estructura previa — codebase y docbase ya existentes (Genesis Design v1.0, tabla 1.2: *"Opera sobre: codebase + docbase existentes"*). Un dominio nuevo no tiene codebase ni docbase todavía; necesita exactamente lo que el genesis produce: ingest → cluster → scaffold. Usar `dev`/`doc` para esto sería forzar un intent a hacer un trabajo para el que no fue diseñado, y es justamente el tipo de "parche" que querés evitar.
+
+La respuesta completa es: **tampoco es reabrir el Mandate Genesis original.** El `mandate.json` del genesis fundacional está firmado y es inmutable (Mandate Domain Spec v1.0.0, Sección 4.1: *"El archivo no se reescribe nunca"*). No hay excepción para este caso. Lo que se necesita es un **Mandate nuevo, de un tipo distinto, que reutiliza el mecanismo del intent `.gen` con un alcance acotado.**
+
+### 12.2 Qué es `domain_expansion`
+
+Un Mandate de tipo `domain_expansion` es un Mandate independiente (nuevo `mandateId`, nuevo `mandate.json`, nueva firma) que ejecuta el mismo mecanismo de cuatro fases del genesis (`ingest → cluster → validate → scaffold`), pero con dos restricciones que lo distinguen del fundacional:
+
+1. **El clustering opera solo sobre el material nuevo**, no sobre todo el proyecto. Los genes existentes no se re-analizan ni se re-vectorizan.
+2. **No puede ejecutarse antes de que el genesis fundacional haya completado.** Es lógicamente una operación de "agregar", no de "fundar".
+
+```
+Mandate Genesis (fundacional)          Mandate domain_expansion #1
+    └── N genes iniciales                  └── M genes nuevos (M ≥ 1)
+                                                (no toca los N genes existentes)
+```
+
+### 12.3 Por qué el clustering acotado a archivos nuevos (y no a todo el proyecto)
+
+Evalué dos approaches: re-clustering global (que podría detectar que el material nuevo en realidad pertenece a un dominio existente, o que un dominio viejo debería partirse) versus clustering acotado solo al material entrante.
+
+Se adopta **clustering acotado a archivos nuevos**, con esta razón de fondo: el genesis fundacional ya estableció una topología de dominios que el usuario validó y sobre la que probablemente ya corrieron intents `.dev`/`.doc` (los genes pueden estar en estado `live`, no solo `seeded`). Re-clusterizar todo el proyecto arriesga proponer una reestructuración de dominios que ya tienen historia y consumidores — eso es un cambio de mucho mayor impacto que "agregar un dominio", y si hace falta, es una decisión que debe tomarse explícitamente, no como efecto secundario de agregar un módulo nuevo.
+
+**Consecuencia de diseño:** El clustering de `domain_expansion` puede proponer como máximo dominios *nuevos* — no puede proponer fusionar un archivo nuevo dentro de un gene existente, ni dividir un dominio existente. Si el usuario, al ver la propuesta, considera que el material nuevo en realidad pertenece a un dominio ya existente (por ejemplo, agregás archivos de autenticación y ya existe el gene `authentication`), eso se resuelve manualmente: el archivo no entra por `domain_expansion`, entra como input de un intent `.dev`/`.doc` futuro sobre el gene `authentication` existente, que sí está diseñado para operar sobre estructura preexistente.
+
+> Esto traza la línea conceptual con precisión: **`domain_expansion` es para material que no encaja en ningún dominio existente.** Si encaja, no es expansión de dominio — es trabajo normal de `.dev`/`.doc` sobre un gene que ya vive.
+
+### 12.4 Forma del comando
+
+```bash
+nucleus mandate create --type domain_expansion \
+  --name <nombre-del-proyecto> \
+  --source <path_nuevo_material> \
+  --base-genesis <genesis-mandate-id>
+```
+
+| Flag | Requerido | Descripción |
+|---|---|---|
+| `--type domain_expansion` | Sí | Activa el flujo de expansión incremental. |
+| `--name` | Sí | Nombre del proyecto — debe coincidir con el proyecto del genesis base. |
+| `--source` | Sí | Path o URL del material **nuevo** únicamente. No se re-entrega el proyecto completo. |
+| `--base-genesis` | Sí | `mandateId` del genesis fundacional completado. Ancla la expansión al proyecto correcto y permite a Nucleus verificar que el fundacional está `completed`. |
+
+### 12.5 Comportamiento de Nucleus
+
+```
+Paso 1 — Validación previa:
+  1. Verificar que --base-genesis existe y su mandate_state.json tiene status: "completed"
+     → Si no completó: error + "El genesis fundacional debe completar antes de expandir dominios"
+  2. Verificar accesibilidad de --source (igual que en genesis fundacional)
+  3. Verificar que no hay otro domain_expansion en curso sobre el mismo --base-genesis
+     → Las expansiones son secuenciales, no concurrentes, para evitar colisiones de clustering
+
+Paso 2 — Creación del estado intermedio:
+  1. Generar mandateId: "expansion-{project-name}-{uuid3}"
+  2. Crear .mandates/.expansion-{name}-{uuid3}/
+  3. Escribir mandate_state.json: status: "building", mandateType: "domain_expansion",
+     baseGenesisId: <referencia al fundacional>
+  4. Emitir: MANDATE_EXPANSION_INITIATED → Sentinel
+
+Paso 3 — Delegación a Brain:
+  Brain instancia el intent .gen vía brain intent create --type gen
+  (mismo comando de la Sección 7.4), con una diferencia:
+  → gen_state.json incluye scope: "expansion", base_genesis_id: <referencia>
+  → La Fase 2 (cluster) consulta ChromaDB filtrando SOLO los vectores
+    del ingest_index.json de este intent — no la colección completa del proyecto
+
+Paso 4 — Firma diferida (idéntico al fundacional):
+  Tras GENESIS_DOMAINS_CONFIRMED, Nucleus construye y firma el mandate.json
+  de la expansión, con N acciones .gen (una por dominio nuevo confirmado).
+  Arranca MandateWorkflow en Temporal — misma task queue mandate-orchestration.
+```
+
+### 12.6 Qué NO cambia del genesis fundacional al ejecutarse una expansión
+
+Para que quede explícito y no haya ambigüedad de implementación:
+
+| Elemento | Estado tras `domain_expansion` |
+|---|---|
+| `mandate.json` del genesis fundacional | Sin cambios — sigue firmado, inmutable, archivado |
+| Genes existentes (`gen.json`, `gen_state.json` por dominio) | Sin cambios — no se re-escriben, no se re-vectorizan |
+| `domain_confirmed.json` del fundacional | Sin cambios — sigue siendo la topología original |
+| Colección ChromaDB del proyecto | **Crece** — se agregan los vectores del material nuevo, no se tocan los existentes |
+| `ingest_manifest.json` / `ingest_index.json` del intent `.gen` fundacional | Sin cambios — pertenecen a su propio intent, archivado |
+
+El proyecto termina con **dos (o más) Mandates en su historial**: el fundacional y N expansiones, cada uno con su propio intent `.gen`, su propia firma, su propio `mandate_state.json`. La topología completa del proyecto en un momento dado es la unión de todos los `domain_confirmed.json` de todos los Mandates Genesis/`domain_expansion` ejecutados sobre ese proyecto — no hay un único archivo "topología actual"; se reconstruye agregando todos los genes vivos del proyecto, sin importar de qué Mandate provienen.
+
+### 12.7 Eventos de Sentinel — extensión
+
+| Evento | Emisor | Receptores | Momento |
+|---|---|---|---|
+| `MANDATE_EXPANSION_INITIATED` | Nucleus | Conductor, Brain | Al crear el estado intermedio de una expansión |
+| `EXPANSION_DOMAINS_PROPOSED` | Brain | Conductor | Análogo a `GENESIS_DOMAINS_PROPOSED`, acotado al material nuevo |
+| `EXPANSION_DOMAINS_CONFIRMED` | Conductor | Nucleus, Brain | Análogo a `GENESIS_DOMAINS_CONFIRMED` |
+| `EXPANSION_COMPLETE` | Nucleus | Conductor | Al completar el scaffold de los dominios nuevos |
+
+La pantalla de validación de dominios en Conductor (Sección 11.5) es reutilizable para `domain_expansion` con un único cambio de contexto: el copy debe dejar claro que el usuario está validando dominios **nuevos**, no la totalidad del proyecto — para evitar que confunda esta pantalla con una oportunidad de reestructurar dominios ya existentes.
+
+### 12.8 Pendiente abierto
+
+¿Qué pasa si el material entregado en `--source` de una expansión, tras el clustering, resulta cohesivo con un dominio ya existente con un score de similitud alto (por ejemplo > 0.85)? La Sección 12.3 resuelve esto manualmente (el usuario decide), pero sería razonable que Brain **señalice** ese caso en `domain_proposal.json` con una advertencia (`possible_overlap_with: "authentication"`) en lugar de dejar que el usuario lo descubra después. Esto queda como mejora de UX a definir, no bloqueante para el primer pass de implementación.
+
+---
+
+*`nucleus mandate create` — Especificación del Comando Genesis · Bloom / Nucleus · Junio 2026*
+*Fuentes: Mandate Domain Spec v1.0.0 · Genesis Intent Design v1.0 · BTIPS v5.0 · GENESIS_INTENT_CREATE.md*
+*v1.1 — agrega: genesis incremental (`domain_expansion`, Sección 12) y spec de `brain intent create --type gen` (Sección 7.4)*
 *Este documento es una especificación de implementación. No modificar sin revisión arquitectónica.*
