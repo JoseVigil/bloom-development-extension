@@ -35,6 +35,27 @@ class TreeManager:
         'locales': '[... localization files]'
     }
 
+    # Scoped exclusions: apply only when the path relative to root matches a
+    # specific pattern. Each entry is (pattern_parts, label) where pattern_parts
+    # is a tuple of path segments. A single '*' segment matches any one part
+    # (useful for UUIDs or user-generated directory names).
+    #
+    # These are intentionally narrow so they only fire inside BloomNucleus
+    # appdata directories and never block unrelated project trees.
+    SCOPED_EXCLUSIONS: List[tuple] = [
+        # BloomNucleus Python engine runtime — lives under bin/engine/runtime/
+        (("bin", "engine", "runtime", "bin"),     "[... python runtime]"),
+        (("bin", "engine", "runtime", "lib"),     "[... python runtime]"),
+        (("bin", "engine", "runtime", "include"), "[... python runtime]"),
+        # Chromium profile data — collapse the entire Default/ profile dir
+        # (contains cache, databases, session data, etc. — not useful in snapshot)
+        (("profiles", "*", "Default"), "[... chromium profile data]"),
+        # Chromium-level caches outside Default/
+        (("profiles", "*", "GrShaderCache"),     "[... chromium cache]"),
+        (("profiles", "*", "GraphiteDawnCache"), "[... chromium cache]"),
+        (("profiles", "*", "ShaderCache"),       "[... chromium cache]"),
+    ]
+
     def __init__(self, root_path: Path):
         self.root = str(root_path.resolve())
 
@@ -176,6 +197,30 @@ class TreeManager:
         except OSError:
             return None
 
+    def _match_scoped_exclusion(self, path: str) -> Optional[str]:
+        """
+        Returns the exclusion label if *path* matches any entry in
+        SCOPED_EXCLUSIONS, otherwise None.
+
+        Matching is done against the path relative to self.root, split into
+        parts. A pattern segment of '*' matches any single directory name
+        (useful for UUIDs or dynamically-named folders like Chromium profiles).
+        """
+        try:
+            rel = os.path.relpath(path, self.root)
+        except ValueError:
+            return None  # Different drive on Windows — skip
+
+        parts = tuple(rel.replace("\\", "/").split("/"))
+
+        for pattern, label in self.SCOPED_EXCLUSIONS:
+            if len(parts) != len(pattern):
+                continue
+            if all(p == s or p == "*" for p, s in zip(pattern, parts)):
+                return label
+
+        return None
+
     def _resolve_paths(self, paths: Optional[List[str]]) -> List[str]:
         """Resolve relative paths to absolute paths."""
         if not paths:
@@ -260,7 +305,13 @@ class TreeManager:
                 if name in self.EXCLUDED_DIRS:
                     tree_str += f" {self.EXCLUDED_DIRS[name]}\n"
                     return tree_str
-                
+
+                # Scoped Exclusions (path-sensitive, e.g. appdata directories)
+                scoped_label = self._match_scoped_exclusion(path)
+                if scoped_label:
+                    tree_str += f" {scoped_label}\n"
+                    return tree_str
+
                 # Python Library Detection
                 if name in ('libs', 'lib', 'site-packages'):
                     if self._is_python_dependency_dir(path):

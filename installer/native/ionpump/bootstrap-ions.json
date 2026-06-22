@@ -9,7 +9,7 @@
       "version": "1.0.0",
       "zip_path": "installer/native/ionpump/github.com.ion.zip",
       "download_url": "",
-      "sha256": "c66c76f2045ef80123212131c6bfb2588810905201e9766d9410cc70c5607d2c",
+      "sha256": "b9a3ff24ea8e6442a2181b32ba4a11fffa232355f66d29e6dda09a1109db8f68",
       "files": [
         {
           "path": "actions/generate_pat.ion",
