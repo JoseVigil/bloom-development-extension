@@ -118,11 +118,11 @@ const state = {
 // Permite que handleMilestoneReached() actualice el stepper sin conocer los
 // índices internos ni acoplarse a la estructura del DOM.
 const STEP_TO_NODE = {
+  nucleus_create:    'workspace',
   github_auth:       'identity',
-  nucleus_create:    'nucleus',
   vault_init:        'vault',
-  google_auth:       'identity',    // google_auth pertenece al mismo nodo que identity
-  ai_provider_setup: 'identity',
+  google_auth:       'providers',
+  ai_provider_setup: 'providers',
   project_create:    'project',
 };
 
@@ -131,37 +131,34 @@ const STEP_TO_NODE = {
 // Fix D: nucleus va antes que vault (índice 1 y 2) para reflejar el orden real
 // de dependencias: nucleus_create requiere [github_token], vault_init requiere
 // [github_token, nucleus_path]. El stepper visual debe coincidir con ese orden.
-const STEPPER_NODES = { identity: 0, nucleus: 1, vault: 2, project: 3, mandate: 4 };
+const STEPPER_NODES = { workspace: 0, identity: 1, providers: 2, project: 3 };
 
 // Texto de status que aparece bajo el label cuando el nodo está established
 const STEPPER_STATUSES = {
-  identity: 'Active',
-  vault:    'Secured',
-  nucleus:  'Established',
-  project:  'Active',
-  mandate:  'Persistent'
+  workspace: 'Configured',
+  identity:  'Active',
+  providers: 'Connected',
+  project:   'Active',
 };
 
 // Mapa screen → nodo activo (screen 0 = entry, sin nodo activo)
-// Fix D: screen 2 = nucleus (antes era vault), screen 3/4 = vault (antes era nucleus)
-// porque el orden de ejecución es: identity → nucleus → vault → project → mandate
+// Nuevo orden: workspace → identity → providers → project
 const STEPPER_MAP = {
-  1: 'identity',
-  2: 'nucleus',
-  3: 'nucleus',
-  4: 'vault',
-  5: 'project',
-  6: 'mandate',
-  7: 'mandate'
+  1: 'workspace',
+  2: 'workspace',   // nucleus-init terminal (parte del step workspace)
+  3: 'identity',
+  4: 'identity',    // vault screen (pertenece al nodo identity)
+  5: 'providers',
+  6: 'project',
+  7: 'project',
 };
 
-// Mapa nodo → screen de destino (nunca navegar a screens 4 ni 7 desde stepper)
+// Mapa nodo → screen de destino
 const STEPPER_NAV = {
-  identity: 1,
-  nucleus:  2,
-  vault:    3,
-  project:  5,
-  mandate:  6,
+  workspace: 1,
+  identity:  3,
+  providers: 5,
+  project:   6,
 };
 
 function navigateToStep(nodeName) {
@@ -201,11 +198,11 @@ function setStepperEstablished(nodeName) {
 // ── SCREEN MAP ─────────────────────────────────────────────────────────────
 const SCREEN_IDS = [
   'entry',        // 0
-  'identity',     // 1
-  'vault',        // 2
-  'nucleus',      // 3
-  'nucleus-init', // 4
-  'project',      // 5
+  'workspace',    // 1 — nuevo step 1: configurar workspace (nucleus_create)
+  'nucleus-init', // 2 — terminal de nucleus init
+  'identity',     // 3 — github auth (antes screen 1)
+  'vault',        // 4 — vault confirmation (antes screen 2)
+  'project',      // 5 — project selection (antes screen 5)
   'milestone',    // 6
   'launch'        // 7
 ];
@@ -227,14 +224,13 @@ async function goTo(n) {
   if (activeNode) setStepperActive(activeNode);
 
   // Efectos por pantalla
-  // Fix D: al llegar a screen 2 (nucleus-create) identity queda established;
-  // al llegar a screen 3 (vault) nucleus queda established; al llegar a screen 4
-  // (nucleus-init terminal) se corre el terminal; al llegar a screen 5 (project)
-  // vault queda established. Orden alineado con dependencias reales del onboarding.
-  if (n === 2) setStepperEstablished('identity');
-  if (n === 3) { setStepperEstablished('nucleus'); loadOrgs(); }
-  if (n === 4) runNucleusTerminal();
-  if (n === 5) { setStepperEstablished('vault'); loadRepos(); }
+  // Screen 2: nucleus-init terminal (llama al IPC)
+  // Screen 3: identity ready (workspace ya establecido)
+  // Screen 4: vault confirmation
+  // Screen 5: project selection (vault establecido)
+  if (n === 2) runNucleusTerminal();
+  if (n === 3) { setStepperEstablished('workspace'); kickoffDiscovery(); }
+  if (n === 5) { setStepperEstablished('identity'); loadRepos(); }
   if (n === 6) {
     setStepperEstablished('project');
     runMilestoneSequence();
@@ -374,7 +370,7 @@ async function handleIdentityBtn() {
   log('info', 'click — btn-continue-identity');
 
   const btn = document.getElementById('btn-continue-identity');
-  btn.textContent = 'Awaiting GitHub…';
+  btn.textContent = 'Esperando GitHub…';
   btn.disabled = true;
   btn.onclick  = null;
 
@@ -481,16 +477,221 @@ function checkIdentityReady() {
 
   log('info', 'github confirmed — identity ready');
   setStepperEstablished('identity');
-  showCortex("GitHub connected. Vault layer next.");
+  showCortex("GitHub connected. Setting up vault…");
 
   const btn = document.getElementById('btn-continue-identity');
   btn.textContent = 'Continue';
   btn.disabled    = false;
-  btn.onclick     = () => goTo(2);
+  btn.onclick     = () => goTo(4);
 }
 
-// ── SCREEN 3 — Nucleus ─────────────────────────────────────────────────────
-async function loadOrgs() {
+// ── SCREEN 1 — Workspace (nucleus_create) ─────────────────────────────────
+
+// Estado del workspace step (persiste para navegación hacia atrás)
+const workspaceState = {
+  path: '',
+  org:  '',
+  githubVerified: null,   // true | false | null
+  _orgDebounceTimer: null,
+};
+
+function slugify(val) {
+  return val.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
+function updateWorkspacePreview() {
+  const pathVal = workspaceState.path;
+  const orgVal  = workspaceState.org;
+  const orgDisplay   = document.getElementById('ws-preview-org');
+  const pathDisplay  = document.getElementById('ws-preview-path');
+  const structDisplay = document.getElementById('ws-preview-struct');
+
+  if (!pathDisplay) return;
+
+  if (!pathVal) {
+    if (pathDisplay)   pathDisplay.textContent  = '—';
+    if (orgDisplay)    orgDisplay.textContent   = '—';
+    if (structDisplay) structDisplay.textContent = 'Completá la ubicación para ver la preview';
+    return;
+  }
+
+  const effectiveOrg = orgVal || 'bloom-local';
+  const isTemporary  = !orgVal;
+
+  if (pathDisplay)  pathDisplay.textContent  = pathVal;
+  if (orgDisplay)   orgDisplay.textContent   = isTemporary ? '(Temporal)' : orgVal;
+  if (structDisplay) {
+    structDisplay.textContent = `${pathVal}/.bloom/.nucleus-${effectiveOrg}/`;
+  }
+}
+
+function checkWorkspaceReady() {
+  const btn = document.getElementById('btn-continue-workspace');
+  if (btn) btn.disabled = !workspaceState.path;
+}
+
+async function selectWorkspaceFolder() {
+  const result = await window.onboarding.selectFolder();
+  if (!result.success || result.canceled) return;
+
+  workspaceState.path = result.path;
+  const input = document.getElementById('ws-path-input');
+  if (input) input.value = result.path;
+  updateWorkspacePreview();
+  checkWorkspaceReady();
+}
+
+function onWorkspacePathInput(e) {
+  workspaceState.path = e.target.value.trim();
+  updateWorkspacePreview();
+  checkWorkspaceReady();
+}
+
+function onWorkspaceOrgInput(e) {
+  const raw      = e.target.value;
+  const slugged  = slugify(raw);
+
+  // Corregir automáticamente si había mayúsculas
+  if (raw !== slugged) {
+    e.target.value = slugged;
+    const hint = document.getElementById('ws-org-hint');
+    if (hint) { hint.textContent = 'Convertido a minúsculas'; hint.style.display = 'block'; }
+    setTimeout(() => { if (hint) hint.style.display = 'none'; }, 2000);
+  }
+
+  workspaceState.org = slugged;
+  updateWorkspacePreview();
+
+  // Limpiar badge anterior
+  const badge = document.getElementById('ws-org-badge');
+  if (badge) { badge.textContent = ''; badge.className = 'ws-org-badge'; }
+  workspaceState.githubVerified = null;
+
+  // Debounce 600ms para verificar en GitHub
+  clearTimeout(workspaceState._orgDebounceTimer);
+  if (slugged.length >= 2) {
+    workspaceState._orgDebounceTimer = setTimeout(() => verifyOrgOnGithub(slugged), 600);
+  }
+}
+
+function onWorkspaceOrgBlur(e) {
+  // Si quedó vacío al perder el foco, usar bloom-local como valor interno
+  if (!e.target.value.trim()) {
+    workspaceState.org = '';
+    updateWorkspacePreview();
+  }
+}
+
+async function verifyOrgOnGithub(slug) {
+  const badge = document.getElementById('ws-org-badge');
+  if (!badge) return;
+  badge.textContent = '…';
+  badge.className = 'ws-org-badge checking';
+
+  try {
+    const res = await fetch(`https://api.github.com/orgs/${encodeURIComponent(slug)}`);
+    if (res.status === 200) {
+      badge.textContent = '✓ Organización encontrada en GitHub';
+      badge.className = 'ws-org-badge found';
+      workspaceState.githubVerified = true;
+    } else if (res.status === 404) {
+      badge.textContent = 'Nueva organización — la vincularás en el paso siguiente';
+      badge.className = 'ws-org-badge new';
+      workspaceState.githubVerified = false;
+    } else {
+      badge.textContent = '';
+      badge.className = 'ws-org-badge';
+    }
+  } catch (_) {
+    // Error de red — silencioso
+    badge.textContent = '';
+    badge.className = 'ws-org-badge';
+  }
+}
+
+async function continueWorkspace() {
+  const btn = document.getElementById('btn-continue-workspace');
+  if (!btn || btn.disabled) return;
+
+  const path = workspaceState.path;
+  const org  = workspaceState.org || 'bloom-local';
+
+  log('info', `continueWorkspace — org: ${org} | path: ${path}`);
+
+  // Estado loading
+  btn.disabled    = true;
+  btn.textContent = 'Creando estructura…';
+
+  // Limpiar error previo
+  const errEl = document.getElementById('ws-error');
+  if (errEl) errEl.style.display = 'none';
+
+  let result;
+  try {
+    result = await window.onboarding.initNucleus({ org, path });
+  } catch (e) {
+    result = { success: false, error: e.message };
+  }
+
+  log(result.success ? 'info' : 'error',
+      `IPC ← onboarding:init-nucleus — success: ${result.success}`);
+
+  if (result.success) {
+    // Guardar en estado global para pasos siguientes
+    selectedOrg        = org;
+    selectedFolderPath = path;
+    state.selectedOrg  = org;
+    state.selectedFolder = path;
+
+    // Marcar step completo
+    await window.onboarding.markStepComplete({ step: 'nucleus_create' });
+
+    // Avanzar al step 2 (github_auth) — screen 3
+    goTo(3);
+  } else {
+    btn.disabled    = false;
+    btn.textContent = 'Continuar';
+
+    if (!errEl) return;
+    errEl.style.display = 'block';
+
+    const msg = result.error || '';
+    if (msg.includes('already exists') || msg.includes('ya existe')) {
+      errEl.innerHTML = `
+        Ya existe una configuración de Bloom en esta carpeta.
+        <div class="ws-error-actions">
+          <button onclick="useExistingWorkspace()">Usar la existente</button>
+          <button onclick="selectWorkspaceFolder()">Elegir otra ubicación</button>
+        </div>`;
+    } else if (msg.includes('EACCES') || msg.includes('permission') || msg.includes('permisos')) {
+      errEl.innerHTML = `
+        Sin permisos para crear la carpeta en <strong>${path}</strong>. Elegí otra ubicación.
+        <div class="ws-error-actions">
+          <button onclick="selectWorkspaceFolder()">Elegir carpeta</button>
+        </div>`;
+    } else {
+      errEl.innerHTML = `
+        No se pudo crear el workspace en <strong>${path}</strong>. ${msg}
+        <div class="ws-error-actions">
+          <button onclick="continueWorkspace()">Reintentar</button>
+        </div>`;
+    }
+  }
+}
+
+async function useExistingWorkspace() {
+  // El workspace ya existe — marcar como completo y continuar
+  const org  = workspaceState.org || 'bloom-local';
+  const path = workspaceState.path;
+  selectedOrg        = org;
+  selectedFolderPath = path;
+  state.selectedOrg  = org;
+  state.selectedFolder = path;
+  await window.onboarding.markStepComplete({ step: 'nucleus_create' });
+  goTo(3);
+}
+
+// ── SCREEN 2 — Nucleus Init Terminal ───────────────────────────────────────
   const result = await window.onboarding.listOrgs();
   const list   = document.getElementById('org-list');
   if (!list) return;
@@ -549,7 +750,7 @@ function initNucleus() {
   goTo(4); // Fix 4: goTo(4) llama runNucleusTerminal()
 }
 
-// ── SCREEN 4 — Nucleus Init Terminal ───────────────────────────────────────
+// ── SCREEN 2 — Nucleus Init Terminal ───────────────────────────────────────
 function runNucleusTerminal() {
   const terminal = document.getElementById('nucleus-terminal');
   if (!terminal) return;
@@ -803,6 +1004,19 @@ function toggleDebugPanel() {
 document.addEventListener('DOMContentLoaded', () => {
   log('info', 'DOM ready — initialized');
   document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
+
+  // ── Workspace screen (Step 1) handlers ────────────────────────────────────
+  const wsPathInput = document.getElementById('ws-path-input');
+  if (wsPathInput) wsPathInput.addEventListener('input', onWorkspacePathInput);
+
+  const wsOrgInput = document.getElementById('ws-org-input');
+  if (wsOrgInput) {
+    wsOrgInput.addEventListener('input', onWorkspaceOrgInput);
+    wsOrgInput.addEventListener('blur', onWorkspaceOrgBlur);
+  }
+
+  const btnWorkspace = document.getElementById('btn-continue-workspace');
+  if (btnWorkspace) btnWorkspace.onclick = continueWorkspace;
 
   // ── Milestone listeners (Cambio 7) ─────────────────────────────────────
   //

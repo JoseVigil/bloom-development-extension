@@ -732,3 +732,8 @@ https://claude.ai/chat/a94c77ee-5560-40dc-9511-b1b43b9f25c8
 btips
 ionProgressBridge.ts
 https://claude.ai/chat/0d2f23cb-5afe-4b17-a18f-5ae661f5b0eb
+
+
+linkedin 
+Client projects
+https://www.linkedin.com/my-items/client-projects/

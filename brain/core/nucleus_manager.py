@@ -8,6 +8,15 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
 from uuid import uuid4
+from enum import Enum
+
+
+class OrgMode(str, Enum):
+    PERSONAL   = "personal"    # github_handle == github username
+    ORG        = "org"         # org existente en GitHub
+    ORG_NEW    = "org_new"     # nombre nuevo, org aún no creada
+    TEMPORARY  = "temporary"   # bloom-local, sin vínculo GitHub
+    AUTO       = "auto"        # el manager resuelve vía API check
 
 
 class NucleusManager:
@@ -31,9 +40,11 @@ class NucleusManager:
         self,
         organization_name: str,
         organization_url: str = "",
+        org_mode: OrgMode = OrgMode.AUTO,
         output_dir: str = ".bloom",
         private: bool = False,
         force: bool = False,
+        skip_github_check: bool = False,
         on_progress: Optional[Callable[[str], None]] = None
     ) -> Dict[str, Any]:
         """
@@ -48,41 +59,55 @@ class NucleusManager:
         repo_url = ""
         is_git_repo = False
         
-        try:
-            from brain.core.github.api_client import GitHubAPIClient
-            from brain.core.git.executor import GitExecutor
-            
-            client = GitHubAPIClient()
-            git = GitExecutor()
-            
+        resolved_mode = org_mode
+        github_verified = False
+        repo_url = organization_url
+
+        # Resolver modo AUTO via GitHub API check (sin token requerido)
+        if resolved_mode == OrgMode.AUTO and not skip_github_check:
+            resolved_mode = self._resolve_org_mode(organization_name)
             if on_progress:
-                on_progress(f"Checking GitHub for {organization_name}/{nucleus_name}...")
-            
-            if not client.repo_exists(organization_name, nucleus_name):
+                on_progress(f"Mode resolved: {resolved_mode.value}")
+
+        # Solo intentar crear/clonar repo si NO es temporal y hay token disponible
+        if resolved_mode != OrgMode.TEMPORARY:
+            try:
+                from brain.core.github.api_client import GitHubAPIClient
+                from brain.core.git.executor import GitExecutor
+
+                client = GitHubAPIClient()
+                git = GitExecutor()
+
+                # Si es AUTO o PERSONAL, verificar si coincide con el usuario actual
+                if resolved_mode in (OrgMode.AUTO, OrgMode.PERSONAL):
+                    current_user = client.get_current_user().get("login", "")
+                    if organization_name == current_user:
+                        resolved_mode = OrgMode.PERSONAL
+
+                if resolved_mode in (OrgMode.PERSONAL, OrgMode.ORG):
+                    nucleus_name = f"nucleus-{self._slugify(organization_name)}"
+                    if not client.repo_exists(organization_name, nucleus_name):
+                        if on_progress:
+                            on_progress(f"Creating repository {organization_name}/{nucleus_name}...")
+                        repo = client.create_repo(
+                            name=nucleus_name,
+                            description=f"Bloom Nucleus - {organization_name} Governance & Discovery",
+                            private=private,
+                            auto_init=True,
+                            org=organization_name if resolved_mode == OrgMode.ORG else None
+                        )
+                        repo_url = repo.html_url
+                        git.clone(repo.clone_url, self.root_path)
+                        is_git_repo = True
+                        github_verified = True
+
+                elif resolved_mode == OrgMode.ORG_NEW:
+                    if on_progress:
+                        on_progress(f"New org '{organization_name}' — skipping GitHub. Create org at github.com first.")
+
+            except (ImportError, Exception) as e:
                 if on_progress:
-                    on_progress(f"Creating repository {organization_name}/{nucleus_name}...")
-                
-                repo = client.create_repo(
-                    name=nucleus_name,
-                    description=f"Bloom Nucleus - {organization_name} Governance & Discovery",
-                    private=private,
-                    auto_init=True,
-                    org=organization_name if organization_name != client.get_current_user()["login"] else None
-                )
-                repo_url = repo.html_url
-                
-                if on_progress:
-                    on_progress(f"Cloning to {self.root_path}...")
-                
-                if self.root_path.exists() and force:
-                    import shutil
-                    shutil.rmtree(self.root_path)
-                
-                git.clone(repo.clone_url, self.root_path)
-                is_git_repo = True
-                
-        except (ImportError, Exception):
-            pass
+                    on_progress(f"GitHub step skipped: {e}")
 
         if on_progress:
             on_progress("Generating Nucleus V2.0 structure...")
@@ -122,7 +147,8 @@ class NucleusManager:
             nucleus_name,
             nucleus_dir,
             projects,
-            timestamp
+            timestamp,
+            org_mode=resolved_mode
         )
         
         core_dir = nucleus_dir / ".core"
@@ -214,6 +240,8 @@ class NucleusManager:
                 "name": organization_name,
                 "url": repo_url
             },
+            "org_mode": resolved_mode.value,
+            "github_verified": github_verified,
             "files_created": files_created,
             "projects_detected": len(projects),
             "is_git_repo": is_git_repo,
@@ -380,7 +408,8 @@ class NucleusManager:
         nucleus_name: str,
         nucleus_dir: Path,
         projects: List[Dict[str, Any]],
-        timestamp: str
+        timestamp: str,
+        org_mode: OrgMode = OrgMode.AUTO
     ) -> Dict[str, Any]:
         """
         Generate enhanced nucleus-config.json with comprehensive metadata.
@@ -400,7 +429,10 @@ class NucleusManager:
             "organization": {
                 "name": org_name,
                 "url": org_url,
-                "slug": self._slugify(org_name)
+                "slug": self._slugify(org_name),
+                "mode": org_mode.value,
+                "github_verified": False,
+                "is_temporary": org_mode == OrgMode.TEMPORARY,
             },
             
             "nucleus": {
@@ -509,6 +541,47 @@ class NucleusManager:
             if isinstance(children, dict) and children:
                 self._create_directory_tree(dir_path, children)
     
+    def _resolve_org_mode(self, org_name: str) -> OrgMode:
+        """
+        Verifica via GitHub API pública (sin token) si el nombre
+        corresponde a un usuario, una org existente, o algo nuevo.
+        """
+        import urllib.request
+        import urllib.error
+
+        slug = self._slugify(org_name)
+
+        # Verificar como org primero
+        try:
+            req = urllib.request.Request(
+                f"https://api.github.com/orgs/{slug}",
+                headers={"User-Agent": "BloomNucleus/2.0"}
+            )
+            urllib.request.urlopen(req, timeout=3)
+            return OrgMode.ORG
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                pass  # error de red, continuar
+        except Exception:
+            pass
+
+        # Verificar como usuario
+        try:
+            req = urllib.request.Request(
+                f"https://api.github.com/users/{slug}",
+                headers={"User-Agent": "BloomNucleus/2.0"}
+            )
+            urllib.request.urlopen(req, timeout=3)
+            return OrgMode.PERSONAL
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return OrgMode.ORG_NEW
+        except Exception:
+            pass
+
+        # Sin conectividad o error inesperado → asumir nuevo
+        return OrgMode.ORG_NEW
+
     def _slugify(self, text: str) -> str:
         """Convert text to slug format."""
         return text.lower().replace(" ", "-").replace("_", "-")
