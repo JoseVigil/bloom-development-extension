@@ -171,7 +171,7 @@ func runBrainCreate(c *core.Core, orgSlug, targetPath, url string, force bool) e
 		"--org", orgSlug,
 		"--path", targetPath,
 	}
-	if c.Config.OutputJSON {
+	if c.IsJSON {
 		// Insertar --json al inicio (flag global de brain)
 		brainArgs = append([]string{"--json"}, brainArgs...)
 	}
