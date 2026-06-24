@@ -311,7 +311,19 @@ async function launchMasterProfile(win) {
 
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
     logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
+    // ── FIX: recuperar launch_id del estado persistido del milestone ──────────
+    // Sin esto, main.js recibe launch_id:null en reruns y el bridge no puede
+    // filtrar PROFILE_CONNECTED por launch_id (Opción A degrada a Opción B).
+    const milestoneData = nucleusManager.getMilestoneData(MILESTONE) || {};
+    return {
+      success:          true,
+      skipped:          true,
+      profile_id:       milestoneData.profile_id       || nucleusManager.state.master_profile,
+      launch_id:        milestoneData.launch_id        || null,
+      chrome_pid:       milestoneData.chrome_pid       || null,
+      extension_loaded: milestoneData.extension_loaded || false,
+      state:            milestoneData.state            || null,
+    };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
@@ -338,10 +350,16 @@ async function launchMasterProfile(win) {
       throw new Error(`Launch failed: ${result?.error || JSON.stringify(result)}`);
     }
 
+    // ── FIX: NO abortar si extension_loaded es false en este punto ───────────
+    // nucleus synapse launch retorna extension_loaded:false porque Chromium acaba
+    // de arrancar — la extensión Cortex aún no completó REGISTER_HOST.
+    // La señal real del handshake es el broadcast PROFILE_CONNECTED que Brain
+    // emite después, y que el SynapseBridge en main.js espera vía TCP push.
+    // Abortar aquí corta la cadena antes de que el bridge pueda escuchar.
     if (!result.extension_loaded) {
-      throw new Error(
-        `Extension not loaded after launch — chrome_pid: ${result.chrome_pid}, state: ${result.state}`
-      );
+      logger.warn(`⚠️ extension_loaded=false al momento del launch (esperado) — el handshake se completará vía PROFILE_CONNECTED push`);
+      logger.warn(`   chrome_pid: ${result.chrome_pid}, state: ${result.state}`);
+      // No throw — continuar para que main.js instancie el SynapseBridge
     }
 
     logger.success(`✅ Master profile launched`);

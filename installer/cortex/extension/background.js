@@ -780,6 +780,15 @@ function handleHostMessage(msg) {
 
     console.log('[Synapse] ✓ ACCOUNT_REGISTERED → forwarding to native host:', msg.service, msg.email || '');
 
+    // 🔧 FIX 3: loguear recepción al Harness (handler secundario — fuente: host)
+    forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
+      _dir:       'in',
+      source:     'host',
+      service:    msg.service     || null,
+      profile_id: msg.profile_id  || config?.profileId,
+      launch_id:  msg.launch_id   || config?.launchId,
+    });
+
     sendToHost({
       event:      'ACCOUNT_REGISTERED',
       profile_id: msg.profile_id  || config?.profileId,
@@ -1136,14 +1145,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
     console.log('[Synapse] ✓ ACCOUNT_REGISTERED recibido desde discovery.js — service:', msg.service);
 
-    sendToHost({
-      event:      'ACCOUNT_REGISTERED',
-      profile_id: msg.profile_id  || config?.profileId,
-      launch_id:  msg.launch_id   || config?.launchId,
-      service:    msg.service,
-      email:      msg.email       || '',
-      timestamp:  msg.timestamp   || Date.now()
+    forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
+      _dir:             'in',
+      service:          msg.service          || null,
+      username:         msg.username         || null,
+      token_fingerprint: msg.token_fingerprint || null,
+      profile_id:       msg.profile_id       || config?.profileId,
+      launch_id:        msg.launch_id        || config?.launchId,
     });
+
+    // 1. Forwarding del milestone al host → MilestoneReactor → Landing
+    sendToHost({
+      event:             'ACCOUNT_REGISTERED',
+      service:           msg.service,
+      username:          msg.username          || '',
+      token_fingerprint: msg.token_fingerprint || '',
+      profile_id:        msg.profile_id        || config?.profileId,
+      launch_id:         msg.launch_id         || config?.launchId,
+      timestamp:         msg.timestamp         || Date.now(),
+    });
+
+    // 2. GITHUB_TOKEN_STORED al host — registra el PAT en ServerManager.
+    //    Se emite después del milestone para que el reactor ya tenga el step
+    //    marcado cuando el host procese el token.
+    if (msg.service === 'github' && msg.token_fingerprint) {
+      sendToHost({
+        event:             'GITHUB_TOKEN_STORED',
+        token_fingerprint: msg.token_fingerprint,
+        profile_id:        msg.profile_id || config?.profileId,
+        launch_id:         msg.launch_id  || config?.launchId,
+        timestamp:         Date.now(),
+      });
+      console.log('[Synapse] ✓ GITHUB_TOKEN_STORED emitido internamente desde ACCOUNT_REGISTERED');
+    }
 
     sendResp({ received: true });
     return true;
@@ -1176,6 +1210,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   }
 
   // ── GITHUB_TOKEN_STORED ────────────────────────────────────────────────────
+  // En el flujo normal de onboarding, este evento llega emitido internamente
+  // por el handler de ACCOUNT_REGISTERED (arriba), no directamente desde discovery.js.
+  // El handler standalone sigue activo para el Harness (simulación) y otros callers.
   if (event === 'GITHUB_TOKEN_STORED') {
     console.log('[Synapse] 📥 GITHUB_TOKEN_STORED recibido');
 

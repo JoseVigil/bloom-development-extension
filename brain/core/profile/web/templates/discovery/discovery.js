@@ -1061,30 +1061,32 @@ class GithubAuthFlow {
     // Calcular fingerprint para el evento — token real NUNCA sale en el mensaje
     const fingerprint = await this.sha256Prefix(token);
 
-    // Emitir GITHUB_TOKEN_STORED a background.js → host → ServerManager
-    chrome.runtime.sendMessage({
-      event:             'GITHUB_TOKEN_STORED',
-      token_fingerprint: fingerprint,
-      profile_id:        self.SYNAPSE_CONFIG?.profileId,
-      launch_id:         self.SYNAPSE_CONFIG?.launchId,
-    });
-
     // Actualizar bloom_profile_state con el vault recién creado
     this.discovery._updateVaultState(fingerprint);
 
-    // Emitir GITHUB_ACCOUNT_CREATED si tenemos username (best-effort)
+    // Actualizar bloom_profile_state con la cuenta de GitHub (si la tenemos)
     if (vault.github_user) {
-      chrome.runtime.sendMessage({
-        event:      'GITHUB_ACCOUNT_CREATED',
-        username:   vault.github_user,
-        profile_id: self.SYNAPSE_CONFIG?.profileId,
-        launch_id:  self.SYNAPSE_CONFIG?.launchId,
-      });
-      console.log('[GithubAuthFlow] GITHUB_ACCOUNT_CREATED emitido para:', vault.github_user);
-
-      // Actualizar bloom_profile_state con la cuenta de GitHub
       this.discovery._updateAccountState('github', vault.github_user);
     }
+
+    // ── ACCOUNT_REGISTERED ────────────────────────────────────────────────────
+    // Evento canónico de milestone: el usuario tiene cuenta activa en el servicio
+    // y Bloom la reconoció. Dispara github_auth en MilestoneReactor → Landing.
+    //
+    // background.js recibe este evento y:
+    //   1. Lo forwarding al host como ACCOUNT_REGISTERED (dispara MilestoneReactor)
+    //   2. Internamente emite GITHUB_TOKEN_STORED al host (registra el PAT)
+    //
+    chrome.runtime.sendMessage({
+      event:             'ACCOUNT_REGISTERED',
+      service:           'github',
+      username:          vault.github_user  || '',
+      token_fingerprint: fingerprint,
+      profile_id:        self.SYNAPSE_CONFIG?.profileId,
+      launch_id:         self.SYNAPSE_CONFIG?.launchId,
+      timestamp:         Date.now(),
+    });
+    console.log('[GithubAuthFlow] ACCOUNT_REGISTERED emitido — service: github, user:', vault.github_user || '(sin resolver)');
 
     // Actualizar onboarding_state local
     await chrome.storage.local.set({

@@ -240,6 +240,7 @@ if (typeof self !== 'undefined') {
             options: [
               "GITHUB_PAT_DETECTED",
               "GITHUB_TOKEN_STORED",
+              "ACCOUNT_REGISTERED",
               "ION_FLOW_STARTED",
               "ION_FLOW_COMPLETED",
               "ION_FLOW_ERROR"

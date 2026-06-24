@@ -36,6 +36,8 @@ class SynapseManager:
             "handshake_confirm":  self._handle_handshake_confirm,
             # Notificación del host C++ (bloom-host) — informativa, sin respuesta
             "PROFILE_CONNECTED":  self._handle_profile_connected,
+            # Registro de cuenta de servicio externo (GitHub, etc.)
+            "ACCOUNT_REGISTERED": self._handle_account_registered,
             # Comandos DOM para IonPump:
             "DOM_FOCUS":          self._handle_dom_passthrough,
             "DOM_TYPE":           self._handle_dom_passthrough,
@@ -166,6 +168,39 @@ class SynapseManager:
         profile_id = message.get("profile_id", "")
         launch_id  = message.get("launch_id", "")
         self.logger.info(f"🔌 PROFILE_CONNECTED recibido del host — profile={profile_id} launch={launch_id}")
+
+    def _handle_account_registered(self, message: Dict[str, Any]) -> None:
+        """
+        🔧 FIX 2: Registra que el usuario completó el alta de una cuenta de servicio.
+        Publica el evento en el Brain EventBus TCP (port 5678) para que
+        SynapseBridge → MilestoneReactor puedan reaccionar.
+        """
+        profile_id = message.get("profile_id", "")
+        launch_id  = message.get("launch_id", "")
+        service    = message.get("service", "")
+        email      = message.get("email", "")
+
+        self.logger.info(
+            f"✅ ACCOUNT_REGISTERED recibido — service={service} email={email} "
+            f"profile={profile_id} launch={launch_id}"
+        )
+
+        # Publicar en el EventBus TCP para que SynapseBridge lo propague al Conductor
+        try:
+            import socket, json as _json
+            payload = _json.dumps({
+                "event":      "ACCOUNT_REGISTERED",
+                "service":    service,
+                "email":      email,
+                "profile_id": profile_id,
+                "launch_id":  launch_id,
+                "timestamp":  time.time(),
+            })
+            with socket.create_connection(("127.0.0.1", 5678), timeout=2) as sock:
+                sock.sendall((payload + "\n").encode("utf-8"))
+            self.logger.info("📡 ACCOUNT_REGISTERED publicado en Brain EventBus TCP (port 5678)")
+        except Exception as e:
+            self.logger.error(f"❌ No se pudo publicar ACCOUNT_REGISTERED en EventBus: {e}")
 
     def _handle_dom_passthrough(self, message: Dict[str, Any]) -> None:
         """Reenvía comandos DOM de IonPump hacia Chrome. No modifica el mensaje."""
