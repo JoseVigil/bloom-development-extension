@@ -1,7 +1,9 @@
 package core
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -78,6 +80,42 @@ func InitPaths() (*Paths, error) {
 	}
 
 	return paths, nil
+}
+
+// ResolveBrainPath localiza el binario "brain" siguiendo esta precedencia:
+//
+//  1. Variable de entorno BLOOM_BRAIN_PATH (override explícito)
+//  2. Mismo directorio que el ejecutable nucleus en ejecución
+//  3. PATH del sistema operativo
+//
+// Si ninguna estrategia localiza el binario, retorna un error descriptivo
+// para que el caller pueda emitir un mensaje claro al usuario.
+func ResolveBrainPath() (string, error) {
+	// ── 1. Variable de entorno explícita ──────────────────────────────────
+	if p := os.Getenv("BLOOM_BRAIN_PATH"); p != "" {
+		return p, nil
+	}
+
+	// ── 2. Mismo directorio que el ejecutable nucleus en ejecución ────────
+	execPath, err := os.Executable()
+	if err == nil {
+		candidate := filepath.Join(filepath.Dir(execPath), "brain")
+		if runtime.GOOS == "windows" {
+			candidate += ".exe"
+		}
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			return candidate, nil
+		}
+	}
+
+	// ── 3. PATH del sistema ────────────────────────────────────────────────
+	if found, lookErr := exec.LookPath("brain"); lookErr == nil {
+		return found, nil
+	}
+
+	return "", fmt.Errorf(
+		"brain binary not found: set BLOOM_BRAIN_PATH or ensure brain is in PATH",
+	)
 }
 
 func (p *Paths) String() string {
