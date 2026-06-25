@@ -1,0 +1,33 @@
+elias-repos/
+└── .bloom/
+    └── .nucleus-elias-repos/
+        ├── .cache/
+        │   ├── .last-sync.json
+        │   ├── .projects-snapshot.json
+        │   └── .semantic-index.json
+        ├── .core/
+        │   ├── .meta.json
+        │   ├── .nucleus-config.json
+        │   ├── .policies.bl
+        │   ├── .rules.bl
+        │   └── .standards.bl
+        ├── .governance/
+        │   ├── architecture/
+        │   │   ├── .decisions/
+        │   │   ├── .patterns.bl
+        │   │   └── .principles.bl
+        │   ├── quality/
+        │   │   ├── .code-standards.bl
+        │   │   └── .testing-requirements.bl
+        │   └── security/
+        │       ├── .compliance-requirements.bl
+        │       └── .security-standards.bl
+        ├── .intents/
+        │   └── .exp/
+        ├── .relations/
+        │   └── .project-links.json
+        ├── findings/
+        │   └── README.md
+        └── reports/
+            ├── exports/
+            └── health-dashboard.json

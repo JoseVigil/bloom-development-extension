@@ -1333,7 +1333,76 @@ body::after {
     </div>
   </div>
 
-  <!-- SCREEN 1: Establish Identity -->
+  <!-- SCREEN 1: Workspace (nucleus_create) -->
+  <div class="screen" id="screen-workspace">
+    <div class="screen-inner fade-up">
+
+      <div class="stage-label">Step 1 — Workspace</div>
+      <h2 class="stage-title">Configurá tu espacio<br>de trabajo.</h2>
+      <p class="stage-body" style="margin-bottom:32px;">
+        Elegí dónde van a vivir tus proyectos y cómo identificar tu organización.
+        Estos dos valores definen la estructura local de Bloom en tu máquina.
+      </p>
+
+      <!-- Campo 1: Ruta del workspace -->
+      <div class="ws-field-group">
+        <label class="ws-field-label" for="ws-path-input">Ubicación del workspace</label>
+        <div class="ws-input-row">
+          <input
+            id="ws-path-input"
+            class="ws-input"
+            type="text"
+            placeholder="/home/usuario/proyectos"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="ws-btn-folder" onclick="selectWorkspaceFolder()">Elegir carpeta</button>
+        </div>
+        <div class="ws-field-helper">Todos los repos de Bloom se crearán dentro de esta carpeta.</div>
+      </div>
+
+      <!-- Campo 2: Nombre de organización -->
+      <div class="ws-field-group">
+        <label class="ws-field-label" for="ws-org-input">Nombre de organización</label>
+        <input
+          id="ws-org-input"
+          class="ws-input"
+          type="text"
+          placeholder="ej: bloom-labs  o  tu-usuario-de-github"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div class="ws-org-hint" id="ws-org-hint">Convertido a minúsculas</div>
+        <div class="ws-org-badge" id="ws-org-badge"></div>
+        <div class="ws-field-helper">
+          Usá minúsculas, números y guiones. Podés dejarlo vacío para continuar con un nombre temporal.
+        </div>
+      </div>
+
+      <!-- Preview en tiempo real -->
+      <div class="ws-preview">
+        <div class="ws-preview-row">
+          <span class="ws-preview-key">Workspace</span>
+          <span class="ws-preview-val" id="ws-preview-path">—</span>
+        </div>
+        <div class="ws-preview-row">
+          <span class="ws-preview-key">Organización</span>
+          <span class="ws-preview-val" id="ws-preview-org">—</span>
+        </div>
+        <div class="ws-preview-row">
+          <span class="ws-preview-key">Estructura</span>
+          <span class="ws-preview-struct-val" id="ws-preview-struct">Completá la ubicación para ver la preview</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-continue-workspace" disabled onclick="continueWorkspace()">
+        Continuar
+      </button>
+
+      <div class="ws-error" id="ws-error"></div>
+
+    </div>
+  </div>
   <div class="screen" id="screen-identity">
     <div class="screen-inner">
       <div class="stage-label">Stage 1 — Identity</div>
@@ -1455,59 +1524,14 @@ body::after {
   </div>
 
   <!-- SCREEN 3: Nucleus Creation -->
-  <div class="screen" id="screen-nucleus">
-    <div class="screen-inner">
-      <div class="nucleus-visual">
-        <div class="nucleus-ring"></div>
-        <div class="nucleus-ring"></div>
-        <div class="nucleus-ring"></div>
-        <div class="nucleus-core"></div>
-      </div>
-      <div class="stage-label">Stage 3 — Nucleus</div>
-      <h2 class="stage-title">Configurá el espacio<br>de trabajo.</h2>
-      <p class="stage-body" style="margin-bottom:32px;">Nucleus es el governance layer de Bloom. Necesita saber desde qué organización de GitHub vas a operar y dónde guardar los archivos de configuración en tu máquina.</p>
-
-      <div class="nucleus-step-label">Paso 1 — Organización</div>
-      <div class="question-label">Elegí tu organización principal</div>
-      <div class="select-list" id="org-list">
-        <div class="select-item" onclick="selectOrg(this, 'personal')">
-          <span>personal</span>
-          <span class="select-item-label">GitHub Org</span>
-        </div>
-        <div class="select-item" onclick="selectOrg(this, 'btips-lab')">
-          <span>btips-lab</span>
-          <span class="select-item-label">GitHub Org</span>
-        </div>
-        <div class="select-item" onclick="selectOrg(this, 'new')">
-          <span>+ Create new organization</span>
-          <span class="select-item-label">GitHub</span>
-        </div>
-      </div>
-
-      <div class="nucleus-step-label">Paso 2 — Carpeta de trabajo</div>
-      <div class="question-label">Elegí dónde guardar los archivos de configuración</div>
-      <div class="folder-picker" id="folder-picker" onclick="selectFolder()">
-        <span class="folder-picker-path" id="folder-path">Ninguna carpeta seleccionada</span>
-        <span class="folder-picker-action">Seleccionar</span>
-      </div>
-
-      <button class="btn-primary" id="btn-init-nucleus" onclick="initNucleus()" disabled>Inicializar →</button>
-    </div>
-  </div>
-
-  <!-- SCREEN 3b: Nucleus Init Terminal -->
+  <!-- SCREEN 2: Nucleus Create Terminal -->
   <div class="screen" id="screen-nucleus-init">
     <div class="screen-inner">
-      <div class="stage-label">Nucleus — Initializing</div>
-      <h2 class="stage-title" style="margin-bottom:8px;">Inicializando Nucleus…</h2>
-      <p class="stage-body" style="margin-bottom:32px;">Este proceso tarda entre 30 y 90 segundos.<br>No cerrés la ventana.</p>
+      <div class="stage-label">Workspace — Initializing</div>
+      <h2 class="stage-title" style="margin-bottom:8px;">Creando workspace…</h2>
+      <p class="stage-body" style="margin-bottom:32px;">Este proceso tarda unos segundos.<br>No cerrés la ventana.</p>
       <div class="terminal" id="nucleus-terminal">
-        <div class="terminal-line" id="tl-0">$ nucleus init --org btips-lab</div>
-        <div class="terminal-line" id="tl-1">→ Creating repository structure...</div>
-        <div class="terminal-line" id="tl-2">→ Generating governance scaffold...</div>
-        <div class="terminal-line" id="tl-3">→ Creating GitHub repository...</div>
-        <div class="terminal-line" id="tl-4">→ Linking local path...</div>
-        <div class="terminal-line" id="tl-5">✓ Nucleus established.<span class="terminal-cursor"></span></div>
+        <div class="terminal-line" id="tl-0">$ nucleus create --org ...</div>
       </div>
     </div>
   </div>

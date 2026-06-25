@@ -265,13 +265,32 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
     }
   });
 
-  // ── HANDLER: Inicializar Nucleus con streaming de output ────────────────
-  ipcMain.handle('onboarding:init-nucleus', async (event, { org, path: nucleusPath }) => {
-    log.info('[IPC] onboarding:init-nucleus — org:', org, '| path:', nucleusPath);
+  // ── HANDLER: Crear workspace con nucleus create (streaming de output) ────
+  // Corrección #2: usa `nucleus create`, no `nucleus init`.
+  // `nucleus init` corre en el step 2 (github_auth), después de tener github_id.
+  // Este handler solo crea el árbol .bloom/.nucleus-{org}/ en disco.
+  //
+  // Payload:
+  //   { org, path }             → nucleus create --org {org} --path {basePath}/{org}
+  //   { temporary: true, path } → nucleus create --temporary --path {basePath}/bloom-workspace
+  ipcMain.handle('onboarding:init-nucleus', async (event, { org, path: basePath, temporary }) => {
+    // nucleus create --path espera la carpeta del proyecto nuevo, no el directorio padre.
+    // El path correcto es: {basePath}/{org}  (ej: /home/jose/repos/elias-repos)
+    // Para el caso temporary el binario resuelve el slug, usamos un placeholder de carpeta.
+    const folderName  = temporary ? 'bloom-workspace' : org;
+    const nucleusPath = require('path').join(basePath, folderName);
+
+    log.info('[IPC] onboarding:init-nucleus — org:', org ?? '(temporary)', '| nucleusPath:', nucleusPath);
     return new Promise((resolve) => {
+      const args = ['--json', 'create', '--path', nucleusPath];
+      if (temporary) {
+        args.push('--temporary');
+      } else if (org) {
+        args.push('--org', org);
+      }
       const child = spawn(
         paths.nucleusExe,
-        ['init', '--org', org, '--path', nucleusPath],
+        args,
         { windowsHide: true }
       );
 
@@ -309,7 +328,17 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
           } catch (e) {
             log.warn('[IPC] onboarding:init-nucleus — could not persist nucleus_create:', e.message);
           }
-          resolve({ success: true, output: allOutput });
+          // Intentar parsear el org slug resuelto del output JSON de nucleus create.
+          // Útil cuando se usó --temporary y el binario asignó el slug internamente.
+          let resolvedOrg = org || null;
+          try {
+            const jsonLine = allOutput.split('\n').find(l => l.trim().startsWith('{'));
+            if (jsonLine) {
+              const parsed = JSON.parse(jsonLine);
+              resolvedOrg = parsed.org || parsed.org_slug || resolvedOrg;
+            }
+          } catch (_) {}
+          resolve({ success: true, org: resolvedOrg, output: allOutput });
         } else {
           log.error('[IPC] onboarding:init-nucleus — FAILED: exit code', code);
           resolve({ success: false, error: `Exit code ${code}`, output: allOutput });

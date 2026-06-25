@@ -49,25 +49,25 @@ const path = require('path');
 //
 const FALLBACK_STEPS = [
   {
+    id:                 'nucleus_create',
+    label:              'Configurar workspace',
+    screen:             'nucleus-create',
+    vault_required:     false,
+    requires:           [],
+    produces:           'nucleus_path',
+    blocking:           true,
+    cortex_events:      [],             // iniciado por Conductor, no por Brain
+    conductor_reaction: 'markStepComplete',
+  },
+  {
     id:                 'github_auth',
     label:              'Conectar GitHub',
     screen:             'github-login',
     vault_required:     false,
-    requires:           [],
+    requires:           ['nucleus_path'],
     produces:           'github_token',
     blocking:           true,
     cortex_events:      ['GITHUB_PAT_DETECTED', 'GITHUB_TOKEN_STORED', 'ACCOUNT_REGISTERED'],
-    conductor_reaction: 'markStepComplete',
-  },
-  {
-    id:                 'nucleus_create',
-    label:              'Crear Nucleus',
-    screen:             'nucleus-create',
-    vault_required:     false,
-    requires:           ['github_token'],
-    produces:           'nucleus_path',
-    blocking:           true,
-    cortex_events:      [],             // iniciado por Conductor, no por Brain
     conductor_reaction: 'markStepComplete',
   },
   {

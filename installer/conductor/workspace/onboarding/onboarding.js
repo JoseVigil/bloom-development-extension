@@ -502,8 +502,8 @@ function slugify(val) {
 function updateWorkspacePreview() {
   const pathVal = workspaceState.path;
   const orgVal  = workspaceState.org;
-  const orgDisplay   = document.getElementById('ws-preview-org');
-  const pathDisplay  = document.getElementById('ws-preview-path');
+  const orgDisplay    = document.getElementById('ws-preview-org');
+  const pathDisplay   = document.getElementById('ws-preview-path');
   const structDisplay = document.getElementById('ws-preview-struct');
 
   if (!pathDisplay) return;
@@ -515,13 +515,15 @@ function updateWorkspacePreview() {
     return;
   }
 
-  const effectiveOrg = orgVal || 'bloom-local';
-  const isTemporary  = !orgVal;
+  const isTemporary = !orgVal;
 
-  if (pathDisplay)  pathDisplay.textContent  = pathVal;
+  if (pathDisplay)  pathDisplay.textContent  = isTemporary ? pathVal : `${pathVal}/${orgVal}`;
   if (orgDisplay)   orgDisplay.textContent   = isTemporary ? '(Temporal)' : orgVal;
+
   if (structDisplay) {
-    structDisplay.textContent = `${pathVal}/.bloom/.nucleus-${effectiveOrg}/`;
+    structDisplay.textContent = isTemporary
+      ? `${pathVal}/bloom-workspace/.bloom/.nucleus-<temporal>/`
+      : `${pathVal}/${orgVal}/.bloom/.nucleus-${orgVal}/`;
   }
 }
 
@@ -613,10 +615,18 @@ async function continueWorkspace() {
   const btn = document.getElementById('btn-continue-workspace');
   if (!btn || btn.disabled) return;
 
-  const path = workspaceState.path;
-  const org  = workspaceState.org || 'bloom-local';
+  const path      = workspaceState.path;
+  const orgSlug   = workspaceState.org;
+  const temporary = !orgSlug;
 
-  log('info', `continueWorkspace — org: ${org} | path: ${path}`);
+  // Construir payload correcto:
+  // - si el campo org está vacío → pasar temporary:true (el binario resuelve el slug internamente)
+  // - si tiene valor → pasar org: slug (sin hardcodear 'bloom-local' acá)
+  const ipcPayload = temporary
+    ? { path, temporary: true }
+    : { path, org: orgSlug };
+
+  log('info', `continueWorkspace — payload: ${JSON.stringify(ipcPayload)}`);
 
   // Estado loading
   btn.disabled    = true;
@@ -628,25 +638,29 @@ async function continueWorkspace() {
 
   let result;
   try {
-    result = await window.onboarding.initNucleus({ org, path });
+    result = await window.onboarding.initNucleus(ipcPayload);
   } catch (e) {
     result = { success: false, error: e.message };
   }
 
   log(result.success ? 'info' : 'error',
-      `IPC ← onboarding:init-nucleus — success: ${result.success}`);
+      `IPC ← onboarding:init-nucleus (nucleus create) — success: ${result.success}`);
 
   if (result.success) {
     // Guardar en estado global para pasos siguientes
-    selectedOrg        = org;
-    selectedFolderPath = path;
-    state.selectedOrg  = org;
+    // Si fue temporary, el slug real lo devuelve el handler en result.org
+    const resolvedOrg = result.org || orgSlug || 'bloom-local';
+    selectedOrg          = resolvedOrg;
+    selectedFolderPath   = path;
+    state.selectedOrg    = resolvedOrg;
     state.selectedFolder = path;
 
     // Marcar step completo
     await window.onboarding.markStepComplete({ step: 'nucleus_create' });
 
     // Avanzar al step 2 (github_auth) — screen 3
+    // NOTA: nucleus init NO se llama aquí. Se llama en screen 3 (github_auth),
+    // después de que el usuario autentica con GitHub y el sistema dispone del github_id.
     goTo(3);
   } else {
     btn.disabled    = false;
@@ -680,18 +694,25 @@ async function continueWorkspace() {
 }
 
 async function useExistingWorkspace() {
-  // El workspace ya existe — marcar como completo y continuar
-  const org  = workspaceState.org || 'bloom-local';
-  const path = workspaceState.path;
-  selectedOrg        = org;
-  selectedFolderPath = path;
-  state.selectedOrg  = org;
+  // El workspace ya existe — marcar como completo y continuar sin re-ejecutar nucleus create.
+  // El slug real de org vacío lo resolverá el handler cuando corresponda; acá solo
+  // guardamos lo que tenemos y avanzamos.
+  const orgSlug = workspaceState.org;   // puede ser '' si es temporary
+  const path    = workspaceState.path;
+  selectedOrg          = orgSlug || null;
+  selectedFolderPath   = path;
+  state.selectedOrg    = orgSlug || null;
   state.selectedFolder = path;
   await window.onboarding.markStepComplete({ step: 'nucleus_create' });
   goTo(3);
 }
 
 // ── SCREEN 2 — Nucleus Init Terminal ───────────────────────────────────────
+// (ver runNucleusTerminal más abajo)
+
+// ── SCREEN 3 — Identity (github_auth) ─────────────────────────────────────
+// loadOrgs se mantiene para pasos posteriores que aún lo usan
+async function loadOrgs() {
   const result = await window.onboarding.listOrgs();
   const list   = document.getElementById('org-list');
   if (!list) return;
@@ -750,7 +771,10 @@ function initNucleus() {
   goTo(4); // Fix 4: goTo(4) llama runNucleusTerminal()
 }
 
-// ── SCREEN 2 — Nucleus Init Terminal ───────────────────────────────────────
+// ── SCREEN 2 — Nucleus Create Terminal ─────────────────────────────────────
+// El IPC onboarding:init-nucleus ya se disparó en continueWorkspace() (screen 1).
+// Esta pantalla solo escucha las líneas de output que el main process emite
+// mientras el subproceso `nucleus create` corre.
 function runNucleusTerminal() {
   const terminal = document.getElementById('nucleus-terminal');
   if (!terminal) return;
@@ -765,28 +789,7 @@ function runNucleusTerminal() {
     terminal.scrollTop = terminal.scrollHeight;
   });
 
-  log('info', 'IPC → onboarding:init-nucleus');
-  window.onboarding.initNucleus({
-    org:  selectedOrg,
-    path: selectedFolderPath
-  }).then(result => {
-    log(result.success ? 'info' : 'error',
-        `IPC ← onboarding:init-nucleus — success: ${result.success}`);
-    if (result.success) {
-      const done = document.createElement('div');
-      done.className = 'terminal-line done';
-      done.innerHTML = '✓ Nucleus established.<span class="terminal-cursor"></span>';
-      terminal.appendChild(done);
-      setTimeout(() => goTo(5), 1200);
-    } else {
-      const err = document.createElement('div');
-      err.className = 'terminal-line';
-      err.style.color = 'var(--error)';
-      err.textContent = '✗ Init failed: ' + result.error;
-      terminal.appendChild(err);
-      log('error', `runNucleusTerminal failed: ${result.error}`);
-    }
-  });
+  log('info', 'nucleus-terminal: escuchando líneas de nucleus create…');
 }
 
 // ── SCREEN 5 — Project ─────────────────────────────────────────────────────
