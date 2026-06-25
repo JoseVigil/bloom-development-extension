@@ -148,7 +148,7 @@ const STEPPER_MAP = {
   2: 'workspace',   // nucleus-init terminal (parte del step workspace)
   3: 'identity',
   4: 'identity',    // vault screen (pertenece al nodo identity)
-  5: 'providers',
+  5: 'project',     // project selection (providers se maneja por onStepUpdate/milestone, no por navegación)
   6: 'project',
   7: 'project',
 };
@@ -229,7 +229,7 @@ async function goTo(n) {
   // Screen 4: vault confirmation
   // Screen 5: project selection (vault establecido)
   if (n === 2) runNucleusTerminal();
-  if (n === 3) { setStepperEstablished('workspace'); kickoffDiscovery(); }
+  if (n === 3) { setStepperEstablished('workspace'); }
   if (n === 5) { setStepperEstablished('identity'); loadRepos(); }
   if (n === 6) {
     setStepperEstablished('project');
@@ -766,10 +766,15 @@ function checkNucleusReady() {
   document.getElementById('btn-init-nucleus').disabled = !(selectedOrg && folderSelected);
 }
 
-function initNucleus() {
-  log('info', `initNucleus — org: ${selectedOrg} | path: ${selectedFolderPath}`);
-  goTo(4); // Fix 4: goTo(4) llama runNucleusTerminal()
-}
+// REMOVED (código zombie): initNucleus() redirigía a goTo(4) (terminal antigua del screen 2
+// en el orden previo). Ya no forma parte del flujo — continueWorkspace() en screen 1
+// dispara el IPC init-nucleus directamente y avanza a goTo(3) al completar.
+// Se deja comentado como referencia histórica.
+//
+// function initNucleus() {
+//   log('info', `initNucleus — org: ${selectedOrg} | path: ${selectedFolderPath}`);
+//   goTo(4); // Fix 4: goTo(4) llama runNucleusTerminal()
+// }
 
 // ── SCREEN 2 — Nucleus Create Terminal ─────────────────────────────────────
 // El IPC onboarding:init-nucleus ya se disparó en continueWorkspace() (screen 1).

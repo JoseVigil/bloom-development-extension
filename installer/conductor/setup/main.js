@@ -881,10 +881,13 @@ function registerInstallHandlers() {
           verbose:       IS_DEV,
         });
 
-        // ── ÚNICA señal válida de handshake: PROFILE_CONNECTED push de Brain ──────
-        // nucleus synapse status devuelve state=RUNNING desde el momento del launch
-        // (Chrome existe como proceso). Eso NO indica que Cortex completó REGISTER_HOST.
-        // El catch-up en REGISTER_ACK es solo informativo — nunca dispara heartbeat:validated.
+        // ── Resolución del handshake: dos caminos posibles ──────────────────────────
+        // Camino 1 (nominal): PROFILE_CONNECTED push de Brain → case 'HANDSHAKE'
+        // Camino 2 (catch-up): si el bridge llegó tarde y el evento ya pasó, el
+        //   REGISTER_ACK incluye catch_up_needed=true → poll CLI hasta state=ONLINE.
+        // Ambos llaman _resolveHandshake() que garantiza emisión única de heartbeat:validated.
+        // nucleus synapse status retorna RUNNING desde que Chrome existe como proceso;
+        // ONLINE indica que Cortex completó REGISTER_HOST (handshake real).
 
         let _handshakeTimeout = setTimeout(() => {
           if (!_installBridge) return;  // ya resolvió normalmente
@@ -896,6 +899,33 @@ function registerInstallHandlers() {
             });
           }
         }, 120_000);
+
+        // Flag para evitar double-emit si PROFILE_CONNECTED push y catch-up poll
+        // coinciden en el tiempo (ambos resuelven antes de que el otro aborte).
+        let _handshakeResolved = false;
+
+        const _resolveHandshake = (source, extra = {}) => {
+          if (_handshakeResolved) {
+            _logger.warn(`[Bridge] _resolveHandshake llamado dos veces — ignorando segunda resolución (source=${source})`);
+            return;
+          }
+          _handshakeResolved = true;
+
+          _logger.info(`[Bridge] heartbeat:validated → source=${source}`);
+          log(`✅ [Synapse Bridge] Handshake resuelto via ${source} (${profileId})`);
+
+          if (_handshakeTimeout) { clearTimeout(_handshakeTimeout); _handshakeTimeout = null; }
+          if (!win || win.isDestroyed()) return;
+
+          win.webContents.send('heartbeat:validated', {
+            profile_id:       profileId,
+            state:            'RUNNING',
+            extension_loaded: true,
+            ...extra,
+          });
+          if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
+          setTimeout(() => startHeartbeat(), 2000);
+        };
 
         _installBridge.on('synapse:event', (payload) => {
           if (!win || win.isDestroyed()) {
@@ -919,29 +949,79 @@ function registerInstallHandlers() {
                 state:            payload.phase || 'CONNECTING',
                 extension_loaded: false,
               });
-              // REGISTER_ACK: solo loguear. nucleus status ya es RUNNING porque Chrome
-              // arrancó, pero eso no es el handshake de Cortex — no disparar validated.
+
+              // REGISTER_ACK con catch_up_needed=true: PROFILE_CONNECTED puede haber
+              // ocurrido antes de que el bridge conectara. Arrancamos poll CLI como
+              // safety net. Si el push llega después por el socket, _resolveHandshake
+              // descarta la segunda resolución con el flag _handshakeResolved.
               if (payload.catch_up_needed) {
-                _logger.info(`[Bridge] REGISTER_ACK recibido — escuchando PROFILE_CONNECTED push de Brain (profileId=${profileId})`);
-                log(`🔍 [Synapse Bridge] REGISTER_ACK — esperando PROFILE_CONNECTED push de Brain`);
+                _logger.info(`[Bridge] REGISTER_ACK con catch_up_needed=true — iniciando poll catch-up (profileId=${profileId})`);
+                log(`🔍 [Synapse Bridge] REGISTER_ACK — poll catch-up iniciado`);
+
+                // Poll con retry: el PROFILE_CONNECTED puede llegar milisegundos DESPUÉS
+                // del REGISTER_ACK (el installer conecta mientras Brain procesa el evento).
+                // Un poll one-shot puede ver state=RUNNING (Chrome existe) antes de que
+                // Brain procese REGISTER_HOST de Cortex. Reintentamos cada 500ms hasta
+                // CATCH_UP_MAX_RETRIES. Si el push de Brain llega mientras tanto,
+                // _resolveHandshake() ignora la segunda resolución via _handshakeResolved.
+                const CATCH_UP_INTERVAL_MS = 500;
+                const CATCH_UP_MAX_RETRIES = 20;  // 10s total antes de ceder al push
+                let _catchUpAttempt = 0;
+
+                const _doCatchUpPoll = () => {
+                  // Abortar si el handshake ya resolvió (por push o por intento previo)
+                  if (_handshakeResolved || !_installBridge || !win || win.isDestroyed()) return;
+
+                  _catchUpAttempt++;
+                  executeNucleusCommand(['--json', 'synapse', 'status', profileId])
+                    .then(statusResult => {
+                      // nucleus retorna { status: { state: "ONLINE", ... }, success: true }
+                      // Normalizamos: primero el campo canónico anidado, luego top-level
+                      // como fallback (builds anteriores de nucleus emitían state en raíz).
+                      const state = statusResult.status?.state ?? statusResult.state ?? 'UNKNOWN';
+                      _logger.info(
+                        `[Bridge] Catch-up poll #${_catchUpAttempt}/${CATCH_UP_MAX_RETRIES}` +
+                        ` — state=${state}` +
+                        ` raw=${JSON.stringify(statusResult).slice(0, 120)}`
+                      );
+
+                      if (_handshakeResolved) return;  // push llegó mientras ejecutaba el comando
+
+                      if (state === 'ONLINE') {
+                        _resolveHandshake('catch-up-poll', {
+                          _recovered:        true,
+                          _catch_up_attempt: _catchUpAttempt,
+                        });
+
+                      } else if (_catchUpAttempt < CATCH_UP_MAX_RETRIES) {
+                        _logger.info(`[Bridge] Catch-up #${_catchUpAttempt}: state=${state} — reintentando en ${CATCH_UP_INTERVAL_MS}ms`);
+                        setTimeout(_doCatchUpPoll, CATCH_UP_INTERVAL_MS);
+
+                      } else {
+                        _logger.info(`[Bridge] Catch-up agotado (${CATCH_UP_MAX_RETRIES} intentos, last state=${state}) — esperando PROFILE_CONNECTED push`);
+                        log(`🔍 [Synapse Bridge] Catch-up agotado — solo push puede resolver ahora`);
+                      }
+                    })
+                    .catch(err => {
+                      _logger.warn(`[Bridge] Catch-up poll #${_catchUpAttempt} error: ${err.message}`);
+                      if (!_handshakeResolved && _catchUpAttempt < CATCH_UP_MAX_RETRIES) {
+                        setTimeout(_doCatchUpPoll, CATCH_UP_INTERVAL_MS);
+                      }
+                    });
+                };
+
+                // Delay inicial: dar 300ms a Brain para procesar PROFILE_CONNECTED
+                // antes del primer poll (evita el one-shot miss en el caso típico).
+                setTimeout(_doCatchUpPoll, 300);
               }
               break;
 
             // HANDSHAKE: PROFILE_CONNECTED del perfil activo → handshake real completo.
             // Brain lo emite cuando Cortex hace REGISTER_HOST y ProfileStateManager
-            // setea el perfil como ONLINE. Es la ÚNICA señal válida.
+            // setea el perfil como ONLINE. Es la señal canónica; catch-up es el fallback.
             case 'HANDSHAKE':
-              _logger.success(`[Bridge] ✅ PROFILE_CONNECTED recibido → handshake completo (profileId=${profileId}) — emitiendo heartbeat:validated`);
-              log(`✅ [Synapse Bridge] PROFILE_CONNECTED recibido — handshake completo (${profileId})`);
-              if (_handshakeTimeout) { clearTimeout(_handshakeTimeout); _handshakeTimeout = null; }
-              win.webContents.send('heartbeat:validated', {
-                profile_id:       profileId,
-                state:            'RUNNING',
-                extension_loaded: true,
-              });
-              _logger.info(`[Bridge] heartbeat:validated enviado al renderer`);
-              if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
-              setTimeout(() => startHeartbeat(), 2000);
+              _logger.info(`[Bridge] ✅ PROFILE_CONNECTED recibido → handshake completo (profileId=${profileId})`);
+              _resolveHandshake('profile-connected-push');
               break;
 
             // ERROR de conexión TCP

@@ -291,6 +291,40 @@ function initOnboardingBridge() {
     });
   }
 
+  // ── CATCH-UP POLL ────────────────────────────────────────────────────────
+  // Si PROFILE_CONNECTED ya ocurrió antes de que el bridge conectase, Brain
+  // no lo re-emite. El REGISTER_ACK llega con catch_up_needed: true como señal
+  // de que debemos consultar el estado actual del perfil via CLI en lugar de
+  // quedarnos esperando un push que nunca va a llegar.
+  _onboardingBridge.on('message', async (enriched) => {
+    if (enriched.type !== 'STATUS' || !enriched.catch_up_needed) return;
+
+    log.info('[SYNAPSE] REGISTER_ACK con catch_up_needed=true — haciendo poll de seguridad');
+
+    try {
+      const result = await execNucleus(
+        ['--json', 'synapse', 'status', profileId],
+        15_000
+      );
+
+      if (result.state === 'ONLINE' || result.extension_loaded) {
+        log.info('[SYNAPSE] Catch-up: perfil ya está ONLINE — simulando HANDSHAKE');
+        _onboardingBridge.emit('message', {
+          type:       'HANDSHAKE',
+          _profileId: profileId,
+          _launchId:  null,
+          _ts:        Date.now(),
+          _recovered: true,
+        });
+      } else {
+        log.info('[SYNAPSE] Catch-up: perfil no está ONLINE aún — esperando push de Brain');
+      }
+    } catch (e) {
+      log.warn('[SYNAPSE] Catch-up poll falló — continuando esperando push:', e.message);
+      // No es fatal: si el perfil conecta después, el push llegará normalmente.
+    }
+  });
+
   // CRÍTICO: sin connectToBrain() el socket TCP nunca se abre y Brain
   // nunca manda nada — los listeners 'message' nunca disparan.
   _onboardingBridge.connectToBrain(profileId);
