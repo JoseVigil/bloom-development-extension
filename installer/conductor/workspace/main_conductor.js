@@ -161,11 +161,11 @@ function bootServices(onboardingDone) {
 // ── WINDOW FACTORIES ───────────────────────────────────────────────────────
 function createOnboardingWindow() {
   mainWindow = new BrowserWindow({
-    width: 920,
-    height: 620,
-    minWidth: 920,
-    minHeight: 620,
-    resizable: false,
+    width: 1280,
+    height: 800,
+    minWidth: 760,
+    minHeight: 520,
+    resizable: true,
     center: true,
     alwaysOnTop: false,
     backgroundColor: '#080A0E',
@@ -181,7 +181,10 @@ function createOnboardingWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'onboarding', 'onboarding.html'));
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
+    mainWindow.show();
+  });
   mainWindow.on('closed', () => {
     if (_onboardingBridge) {
       _onboardingBridge.destroy();

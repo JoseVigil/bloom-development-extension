@@ -1013,53 +1013,25 @@ function _synapseCategory(data) {
   return 'synapse';
 }
 
-// ── DEBUG PANEL ────────────────────────────────────────────────────────────
-let debugPanelOpen = false;
+// ── TAB SYSTEM ─────────────────────────────────────────────────────────────
+//
+// El iframe #debug-frame se carga con src desde el HTML — está vivo desde
+// DOMContentLoaded. switchTab solo alterna visibilidad CSS, sin toca el DOM
+// del iframe ni el src. No hay buffer, no hay lazy-load, no se pierden eventos.
+//
+let _activeTab = 'onboarding';
 
-// Buffer de eventos Synapse recibidos antes de que el iframe esté listo.
-// Se vacía (flush) cuando el iframe termina de cargar.
-const _synapseEventBuffer = [];
+function switchTab(name) {
+  if (name === _activeTab) return;
+  _activeTab = name;
 
-function _flushSynapseBuffer(frame) {
-  if (!_synapseEventBuffer.length) return;
-  log('info', `debug-frame: flush de ${_synapseEventBuffer.length} eventos bufferizados`);
-  for (const data of _synapseEventBuffer) {
-    frame.contentWindow.postMessage({ type: 'SYNAPSE_RAW_EVENT', payload: data }, '*');
-  }
-  _synapseEventBuffer.length = 0;
-}
+  document.querySelectorAll('.content-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
 
-function toggleDebugPanel() {
-  const container = document.getElementById('debug-panel-container');
-  const btn       = document.getElementById('debug-toggle');
-  if (!container || !btn) return;
+  document.getElementById(`tab-${name}`)?.classList.add('active');
+  document.getElementById(`panel-${name}`)?.classList.add('active');
 
-  debugPanelOpen = !debugPanelOpen;
-
-  if (debugPanelOpen) {
-    const frame = document.getElementById('debug-frame');
-    if (frame && !frame.dataset.loaded) {
-      frame.src = '../shared/debug.html';
-      frame.dataset.loaded = '1';
-      frame.addEventListener('load', () => {
-        log('info', 'debug-frame: load event — iframe listo');
-        _flushSynapseBuffer(frame);
-      }, { once: true });
-    }
-    container.classList.remove('hidden');
-    btn.classList.add('active');
-    const rail = document.getElementById('notification-rail');
-    if (rail) rail.style.display = 'none';
-    const cortex = document.getElementById('cortex-bar');
-    if (cortex) cortex.classList.remove('visible');
-    log('info', 'debug panel opened');
-  } else {
-    container.classList.add('hidden');
-    btn.classList.remove('active');
-    const rail2 = document.getElementById('notification-rail');
-    if (rail2) rail2.style.display = '';
-    log('info', 'debug panel closed');
-  }
+  log('info', `tab: switched to ${name}`);
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
@@ -1108,48 +1080,49 @@ document.addEventListener('DOMContentLoaded', () => {
     log('info', 'onboarding:step-ui-update listener registrado');
   }
 
-  // ── Debug panel ─────────────────────────────────────────────────────────
-  const debugBtn = document.getElementById('debug-toggle');
-  if (debugBtn) {
-    debugBtn.onclick = toggleDebugPanel;
-    const isDev = !!(window.__BLOOM_DEV__ ||
-                     window.location.href.includes('localhost') ||
-                     window.navigator.userAgent.includes('Electron'));
-    debugBtn.style.display = isDev ? 'flex' : 'none';
-  }
-
-  document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'D') {
-      e.preventDefault();
-      toggleDebugPanel();
+  // ── Harness tab — live dot refleja WS state del iframe ─────────────────
+  window.addEventListener('message', (evt) => {
+    if (!evt.data) return;
+    if (evt.data.type === 'HARNESS_WS_STATE') {
+      const dot = document.getElementById('harness-live-dot');
+      if (dot) dot.className = 'tab-live-dot' + (evt.data.state === 'live' ? ' live' : '');
+    }
+    if (evt.data.type === 'REQUEST_HEALTH') {
+      (async () => {
+        try {
+          const data = await (window.onboarding?.health?.() ?? window.electronAPI?.health?.());
+          document.getElementById('debug-frame')?.contentWindow
+            ?.postMessage({ type: 'HEALTH_RESPONSE', data }, '*');
+        } catch(e) {
+          document.getElementById('debug-frame')?.contentWindow
+            ?.postMessage({ type: 'HEALTH_RESPONSE', error: e.message }, '*');
+        }
+      })();
     }
   });
 
-  // ── Synapse raw event bridge (padre → iframe debug.html) ────────────────
-  // debug.html corre en un iframe sin preload propio, así que no tiene
-  // window.onboarding.onSynapseEvent. Lo recibimos acá (sí tenemos preload)
-  // y lo reenviamos por postMessage. El tipo 'SYNAPSE_RAW_EVENT' debe
-  // coincidir con el que escucha debug.html en initRawFeed().
-  //
-  // Si el panel todavía no se abrió (frame sin src / sin contentWindow listo),
-  // acumulamos en _synapseEventBuffer y lo vaciamos en el evento 'load' del iframe
-  // (registrado en toggleDebugPanel cuando se asigna el src por primera vez).
+  // ── Atajo de teclado Ctrl/Cmd+Shift+D → toggle Harness tab ─────────────
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'D') {
+      e.preventDefault();
+      switchTab(_activeTab === 'harness' ? 'onboarding' : 'harness');
+    }
+  });
+
+  // ── Synapse bridge (preload → iframe debug.html via postMessage) ─────────
+  // El iframe ya está cargado desde el inicio — no hay buffer ni frameReady check.
+  // Un único callback maneja notificaciones rail + reenvío al iframe.
   if (window.onboarding?.onSynapseEvent) {
     window.onboarding.onSynapseEvent((data) => {
-      // ── Notificaciones del rail por tipo de evento Synapse ─────────────────
-      // HANDSHAKE: señal de que Chrome Host hizo REGISTER_HOST exitosamente.
-      // Solo notificar una vez — el bridge puede re-emitir en catch-up.
+      // Notificación rail — HANDSHAKE una sola vez
       if (data.type === 'HANDSHAKE' && !window._synapseHandshakeNotified) {
         window._synapseHandshakeNotified = true;
         addNotification('Synapse handshake complete', { icon: '⚡', type: 'success' });
       }
-
+      // Reenvío al iframe — siempre disponible
       const frame = document.getElementById('debug-frame');
-      const frameReady = frame && frame.dataset.loaded && frame.contentWindow;
-      if (frameReady) {
-        // Feed raw — mensaje enriquecido tal cual sale del bridge
+      if (frame?.contentWindow) {
         frame.contentWindow.postMessage({ type: 'SYNAPSE_RAW_EVENT', payload: data }, '*');
-        // Event Feed — formato que espera ingestEvent() en debug.html
         frame.contentWindow.postMessage({ type: 'SYNAPSE_EVENT', payload: {
           category:   _synapseCategory(data),
           event:      data.event || data.type || '?',
@@ -1157,12 +1130,9 @@ document.addEventListener('DOMContentLoaded', () => {
           profile_id: data._profileId || data.profile_id || null,
           timestamp:  data._ts || data.timestamp || Date.now(),
         }}, '*');
-        log('info', `onSynapseEvent — reenviado a debug-frame: ${data?.type || data?.event || '?'}`);
-      } else {
-        _synapseEventBuffer.push(data);
-        log('info', `onSynapseEvent — panel cerrado, bufferizado (total: ${_synapseEventBuffer.length}): ${data?.type || data?.event || '?'}`);
+        log('info', `onSynapseEvent → debug-frame: ${data?.type || data?.event || '?'}`);
       }
     });
-    log('info', 'onSynapseEvent listener registrado — reenvío a debug-frame activo');
+    log('info', 'onSynapseEvent listener registrado — bridge activo desde inicio');
   }
 });

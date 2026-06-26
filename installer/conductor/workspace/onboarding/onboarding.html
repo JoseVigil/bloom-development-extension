@@ -175,37 +175,91 @@ body::after {
 
 #sidebar-spacer { flex: 1; }
 
-#debug-toggle {
-  margin: 0 24px;
-  padding: 10px 14px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
-  text-align: left;
-}
-#debug-toggle:hover { border-color: var(--border-active); color: var(--text-secondary); }
-#debug-toggle.active { border-color: var(--accent); color: var(--accent); }
-
+/* ── CONTENT AREA + TAB SYSTEM ── */
 #content-area {
   flex: 1;
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-#debug-panel-container {
-  width: 100%; height: 100%;
+/* Tab bar — vive en el tope del content-area, siempre visible */
+#content-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.content-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  user-select: none;
+  gap: 7px;
+}
+.content-tab:hover { color: var(--text-secondary); }
+.content-tab.active {
+  color: var(--text-secondary);
+  border-bottom-color: var(--accent);
+}
+
+/* Dot de estado vivo en el tab de Harness */
+.tab-live-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.tab-live-dot.live {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* Paneles bajo el tab bar */
+#content-panels {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.content-panel {
   position: absolute;
   inset: 0;
-  z-index: 50;
+  visibility: hidden;   /* oculto pero el DOM vive — el iframe sigue activo */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
 }
-#debug-panel-container.hidden { display: none; }
+.content-panel.active {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Stage (panel onboarding) */
+#panel-onboarding {
+  width: 100%; height: 100%;
+}
+
+/* Harness (panel debug) */
+#panel-harness {
+  width: 100%; height: 100%;
+}
 
 #debug-frame {
   width: 100%; height: 100%;
@@ -1309,19 +1363,28 @@ body::after {
       </div>
     </div>
     <div id="sidebar-spacer"></div>
-    <button id="debug-toggle" onclick="toggleDebugPanel()">Debug</button>
   </aside>
 
-  <!-- CONTENT AREA -->
+  <!-- CONTENT AREA con tabs -->
   <div id="content-area">
 
-    <!-- DEBUG PANEL (lazy-loaded) -->
-    <div id="debug-panel-container" class="hidden">
-      <iframe id="debug-frame" src=""></iframe>
+    <!-- TAB BAR -->
+    <div id="content-tabs">
+      <div class="content-tab active" id="tab-onboarding" onclick="switchTab('onboarding')">
+        Onboarding
+      </div>
+      <div class="content-tab" id="tab-harness" onclick="switchTab('harness')">
+        <span class="tab-live-dot" id="harness-live-dot"></span>
+        Harness
+      </div>
     </div>
 
-    <!-- STAGE -->
-    <div id="stage">
+    <!-- PANELES -->
+    <div id="content-panels">
+
+      <!-- Panel 1: flujo de usuario -->
+      <div class="content-panel active" id="panel-onboarding">
+        <div id="stage">
 
   <!-- SCREEN 0: Entry -->
   <div class="screen active" id="screen-entry">
@@ -1613,6 +1676,14 @@ body::after {
   </div>
 
 </div><!-- /stage -->
+      </div><!-- /panel-onboarding -->
+
+      <!-- Panel 2: Harness — iframe cargado desde el inicio, siempre activo -->
+      <div class="content-panel" id="panel-harness">
+        <iframe id="debug-frame" src="../shared/debug.html"></iframe>
+      </div>
+
+    </div><!-- /content-panels -->
 
   </div><!-- /content-area -->
 

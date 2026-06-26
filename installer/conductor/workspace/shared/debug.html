@@ -189,7 +189,16 @@ html, body {
   gap: 4px;
   flex: 1;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-active) transparent;
 }
+#sidebar-filters::-webkit-scrollbar { width: 3px; }
+#sidebar-filters::-webkit-scrollbar-track { background: transparent; }
+#sidebar-filters::-webkit-scrollbar-thumb {
+  background: var(--border-active);
+  border-radius: 2px;
+}
+#sidebar-filters::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 .filter-row {
   display: flex;
   align-items: center;
@@ -850,6 +859,10 @@ function setWsState(state) {
   dot.className   = state === 'live' ? 'live' : state === 'error' ? 'error' : '';
   label.className = state === 'live' ? 'live' : '';
   label.textContent = state === 'live' ? 'live' : state === 'error' ? 'reconnecting' : 'connecting';
+  // Notificar al padre (onboarding.html) para que actualice el dot del tab Harness
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'HARNESS_WS_STATE', state }, '*');
+  }
 }
 
 // ── HEALTH ───────────────────────────────────────────────────────────────────
