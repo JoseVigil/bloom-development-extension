@@ -113,6 +113,51 @@ const state = {
   selectedRepo:   null,  // { name, full_name, private }
 };
 
+// ── NOTIFICATION RAIL ─────────────────────────────────────────────────────
+//
+// addNotification(text, opts) — único punto de escritura en #notification-list.
+//
+// opts:
+//   icon  {string}  — emoji o símbolo que aparece como dot (default: '·')
+//   type  {string}  — clase CSS adicional en .notif-card: 'success' | 'warn' | 'error'
+//                     (sin valor → estilo neutro)
+//
+// Las notificaciones se insertan al inicio de la lista (más reciente arriba).
+// El botón ✕ de cada card la elimina individualmente.
+// Si el debug panel está abierto, el rail está oculto (display:none) — la
+// notificación se agrega igual; será visible cuando el panel se cierre.
+//
+function addNotification(text, { icon = '·', type = '' } = {}) {
+  const list = document.getElementById('notification-list');
+  if (!list) return;
+
+  const card = document.createElement('div');
+  card.className = ['notif-card', type].filter(Boolean).join(' ');
+
+  const dot = document.createElement('span');
+  dot.className   = 'notif-dot';
+  dot.textContent = icon;
+
+  const msg = document.createElement('span');
+  msg.className   = 'notif-text';
+  msg.textContent = text;
+
+  const close = document.createElement('button');
+  close.className   = 'notif-close';
+  close.textContent = '✕';
+  close.setAttribute('aria-label', 'Dismiss notification');
+  close.onclick = () => card.remove();
+
+  card.appendChild(dot);
+  card.appendChild(msg);
+  card.appendChild(close);
+
+  // Insertar al inicio — la más reciente queda arriba
+  list.insertBefore(card, list.firstChild);
+
+  log('info', `notification: [${type || 'info'}] ${text}`);
+}
+
 // ── MILESTONE → STEPPER mapping ────────────────────────────────────────────
 // Mapa stepId (onboarding_steps.json) → nombre de nodo del stepper (STEPPER_NODES).
 // Permite que handleMilestoneReached() actualice el stepper sin conocer los
@@ -309,6 +354,9 @@ function _onMilestoneGithubAuth(data) {
   document.getElementById('acc-github')?.classList.add('active');
   log('info', 'milestone: github_auth confirmado por Brain');
 
+  const userLabel = data?.username ? ` — @${data.username}` : '';
+  addNotification(`GitHub connected${userLabel}`, { icon: '✓', type: 'success' });
+
   // Limpiar el poll de fallback — ya no necesitamos el setInterval
   _clearPollFallback();
 
@@ -333,22 +381,27 @@ function _onMilestoneGithubAuth(data) {
 
 function _onMilestoneVaultInit(_data) {
   log('info', 'milestone: vault_init confirmado por Brain');
+  addNotification('Vault initialized', { icon: '🔒', type: 'success' });
   setStepperEstablished('vault');
   showCortex('Vault initialized. Setting up workspace…');
 }
 
 function _onMilestoneGoogleAuth(_data) {
   log('info', 'milestone: google_auth confirmado por Brain');
+  addNotification('Google account connected', { icon: '✓', type: 'success' });
   showCortex('Google connected.');
 }
 
 function _onMilestoneAiProviderSetup(data) {
   log('info', `milestone: ai_provider_setup confirmado por Brain — provider: ${data?.provider || 'n/a'}`);
+  const providerLabel = data?.provider ? ` (${data.provider})` : '';
+  addNotification(`AI provider configured${providerLabel}`, { icon: '✓', type: 'success' });
   showCortex('AI provider configured.');
 }
 
 function _onMilestoneProjectCreate(_data) {
   log('info', 'milestone: project_create confirmado por Brain');
+  addNotification('Project created — workspace ready', { icon: '✓', type: 'success' });
   // El reactor ya llamó nucleus synapse onboarding --step success para Chrome.
   // El renderer avanza a la pantalla de milestone (screen 6) si no está ahí.
   const milestoneScreen = document.getElementById('screen-milestone');
@@ -657,6 +710,7 @@ async function continueWorkspace() {
 
     // Marcar step completo
     await window.onboarding.markStepComplete({ step: 'nucleus_create' });
+    addNotification('Workspace configured', { icon: '✓', type: 'success' });
 
     // Avanzar al step 2 (github_auth) — screen 3
     // NOTA: nucleus init NO se llama aquí. Se llama en screen 3 (github_auth),
@@ -1082,6 +1136,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // (registrado en toggleDebugPanel cuando se asigna el src por primera vez).
   if (window.onboarding?.onSynapseEvent) {
     window.onboarding.onSynapseEvent((data) => {
+      // ── Notificaciones del rail por tipo de evento Synapse ─────────────────
+      // HANDSHAKE: señal de que Chrome Host hizo REGISTER_HOST exitosamente.
+      // Solo notificar una vez — el bridge puede re-emitir en catch-up.
+      if (data.type === 'HANDSHAKE' && !window._synapseHandshakeNotified) {
+        window._synapseHandshakeNotified = true;
+        addNotification('Synapse handshake complete', { icon: '⚡', type: 'success' });
+      }
+
       const frame = document.getElementById('debug-frame');
       const frameReady = frame && frame.dataset.loaded && frame.contentWindow;
       if (frameReady) {
