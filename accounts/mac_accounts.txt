@@ -1,0 +1,26 @@
+roamtouch@gmail.com
+
+adm.daxes.io@gmail.com
+
+adm.uitool.com@gmail.com
+
+bloomaut.team@gmail.com
+
+cellllbio@gmail.com
+
+gestureos@gmail.com
+
+jvgroup.del@gmail.com
+
+maular.com@gmail.com
+
+padkite@gmail.com
+
+
+
+Linux
+google-chrome --profile-directory="Default"
+google-chrome --profile-directory="Profile 1"
+google-chrome --profile-directory="Profile 5"
+google-chrome --profile-directory="Profile 6"
+google-chrome --profile-directory="Profile 17"

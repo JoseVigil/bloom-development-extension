@@ -61,6 +61,9 @@
     {
       "matches": ["<all_urls>"],
       "resources": [
+        "protocols/discovery.schema.json",
+        "protocols/landing.schema.json",
+        "protocols/ionpump.schema.json",
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
         "harness.synapse.config.js",

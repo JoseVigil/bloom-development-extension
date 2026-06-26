@@ -189,6 +189,9 @@ async function initialize() {
   
   await loadConfig();
 
+  // Cargar schemas de protocolo y registrar handlers
+  await loadProtocolSchemas();
+
   // FIX: Verificar que profileId y launchId existen antes de conectar.
   if (!config) {
     console.error('[Synapse] ✗ Config failed to load — aborting connection');
@@ -966,8 +969,137 @@ async function forwardToContent(msg) {
 // CONTENT MESSAGES
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// Schema-aware handler registry
+// ---------------------------------------------------------------------------
+const REGISTERED_HANDLERS = {};
+
+/**
+ * registerHandler(eventName, schema, handlerFn)
+ *
+ * Registra un handler para un evento específico. Antes de invocar handlerFn,
+ * aplica los defaults declarados en el schema para cualquier campo ausente
+ * en el mensaje entrante.
+ *
+ * @param {string}   eventName  - Nombre del evento (ej: "ACCOUNT_REGISTERED")
+ * @param {object}   schema     - Objeto con { parameters: [ { name, default? } ] }
+ *                                Típicamente: discoverySchema.messages.find(m => m.id === ...)
+ * @param {Function} handlerFn  - function(msg, sender, sendResponse) => bool|void
+ *                                Mismo contrato que chrome.runtime.onMessage listener.
+ *                                Debe retornar `true` si la respuesta es async.
+ */
+function registerHandler(eventName, schema, handlerFn) {
+  REGISTERED_HANDLERS[eventName] = { schema, handlerFn };
+}
+
+/**
+ * applySchemaDefaults(msg, schema)
+ *
+ * Retorna una copia shallow de msg con los defaults del schema aplicados
+ * para los campos que estén ausentes (undefined o null).
+ * No muta el mensaje original.
+ */
+function applySchemaDefaults(msg, schema) {
+  if (!schema || !Array.isArray(schema.parameters)) return msg;
+
+  const patched = Object.assign({}, msg);
+  for (const param of schema.parameters) {
+    if (param.default !== undefined && patched[param.name] == null) {
+      patched[param.name] = param.default;
+    }
+  }
+  return patched;
+}
+
+// ============================================================================
+// SCHEMA LOADER — Harness Protocol Single Source of Truth
+// Carga los JSON schemas desde el bundle de la extensión y registra los
+// handlers que los consumen. Esto reemplaza la dependencia de los manifests
+// JS para los eventos migrados.
+// ============================================================================
+
+let discoverySchema = null;
+
+async function loadProtocolSchemas() {
+  try {
+    const r = await fetch(chrome.runtime.getURL('protocols/discovery.schema.json'));
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    discoverySchema = await r.json();
+    console.log('[Synapse] ✓ discovery.schema.json cargado');
+    registerOnboardingHandlers();
+  } catch (err) {
+    console.error('[Synapse] ✗ Error cargando discovery.schema.json:', err);
+  }
+}
+
+function registerOnboardingHandlers() {
+  const accountRegisteredSchema = discoverySchema?.messages?.find(
+    m => m.id === 'account_registered'
+  );
+
+  registerHandler('ACCOUNT_REGISTERED', accountRegisteredSchema, (msg, sender, sendResp) => {
+    if (!msg.profile_id || !msg.launch_id) {
+      console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED enviado sin profile_id/launch_id');
+    }
+
+    console.log('[Synapse] ✓ ACCOUNT_REGISTERED recibido desde discovery.js — service:', msg.service);
+
+    forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
+      _dir:              'in',
+      service:           msg.service           || null,
+      username:          msg.username          || null,
+      token_fingerprint: msg.token_fingerprint || null,
+      profile_id:        msg.profile_id        || config?.profileId,
+      launch_id:         msg.launch_id         || config?.launchId,
+    });
+
+    // 1. Forwarding del milestone al host → MilestoneReactor → Landing
+    sendToHost({
+      event:             'ACCOUNT_REGISTERED',
+      service:           msg.service,
+      username:          msg.username          || '',
+      token_fingerprint: msg.token_fingerprint || '',
+      profile_id:        msg.profile_id        || config?.profileId,
+      launch_id:         msg.launch_id         || config?.launchId,
+      timestamp:         msg.timestamp         || Date.now(),
+    });
+
+    // 2. GITHUB_TOKEN_STORED al host — registra el PAT en ServerManager.
+    //    Con registerHandler, msg.service y msg.token_fingerprint ya tienen
+    //    los defaults del schema aplicados — esta condición nunca ve undefined.
+    if (msg.service === 'github' && msg.token_fingerprint) {
+      sendToHost({
+        event:             'GITHUB_TOKEN_STORED',
+        token_fingerprint: msg.token_fingerprint,
+        profile_id:        msg.profile_id || config?.profileId,
+        launch_id:         msg.launch_id  || config?.launchId,
+        timestamp:         Date.now(),
+      });
+      console.log('[Synapse] ✓ GITHUB_TOKEN_STORED emitido internamente desde ACCOUNT_REGISTERED');
+    }
+
+    sendResp({ received: true });
+    return true;
+  });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
+
+  // --- Registered handler dispatch (Harness Protocol SSoT) ---
+  // Chequear primero; si el evento está registrado, despachar y retornar.
+  // Los handlers registrados reciben el mensaje con defaults de schema aplicados.
+  const _registeredEvent = msg.event || msg.command;
+  if (_registeredEvent && REGISTERED_HANDLERS[_registeredEvent]) {
+    const { schema, handlerFn } = REGISTERED_HANDLERS[_registeredEvent];
+    const patchedMsg = applySchemaDefaults(msg, schema);
+    const _asyncResult = handlerFn(patchedMsg, sender, sendResp);
+    // Preservar el contrato `return true` para canales async
+    if (_asyncResult === true) return true;
+    return;
+  }
+  // --- Fin registered handler dispatch ---
+  // (el if-chain existente continúa sin modificaciones a partir de aquí)
 
   // Harness: handshake de buffer — la tab del Harness recién abierta pide
   // "decime todo lo que me perdí" y le contestamos con harnessLogBuffer.
@@ -1133,52 +1265,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     forwardToDebugPanel('synapse', 'DISCOVERY_COMPLETE', {
       steps_done: msg.payload?.steps_done || msg.steps_done || null
     }, config?.profileId);
-    sendResp({ received: true });
-    return true;
-  }
-
-  // ACCOUNT_REGISTERED
-  if (event === 'ACCOUNT_REGISTERED') {
-    if (!msg.profile_id || !msg.launch_id) {
-      console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED enviado sin profile_id/launch_id');
-    }
-
-    console.log('[Synapse] ✓ ACCOUNT_REGISTERED recibido desde discovery.js — service:', msg.service);
-
-    forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
-      _dir:             'in',
-      service:          msg.service          || null,
-      username:         msg.username         || null,
-      token_fingerprint: msg.token_fingerprint || null,
-      profile_id:       msg.profile_id       || config?.profileId,
-      launch_id:        msg.launch_id        || config?.launchId,
-    });
-
-    // 1. Forwarding del milestone al host → MilestoneReactor → Landing
-    sendToHost({
-      event:             'ACCOUNT_REGISTERED',
-      service:           msg.service,
-      username:          msg.username          || '',
-      token_fingerprint: msg.token_fingerprint || '',
-      profile_id:        msg.profile_id        || config?.profileId,
-      launch_id:         msg.launch_id         || config?.launchId,
-      timestamp:         msg.timestamp         || Date.now(),
-    });
-
-    // 2. GITHUB_TOKEN_STORED al host — registra el PAT en ServerManager.
-    //    Se emite después del milestone para que el reactor ya tenga el step
-    //    marcado cuando el host procese el token.
-    if (msg.service === 'github' && msg.token_fingerprint) {
-      sendToHost({
-        event:             'GITHUB_TOKEN_STORED',
-        token_fingerprint: msg.token_fingerprint,
-        profile_id:        msg.profile_id || config?.profileId,
-        launch_id:         msg.launch_id  || config?.launchId,
-        timestamp:         Date.now(),
-      });
-      console.log('[Synapse] ✓ GITHUB_TOKEN_STORED emitido internamente desde ACCOUNT_REGISTERED');
-    }
-
     sendResp({ received: true });
     return true;
   }
@@ -1651,29 +1737,3 @@ initialize();
 chrome.runtime.onSuspend?.addListener(() => {
   console.log('[Synapse] 💤 Service worker suspending');
 });
-
-// ============================================================================
-// DEBUGGING HELPERS
-// ============================================================================
-
-if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) {
-  console.log('[Synapse] 🐛 Debug mode enabled');
-  
-  self.SYNAPSE_DEBUG = {
-    getState: () => ({
-      initialized: isInitialized,
-      connectionState,
-      handshakeState,
-      hasPort: nativePort !== null,
-      config: config ? { ...config, bridge_name: '***' } : null,
-      mode: config?.mode
-    }),
-    forceReconnect: () => {
-      if (nativePort) {
-        nativePort.disconnect();
-      }
-      isInitialized = false;
-      initialize();
-    }
-  };
-}

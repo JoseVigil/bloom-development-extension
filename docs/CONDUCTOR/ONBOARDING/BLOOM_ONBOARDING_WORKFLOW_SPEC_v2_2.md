@@ -1,10 +1,10 @@
-# BLOOM — Onboarding Workflow Spec v2.1
+# BLOOM — Onboarding Workflow Spec v2.2
 ## `nucleus synapse onboarding` — Especificación de implementación
 
 > **Destinatario:** Claude instancia — implementación Go + Python + JavaScript  
-> **Versión anterior:** v2.0 (2026-03-05)  
+> **Versión anterior:** v2.1 (2026-06-15)  
 > **Estado:** Arquitectura verificada en código fuente real · UX Conductor documentada  
-> **Fecha:** 2026-06-15
+> **Fecha:** 2026-06-25
 
 ---
 
@@ -47,9 +47,10 @@ Bloom tiene **dos flujos de onboarding independientes** que no deben confundirse
 
 ```
 1. Conductor onboarding completo:
-   - GitHub autenticado (pollIdentity → github_auth: true)
+   - Workspace local configurado (nucleus_create — ruta base + org slug)
+   - GitHub autenticado (pollIdentity → github_auth: true) — requiere nucleus_create
    - Vault inicializado
-   - Nucleus inicializado (nucleus init completado)
+   - Nucleus inicializado (nucleus init completado — corre post github_auth con github_id disponible)
    - Genesis Mandate creado
 
 2. Servicios corriendo:
@@ -1013,10 +1014,8 @@ en una instancia separada:
 
 ---
 
-**Versión:** 2.1  
-**Fecha:** 2026-06-15  
+**Versión:** 2.2  
+**Fecha:** 2026-06-25  
 **Estado:** Listo para implementación  
-**Cambios vs v2.0:**
-- Agregada sección §0.5 — Mapa del sistema con los dos onboardings diferenciados  
-- Documentada relación y prerequisitos entre Conductor onboarding y Synapse onboarding  
-- Sección §13 expandida con referencia a `IMPL_PROMPT_ONBOARDING_UX_v1.md`
+**Cambios vs v2.1:**
+- Actualizada sección §0.5 — prerequisitos del Conductor onboarding en el nuevo orden: `nucleus_create` primero, `github_auth` segundo (requiere `nucleus_path`). Nota sobre `nucleus init` ejecutándose post-`github_auth` con `github_id` disponible.

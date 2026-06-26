@@ -35,6 +35,55 @@ const ProtocolReader = {
   },
 
   /**
+   * Carga los tres schemas JSON independientes vía chrome.runtime.getURL()
+   * y los convierte en manifests compatibles con el array this.manifests.
+   * Retorna una Promise que resuelve cuando todos terminaron (con allSettled,
+   * para que un schema faltante no bloquee los otros dos).
+   */
+  async discoverFromJSON() {
+    const SCHEMA_FILES = [
+      { file: 'protocols/discovery.schema.json', key: 'DISCOVERY_PROTOCOL_MANIFEST' },
+      { file: 'protocols/landing.schema.json',   key: 'LANDING_PROTOCOL_MANIFEST'   },
+      { file: 'protocols/ionpump.schema.json',   key: 'IONPUMP_PROTOCOL_MANIFEST'   },
+    ];
+
+    // Solo disponible dentro de la extensión; en dev standalone esta función
+    // simplemente no carga nada (los legacy globals ya cubrieron el caso).
+    if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) {
+      console.log('[ProtocolReader] chrome.runtime.getURL no disponible — skipping JSON schemas');
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      SCHEMA_FILES.map(async ({ file, key }) => {
+        const url = chrome.runtime.getURL(file);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${file}`);
+        const schema = await res.json();
+
+        // Evitar duplicados: si el global legacy ya cargó este manifest, omitir.
+        const alreadyLoaded = this.manifests.some(m => m.key === key);
+        if (alreadyLoaded) {
+          console.log(`[ProtocolReader] ↷ JSON schema skipped (legacy global present): ${key}`);
+          return;
+        }
+
+        this.manifests.push({ key, manifest: schema });
+        console.log(`[ProtocolReader] ✓ JSON schema loaded: ${key} (${schema.messages?.length || 0} messages)`);
+      })
+    );
+
+    // Loguear failures sin explotar
+    for (const [i, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        console.warn(`[ProtocolReader] ✗ Failed to load ${SCHEMA_FILES[i].file}:`, result.reason);
+      }
+    }
+
+    console.log(`[ProtocolReader] After JSON discovery: ${this.manifests.length} protocol(s) total.`);
+  },
+
+  /**
    * Renders the protocol list into #protocol-list.
    * Each message is a clickable item that populates the Simulator.
    */
@@ -585,14 +634,20 @@ const Harness = {
       _sendHarnessHello(0);
     }
 
-    // 2. Discover and render protocols
+    // 2. Discover protocols — primero los globales legacy (síncronos),
+    //    luego los JSON schemas via chrome.runtime.getURL (async).
+    //    Los JSON solo se pushean si el global legacy NO cubrió ese key,
+    //    por lo que la coexistencia temporal es segura.
     ProtocolReader.discover();
+    await ProtocolReader.discoverFromJSON();
     ProtocolReader.render();
+    Logger.log('INFO', `Protocols loaded: ${ProtocolReader.manifests.length} total`);
 
     // 3. Schedule a second discovery pass for late-loading scripts
-    setTimeout(() => {
+    setTimeout(async () => {
       const before = ProtocolReader.manifests.length;
       ProtocolReader.discover();
+      await ProtocolReader.discoverFromJSON();
       if (ProtocolReader.manifests.length !== before) {
         ProtocolReader.render();
         Logger.log('INFO', `Late discovery: ${ProtocolReader.manifests.length} protocol(s) total`);

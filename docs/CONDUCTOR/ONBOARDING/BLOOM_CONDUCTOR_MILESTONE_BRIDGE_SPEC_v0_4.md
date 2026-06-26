@@ -1,7 +1,13 @@
 # Bloom — Conductor Milestone Event Bridge
-## Especificación de investigación · v0.3 · 20 de junio de 2026
+## Especificación de investigación · v0.4 · 25 de junio de 2026
 
 > **Estado de este documento:** pre-implementación. No codear hasta cerrar las incógnitas de la §3.
+
+> **Enmienda · 25 de junio de 2026 — Cambio de orden en el flujo de onboarding de Conductor**
+>
+> El onboarding del Conductor fue reestructurado para invertir el orden de los dos primeros pasos. Anteriormente el flujo comenzaba con la autenticación de GitHub (`github_auth`) y luego creaba el workspace local (`nucleus_create`). El nuevo orden es el inverso: el usuario configura primero su espacio de trabajo local antes de cualquier autenticación externa. El step 1 (`nucleus_create`) ahora tiene `requires: []` y captura dos valores — la ruta base del workspace y el slug de organización — que se pasan al binario mediante `nucleus create --org {slug} --path {basePath}/{slug}` (o `--temporary` si el campo org queda vacío, delegando la resolución del slug al binario). El step 2 (`github_auth`) pasa a requerir `nucleus_path` como prerequisito. El comando `nucleus init` no se ejecuta en este step — es un comando separado que corre después del GitHub auth en el step 2, una vez que el sistema dispone del `github_id`. El stepper visual fue reducido de 5 nodos a 4: Workspace → Identity → Providers → Project.
+>
+> Esta enmienda actualiza §2.2 (orden de `ONBOARDING_STEP_IDS`), §4.3 (schema del Milestone Registry — entrada nueva para `nucleus_create`, cadena de `requires` corregida), y §4.5 (`_buildHandlers()` del MilestoneReactor — handler nuevo para `nucleus_create`). El `nucleus.json` de referencia para estado de partida limpio es: `{ "completed": false, "started": false, "current_step": "nucleus_create", "completed_steps": [] }`.
 >
 > **Propósito:** diseñar el canal robusto entre Cortex (extensión de Chrome) y Conductor (Electron) para que Workspace reaccione a los hitos del onboarding en tiempo real, sin hardcodear eventos ni lógica de negocio en el frontend.
 >
@@ -48,26 +54,28 @@ La cadena existe. El problema es que **es unidireccional y asincrónica** — Co
 {
   success: true,
   steps: {
-    github_auth:       true/false,
-    nucleus_create:    true/false,
+    nucleus_create:    true/false,   // step 1 — workspace local
+    github_auth:       true/false,   // step 2 — requiere nucleus_create
     vault_init:        true/false,
     google_auth:       true/false,
     ai_provider_setup: true/false,
     project_create:    true/false
   },
-  completedSteps: ['github_auth', ...]
+  completedSteps: ['nucleus_create', ...]
 }
 ```
 
 Los step IDs están hardcodeados en `ONBOARDING_STEP_IDS` en `onboarding-handlers.js`:
 ```javascript
 const ONBOARDING_STEP_IDS = [
-  'github_auth', 'nucleus_create', 'vault_init',
+  'nucleus_create', 'github_auth', 'vault_init',
   'google_auth', 'ai_provider_setup', 'project_create'
 ];
 ```
 
 **Este es el hardcodeo que queremos eliminar.** Estos IDs deberían venir de una fuente de verdad dinámica.
+
+> **Nota (enmienda 25-jun-2026):** `nucleus_create` es ahora el step 1. `github_auth` requiere que `nucleus_create` esté completo. Conductor ya va a ver `completed_steps: ["nucleus_create"]` en el estado inicial del onboarding — cualquier lógica de polling de respaldo (Opción D en §4.4) debe contemplar que ese step siempre estará marcado en `nucleus.json` antes de que el usuario llegue a `github_auth`.
 
 ### 2.3 Lo que tiene `onboarding.js` (renderer) hoy
 
@@ -209,12 +217,23 @@ Independientemente de dónde viva, el registry debería tener este schema:
   "version": "1.0",
   "steps": [
     {
+      "id": "nucleus_create",
+      "label": "Workspace Configured",
+      "description": "Local workspace path and org slug captured. nucleus create executed.",
+      "provider": null,
+      "blocking": true,
+      "requires": [],
+      "cortex_events": [],
+      "nucleus_event": "ONBOARDING_STEP_COMPLETE",
+      "conductor_reaction": "onNucleusCreateComplete"
+    },
+    {
       "id": "github_auth",
       "label": "GitHub Connected",
       "description": "Personal Access Token stored in Chrome vault",
       "provider": "github",
       "blocking": true,
-      "requires": [],
+      "requires": ["nucleus_create"],
       "cortex_events": ["GITHUB_TOKEN_STORED", "GITHUB_ACCOUNT_CREATED"],
       "nucleus_event": "ONBOARDING_STEP_COMPLETE",
       "conductor_reaction": "onGithubAuthComplete"
@@ -279,6 +298,8 @@ Independientemente de dónde viva, el registry debería tener este schema:
 ```
 
 **Nota:** `conductor_reaction` es el nombre de un handler en el código de Conductor. Si en el futuro aparece un hito nuevo, se agrega al registry y se escribe el handler — la infraestructura no cambia.
+
+> **Cambio vs v0.3 (enmienda 25-jun-2026):** Se agrega la entrada `nucleus_create` como step 1 con `requires: []`. `github_auth` pasa a `requires: ["nucleus_create"]`. El stepper visual tiene 4 nodos (Workspace → Identity → Providers → Project), no 5 — el handler `onNucleusCreateComplete` debe reflejar esto al actualizar el stepper de Conductor.
 
 ### 4.4 El Event Bridge (opciones en orden de preferencia)
 
@@ -351,6 +372,7 @@ class MilestoneReactor {
   _buildHandlers() {
     // Mapeo dinámico: id → función handler
     return {
+      nucleus_create:    () => this._onNucleusCreateComplete(),
       github_auth:       () => this._onGithubAuthComplete(),
       vault_init:        () => this._onVaultInitComplete(),
       google_auth:       () => this._onGoogleAuthComplete(),
@@ -384,6 +406,18 @@ class MilestoneReactor {
   }
 
   // ── HANDLERS POR HITO ──────────────────────────────────────────────────
+
+  _onNucleusCreateComplete() {
+    // UI: marcar Workspace como configurado en el stepper de Conductor (nodo 1/4)
+    // Habilitar el botón "Continue" hacia github_auth
+    const win = this.getWindow();
+    if (win) win.webContents.send('onboarding:step-ui-update', {
+      stepId: 'nucleus_create',
+      action: 'mark_confirmed',
+      node:   'workspace',
+      label:  'Workspace listo'
+    });
+  }
 
   _onGithubAuthComplete() {
     // UI: marcar GitHub como confirmado en screen-identity
@@ -560,5 +594,6 @@ Estas decisiones están tomadas independientemente de cómo se resuelvan las inc
 ---
 
 *Documento de investigación — 20 de junio de 2026.*
-*Versión 0.1 — pre-implementación. No codear hasta cerrar §3.*
+*Versión 0.4 — pre-implementación. No codear hasta cerrar §3.*
+*Enmienda 25-jun-2026: cambio de orden nucleus_create → github_auth. Ver §2.2, §4.3, §4.5.*
 *Próxima acción: adjuntar los archivos de §6 y responder el checklist de §5.*

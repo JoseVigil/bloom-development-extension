@@ -1,8 +1,9 @@
 # Bloom Workspace Harness — Manual de Referencia
 
-**Sistema:** Bloom Conductor · Workspace (Electron)  
-**Protocolo:** Synapse v4  
-**Estado:** funcional — canal Workspace → nucleus → bus → Cortex verificado  
+**Sistema:** Bloom Conductor · Workspace (Electron)
+**Protocolo:** Synapse v4
+**Estado:** funcional — canal Workspace → nucleus → bus → Cortex verificado
+**Revisión:** Junio 2026 — Jun 25 (actualizado con hallazgos de auditoría Cortex)
 
 ---
 
@@ -11,9 +12,18 @@
 El Harness es el panel de debug del protocolo Synapse en el lado de Workspace. Su rol es doble:
 
 - **Observar** todos los eventos que circulan por el bus de nucleus en tiempo real, vía WebSocket
-- **Simular** eventos del protocolo para testear que Cortex los recibe y los procesa correctamente, sin depender del flujo real
+- **Simular** eventos del protocolo para testear que Cortex los recibe y los procesa correctamente
 
-El Harness **no modifica estado del sistema** por sí mismo. Cuando simula un evento, lo inyecta en el bus exactamente igual que lo haría cualquier otro componente. nucleus lo procesa y lo distribuye. El resultado es indistinguible de un evento real.
+El Harness **no modifica estado del sistema** por sí mismo. Cuando simula un evento, lo inyecta en el bus exactamente igual que lo haría cualquier otro componente. nucleus lo procesa y lo distribuye.
+
+### Relación con el Cortex Harness
+
+El Workspace Harness y el Cortex Harness son **dos consumidores del mismo feed**. `background.js` (Cortex) emite cada evento hacia dos destinos simultáneos:
+
+1. **POST** `http://localhost:48215/api/internal/system-event` → llega aquí (Workspace Harness, via nucleus)
+2. **`chrome.runtime.sendMessage`** → llega al Cortex Harness (tab de la extensión)
+
+Si el shape del mensaje `HARNESS_LOG` cambia, **rompe a los dos consumidores**. Cualquier cambio en el formato debe coordinarse.
 
 ---
 
@@ -39,16 +49,16 @@ El Harness **no modifica estado del sistema** por sí mismo. Cuando simula un ev
         │                               │
    WS broadcast                   otros listeners
    type: "system:event"                │
-        │                           Cortex
-   todos los clientes              (web / extension)
+        │                           Cortex / background.js
+   todos los clientes              (también recibe por POST)
    conectados al WS
 ```
 
 ### Canal 1 — WebSocket (observación)
 
-`ws://localhost:4124` — el Control Plane de nucleus hace broadcast de todos los eventos del bus a todos los clientes conectados.
+`ws://localhost:4124` — nucleus hace broadcast de todos los eventos del bus.
 
-Envelope que emite nucleus:
+Envelope:
 ```json
 {
   "type": "system:event",
@@ -62,22 +72,12 @@ Envelope que emite nucleus:
 }
 ```
 
-> **Importante:** el discriminador es `type: "system:event"` (dos puntos), no `"system_event"` (guión bajo). El código actual acepta ambos para compatibilidad.
-
-Al conectar, nucleus también emite:
-```json
-{
-  "event": "bloom.ai.execution.connected",
-  "data": { "clientId": "client_...", "timestamp": ... }
-}
-```
-Este mensaje no tiene `type: "system:event"` por lo que el Harness lo ignora correctamente.
+> El discriminador es `type: "system:event"` (con dos puntos). El código actual acepta ambos formatos (`"system:event"` y `"system_event"`) para compatibilidad retroactiva.
 
 ### Canal 2 — HTTP REST (simulación)
 
 `POST http://localhost:48215/api/internal/system-event`
 
-Payload:
 ```json
 {
   "category": "nucleus",
@@ -89,11 +89,11 @@ Payload:
 
 Respuesta exitosa: `{"ok": true}`
 
-El evento entra al bus de nucleus y nucleus lo redistribuye por WS a todos los clientes conectados, incluyendo al propio Harness (que lo ve aparecer en el feed) y a Cortex.
+El evento entra al bus de nucleus y se redistribuye por WS a todos los clientes.
 
 ### Canal 3 — postMessage bridge (IPC proxy)
 
-Como `debug.html` corre en un `<iframe>`, no tiene acceso a `window.onboarding` (que el preload de Electron solo inyecta en el documento raíz). Para el health, `onboarding.js` actúa como proxy:
+Como `debug.html` corre en un `<iframe>`, no tiene acceso a `window.onboarding`. Para el health, `onboarding.js` actúa como proxy:
 
 ```
 debug.html (iframe)
@@ -101,20 +101,18 @@ debug.html (iframe)
   ← postMessage({ type: 'HEALTH_RESPONSE', data }) ← window.onboarding.health() via IPC
 ```
 
-El sim también tiene este fallback pero actualmente no se usa porque el fetch directo a `:48215` funciona.
-
 ---
 
 ## 3. Archivos del sistema
 
 | Archivo | Ubicación | Rol |
 |---|---|---|
-| `debug.html` | `shared/debug.html` | Panel de debug completo — feed, sim-bar, health sidebar |
+| `debug.html` | `shared/debug.html` | Panel de debug — feed, sim-bar, health sidebar |
 | `onboarding.html` | `onboarding/onboarding.html` | Documento raíz que monta el iframe |
-| `onboarding.js` | `onboarding/onboarding.js` | Lógica del renderer — incluye `toggleDebugPanel()` y el postMessage bridge |
-| `preload_onboarding.js` | `onboarding/preload_onboarding.js` | Expone `window.onboarding` al renderer raíz via `contextBridge` |
-| `main_conductor.js` | `main_conductor.js` | Proceso main — IPC handlers, spawn de nucleus, `onboarding:health` |
-| `onboarding-handlers.js` | `onboarding-handlers.js` | Handlers IPC específicos del flujo de onboarding |
+| `onboarding.js` | `onboarding/onboarding.js` | Lógica del renderer — `toggleDebugPanel()`, postMessage bridge |
+| `preload_onboarding.js` | `onboarding/preload_onboarding.js` | Expone `window.onboarding` via `contextBridge` |
+| `main_conductor.js` | `main_conductor.js` | Proceso main — IPC handlers, spawn de nucleus |
+| `onboarding-handlers.js` | `onboarding-handlers.js` | Handlers IPC del flujo de onboarding |
 
 ---
 
@@ -127,10 +125,10 @@ El sim también tiene este fallback pero actualmente no se usa porque el fetch d
 │              │                                                      │
 │  HEALTH      │  FEED                                                │
 │  ────────    │                                                      │
-│  ● nucleus   │  [nucleus] BOOTSTRAP_READY  19:17:47  success       │
-│    API OK    │  [synapse] HANDSHAKE_CONFIRMED  19:15:22  info      │
-│              │  [temporal] WORKFLOW_STATE_CHANGED  19:14:01  warn  │
-│  FILTERS     │                                                      │
+│  ● nucleus   │  [synapse] HANDSHAKE_CONFIRMED  19:15:22  info      │
+│    API OK    │  [synapse] HOST→:ACCOUNT_REGISTERED  19:16:01  info │
+│              │  [synapse] GITHUB_PAT_DETECTED  19:17:30  info      │
+│  FILTERS     │  [nucleus] BOOTSTRAP_READY  19:17:47  success       │
 │  ────────    │                                                      │
 │  ☑ synapse   │                                                      │
 │  ☑ temporal  │                                                      │
@@ -144,29 +142,25 @@ El sim también tiene este fallback pero actualmente no se usa porque el fetch d
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Sidebar izquierdo — Health + Filters
-
-**Health section:** muestra el estado de nucleus. Dado que `/health` REST devuelve `{status, timestamp, version}` sin detalle de componentes, la UI muestra "API OK" cuando el server responde 200. El detalle completo de componentes (brain, temporal, vault, etc.) solo está disponible via `nucleus --json health` en la CLI.
-
-**Filters:** checkbox por categoría de evento. Cada categoría tiene un color distinto en el feed. El contador muestra cuántos eventos de esa categoría llegaron en la sesión actual.
-
 ### Feed central
 
-Cada entrada muestra: categoría (con color), nombre del evento, timestamp, nivel (success/warn/error/info).
+Cada entrada muestra: categoría (con color), nombre del evento, timestamp, nivel.
 
-Click en una entrada abre el **detail drawer** con el payload completo en JSON.
+Las categorías que emite `background.js` hacia este feed son:
+- `synapse` — eventos del protocolo Synapse (handshake, tokens, discovery, IonPump)
+- `sentinel` — eventos de la extensión Chrome (actuator_ready → `EXTENSION_LOADED`)
+- `brain` — eventos IonPump (ION_FLOW_*, ION_RELOAD_*, ION_INSPECT_RESULT)
 
-El feed tiene un máximo de 500 entradas. Las entradas más nuevas aparecen arriba.
+Los nombres de eventos tienen prefijos direccionales:
+- `HOST→:LABEL` — mensaje entrante del host a background.js
+- `→HOST:LABEL` — mensaje saliente de background.js al host
+- `LABEL` sin prefijo — evento reportado por el propio componente (ej: `HANDSHAKE_CONFIRMED`)
 
-**Botón Pause** (⏸): congela el feed sin desconectar el WS. Los eventos siguen llegando pero no se renderizan hasta que se reanude.
+> **Nota de seguridad:** tokens y API keys son sanitizados antes de llegar al feed — primeros 10 caracteres + `…`. Nunca aparece el token completo.
 
-**Botón Clear** (🗑): limpia el feed visual y el array de estado.
+### Filtros
 
-### Sim-bar inferior
-
-Dropdown con todos los eventos simulables agrupados por categoría + botón **POST →** que los despacha al bus.
-
-**Auto:** modo de disparo automático que envía el evento seleccionado cada N segundos. Útil para testear que Cortex maneja eventos repetidos correctamente.
+Checkbox por categoría. El contador muestra cuántos eventos de esa categoría llegaron en la sesión actual.
 
 ---
 
@@ -175,16 +169,15 @@ Dropdown con todos los eventos simulables agrupados por categoría + botón **PO
 ### synapse
 | Evento | Propósito | Data |
 |---|---|---|
-| `GITHUB_PAT_DETECTED` | Simula que el clipboard monitor detectó un token | `token_fingerprint: "ghp_...abc"` |
-| `GITHUB_TOKEN_STORED` | Simula que el token fue cifrado en vault | `vault_key: "sk_bloom_pat"` |
+| `GITHUB_PAT_DETECTED` | Simula clipboard monitor detectando token | `token_fingerprint: "ghp_...abc"` |
+| `GITHUB_TOKEN_STORED` | Simula token cifrado en vault | `vault_key: "sk_bloom_pat"` |
 | `DISCOVERY_COMPLETE` | Cierra el flujo de onboarding | `steps_done: 5` |
 | `HANDSHAKE_CONFIRMED` | Handshake Synapse entre Workspace y Cortex | `extension_id: "bloom-ext"` |
 
 ### temporal
 | Evento | Propósito | Data |
 |---|---|---|
-| `WORKFLOW_STATE_CHANGED` | Cambio de estado de un workflow Temporal | `from: "PENDING", to: "RUNNING"` |
-| `INTENT_COMPLETED` | Un intent de automatización completó | `intent: "navigate_to_pr"` |
+| `WORKFLOW_STATE_CHANGED` | Un workflow cambió de estado | `workflow: "onboarding", state: "completed"` |
 | `INTENT_FAILED` | Un intent falló | `intent: "click_merge", error: "element_not_found"` |
 
 ### brain
@@ -213,17 +206,19 @@ Dropdown con todos los eventos simulables agrupados por categoría + botón **PO
 
 ### Flujo A — Verificar que Cortex recibe un evento
 
-1. Tener Cortex conectado al WS en `:4124` (verificar en logs de Cortex)
+1. Tener Cortex conectado (verificar handshake completado en logs de background.js)
 2. En el sim-bar, seleccionar el evento a testear
 3. Presionar **POST →**
-4. Verificar en el feed de Workspace que aparece la entrada (borde verde = llegó al servidor)
-5. Verificar en Cortex que el evento llegó con el mismo timestamp
+4. Verificar en el feed de Workspace que aparece la entrada
+5. Verificar en el Cortex Harness (tab de la extensión) que el mismo evento aparece en su feed
 
-### Flujo B — Simular el flujo completo de onboarding
+### Flujo B — Simular el flujo completo github_auth → Landing
 
-Disparar en orden, verificando que Cortex avanza en cada paso:
+El objetivo del **primer milestone**: disparar desde Workspace y verificar que Cortex lo recibe y abre Landing.
 
 ```
+Workspace sim-bar → Cortex background.js → Discovery → Landing
+
 1. nucleus    · BOOTSTRAP_READY          ← handshake inicial
 2. sentinel   · EXTENSION_LOADED         ← extensión lista
 3. brain      · PROFILE_LAUNCHED         ← Chrome con perfil activo
@@ -233,9 +228,11 @@ Disparar en orden, verificando que Cortex avanza en cada paso:
 7. synapse    · DISCOVERY_COMPLETE       ← onboarding finalizado
 ```
 
+Verificar en el feed del Cortex Harness que aparecen los mismos eventos con los mismos timestamps.
+
 ### Flujo C — Testear resiliencia de Cortex
 
-Usar **Auto** con `temporal · INTENT_FAILED` para verificar que Cortex maneja fallos repetidos sin romperse. Verificar que no acumula handlers o que el retry logic funciona correctamente.
+Usar **Auto** con `temporal · INTENT_FAILED` para verificar que Cortex maneja fallos repetidos sin romperse.
 
 ---
 
@@ -245,33 +242,32 @@ Usar **Auto** con `temporal · INTENT_FAILED` para verificar que Cortex maneja f
 
 **Causa:** `:4124` no está escuchando o el Control Plane no levantó.
 
-**Verificar:**
 ```bash
 ss -tlnp | grep 4124
 nucleus --json health | python3 -m json.tool
 ```
 
-Si el proceso existe pero el WS no conecta, revisar que el iframe no tenga una CSP que bloquee `ws://localhost`. La meta CSP de `debug.html` debe incluir `ws://localhost:4124` en `connect-src`.
+Verificar que la meta CSP de `debug.html` incluye `ws://localhost:4124` en `connect-src`.
 
 ---
 
 ### Health muestra "UNKNOWN"
 
-**Causa A:** el bridge de postMessage no está instalado — `onboarding.js` no tiene `_installDebugHealthBridge()` o `toggleDebugPanel()` no la llama.
+**Causa A:** bridge de postMessage no instalado — `onboarding.js` no tiene `_installDebugHealthBridge()`.
 
 **Causa B:** nucleus no está corriendo. Verificar con `nucleus --json health`.
 
-**Causa C:** todas las rutas REST fallaron. La única ruta real es `/health`. Si devuelve 200 con `{status:"ok"}` pero el Harness muestra UNKNOWN, el código está validando por `data.components || data.state` y `/health` no tiene esos campos — usar `renderHealthSimple()`.
+**Causa C:** `/health` devuelve `{status:"ok"}` pero el Harness valida `data.components || data.state` — usar `renderHealthSimple()`.
 
 ---
 
 ### POST → no hace nada visible
 
-**Causa A:** el fetch llegó al servidor (`{"ok":true}`) pero el evento no vuelve por WS porque el WS no está conectado. Verificar el dot del WS.
+**Causa A:** el fetch llegó al servidor (`{"ok":true}`) pero el WS no está conectado. Verificar el dot del WS.
 
-**Causa B:** el envelope del WS cambió. El discriminador actual acepta `type: "system:event"` y `type: "system_event"`. Si nucleus cambia el envelope, actualizar en `ws.onmessage` de `debug.html`.
+**Causa B:** el envelope del WS cambió. Discriminador actual: `type: "system:event"` o `type: "system_event"`.
 
-**Causa C:** el fetch falla con 404. La ruta correcta es `/api/internal/system-event`. Verificar con:
+**Causa C:** fetch falla con 404. Verificar:
 ```bash
 curl -X POST http://localhost:48215/api/internal/system-event \
   -H "Content-Type: application/json" \
@@ -281,18 +277,29 @@ curl -X POST http://localhost:48215/api/internal/system-event \
 
 ---
 
+### Evento llega al Workspace Harness pero no al Cortex Harness
+
+**Causa probable:** `background.js` está emitiendo correctamente (el POST llegó a nucleus), pero la tab del Cortex Harness no tiene un listener activo o hubo un error silencioso en `chrome.runtime.sendMessage`.
+
+**Verificar en Dev Tools de background.js** (service worker):
+1. ¿`harnessLogBuffer` tiene entradas?
+2. ¿El `chrome.runtime.sendMessage(harnessMsg).catch(() => {})` falló silenciosamente?
+
+El Cortex Harness debería pedir el replay al abrir (`HARNESS_HELLO`). Si el replay no llega, verificar que la tab del Harness está completamente cargada antes de esperarlo.
+
+---
+
 ### Notification-rail visible al abrir debug
 
-**Causa:** `toggleDebugPanel()` en `onboarding.js` no oculta `#notification-rail`.
+**Causa:** `toggleDebugPanel()` no oculta `#notification-rail`.
 
-**Fix:** en la rama `if (debugPanelOpen)` de `toggleDebugPanel()`:
 ```javascript
+// En onboarding.js — rama if (debugPanelOpen):
 const rail = document.getElementById('notification-rail');
 if (rail) rail.style.display = 'none';
 document.getElementById('cortex-bar')?.classList.remove('visible');
-```
-Y en la rama `else`:
-```javascript
+
+// En rama else:
 const rail2 = document.getElementById('notification-rail');
 if (rail2) rail2.style.display = '';
 ```
@@ -305,7 +312,7 @@ if (rail2) rail2.style.display = '';
 [WARN] postMessage health bridge: timeout
 ```
 
-Esto es esperado si `onboarding.js` no tiene el bridge instalado. El Harness cae al fallback REST y muestra "API OK" con la info simplificada. No es un error bloqueante — el health y el sim funcionan igual.
+Comportamiento esperado si `onboarding.js` no tiene el bridge instalado. El Harness cae al fallback REST y muestra "API OK". No es bloqueante.
 
 Para eliminar el warning, agregar `_installDebugHealthBridge()` en `onboarding.js` y llamarla desde `toggleDebugPanel()`.
 
@@ -317,32 +324,31 @@ Para eliminar el warning, agregar `_installDebugHealthBridge()` en `onboarding.j
 
 | # | Problema | Impacto | Estado |
 |---|---|---|---|
-| 1 | Health sidebar muestra "API OK" en vez del detalle de componentes | Informativo — no se puede ver el estado de brain, temporal, vault desde el Harness | Requiere bridge postMessage funcionando |
-| 2 | postMessage bridge da timeout — el bridge en `onboarding.js` no se instala correctamente en todos los builds | Health y sim funcionan igual por REST, pero los logs muestran warnings | Investigar por qué `_installDebugHealthBridge()` no responde |
-| 3 | `profile_id` hardcodeado en los eventos del sim-bar (`"2183af25"`) | Los eventos simulados no corresponden al perfil activo de la sesión | Leer el `profile_id` real desde `window.onboarding` o desde un meta tag en `onboarding.html` |
-| 4 | WS se reconecta con backoff pero no avisa en el feed cuando reconecta | Se pierde contexto de cuándo el canal estuvo caído | Agregar entrada de sistema al feed en `ws.onopen` después de reconexión |
+| 1 | Health sidebar muestra "API OK" sin detalle de componentes | No se puede ver el estado de brain, temporal, vault desde el Harness | Requiere bridge postMessage funcionando |
+| 2 | postMessage bridge da timeout | Health y sim funcionan igual por REST, pero los logs muestran warnings | Investigar `_installDebugHealthBridge()` |
+| 3 | `profile_id` hardcodeado en eventos del sim-bar | Los eventos simulados no corresponden al perfil activo | Leer el `profile_id` real desde `window.onboarding` |
+| 4 | WS se reconecta sin aviso en el feed | Se pierde contexto de cuándo el canal estuvo caído | Agregar entrada de sistema al feed en `ws.onopen` |
 
 ### Features pendientes
 
 | # | Feature | Descripción |
 |---|---|---|
-| F1 | Editar payload antes de enviar | Hoy el sim-bar envía el payload hardcodeado. Agregar un textarea editable que se muestre al seleccionar un evento |
-| F2 | Historial de sesión | Exportar el feed completo como JSON o copiar al clipboard para compartir en issues |
-| F3 | Filtro por `profile_id` | Cuando hay múltiples perfiles activos, poder ver solo los eventos de uno |
-| F4 | Indicador de latencia | Mostrar el tiempo entre el POST y el momento en que el evento vuelve por WS |
-| F5 | Agregar eventos al sim-bar sin modificar el HTML | Cargar el catálogo de eventos desde un JSON externo o desde nucleus via REST |
-| F6 | Health con detalle completo | Cuando el bridge esté funcionando, mostrar cada componente del JSON de `nucleus --json health` con su estado individual |
+| F1 | Editar payload antes de enviar | Agregar textarea editable al seleccionar un evento |
+| F2 | Historial de sesión | Exportar el feed completo como JSON |
+| F3 | Filtro por `profile_id` | Para múltiples perfiles activos |
+| F4 | Indicador de latencia | Tiempo entre POST y vuelta por WS |
+| F5 | Vista del catálogo de schemas de Cortex | *(actualizado Jun 26 2026)* — El catálogo JSON ya existe en Cortex (extension/protocols/*.schema.json, Fase 1–5). Pendiente: exponer esos schemas como lectura en el feed del Workspace Harness para tener visibilidad del contrato desde el lado Electron. |
+| F6 | Health con detalle completo | Cuando el bridge esté funcionando |
+| F7 | Vista integrada con Cortex Harness | Ver en un solo feed los eventos de ambos Harnesses — hoy se ven separados |
 
 ---
 
 ## 9. Constantes de configuración
 
-Definidas al inicio del script de `debug.html`:
-
 ```javascript
-const WS_URL     = 'ws://localhost:4124';       // Control Plane WebSocket
-const API_URL    = 'http://localhost:48215';    // nucleus REST API
-const MAX_ENTRIES = 500;                        // máximo de entradas en el feed
+const WS_URL     = 'ws://localhost:4124';
+const API_URL    = 'http://localhost:48215';
+const MAX_ENTRIES = 500;
 ```
 
 Rutas REST relevantes:
@@ -353,18 +359,38 @@ POST /api/internal/system-event        → { ok: true }
 
 ---
 
-## 10. Estado verificado al cierre de esta sesión
+## 10. Estado verificado al cierre de sesión Jun 25
 
 ```
 ✓  WebSocket conecta a ws://localhost:4124
 ✓  Envelope WS: { type: "system:event", payload: { category, event, data, profile_id, timestamp } }
 ✓  POST /api/internal/system-event responde {"ok":true}
-✓  Eventos simulados aparecen en el feed con borde success
-✓  nucleus --json health muestra todos los componentes HEALTHY
+✓  Eventos simulados aparecen en el feed
+✓  background.js confirma doble destino: nucleus POST + Cortex Harness sendMessage
+✓  harnessLogBuffer (100 entradas) + HARNESS_HELLO/REPLAY funcionando en Cortex
 ✓  notification-rail y cortex-bar se ocultan al abrir el debug panel
-✓  CSP permite img-src data: (grain SVG sin errores)
+✓  CSP permite img-src data:
 
 ✗  postMessage bridge da timeout (health via REST funciona como fallback)
 ✗  Health sidebar muestra "API OK" sin detalle de componentes
-?  Cortex recibe los eventos del bus — pendiente verificar en la sesión de Cortex
+?  Cortex Harness y Workspace Harness en sync — pendiente verificar en sesión integrada
+?  Landing abre correctamente post ACCOUNT_REGISTERED — pendiente test end-to-end
 ```
+
+---
+
+## 11. Próximo paso — test de primer milestone
+
+El objetivo del primer test es:
+
+> **Verificar que un registro correcto de GitHub (PAT detectado → confirmado → ACCOUNT_REGISTERED) llega correctamente al Workspace y dispara la apertura de Landing.**
+
+Para ejecutarlo:
+1. Tener ambos Harnesses abiertos (Workspace en Electron + Cortex en Chrome)
+2. Verificar handshake completado en ambos feeds
+3. Ejecutar la secuencia del §6 Flujo B
+4. Verificar que `ACCOUNT_REGISTERED` aparece en el feed del Workspace Harness con categoría `synapse`
+5. Verificar que `→HOST:ACCOUNT_REGISTERED` y `→HOST:GITHUB_TOKEN_STORED` aparecen en el feed del Cortex Harness
+6. Verificar que Brain dispara el re-launch y Landing page abre
+
+Si el paso 6 no ocurre, el punto de falla está en el lado Brain (MilestoneReactor) — fuera del scope del Harness de Cortex.
