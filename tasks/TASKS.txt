@@ -733,7 +733,11 @@ btips
 ionProgressBridge.ts
 https://claude.ai/chat/0d2f23cb-5afe-4b17-a18f-5ae661f5b0eb
 
-
 linkedin 
 Client projects
 https://www.linkedin.com/my-items/client-projects/
+
+Noti Gmail
+Companion Gemini
+Panel lateral companion en Chromium para sistema BTIPS
+https://claude.ai/chat/340d1dc7-7442-46a1-85d7-02ca2ef7ce3f

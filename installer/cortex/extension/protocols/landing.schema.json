@@ -1,0 +1,174 @@
+{
+  "version": "1.0.0",
+  "protocol": "landing",
+  "description": "Profile cockpit — session state, stats, linked accounts, quick actions",
+  "messages": [
+    {
+      "id": "profile_load",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Request a full profile data reload",
+      "payload_template": {
+        "command": "profile_load",
+        "profile_id": "$PROFILE_ID"
+      },
+      "parameters": [
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        }
+      ]
+    },
+    {
+      "id": "health_check",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Trigger a full-stack health check",
+      "payload_template": {
+        "command": "health_check",
+        "scope": "$SCOPE"
+      },
+      "parameters": [
+        {
+          "name": "scope",
+          "type": "enum",
+          "variable": "$SCOPE",
+          "options": ["extension", "host", "full-stack"]
+        }
+      ]
+    },
+    {
+      "id": "nucleus_sync",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Trigger a nucleus project sync",
+      "payload_template": {
+        "command": "nucleus_sync",
+        "profile_id": "$PROFILE_ID",
+        "launch_id": "$LAUNCH_ID"
+      },
+      "parameters": [
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        }
+      ]
+    },
+    {
+      "id": "intent_list",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Request the list of active intents for this profile",
+      "payload_template": {
+        "command": "intent_list",
+        "profile_id": "$PROFILE_ID"
+      },
+      "parameters": [
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        }
+      ]
+    },
+    {
+      "id": "session_status",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Simulate a session status update from the host",
+      "payload_template": {
+        "event": "SESSION_STATUS",
+        "status": "$STATUS",
+        "profile_id": "$PROFILE_ID",
+        "launch_id": "$LAUNCH_ID"
+      },
+      "parameters": [
+        {
+          "name": "status",
+          "type": "enum",
+          "variable": "$STATUS",
+          "options": ["active", "idle", "disconnected", "error"]
+        },
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        }
+      ]
+    },
+    {
+      "id": "stats_update",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Simulate a stats update payload (launches, uptime, intents)",
+      "payload_template": {
+        "event": "STATS_UPDATE",
+        "profile_id": "$PROFILE_ID",
+        "stats": {
+          "totalLaunches": "$TOTAL_LAUNCHES",
+          "uptime": "$UPTIME",
+          "intentsCompleted": "$INTENTS_COMPLETED"
+        }
+      },
+      "parameters": [
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "total_launches",
+          "type": "string",
+          "variable": "$TOTAL_LAUNCHES",
+          "default": "42"
+        },
+        {
+          "name": "uptime",
+          "type": "string",
+          "variable": "$UPTIME",
+          "default": "3600"
+        },
+        {
+          "name": "intents_completed",
+          "type": "string",
+          "variable": "$INTENTS_COMPLETED",
+          "default": "7"
+        }
+      ]
+    }
+  ],
+  "observable_events": [
+    "SESSION_STATUS",
+    "STATS_UPDATE",
+    "PROFILE_LOADED",
+    "HEALTH_CHECK_RESULT",
+    "GITHUB_TOKEN_STORED",
+    "GITHUB_ACCOUNT_CREATED",
+    "ACCOUNT_REGISTERED"
+  ]
+}

@@ -112,6 +112,11 @@ brain filesystem tree /Users/josevigil/Library/BloomNucleus -o tree/library_tree
 
 brain filesystem tree /home/jose/.local/share/BloomNucleus -o tree/library_tree.txt
 
+brain filesystem tree /home/jose/repos/elias-repos -o tree/elias-repos_tree.txt
+
+
+
+
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus\logs -o tree/appdata_logs_tree.txt
 
 brain filesystem tree installer -o tree/installer_tree.txt
