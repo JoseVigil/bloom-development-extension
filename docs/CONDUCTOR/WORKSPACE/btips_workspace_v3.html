@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTIPS — Cognitive Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+
+/* ═══════════════════════════════════════════════════
+   BTIPS DESIGN SYSTEM — BLOOM v1.0
+═══════════════════════════════════════════════════ */
+
+:root {
+  --color-bg:              #080A0E;
+  --color-surface:         #0D1117;
+  --color-surface-hover:   #131820;
+
+  --color-text-primary:    #E8EAF0;
+  --color-text-secondary:  rgba(232,234,240,0.45);
+  --color-text-dim:        rgba(232,234,240,0.22);
+
+  --color-border:          rgba(255,255,255,0.06);
+  --color-border-active:   rgba(255,255,255,0.18);
+
+  --color-accent:          #C8F55A;
+  --color-accent-dim:      rgba(200,245,90,0.12);
+  --color-accent-glow:     rgba(200,245,90,0.06);
+
+  --color-error:           #FF4444;
+
+  --font-display: 'Syne', sans-serif;
+  --font-mono:    'DM Mono', monospace;
+
+  --space-xs:   8px;
+  --space-sm:   12px;
+  --space-md:   24px;
+  --space-lg:   40px;
+  --space-xl:   56px;
+
+  --radius-sm:  2px;
+  --radius-md:  4px;
+
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:   0 4px 16px rgba(0,0,0,0.6);
+  --shadow-glow: 0 0 12px rgba(200,245,90,0.25), 0 0 1px #C8F55A;
+
+  --duration-fast:  150ms;
+  --duration-base:  300ms;
+  --duration-slow:  600ms;
+  --ease-system:    cubic-bezier(0.4,0,0.2,1);
+
+  --sidebar-w:    56px;
+  --tab-h:        46px;
+  --ledger-w:     260px;
+  --alfred-h:     220px;
+}
+
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+}
+
+html, body {
+  height: 100%; width: 100%;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* Grain overlay */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,<svg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.028'/></svg>");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ═══════════════════════════════════════════════════
+   LAYOUT ROOT
+═══════════════════════════════════════════════════ */
+
+.workspace {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════
+   LEFT SIDEBAR — NAVIGATION RAIL
+═══════════════════════════════════════════════════ */
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  z-index: 100;
+  position: relative;
+}
+
+.sidebar-logo {
+  width: var(--sidebar-w);
+  height: var(--tab-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.sidebar-logo-mark {
+  width: 20px;
+  height: 20px;
+  position: relative;
+}
+
+.sidebar-logo-mark::before,
+.sidebar-logo-mark::after {
+  content: '';
+  position: absolute;
+}
+
+/* BTIPS hexagonal mark */
+.logo-hex {
+  width: 22px;
+  height: 22px;
+  background: var(--color-accent);
+  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.logo-hex::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--color-bg);
+  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+}
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-sm) 0;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.nav-item {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--duration-fast) var(--ease-system);
+  flex-shrink: 0;
+}
+
+.nav-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.nav-item.active {
+  background: var(--color-accent-dim);
+}
+
+.nav-item.active .nav-icon {
+  color: var(--color-accent);
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-dim);
+  transition: color var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.nav-item:hover .nav-icon {
+  color: var(--color-text-secondary);
+}
+
+.nav-tooltip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-active);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+  z-index: 200;
+}
+
+.nav-item:hover .nav-tooltip {
+  opacity: 1;
+}
+
+.sidebar-bottom {
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--color-accent-dim);
+  border: 1px solid rgba(200,245,90,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.system-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: var(--shadow-glow);
+  animation: pulse-system 3s ease-in-out infinite;
+}
+
+@keyframes pulse-system {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(200,245,90,0.3); }
+  50% { opacity: 0.6; box-shadow: 0 0 4px rgba(200,245,90,0.1); }
+}
+
+/* ═══════════════════════════════════════════════════
+   MAIN CONTENT AREA
+═══════════════════════════════════════════════════ */
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   MANDATE TAB BAR
+═══════════════════════════════════════════════════ */
+
+.tab-bar {
+  height: var(--tab-h);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+  overflow: hidden;
+}
+
+.tab-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,245,90,0.08), transparent);
+  pointer-events: none;
+}
+
+.tabs-list {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  cursor: pointer;
+  position: relative;
+  border-right: 1px solid var(--color-border);
+  transition: background var(--duration-fast) var(--ease-system);
+  min-width: 120px;
+  max-width: 180px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tab:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.tab.active {
+  background: var(--color-bg);
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1.5px;
+  background: var(--color-accent);
+}
+
+.tab-indicator {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--color-text-dim);
+  transition: background var(--duration-base);
+}
+
+.tab.active .tab-indicator {
+  background: var(--color-accent);
+  box-shadow: 0 0 6px rgba(200,245,90,0.4);
+}
+
+.tab-indicator.running {
+  background: var(--color-accent);
+  animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+@keyframes pulse-indicator {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.tab-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--duration-fast);
+}
+
+.tab.active .tab-name {
+  color: var(--color-text-primary);
+}
+
+.tab-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  padding: 1px 5px;
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.tab-close {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--duration-fast), background var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.tab-close svg {
+  width: 8px;
+  height: 8px;
+  color: var(--color-text-secondary);
+}
+
+.tab-add {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-dim);
+  border-right: 1px solid var(--color-border);
+  transition: color var(--duration-fast), background var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.tab-add:hover {
+  color: var(--color-text-secondary);
+  background: rgba(255,255,255,0.02);
+}
+
+.tab-add svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-bar-right {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  border-left: 1px solid var(--color-border);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tab-system-info {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.tab-alfred-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--color-accent-dim);
+  border: 1px solid rgba(200,245,90,0.15);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.tab-alfred-btn:hover {
+  background: rgba(200,245,90,0.18);
+  border-color: rgba(200,245,90,0.3);
+}
+
+.tab-alfred-btn span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.tab-alfred-btn .alfred-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 5px rgba(200,245,90,0.5);
+  animation: pulse-indicator 2.5s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════
+   WORKSPACE BODY (center + ledger)
+═══════════════════════════════════════════════════ */
+
+.workspace-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   CENTRAL MANDATE WORKSPACE
+═══════════════════════════════════════════════════ */
+
+.mandate-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--color-bg);
+}
+
+.mandate-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.mandate-content::-webkit-scrollbar { width: 4px; }
+.mandate-content::-webkit-scrollbar-track { background: transparent; }
+.mandate-content::-webkit-scrollbar-thumb {
+  background: var(--color-border-active);
+  border-radius: 2px;
+}
+
+/* Genesis announcement banner */
+.genesis-announcement {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--color-accent-glow);
+  border: 1px solid rgba(200,245,90,0.15);
+  border-radius: var(--radius-md);
+  animation: fadeInDown var(--duration-slow) var(--ease-system) both;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.genesis-icon {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: var(--shadow-glow);
+  flex-shrink: 0;
+  margin-top: 5px;
+  animation: pulse-system 2s ease-in-out infinite;
+}
+
+.genesis-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.genesis-headline {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.genesis-body-text {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+/* Mandate header */
+.mandate-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeInUp 0.5s var(--ease-system) 0.1s both;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mandate-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.mandate-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.mandate-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.mandate-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mandate-meta-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.mandate-meta-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+}
+
+.mandate-meta-sep {
+  width: 1px;
+  height: 10px;
+  background: var(--color-border);
+}
+
+/* Workspace sections grid */
+.workspace-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 16px;
+  animation: fadeInUp 0.5s var(--ease-system) 0.2s both;
+}
+
+.workspace-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--duration-fast);
+}
+
+.workspace-section:hover {
+  border-color: var(--color-border-active);
+}
+
+.workspace-section.full-width {
+  grid-column: 1 / -1;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+}
+
+.section-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.section-action {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast);
+}
+
+.section-action:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-active);
+}
+
+.section-body {
+  padding: 16px;
+}
+
+/* Intent Activity */
+.intent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+
+.intent-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.intent-status {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.intent-status.idle { background: var(--color-text-dim); }
+.intent-status.active { background: var(--color-accent); box-shadow: 0 0 5px rgba(200,245,90,0.4); }
+.intent-status.pending { background: rgba(200,245,90,0.3); }
+
+.intent-text {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  flex: 1;
+}
+
+.intent-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+}
+
+.intent-tag.defining {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+}
+
+.intent-tag.setup {
+  background: rgba(255,255,255,0.04);
+  color: var(--color-text-dim);
+}
+
+.intent-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  gap: 8px;
+  text-align: center;
+}
+
+.intent-empty-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.intent-empty-sub {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--color-text-dim);
+  opacity: 0.5;
+  max-width: 200px;
+  line-height: 1.6;
+}
+
+/* Mandate Notes */
+.notes-area {
+  width: 100%;
+  min-height: 100px;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+  caret-color: var(--color-accent);
+}
+
+.notes-area::placeholder {
+  color: var(--color-text-dim);
+}
+
+/* AI Interaction */
+.ai-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 80px;
+}
+
+.ai-message-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ai-msg-source {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  flex-shrink: 0;
+  margin-top: 2px;
+  min-width: 40px;
+}
+
+.ai-msg-content {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+/* ═══════════════════════════════════════════════════
+   CONTINUITY LEDGER PANEL
+═══════════════════════════════════════════════════ */
+
+.ledger-panel {
+  width: var(--ledger-w);
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ledger-header {
+  height: var(--tab-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.ledger-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ledger-title-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.ledger-live {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ledger-live-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 5px rgba(200,245,90,0.4);
+  animation: pulse-system 2s ease-in-out infinite;
+}
+
+.ledger-live-text {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.ledger-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
+.ledger-body::-webkit-scrollbar { width: 3px; }
+.ledger-body::-webkit-scrollbar-track { background: transparent; }
+.ledger-body::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+.ledger-mandate-group {
+  margin-bottom: 4px;
+}
+
+.ledger-mandate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+  position: relative;
+}
+
+.ledger-mandate-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.ledger-mandate-row.active {
+  background: var(--color-accent-dim);
+}
+
+.ledger-expand {
+  width: 10px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ledger-expand svg {
+  width: 8px;
+  height: 8px;
+  color: var(--color-text-dim);
+  transition: transform var(--duration-fast);
+}
+
+.ledger-mandate-row.expanded .ledger-expand svg {
+  transform: rotate(90deg);
+}
+
+.ledger-mandate-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ledger-mandate-dot.genesis {
+  background: var(--color-accent);
+  box-shadow: 0 0 5px rgba(200,245,90,0.4);
+}
+
+.ledger-mandate-dot.inactive {
+  background: var(--color-text-dim);
+}
+
+.ledger-mandate-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ledger-mandate-row.active .ledger-mandate-name {
+  color: var(--color-accent);
+}
+
+.ledger-mandate-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.ledger-intents {
+  display: flex;
+  flex-direction: column;
+  padding-left: 30px;
+  border-left: 1px solid var(--color-border);
+  margin-left: 20px;
+  margin-bottom: 4px;
+}
+
+.ledger-intent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 16px 5px 8px;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+  position: relative;
+}
+
+.ledger-intent-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.ledger-intent-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.ledger-intent-icon {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.ledger-intent-text {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.ledger-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 8px 16px;
+}
+
+.ledger-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ledger-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ledger-stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.ledger-stat-value {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════
+   ALFRED PANEL — BOTTOM AI INTERACTION
+═══════════════════════════════════════════════════ */
+
+.alfred-panel {
+  height: var(--alfred-h);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: height var(--duration-base) var(--ease-system);
+  position: relative;
+}
+
+.alfred-panel.collapsed {
+  height: 40px;
+}
+
+.alfred-panel-header {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+
+.alfred-panel-header:hover {
+  background: var(--color-surface-hover);
+}
+
+.alfred-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alfred-mark {
+  width: 18px;
+  height: 18px;
+  background: var(--color-accent-dim);
+  border: 1px solid rgba(200,245,90,0.2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.alfred-mark svg {
+  width: 10px;
+  height: 10px;
+  color: var(--color-accent);
+}
+
+.alfred-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.alfred-context-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.alfred-panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alfred-ctrl {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-dim);
+  transition: all var(--duration-fast);
+}
+
+.alfred-ctrl:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.alfred-ctrl svg {
+  width: 11px;
+  height: 11px;
+}
+
+.alfred-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alfred-messages::-webkit-scrollbar { width: 3px; }
+.alfred-messages::-webkit-scrollbar-track { background: transparent; }
+.alfred-messages::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+.alfred-msg {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.alfred-msg-who {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  margin-top: 1px;
+  min-width: 44px;
+}
+
+.alfred-msg-who.alfred { color: var(--color-accent); }
+.alfred-msg-who.user { color: var(--color-text-dim); }
+
+.alfred-msg-text {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+.alfred-msg-text.alfred { color: var(--color-text-primary); }
+
+.alfred-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.alfred-input {
+  flex: 1;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-primary);
+  letter-spacing: 0.02em;
+  outline: none;
+  transition: border-color var(--duration-fast);
+  caret-color: var(--color-accent);
+}
+
+.alfred-input::placeholder {
+  color: var(--color-text-dim);
+}
+
+.alfred-input:focus {
+  border-color: var(--color-border-active);
+}
+
+.alfred-send {
+  width: 30px;
+  height: 30px;
+  background: var(--color-accent-dim);
+  border: 1px solid rgba(200,245,90,0.2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.alfred-send:hover {
+  background: rgba(200,245,90,0.2);
+  border-color: rgba(200,245,90,0.35);
+}
+
+.alfred-send svg {
+  width: 12px;
+  height: 12px;
+  color: var(--color-accent);
+}
+
+/* Alfred panel collapse state */
+.alfred-panel.collapsed .alfred-messages,
+.alfred-panel.collapsed .alfred-input-row {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   NEW MANDATE MODAL
+═══════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,10,14,0.85);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-base) var(--ease-system);
+}
+
+.modal-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-active);
+  border-radius: var(--radius-md);
+  width: 440px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transform: translateY(8px);
+  transition: transform var(--duration-base) var(--ease-system);
+  box-shadow: var(--shadow-md);
+}
+
+.modal-overlay.visible .modal {
+  transform: translateY(0);
+}
+
+.modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.modal-input {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color var(--duration-fast);
+  caret-color: var(--color-accent);
+  width: 100%;
+}
+
+.modal-input:focus {
+  border-color: var(--color-border-active);
+}
+
+.modal-input::placeholder {
+  color: var(--color-text-dim);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn-ghost {
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-border-active);
+  color: var(--color-text-primary);
+}
+
+.btn-primary {
+  padding: 8px 20px;
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--color-bg);
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--duration-fast);
+}
+
+.btn-primary:hover { opacity: 0.88; }
+
+/* ═══════════════════════════════════════════════════
+   SCROLLBAR GLOBAL
+═══════════════════════════════════════════════════ */
+* { scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; }
+
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     WORKSPACE ROOT
+════════════════════════════════════════ -->
+<div class="workspace">
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo" title="BTIPS">
+      <div class="logo-hex"></div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <!-- Nucleus -->
+      <div class="nav-item active" title="Nucleus">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="10" cy="10" r="3"/>
+          <circle cx="10" cy="10" r="7" stroke-dasharray="2 2"/>
+          <circle cx="10" cy="3" r="1" fill="currentColor" stroke="none"/>
+          <circle cx="10" cy="17" r="1" fill="currentColor" stroke="none"/>
+          <circle cx="3" cy="10" r="1" fill="currentColor" stroke="none"/>
+          <circle cx="17" cy="10" r="1" fill="currentColor" stroke="none"/>
+        </svg>
+        <span class="nav-tooltip">Nucleus</span>
+      </div>
+
+      <!-- Accounts -->
+      <div class="nav-item" title="Accounts">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="10" cy="7" r="3"/>
+          <path d="M4 17c0-3.314 2.686-6 6-6s6 2.686 6 6"/>
+        </svg>
+        <span class="nav-tooltip">Accounts</span>
+      </div>
+
+      <!-- Store -->
+      <div class="nav-item" title="Store">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="3" y="8" width="14" height="10" rx="1"/>
+          <path d="M7 8V6a3 3 0 0 1 6 0v2"/>
+          <path d="M10 12v2"/>
+        </svg>
+        <span class="nav-tooltip">Store</span>
+      </div>
+
+      <!-- Continuity -->
+      <div class="nav-item" title="Continuity">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M4 4h4v4H4z"/>
+          <path d="M12 4h4v4h-4z"/>
+          <path d="M4 12h4v4H4z"/>
+          <path d="M6 8v4M14 8v4M8 14h4"/>
+        </svg>
+        <span class="nav-tooltip">Continuity</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <!-- Settings -->
+      <div class="nav-item" title="Settings">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="10" cy="10" r="2.5"/>
+          <path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M5.05 5.05l1.06 1.06M13.89 13.89l1.06 1.06M5.05 14.95l1.06-1.06M13.89 6.11l1.06-1.06"/>
+        </svg>
+        <span class="nav-tooltip">Settings</span>
+      </div>
+      <div class="user-avatar">US</div>
+      <div class="system-status-dot"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-area">
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <div class="tabs-list" id="tabsList">
+        <!-- Genesis tab (initial, permanent) -->
+        <div class="tab active" data-id="genesis" onclick="switchTab(this,'genesis')">
+          <div class="tab-indicator running"></div>
+          <span class="tab-name">Genesis</span>
+          <span class="tab-badge">M–001</span>
+        </div>
+        <div class="tab" data-id="auth" onclick="switchTab(this,'auth')">
+          <div class="tab-indicator"></div>
+          <span class="tab-name">Authentication</span>
+          <div class="tab-close" onclick="closeTab(event,this)">
+            <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M1 1l6 6M7 1l-6 6"/>
+            </svg>
+          </div>
+        </div>
+        <div class="tab" data-id="ai" onclick="switchTab(this,'ai')">
+          <div class="tab-indicator"></div>
+          <span class="tab-name">AI Integration</span>
+          <div class="tab-close" onclick="closeTab(event,this)">
+            <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M1 1l6 6M7 1l-6 6"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="tab-add" onclick="openNewMandateModal()" title="New Mandate">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M7 2v10M2 7h10"/>
+        </svg>
+      </div>
+      <div class="tab-bar-right">
+        <span class="tab-system-info" id="tabSystemInfo">M–003 Active</span>
+        <div class="tab-alfred-btn" onclick="toggleAlfred()">
+          <div class="alfred-dot"></div>
+          <span>Alfred</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- WORKSPACE BODY -->
+    <div class="workspace-body">
+
+      <!-- MANDATE WORKSPACE -->
+      <div class="mandate-area">
+        <div class="mandate-content" id="mandateContent">
+
+          <!-- Genesis Activation Announcement -->
+          <div class="genesis-announcement" id="genesisAnnouncement">
+            <div class="genesis-icon"></div>
+            <div class="genesis-text-block">
+              <span class="genesis-headline">Genesis Mandate Active</span>
+              <p class="genesis-body-text">This is the beginning of your project's history.<br>Every intent you execute will expand the Continuity Ledger.</p>
+            </div>
+          </div>
+
+          <!-- Mandate Header -->
+          <div class="mandate-header" id="mandateHeader">
+            <span class="mandate-eyebrow">Mandate</span>
+            <h1 class="mandate-title" id="mandateTitle">Genesis</h1>
+            <div class="mandate-meta">
+              <div class="mandate-meta-item">
+                <span class="mandate-meta-label">Status</span>
+                <span class="mandate-meta-value" style="color: var(--color-accent);">Active</span>
+              </div>
+              <div class="mandate-meta-sep"></div>
+              <div class="mandate-meta-item">
+                <span class="mandate-meta-label">Intents</span>
+                <span class="mandate-meta-value" id="mandateIntentCount">2</span>
+              </div>
+              <div class="mandate-meta-sep"></div>
+              <div class="mandate-meta-item">
+                <span class="mandate-meta-label">Created</span>
+                <span class="mandate-meta-value" id="mandateDate">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Workspace Sections -->
+          <div class="workspace-sections">
+
+            <!-- Intent Activity -->
+            <div class="workspace-section">
+              <div class="section-header">
+                <div class="section-title-row">
+                  <div class="section-dot" style="background: var(--color-accent);"></div>
+                  <span class="section-title">Intent Activity</span>
+                </div>
+                <span class="section-action">+ New Intent</span>
+              </div>
+              <div class="section-body">
+                <div class="intent-list" id="intentList">
+                  <div class="intent-item">
+                    <div class="intent-status active"></div>
+                    <span class="intent-text">Define project structure and namespace</span>
+                    <span class="intent-tag defining">Defining</span>
+                  </div>
+                  <div class="intent-item">
+                    <div class="intent-status pending"></div>
+                    <span class="intent-text">Setup AI integration layer</span>
+                    <span class="intent-tag setup">Pending</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mandate Notes -->
+            <div class="workspace-section">
+              <div class="section-header">
+                <div class="section-title-row">
+                  <div class="section-dot"></div>
+                  <span class="section-title">Mandate Notes</span>
+                </div>
+                <span class="section-action">Save</span>
+              </div>
+              <div class="section-body">
+                <textarea class="notes-area" placeholder="Document intent, decisions, observations..."></textarea>
+              </div>
+            </div>
+
+            <!-- AI Interaction -->
+            <div class="workspace-section full-width">
+              <div class="section-header">
+                <div class="section-title-row">
+                  <div class="section-dot" style="background: var(--color-accent); box-shadow: 0 0 5px rgba(200,245,90,0.3);"></div>
+                  <span class="section-title">AI Interaction Log</span>
+                </div>
+                <span class="section-action">Clear</span>
+              </div>
+              <div class="section-body">
+                <div class="ai-messages">
+                  <div class="ai-message-item">
+                    <span class="ai-msg-source">Alfred</span>
+                    <span class="ai-msg-content">Genesis Mandate is active. I have context on this project's structure. How can I assist with this mandate?</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ALFRED PANEL -->
+        <div class="alfred-panel" id="alfredPanel">
+          <div class="alfred-panel-header" onclick="toggleAlfred()">
+            <div class="alfred-identity">
+              <div class="alfred-mark">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M7 2C4.24 2 2 4.24 2 7s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z"/>
+                  <path d="M5 7h4M7 5v4"/>
+                </svg>
+              </div>
+              <span class="alfred-name">Alfred</span>
+              <span class="alfred-context-badge" id="alfredContext">Context: Genesis</span>
+            </div>
+            <div class="alfred-panel-controls">
+              <div class="alfred-ctrl" title="Expand">
+                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M2 8l4-4 4 4" id="alfredChevron"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="alfred-messages" id="alfredMessages">
+            <div class="alfred-msg">
+              <span class="alfred-msg-who alfred">Alfred</span>
+              <span class="alfred-msg-text alfred">Genesis Mandate initialized. I have full context of this project. What would you like to work on?</span>
+            </div>
+          </div>
+          <div class="alfred-input-row">
+            <input
+              type="text"
+              class="alfred-input"
+              id="alfredInput"
+              placeholder="Describe an intent or ask Alfred..."
+              onkeydown="handleAlfredKey(event)"
+            />
+            <div class="alfred-send" onclick="sendAlfredMessage()">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M12 2L2 7l4 1.5L7.5 12 12 2z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTINUITY LEDGER -->
+      <aside class="ledger-panel">
+        <div class="ledger-header">
+          <div class="ledger-title">
+            <span class="ledger-title-text">Continuity Ledger</span>
+          </div>
+          <div class="ledger-live">
+            <div class="ledger-live-dot"></div>
+            <span class="ledger-live-text">Live</span>
+          </div>
+        </div>
+
+        <div class="ledger-body">
+
+          <!-- Genesis -->
+          <div class="ledger-mandate-group">
+            <div class="ledger-mandate-row active expanded" onclick="toggleLedgerGroup(this)">
+              <div class="ledger-expand">
+                <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M2 3l2 2 2-2"/>
+                </svg>
+              </div>
+              <div class="ledger-mandate-dot genesis"></div>
+              <span class="ledger-mandate-name">Genesis</span>
+              <span class="ledger-mandate-count">2</span>
+            </div>
+            <div class="ledger-intents" id="group-genesis">
+              <div class="ledger-intent-row">
+                <div class="ledger-intent-icon" style="background: var(--color-accent);"></div>
+                <span class="ledger-intent-text">Define project structure</span>
+              </div>
+              <div class="ledger-intent-row">
+                <div class="ledger-intent-icon"></div>
+                <span class="ledger-intent-text">Setup AI integration</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ledger-divider"></div>
+
+          <!-- Authentication -->
+          <div class="ledger-mandate-group">
+            <div class="ledger-mandate-row expanded" onclick="toggleLedgerGroup(this)">
+              <div class="ledger-expand">
+                <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M2 3l2 2 2-2"/>
+                </svg>
+              </div>
+              <div class="ledger-mandate-dot inactive"></div>
+              <span class="ledger-mandate-name">Authentication</span>
+              <span class="ledger-mandate-count">2</span>
+            </div>
+            <div class="ledger-intents" id="group-auth">
+              <div class="ledger-intent-row">
+                <div class="ledger-intent-icon"></div>
+                <span class="ledger-intent-text">Login flow design</span>
+              </div>
+              <div class="ledger-intent-row">
+                <div class="ledger-intent-icon"></div>
+                <span class="ledger-intent-text">OAuth integration</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ledger-divider"></div>
+
+          <!-- AI Integration -->
+          <div class="ledger-mandate-group">
+            <div class="ledger-mandate-row" onclick="toggleLedgerGroup(this)">
+              <div class="ledger-expand">
+                <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M2 3l2 2 2-2"/>
+                </svg>
+              </div>
+              <div class="ledger-mandate-dot inactive"></div>
+              <span class="ledger-mandate-name">AI Integration</span>
+              <span class="ledger-mandate-count">2</span>
+            </div>
+            <div class="ledger-intents" id="group-ai" style="display:none;">
+              <div class="ledger-intent-row">
+                <div class="ledger-intent-icon"></div>
+                <span class="ledger-intent-text">Gemini adapter</span>
+              </div>
+              <div class="ledger-intent-row">
+                <div class="ledger-intent-icon"></div>
+                <span class="ledger-intent-text">Prompt orchestration</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="ledger-footer">
+          <div class="ledger-stat">
+            <span class="ledger-stat-label">Mandates</span>
+            <span class="ledger-stat-value" id="ledgerMandateCount">3</span>
+          </div>
+          <div class="ledger-stat">
+            <span class="ledger-stat-label">Intents</span>
+            <span class="ledger-stat-value" id="ledgerIntentCount">6</span>
+          </div>
+          <div class="ledger-stat">
+            <span class="ledger-stat-label">Status</span>
+            <span class="ledger-stat-value" style="color: var(--color-accent);">Persistent</span>
+          </div>
+        </div>
+      </aside>
+
+    </div><!-- /workspace-body -->
+  </div><!-- /main-area -->
+</div><!-- /workspace -->
+
+<!-- NEW MANDATE MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-eyebrow">Create Mandate</span>
+      <h2 class="modal-title">New Cognitive Container</h2>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Mandate Name</label>
+      <input
+        type="text"
+        class="modal-input"
+        id="newMandateName"
+        placeholder="e.g. Deployment System"
+        onkeydown="handleModalKey(event)"
+        autofocus
+      />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="createMandate()">Activate Mandate</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+/* ═══════════════════════════════════════════════════
+   BTIPS WORKSPACE — INTERACTION LAYER
+═══════════════════════════════════════════════════ */
+
+// State
+let mandateCounter = 3;
+let alfredCollapsed = false;
+let activeTab = 'genesis';
+
+const mandateData = {
+  genesis: {
+    title: 'Genesis',
+    status: 'Active',
+    badge: 'M–001',
+    intents: [
+      { text: 'Define project structure and namespace', status: 'active', tag: 'Defining' },
+      { text: 'Setup AI integration layer', status: 'pending', tag: 'Pending' }
+    ],
+    announcement: true,
+    intentCount: 2
+  },
+  auth: {
+    title: 'Authentication',
+    status: 'In Progress',
+    badge: 'M–002',
+    intents: [
+      { text: 'Design login flow and UX states', status: 'active', tag: 'Design' },
+      { text: 'Implement OAuth integration', status: 'pending', tag: 'Pending' }
+    ],
+    announcement: false,
+    intentCount: 2
+  },
+  ai: {
+    title: 'AI Integration',
+    status: 'Pending',
+    badge: 'M–003',
+    intents: [
+      { text: 'Build Gemini API adapter layer', status: 'idle', tag: 'Setup' },
+      { text: 'Design prompt orchestration pipeline', status: 'idle', tag: 'Setup' }
+    ],
+    announcement: false,
+    intentCount: 2
+  }
+};
+
+// ── Set current date on mandate
+function setDate() {
+  const d = new Date();
+  const opts = { year: 'numeric', month: 'short', day: 'numeric' };
+  document.getElementById('mandateDate').textContent = d.toLocaleDateString('en-US', opts);
+}
+setDate();
+
+// ── Tab switching
+function switchTab(tabEl, id) {
+  // Update tab visuals
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+  activeTab = id;
+
+  // Update mandate content
+  const data = mandateData[id];
+  if (!data) return;
+
+  document.getElementById('mandateTitle').textContent = data.title;
+  document.getElementById('mandateIntentCount').textContent = data.intentCount;
+  document.getElementById('alfredContext').textContent = 'Context: ' + data.title;
+  document.getElementById('tabSystemInfo').textContent = data.badge + ' Active';
+
+  // Show/hide genesis announcement
+  const ann = document.getElementById('genesisAnnouncement');
+  ann.style.display = data.announcement ? 'flex' : 'none';
+
+  // Update mandate meta status
+  const statusEl = document.querySelector('.mandate-meta-value');
+  if (statusEl) {
+    statusEl.textContent = data.status;
+    statusEl.style.color = data.status === 'Active' ? 'var(--color-accent)' : 'var(--color-text-secondary)';
+  }
+
+  // Rebuild intent list
+  const intentList = document.getElementById('intentList');
+  intentList.innerHTML = '';
+  data.intents.forEach(intent => {
+    const item = document.createElement('div');
+    item.className = 'intent-item';
+    const tagBg = intent.status === 'active' ? 'var(--color-accent-dim)' : 'rgba(255,255,255,0.04)';
+    const tagColor = intent.status === 'active' ? 'var(--color-accent)' : 'var(--color-text-dim)';
+    item.innerHTML = `
+      <div class="intent-status ${intent.status}"></div>
+      <span class="intent-text">${intent.text}</span>
+      <span class="intent-tag" style="background:${tagBg};color:${tagColor}">${intent.tag}</span>
+    `;
+    intentList.appendChild(item);
+  });
+
+  // Update Alfred
+  addAlfredMessage('alfred', `Now in ${data.title} Mandate. I have full context. How can I assist?`);
+}
+
+// ── Close tab
+function closeTab(event, closeBtn) {
+  event.stopPropagation();
+  const tab = closeBtn.closest('.tab');
+  const id = tab.dataset.id;
+  if (id === 'genesis') return; // Genesis is permanent
+
+  const wasActive = tab.classList.contains('active');
+  tab.remove();
+  delete mandateData[id];
+
+  if (wasActive) {
+    const remaining = document.querySelector('.tab');
+    if (remaining) {
+      const newId = remaining.dataset.id;
+      switchTab(remaining, newId);
+      remaining.classList.add('active');
+    }
+  }
+
+  // Update ledger
+  updateLedgerStats();
+}
+
+// ── Open new mandate modal
+function openNewMandateModal() {
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.add('visible');
+  setTimeout(() => {
+    document.getElementById('newMandateName').focus();
+  }, 50);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('visible');
+  document.getElementById('newMandateName').value = '';
+}
+
+function handleModalKey(e) {
+  if (e.key === 'Enter') createMandate();
+  if (e.key === 'Escape') closeModal();
+}
+
+// ── Create new mandate
+function createMandate() {
+  const nameInput = document.getElementById('newMandateName');
+  const name = nameInput.value.trim();
+  if (!name) return;
+
+  mandateCounter++;
+  const id = 'mandate-' + mandateCounter;
+  const badgeNum = mandateCounter.toString().padStart(3, '0');
+
+  // Register in state
+  mandateData[id] = {
+    title: name,
+    status: 'Active',
+    badge: `M–${badgeNum}`,
+    intents: [],
+    announcement: false,
+    intentCount: 0
+  };
+
+  // Create tab
+  const tab = document.createElement('div');
+  tab.className = 'tab';
+  tab.dataset.id = id;
+  tab.onclick = function() { switchTab(this, id); };
+  tab.innerHTML = `
+    <div class="tab-indicator running"></div>
+    <span class="tab-name">${name}</span>
+    <div class="tab-close" onclick="closeTab(event,this)">
+      <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M1 1l6 6M7 1l-6 6"/>
+      </svg>
+    </div>
+  `;
+
+  const tabsList = document.getElementById('tabsList');
+  tabsList.appendChild(tab);
+
+  // Add to ledger
+  addLedgerGroup(id, name, badgeNum);
+
+  // Switch to new tab
+  switchTab(tab, id);
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+
+  closeModal();
+  updateLedgerStats();
+}
+
+// ── Add group to ledger
+function addLedgerGroup(id, name, num) {
+  const ledgerBody = document.querySelector('.ledger-body');
+  const divider = document.createElement('div');
+  divider.className = 'ledger-divider';
+
+  const group = document.createElement('div');
+  group.className = 'ledger-mandate-group';
+  group.innerHTML = `
+    <div class="ledger-mandate-row" onclick="toggleLedgerGroup(this)">
+      <div class="ledger-expand">
+        <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 3l2 2 2-2"/>
+        </svg>
+      </div>
+      <div class="ledger-mandate-dot inactive"></div>
+      <span class="ledger-mandate-name">${name}</span>
+      <span class="ledger-mandate-count">0</span>
+    </div>
+    <div class="ledger-intents" id="group-${id}" style="display:none;">
+      <div class="ledger-intent-row" style="opacity:0.4;">
+        <div class="ledger-intent-icon"></div>
+        <span class="ledger-intent-text">No intents yet</span>
+      </div>
+    </div>
+  `;
+
+  const footer = document.querySelector('.ledger-footer');
+  ledgerBody.insertBefore(divider, footer);
+  ledgerBody.insertBefore(group, footer);
+}
+
+// ── Toggle ledger group expand
+function toggleLedgerGroup(rowEl) {
+  rowEl.classList.toggle('expanded');
+  const groupId = rowEl.closest('.ledger-mandate-group').querySelector('.ledger-intents');
+  if (groupId) {
+    groupId.style.display = rowEl.classList.contains('expanded') ? 'flex' : 'none';
+  }
+}
+
+// ── Update ledger footer stats
+function updateLedgerStats() {
+  const mandateCount = Object.keys(mandateData).length;
+  let totalIntents = 0;
+  Object.values(mandateData).forEach(m => totalIntents += m.intentCount);
+  document.getElementById('ledgerMandateCount').textContent = mandateCount;
+  document.getElementById('ledgerIntentCount').textContent = totalIntents;
+}
+
+// ── Alfred panel toggle
+function toggleAlfred() {
+  alfredCollapsed = !alfredCollapsed;
+  const panel = document.getElementById('alfredPanel');
+  const chevron = document.getElementById('alfredChevron');
+  panel.classList.toggle('collapsed', alfredCollapsed);
+  if (chevron) {
+    chevron.setAttribute('d', alfredCollapsed ? 'M2 4l4 4 4-4' : 'M2 8l4-4 4 4');
+  }
+}
+
+// ── Alfred messaging
+function handleAlfredKey(e) {
+  if (e.key === 'Enter') sendAlfredMessage();
+}
+
+function sendAlfredMessage() {
+  const input = document.getElementById('alfredInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  addAlfredMessage('user', text);
+  input.value = '';
+
+  // Simulate Alfred response
+  setTimeout(() => {
+    const responses = [
+      `I've logged that intent under ${mandateData[activeTab]?.title || 'the current'} Mandate. The Continuity Ledger has been updated.`,
+      `Understood. This will be preserved in the project's history. Would you like me to break this down into sub-intents?`,
+      `Intent registered. I can assist you execute this within the current mandate context.`,
+      `That aligns with the project structure. I'm ready to assist with execution.`
+    ];
+    const r = responses[Math.floor(Math.random() * responses.length)];
+    addAlfredMessage('alfred', r);
+  }, 700);
+}
+
+function addAlfredMessage(who, text) {
+  const container = document.getElementById('alfredMessages');
+  const msg = document.createElement('div');
+  msg.className = 'alfred-msg';
+  msg.innerHTML = `
+    <span class="alfred-msg-who ${who}">${who === 'alfred' ? 'Alfred' : 'You'}</span>
+    <span class="alfred-msg-text ${who === 'alfred' ? 'alfred' : ''}">${text}</span>
+  `;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+
+  // Open panel if collapsed
+  if (alfredCollapsed && who === 'alfred') {
+    toggleAlfred();
+  }
+}
+
+// ── Close modal on overlay click
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── Keyboard shortcut: Escape closes modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+// Initialize
+updateLedgerStats();
+
+</script>
+</body>
+</html>
