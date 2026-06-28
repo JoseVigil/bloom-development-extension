@@ -207,6 +207,7 @@ class LandingFlow {
         case 'ACCOUNT_REGISTERED':
           // Recargar bloom_profile_state y re-renderizar el panel
           chrome.storage.local.get('bloom_profile_state', (result) => {
+            console.log('[Landing] Actualizando dashboard por evento:', msg.event);
             if (result.bloom_profile_state) {
               this.bloomProfileState = result.bloom_profile_state;
               this.profileData = this.mergeProfileState(this.profileData, this.bloomProfileState);

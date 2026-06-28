@@ -118,6 +118,7 @@
         "profile_id": "$PROFILE_ID",
         "launch_id": "$LAUNCH_ID",
         "service": "$SERVICE",
+        "username": "$USERNAME",
         "token_fingerprint": "$TOKEN_FINGERPRINT"
       },
       "parameters": [
@@ -139,6 +140,12 @@
           "variable": "$SERVICE",
           "options": ["github"],
           "default": "github"
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "variable": "$USERNAME",
+          "default": "octocat"
         },
         {
           "name": "token_fingerprint",

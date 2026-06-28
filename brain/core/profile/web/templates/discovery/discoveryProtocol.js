@@ -395,21 +395,17 @@ if (typeof self !== 'undefined') {
         payload_template: {
           event: "ACCOUNT_REGISTERED",
           profile_id: "$PROFILE_ID",
-          launch_id: "$LAUNCH_ID"
+          launch_id: "$LAUNCH_ID",
+          service: "$SERVICE",
+          username: "$USERNAME",
+          token_fingerprint: "$TOKEN_FINGERPRINT"
         },
         parameters: [
-          {
-            name: "profile_id",
-            type: "auto",
-            variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
-          },
-          {
-            name: "launch_id",
-            type: "auto",
-            variable: "$LAUNCH_ID",
-            source: "SYNAPSE_CONFIG.launchId"
-          }
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
+          { name: "service", type: "enum", variable: "$SERVICE", options: ["github"], default: "github" },
+          { name: "username", type: "string", variable: "$USERNAME", default: "octocat" },
+          { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ghp_simulatedToken" }
         ]
       },
       {
@@ -489,6 +485,33 @@ if (typeof self !== 'undefined') {
             source: "SYNAPSE_CONFIG.launchId"
           }
         ]
+      },
+      {
+        id: "harness_simulate_handshake",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Bypass del handshake nativo — fuerza handshakeState a CONFIRMED sin native host",
+        payload_template: {
+          event: "HARNESS_SIMULATE_HANDSHAKE",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
+        ]
+      },
+      {
+        id: "harness_open_landing",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Abre o trae al frente la tab de landing directamente desde el Harness",
+        payload_template: {
+          event: "HARNESS_OPEN_LANDING"
+        },
+        parameters: []
       }
     ],
 
@@ -497,7 +520,9 @@ if (typeof self !== 'undefined') {
       "HANDSHAKE_CONFIRMED",
       "API_KEY_REGISTERED",
       "ACCOUNT_REGISTERED",
-      "DISCOVERY_COMPLETE"
+      "DISCOVERY_COMPLETE",
+      "HARNESS_SIMULATE_HANDSHAKE",
+      "HARNESS_OPEN_LANDING"
     ]
   };
 }

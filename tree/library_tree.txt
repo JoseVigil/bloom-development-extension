@@ -1,2 +1,40 @@
-Library/
-└── BloomNucleus [NOT FOUND]
+BloomNucleus/
+├── bin/
+│   └── brain/
+│       ├── _internal/ [... dependencies]
+│       ├── brain
+│       └── help/
+│           ├── brain-ai-full.json
+│           ├── brain-ai-schema.json
+│           ├── brain-legacy.json
+│           ├── help-full.txt
+│           └── help.txt
+├── config/
+├── hooks/
+│   └── system_health/
+├── ionsites/
+├── logs/
+│   ├── brain/
+│   │   ├── core/
+│   │   │   └── brain_core_20260627.log
+│   │   ├── profile/
+│   │   │   └── brain_profile_20260627.log
+│   │   └── server/
+│   │       ├── brain_server_20260627.log
+│   │       ├── brain_server_event_bus_20260627.log
+│   │       └── brain_server_manager_20260627.log
+│   └── build/ [... build output]
+├── profiles/
+├── run/
+├── tree/
+│   ├── appdata_tree.txt
+│   ├── brain_tree.txt
+│   ├── conductor_tree.txt
+│   ├── cortex_tree.txt
+│   ├── installer_tree.txt
+│   ├── native_tree.txt
+│   ├── nucleus_tree.txt
+│   ├── sentinel_tree.txt
+│   ├── src_tree.txt
+│   └── webview_tree.txt
+└── workers/

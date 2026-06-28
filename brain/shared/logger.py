@@ -24,6 +24,7 @@ class BrainLogger:
     _instance: Optional['BrainLogger'] = None
     _initialized: bool = False
     _specialized_handlers: Dict[str, RotatingFileHandler] = {}
+    _nucleus_missing_warned: bool = False
 
     # Configuración de namespaces especializados
     SPECIALIZED_NAMESPACES = {
@@ -73,6 +74,7 @@ class BrainLogger:
         self.log_dir: Optional[Path] = None
         self.log_file: Optional[Path] = None
         self.is_frozen = getattr(sys, 'frozen', False)
+        self.json_mode: bool = False
 
     def setup(self, verbose: bool = False, log_name: str = "brain_core", json_mode: bool = False):
         """
@@ -161,6 +163,7 @@ class BrainLogger:
 
             # 9. Marcar como inicializado
             BrainLogger._initialized = True
+            self.json_mode = json_mode
             self._log_system_info(json_mode)
 
             if not json_mode:
@@ -269,7 +272,12 @@ class BrainLogger:
         except subprocess.TimeoutExpired:
             sys.stderr.write(f"WARNING: nucleus telemetry register timeout para '{stream_id}'\n")
         except FileNotFoundError:
-            sys.stderr.write(f"WARNING: nucleus no encontrado para '{stream_id}'\n")
+            if not BrainLogger._nucleus_missing_warned:
+                BrainLogger._nucleus_missing_warned = True
+                if self.json_mode:
+                    sys.stderr.write(json.dumps({"warning": "nucleus is not deployed — telemetry disabled"}) + "\n")
+                else:
+                    logging.getLogger("brain.telemetry").warning("nucleus is not deployed — telemetry disabled")
         except Exception as e:
             sys.stderr.write(f"WARNING: Error al registrar telemetría para '{stream_id}': {e}\n")
 

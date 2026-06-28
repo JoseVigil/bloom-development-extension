@@ -456,6 +456,24 @@ async function openDiscoveryTab() {
   }
 }
 
+async function openLandingTab() {
+  try {
+    const landingUrl = chrome.runtime.getURL('landing/index.html');
+    console.log('[Landing] openLandingTab() — URL:', landingUrl);
+    const allTabs = await chrome.tabs.query({});
+    const existingTab = allTabs.find(t => t.url && t.url.startsWith(landingUrl));
+    if (existingTab) {
+      await chrome.tabs.update(existingTab.id, { active: true });
+      console.log('[Landing] ✓ Tab existente traída al frente (id:', existingTab.id + ')');
+    } else {
+      const newTab = await chrome.tabs.create({ url: landingUrl, active: true });
+      console.log('[Landing] ✓ Tab creada (id:', newTab.id + ')');
+    }
+  } catch (tabErr) {
+    console.error('[Landing] ✗ openLandingTab error:', tabErr.message, tabErr.stack);
+  }
+}
+
 async function applyWindowLayout(layout = {}) {
   const {
     width  = 600,
@@ -678,6 +696,11 @@ function handleHostMessage(msg) {
     if (config?.mode === 'discovery') {
       console.log('[Discovery] host_ready → abriendo/recargando discovery tab (SW activo)');
       openDiscoveryTab();
+    }
+
+    if (config?.mode === 'landing') {
+      console.log('[Landing] host_ready → abriendo/recargando landing tab (SW activo)');
+      openLandingTab();
     }
 
     chrome.runtime.sendMessage({
@@ -1079,6 +1102,16 @@ function registerOnboardingHandlers() {
     }
 
     sendResp({ received: true });
+
+    chrome.runtime.sendMessage({
+      event: 'ACCOUNT_REGISTERED',
+      service: msg.service,
+      username: msg.username || '',
+      token_fingerprint: msg.token_fingerprint || '',
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id: msg.launch_id || config?.launchId,
+    }).catch(() => {});
+
     return true;
   });
 }
@@ -1100,6 +1133,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   }
   // --- Fin registered handler dispatch ---
   // (el if-chain existente continúa sin modificaciones a partir de aquí)
+
+  // ── HARNESS: simular handshake completo sin native host ─────────────────
+  if (event === 'HARNESS_SIMULATE_HANDSHAKE') {
+    handshakeState = 'CONFIRMED';
+    connectionState = 'CONNECTED';
+    chrome.storage.local.set({
+      synapseStatus: {
+        command: 'system_ready',
+        payload: {
+          handshake_confirmed: true,
+          profile_id: msg.profile_id || config?.profileId,
+          launch_id:  msg.launch_id  || config?.launchId,
+          timestamp:  Date.now()
+        }
+      }
+    });
+    console.log('[Harness] ✓ HARNESS_SIMULATE_HANDSHAKE — handshakeState forzado a CONFIRMED');
+    forwardToDebugPanel('synapse', 'HANDSHAKE_CONFIRMED', { _simulated: true }, config?.profileId);
+    chrome.runtime.sendMessage({ event: 'HANDSHAKE_CONFIRMED', timestamp: Date.now() }).catch(() => {});
+    sendResp({ received: true, handshakeState });
+    return true;
+  }
+  // ── HARNESS: abrir landing tab directamente ──────────────────────────────
+  if (event === 'HARNESS_OPEN_LANDING') {
+    openLandingTab();
+    sendResp({ received: true });
+    return true;
+  }
 
   // Harness: handshake de buffer — la tab del Harness recién abierta pide
   // "decime todo lo que me perdí" y le contestamos con harnessLogBuffer.
@@ -1313,6 +1374,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     forwardToDebugPanel('synapse', 'GITHUB_TOKEN_STORED', {
       vault_key: msg.vault_key || 'sk_bloom_pat'
     }, msg.profile_id || config?.profileId);
+
+    chrome.runtime.sendMessage({
+      event: 'GITHUB_TOKEN_STORED',
+      token_fingerprint: msg.token_fingerprint,
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id: msg.launch_id || config?.launchId,
+    }).catch(() => {});
 
     console.log('[Synapse] ✓ GITHUB_TOKEN_STORED → forwarding to native host');
     sendResp({ received: true });
