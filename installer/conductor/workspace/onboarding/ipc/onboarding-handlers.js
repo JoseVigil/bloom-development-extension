@@ -5,7 +5,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const { ipcMain, dialog } = require('electron');
+const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
@@ -23,7 +23,7 @@ const ONBOARDING_STEP_IDS = [
   'project_create',
 ];
 
-function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
+function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor) {
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
   // Paso 1: github_auth es el primer step.
@@ -448,6 +448,45 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
     else if (level === 'warn')  log.warn(msg);
     else                        log.info(msg);
     return { success: true };
+  });
+
+  // ── HANDLER: Harness — inyectar milestone directamente al reactor ────────
+  // Solo disponible en builds de desarrollo (!app.isPackaged).
+  // Permite disparar handleMilestone() sin necesitar una cuenta real ni
+  // que Brain emita el evento — útil para testear el flujo de UI completo.
+  //
+  // Payload: { stepId: string, data?: object }
+  // Ejemplo: { stepId: 'github_auth', data: { username: 'test-user', org: 'bloom-labs' } }
+  ipcMain.handle('harness:inject-milestone', async (event, { stepId, data = {} }) => {
+    if (app.isPackaged) {
+      log.warn('[HARNESS] inject-milestone rechazado — build empaquetado');
+      return { success: false, error: 'harness not available in production builds' };
+    }
+    if (!stepId || typeof stepId !== 'string') {
+      return { success: false, error: 'stepId is required' };
+    }
+    const reactor = getReactor?.();
+    if (!reactor) {
+      log.warn('[HARNESS] inject-milestone: reactor no disponible todavía');
+      return { success: false, error: 'reactor not initialized — call after initOnboardingBridge()' };
+    }
+    log.info(`[HARNESS] inject-milestone → stepId: "${stepId}" data: ${JSON.stringify(data)}`);
+    try {
+      // Construir un enriched mínimo que el reactor entienda
+      const enriched = {
+        type:     'ONBOARDING_MILESTONE',
+        event:    stepId.toUpperCase(),   // para que los handlers que inspeccionan enriched.event funcionen
+        data,
+        _ts:      Date.now(),
+        _harness: true,                   // trazabilidad: este evento fue inyectado por harness
+      };
+      reactor.handleMilestone(stepId, enriched);
+      log.info(`[HARNESS] inject-milestone ok — "${stepId}"`);
+      return { success: true, stepId };
+    } catch (err) {
+      log.error(`[HARNESS] inject-milestone error — "${stepId}":`, err.message);
+      return { success: false, error: err.message };
+    }
   });
 }
 

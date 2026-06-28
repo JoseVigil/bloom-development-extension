@@ -90,4 +90,15 @@ contextBridge.exposeInMainWorld('onboarding', {
     ipcRenderer.removeAllListeners('synapse:raw-event');
     ipcRenderer.on('synapse:raw-event', (_, data) => callback(data));
   },
+
+  // ── Harness — inyección directa de milestones (solo dev) ─────────────────
+  //
+  // Permite disparar handleMilestone() en el MilestoneReactor sin pasar por Brain.
+  // Solo disponible en builds no empaquetados — el handler en main lo rechaza
+  // si app.isPackaged es true.
+  //
+  // Uso en debug.html (via postMessage desde onboarding.js):
+  //   window.onboarding.injectMilestone({ stepId: 'github_auth', data: { username: 'test' } })
+  //
+  injectMilestone: (params) => ipcRenderer.invoke('harness:inject-milestone', params),
 });

@@ -176,7 +176,7 @@ const STEP_TO_NODE = {
 // Fix D: nucleus va antes que vault (índice 1 y 2) para reflejar el orden real
 // de dependencias: nucleus_create requiere [github_token], vault_init requiere
 // [github_token, nucleus_path]. El stepper visual debe coincidir con ese orden.
-const STEPPER_NODES = { workspace: 0, identity: 1, providers: 2, project: 3 };
+const STEPPER_NODES = { workspace: 0, identity: 1, providers: 2, project: 3, mandate: 4 };
 
 // Texto de status que aparece bajo el label cuando el nodo está established
 const STEPPER_STATUSES = {
@@ -184,6 +184,7 @@ const STEPPER_STATUSES = {
   identity:  'Active',
   providers: 'Connected',
   project:   'Active',
+  mandate:   'Persistent',
 };
 
 // Mapa screen → nodo activo (screen 0 = entry, sin nodo activo)
@@ -194,8 +195,8 @@ const STEPPER_MAP = {
   3: 'identity',
   4: 'identity',    // vault screen (pertenece al nodo identity)
   5: 'project',     // project selection (providers se maneja por onStepUpdate/milestone, no por navegación)
-  6: 'project',
-  7: 'project',
+  6: 'mandate',     // screen-milestone: mandate visible
+  7: 'mandate',     // screen-launch: animación de cierre
 };
 
 // Mapa nodo → screen de destino
@@ -203,7 +204,8 @@ const STEPPER_NAV = {
   workspace: 1,
   identity:  3,
   providers: 5,
-  project:   6,
+  project:   5,
+  mandate:   6,
 };
 
 function navigateToStep(nodeName) {
@@ -382,7 +384,7 @@ function _onMilestoneGithubAuth(data) {
 function _onMilestoneVaultInit(_data) {
   log('info', 'milestone: vault_init confirmado por Brain');
   addNotification('Vault initialized', { icon: '🔒', type: 'success' });
-  setStepperEstablished('vault');
+  setStepperEstablished('identity');   // ← era 'vault', que no existe en STEPPER_NODES
   showCortex('Vault initialized. Setting up workspace…');
 }
 

@@ -27,6 +27,7 @@ const log = getLogger('onboarding');
 // Permite escuchar todos los mensajes de Brain durante el onboarding y
 // reemitirlos al renderer via synapse:raw-event para el debug panel.
 let _onboardingBridge = null;
+let _reactor          = null;
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const BLOOM_BASE   = paths.bloomBase;
@@ -260,7 +261,7 @@ function initOnboardingBridge() {
   const registry = new MilestoneRegistry({ bloomRoot, ONBOARDING_EVENTS });
   registry.loadSteps();
 
-  const reactor = new MilestoneReactor({
+  _reactor = new MilestoneReactor({
     registry,
     getWindow:    () => mainWindow,
     execNucleus,
@@ -270,7 +271,7 @@ function initOnboardingBridge() {
 
   // Rehidratar desde disco para no re-ejecutar steps ya completados en
   // sesiones anteriores (ej: si Conductor se reinicia durante el onboarding).
-  reactor.rehydrateFromDisk();
+  _reactor.rehydrateFromDisk();
 
   // Conectar el bridge al reactor: solo procesamos mensajes ONBOARDING_MILESTONE.
   // El listener de raw-event (debug panel) sigue recibiendo TODO vía el segundo listener.
@@ -282,7 +283,7 @@ function initOnboardingBridge() {
       log.warn('[SYNAPSE] ONBOARDING_MILESTONE sin mapeo en registry:', enriched.event);
       return;
     }
-    reactor.handleMilestone(stepId, enriched);
+    _reactor.handleMilestone(stepId, enriched);
   });
 
   // Raw event forwarding para el panel de debug (synapse:raw-event).
@@ -538,7 +539,7 @@ app.whenReady().then(async () => {
     createOnboardingWindow();
     // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
     // para que los handlers siempre resuelvan la ventana actual
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow);
+    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor);
     // Inicializar el bridge de synapse para el onboarding.
     // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
     // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
@@ -563,7 +564,7 @@ app.on('activate', () => {
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow);
+        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor);
         initOnboardingBridge();
       }
     }
