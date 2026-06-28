@@ -306,7 +306,7 @@ async function seedMasterProfile(win) {
   }
 }
 
-async function launchMasterProfile(win) {
+async function launchMasterProfile(win, onBeforeLaunch) {
   const MILESTONE = 'nucleus_launch';
 
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
@@ -339,6 +339,15 @@ async function launchMasterProfile(win) {
 
     logger.info(`Launching profile: ${profileId}`);
     logger.info('   Running: nucleus --json synapse launch <profileId> --mode discovery');
+
+    // ── Hook pre-launch: conectar el bridge ANTES de que nucleus lance Chrome ──
+    // main.js usa este callback para llamar _installBridge.connectToBrain(profileId)
+    // mientras Chrome todavía no existe. Así el bridge está registrado como Sentinel
+    // en Brain antes de que Cortex haga REGISTER_HOST y Brain emita PROFILE_CONNECTED.
+    if (typeof onBeforeLaunch === 'function') {
+      logger.info(`[installer] onBeforeLaunch → profileId=${profileId}`);
+      onBeforeLaunch(profileId);
+    }
 
     // Invocar el launch real. Temporal debe estar activo (garantizado por certification).
     // Sentinel + Chromium tardan ~5-10s en levantar; usar timeout generoso.
@@ -1534,7 +1543,7 @@ async function deployBootstrapIonSites(win) {
 // MAIN ORCHESTRATOR
 // ============================================================================
 
-async function installService(win) {
+async function installService(win, { onBeforeLaunch } = {}) {
   try {
     logger.separator('BLOOM NUCLEUS INSTALLATION');
 
@@ -1561,8 +1570,8 @@ async function installService(win) {
     await installOllamaServiceStep(win);    // 9/12 - Arranca Ollama
     await installSessionSensor(win);        // 10/12 — non-critical, cannot abort
     await runCertification(win);            // 11/12 - Verifica Temporal ready
-    await seedMasterProfile(win);                         // 12/12 - Usa Temporal
-    const launchResult = await launchMasterProfile(win);  // Heartbeat final
+    await seedMasterProfile(win);                                        // 12/12 - Usa Temporal
+    const launchResult = await launchMasterProfile(win, onBeforeLaunch); // Heartbeat final
 
     await nucleusManager.markInstallationComplete();
 

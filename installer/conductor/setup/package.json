@@ -33,7 +33,7 @@
   },
   "build": {
     "appId": "com.bloom.conductor.installer",
-    "productName": "bloom-setup", 
+    "productName": "bloom-setup",
     "copyright": "Copyright © 2024 BTIP Studio",
     "linux": {
       "target": [
