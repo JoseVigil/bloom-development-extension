@@ -1121,6 +1121,19 @@ document.addEventListener('DOMContentLoaded', () => {
         window._synapseHandshakeNotified = true;
         addNotification('Synapse handshake complete', { icon: '⚡', type: 'success' });
       }
+      // ── NUEVO: rutear ONBOARDING_MILESTONE al reactor de milestones ──────────
+      // El SynapseBridge clasifica como ONBOARDING_MILESTONE todos los eventos
+      // de onboarding que llegan de Brain. El renderer debe actuar sobre ellos
+      // exactamente igual que si hubieran llegado por el canal push (onMilestone).
+      // data.data.step contiene el stepId (ej: 'github_auth').
+      if (data.type === 'ONBOARDING_MILESTONE') {
+        const stepId = data.data?.step;
+        if (stepId) {
+          log('info', `onSynapseEvent: ONBOARDING_MILESTONE → handleMilestoneReached('${stepId}')`);
+          handleMilestoneReached(stepId, data.data);
+        }
+      }
+
       // Reenvío al iframe — siempre disponible
       const frame = document.getElementById('debug-frame');
       if (frame?.contentWindow) {

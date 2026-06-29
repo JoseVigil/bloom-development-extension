@@ -20,8 +20,12 @@ bloom-development-extension/
         │   │   │   ├── OnboardingWizard.svelte
         │   │   │   ├── ProjectsPanel.svelte
         │   │   │   ├── SystemStatus.svelte
-        │   │   │   ├── TipsChat.svelte
-        │   │   │   └── TokenEstimator.svelte
+        │   │   │   ├── TokenEstimator.svelte
+        │   │   │   └── debug/
+        │   │   │       ├── DebugDetail.svelte
+        │   │   │       ├── DebugFeed.svelte
+        │   │   │       ├── DebugSidebar.svelte
+        │   │   │       └── DebugSimBar.svelte
         │   │   ├── stores/
         │   │   │   ├── auth.ts
         │   │   │   ├── intents.ts
@@ -35,6 +39,8 @@ bloom-development-extension/
         │   └── routes/
         │       ├── +layout.svelte
         │       ├── +page.svelte
+        │       ├── debug/
+        │       │   └── +page.svelte
         │       ├── genesis/
         │       │   └── +page.svelte
         │       ├── home/

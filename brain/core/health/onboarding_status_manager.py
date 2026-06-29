@@ -348,6 +348,82 @@ class OnboardingStatusManager:
             'error': 'No nucleus found for project check'
         }
     
+    def mark_github_auth_completed(self, profile_id: str, username: str, token_fingerprint: str) -> bool:
+        """Mark GitHub auth as completed and persist token info."""
+        if self.verbose:
+            print(f"✅ Marking github_auth completed for profile {profile_id}, user {username}")
+
+        possible_paths = [
+            'brain.core.github.auth_manager',
+            'brain.core.github.auth',
+            'brain.github.auth_manager',
+            'brain.github.auth',
+        ]
+
+        try:
+            for module_path in possible_paths:
+                module = self._safe_import_module(module_path)
+                if not module or not hasattr(module, 'AuthManager'):
+                    continue
+
+                AuthManager = getattr(module, 'AuthManager')
+                auth_manager = AuthManager()
+
+                if hasattr(auth_manager, 'save_token'):
+                    auth_manager.save_token(username, token_fingerprint, profile_id=profile_id)
+                    return True
+                elif hasattr(auth_manager, 'store_token'):
+                    auth_manager.store_token(username, token_fingerprint, profile_id=profile_id)
+                    return True
+
+                # Fallback: persist state manually
+                self._persist_github_state(profile_id, username, token_fingerprint)
+                return True
+
+            # No AuthManager found in any path — use fallback directly
+            self._persist_github_state(profile_id, username, token_fingerprint)
+            return True
+
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠️ Failed to mark github_auth: {e}")
+        return False
+
+    def _persist_github_state(self, profile_id: str, username: str, token_fingerprint: str) -> None:
+        """Fallback persistence: write GitHub auth state to .bloom/profile_state.json."""
+        from pathlib import Path
+        import json
+
+        try:
+            bloom_dir = Path(".bloom")
+            state_file = bloom_dir / "profile_state.json"
+            state_file.parent.mkdir(exist_ok=True)
+
+            # Merge with existing state if file already exists
+            existing: dict = {}
+            if state_file.exists():
+                with open(state_file, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+
+            existing.update({
+                "profile_id": profile_id,
+                "github_auth": True,
+                "github": {
+                    "username": username,
+                    "token_fingerprint": token_fingerprint,
+                },
+            })
+
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(existing, f, indent=2)
+
+            if self.verbose:
+                print(f"  💾 GitHub state persisted to {state_file}")
+
+        except Exception as e:
+            if self.verbose:
+                print(f"  ⚠️ _persist_github_state failed: {e}")
+
     def _scan_for_nuclei(self) -> list:
         """Fallback: Manually scan for nucleus directories"""
         from pathlib import Path

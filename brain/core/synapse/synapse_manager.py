@@ -170,28 +170,35 @@ class SynapseManager:
         self.logger.info(f"🔌 PROFILE_CONNECTED recibido del host — profile={profile_id} launch={launch_id}")
 
     def _handle_account_registered(self, message: Dict[str, Any]) -> None:
-        """
-        🔧 FIX 2: Registra que el usuario completó el alta de una cuenta de servicio.
-        Publica el evento en el Brain EventBus TCP (port 5678) para que
-        SynapseBridge → MilestoneReactor puedan reaccionar.
-        """
         profile_id = message.get("profile_id", "")
         launch_id  = message.get("launch_id", "")
         service    = message.get("service", "")
-        email      = message.get("email", "")
-
+        username   = message.get("username", "") or message.get("email", "")
+        token      = message.get("token", "")
         self.logger.info(
-            f"✅ ACCOUNT_REGISTERED recibido — service={service} email={email} "
+            f"✅ ACCOUNT_REGISTERED recibido — service={service} username={username} "
             f"profile={profile_id} launch={launch_id}"
         )
-
-        # Publicar en el EventBus TCP para que SynapseBridge lo propague al Conductor
+        if service.lower() in ("github", "github_oauth"):
+            try:
+                from brain.shared.credentials import GitHubCredentials
+                creds = GitHubCredentials()
+                if token:
+                    creds.save_token(token)
+                    self.logger.info(f"✅ GitHub token persistido para usuario: {username}")
+                else:
+                    self.logger.warning(
+                        "⚠️ ACCOUNT_REGISTERED sin token — poll-identity seguirá en false. "
+                        "Verificar que Cortex incluya 'token' en el payload."
+                    )
+            except Exception as e:
+                self.logger.error(f"❌ No se pudo persistir GitHub credentials: {e}")
         try:
             import socket, json as _json
             payload = _json.dumps({
                 "event":      "ACCOUNT_REGISTERED",
                 "service":    service,
-                "email":      email,
+                "username":   username,
                 "profile_id": profile_id,
                 "launch_id":  launch_id,
                 "timestamp":  time.time(),

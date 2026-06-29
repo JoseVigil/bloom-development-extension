@@ -212,7 +212,7 @@ class ServerManager:
                     logger.error(f"❌ [{conn_id}] Invalid JSON: {e}")
                     continue
                 
-                msg_type = msg.get('type')
+                msg_type = msg.get('type') or msg.get('event')
                 logger.debug(f"📥 [{conn_id}] Message: {msg_type}")
                 
                 # === MESSAGE HANDLERS ===
@@ -558,6 +558,50 @@ class ServerManager:
 
                     await self._send_to_writer(writer, {
                         'type':   'GITHUB_TOKEN_STORED_ACK',
+                        'status': 'ok',
+                    })
+
+                elif msg_type == 'ACCOUNT_REGISTERED':
+                    # Paso 1 github_auth — synapse_manager detectó registro de cuenta GitHub.
+                    #
+                    # Contrato de entrada:
+                    #   profile_id        : str — UUID del perfil Chrome
+                    #   launch_id         : str — ID del launch activo
+                    #   service           : str — nombre del servicio (ej. 'github')
+                    #   username          : str — username registrado
+                    #   token_fingerprint : str — SHA256 primeros 8 chars del token
+                    #
+                    # Sin handler explícito este msg_type caía al `else` (línea 584)
+                    # que rutea por target_profile. Como synapse_manager no incluye
+                    # target_profile, terminaba en broadcast a hosts — los Sentinels
+                    # (tipo 'cli') nunca lo recibían. ONBOARDING_STEP_COMPLETE nunca
+                    # se emitía → MilestoneReactor nunca avanzaba el onboarding.
+                    profile_id        = msg.get('profile_id')
+                    launch_id         = msg.get('launch_id')
+                    service           = msg.get('service', '')
+                    username          = msg.get('username', '')
+                    token_fingerprint = msg.get('token_fingerprint', '')
+
+                    logger.info(
+                        f"✅ [{conn_id}] ACCOUNT_REGISTERED: "
+                        f"profile={profile_id[:8] if profile_id else '?'} "
+                        f"service={service} username={username}"
+                    )
+
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id':        profile_id,
+                            'step':              'github_auth',
+                            'service':           service,
+                            'username':          username,
+                            'token_fingerprint': token_fingerprint,
+                        }
+                    )
+                    await self._broadcast_event(event)
+
+                    await self._send_to_writer(writer, {
+                        'type':   'ACCOUNT_REGISTERED_ACK',
                         'status': 'ok',
                     })
 
