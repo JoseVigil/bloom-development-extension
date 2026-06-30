@@ -514,19 +514,19 @@ class HarnessGenerator:
 
 ---
 
-### 2.2 ionpump_protocol.js — nuevo archivo en Cortex
+### 2.2 harnessProtocol.js — nuevo archivo en Cortex
 
-Este archivo es generado por Brain en seed y copiado al directorio de la extensión. Expone `IONPUMP_PROTOCOL_MANIFEST` en `self.*` para que el Harness lo lea.
+Este archivo es generado por Brain en seed y copiado al directorio de la extensión. Expone `HARNESS_PROTOCOL_MANIFEST` en `self.*` para que el Harness lo lea.
 
 ```javascript
-// ionpump_protocol.js
+// harnessProtocol.js
 // Generado por Brain en seed. No editar manualmente.
-// Actualizar IONPUMP_PROTOCOL_MANIFEST cuando cambien los comandos Synapse
+// Actualizar HARNESS_PROTOCOL_MANIFEST cuando cambien los comandos Synapse
 // soportados por IonPump.
 
-self.IONPUMP_PROTOCOL_MANIFEST = {
+self.HARNESS_PROTOCOL_MANIFEST = {
   version: "1.0.0",
-  protocol: "ionpump",
+  protocol: "harness",
   description: "Web automation runtime — ion site control and DOM commands",
 
   messages: [

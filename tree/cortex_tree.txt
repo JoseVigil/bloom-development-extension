@@ -2,7 +2,11 @@ bloom-development-extension/
 └── cortex/
     ├── build-cortex/
     │   ├── VERSION
+    │   ├── build_number.darwin.txt
+    │   ├── build_number.effective.txt
+    │   ├── build_number.linux.txt
     │   ├── build_number.txt
+    │   ├── build_number.windows.txt
     │   ├── cortex.meta.json
     │   └── package.py
     ├── extension/
@@ -12,7 +16,11 @@ bloom-development-extension/
     │   │   └── icon16.png
     │   ├── background.js
     │   ├── content.js
-    │   └── manifest.json
+    │   ├── manifest.json
+    │   └── protocols/
+    │       ├── discovery.schema.json
+    │       ├── harness.schema.json
+    │       └── landing.schema.json
     └── legacy-crypto/
         ├── crx/
         │   ├── id.json

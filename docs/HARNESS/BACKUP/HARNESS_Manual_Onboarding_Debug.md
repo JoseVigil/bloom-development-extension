@@ -29,7 +29,7 @@ Para que un nuevo agente pueda continuar este trabajo sin reconstruir contexto, 
 | `INVESTIGACION_Harness_Protocol_Autodiscovery.md` | (raíz del proyecto) | Modelo mental del Harness: ProtocolReader, manifests, canales runtime vs tabs |
 | `harness_dead_diagnosis.svg` | (raíz del proyecto) | Diagnóstico de las 4 causas raíz + plan de reparación (ya ejecutado) |
 | `discoveryProtocol.js` | `.../extension/discovery/discoveryProtocol.js` | Protocolo real + `DISCOVERY_PROTOCOL_MANIFEST` con los 8 mensajes del flujo |
-| `ionpump_protocol.js` | `.../extension/harness/ionpump_protocol.js` | `IONPUMP_PROTOCOL_MANIFEST` con los 10 comandos DOM |
+| `harnessProtocol.js` | `.../extension/harness/harnessProtocol.js` | `HARNESS_PROTOCOL_MANIFEST` con los 10 comandos DOM |
 | `harness.synapse.config.js` | `.../extension/harness.synapse.config.js` | Config de sesión activa: profileId, launchId, profileAlias |
 | `manifest.json` | `.../extension/manifest.json` | Permisos, web_accessible_resources, content_scripts |
 | `index.html` | `.../extension/harness/index.html` | HTML del Harness (ahora sin inline scripts) |

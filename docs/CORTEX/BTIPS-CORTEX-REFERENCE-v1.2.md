@@ -100,7 +100,7 @@ extension/
 ├── protocols/
 │   ├── discovery.schema.json        ← Schema SSoT del protocolo Discovery
 │   ├── landing.schema.json          ← Schema SSoT del protocolo Landing
-│   └── ionpump.schema.json          ← Schema SSoT del protocolo IonPump
+│   └── harness.schema.json          ← Schema SSoT del protocolo IonPump
 │
 ├── discovery/
 │   ├── index.html                   ← UI de la página de discovery/onboarding
@@ -885,7 +885,7 @@ Para agregar `perplexity.ai` u otro sitio:
 
 1. **Brain:** Crear recipe `ionsites/perplexity.ai/message.ion`. IonPump lo detecta por hot-reload del filesystem.
 2. **Cortex:** Si el dominio no está en `content_scripts.matches` del manifest, agregar `"*://perplexity.ai/*"`. Esto requiere re-empaquetar y desplegar el `.blx`.
-3. **Harness:** En `IONPUMP_PROTOCOL_MANIFEST`, agregar el dominio al campo `options` del parámetro `site`. El Harness lo refleja automáticamente.
+3. **Harness:** En `HARNESS_PROTOCOL_MANIFEST`, agregar el dominio al campo `options` del parámetro `site`. El Harness lo refleja automáticamente.
 
 ---
 
@@ -933,7 +933,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
 self.LANDING_PROTOCOL_MANIFEST = { ... };
 
 // content.js (o ionsites-protocol.js) expone:
-self.IONPUMP_PROTOCOL_MANIFEST = { ... };
+self.HARNESS_PROTOCOL_MANIFEST = { ... };
 ```
 
 El `ProtocolReader` del Harness carga todos los manifests disponibles al inicializarse. El mecanismo es un **escaneo de `self.*`**: itera sobre el contexto global buscando cualquier objeto que tenga la forma `{ version, protocol, messages: [] }`. No existe un array hardcodeado de nombres de protocolo en `harness/index.html`.
@@ -967,7 +967,7 @@ Los tres schemas son:
 |---------|-----------|-------------|
 | `protocols/discovery.schema.json` | `discovery` | Onboarding, handshake, GitHub auth, registro de cuentas |
 | `protocols/landing.schema.json` | `landing` | Cockpit de sesión, stats, health check, sync |
-| `protocols/ionpump.schema.json` | `ionpump` | Comandos DOM y eventos de automatización web |
+| `protocols/harness.schema.json` | `ionpump` | Comandos DOM y eventos de automatización web |
 
 **Por qué los schemas son la fuente canónica, no los manifests JS**
 
@@ -1075,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadScriptOptional('../harness.synapse.config.js');
   await loadScriptOptional('../discovery.synapse.config.js');
   await loadScriptOptional('../discovery/discoveryProtocol.js');
-  await loadScriptOptional('ionpump_protocol.js');
+  await loadScriptOptional('harnessProtocol.js');
 
   // --- Solo existen post-onboarding ---
   await loadScriptOptional('../landing.synapse.config.js');
@@ -1568,14 +1568,14 @@ Esta sección describe los puntos de extensión de Cortex para desarrollo de nue
 
 1. **`content.js`**: Implementar la función `executeNewCommand(payload)` y agregar el case en el switch del `onMessage` listener.
 2. **Brain**: Agregar el nuevo tipo de comando en `SynapseServer` y en los módulos que lo necesiten (IonPump, intent executor, etc.).
-3. **Harness**: Si el nuevo comando necesita testing, agregar al `IONPUMP_PROTOCOL_MANIFEST` o al manifest correspondiente.
+3. **Harness**: Si el nuevo comando necesita testing, agregar al `HARNESS_PROTOCOL_MANIFEST` o al manifest correspondiente.
 
 ### Agregar un nuevo sitio a IonPump
 
 Ver sección 12. Resumen:
 1. Crear recipe `.ion` en `ionsites/{dominio}/message.ion`.
 2. Si el dominio no está en `content_scripts.matches`, agregar y reempaquetar `.blx`.
-3. Agregar el dominio al `options` del parámetro `site` en `IONPUMP_PROTOCOL_MANIFEST`.
+3. Agregar el dominio al `options` del parámetro `site` en `HARNESS_PROTOCOL_MANIFEST`.
 
 ### Agregar una nueva página interna
 

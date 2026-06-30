@@ -6,7 +6,7 @@
 > - Sentinel seed.go: eliminadas `copyHarnessPage()`, `copyIonPumpProtocol()`, `writeHarnessConfig()` — Brain las maneja
 > - Sentinel seed.go: único agregado real es el flag `--dev` pasado a `brain profile create`
 > - `harness.synapse.config.js`: movido de seed a **launch** (`ignition_identity.go`)
-> - `ionpump_protocol.js`: lo copia `discovery_generator.py` de Brain, no Sentinel
+> - `harnessProtocol.js`: lo copia `discovery_generator.py` de Brain, no Sentinel
 > - `harness/index.html`: lo copia `harness_generator.py` de Brain en `profile create --dev`
 > - Cortex: sin cambios respecto a v1.0
 
@@ -28,7 +28,7 @@ sentinel seed <alias> <master> [--dev]
   │
   ├── 2. Llama: brain profile create <alias> [--dev]
   │       └── Brain crea extension/, genera páginas, copia assets
-  │           En --dev: también copia harness/index.html e ionpump_protocol.js
+  │           En --dev: también copia harness/index.html e harnessProtocol.js
   │
   └── 3. bin/extension/ se borra (defer cleanup en Sentinel)
       — Sentinel no escribe nada en extension/ después de este punto
@@ -221,20 +221,20 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
 
 ---
 
-### 1.2 ionpump_protocol.js — ubicación correcta
+### 1.2 harnessProtocol.js — ubicación correcta
 
 > ⚠️ **Diferencia respecto a v1.0:** Este archivo NO es creado por Sentinel.
-> Vive en `brain/core/profile/web/templates/discovery/ionpump_protocol.js` y
+> Vive en `brain/core/profile/web/templates/discovery/harnessProtocol.js` y
 > es copiado por `discovery_generator.py` de Brain junto con los demás assets estáticos.
 > Sentinel no interviene.
 
-**Ubicación del template:** `brain/core/profile/web/templates/discovery/ionpump_protocol.js`
+**Ubicación del template:** `brain/core/profile/web/templates/discovery/harnessProtocol.js`
 
 **Quién lo copia:** `discovery_generator.py` → `_copy_static_assets()` → lista `files_to_copy`
 
-**Dónde termina:** `profiles/<uuid>/extension/discovery/ionpump_protocol.js`
+**Dónde termina:** `profiles/<uuid>/extension/discovery/harnessProtocol.js`
 
-El contenido del manifest (`IONPUMP_PROTOCOL_MANIFEST`) no cambia respecto a v1.0.
+El contenido del manifest (`HARNESS_PROTOCOL_MANIFEST`) no cambia respecto a v1.0.
 Ver `IMPL_PROMPT_BRAIN_IonPump_Harness_v2.md` para el contenido completo.
 
 ---
@@ -257,7 +257,7 @@ Agregar a `web_accessible_resources` en el `manifest.json` del `.blx`:
         "discovery/index.html",
         "discovery/styles.css",
         "discovery/discovery.js",
-        "discovery/ionpump_protocol.js",
+        "discovery/harnessProtocol.js",
         "landing/index.html",
         "landing/styles.css",
         "landing/landing.js",
@@ -272,7 +272,7 @@ Agregar a `web_accessible_resources` en el `manifest.json` del `.blx`:
 **Cambios respecto al manifest actual:**
 - Agrega `"harness.synapse.config.js"` — config que Sentinel escribe en **launch**
 - Agrega `"harness/index.html"` y `"harness/*"` — solo existe en dev builds
-- Agrega `"discovery/ionpump_protocol.js"` — nuevo asset en discovery/
+- Agrega `"discovery/harnessProtocol.js"` — nuevo asset en discovery/
 
 > **Nota:** `harness/index.html` solo existe en el filesystem de la extensión cuando Brain
 > lo copió en `profile create --dev`. En prod la entrada en `web_accessible_resources`
@@ -499,7 +499,7 @@ profiles/<uuid>/extension/
 ├── discovery/
 │   ├── index.html                    ← existente
 │   ├── discoveryProtocol.js          ← existente
-│   ├── ionpump_protocol.js           ← NUEVO (copiado por Brain/discovery_generator)
+│   ├── harnessProtocol.js           ← NUEVO (copiado por Brain/discovery_generator)
 │   └── [otros assets existentes]
 ├── landing/
 │   └── [existente]
@@ -522,8 +522,8 @@ profiles/<uuid>/extension/
 
 - [ ] `DISCOVERY_PROTOCOL_MANIFEST` agregado al final de `templates/discovery/discoveryProtocol.js`
 - [ ] 6 mensajes del milestone GitHub presentes en el manifest
-- [ ] `ionpump_protocol.js` creado en `templates/discovery/` (Brain lo copia via discovery_generator)
-- [ ] `manifest.json` actualizado: `harness.synapse.config.js`, `harness/*`, `discovery/ionpump_protocol.js`
+- [ ] `harnessProtocol.js` creado en `templates/discovery/` (Brain lo copia via discovery_generator)
+- [ ] `manifest.json` actualizado: `harness.synapse.config.js`, `harness/*`, `discovery/harnessProtocol.js`
 - [ ] `harness/index.html` implementado con ProtocolReader y UI dinámica
 - [ ] Harness dispatcher diferencia `channel: "runtime"` vs `channel: "tabs"`
 - [ ] Harness listener es pasivo — no interfiere con routing de background.js
@@ -540,6 +540,6 @@ profiles/<uuid>/extension/
 
 ---
 
-*Cortex: implementar en orden: manifest discovery → ionpump_protocol.js → manifest.json → harness/index.html*  
+*Cortex: implementar en orden: manifest discovery → harnessProtocol.js → manifest.json → harness/index.html*  
 *Sentinel seed: solo agregar --dev flag*  
 *Sentinel launch: agregar writeHarnessConfig en ignition_identity.go*

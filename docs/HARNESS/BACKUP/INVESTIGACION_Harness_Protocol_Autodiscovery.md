@@ -331,9 +331,9 @@ Cuando IONPump sea implementado, agrega su propio manifest al sistema:
 ```javascript
 // content.js (o un ionsites-protocol.js separado)
 
-self.IONPUMP_PROTOCOL_MANIFEST = {
+self.HARNESS_PROTOCOL_MANIFEST = {
   version: "1.0.0",
-  protocol: "ionpump",
+  protocol: "harness",
   description: "Web automation runtime — DOM commands and site events",
 
   // Mensajes que van POR chrome.runtime (el Harness puede simularlos directamente)
@@ -437,7 +437,7 @@ Si el manifest de Cortex no incluye perplexity en `content_scripts.matches`, hay
 
 ### 5.3 Lo que cambia en el protocolo para que el Harness lo lea
 
-En `IONPUMP_PROTOCOL_MANIFEST`, se agrega perplexity al campo `options` de los parámetros `site`:
+En `HARNESS_PROTOCOL_MANIFEST`, se agrega perplexity al campo `options` de los parámetros `site`:
 
 ```javascript
 options: ["claude.ai", "chatgpt.com", "grok.com", "aistudio.google.com", "perplexity.ai"]

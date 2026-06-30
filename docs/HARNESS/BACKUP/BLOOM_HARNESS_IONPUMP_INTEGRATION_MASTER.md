@@ -30,7 +30,7 @@ Este documento resuelve una tensión arquitectónica real: Harness e IonPump se 
 ├──────────────┼──────────────────────────────────────────────────────┤
 │ Cortex       │ Aloja harness/index.html (copiado por Sentinel/Brain).│
 │              │ Expone DISCOVERY_PROTOCOL_MANIFEST y                  │
-│              │ IONPUMP_PROTOCOL_MANIFEST en self.*                   │
+│              │ HARNESS_PROTOCOL_MANIFEST en self.*                   │
 │              │ El content.js ejecuta comandos DOM de IonPump.        │
 │              │ NO modifica nada más.                                 │
 ├──────────────┼──────────────────────────────────────────────────────┤
@@ -54,7 +54,7 @@ Son problemas ortogonales que comparten infraestructura.
 
 **IonPump resuelve:** "¿Cómo ejecuta Brain acciones DOM en sitios web arbitrarios sin hardcodear lógica por sitio, sin requerir deploy de Cortex cuando cambia la UI de un sitio, y manteniendo el protocolo Synapse existente sin modificaciones?"
 
-**La superficie compartida:** ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump define el `IONPUMP_PROTOCOL_MANIFEST`. El Harness lo lee. Es una relación unidireccional: IonPump produce, Harness consume.
+**La superficie compartida:** ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump define el `HARNESS_PROTOCOL_MANIFEST`. El Harness lo lee. Es una relación unidireccional: IonPump produce, Harness consume.
 
 ---
 
@@ -68,7 +68,7 @@ El Harness NO tiene tabla de mensajes propia. NO define eventos. NO mantiene con
 extension/
 ├── discovery/discoveryProtocol.js    → DISCOVERY_PROTOCOL_MANIFEST
 ├── landing/landingProtocol.js        → LANDING_PROTOCOL_MANIFEST
-└── (futuro) ionpump_protocol.js      → IONPUMP_PROTOCOL_MANIFEST
+└── (futuro) harnessProtocol.js      → HARNESS_PROTOCOL_MANIFEST
 ```
 
 Cada protocolo exporta un objeto `*_PROTOCOL_MANIFEST` en `self.*`. El Harness los descubre y lee al inicializarse. Agregar un mensaje al protocolo actualiza el Harness automáticamente. No hay paso 2.
@@ -191,7 +191,7 @@ class ProtocolReader {
     const available = [
       { key: 'discovery', global: 'DISCOVERY_PROTOCOL_MANIFEST' },
       { key: 'landing',   global: 'LANDING_PROTOCOL_MANIFEST' },
-      { key: 'ionpump',   global: 'IONPUMP_PROTOCOL_MANIFEST' }   // cuando exista
+      { key: 'ionpump',   global: 'HARNESS_PROTOCOL_MANIFEST' }   // cuando exista
     ];
     for (const { key, global } of available) {
       if (self[global]) this.protocols[key] = self[global];
@@ -385,12 +385,12 @@ error_handlers:
 
 Cuando IonPump existe, `discoveryProtocol.js` ya tiene el `DISCOVERY_PROTOCOL_MANIFEST` con los mensajes de GitHub. El Harness los lee y genera los botones de simulación.
 
-IonPump agrega además el `IONPUMP_PROTOCOL_MANIFEST` en `ionpump_protocol.js` (archivo nuevo en Cortex, sin modificar nada existente):
+IonPump agrega además el `HARNESS_PROTOCOL_MANIFEST` en `harnessProtocol.js` (archivo nuevo en Cortex, sin modificar nada existente):
 
 ```javascript
-self.IONPUMP_PROTOCOL_MANIFEST = {
+self.HARNESS_PROTOCOL_MANIFEST = {
   version: "1.0.0",
-  protocol: "ionpump",
+  protocol: "harness",
   description: "Web automation runtime — ion site control",
 
   messages: [
@@ -497,8 +497,8 @@ Para que el milestone GitHub funcione con IonPump completamente operativo:
 - `github.com/auth.ion`
 
 **Cortex:**
-- `ionpump_protocol.js` — expone `IONPUMP_PROTOCOL_MANIFEST` en `self.*`
-- `manifest.json` — agrega `ionpump_protocol.js` a `web_accessible_resources`
+- `harnessProtocol.js` — expone `HARNESS_PROTOCOL_MANIFEST` en `self.*`
+- `manifest.json` — agrega `harnessProtocol.js` a `web_accessible_resources`
 
 **Sentinel:**
 - `seed.go` — `writeHarnessConfig()` + copia `harness/index.html`
@@ -518,7 +518,7 @@ Para que el milestone GitHub funcione con IonPump completamente operativo:
    → background.js conecta a bloom-host (handshake 3 fases)
 
 2. Developer abre Harness en tab separada
-   → ProtocolReader carga DISCOVERY_PROTOCOL_MANIFEST y IONPUMP_PROTOCOL_MANIFEST
+   → ProtocolReader carga DISCOVERY_PROTOCOL_MANIFEST y HARNESS_PROTOCOL_MANIFEST
    → Panel Simulate muestra botones generados dinámicamente
    → Feed muestra HANDSHAKE_CONFIRMED (confirma canal activo)
 
@@ -587,7 +587,7 @@ installer/metamorph/internal/inspection/
 extension/
 ├── discovery/discoveryProtocol.js    ← agrega DISCOVERY_PROTOCOL_MANIFEST al final
 ├── landing/landingProtocol.js        ← agrega LANDING_PROTOCOL_MANIFEST al final
-└── manifest.json                     ← agrega harness/index.html y ionpump_protocol.js
+└── manifest.json                     ← agrega harness/index.html y harnessProtocol.js
                                          a web_accessible_resources
 
 sentinel/internal/seed/seed.go        ← agrega writeHarnessConfig()
@@ -669,7 +669,7 @@ Semana 3 — IonPump Execution + Integración
   10. ionpump_executor.py (Ion → Synapse commands)
   11. ionpump_state.py (state machine)
   12. Modificación de intent_executor.py
-  13. IONPUMP_PROTOCOL_MANIFEST en ionpump_protocol.js
+  13. HARNESS_PROTOCOL_MANIFEST en harnessProtocol.js
   14. manifest.json actualizado (harness + ionpump_protocol)
 
 Semana 4 — Hot-reload + Metamorph + Validación end-to-end
@@ -685,7 +685,7 @@ Semana 4 — Hot-reload + Metamorph + Validación end-to-end
 
 | # | Pregunta | Owner | Blocking? |
 |---|----------|-------|-----------|
-| 1 | ¿El `ionpump_protocol.js` vive en Cortex o lo genera Brain en seed? | Arq. | Semana 3 |
+| 1 | ¿El `harnessProtocol.js` vive en Cortex o lo genera Brain en seed? | Arq. | Semana 3 |
 | 2 | ¿Qué versión mínima de Cortex requiere el ion de github.com? | Cortex | Semana 2 |
 | 3 | ¿El watchdog de IonPump usa `watchdog` library Python o polling manual? | Brain | Semana 4 |
 | 4 | Formato exacto del manifest Metamorph para `.ion` files | Metamorph | Semana 4 |

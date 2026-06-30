@@ -766,9 +766,9 @@ def create_profile(
 
 ---
 
-### 2.3 ionpump_protocol.js — archivo en templates de Cortex
+### 2.3 harnessProtocol.js — archivo en templates de Cortex
 
-Este archivo vive en `brain/core/profile/web/templates/discovery/ionpump_protocol.js`.
+Este archivo vive en `brain/core/profile/web/templates/discovery/harnessProtocol.js`.
 Es copiado por `discovery_generator.py` al directorio de la extensión junto con los otros
 assets estáticos, exactamente igual que `discoveryProtocol.js`.
 
@@ -779,14 +779,14 @@ files_to_copy = [
     "discovery.js",
     "script.js",
     "discoveryProtocol.js",
-    "ionpump_protocol.js",   # ← NUEVO
+    "harnessProtocol.js",   # ← NUEVO
     "content-aistudio.js",
     "onboarding.js",
     "styles.css"
 ]
 ```
 
-**Contenido de `templates/discovery/ionpump_protocol.js`:** ver `IMPL_PROMPT_BRAIN_IonPump_Harness.md` v1.0 sección 2.2 — el contenido del manifest no cambia.
+**Contenido de `templates/discovery/harnessProtocol.js`:** ver `IMPL_PROMPT_BRAIN_IonPump_Harness.md` v1.0 sección 2.2 — el contenido del manifest no cambia.
 
 ---
 

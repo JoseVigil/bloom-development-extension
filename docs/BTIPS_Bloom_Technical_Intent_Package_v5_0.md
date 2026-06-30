@@ -227,7 +227,7 @@ Los tres activos de Cortex comparten un canal único de **Chrome Native Messagin
 
 * `DISCOVERY_PROTOCOL_MANIFEST` — mensajes del flujo de onboarding
 * `LANDING_PROTOCOL_MANIFEST` — mensajes del dashboard del perfil
-* `IONPUMP_PROTOCOL_MANIFEST` — comandos DOM y eventos de automatización web
+* `HARNESS_PROTOCOL_MANIFEST` — comandos DOM y eventos de automatización web
 
 Este mecanismo garantiza que agregar un mensaje al protocolo actualice automáticamente cualquier componente que los consuma — sin pasos adicionales, sin builds separados.
 

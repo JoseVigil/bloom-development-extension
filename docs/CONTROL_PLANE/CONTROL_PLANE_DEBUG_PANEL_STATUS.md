@@ -302,7 +302,7 @@ PRÓXIMA SESIÓN
 DESPUÉS DEL MILESTONE
   7. Puente background.js → POST /internal/system-event
   8. Versión Svelte en /debug si se quiere en Workspace
-  9. IonPump integration (IONPUMP_PROTOCOL_MANIFEST)
+  9. IonPump integration (HARNESS_PROTOCOL_MANIFEST)
 ```
 
 ---

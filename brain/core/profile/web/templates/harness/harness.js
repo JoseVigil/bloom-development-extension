@@ -16,7 +16,7 @@ const ProtocolReader = {
     const candidates = [
       'DISCOVERY_PROTOCOL_MANIFEST',
       'LANDING_PROTOCOL_MANIFEST',
-      'IONPUMP_PROTOCOL_MANIFEST',
+      'HARNESS_PROTOCOL_MANIFEST',
     ];
 
     this.manifests = [];
@@ -44,7 +44,7 @@ const ProtocolReader = {
     const SCHEMA_FILES = [
       { file: 'protocols/discovery.schema.json', key: 'DISCOVERY_PROTOCOL_MANIFEST' },
       { file: 'protocols/landing.schema.json',   key: 'LANDING_PROTOCOL_MANIFEST'   },
-      { file: 'protocols/ionpump.schema.json',   key: 'IONPUMP_PROTOCOL_MANIFEST'   },
+      { file: 'protocols/harness.schema.json',   key: 'HARNESS_PROTOCOL_MANIFEST'   },
     ];
 
     // Solo disponible dentro de la extensión; en dev standalone esta función
@@ -789,7 +789,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadScriptOptional('../harness.synapse.config.js');
   await loadScriptOptional('../discovery.synapse.config.js');
   await loadScriptOptional('../discovery/discoveryProtocol.js');
-  await loadScriptOptional('ionpump_protocol.js');
+  await loadScriptOptional('harnessProtocol.js');
 
   // --- Solo existen post-onboarding ---
   await loadScriptOptional('../landing.synapse.config.js');

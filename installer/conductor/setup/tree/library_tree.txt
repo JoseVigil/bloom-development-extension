@@ -3260,7 +3260,7 @@ BloomNucleus/
 │       │   ├── harness/
 │       │   │   ├── harness.js
 │       │   │   ├── index.html
-│       │   │   └── ionpump_protocol.js
+│       │   │   └── harnessProtocol.js
 │       │   ├── harness.synapse.config.js
 │       │   ├── landing/
 │       │   │   ├── data-loader.js

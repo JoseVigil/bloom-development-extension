@@ -198,15 +198,15 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
 
 ---
 
-### 1.2 Crear ionpump_protocol.js
+### 1.2 Crear harnessProtocol.js
 
-Archivo nuevo en `extension/`. Expone `IONPUMP_PROTOCOL_MANIFEST` en `self.*`.
+Archivo nuevo en `extension/`. Expone `HARNESS_PROTOCOL_MANIFEST` en `self.*`.
 
 Ver contenido completo en: `IMPL_PROMPT_BRAIN_IonPump_Harness.md` sección 2.2
 
 El archivo es copiado por Brain/Sentinel en seed. No editar manualmente en producción.
 
-**Ubicación:** `extension/ionpump_protocol.js`
+**Ubicación:** `extension/harness/harnessProtocol.js`
 
 **Regla:** los `options` del parámetro `site` se actualizan cuando se agrega un nuevo ion site. El Harness refleja el cambio automáticamente sin modificar su código.
 
@@ -222,6 +222,9 @@ Agregar a `web_accessible_resources`:
     {
       "matches": ["<all_urls>"],
       "resources": [
+        "protocols/discovery.schema.json",
+        "protocols/landing.schema.json",
+        "protocols/harness.schema.json",
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
         "harness.synapse.config.js",
@@ -230,11 +233,13 @@ Agregar a `web_accessible_resources`:
         "discovery/index.html",
         "discovery/styles.css",
         "discovery/discovery.js",
+        "discovery/discoveryProtocol.js",
         "landing/index.html",
         "landing/styles.css",
         "landing/landing.js",
         "harness/index.html",
-        "ionpump_protocol.js"
+        "harness/harnessProtocol.js",
+        "harness/*"
       ]
     }
   ]
@@ -244,7 +249,7 @@ Agregar a `web_accessible_resources`:
 **Cambios respecto al manifest actual:**
 - Agrega `"harness.synapse.config.js"` — config que Sentinel escribe
 - Agrega `"harness/index.html"` — ya estaba pero confirmar
-- Agrega `"ionpump_protocol.js"` — NUEVO
+- Agrega `"harnessProtocol.js"` — NUEVO
 - Agrega `"harness/*"` — para recursos futuros del Harness
 
 **Nota:** `harness/index.html` solo existe en el filesystem de la extensión cuando Sentinel lo copió (builds de dev). En prod, la entrada en `web_accessible_resources` no causa error si el archivo no existe — Chrome simplemente devuelve 404.
@@ -384,15 +389,15 @@ func copyHarnessPage(brainTemplatesDir, extensionDir string) error {
 }
 
 func copyIonPumpProtocol(brainTemplatesDir, extensionDir string) error {
-    // Copia ionpump_protocol.js al directorio raíz de la extensión.
+    // Copia harnessProtocol.js al directorio raíz de la extensión.
     // Siempre se copia (dev y prod) — es parte del runtime de Cortex.
     
-    src := filepath.Join(brainTemplatesDir, "ionpump_protocol.js")
+    src := filepath.Join(brainTemplatesDir, "harnessProtocol.js")
     if _, err := os.Stat(src); os.IsNotExist(err) {
-        return fmt.Errorf("ionpump_protocol.js not found in Brain templates: %s", src)
+        return fmt.Errorf("harnessProtocol.js not found in Brain templates: %s", src)
     }
     
-    dst := filepath.Join(extensionDir, "ionpump_protocol.js")
+    dst := filepath.Join(extensionDir, "harnessProtocol.js")
     return copyFile(src, dst)
 }
 ```
@@ -436,7 +441,7 @@ sentinel seed --profile-id <id> --reseed
 Esto sobrescribe:
 - `harness/index.html` → nueva versión del Harness
 - `harness.synapse.config.js` → regenerado con timestamps actualizados
-- `ionpump_protocol.js` → actualizado si cambió
+- `harnessProtocol.js` → actualizado si cambió
 
 No requiere reinstalar Cortex. No requiere empaquetar un nuevo `.blx`.
 
@@ -451,7 +456,7 @@ Después del seed, verificar que existen:
 ├── discovery.synapse.config.js   ← existente
 ├── landing.synapse.config.js     ← existente
 ├── harness.synapse.config.js     ← NUEVO (siempre)
-├── ionpump_protocol.js           ← NUEVO (siempre)
+├── harnessProtocol.js           ← NUEVO (siempre)
 └── harness/
     └── index.html                ← NUEVO (solo en dev)
 ```
@@ -472,8 +477,8 @@ El Sentinel puede agregar estas verificaciones a su output de seed:
 
 - [ ] `DISCOVERY_PROTOCOL_MANIFEST` agregado al final de `discoveryProtocol.js`
 - [ ] 6 mensajes del milestone GitHub presentes en el manifest
-- [ ] `ionpump_protocol.js` creado con `IONPUMP_PROTOCOL_MANIFEST`
-- [ ] `manifest.json` actualizado: `harness.synapse.config.js`, `harness/*`, `ionpump_protocol.js`
+- [ ] `harnessProtocol.js` creado con `HARNESS_PROTOCOL_MANIFEST`
+- [ ] `manifest.json` actualizado: `harness.synapse.config.js`, `harness/*`, `harnessProtocol.js`
 - [ ] `harness/index.html` implementado con ProtocolReader y UI dinámica
 - [ ] Harness dispatcher diferencia `channel: "runtime"` vs `channel: "tabs"`
 - [ ] Harness listener es pasivo — no interfiere con routing de background.js

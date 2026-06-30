@@ -63,7 +63,7 @@
       "resources": [
         "protocols/discovery.schema.json",
         "protocols/landing.schema.json",
-        "protocols/ionpump.schema.json",
+        "protocols/harness.schema.json",
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
         "harness.synapse.config.js",
@@ -73,11 +73,11 @@
         "discovery/styles.css",
         "discovery/discovery.js",
         "discovery/discoveryProtocol.js",
-        "discovery/ionpump_protocol.js",
         "landing/index.html",
         "landing/styles.css",
         "landing/landing.js",
         "harness/index.html",
+        "harness/harnessProtocol.js",
         "harness/*"
       ]
     }

@@ -50,6 +50,13 @@ contextBridge.exposeInMainWorld('onboarding', {
   // y devuelve el JSON parseado. El debug panel lo usa para el sidebar.
   health: () => ipcRenderer.invoke('onboarding:health'),
 
+  // ── Resume state — leer progreso persistido al arrancar ──────────────────
+  //
+  // Llamado en DOMContentLoaded de onboarding.js para detectar si hay un
+  // onboarding en curso y saltar automáticamente al step correcto.
+  // Ver onboarding-handlers.js → 'onboarding:get-resume-state'.
+  getResumeState: () => ipcRenderer.invoke('onboarding:get-resume-state'),
+
   // ── Push del MilestoneReactor (Cambio 6) ──────────────────────────────
   //
   // onMilestone — emitido por MilestoneReactor cuando un hito se completa.
@@ -90,6 +97,11 @@ contextBridge.exposeInMainWorld('onboarding', {
     ipcRenderer.removeAllListeners('synapse:raw-event');
     ipcRenderer.on('synapse:raw-event', (_, data) => callback(data));
   },
+
+  // Persistir github_username / github_org en nucleus.json desde el renderer.
+  // Usado por _onMilestoneGithubAuth() como fallback cuando Brain no escribe
+  // estos campos por su cuenta. Ver onboarding-handlers.js → 'onboarding:persist-github-data'.
+  persistGithubData: (params) => ipcRenderer.invoke('onboarding:persist-github-data', params),
 
   // ── Harness — inyección directa de milestones (solo dev) ─────────────────
   //

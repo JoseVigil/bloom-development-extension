@@ -5858,7 +5858,7 @@ bloom-development-extension/
 │   │   │           │   ├── __init__.py
 │   │   │           │   ├── harness.js
 │   │   │           │   ├── index.html
-│   │   │           │   └── ionpump_protocol.js
+│   │   │           │   └── harnessProtocol.js
 │   │   │           └── landing/
 │   │   │               ├── __init__.py
 │   │   │               ├── data-loader.js

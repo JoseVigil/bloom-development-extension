@@ -24,7 +24,7 @@
 
 Antes de la migración (Fases 1–4), la extensión Bloom Cortex mantenía la definición de sus mensajes de protocolo en tres lugares distintos y no coordinados:
 
-- **Archivos `*Protocol.js`** (`discovery/discoveryProtocol.js`, `landing/landingProtocol.js`, `ionpump_protocol.js`): definían globals como `DISCOVERY_PROTOCOL_MANIFEST` inyectados en `window` / `self`. El Harness los leía de forma síncrona en boot.
+- **Archivos `*Protocol.js`** (`discovery/discoveryProtocol.js`, `landing/landingProtocol.js`, `harnessProtocol.js`): definían globals como `DISCOVERY_PROTOCOL_MANIFEST` inyectados en `window` / `self`. El Harness los leía de forma síncrona en boot.
 - **If-chains en `background.js`**: cada evento (`ACCOUNT_REGISTERED`, `GITHUB_PAT_DETECTED`, etc.) tenía su lógica de validación y defaults hardcodeados directamente en el listener.
 - **`*.synapse.config.js`**: archivos de configuración de sesión leídos vía regex en `loadConfig()` y `loadHarnessConfig()`.
 
@@ -41,7 +41,7 @@ extension/
 └── protocols/
     ├── discovery.schema.json   ← protocolo de onboarding / registro
     ├── landing.schema.json     ← protocolo de landing / sesión activa
-    └── ionpump.schema.json     ← protocolo de automatización DOM
+    └── harness.schema.json     ← protocolo de automatización DOM
 ```
 
 Estos archivos están declarados en `web_accessible_resources` en `manifest.json` para que tanto `background.js` como el Harness puedan accederlos via `chrome.runtime.getURL()`.
@@ -233,7 +233,7 @@ async discoverFromJSON() {
   const SCHEMA_FILES = [
     { file: 'protocols/discovery.schema.json', key: 'DISCOVERY_PROTOCOL_MANIFEST' },
     { file: 'protocols/landing.schema.json',   key: 'LANDING_PROTOCOL_MANIFEST'   },
-    { file: 'protocols/ionpump.schema.json',   key: 'IONPUMP_PROTOCOL_MANIFEST'   },
+    { file: 'protocols/harness.schema.json',   key: 'HARNESS_PROTOCOL_MANIFEST'   },
   ];
 
   const results = await Promise.allSettled(
@@ -344,7 +344,7 @@ Los siguientes elementos siguen usando el sistema anterior y **no se deben borra
 | `loadScriptOptional(*.js)` en boot | `harness.js` | Carga los configs legacy en boot. Se elimina junto con los archivos físicos. |
 | `ConfigReader.read()` desde `self.*` | `harness.js` | Lee `self.HARNESS_CONFIG` y `self.SYNAPSE_CONFIG`. Se reemplaza por la recepción de `HARNESS_CONFIG_READY` desde background cuando `loadHarnessConfig` sea migrado. |
 
-*(actualizado Jun 26 2026) — Los archivos legacy `discoveryProtocol.js`, `landingProtocol.js` e `ionpump_protocol.js` están marcados para eliminación como parte de la Fase 5. La secuencia de limpieza documentada en "Orden recomendado" es el plan activo.*
+*(actualizado Jun 26 2026) — Los archivos legacy `discoveryProtocol.js`, `landingProtocol.js` e `harnessProtocol.js` están marcados para eliminación como parte de la Fase 5. La secuencia de limpieza documentada en "Orden recomendado" es el plan activo.*
 
 **Orden recomendado para completar la limpieza:**
 

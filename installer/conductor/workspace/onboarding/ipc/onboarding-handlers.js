@@ -281,6 +281,29 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     const nucleusPath = require('path').join(basePath, folderName);
 
     log.info('[IPC] onboarding:init-nucleus — org:', org ?? '(temporary)', '| nucleusPath:', nucleusPath);
+
+    // ── Guardado optimista PRE-spawn ─────────────────────────────────────
+    // Si el usuario cierra la app mientras `nucleus create` está corriendo
+    // (o justo antes de que el proceso termine), el bloque post-close de
+    // abajo nunca llega a ejecutar y workspace_org/workspace_path quedan
+    // sin persistir — el usuario pierde lo que tipeó. Para evitar esa
+    // pérdida, escribimos el intento ANTES de spawnear, marcado como
+    // pendiente. resumeOnboarding() en el renderer puede usar estos campos
+    // para repoblar los inputs aunque nucleus_create no haya completado.
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      data.onboarding.started    = true;
+      data.onboarding.started_at = data.onboarding.started_at || new Date().toISOString();
+      data.onboarding.workspace_path_pending = nucleusPath;
+      data.onboarding.workspace_org_pending  = org || null;
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      log.info('[IPC] onboarding:init-nucleus — pending state persisted before spawn');
+    } catch (e) {
+      log.warn('[IPC] onboarding:init-nucleus — could not persist pending state:', e.message);
+    }
+
     return new Promise((resolve) => {
       const args = ['--json', 'create', '--path', nucleusPath];
       if (temporary) {
@@ -312,24 +335,10 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       child.on('close', code => {
         if (code === 0) {
           log.success('[IPC] onboarding:init-nucleus — ok');
-          // Fix C: persistir nucleus_create en completed_steps.
-          // El reactor nunca recibe un evento Cortex para este step (cortex_events: []),
-          // así que es responsabilidad del handler marcarlo al completar el proceso.
-          try {
-            const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-            data.onboarding = data.onboarding || {};
-            data.onboarding.completed_steps = data.onboarding.completed_steps || [];
-            if (!data.onboarding.completed_steps.includes('nucleus_create')) {
-              data.onboarding.completed_steps.push('nucleus_create');
-              data.onboarding.updated_at = new Date().toISOString();
-              fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
-              log.success('[IPC] onboarding:init-nucleus — nucleus_create persisted in completed_steps');
-            }
-          } catch (e) {
-            log.warn('[IPC] onboarding:init-nucleus — could not persist nucleus_create:', e.message);
-          }
-          // Intentar parsear el org slug resuelto del output JSON de nucleus create.
-          // Útil cuando se usó --temporary y el binario asignó el slug internamente.
+
+          // PASO 1: Calcular resolvedOrg PRIMERO desde el output JSON de nucleus create.
+          // Si se usó --temporary, el binario asigna el slug internamente y lo incluye
+          // en el JSON de salida. Necesitamos este valor antes de persistir en disco.
           let resolvedOrg = org || null;
           try {
             const jsonLine = allOutput.split('\n').find(l => l.trim().startsWith('{'));
@@ -337,8 +346,52 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
               const parsed = JSON.parse(jsonLine);
               resolvedOrg = parsed.org || parsed.org_slug || resolvedOrg;
             }
-          } catch (_) {}
-          resolve({ success: true, org: resolvedOrg, output: allOutput });
+          } catch (_) {
+            // Output no-JSON — usar el org del payload (puede ser null en modo temporary)
+          }
+
+          // PASO 2: Persistir en nucleus.json.
+          // workspace_org es crítico para el mecanismo de resume: get-resume-state lo
+          // devuelve en workspaceState.org, y loadRepos() lo necesita para listar repos.
+          // workspace_path es necesario para restaurar los inputs del workspace screen.
+          //
+          // Esta escritura es la fuente de verdad final. Los campos *_pending
+          // (escritos antes del spawn) quedan obsoletos en este punto y se limpian
+          // para no confundir un futuro resume con datos de un intento ya resuelto.
+          try {
+            const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+            data.onboarding                  = data.onboarding || {};
+            data.onboarding.completed_steps  = data.onboarding.completed_steps || [];
+
+            if (!data.onboarding.completed_steps.includes('nucleus_create')) {
+              data.onboarding.completed_steps.push('nucleus_create');
+            }
+
+            // Siempre actualizar path y org — puede que hayan cambiado si el usuario
+            // retomó un workspace existente con useExistingWorkspace().
+            data.onboarding.workspace_path = nucleusPath;
+            data.onboarding.workspace_org  = resolvedOrg || null;
+            data.onboarding.updated_at     = new Date().toISOString();
+
+            // Limpiar el estado pendiente — ya tenemos el resultado definitivo.
+            delete data.onboarding.workspace_path_pending;
+            delete data.onboarding.workspace_org_pending;
+
+            fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+            log.success(
+              '[IPC] onboarding:init-nucleus — nucleus_create persisted ' +
+              '(path: ' + nucleusPath + ', org: ' + (resolvedOrg || '(temporary/unresolved)') + ')'
+            );
+          } catch (e) {
+            // CRÍTICO: si esto falla, el usuario pierde el org/path aunque
+            // `nucleus create` haya tenido éxito. Lo dejamos bien visible en logs
+            // y devolvemos el dato igual en la respuesta IPC para que el renderer
+            // pueda, como red de seguridad, reintentar la persistencia explícitamente
+            // vía onboarding:mark-step-complete con datos extendidos.
+            log.error('[IPC] onboarding:init-nucleus — COULD NOT PERSIST nucleus_create (org/path lost on disk!):', e.message);
+          }
+
+          resolve({ success: true, org: resolvedOrg, path: nucleusPath, output: allOutput });
         } else {
           log.error('[IPC] onboarding:init-nucleus — FAILED: exit code', code);
           resolve({ success: false, error: `Exit code ${code}`, output: allOutput });
@@ -441,6 +494,82 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     }
   });
 
+  // ── HANDLER: Estado de resume — leer progreso persistido ────────────────
+  //
+  // Llamado en DOMContentLoaded para detectar si hay un onboarding en curso.
+  // Lee nucleus.json y devuelve qué steps están completados, cuál es el
+  // current_step, y si el onboarding ya finalizó.
+  //
+  // Respuesta:
+  //   {
+  //     success: true,
+  //     hasProgress: boolean,      // true si onboarding.started && !completed
+  //     completed: boolean,        // true si onboarding.completed === true
+  //     completedSteps: string[],  // ej: ['nucleus_create', 'github_auth']
+  //     currentStep: string|null,  // último step navegado (persistido en navigate handler)
+  //     workspaceState: {          // datos necesarios para restaurar variables globales
+  //       path: string|null,
+  //       org:  string|null,
+  //       pending: boolean,        // true si path/org vienen de un intento interrumpido
+  //                                 // (nucleus_create no llegó a completar el exit 0)
+  //     }
+  //   }
+  ipcMain.handle('onboarding:get-resume-state', async () => {
+    log.info('[IPC] onboarding:get-resume-state');
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const ob   = data.onboarding || {};
+
+      const completedSteps = ob.completed_steps || [];
+      const hasProgress    = !!ob.started && !ob.completed;
+      const completed      = !!ob.completed;
+
+      // Recuperar ruta y org del workspace — persistidos por onboarding:init-nucleus
+      // al completar nucleus_create. Si nucleus_create no llegó a completar (ej: el
+      // usuario cerró la app mientras `nucleus create` corría), caemos a los campos
+      // *_pending escritos ANTES del spawn — así no se pierde lo que el usuario tipeó,
+      // aunque el step formalmente no esté en completed_steps todavía.
+      // Fallback final a bloom_base para builds más viejos sin estos campos.
+      const bloomBase = data.system_map?.bloom_base || null;
+
+      // github_username / github_org: persistidos opcionalmente por Brain cuando
+      // procesa GITHUB_TOKEN_STORED. Permiten al renderer restaurar vault-username
+      // y vault-org sin hacer un poll adicional al reabrir el onboarding.
+      const workspaceState = {
+        path:           ob.workspace_path  || ob.workspace_path_pending || (bloomBase ? require('path').dirname(bloomBase) : null),
+        org:            ob.workspace_org   || ob.workspace_org_pending  || null,
+        pending:        !ob.workspace_path && !!ob.workspace_path_pending,
+        githubUsername: ob.github_username || ob.github_user || null,
+        githubOrg:      ob.github_org      || ob.workspace_org || ob.workspace_org_pending || null,
+      };
+
+      log.success('[IPC] onboarding:get-resume-state — ok:', JSON.stringify({
+        hasProgress, completed, completedSteps, currentStep: ob.current_step || null,
+        workspaceState: { path: workspaceState.path, org: workspaceState.org },
+      }));
+
+      return {
+        success:        true,
+        hasProgress,
+        completed,
+        completedSteps,
+        currentStep:    ob.current_step    || null,
+        startedAt:      ob.started_at      || null,
+        workspaceState,
+      };
+    } catch (err) {
+      log.error('[IPC] onboarding:get-resume-state — FAILED:', err.message);
+      return {
+        success:        false,
+        hasProgress:    false,
+        completed:      false,
+        completedSteps: [],
+        currentStep:    null,
+        workspaceState: { path: null, org: null, pending: false, githubUsername: null, githubOrg: null },
+      };
+    }
+  });
+
   // ── HANDLER: Bridge de logging desde el renderer ────────────────────────
   ipcMain.handle('onboarding:log', async (event, { level, message }) => {
     const msg = `[RENDERER] ${message}`;
@@ -485,6 +614,34 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       return { success: true, stepId };
     } catch (err) {
       log.error(`[HARNESS] inject-milestone error — "${stepId}":`, err.message);
+      return { success: false, error: err.message };
+    }
+  });
+  // ── HANDLER: Persistir datos de GitHub para el mecanismo de resume ──────────
+  // Llamado por el renderer cuando el milestone de github_auth llega con payload
+  // completo y Brain no escribió github_username en nucleus.json por su cuenta.
+  //
+  // Payload: { username: string, org: string|null }
+  ipcMain.handle('onboarding:persist-github-data', async (event, { username, org }) => {
+    if (!username || typeof username !== 'string') {
+      return { success: false, error: 'username is required' };
+    }
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      // Solo escribir si no están ya seteados (Brain tiene precedencia)
+      if (!data.onboarding.github_username) {
+        data.onboarding.github_username = username;
+      }
+      if (!data.onboarding.github_org && org) {
+        data.onboarding.github_org = org;
+      }
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      log.success('[IPC] onboarding:persist-github-data — ok:', username);
+      return { success: true };
+    } catch (err) {
+      log.error('[IPC] onboarding:persist-github-data — FAILED:', err.message);
       return { success: false, error: err.message };
     }
   });

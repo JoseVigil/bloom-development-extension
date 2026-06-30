@@ -3,7 +3,7 @@
 // Filosofía: Músculo ciego. Ejecuta comandos primitivos sin pensar.
 //
 // CHANGELOG v2.3
-// Agrega handlers explícitos para IONPUMP_PROTOCOL_MANIFEST v2.0:
+// Agrega handlers explícitos para HARNESS_PROTOCOL_MANIFEST v2.0:
 //   DOM_FOCUS   — foco en elemento sin click ni typing (handler propio)
 //   DOM_EXTRACT — alias explícito de DOM_READ (Brain/IonPump usa este nombre)
 //
@@ -479,7 +479,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result = executeRead(payload.selector, payload.options);
           break;
 
-        // DOM_EXTRACT — alias de DOM_READ para compatibilidad con IONPUMP_PROTOCOL_MANIFEST v2.0
+        // DOM_EXTRACT — alias de DOM_READ para compatibilidad con HARNESS_PROTOCOL_MANIFEST v2.0
         // Brain/IonPump envía DOM_EXTRACT; content.js lo resuelve igual que DOM_READ.
         case "DOM_EXTRACT":
           result = executeRead(payload.selector, payload.options);

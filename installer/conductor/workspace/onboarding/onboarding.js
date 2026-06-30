@@ -214,10 +214,21 @@ function navigateToStep(nodeName) {
   const nodes = document.querySelectorAll('.step-node');
   const node = nodes[idx];
   if (!node) return;
-  // Solo navegar si está established (ya completado) o active (pantalla actual)
-  if (!node.classList.contains('established') && !node.classList.contains('active')) return;
+
+  // Navegación libre: el usuario puede saltar a cualquier step del stepper,
+  // completado o no, para entender el flujo completo y dónde está parado.
+  // No bloqueamos por estado 'pending' — la pantalla de destino puede no
+  // tener todos los datos disponibles todavía (ej: lista de repos vacía si
+  // no hay github_auth), pero eso es responsabilidad de cada screen, no del
+  // stepper. Avisamos en el log para diagnóstico, sin interrumpir al usuario.
   const target = STEPPER_NAV[nodeName];
   if (target === undefined) return;
+
+  const isPending = node.classList.contains('pending');
+  if (isPending) {
+    log('info', `stepper click → navigateToStep(${nodeName}) — step aún no completado, navegando igual`);
+  }
+
   log('info', `stepper click → navigateToStep(${nodeName}) → goTo(${target})`);
   goTo(target);
 }
@@ -229,6 +240,7 @@ function setStepperActive(nodeName) {
   nodes.forEach(n => n.classList.remove('active'));
   if (nodes[idx]) nodes[idx].classList.add('active');
   log('info', `stepper: active → ${nodeName}`);
+  refreshStepperPendingStates();
 }
 
 function setStepperEstablished(nodeName) {
@@ -240,6 +252,18 @@ function setStepperEstablished(nodeName) {
     nodes[idx].classList.add('established');
   }
   log('info', `stepper: established → ${nodeName}`);
+  refreshStepperPendingStates();
+}
+
+// Marca como 'pending' (visualmente atenuado, pero igual navegable) cualquier
+// nodo que no esté ni 'established' ni 'active'. Se recalcula cada vez que
+// cambia el estado del stepper para mantener el estilo consistente.
+function refreshStepperPendingStates() {
+  document.querySelectorAll('.step-node').forEach(n => {
+    const isDone   = n.classList.contains('established');
+    const isActive = n.classList.contains('active');
+    n.classList.toggle('pending', !isDone && !isActive);
+  });
 }
 
 // ── SCREEN MAP ─────────────────────────────────────────────────────────────
@@ -1036,10 +1060,194 @@ function switchTab(name) {
   log('info', `tab: switched to ${name}`);
 }
 
+// ── RESUME — restaurar sesión de onboarding interrumpida ──────────────────
+//
+// Mapa de stepId → pantalla de destino (goTo index).
+// "dado que este step YA está completo, ¿en qué pantalla debe estar el usuario?"
+// = la pantalla del SIGUIENTE step a completar.
+const RESUME_STEP_SCREEN = {
+  nucleus_create: 3,   // → identity (github_auth)
+  github_auth:    4,   // → vault confirmation
+  vault_init:     5,   // → project selection
+  project_create: 6,   // → milestone
+};
+
+// Orden canónico de steps — de más avanzado a menos avanzado.
+// Usado para encontrar el step más alto completado.
+const RESUME_STEP_ORDER = ['project_create', 'vault_init', 'github_auth', 'nucleus_create'];
+
+/**
+ * resumeOnboarding()
+ *
+ * Lee estado de nucleus.json, restaura variables globales + UI, y navega
+ * a la pantalla correcta. Retorna true si se hizo resume, false si hay
+ * que empezar desde el principio.
+ *
+ * Restauraciones por step completado:
+ *   nucleus_create → workspaceState fields, selectedOrg, selectedFolderPath,
+ *                    preview DOM, workspace screen inputs
+ *   github_auth    → activeAccounts('github'), acc-github icon, identity btn,
+ *                    vault-username / vault-org DOM, state.githubUsername/Org
+ *   vault_init     → stepper node identity established
+ *   project_create → (no state to restore, milestone screen handles itself)
+ */
+async function resumeOnboarding() {
+  if (!window.onboarding?.getResumeState) {
+    log('warn', 'resumeOnboarding: getResumeState no disponible — modo fresh start');
+    return false;
+  }
+
+  let resume;
+  try {
+    resume = await window.onboarding.getResumeState();
+  } catch (e) {
+    log('error', `resumeOnboarding: error leyendo estado — ${e.message}`);
+    return false;
+  }
+
+  if (!resume.success || !resume.hasProgress) {
+    log('info', `resumeOnboarding: sin progreso previo — fresh start`);
+    return false;
+  }
+  if (resume.completed) {
+    log('info', 'resumeOnboarding: onboarding ya completado — no hay nada que retomar');
+    return false;
+  }
+
+  const { completedSteps = [], workspaceState: ws = {} } = resume;
+  log('info', `resumeOnboarding: completedSteps=[${completedSteps.join(', ')}]`);
+
+  // ── 1. Restaurar nucleus_create (workspace) ─────────────────────────────
+  //
+  // Dos casos posibles:
+  //   a) nucleus_create completó — ws.path/ws.org vienen de los campos definitivos.
+  //   b) nucleus_create quedó interrumpido (ej: usuario cerró la app mientras
+  //      `nucleus create` corría) — ws.pending === true, los valores vienen de
+  //      los campos *_pending escritos antes del spawn. En este caso repoblamos
+  //      los inputs para que el usuario no tenga que re-tipear nada, pero NO
+  //      marcamos el step como completo ni avanzamos de pantalla: el usuario
+  //      debe re-confirmar "Continuar" para que `nucleus create` corra de nuevo.
+  if (ws.path && (completedSteps.includes('nucleus_create') || ws.pending)) {
+    // Restaurar los inputs del workspace screen siempre
+    const wsPathInput = document.getElementById('ws-path-input');
+    const wsOrgInput  = document.getElementById('ws-org-input');
+    if (wsPathInput) wsPathInput.value = ws.path;
+    if (wsOrgInput && ws.org) wsOrgInput.value = ws.org;
+
+    // workspaceState (objeto local del step) para que checkWorkspaceReady() funcione
+    workspaceState.path = ws.path;
+    workspaceState.org  = ws.org || '';
+
+    // Restaurar preview en tiempo real del workspace screen
+    updateWorkspacePreview();
+    checkWorkspaceReady();
+
+    if (ws.pending) {
+      // Intento interrumpido: NO seteamos selectedOrg/selectedFolder globales
+      // todavía (eso implicaría tratar el step como completo), solo dejamos
+      // los inputs listos para que el usuario confirme de nuevo.
+      addNotification(
+        'Workspace incompleto — revisá los datos y continuá de nuevo',
+        { icon: '⚠', type: 'warn' }
+      );
+      log('info', `resumeOnboarding: workspace PENDIENTE restaurado (intento interrumpido) — path: ${ws.path} | org: ${ws.org || '(none)'}`);
+    } else {
+      // Variables globales que los steps siguientes necesitan
+      selectedFolderPath   = ws.path;
+      selectedOrg          = ws.org || null;
+      state.selectedFolder = ws.path;
+      state.selectedOrg    = ws.org || null;
+
+      log('info', `resumeOnboarding: workspace restaurado — path: ${ws.path} | org: ${ws.org || '(none)'}`);
+    }
+  }
+
+  // ── 2. Restaurar github_auth (identity) ────────────────────────────────
+  if (completedSteps.includes('github_auth')) {
+    activeAccounts.add('github');
+    document.getElementById('acc-github')?.classList.add('active');
+
+    // Estado del poll indicator
+    const pollLabel  = document.getElementById('identity-poll-label');
+    const pollStatus = document.getElementById('identity-poll-status');
+    if (pollLabel)  pollLabel.textContent = '✓ Token detectado';
+    if (pollStatus) {
+      pollStatus.style.display = 'flex';
+      pollStatus.classList.add('confirmed');
+    }
+
+    // Botón de identity en estado "Continue" ya que GitHub está confirmado
+    const identityBtn = document.getElementById('btn-continue-identity');
+    if (identityBtn) {
+      identityBtn.textContent = 'Continue';
+      identityBtn.disabled    = false;
+      identityBtn.onclick     = () => goTo(4);
+    }
+
+    // Restaurar username/org en el vault screen si los tenemos
+    if (ws.githubUsername) {
+      state.githubUsername = ws.githubUsername;
+      const vaultUser = document.getElementById('vault-username');
+      if (vaultUser) vaultUser.textContent = '@' + ws.githubUsername;
+    }
+    if (ws.githubOrg) {
+      state.githubOrg = ws.githubOrg;
+      const vaultOrg = document.getElementById('vault-org');
+      if (vaultOrg) vaultOrg.textContent = ws.githubOrg;
+    }
+
+    log('info', `resumeOnboarding: github_auth restaurado — @${ws.githubUsername || '?'}`);
+  }
+
+  // ── 3. Marcar stepper nodes como established ───────────────────────────
+  // Cada step completado establece un conjunto de nodos en el stepper.
+  // Se aplican acumulativamente — un step más avanzado implica los anteriores.
+  const STEP_ESTABLISHES = {
+    nucleus_create: ['workspace'],
+    github_auth:    ['workspace', 'identity'],
+    vault_init:     ['workspace', 'identity'],
+    project_create: ['workspace', 'identity', 'providers', 'project'],
+  };
+  const toEstablish = new Set();
+  for (const stepId of completedSteps) {
+    for (const n of (STEP_ESTABLISHES[stepId] || [])) toEstablish.add(n);
+  }
+  for (const nodeName of toEstablish) setStepperEstablished(nodeName);
+
+  // ── 4. Calcular pantalla de destino ────────────────────────────────────
+  // Recorrer de más avanzado a menos para encontrar el primer step completo.
+  let targetScreen = 1; // default: workspace (primer step real)
+  for (const stepId of RESUME_STEP_ORDER) {
+    if (completedSteps.includes(stepId)) {
+      targetScreen = RESUME_STEP_SCREEN[stepId];
+      log('info', `resumeOnboarding: step más avanzado="${stepId}" → screen ${targetScreen}`);
+      break;
+    }
+  }
+
+  if (completedSteps.length > 0) {
+    addNotification(
+      `Retomando desde ${completedSteps.length} step${completedSteps.length !== 1 ? 's' : ''} completado${completedSteps.length !== 1 ? 's' : ''}`,
+      { icon: '↩', type: 'success' }
+    );
+  } else if (ws.pending) {
+    addNotification('Retomando workspace incompleto', { icon: '↩', type: '' });
+  }
+
+  log('info', `resumeOnboarding: navegando a screen ${targetScreen}`);
+  await goTo(targetScreen);
+  return true;
+}
+
 // ── INIT ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   log('info', 'DOM ready — initialized');
   document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
+
+  // Inicializar clase 'pending' en todos los nodos del stepper que arrancan
+  // sin estado (ni active ni established) — necesario para que el estilo CSS
+  // y la navegación libre del stepper sean consistentes desde el primer render.
+  refreshStepperPendingStates();
 
   // ── Workspace screen (Step 1) handlers ────────────────────────────────────
   const wsPathInput = document.getElementById('ws-path-input');
@@ -1150,4 +1358,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     log('info', 'onSynapseEvent listener registrado — bridge activo desde inicio');
   }
+
+  // ── Resume de sesión interrumpida ──────────────────────────────────────
+  //
+  // Intentar retomar el onboarding donde quedó. Se llama al final para que
+  // todos los listeners ya estén registrados cuando goTo() dispara efectos
+  // secundarios (setStepperEstablished, loadRepos, runNucleusTerminal, etc.).
+  //
+  // Si resumeOnboarding() retorna false → el usuario empieza en screen 0
+  // (entry / "Start") que es el comportamiento original.
+  resumeOnboarding().catch(err => {
+    log('error', `resumeOnboarding error — ${err.message}`);
+    // No crashear — simplemente arrancar desde el principio
+  });
 });

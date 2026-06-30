@@ -190,7 +190,7 @@ brain/core/profile/web/templates/discovery/
 ├── discovery.js
 ├── script.js
 ├── discoveryProtocol.js        ← PROTOCOL object + DISCOVERY_PROTOCOL_MANIFEST
-├── ionpump_protocol.js         ← IONPUMP_PROTOCOL_MANIFEST (leído por Harness)
+├── harnessProtocol.js         ← HARNESS_PROTOCOL_MANIFEST (leído por Harness)
 ├── content-aistudio.js
 ├── onboarding.js
 └── styles.css
@@ -224,7 +224,7 @@ profiles/<uuid>/extension/
 | Componente | Estado |
 |---|---|
 | Assets estáticos copiados por `discovery_generator.py` | ✅ |
-| `ionpump_protocol.js` incluido en `files_to_copy` | ✅ |
+| `harnessProtocol.js` incluido en `files_to_copy` | ✅ |
 | `DISCOVERY_PROTOCOL_MANIFEST` al final de `discoveryProtocol.js` | ✅ |
 | `discovery.synapse.config.js` generado por Sentinel en launch | ✅ |
 | PROTOCOL object (fases, UI, mensajes) | ✅ |
@@ -355,7 +355,7 @@ la forma `{ version, protocol, messages: [] }`. No hay lista hardcodeada.
 |---|---|---|
 | `self.DISCOVERY_PROTOCOL_MANIFEST` | `templates/discovery/discoveryProtocol.js` | `extension/discovery/discoveryProtocol.js` |
 | `self.LANDING_PROTOCOL_MANIFEST` | `templates/landing/landingProtocol.js` | `extension/landing/landingProtocol.js` |
-| `self.IONPUMP_PROTOCOL_MANIFEST` | `templates/discovery/ionpump_protocol.js` | `extension/discovery/ionpump_protocol.js` |
+| `self.HARNESS_PROTOCOL_MANIFEST` | `templates/discovery/harnessProtocol.js` | `extension/discovery/harnessProtocol.js` |
 
 **Para agregar un nuevo protocolo:** crear el manifest en el template correspondiente,
 agregar el archivo a `web_accessible_resources`, y asegurarse de que se copia en seed.
@@ -423,7 +423,7 @@ self.SYNAPSE_DEBUG = {
 > Solo disponible cuando la URL del Service Worker contiene `debug=true`.
 > En builds de producción `self.SYNAPSE_DEBUG` es `undefined`.
 
-### 4.5 IONPUMP_PROTOCOL_MANIFEST — 10 mensajes disponibles
+### 4.5 HARNESS_PROTOCOL_MANIFEST — 10 mensajes disponibles
 
 | id | Comando | Descripción |
 |---|---|---|
@@ -457,7 +457,7 @@ sentinel seed <alias> <master> [--dev]
                     ├── _copy_extension_to_profile()
                     └── _generate_profile_pages(dev_mode=devMode)
                           ├── generate_discovery_page()
-                          │     → extension/discovery/ (incluye ionpump_protocol.js)
+                          │     → extension/discovery/ (incluye harnessProtocol.js)
                           ├── generate_profile_landing()
                           │     → extension/landing/
                           └── generate_harness_page(dev_mode=devMode)
@@ -500,7 +500,7 @@ sentinel seed dev_test_01 true --dev
 ```
 Verificar:
 ```
-profiles/<uuid>/extension/discovery/ionpump_protocol.js  ← si falta: template no está
+profiles/<uuid>/extension/discovery/harnessProtocol.js  ← si falta: template no está
 profiles/<uuid>/extension/harness/index.html             ← si falta: dev_mode no llegó
 ```
 
@@ -653,7 +653,7 @@ if (typeof self !== 'undefined') {
 | `ionpump_ipc.py` | TCP client en proceso IonPump | Cambios en contrato IPC |
 | `discoveryProtocol.js` | PROTOCOL UI + DISCOVERY_PROTOCOL_MANIFEST | Se agrega mensaje Discovery |
 | `landingProtocol.js` | PROTOCOL UI + LANDING_PROTOCOL_MANIFEST | Se agrega mensaje Landing |
-| `ionpump_protocol.js` | IONPUMP_PROTOCOL_MANIFEST | Se agrega comando DOM o evento IonPump |
+| `harnessProtocol.js` | HARNESS_PROTOCOL_MANIFEST | Se agrega comando DOM o evento IonPump |
 | `harness/index.html` | Debug UI completa | Solo si cambia arquitectura del Harness |
 | `harness_generator.py` | Copia assets Harness en seed | Si se agregan más assets |
 | `discovery_generator.py` | Copia assets Discovery en seed | Si se agregan archivos a `templates/discovery/` |

@@ -10,9 +10,9 @@
 // ============================================================================
 
 if (typeof self !== 'undefined') {
-  self.IONPUMP_PROTOCOL_MANIFEST = {
+  self.HARNESS_PROTOCOL_MANIFEST = {
     version: "1.0.0",
-    protocol: "ionpump",
+    protocol: "harness",
     description: "IonPump runtime — web automation DOM commands and event triggers for registered ion sites",
 
     messages: [

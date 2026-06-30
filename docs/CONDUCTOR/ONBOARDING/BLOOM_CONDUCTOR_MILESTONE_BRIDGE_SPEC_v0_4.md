@@ -86,7 +86,7 @@ El renderer hace polling cada 3 segundos y reacciona a `steps.github_auth === tr
 El sistema tiene manifests autodescriptivos:
 - `DISCOVERY_PROTOCOL_MANIFEST` en `discoveryProtocol.js` — describe steps, eventos observables, acciones.
 - `LANDING_PROTOCOL_MANIFEST` en `landingProtocol.js` — describe `observable_events`.
-- Existe mención de un `IONPUMP_PROTOCOL_MANIFEST` — no confirmado en código.
+- Existe mención de un `HARNESS_PROTOCOL_MANIFEST` — no confirmado en código.
 
 La pregunta sin responder: **¿hay un manifest canónico de hitos en el lado del sistema (Go/Temporal/Brain) que Conductor pueda consultar?**
 

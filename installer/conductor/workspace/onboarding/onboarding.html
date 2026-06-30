@@ -111,6 +111,7 @@ body::after {
   gap: 0;
   position: relative;
   padding-bottom: 0;
+  cursor: pointer; /* Navegación libre: todo step es clickeable, completado o no */
 }
 
 .step-node-row {
@@ -128,8 +129,6 @@ body::after {
   flex-shrink: 0;
   transition: background 0.4s, box-shadow 0.4s, border-color 0.4s;
 }
-.step-node.established,
-.step-node.active { cursor: pointer; }
 
 .step-node.active .step-dot {
   background: var(--text-dim);
@@ -140,6 +139,10 @@ body::after {
   box-shadow: 0 0 8px var(--accent);
   border-color: var(--accent);
 }
+/* pending: step todavía no alcanzado — dot apagado, leve hover para indicar
+   que igual es navegable (decisión: el usuario puede saltar libremente) */
+.step-node.pending .step-dot { opacity: 0.5; }
+.step-node:hover .step-label { color: var(--text-secondary); }
 
 .step-label {
   font-family: var(--font-mono);
@@ -1081,7 +1084,7 @@ body::after {
   cursor: pointer;
 }
 .step-node.pending .step-node-row {
-  cursor: default;
+  cursor: pointer;
 }
 
 /* ── IDENTITY INSTRUCTION BLOCK ── */

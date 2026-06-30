@@ -79,11 +79,11 @@ chrome://extensions → Bloom Nucleus Bridge → Inspect views → harness/index
 
 - `protocols/discovery.schema.json`  → DISCOVERY_PROTOCOL_MANIFEST  
 - `protocols/landing.schema.json`    → LANDING_PROTOCOL_MANIFEST  
-- `protocols/ionpump.schema.json`    → IONPUMP_PROTOCOL_MANIFEST  
+- `protocols/harness.schema.json`    → HARNESS_PROTOCOL_MANIFEST  
 
 Los schemas están declarados en `web_accessible_resources` en `manifest.json`.
 
-*(sistema anterior — transitorio)* — Durante la migración, `ProtocolReader.discover()` sigue activo como fallback y lee los globals `self.DISCOVERY_PROTOCOL_MANIFEST`, `self.LANDING_PROTOCOL_MANIFEST` e `self.IONPUMP_PROTOCOL_MANIFEST` desde los archivos legacy `*Protocol.js`. Estos archivos están marcados para eliminación al completarse la limpieza de la Fase 5. Ver ARCHITECTURE_HarnessProtocol.md §8.
+*(sistema anterior — transitorio)* — Durante la migración, `ProtocolReader.discover()` sigue activo como fallback y lee los globals `self.DISCOVERY_PROTOCOL_MANIFEST`, `self.LANDING_PROTOCOL_MANIFEST` e `self.HARNESS_PROTOCOL_MANIFEST` desde los archivos legacy `*Protocol.js`. Estos archivos están marcados para eliminación al completarse la limpieza de la Fase 5. Ver ARCHITECTURE_HarnessProtocol.md §8.
 
 **Tipos de mensaje:**
 - `command` — un mensaje que el Harness inicia hacia background.js
@@ -262,7 +262,7 @@ extension/
 
 extension/discovery/
 ├── discoveryProtocol.js             ← self.DISCOVERY_PROTOCOL_MANIFEST (8 mensajes)
-└── ionpump_protocol.js              ← self.IONPUMP_PROTOCOL_MANIFEST (10 comandos)
+└── harnessProtocol.js              ← self.HARNESS_PROTOCOL_MANIFEST (10 comandos)
 
 extension/landing/
 └── landingProtocol.js               ← window.PROTOCOL + self.LANDING_PROTOCOL_MANIFEST (6 mensajes)
@@ -272,7 +272,7 @@ extension/
 └── protocols/                        ← NUEVO (Fase 1–5)
     ├── discovery.schema.json         ← fuente de verdad del protocolo discovery
     ├── landing.schema.json           ← fuente de verdad del protocolo landing
-    └── ionpump.schema.json           ← fuente de verdad del protocolo ionpump
+    └── harness.schema.json           ← fuente de verdad del protocolo ionpump
 ```
 
 **Secuencia de boot de harness.js (DOMContentLoaded):**
@@ -322,7 +322,7 @@ junto con los archivos físicos al completarse la Fase 5.
 - `landing.js` — `LandingFlow` completo con `mergeProfileState` y listener de updates
 - `background.js` — `registerHandler(eventName, schema, handlerFn)` + `applySchemaDefaults()` *(Fase 1–5)*
 - `background.js` — `loadProtocolSchemas()` — carga `protocols/*.schema.json` via fetch al boot *(Fase 1–5)*
-- `extension/protocols/` — `discovery.schema.json`, `landing.schema.json`, `ionpump.schema.json` *(Fase 1–5)*
+- `extension/protocols/` — `discovery.schema.json`, `landing.schema.json`, `harness.schema.json` *(Fase 1–5)*
 
 ### Pendiente / No auditado
 
@@ -330,7 +330,7 @@ junto con los archivos físicos al completarse la Fase 5.
 |---|---|---|
 | Auditar | `nucleus/internal/supervisor/onboarding_harness.go` | No provisto — auditar en próxima sesión |
 | Verificar | `harness/index.html` | No provisto — verificar que no tiene JS inline |
-| Verificar | `ionpump_protocol.js` | No provisto en esta sesión (auditado Jun 19) |
+| Verificar | `harnessProtocol.js` | No provisto en esta sesión (auditado Jun 19) |
 | Decisión pendiente | Canal `"tabs"` en IonPump | ¿Roadmap o descartado? (§18 #7) |
 
 ---
@@ -359,7 +359,7 @@ Para continuar desde donde terminamos:
 |---|---|---|
 | Este documento | `/docs/HARNESS/` | Contexto completo de la sesión Jun 25 |
 | `harness/index.html` | `templates/harness/index.html` | Verificar que no hay JS inline (CSP) |
-| `ionpump_protocol.js` | `templates/harness/ionpump_protocol.js` | Confirmar 10 mensajes vs doc |
+| `harnessProtocol.js` | `templates/harness/harnessProtocol.js` | Confirmar 10 mensajes vs doc |
 | `onboarding_harness.go` | `nucleus/internal/supervisor/onboarding_harness.go` | Wildcard no documentado — auditar |
 | `ignition_identity.go` | `sentinel/...` | Verificar `writeHarnessConfig()` lines 408-444 |
 | `background.js` del host (bloom-host) | No provisto aún | Para entender MilestoneReactor |

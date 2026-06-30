@@ -20,9 +20,9 @@ Durante esta fusión se aportó el código real de `harness_generator.py` y `har
 | # | Contradicción | Qué decía cada uno | Resolución |
 |---|---|---|---|
 | 1 | `dev_mode` y el deploy del Harness | Ambos: "no-op completo si `dev_mode=False`", "no existe en prod" | **Código real lo contradice a los dos.** Ver §0.2 — es el hallazgo más importante de esta fusión. |
-| 2 | Archivos que copia `harness_generator.py` | IONPUMP-SOT decía 4 (`index.html`, `harness.js`, `ionpump_protocol.js`, `ion.manifest.json`), citando "código real" de una sesión anterior. SOURCE_OF_TRUTH mostraba un snippet con solo 1 (`index.html`), pero su propio texto narrativo asumía que `harness.js` también existía. | **Código real (esta sesión): son 3** — `index.html`, `harness.js`, `ionpump_protocol.js`. Ninguno de los dos documentos tenía razón. `ion.manifest.json` no se copia a `extension/harness/` con el código actual; la pregunta abierta que IONPUMP-SOT dejaba pendiente sobre ese archivo queda resuelta: no aplica a esta versión del generador. |
-| 3 | Ubicación de `ionpump_protocol.js` | IONPUMP-SOT: doble ubicación por diseño, origen canónico en `templates/harness/`. SOURCE_OF_TRUTH: única ubicación en `templates/discovery/`, sin copia en `harness/`. | El boot real de `harness.js` (línea 631) carga `ionpump_protocol.js` con ruta relativa local (sin `../`), y `harness_generator.py` real lo incluye en su propio `files_to_copy`. Esto **confirma que existe una copia local en `harness/`**, consistente con el modelo de IONPUMP-SOT. No hay evidencia en esta sesión sobre si `discovery/` tiene o no su propia copia — se preserva esa parte como no verificada (§18). |
-| 4 | Estructura del manifest `IONPUMP_PROTOCOL_MANIFEST` | IONPUMP-SOT: un solo array `messages` mezclando canales `runtime` y `tabs`. SOURCE_OF_TRUTH: dos arrays separados, `messages` (runtime) y `tab_messages` (tabs). | El `ProtocolReader.discover()` real (`harness.js` línea 76) solo itera `manifest.messages` — nunca lee `tab_messages`. **Con la estructura de SOURCE_OF_TRUTH, los mensajes de canal `tabs` nunca aparecerían en el panel Protocols.** Se adopta el formato de array único de IONPUMP-SOT como el correcto. |
+| 2 | Archivos que copia `harness_generator.py` | IONPUMP-SOT decía 4 (`index.html`, `harness.js`, `harnessProtocol.js`, `ion.manifest.json`), citando "código real" de una sesión anterior. SOURCE_OF_TRUTH mostraba un snippet con solo 1 (`index.html`), pero su propio texto narrativo asumía que `harness.js` también existía. | **Código real (esta sesión): son 3** — `index.html`, `harness.js`, `harnessProtocol.js`. Ninguno de los dos documentos tenía razón. `ion.manifest.json` no se copia a `extension/harness/` con el código actual; la pregunta abierta que IONPUMP-SOT dejaba pendiente sobre ese archivo queda resuelta: no aplica a esta versión del generador. |
+| 3 | Ubicación de `harnessProtocol.js` | IONPUMP-SOT: doble ubicación por diseño, origen canónico en `templates/harness/`. SOURCE_OF_TRUTH: única ubicación en `templates/discovery/`, sin copia en `harness/`. | El boot real de `harness.js` (línea 631) carga `harnessProtocol.js` con ruta relativa local (sin `../`), y `harness_generator.py` real lo incluye en su propio `files_to_copy`. Esto **confirma que existe una copia local en `harness/`**, consistente con el modelo de IONPUMP-SOT. No hay evidencia en esta sesión sobre si `discovery/` tiene o no su propia copia — se preserva esa parte como no verificada (§18). |
+| 4 | Estructura del manifest `HARNESS_PROTOCOL_MANIFEST` | IONPUMP-SOT: un solo array `messages` mezclando canales `runtime` y `tabs`. SOURCE_OF_TRUTH: dos arrays separados, `messages` (runtime) y `tab_messages` (tabs). | El `ProtocolReader.discover()` real (`harness.js` línea 76) solo itera `manifest.messages` — nunca lee `tab_messages`. **Con la estructura de SOURCE_OF_TRUTH, los mensajes de canal `tabs` nunca aparecerían en el panel Protocols.** Se adopta el formato de array único de IONPUMP-SOT como el correcto. |
 | 5 | Dispatcher de canal `tabs` | Ambos documentan un dispatcher que diferencia `runtime` de `tabs`, con `chrome.tabs.sendMessage` implementado. | El `Simulator.send()` real solo implementa `channel === 'runtime'`. El `else` loguea `Unknown channel` como error. **Esto no es una contradicción entre los documentos — es algo que los dos documentaron como ya resuelto y en realidad no lo está.** Ver §18.1. |
 
 ### 0.2 El hallazgo que invalida un principio "no negociable" de ambos documentos
@@ -47,7 +47,7 @@ El Harness no modifica el estado del sistema. Despacha mensajes como si los hubi
 
 ### Relación entre ambos
 
-Problemas ortogonales que comparten infraestructura: ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump produce `IONPUMP_PROTOCOL_MANIFEST`; el Harness lo consume. Relación unidireccional.
+Problemas ortogonales que comparten infraestructura: ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump produce `HARNESS_PROTOCOL_MANIFEST`; el Harness lo consume. Relación unidireccional.
 
 > **Regla de oro:** la fuente de verdad es el protocolo. El Harness la lee. IonPump la alimenta. Nadie la duplica.
 
@@ -73,9 +73,9 @@ Problemas ortogonales que comparten infraestructura: ambos necesitan que Cortex 
 
 | Componente | Rol |
 |---|---|
-| **Brain** | Aloja `IonPumpManager` (runtime singleton). Expone admin CLI. Genera los assets del Harness vía `harness_generator.py` — **siempre**, no solo en `--dev` (ver §0.2). Genera `discovery/` vía `discovery_generator.py` (incluye su propia copia de `ionpump_protocol.js`). Único escritor del `extensionDir` durante el seed. |
+| **Brain** | Aloja `IonPumpManager` (runtime singleton). Expone admin CLI. Genera los assets del Harness vía `harness_generator.py` — **siempre**, no solo en `--dev` (ver §0.2). Genera `discovery/` vía `discovery_generator.py` (incluye su propia copia de `harnessProtocol.js`). Único escritor del `extensionDir` durante el seed. |
 | **Sentinel** | Pasa el flag `--dev` a `brain profile create` en seed (su efecto real sobre el Harness está en duda, ver §0.2). Escribe `harness.synapse.config.js` en **launch** (no en seed), condicionado a que `harness/index.html` exista — condición que ahora se cumple casi siempre, dado que Brain ya no lo gatea por `dev_mode`. No toca `extensionDir` después de llamar a Brain. |
-| **Cortex** | Aloja `harness/index.html`, `harness/harness.js`, `harness/ionpump_protocol.js` (copiados por Brain). Expone `DISCOVERY_PROTOCOL_MANIFEST` e `IONPUMP_PROTOCOL_MANIFEST` en `self.*`. `content.js` ejecuta comandos DOM de IonPump. No modifica nada más. |
+| **Cortex** | Aloja `harness/index.html`, `harness/harness.js`, `harness/harnessProtocol.js` (copiados por Brain). Expone `DISCOVERY_PROTOCOL_MANIFEST` e `HARNESS_PROTOCOL_MANIFEST` en `self.*`. `content.js` ejecuta comandos DOM de IonPump. No modifica nada más. |
 | **Metamorph** | Único escritor de `ionsites/`. Inspecciona y reconcilia `.ion` recipes. No participa del runtime IonPump ni del Event Bus. |
 | **Harness** | Lee manifests de protocolo en runtime. Genera UI dinámica. Observa y simula. No tiene tabla de mensajes propia, no abre canales propios. |
 
@@ -92,13 +92,13 @@ brain/core/profile/web/
 ├── templates/harness/
 │   ├── index.html            ← sin scripts inline (fix CSP)
 │   ├── harness.js             ← todo el JS, boot async
-│   └── ionpump_protocol.js    ← copia local del manifest IonPump para el Harness
+│   └── harnessProtocol.js    ← copia local del manifest IonPump para el Harness
 └── harness_generator.py
 
 profiles/<uuid>/extension/harness/
 ├── index.html
 ├── harness.js
-└── ionpump_protocol.js
+└── harnessProtocol.js
 ```
 
 **Código real de `harness_generator.py`** (verificado en esta sesión, reemplaza cualquier versión anterior citada en los documentos fuente):
@@ -118,7 +118,7 @@ def generate_harness_page(target_ext_dir: Path, profile_data: Dict[str, Any], de
 
 def _copy_static_assets(harness_dir: Path) -> None:
     template_dir = Path(__file__).parent / "templates" / "harness"
-    files_to_copy = ["index.html", "harness.js", "ionpump_protocol.js"]
+    files_to_copy = ["index.html", "harness.js", "harnessProtocol.js"]
     for file_name in files_to_copy:
         source = template_dir / file_name
         if source.exists():
@@ -164,7 +164,7 @@ Dev Tools del Harness: `chrome://extensions` → la extensión → **Inspect vie
 const ProtocolReader = {
   manifests: [],
   discover() {
-    const candidates = ['DISCOVERY_PROTOCOL_MANIFEST', 'LANDING_PROTOCOL_MANIFEST', 'IONPUMP_PROTOCOL_MANIFEST'];
+    const candidates = ['DISCOVERY_PROTOCOL_MANIFEST', 'LANDING_PROTOCOL_MANIFEST', 'HARNESS_PROTOCOL_MANIFEST'];
     this.manifests = [];
     for (const key of candidates) {
       const manifest = (typeof self !== 'undefined' && self[key]) || (typeof window !== 'undefined' && window[key]);
@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadScriptOptional('../harness.synapse.config.js');
   await loadScriptOptional('../discovery.synapse.config.js');
   await loadScriptOptional('../discovery/discoveryProtocol.js');
-  await loadScriptOptional('ionpump_protocol.js');        // ← local, mismo directorio que index.html
+  await loadScriptOptional('harnessProtocol.js');        // ← local, mismo directorio que index.html
 
   // Solo existen post-onboarding
   await loadScriptOptional('../landing.synapse.config.js');
@@ -218,9 +218,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 ### 4.7 El manifest autodescriptivo — formato (adoptado: array único)
 
 ```javascript
-self.IONPUMP_PROTOCOL_MANIFEST = {
+self.HARNESS_PROTOCOL_MANIFEST = {
   version: "1.0.0",
-  protocol: "ionpump",
+  protocol: "harness",
   description: "Web automation runtime — ion site control",
   messages: [
     {
@@ -264,9 +264,9 @@ Tipos de parámetro: `auto` (se resuelve solo, invisible), `string` (campo edita
       "resources": [
         "harness/index.html",
         "harness/harness.js",
-        "harness/ionpump_protocol.js",
+        "harness/harnessProtocol.js",
         "harness.synapse.config.js",
-        "discovery/ionpump_protocol.js"
+        "discovery/harnessProtocol.js"
       ]
     }
   ]
@@ -465,7 +465,7 @@ brain ionpump test github.com bootstrap [--dry-run]
 
 6 mensajes del milestone GitHub, agregados al final de `discoveryProtocol.js`: `onboarding_navigate` (command, enum `step`), `github_pat_detected` (event, string `token`), `github_token_stored` (event, string + 2 auto), `account_registered` (event, 2 auto), `host_ready` (command, sin parámetros), `discovery_complete` (event, 2 auto). Todos `channel: "runtime"`, dirección `harness_to_background`. `observable_events`: `HANDSHAKE_CONFIRMED`, `API_KEY_REGISTERED`, `ACCOUNT_REGISTERED`, `DISCOVERY_COMPLETE`, `GITHUB_PAT_DETECTED`, `GITHUB_TOKEN_STORED`.
 
-**Agregar un sitio nuevo a IonPump (ej. `perplexity.ai`):** crear `ionsites/perplexity.ai/{message.ion, ion.manifest.json}` (IonPumpManager lo detecta por hot-reload); agregar el dominio a `matches` del content script si falta; agregar `perplexity.ai` a `options` del parámetro `site` en `IONPUMP_PROTOCOL_MANIFEST`. **El Harness no se toca** — `ProtocolReader` refleja el cambio automáticamente en runtime.
+**Agregar un sitio nuevo a IonPump (ej. `perplexity.ai`):** crear `ionsites/perplexity.ai/{message.ion, ion.manifest.json}` (IonPumpManager lo detecta por hot-reload); agregar el dominio a `matches` del content script si falta; agregar `perplexity.ai` a `options` del parámetro `site` en `HARNESS_PROTOCOL_MANIFEST`. **El Harness no se toca** — `ProtocolReader` refleja el cambio automáticamente en runtime.
 
 ---
 
@@ -477,8 +477,8 @@ brain ionpump test github.com bootstrap [--dry-run]
 sentinel seed <alias> <master> --dev
   ├── 1. Extrae .blx → bin/extension/ (temporal)
   ├── 2. Llama: brain profile create <alias> --dev
-  │       └── discovery_generator.py: copia discoveryProtocol.js, ionpump_protocol.js
-  │       └── harness_generator.py: copia index.html, harness.js, ionpump_protocol.js
+  │       └── discovery_generator.py: copia discoveryProtocol.js, harnessProtocol.js
+  │       └── harness_generator.py: copia index.html, harness.js, harnessProtocol.js
   │           ⚠️ esto ocurre SIEMPRE — el flag --dev ya no lo condiciona (§0.2)
   └── 3. bin/extension/ se borra (Sentinel)
 ```
@@ -519,7 +519,7 @@ def _generate_profile_pages(self, profile_id, profile_name, dev_mode=False):
 ```python
 files_to_copy = [
     "index.html", "discovery.js", "script.js", "discoveryProtocol.js",
-    "ionpump_protocol.js",  # copia para el contexto de discovery
+    "harnessProtocol.js",  # copia para el contexto de discovery
     "content-aistudio.js", "onboarding.js", "styles.css",
 ]
 ```
@@ -656,7 +656,7 @@ Ninguno de los dos documentos previos refleja el estado real verificado en esta 
 
 **Nuevos:**
 ```
-brain/core/profile/web/templates/harness/{index.html, harness.js, ionpump_protocol.js}
+brain/core/profile/web/templates/harness/{index.html, harness.js, harnessProtocol.js}
 brain/core/profile/web/harness_generator.py
 brain/core/ionpump/{ionpump_manager,ionpump_loader,ionpump_registry,ionpump_executor,ionpump_state,ionpump_models,ionpump_validator,ionpump_ipc}.py
 brain/core/synapse/synapse_ipc_server.py
@@ -667,13 +667,13 @@ installer/metamorph/internal/inspection/ionrecipes.go
 
 **Modificados:**
 ```
-brain/core/profile/web/templates/discovery/{discoveryProtocol.js (+manifest al final), ionpump_protocol.js (nuevo)}
-brain/core/profile/web/discovery_generator.py        ← agrega ionpump_protocol.js a files_to_copy
+brain/core/profile/web/templates/discovery/{discoveryProtocol.js (+manifest al final), harnessProtocol.js (nuevo)}
+brain/core/profile/web/discovery_generator.py        ← agrega harnessProtocol.js a files_to_copy
 brain/core/profile/profile_create.py                  ← agrega llamada a generate_harness_page
 brain/core/synapse/synapse_manager.py                  ← lanza SynapseIPCServer en thread, agrega handlers DOM
 sentinel/internal/seed/seed.go                         ← agrega flag --dev
 sentinel/internal/ignition/ignition_identity.go        ← agrega writeHarnessConfig()
-extension/manifest.json                                ← agrega harness/*, harness.synapse.config.js, discovery/ionpump_protocol.js
+extension/manifest.json                                ← agrega harness/*, harness.synapse.config.js, discovery/harnessProtocol.js
 installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo, flag --ion-recipes
 ```
 
@@ -683,9 +683,9 @@ installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo
 
 ## 15. Checklist de implementación por componente
 
-**Brain:** `ionpump_models.py` con dataclasses completas · `ionpump_registry.py` con invariantes · `ionpump_loader.py` crea `ionsites/` si no existe (no error) · `ionpump_validator.py` retorna `ValidationResult`, no lanza excepciones · `ionpump_executor.py` es async generator puro, no envía · `ionpump_ipc.py` con error claro si falta el port file · `synapse_ipc_server.py` solo en 127.0.0.1, port file borrado en `try/finally` · `ionpump_manager.py` singleton · `harness_generator.py` — **verificar con el equipo si el deploy incondicional (§0.2) es la conducta deseada o hay que reintroducir el gate de `dev_mode`** · `discovery_generator.py` con `ionpump_protocol.js` en `files_to_copy` · scan de manifests al arrancar no bloquea el start de Brain.
+**Brain:** `ionpump_models.py` con dataclasses completas · `ionpump_registry.py` con invariantes · `ionpump_loader.py` crea `ionsites/` si no existe (no error) · `ionpump_validator.py` retorna `ValidationResult`, no lanza excepciones · `ionpump_executor.py` es async generator puro, no envía · `ionpump_ipc.py` con error claro si falta el port file · `synapse_ipc_server.py` solo en 127.0.0.1, port file borrado en `try/finally` · `ionpump_manager.py` singleton · `harness_generator.py` — **verificar con el equipo si el deploy incondicional (§0.2) es la conducta deseada o hay que reintroducir el gate de `dev_mode`** · `discovery_generator.py` con `harnessProtocol.js` en `files_to_copy` · scan de manifests al arrancar no bloquea el start de Brain.
 
-**Cortex:** `DISCOVERY_PROTOCOL_MANIFEST` al final de `discoveryProtocol.js`, 6 mensajes del milestone · `ionpump_protocol.js` en `templates/discovery/` · `manifest.json` con los recursos de §4.9 · `harness/index.html` con `ProtocolReader` y UI dinámica, sin JS inline · boot async con `loadScriptOptional()` · **implementar el dispatcher de canal `tabs` en `Simulator.send()`, hoy ausente (§4.5, §18.1)**.
+**Cortex:** `DISCOVERY_PROTOCOL_MANIFEST` al final de `discoveryProtocol.js`, 6 mensajes del milestone · `harnessProtocol.js` en `templates/discovery/` · `manifest.json` con los recursos de §4.9 · `harness/index.html` con `ProtocolReader` y UI dinámica, sin JS inline · boot async con `loadScriptOptional()` · **implementar el dispatcher de canal `tabs` en `Simulator.send()`, hoy ausente (§4.5, §18.1)**.
 
 **Sentinel:** flag `--dev` en `seed.go` · `writeHarnessConfig()` en launch, no en seed · no fatal si falla · sin `copyHarnessPage()` ni `copyIonPumpProtocol()` en seed.go.
 
@@ -720,7 +720,7 @@ installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo
 
 ### 18.1 Canal `tabs` no implementado en el dispatcher real — ALTA PRIORIDAD
 
-Ambos documentos fuente y el propio manifest modelan `channel: "tabs"` como un mecanismo de primera clase, pero `Simulator.send()` real solo maneja `runtime`. Si `IONPUMP_PROTOCOL_MANIFEST` incluye mensajes `tabs` (razonable, dado que las acciones DOM de IonPump ocurren en una tab), hoy esos mensajes no se pueden simular desde el Harness — caen en `Unknown channel`. Implementar el branch faltante (`chrome.tabs.sendMessage` + selector de tab activo) o, si se decidió deprioritizar `tabs` para esta fase, dejarlo documentado explícitamente en vez de tácito.
+Ambos documentos fuente y el propio manifest modelan `channel: "tabs"` como un mecanismo de primera clase, pero `Simulator.send()` real solo maneja `runtime`. Si `HARNESS_PROTOCOL_MANIFEST` incluye mensajes `tabs` (razonable, dado que las acciones DOM de IonPump ocurren en una tab), hoy esos mensajes no se pueden simular desde el Harness — caen en `Unknown channel`. Implementar el branch faltante (`chrome.tabs.sendMessage` + selector de tab activo) o, si se decidió deprioritizar `tabs` para esta fase, dejarlo documentado explícitamente en vez de tácito.
 
 ### 18.2 Deploy incondicional del Harness — requiere decisión del equipo, no solo documentación
 
@@ -734,7 +734,7 @@ La pregunta abierta que `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` dejaba pendiente so
 
 La línea de boot que dice "Siempre presentes desde seed --dev" asume el modelo viejo. Corregir el comentario para que no induzca a pensar que esos archivos dependen de `--dev`, dado §0.2.
 
-### 18.5 Copia de `ionpump_protocol.js` en `discovery/` — no verificado en esta sesión
+### 18.5 Copia de `harnessProtocol.js` en `discovery/` — no verificado en esta sesión
 
 Se confirmó la copia local en `harness/`. No se aportó código de `discovery_generator.py` en esta sesión, así que no se puede confirmar si también copia su propia versión a `extension/discovery/` o si depende de algún otro mecanismo. No asumir — confirmar leyendo `discovery_generator.py` real antes de tocar esa ruta.
 
