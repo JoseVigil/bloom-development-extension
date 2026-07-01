@@ -1,6 +1,12 @@
 # Bloom — Harness + IonPump: Fuente de Verdad
-## Versión consolidada · Junio 2026 — revisión Jun 25 (auditoría completa contra código fuente)
+## Versión consolidada · v1.2 — Jul 1 2026 (corrección de la cascada ACCOUNT_REGISTERED → GITHUB_TOKEN_STORED)
 ### Supersede: todos los documentos del directorio `/docs/HARNESS/`
+
+> **v1.2 — resumen del cambio:** la revisión Jun 25 (v1.1) afirmaba que el handler de
+> `ACCOUNT_REGISTERED` en `background.js` emitía internamente `GITHUB_TOKEN_STORED` al host. Esa
+> cascada no existe en el código: son dos handlers independientes, y `GITHUB_TOKEN_STORED` es un
+> evento sintético del Harness que solo se dispara si se simula manualmente. Ver §22 para el
+> detalle completo y la lista de secciones corregidas (§9.1, §9.4, §12.2, §13, §15, §17, §20).
 
 > **Jerarquía de fuentes para esta revisión:**
 > 1. `background.js` — verificado Jun 25 2026 (1680 líneas)
@@ -38,6 +44,7 @@
 19. [Adenda — verificación Jun 19 2026](#19-adenda--verificación-jun-19-2026)
 20. [Adenda — auditoría Jun 25 2026 (esta revisión)](#20-adenda--auditoría-jun-25-2026-esta-revisión)
 21. [Adenda — Fase 5: migración a JSON schemas (Jun 26 2026)](#21-adenda--fase-5-migración-a-json-schemas-jun-26-2026)
+22. [Adenda — corrección cascada ACCOUNT_REGISTERED / GITHUB_TOKEN_STORED (v1.2, Jul 1 2026)](#22-adenda--corrección-cascada-account_registered--github_token_stored-v12-jul-1-2026)
 
 ---
 
@@ -948,7 +955,7 @@ Total: 2 sites
 - **Líneas 617–685:** `handleHostMessage()` → rama `host_ready` → handshake FASE 2 y 3, apertura Harness y Discovery tabs, escritura de `synapseStatus` en storage
 - **Líneas 969–979:** handler `HARNESS_HELLO` → `HARNESS_REPLAY`
 - **Líneas 1127–1138:** handler `DISCOVERY_COMPLETE` / `discovery_complete`
-- **Líneas 1141–1183:** handler `ACCOUNT_REGISTERED` — emite ACCOUNT_REGISTERED al host Y GITHUB_TOKEN_STORED internamente
+- **Líneas 1141–1183:** handler `ACCOUNT_REGISTERED` — `forwardToDebugPanel()`, `sendToHost({event:'ACCOUNT_REGISTERED', ...})`, `sendResp({received:true})` y broadcast interno vía `chrome.runtime.sendMessage`. No emite `GITHUB_TOKEN_STORED` (corregido en v1.2, ver §22)
 - **Líneas 1187–1210:** handler `GITHUB_PAT_DETECTED`
 - **Líneas 1216–1234:** handler `GITHUB_TOKEN_STORED` (standalone, para Harness y otros callers)
 - **Líneas 1317–1366:** handlers IonPump: `ION_EXECUTE_FLOW`, `ION_RELOAD`, `ION_INSPECT`
@@ -1024,12 +1031,13 @@ chrome.runtime.onMessage.addListener((msg) => {
    - Emite `ACCOUNT_REGISTERED` (service:'github', username, token_fingerprint)
    - `showScreen('github-stored')`
 
-`background.js` handler de `ACCOUNT_REGISTERED`:
-1. `forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', ...)` — para observabilidad
-2. `sendToHost({event:'ACCOUNT_REGISTERED', service, username, token_fingerprint, ...})`
-3. Si `service === 'github'` y hay `token_fingerprint`: `sendToHost({event:'GITHUB_TOKEN_STORED', ...})`
+`background.js` handler de `ACCOUNT_REGISTERED` (líneas 1063–1102, vía `registerHandler()` dentro de `registerOnboardingHandlers()`), hace y solo hace:
+1. `forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', ...)` — log al Harness
+2. `sendToHost({event:'ACCOUNT_REGISTERED', service, username, token_fingerprint, ...})` — **un** evento al host nativo
+3. `sendResp({received: true})`
+4. `chrome.runtime.sendMessage({event:'ACCOUNT_REGISTERED', ...})` — broadcast interno
 
-El `GITHUB_TOKEN_STORED` al host lo emite **background.js internamente** desde el handler de `ACCOUNT_REGISTERED`, no `discovery.js` directamente.
+**No existe ningún `if (service === 'github')` ni emisión de `GITHUB_TOKEN_STORED` dentro de este handler.** `ACCOUNT_REGISTERED` y `GITHUB_TOKEN_STORED` son dos `if` independientes dentro del mismo listener `chrome.runtime.onMessage` (línea 1105), cada uno con su propio `sendToHost()`. No hay cascada interna entre ellos. `GITHUB_TOKEN_STORED` es un evento sintético del Harness (`discovery.schema.json`, mensaje `github_token_stored`, `"direction": "harness_to_background"`) que solo se dispara si algo lo activa manualmente desde el panel de testing — nunca como parte del flujo real de `GithubAuthFlow`. *(Corregido en v1.2 — ver §22. Esta misma afirmación falsa estaba duplicada como comentario en `background.js:1345-1348` y `discovery.js:1076-1078`; ambos comentarios deben corregirse o borrarse por separado.)*
 
 ### 9.5 landing.js — flujo real (verificado Jun 25)
 
@@ -1262,9 +1270,11 @@ Harness (Cortex) — dispatches en orden:
 
 4. account_registered      → profile_id: auto, launch_id: auto
    ACK esperado: {received:true}
-   background.js internamente:
+   background.js:
      → sendToHost(ACCOUNT_REGISTERED) → MilestoneReactor → Landing
-     → sendToHost(GITHUB_TOKEN_STORED)
+   (GITHUB_TOKEN_STORED NO se dispara automáticamente aquí — es un evento sintético
+   separado del Harness; despacharlo requiere un paso 4b manual: `github_token_stored`.
+   Corregido en v1.2, ver §22)
 
 5. discovery_complete      → profile_id: auto, launch_id: auto
    ACK esperado: {received:true}
@@ -1300,7 +1310,7 @@ El Harness no puede simular clicks en la UI de Discovery directamente. El paso "
 | `background.js` — `forwardToDebugPanel()` doble destino | ✅ Implementado | Jun 25 |
 | `background.js` — `harnessLogBuffer` + `HARNESS_HELLO`/`REPLAY` | ✅ Implementado | Jun 25 |
 | `background.js` — handlers IonPump (`ION_EXECUTE_FLOW`, `ION_RELOAD`, `ION_INSPECT`) | ✅ Implementado | Jun 25 |
-| `background.js` — `ACCOUNT_REGISTERED` emite `GITHUB_TOKEN_STORED` internamente | ✅ Implementado | Jun 25 |
+| `background.js` — `ACCOUNT_REGISTERED` y `GITHUB_TOKEN_STORED` son handlers independientes, sin cascada | ✅ Verificado | v1.2 (corregido) |
 | `discoveryProtocol.js` — `DISCOVERY_PROTOCOL_MANIFEST` 8 mensajes | ✅ Implementado | Jun 25 |
 | `landingProtocol.js` — `LANDING_PROTOCOL_MANIFEST` 6 mensajes | ✅ Implementado | Jun 25 |
 | `discovery.js` — `routeToStep()` con todos los cases | ✅ Implementado | Jun 25 |
@@ -1356,7 +1366,7 @@ profiles/<uuid>/extension/
 - [x] Handler `HARNESS_HELLO` → `HARNESS_REPLAY`
 - [x] `openHarnessTab()` llamado en `host_ready` cuando `config.harness` existe
 - [x] `openDiscoveryTab()` llamado en `host_ready` cuando `config.mode === 'discovery'`
-- [x] Handler `ACCOUNT_REGISTERED` emite `GITHUB_TOKEN_STORED` internamente para github
+- [x] Handler `ACCOUNT_REGISTERED` — un solo evento a host + broadcast interno; NO emite `GITHUB_TOKEN_STORED` (corregido v1.2, ver §22)
 - [x] Handlers IonPump DOM commands (`ION_EXECUTE_FLOW`, `ION_RELOAD`, `ION_INSPECT`)
 - [x] `registerHandler` + `applySchemaDefaults` — infraestructura de schemas *(Fase 1–5)*
 - [x] `loadProtocolSchemas()` — carga JSON schemas al boot *(Fase 1–5)*
@@ -1429,7 +1439,7 @@ profiles/<uuid>/extension/
 6. **Metamorph no participa del Event Bus.** Es invocado bajo demanda por Nucleus.
 7. **IonPump executor no envía.** Solo genera `SynapseCommand` objects. `IonPumpManager` llama a `IPCClient`.
 8. **`bloom_profile_state` es propiedad de Discovery.** Solo `discovery.js` escribe. `landing.js` solo lee.
-9. **`ACCOUNT_REGISTERED` → `GITHUB_TOKEN_STORED` es una consecuencia interna de background.js.** `discovery.js` solo emite `ACCOUNT_REGISTERED`. El segundo evento lo genera el handler de background.
+9. **`ACCOUNT_REGISTERED` y `GITHUB_TOKEN_STORED` NO tienen relación de cascada.** *(Corregido en v1.2 — ver §22.)* `discovery.js` solo emite `ACCOUNT_REGISTERED` (emisor único: `GithubAuthFlow._saveToken()`). `GITHUB_TOKEN_STORED` no es un evento de producción: es un evento sintético del Harness (`discovery.schema.json`, `github_token_stored`, `"direction": "harness_to_background"`) que solo se dispara si se simula manualmente desde el panel de testing. El handler de `background.js` para `ACCOUNT_REGISTERED` no contiene ningún `if (service === 'github')` ni emite `GITHUB_TOKEN_STORED`; son dos `if` independientes dentro del mismo listener `chrome.runtime.onMessage`, cada uno con su propio `sendToHost()`. Si se observan ambos eventos casi simultáneos, la causa es que el evento simulado del Harness se disparó mientras el flujo real de `discovery.js` corría en paralelo — un artefacto de tener dos fuentes activas a la vez, no una cascada de código.
 
 ---
 
@@ -1496,7 +1506,7 @@ Esta sección documenta el proceso de la revisión que generó las correcciones 
 
 3. **`ProtocolReader` es un objeto literal, no una clase.** El método es `discover()`, no `loadAll()`. Resultado funcional idéntico.
 
-4. **`ACCOUNT_REGISTERED` → `GITHUB_TOKEN_STORED` es interno de background.js.** `discovery.js` solo emite `ACCOUNT_REGISTERED`. background.js handler emite internamente el `GITHUB_TOKEN_STORED` al host. Esto no estaba documentado claramente.
+4. ~~**`ACCOUNT_REGISTERED` → `GITHUB_TOKEN_STORED` es interno de background.js.**~~ **⚠️ Afirmación incorrecta — corregida en v1.2, ver §22.** Esta revisión (Jun 25) introdujo por error la afirmación de que `discovery.js` solo emite `ACCOUNT_REGISTERED` y que el handler de background.js emite internamente `GITHUB_TOKEN_STORED` al host. La revisión posterior (auditoría Jun 30/Jul 1 2026) encontró que esa cascada no existe en el código: son dos handlers independientes sin relación entre sí. La primera mitad de la afirmación (que `discovery.js` solo emite `ACCOUNT_REGISTERED`) era correcta; la segunda (que background.js dispara `GITHUB_TOKEN_STORED` como consecuencia) no lo era.
 
 5. **`landingProtocol.js` usa `window.PROTOCOL`, no `self.PROTOCOL`.** Diferencia de contexto de ejecución: Landing corre en una página Chrome Extension normal (tiene `window`); el manifest sigue usando `self.LANDING_PROTOCOL_MANIFEST`.
 
@@ -1550,3 +1560,125 @@ La secuencia de `loadScriptOptional()` en el boot del Harness se elimina junto c
 > Los datos de protocolo (estructura de mensajes, parámetros, defaults) no se inyectan como globals de JavaScript. Solo los configs de sesión (`*.synapse.config.js`) pueden seguir usando ese patrón mientras no sean migrados.
 
 **Archivos verificados para esta adenda:** contexto de sesión Jun 26 2026 + ARCHITECTURE_HarnessProtocol.md v1.0 Post-Fase 5.
+
+---
+
+## 22. Adenda — corrección cascada ACCOUNT_REGISTERED / GITHUB_TOKEN_STORED (v1.2, Jul 1 2026)
+
+> **Número de versión de este documento: 1.2**
+
+> Reemplaza la afirmación de la revisión Jun 25 (§9.1, §9.4, §13, §15, §17 invariante 9, §20 punto 4)
+> sobre una cascada `ACCOUNT_REGISTERED → GITHUB_TOKEN_STORED` interna a `background.js`. Esa cascada
+> **no existe en el código** y era deuda documental copiada en dos archivos distintos de este mismo
+> documento — no fue verificada contra el código fuente real en el momento en que se escribió.
+
+**Archivos releídos para esta corrección:** `background.js`, `discovery.js`, `discovery.schema.json`,
+`harness.schema.json`, `landing.schema.json`.
+
+### Flujo real: registro de cuenta GitHub
+
+**Emisor único: `discovery.js`, clase `GithubAuthFlow`, método `_saveToken()` (líneas 1025-1100).**
+
+Cuando el usuario confirma el guardado del token, `discovery.js`: persiste el token en
+`bloom_vault_temp`, resuelve el username vía `api.github.com/user` (best-effort), actualiza el
+estado local del vault y de la cuenta, y emite **un solo mensaje** vía `chrome.runtime.sendMessage`:
+
+```js
+// discovery.js:1080-1088
+chrome.runtime.sendMessage({
+  event:             'ACCOUNT_REGISTERED',
+  service:           'github',
+  username:          vault.github_user || '',
+  token_fingerprint: fingerprint,
+  profile_id:        self.SYNAPSE_CONFIG?.profileId,
+  launch_id:         self.SYNAPSE_CONFIG?.launchId,
+  timestamp:         Date.now(),
+});
+```
+
+`discovery.js` **no emite `GITHUB_TOKEN_STORED` en ningún punto del archivo** (verificado por
+búsqueda exhaustiva — cero ocurrencias como `sendMessage`).
+
+### Receptor: background.js
+
+El handler registrado para `ACCOUNT_REGISTERED` (líneas 1063-1102, vía `registerHandler()` dentro
+de `registerOnboardingHandlers()`) hace, y solo hace:
+
+1. `forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {...})` — log al Harness.
+2. `sendToHost({ event: 'ACCOUNT_REGISTERED', ... })` — **un** evento al host nativo.
+3. `sendResp({ received: true })`.
+4. `chrome.runtime.sendMessage({ event: 'ACCOUNT_REGISTERED', ... })` — broadcast interno.
+
+**No existe ningún `if (service === 'github')` ni ninguna emisión de `GITHUB_TOKEN_STORED` dentro
+de este handler.** `ACCOUNT_REGISTERED` y `GITHUB_TOKEN_STORED` son dos `if` independientes dentro
+del mismo listener `chrome.runtime.onMessage` (línea 1105), cada uno con su propio `sendToHost()`.
+No hay cascada interna entre ellos.
+
+### `GITHUB_TOKEN_STORED`: qué es realmente
+
+No es un evento de producción. Es un **evento sintético del Harness**, definido en
+`discovery.schema.json` (mensaje `github_token_stored`) con `"direction": "harness_to_background"`
+— solo existe para que el panel de testing simule manualmente "el usuario confirmó guardado de
+token", sin pasar por el flujo real de `discovery.js`. Aparece también en `harness.schema.json`
+como opción de `EVENT_EMIT` (simulación vía IonPump/Harness), y en `landing.schema.json` como
+`observable_event` — Landing está preparado para reaccionar si lo recibe, pero ningún código de
+producción se lo manda hoy.
+
+`background.js` sí tiene un handler para `GITHUB_TOKEN_STORED` (líneas 1345-1400) que reenvía al
+host — pero solo se activa si algo lo dispara manualmente (Harness), nunca como parte del flujo
+real de auth de GitHub.
+
+### Deuda documental duplicada (pendiente de limpieza fuera de este doc)
+
+La misma afirmación falsa está escrita en dos comentarios de código distintos, no solo en las
+versiones previas de este documento:
+
+- `background.js:1345-1348`, comentario sobre el handler de `GITHUB_TOKEN_STORED`:
+  > "este evento llega emitido internamente por el handler de ACCOUNT_REGISTERED"
+- `discovery.js:1076-1078`, comentario sobre la emisión de `ACCOUNT_REGISTERED`:
+  > "background.js recibe este evento y: ... 2. Internamente emite GITHUB_TOKEN_STORED al host"
+
+Ninguno de los dos describe código que existe. Ambos deberían corregirse o borrarse por separado
+(fuera de alcance de este documento).
+
+### Otro hallazgo: handler duplicado en canal host→extension
+
+`background.js:801-828`, dentro de `handleHostMessage()` (canal *host → extensión*, no
+`chrome.runtime.onMessage`), hay un segundo handler para `msg.event === 'ACCOUNT_REGISTERED'` que
+reenvía el mismo evento de vuelta al host vía `sendToHost()`. Es código vestigial: si el host
+alguna vez devuelve `ACCOUNT_REGISTERED` en lugar de su `_ACK`, esto lo reenvía en loop. No se
+dispara en el flujo actual (los ACKs vienen con sufijo `_ACK`), pero es riesgo latente.
+
+### Qué significa esto para bugs de duplicación de eventos
+
+Si se observan `ACCOUNT_REGISTERED` y `GITHUB_TOKEN_STORED` casi simultáneos (deltas de ~1ms), la
+única fuente posible en el código actual es que alguien haya disparado manualmente el evento
+simulado `github_token_stored` del Harness mientras el flujo real de `discovery.js` corría en
+paralelo y emitía su propio `ACCOUNT_REGISTERED`. No es una falla de emisión en `background.js` ni
+en `discovery.js` — ambos emiten correctamente un solo evento por acción real. Es un artefacto de
+tener dos fuentes (una real, una simulada) activas al mismo tiempo, no una cascada de código.
+
+La deduplicación del lado receptor (fuera de alcance de este doc — pendiente de confirmar contra
+`milestone-reactor.js`) sigue siendo la estrategia correcta para tolerar este escenario,
+independientemente de si el origen es este artefacto de testing u otro futuro.
+
+### Secciones corregidas por esta adenda
+
+| Sección | Cambio |
+|---|---|
+| §9.1 | Descripción del handler `ACCOUNT_REGISTERED` corregida — ya no dice que emite `GITHUB_TOKEN_STORED` |
+| §9.4 | Flujo `GithubAuthFlow` → `background.js` reescrito con los 4 pasos reales del handler |
+| §12.2 (walkthrough Harness) | Paso 4 corregido — ya no asume disparo automático de `GITHUB_TOKEN_STORED` |
+| §13 | Fila de la tabla de estado corregida |
+| §15 | Ítem de checklist corregido |
+| §17 | Invariante #9 reescrito |
+| §20 | Punto 4 marcado como incorrecto, con nota explicativa |
+
+---
+
+*Documento consolidado — v1.2 · Jul 1 2026*
+*Corrección aplicada sobre v1.1 (Jun 25 2026) según HARNESS_SOURCE_OF_TRUTH_FIX.md: elimina la
+afirmación errónea de una cascada interna `ACCOUNT_REGISTERED → GITHUB_TOKEN_STORED` en
+`background.js`. Ver §22.*
+
+**VERSIÓN: 1.2**
