@@ -47,6 +47,7 @@ class TreeManager:
         (("bin", "engine", "runtime", "bin"),     "[... python runtime]"),
         (("bin", "engine", "runtime", "lib"),     "[... python runtime]"),
         (("bin", "engine", "runtime", "include"), "[... python runtime]"),
+        (("bin", "engine", "runtime", "share"),   "[... python runtime]"),
         # Chromium profile data — collapse the entire Default/ profile dir
         # (contains cache, databases, session data, etc. — not useful in snapshot)
         (("profiles", "*", "Default"), "[... chromium profile data]"),
