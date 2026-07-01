@@ -48,17 +48,32 @@ class MilestoneReactor {
    * @param {Function}  opts.execNucleus      Misma función que usa onboarding-handlers.js
    * @param {string}    opts.NUCLEUS_JSON      Path absoluto a nucleus.json
    * @param {boolean}  [opts.verbose=false]
+   * @param {object}   [opts.logger=console]  Logger con métodos .info/.warn/.error
+   *   (ej: el getLogger('onboarding') de main_conductor.js). IMPORTANTE: usar el
+   *   logger inyectado en vez de console.* directo — el sistema de logging del
+   *   Conductor intercepta los métodos del logger, no console global, así que
+   *   console.log/warn/error nunca llegan al archivo de log (ver Bug 4).
    */
-  constructor({ registry, getWindow, execNucleus, NUCLEUS_JSON, verbose = false }) {
+  constructor({ registry, getWindow, execNucleus, NUCLEUS_JSON, verbose = false, logger = console }) {
     this._registry    = registry;
     this._getWindow   = getWindow;
     this._execNucleus = execNucleus;
     this._NUCLEUS_JSON = NUCLEUS_JSON;
     this._verbose     = verbose;
+    this._logger      = logger;
 
     // Set de stepIds ya procesados en esta sesión — idempotencia en memoria.
     // Si el proceso reinicia, el estado persiste en nucleus.json.
     this._processed = new Set();
+
+    // Set separado para dedupe de EMISIÓN al renderer (Bug 3).
+    // _processed usa clave "stepId:event" porque github_auth necesita procesar
+    // varios eventos del mismo step (ACCOUNT_REGISTERED abre Landing,
+    // GITHUB_TOKEN_STORED no). Pero eso permite que ambos eventos lleguen a
+    // _emitMilestone/_emitStepUiUpdate y el renderer vea el milestone dos veces.
+    // _emitted usa clave solo "stepId" — el renderer se notifica una única vez
+    // por step, sin importar cuántos eventos internos lo compongan.
+    this._emitted = new Set();
 
     // Mapa de stepId → handler. Permite extensión sin tocar el switch.
     this._handlers = {
@@ -82,9 +97,18 @@ class MilestoneReactor {
   handleMilestone(stepId, enriched = {}) {
     if (!stepId) return;
 
-    // Idempotencia: no re-ejecutar si ya procesamos este step en la sesión actual.
-    if (this._processed.has(stepId)) {
-      this._log(`handleMilestone: "${stepId}" ya procesado — ignorando`);
+    // Idempotencia: la clave es "stepId:event", no solo stepId.
+    // Un mismo step (ej: github_auth) puede tener varios cortex_events
+    // distintos (GITHUB_PAT_DETECTED, GITHUB_TOKEN_STORED, ACCOUNT_REGISTERED),
+    // y cada uno puede disparar una reacción diferente dentro del mismo handler
+    // (ver _onGithubAuthComplete, que solo abre Landing si enriched.event ===
+    // 'ACCOUNT_REGISTERED'). Si la idempotencia fuera solo por stepId, el primer
+    // evento que llegue "gasta" el step entero y los eventos siguientes para ese
+    // mismo step se descartan en este guard sin llegar nunca al handler —
+    // por eso ACCOUNT_REGISTERED se ackeaba en Brain pero nunca abría Landing.
+    const dedupeKey = `${stepId}:${enriched.event || 'n/a'}`;
+    if (this._processed.has(dedupeKey)) {
+      this._log(`handleMilestone: "${dedupeKey}" ya procesado — ignorando`);
       return;
     }
 
@@ -95,14 +119,14 @@ class MilestoneReactor {
     }
 
     this._log(`handleMilestone: "${stepId}" (evento: ${enriched.event || 'n/a'})`);
-    this._processed.add(stepId);
+    this._processed.add(dedupeKey);
 
     const handler = this._handlers[stepId];
     if (handler) {
       // Ejecutar de forma async, sin bloquear el caller
       Promise.resolve()
         .then(() => handler(enriched))
-        .catch(err => console.error(`[MilestoneReactor] error en handler "${stepId}":`, err.message));
+        .catch(err => this._logger.error(`[MilestoneReactor] error en handler "${stepId}":`, err.message));
     } else {
       // Handler genérico: marcar completo en nucleus.json y notificar al renderer
       this._defaultReaction(stepId, enriched);
@@ -129,13 +153,27 @@ class MilestoneReactor {
   // ── Handlers por step ───────────────────────────────────────────────────────
 
   async _onGithubAuthComplete(enriched) {
-    this._log('_onGithubAuthComplete');
+    this._log(`_onGithubAuthComplete (evento: ${enriched.event || 'n/a'})`);
     await this._persistStepComplete('github_auth');
-    this._emitMilestone('github_auth', {
-      username: enriched.data?.username || null,
-      org:      enriched.data?.org      || null,
-    });
-    this._emitStepUiUpdate('github_auth', { phase: 'ESTABLISHED' });
+
+    // Bug 3 fix: github_auth puede recibir varios eventos Cortex distintos
+    // (ACCOUNT_REGISTERED, GITHUB_TOKEN_STORED, GITHUB_PAT_DETECTED...) y el
+    // guard de handleMilestone() los deja pasar a todos a propósito, porque
+    // cada uno puede requerir una reacción distinta (ver _openLandingTab más
+    // abajo). Pero la notificación al renderer (milestone:reached /
+    // step-ui-update) debe emitirse una sola vez por step, no una vez por
+    // evento interno — de lo contrario el stepper recibe el mismo milestone
+    // duplicado en el mismo segundo. Se dedupea por stepId solamente.
+    if (!this._emitted.has('github_auth')) {
+      this._emitted.add('github_auth');
+      this._emitMilestone('github_auth', {
+        username: enriched.data?.username || null,
+        org:      enriched.data?.org      || null,
+      });
+      this._emitStepUiUpdate('github_auth', { phase: 'ESTABLISHED' });
+    } else {
+      this._log('_onGithubAuthComplete: milestone ya emitido al renderer — solo procesando side-effect');
+    }
 
     // ACCOUNT_REGISTERED = el usuario completó el login de GitHub y la cuenta
     // está creada. En este punto Landing puede abrirse para mostrar el workspace.
@@ -231,7 +269,7 @@ class MilestoneReactor {
       this._log('_onOnboardingSuccess: ok');
     } catch (err) {
       // No-fatal: el renderer ya recibió __onboarding_complete__ por IPC
-      console.warn('[MilestoneReactor] _onOnboardingSuccess: nucleus call falló —', err.message);
+      this._logger.warn('[MilestoneReactor] _onOnboardingSuccess: nucleus call falló —', err.message);
     }
   }
 
@@ -258,7 +296,7 @@ class MilestoneReactor {
       this._log('_openLandingTab: landing lanzada ok');
     } catch (err) {
       // No-fatal: el usuario puede abrir Landing manualmente si este comando falla.
-      console.warn('[MilestoneReactor] _openLandingTab falló —', err.message);
+      this._logger.warn('[MilestoneReactor] _openLandingTab falló —', err.message);
     }
   }
 
@@ -319,14 +357,21 @@ class MilestoneReactor {
         this._log(`_persistStepComplete: "${stepId}" ya estaba en completed_steps`);
       }
     } catch (e) {
-      console.error(`[MilestoneReactor] _persistStepComplete("${stepId}") falló:`, e.message);
+      this._logger.error(`[MilestoneReactor] _persistStepComplete("${stepId}") falló:`, e.message);
     }
   }
 
   // ── Logger ───────────────────────────────────────────────────────────────────
 
+  // IMPORTANTE (Bug 4): usar this._logger, no console.log directo. El logger
+  // custom del Conductor (getLogger) intercepta sus propios métodos .info/
+  // .warn/.error para escribir al archivo de log de la sesión (ver formato
+  // "[INFO] [ONBOARDING] ..." en conductor_onboarding_*.log). console.log
+  // crudo va a stdout/devtools pero nunca llega a ese archivo — por eso
+  // nunca aparecía ninguna línea "[MilestoneReactor]" en los logs pese a que
+  // verbose:true se pasaba correctamente desde main_conductor.js.
   _log(...args) {
-    if (this._verbose) console.log('[MilestoneReactor]', ...args);
+    if (this._verbose) this._logger.info('[MilestoneReactor]', ...args);
   }
 }
 

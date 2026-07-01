@@ -551,6 +551,7 @@ class ServerManager:
                         {
                             'profile_id':        profile_id,
                             'step':              'github_auth',
+                            'original_event':    'GITHUB_TOKEN_STORED',
                             'token_fingerprint': token_fingerprint,
                         }
                     )
@@ -593,6 +594,7 @@ class ServerManager:
                         {
                             'profile_id':        profile_id,
                             'step':              'github_auth',
+                            'original_event':    'ACCOUNT_REGISTERED',
                             'service':           service,
                             'username':          username,
                             'token_fingerprint': token_fingerprint,

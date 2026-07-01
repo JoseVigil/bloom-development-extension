@@ -460,6 +460,11 @@ class SynapseBridge extends EventEmitter {
     const enriched = {
       ...msg,
       type:       classified.type,
+      // Restaura el evento real cuando Brain lo mandó en data.original_event,
+      // así resolveEvent() y _onGithubAuthComplete() (que comparan contra
+      // enriched.event) siguen funcionando sin saber que existe el formato
+      // resumido ONBOARDING_STEP_COMPLETE.
+      ...(classified.originalEvent ? { event: classified.originalEvent } : {}),
       _ts:        Date.now(),
       _profileId: this._profileId,
       _launchId:  this._launchId,
@@ -516,6 +521,28 @@ class SynapseBridge extends EventEmitter {
     if (msgType === 'PROFILE_DISCONNECTED') return { type: 'PROFILE' };
     if (msgType === 'BRAIN_SERVICE_STATUS') return { type: 'STATUS' };
 
+    // ONBOARDING_STEP_COMPLETE llega como EventBus broadcast (Formato A):
+    // { type: 'ONBOARDING_STEP_COMPLETE', timestamp, data: { original_event, ... } }
+    // El discriminador va en msg.type, NO en msg.event (eso es Formato B,
+    // Chrome Native Messaging). El bloque de Formato B más abajo nunca veía
+    // este mensaje porque `event` (derivado de msg.event) quedaba vacío, y
+    // caía al fallback final como { type: 'ONBOARDING_STEP_COMPLETE' } —
+    // nunca se convertía en ONBOARDING_MILESTONE, así que
+    // _connectMilestoneReactor() en workspace-synapse-handlers.js descartaba
+    // el mensaje en su primera línea sin invocar nunca al reactor.
+    if (msgType === 'ONBOARDING_STEP_COMPLETE') {
+      const originalEvent = (msg.data?.original_event || '').toUpperCase();
+      if (!originalEvent) {
+        this._log(
+          'ONBOARDING_STEP_COMPLETE sin data.original_event — Brain desactualizado o evento no migrado todavía'
+        );
+      }
+      return {
+        type: 'ONBOARDING_MILESTONE',
+        ...(originalEvent ? { originalEvent } : {}),
+      };
+    }
+
     // ACK de nuestro REGISTER_CLI: confirma que somos un Sentinel activo.
     // Señalamos catch_up_needed para que el caller haga un poll de safety
     // (PROFILE_CONNECTED podría haber ocurrido antes de que conectásemos).
@@ -539,6 +566,23 @@ class SynapseBridge extends EventEmitter {
     // El MilestoneRegistry puede extender este Set en runtime sin tocar este archivo.
     //
     if (ONBOARDING_EVENTS.has(event)) {
+      // Brain colapsa GITHUB_TOKEN_STORED / ACCOUNT_REGISTERED en
+      // ONBOARDING_STEP_COMPLETE, pero ahora preserva el discriminador
+      // original en data.original_event (ver server_manager.py v1.1.0+).
+      // Contrato explícito, no heurístico: si falta, se loguea y se
+      // sigue sin discriminador — el caller decide qué hacer.
+      if (event === 'ONBOARDING_STEP_COMPLETE') {
+        const originalEvent = (msg.data?.original_event || '').toUpperCase();
+        if (!originalEvent) {
+          this._log(
+            'ONBOARDING_STEP_COMPLETE sin data.original_event — Brain desactualizado o evento no migrado todavía'
+          );
+        }
+        return {
+          type: 'ONBOARDING_MILESTONE',
+          ...(originalEvent ? { originalEvent } : {}),
+        };
+      }
       return { type: 'ONBOARDING_MILESTONE' };
     }
 

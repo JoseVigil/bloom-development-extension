@@ -1087,20 +1087,6 @@ function registerOnboardingHandlers() {
       timestamp:         msg.timestamp         || Date.now(),
     });
 
-    // 2. GITHUB_TOKEN_STORED al host — registra el PAT en ServerManager.
-    //    Con registerHandler, msg.service y msg.token_fingerprint ya tienen
-    //    los defaults del schema aplicados — esta condición nunca ve undefined.
-    if (msg.service === 'github' && msg.token_fingerprint) {
-      sendToHost({
-        event:             'GITHUB_TOKEN_STORED',
-        token_fingerprint: msg.token_fingerprint,
-        profile_id:        msg.profile_id || config?.profileId,
-        launch_id:         msg.launch_id  || config?.launchId,
-        timestamp:         Date.now(),
-      });
-      console.log('[Synapse] ✓ GITHUB_TOKEN_STORED emitido internamente desde ACCOUNT_REGISTERED');
-    }
-
     sendResp({ received: true });
 
     chrome.runtime.sendMessage({
