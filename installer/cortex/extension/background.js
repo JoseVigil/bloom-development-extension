@@ -798,34 +798,13 @@ function handleHostMessage(msg) {
     return;
   }
 
-  // ACCOUNT_REGISTERED
-  if (msg.event === 'ACCOUNT_REGISTERED') {
-    if (!msg.profile_id || !msg.launch_id) {
-      console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED recibido sin profile_id/launch_id — forwarding de todas formas');
-    }
-
-    console.log('[Synapse] ✓ ACCOUNT_REGISTERED → forwarding to native host:', msg.service, msg.email || '');
-
-    // 🔧 FIX 3: loguear recepción al Harness (handler secundario — fuente: host)
-    forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
-      _dir:       'in',
-      source:     'host',
-      service:    msg.service     || null,
-      profile_id: msg.profile_id  || config?.profileId,
-      launch_id:  msg.launch_id   || config?.launchId,
-    });
-
-    sendToHost({
-      event:      'ACCOUNT_REGISTERED',
-      profile_id: msg.profile_id  || config?.profileId,
-      launch_id:  msg.launch_id   || config?.launchId,
-      service:    msg.service,
-      email:      msg.email       || '',
-      timestamp:  msg.timestamp   || Date.now()
-    });
-
-    return;
-  }
+  // NOTA: se eliminó acá un handler duplicado/muerto para msg.event === 'ACCOUNT_REGISTERED'.
+  // Vivía en handleHostMessage (canal HOST → extension) y hacía sendToHost(ACCOUNT_REGISTERED)
+  // — si el host alguna vez devolvía este evento en vez de su _ACK, la extensión se lo reenviaba
+  // de vuelta al host en loop. Nunca se disparaba en el flujo real, pero era código muerto
+  // peligroso. El único handler legítimo de ACCOUNT_REGISTERED es el registrado vía
+  // registerHandler() en registerOnboardingHandlers() (canal EXTENSION-interno,
+  // discovery.js → background.js), más abajo en este archivo.
 
   // Navigation command
   if (msg.type === 'NAVIGATE' && msg.payload?.url) {
@@ -1089,8 +1068,15 @@ function registerOnboardingHandlers() {
 
     sendResp({ received: true });
 
+    // 🔧 FIX: _internal:true evita que este mismo broadcast, al llegar de vuelta al propio
+    // chrome.runtime.onMessage.addListener (línea ~1105), vuelva a matchear REGISTERED_HANDLERS
+    // y re-ejecute este handler (que volvería a llamar sendToHost + volvería a broadcastear:
+    // auto-loop sin corte, sin guard). El dispatcher ahora salta REGISTERED_HANDLERS cuando ve
+    // _internal:true, pero el mensaje sigue llegando a otros listeners de la extensión
+    // (popup, content scripts) que sí lo necesiten.
     chrome.runtime.sendMessage({
       event: 'ACCOUNT_REGISTERED',
+      _internal: true,
       service: msg.service,
       username: msg.username || '',
       token_fingerprint: msg.token_fingerprint || '',
@@ -1108,8 +1094,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   // --- Registered handler dispatch (Harness Protocol SSoT) ---
   // Chequear primero; si el evento está registrado, despachar y retornar.
   // Los handlers registrados reciben el mensaje con defaults de schema aplicados.
+  // 🔧 FIX: mensajes marcados _internal:true son auto-broadcasts de un registered handler
+  // hacia el resto de la extensión (popup, content scripts) — NO deben re-entrar al dispatch
+  // de REGISTERED_HANDLERS, o el handler se re-ejecuta a sí mismo en loop (ver
+  // registerOnboardingHandlers → ACCOUNT_REGISTERED).
   const _registeredEvent = msg.event || msg.command;
-  if (_registeredEvent && REGISTERED_HANDLERS[_registeredEvent]) {
+  if (_registeredEvent && !msg._internal && REGISTERED_HANDLERS[_registeredEvent]) {
     const { schema, handlerFn } = REGISTERED_HANDLERS[_registeredEvent];
     const patchedMsg = applySchemaDefaults(msg, schema);
     const _asyncResult = handlerFn(patchedMsg, sender, sendResp);
@@ -1343,9 +1333,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   }
 
   // ── GITHUB_TOKEN_STORED ────────────────────────────────────────────────────
-  // En el flujo normal de onboarding, este evento llega emitido internamente
-  // por el handler de ACCOUNT_REGISTERED (arriba), no directamente desde discovery.js.
-  // El handler standalone sigue activo para el Harness (simulación) y otros callers.
+  // CORREGIDO (ver HARNESS_SOURCE_OF_TRUTH): el handler de ACCOUNT_REGISTERED NO emite
+  // este evento internamente — eso nunca estuvo implementado, era deuda documental.
+  // discovery.js tampoco lo emite en el flujo de GithubAuthFlow._saveToken() (solo emite
+  // ACCOUNT_REGISTERED). Este handler solo se dispara si algún OTRO caller (Harness/simulación,
+  // o un content script fuera de este repo) manda chrome.runtime.sendMessage con este evento.
+  // Si en producción nunca ves este log, es señal de que nadie lo está emitiendo realmente.
   if (event === 'GITHUB_TOKEN_STORED') {
     console.log('[Synapse] 📥 GITHUB_TOKEN_STORED recibido');
 

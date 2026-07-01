@@ -1073,9 +1073,10 @@ class GithubAuthFlow {
     // Evento canónico de milestone: el usuario tiene cuenta activa en el servicio
     // y Bloom la reconoció. Dispara github_auth en MilestoneReactor → Landing.
     //
-    // background.js recibe este evento y:
-    //   1. Lo forwarding al host como ACCOUNT_REGISTERED (dispara MilestoneReactor)
-    //   2. Internamente emite GITHUB_TOKEN_STORED al host (registra el PAT)
+    // background.js recibe este evento y SOLO lo forwarding al host como ACCOUNT_REGISTERED.
+    // CORREGIDO: no emite GITHUB_TOKEN_STORED internamente — eso nunca estuvo implementado.
+    // El token ya se guardó antes (arriba, en _saveToken) directo a bloom_vault_temp; ese guardado
+    // es local y NO produce ningún evento GITHUB_TOKEN_STORED hacia el host desde este flujo.
     //
     chrome.runtime.sendMessage({
       event:             'ACCOUNT_REGISTERED',
