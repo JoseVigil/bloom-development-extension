@@ -1,5 +1,49 @@
 # Brain Service — Troubleshooting Guide
-> Linux / Ubuntu · Última actualización: 30 de junio de 2026
+> Linux / Ubuntu · Última actualización: 1 de julio de 2026
+
+---
+
+## 0. ⚡ Procedimiento rápido (caso más común: puerto ocupado)
+
+**Este es el escenario más frecuente.** Si `nucleus --json health` muestra `brain_service` en `UNREACHABLE` con `connection refused`, empezá por acá antes de leer el resto de la guía.
+
+```bash
+# 1. Ver si algo tiene el puerto 5678
+sudo fuser 5678/tcp
+
+# 2. Si devuelve un PID, matarlo
+sudo fuser -k 5678/tcp
+
+# 3. Confirmar que quedó libre (fuser Y ss, no alcanza con uno solo)
+sudo fuser 5678/tcp
+sudo ss -tlnp 'sport = :5678'
+
+# 4. ⚠️ CRÍTICO: esperar antes de relanzar (ver nota abajo)
+sleep 2
+
+# 5. Levantar el brain como daemon
+nohup brain service start --port 5678 > /tmp/brain-service.log 2>&1 & disown
+
+# 6. Verificar que arrancó sin errores
+sleep 2
+cat /tmp/brain-service.log
+pgrep -a -f "brain service start"
+sudo fuser 5678/tcp
+
+# 7. Confirmación final
+nucleus --json health 2>/dev/null
+```
+
+> **⚠️ Por qué el `sleep 2` es obligatorio — Race condition confirmada (2026-07-01):**
+> `fuser -k` envía `SIGKILL`, que mata el proceso de forma abrupta sin darle tiempo al kernel a liberar el socket prolijamente. Si se relanza el brain inmediatamente después del kill, el nuevo proceso intenta bindear al puerto 5678 mientras el socket viejo todavía está en estado `TIME_WAIT`/liberándose, y falla con:
+> ```
+> ERROR Puerto 5678 no disponible: [Errno 98] Address already in use
+> ```
+> Esto pasó incluso con `fuser 5678/tcp` devolviendo vacío justo antes del intento — el puerto *parece* libre pero el kernel todavía no terminó de soltarlo. Un `sleep 2` entre el kill y el `nohup ... start` resuelve el problema de forma consistente.
+>
+> Si después del `sleep 2` **igual** falla con `Address already in use`, aumentar a `sleep 5` o verificar con `sudo ss -tlnp 'sport = :5678'` (más confiable que `fuser` solo) antes de reintentar.
+
+Si esto no resuelve el problema, seguir con el diagnóstico detallado abajo.
 
 ---
 
@@ -73,12 +117,17 @@ sudo fuser -k 5678/tcp
 # 3. Verificar que quedó libre (debe devolver vacío)
 sudo fuser 5678/tcp
 
-# 4. Levantar el brain
+# 4. ⚠️ Esperar antes de relanzar — ver nota sobre race condition en Sección 0
+sleep 2
+
+# 5. Levantar el brain
 nohup brain service start --port 5678 > /tmp/brain-service.log 2>&1 & disown
 
-# 5. Verificar
+# 6. Verificar
 nucleus --json health --component brain_service 2>/dev/null
 ```
+
+> ⚠️ Sin el `sleep 2` del paso 4, es común que el paso 5 falle con `Address already in use` aunque `fuser` haya mostrado el puerto libre — el kernel todavía no terminó de liberar el socket tras el `SIGKILL`. Ver Sección 0 para el detalle.
 
 ---
 
@@ -164,16 +213,19 @@ nucleus --json health 2>/dev/null
 # 2. Liberar el puerto si está ocupado
 sudo fuser -k 5678/tcp
 
-# 3. Levantar el brain como daemon
+# 3. ⚠️ Esperar antes de relanzar (evita race condition, ver Sección 0)
+sleep 2
+
+# 4. Levantar el brain como daemon
 nohup brain service start --port 5678 > /tmp/brain-service.log 2>&1 & disown
 
-# 4. Esperar y verificar
+# 5. Esperar y verificar
 sleep 3 && nucleus --json health 2>/dev/null
 
-# 5. Si worker sigue DISCONNECTED, aplicar fix
+# 6. Si worker sigue DISCONNECTED, aplicar fix
 nucleus health --fix
 
-# 6. Verificación final
+# 7. Verificación final
 nucleus --json health 2>/dev/null
 ```
 
@@ -201,7 +253,9 @@ Estado esperado al final:
 | `brain health full-stack` | Stack completo (menos confiable en Linux) |
 | `brain service status` | Estado del servidor brain TCP |
 | `sudo fuser 5678/tcp` | Ver qué proceso tiene el puerto 5678 |
+| `sudo ss -tlnp 'sport = :5678'` | Confirmar liberación del puerto (más confiable que `fuser` solo) |
 | `sudo fuser -k 5678/tcp` | Matar el proceso que tiene el puerto 5678 |
+| `sleep 2` (después de matar, antes de relanzar) | Evita race condition de `Address already in use` — ver Sección 0 |
 | `nohup brain service start --port 5678 > /tmp/brain-service.log 2>&1 & disown` | Levantar brain como daemon en Linux |
 | `pgrep -a -f "brain service start"` | Verificar que el proceso brain existe |
 | `tail -f /tmp/brain-service.log` | Ver logs del brain en tiempo real |
