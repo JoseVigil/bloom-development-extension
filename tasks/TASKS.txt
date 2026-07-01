@@ -741,3 +741,25 @@ Noti Gmail
 Companion Gemini
 Panel lateral companion en Chromium para sistema BTIPS
 https://claude.ai/chat/340d1dc7-7442-46a1-85d7-02ca2ef7ce3f
+
+
+gestureos
+resumen de documento e inicio de prompts nuevos debajo.
+https://claude.ai/chat/62f12713-b1e9-4342-ad68-63966e8a1744
+
+cellbio
+Validación de estrategia para integración de mandates en plugin vscode
+https://claude.ai/chat/cb018009-5fc6-40f1-8278-ac53a0dc9e4c
+
+
+noti gmail
+Mandetes marketplace
+https://claude.ai/chat/eb9dffe8-a46f-4e72-84fa-17a4b6833eb0
+uitool 
+CUUM y el El Epoch Ledger
+https://claude.ai/chat/5ad18a2c-0a14-45ff-b951-e3b532a43000
+roamtouch
+Tokenomics y modelo de incentivos para Cognituum
+https://claude.ai/chat/cc86f2ef-8956-4e7c-9b49-b37ca08560cd
+
+
