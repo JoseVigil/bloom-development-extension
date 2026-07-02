@@ -84,6 +84,8 @@ brain filesystem tree installer/bartcave -o tree/bartcave_tree.txt
 
 brain filesystem tree installer/native -o tree/native_tree.txt
 
+brain filesystem tree installer/ions -o tree/ions_tree.txt
+
 brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
 
 brain filesystem tree installer/cortex -o tree/cortex_tree.txt

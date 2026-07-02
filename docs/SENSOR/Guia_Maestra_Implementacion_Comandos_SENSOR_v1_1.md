@@ -27,9 +27,9 @@ SENSOR y NUCLEUS comparten la misma infraestructura de CLI (Cobra, `help_rendere
 
 | Aspecto | NUCLEUS | SENSOR |
 |---------|---------|--------|
-| **Registro de comandos** | Auto-discovery vía `init()` | Explícito en `root.go` |
-| **Activación** | Import ciego `_` en `main.go` | `root.AddCommand(...)` en `BuildRootCommand` |
-| **Extensibilidad** | Alta — agregar archivo = agregar comando | Deliberada — requiere editar `root.go` |
+| **Registro de comandos** | Auto-discovery vía `init()` | Explícito vía `RegisterXxxCommands(c)` + `cmdregistry.Register(...)` |
+| **Activación** | Import ciego `_` en `main.go` | `main.go` llama cada `RegisterXxxCommands(c)`; `buildRootCommand` itera `cmdregistry.Commands()` |
+| **Extensibilidad** | Alta — agregar archivo = agregar comando | Deliberada — requiere llamar `RegisterXxxCommands(c)` desde `main.go` |
 | **Filosofía** | Gobernanza extensible | Runtime fisiológico estable |
 | **Naturaleza** | Orientado a comandos | Orientado a runtime continuo |
 
@@ -42,52 +42,74 @@ Esta distinción es intencional. Sensor mide presencia humana — sus comandos s
 Los comandos de Sensor se ven y se comportan igual que los de Nucleus para el ecosistema (mismo formato de help, mismas annotations, mismo `--json`), pero internamente son más simples: no hay magia de `init()`, no hay imports ciegos.
 
 ```
-✅ CORRECTO: Comandos como funciones factory en internal/cli/
+✅ CORRECTO: Comandos como funciones factory, registradas explícitamente
    internal/
-   └── cli/
-       ├── root.go           ← Registro explícito de comandos
-       ├── help_renderer.go  ← Renderer compartido con Nucleus
-       ├── config.go         ← Categorías y branding de Sensor
-       └── commands/         ← (opcional) archivos separados por dominio
-           ├── run.go
-           ├── status.go
-           └── ...
+   ├── cli/
+   │   ├── diagnostic.go     ← RegisterDiagnosticCommands(c) + factory(s)
+   │   ├── hcu.go            ← RegisterHCUCommands(c) + factory(s)
+   │   ├── replay.go         ← RegisterReplayCommands(c) + factory
+   │   ├── help_renderer.go  ← Renderer compartido con Nucleus
+   │   └── config.go         ← Categorías y branding de Sensor
+   └── cmdregistry/
+       └── cmdregistry.go    ← Register()/Commands() — el registry REAL que
+                                buildRootCommand (cmd/main.go) itera
+   cmd/
+   └── main.go               ← Llama cada RegisterXxxCommands(c) y arma root
 
 ❌ INCORRECTO: Intentar clonar el patrón init() de Nucleus en Sensor
    internal/
    └── runtime/
-       └── run.go  ← Con init() { cli.Register(...) }
+       └── run.go  ← Con init() { cmdregistry.Register(...) }
    main.go
        └── _ "bloom-sensor/internal/runtime"  ← NO hacer esto
+
+❌ TAMBIÉN INCORRECTO — y fácil de confundir: registrar en internal/cli/registry.go
+   Ese archivo existe en el repo (tipo CommandFactory con firma distinta,
+   su propio slice registry y su propio PrintJSON) pero NADA en main.go lo
+   itera. Un comando registrado ahí compila sin errores y nunca aparece en
+   `bloom-sensor help`. Ver sección 4.1 y 8.5.
 ```
 
 ### 1.3 Flujo de Vida de un Comando en Sensor
 
 ```
-1. Desarrollador crea función factory: func createRunCommand(c *core.Core) *cobra.Command
-2. La función se declara en un archivo dentro de internal/cli/ (o en root.go mismo)
-3. root.go llama explícitamente: root.AddCommand(createRunCommand(c))
-4. BuildRootCommand retorna el root con todos los comandos ya adjuntos
-5. main.go llama BuildRootCommand(c) y ejecuta root.Execute()
-6. help_renderer agrupa por categoría usando Annotations["category"]
+1. Desarrollador crea función factory: func newRunCommand(c *core.Core) *cobra.Command
+2. La función se declara en un archivo dentro de internal/cli/ (o en el paquete
+   de dominio, como buildinfo/runtime/startup)
+3. Ese mismo archivo expone RegisterRunCommands(c *core.Core), que llama
+   explícitamente: cmdregistry.Register(func() *cobra.Command { return newRunCommand(c) })
+4. main.go llama explícitamente RegisterRunCommands(c) (junto con el resto de
+   RegisterXxxCommands) ANTES de construir el root
+5. buildRootCommand (en cmd/main.go) recorre cmdregistry.Commands() y hace
+   root.AddCommand(factory()) por cada una
+6. main.go ejecuta root.Execute()
+7. help_renderer agrupa por categoría usando Annotations["category"]
 ```
 
-No hay imports ciegos. No hay `init()`. Todo el árbol de comandos se construye en `BuildRootCommand`.
+No hay imports ciegos. No hay `init()`. Pero tampoco hay un `root.go` centralizado:
+el árbol de comandos se arma dinámicamente a partir de lo que cada paquete de
+dominio empujó a `cmdregistry` antes de que `buildRootCommand` corra.
 
 ---
 
 ## 2. Sistema de Categorías
 
-### 2.1 Las Cuatro Categorías de Sensor
+### 2.1 Las Cinco Categorías de Sensor
 
 Las categorías son **etiquetas** en `Annotations`, no estructura de carpetas. Se configuran en `internal/cli/config.go`:
 
 | Categoría | Descripción | Comandos actuales |
 |-----------|-------------|-------------------|
 | **`SYSTEM`** | Versión, identidad y contrato con Metamorph | `version`, `info` |
-| **`RUNTIME`** | Arranque e inspección del loop de presencia humana | `run`, `status` |
+| **`RUNTIME`** | Arranque e inspección del loop de presencia humana | `run`, `status`, `diagnostic`, `diagnostic tick` |
 | **`LIFECYCLE`** | Gestión de autostart en HKCU | `enable`, `disable` |
 | **`TELEMETRY`** | Exportación e inspección de snapshots de presencia | `export` |
+| **`COGNITION`** | Inferencia de estado cognitivo, replay y Human Cognitive Units | `hcu`, `hcu compute`, `hcu summary`, `replay` |
+
+> Nota: `diagnostic` usa `RUNTIME`, no una categoría propia — es una inspección
+> de bajo nivel del loop, distinta de `hcu`/`replay`, que trabajan sobre
+> inferencia cognitiva ya procesada. Confirmar contra `diagnostic.go`,
+> `hcu.go` y `replay.go` si agregás subcomandos nuevos a cualquiera de los dos.
 
 ### 2.2 Configuración Visual (config.go)
 
@@ -105,12 +127,14 @@ func DefaultSensorConfig() HelpConfig {
             "RUNTIME",
             "LIFECYCLE",
             "TELEMETRY",
+            "COGNITION",
         },
         CategoryDescs: map[string]string{
             "SYSTEM":    "Version, identity and Metamorph contract",
             "RUNTIME":   "Start and inspect the human presence detection loop",
             "LIFECYCLE": "Manage automatic startup registration (HKCU)",
             "TELEMETRY": "Export and inspect collected presence snapshots",
+            "COGNITION": "Cognitive state inference, replay and Human Cognitive Units",
         },
     }
 }
@@ -229,7 +253,7 @@ func inspectStatus(c *core.Core) (*StatusResult, error) {
 | `Run` | ✅ Sí | Lógica de ejecución |
 | `Annotations["category"]` | ✅ Sí | Sin esto, el comando no aparece en el help |
 | `Annotations["json_response"]` | ✅ Sí | Documenta el contrato JSON |
-| `AddCommand(...)` en `root.go` | ✅ Sí | Sin esto, el comando nunca se registra |
+| `RegisterXxxCommands(c)` llamado desde `main.go` + `cmdregistry.Register(...)` adentro | ✅ Sí | Sin esto, el comando nunca se registra. **Debe ser `cmdregistry.Register`, no `cli.Register`** — ver 4.1 y 8.5 |
 | `Long` | ⚠️ Recomendado | Documentación detallada para `--help` |
 | `Example` | ⚠️ Recomendado | Casos de uso reales, siempre incluir variante `--json` |
 | `Args` | ⚠️ Recomendado | Validación explícita de argumentos |
@@ -242,7 +266,7 @@ func inspectStatus(c *core.Core) (*StatusResult, error) {
 
 ```go
 Annotations: map[string]string{
-    "category":      "RUNTIME",   // Una de: SYSTEM, RUNTIME, LIFECYCLE, TELEMETRY
+    "category":      "RUNTIME",   // Una de: SYSTEM, RUNTIME, LIFECYCLE, TELEMETRY, COGNITION
     "json_response": `{           // JSON válido representando el caso de éxito típico
   "status": "running",
   "pid": 1234
@@ -300,16 +324,26 @@ Args: func(cmd *cobra.Command, args []string) error {
 
 ## 4. Sistema de Registro Explícito
 
-### 4.1 registry.go: El Mecanismo de Registro
+### 4.1 ⚠️ Dos registries, uno solo está conectado
 
-A diferencia de Nucleus, Sensor expone el tipo `CommandFactory` y una lista `registry` en `internal/cli/registry.go`. Sin embargo, el mecanismo preferido en Sensor es **registro directo en `root.go`** vía `root.AddCommand(...)`.
+El repo tiene **dos** paquetes con un `Register`/`Commands`/`PrintJSON` de nombre casi idéntico. No son intercambiables y usar el equivocado falla en silencio (compila, no aparece en el help, no hay error):
 
-`registry.go` provee infraestructura para un patrón opcional de registro desacoplado:
+| | `internal/cmdregistry/cmdregistry.go` | `internal/cli/registry.go` |
+|---|---|---|
+| **¿Lo usa `buildRootCommand`?** | ✅ Sí — es el único que se itera | ❌ No — nada en `main.go` lo llama |
+| `CommandFactory` | `func() *cobra.Command` | `func(c *core.Core) *cobra.Command` |
+| **Qué pasa si registrás ahí un comando** | Aparece en `bloom-sensor help` | Compila. Nunca aparece en `bloom-sensor help`. Ningún error. |
+| **Qué hacer** | ✅ Usar siempre este | ❌ No usar — considerarlo código muerto |
+
+`internal/cmdregistry/cmdregistry.go` es el registry real:
 
 ```go
-// internal/cli/registry.go
+// internal/cmdregistry/cmdregistry.go
+package cmdregistry
 
-type CommandFactory func(c *core.Core) *cobra.Command
+type CommandFactory func() *cobra.Command
+
+var registry []CommandFactory
 
 // Register agrega una factory al registry global.
 func Register(f CommandFactory) {
@@ -329,22 +363,48 @@ func PrintJSON(v interface{}) error {
 }
 ```
 
-### 4.2 root.go: El Punto de Registro Canónico
+Notar que su `CommandFactory` **no** recibe `*core.Core` — el `Core` ya quedó
+capturado en el closure al momento de llamar `Register` (ver 4.3). Esto es
+justamente lo que permite que `main.go` arme el root sin que `cmdregistry`
+necesite conocer el tipo `core.Core` en absoluto.
 
-**Todos los comandos se registran aquí, explícitamente**. Esta es la única fuente de verdad sobre qué comandos existen:
+### 4.2 cmd/main.go: El Punto de Registro Canónico
+
+**No existe `internal/cli/root.go`.** El árbol de comandos se arma en
+`cmd/main.go`, en dos pasos: primero `main()` llama explícitamente cada
+`RegisterXxxCommands(c)` (que a su vez empuja closures a `cmdregistry`),
+después `buildRootCommand` arma el `*cobra.Command` raíz y vuelca todo lo
+acumulado en `cmdregistry` con `root.AddCommand(factory())`:
 
 ```go
-// internal/cli/root.go
-package cli
+// cmd/main.go
+package main
 
-import (
-    "os"
+func main() {
+    cfg := &core.Config{Channel: "stable"}
+    c := core.NewCore(cfg)
+    defer c.Shutdown()
 
-    "bloom-sensor/internal/core"
-    "github.com/spf13/cobra"
-)
+    // ─── REGISTRO EXPLÍCITO DE COMANDOS ───────────────────────────────────
+    buildinfo.RegisterCommands(c)
+    runtime.RegisterCommands(c)
+    startup.RegisterCommands(c)
+    registerExportCommand(c)          // export vive en main.go — ver 4.3 nota
 
-func BuildRootCommand(c *core.Core) *cobra.Command {
+    cli.RegisterDiagnosticCommands(c) // RUNTIME
+    cli.RegisterReplayCommands(c)     // COGNITION
+    cli.RegisterHCUCommands(c)        // COGNITION
+    // ──────────────────────────────────────────────────────────────────────
+
+    root := buildRootCommand(c)
+
+    if err := root.Execute(); err != nil {
+        c.Logger.Error("fatal: %v", err)
+        os.Exit(1)
+    }
+}
+
+func buildRootCommand(c *core.Core) *cobra.Command {
     root := &cobra.Command{
         Use:           "bloom-sensor",
         Short:         "Human presence runtime for the Bloom ecosystem",
@@ -352,119 +412,101 @@ func BuildRootCommand(c *core.Core) *cobra.Command {
         SilenceErrors: true,
     }
 
-    // Flags globales (disponibles para todos los subcomandos)
     root.PersistentFlags().BoolVar(&c.Config.Debug, "debug", false, "Enable debug logging")
     root.PersistentFlags().StringVar(&c.Config.Channel, "channel", "stable", "Release channel (stable|beta)")
     root.PersistentFlags().StringVar(&c.Config.ConfigPath, "config", "", "Config file path")
     root.PersistentFlags().BoolVar(&c.Config.OutputJSON, "json", false, "Output in JSON format")
 
-    // ─── REGISTRO EXPLÍCITO DE COMANDOS ───────────────────────────────────
-    // SYSTEM
-    root.AddCommand(createVersionCommand(c))
-    root.AddCommand(createInfoCommand(c))
+    // Vuelca TODO lo acumulado en cmdregistry — no hay lista manual acá
+    for _, factory := range cmdregistry.Commands() {
+        root.AddCommand(factory())
+    }
 
-    // RUNTIME
-    root.AddCommand(createRunCommand(c))
-    root.AddCommand(createStatusCommand(c))
-
-    // LIFECYCLE
-    root.AddCommand(createEnableCommand(c))
-    root.AddCommand(createDisableCommand(c))
-
-    // TELEMETRY
-    root.AddCommand(createExportCommand(c))
-    // ──────────────────────────────────────────────────────────────────────
-
-    // Help renderer personalizado
-    renderer := NewModernHelpRenderer(os.Stdout, DefaultSensorConfig())
+    renderer := cli.NewModernHelpRenderer(os.Stdout, cli.DefaultSensorConfig())
     root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-        RenderFullHelp(root, renderer)
+        cli.RenderFullHelp(root, renderer)
     })
 
     return root
 }
 ```
 
+Esto tiene una implicación importante: **el orden en `bloom-sensor help` no
+depende de dónde escribas `AddCommand`** (no existe esa lista manual), sino
+del orden en que se llamaron los `RegisterXxxCommands(c)` en `main()`, que a
+su vez solo importa para el orden de registro interno — el `help_renderer`
+reordena visualmente por `CategoryOrder` de `config.go`, no por orden de
+registro. No hace falta agrupar los `Register...` por categoría con
+comentarios como se hacía antes con `AddCommand`.
+
 ### 4.3 Activación de un Nuevo Comando
 
 **PASO 1**: Crear la función factory
 
-Puede vivir en `root.go` si es pequeña, o en un archivo separado dentro de `internal/cli/`:
+Vive en `internal/cli/` (o en el paquete de dominio correspondiente, ej.
+`internal/runtime/`, `internal/startup/`) junto a su función `RegisterXxxCommands`:
 
 ```go
-// internal/cli/export.go  (o directamente en root.go)
+// internal/cli/miarea.go
 package cli
 
 import (
-    "time"
-
+    "bloom-sensor/internal/cmdregistry"
     "bloom-sensor/internal/core"
     "github.com/spf13/cobra"
 )
 
-func createExportCommand(c *core.Core) *cobra.Command {
-    var last string
-    var format string
+// RegisterMiAreaCommands registra el comando en el registry global.
+// main.go debe llamar esta función explícitamente antes de armar el root.
+func RegisterMiAreaCommands(c *core.Core) {
+    cmdregistry.Register(func() *cobra.Command { return newMiAreaCommand(c) })
+}
 
+func newMiAreaCommand(c *core.Core) *cobra.Command {
     cmd := &cobra.Command{
-        Use:   "export",
-        Short: "Dump presence snapshots from the in-memory ring buffer",
-        Long: `Export collected human presence snapshots from the ring buffer.
-
-Supports time-based filtering and multiple output formats.
-The ring buffer holds the last N snapshots from the current session.`,
-        Args: cobra.NoArgs,
+        Use:   "miarea",
+        Short: "Descripción breve",
+        Args:  cobra.NoArgs,
         Annotations: map[string]string{
-            "category": "TELEMETRY",
+            "category": "RUNTIME", // SYSTEM | RUNTIME | LIFECYCLE | TELEMETRY | COGNITION
             "json_response": `{
-  "period": "24h",
-  "samples": 1440,
-  "avg_energy_index": 0.62,
-  "avg_focus_score": 0.71,
-  "total_active_minutes": 312,
-  "snapshots": []
+  "success": true
 }`,
         },
-        Example: `  bloom-sensor export
-  bloom-sensor export --last 1h
-  bloom-sensor export --last 30m --format text
-  bloom-sensor --json export --last 24h`,
-        Run: func(cmd *cobra.Command, args []string) {
-            duration, err := time.ParseDuration(last)
-            if err != nil && last != "" {
-                c.Logger.Error("invalid duration: %s", last)
-                return
-            }
-            result := c.MetricsEngine.Export(duration)
+        Example: `  bloom-sensor miarea
+  bloom-sensor --json miarea`,
+        RunE: func(cmd *cobra.Command, args []string) error {
+            result := doMiArea(c)
             if c.Config.OutputJSON {
-                PrintJSON(result)
-                return
+                return cmdregistry.PrintJSON(result)
             }
-            // Output texto...
+            c.Logger.Info("Done: %v", result)
+            return nil
         },
     }
-
-    cmd.Flags().StringVar(&last, "last", "24h", "Time window to export (e.g. 1h, 30m, 24h)")
-    cmd.Flags().StringVar(&format, "format", "json", "Output format: json|text")
-
     return cmd
 }
 ```
 
-**PASO 2**: Registrar en `root.go`
+**PASO 2**: Llamar `RegisterMiAreaCommands(c)` explícitamente en `cmd/main.go`
 
 ```go
-// En BuildRootCommand, agregar bajo la categoría correspondiente:
-root.AddCommand(createExportCommand(c))
+// En main(), junto al resto de Register...:
+cli.RegisterMiAreaCommands(c)
 ```
+
+Si esto se omite, el comando compila y no aparece en ningún lado — ni
+siquiera con error. **No hay `root.AddCommand` que editar a mano**: alcanza
+con la línea de arriba, porque `buildRootCommand` ya itera todo lo que haya
+en `cmdregistry.Commands()`.
 
 **PASO 3**: Verificar
 
 ```bash
 go build -o bloom-sensor.exe ./cmd/
-bloom-sensor help        # El comando debe aparecer en TELEMETRY
-bloom-sensor export --help
-bloom-sensor --json export --last 1h
+bloom-sensor help        # El comando debe aparecer en su categoría
+bloom-sensor miarea --help
+bloom-sensor --json miarea
 ```
 
 ### 4.4 Comandos con Subcomandos
