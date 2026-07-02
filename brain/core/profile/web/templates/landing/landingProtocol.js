@@ -280,25 +280,40 @@
       return;
     }
 
-    this.elements.accountsList.innerHTML = accounts.map(account => `
-      <div class="account-item">
-        <div class="account-avatar">${(account.provider || 'A')[0].toUpperCase()}</div>
-        <div class="account-info">
-          <div class="account-provider">${account.provider || 'Unknown'}</div>
-          <div class="account-email">${account.email || account.username || '-'}</div>
+    // 🎨 FIX UX: antes solo el punto de estado (account-status) reflejaba
+    // connected vs pending — el resto del row (avatar, nombre, email) se
+    // veía igual de "vivo" para las 3 cuentas sin importar el estado real,
+    // así que era imposible distinguir a simple vista qué está habilitado.
+    // Ahora el item completo se atenúa (is-disabled) cuando no está conectado.
+    this.elements.accountsList.innerHTML = accounts.map(account => {
+      const isConnected = account.status === 'connected' || account.status === 'active';
+      const itemClass = isConnected ? 'account-item' : 'account-item is-disabled';
+      const secondaryText = account.email || account.username || (isConnected ? '-' : 'Not linked');
+
+      return `
+        <div class="${itemClass}">
+          <div class="account-avatar">${(account.provider || 'A')[0].toUpperCase()}</div>
+          <div class="account-info">
+            <div class="account-provider">${account.provider || 'Unknown'}</div>
+            <div class="account-email">${secondaryText}</div>
+          </div>
+          <div class="account-status ${account.status || 'unknown'}"></div>
         </div>
-        <div class="account-status ${account.status || 'unknown'}"></div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   },
 
   renderVaults(vaults) {
     const container = document.getElementById('vaults-list');
     if (!container) return;
 
+    // NOTA: Google se removió de esta lista a propósito. El auth de Google
+    // no persiste ninguna key en el vault (es solo OAuth de cuenta) — mostrarlo
+    // acá como "pending" para siempre era engañoso, ya que nunca iba a pasar
+    // a "active". Los únicos providers que efectivamente guardan una key en
+    // el vault son GitHub (PAT) y Gemini (API key).
     const ALL_VAULTS = [
       { provider: 'github', label: 'GitHub' },
-      { provider: 'google', label: 'Google' },
       { provider: 'gemini', label: 'Gemini' }
     ];
 
@@ -306,9 +321,12 @@
       const vault = (vaults || []).find(v => v.provider === def.provider);
       const status      = vault ? 'active'   : 'pending';
       const statusLabel = vault ? '● activo' : '○ pendiente';
-      const fingerprint = vault ? vault.fingerprint : '—';
+      const fingerprint = vault ? vault.fingerprint : 'Not created';
+      // Mismo criterio que renderAccounts: atenuar el item completo, no
+      // solo el punto de estado, cuando el vault todavía no existe.
+      const itemClass   = vault ? 'account-item' : 'account-item is-disabled';
       return `
-        <div class="account-item">
+        <div class="${itemClass}">
           <div class="account-avatar">${def.label[0]}</div>
           <div class="account-info">
             <div class="account-provider">${def.label}</div>
@@ -590,7 +608,8 @@ if (typeof window !== 'undefined') {
       "HEALTH_CHECK_RESULT",
       "GITHUB_TOKEN_STORED",
       "GITHUB_ACCOUNT_CREATED",
-      "ACCOUNT_REGISTERED"
+      "ACCOUNT_REGISTERED",
+      "VAULT_INITIALIZED"
     ]
     };
   }

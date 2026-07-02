@@ -257,6 +257,23 @@ html, body {
 }
 .account-item:hover { background: var(--bg-3); }
 
+/* ── Disabled state — cuentas/vaults que todavía no existen ─────────────
+   Antes solo el punto de estado (account-status) distinguía connected vs
+   pending, y el resto del row se veía igual de "activo" para las 3 cuentas
+   sin importar el estado real. Ahora se atenúa el item completo: avatar,
+   texto, y se fuerza el punto a --status-idle (gris), pisando el ámbar de
+   .pending que se leía casi tan "vivo" como el verde de conectado. */
+.account-item.is-disabled {
+  opacity: 0.45;
+}
+.account-item.is-disabled:hover { background: transparent; }
+.account-item.is-disabled .account-avatar {
+  color: var(--text-tertiary);
+}
+.account-item.is-disabled .account-status {
+  background: var(--status-idle);
+}
+
 .account-avatar {
   width: 26px;
   height: 26px;

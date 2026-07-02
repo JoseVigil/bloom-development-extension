@@ -1400,10 +1400,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       timestamp:         msg.timestamp   || Date.now()
     });
 
-    forwardToDebugPanel('synapse', 'GITHUB_TOKEN_STORED', {
-      vault_key: msg.vault_key || 'sk_bloom_pat'
-    }, msg.profile_id || config?.profileId);
-
     chrome.runtime.sendMessage({
       event: 'GITHUB_TOKEN_STORED',
       token_fingerprint: msg.token_fingerprint,
@@ -1412,6 +1408,41 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     }).catch(() => {});
 
     console.log('[Synapse] ✓ GITHUB_TOKEN_STORED → forwarding to native host');
+
+    // ── VAULT_INITIALIZED ──────────────────────────────────────────────────
+    // FIX: este paso creaba el vault_key pero solo lo mandaba a
+    // forwardToDebugPanel() (debug panel + harness log), reutilizando el
+    // nombre de evento GITHUB_TOKEN_STORED. Eso significaba que Brain nunca
+    // se enteraba de que el vault se había creado: ONBOARDING_EVENTS incluye
+    // VAULT_INITIALIZED (ver synapse-bridge.js) y el Milestone Registry mapea
+    // ese evento al step vault_init — pero como nunca salía por sendToHost(),
+    // el MilestoneReactor nunca disparaba _onVaultInitComplete() y Landing
+    // nunca se abría. Ahora se emite como su propio evento, con su propio
+    // nombre, hacia el host — igual que GITHUB_TOKEN_STORED arriba.
+    const vaultKey = msg.vault_key || 'sk_bloom_pat';
+
+    sendToHost({
+      event:      'VAULT_INITIALIZED',
+      vault_key:  vaultKey,
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id:  msg.launch_id  || config?.launchId,
+      timestamp:  Date.now()
+    });
+
+    forwardToDebugPanel('synapse', 'VAULT_INITIALIZED', {
+      vault_key: vaultKey
+    }, msg.profile_id || config?.profileId);
+
+    chrome.runtime.sendMessage({
+      event:              'VAULT_INITIALIZED',
+      vault_key:          vaultKey,
+      token_fingerprint:  msg.token_fingerprint,
+      profile_id:         msg.profile_id || config?.profileId,
+      launch_id:          msg.launch_id  || config?.launchId,
+    }).catch(() => {});
+
+    console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host');
+
     sendResp({ received: true });
     return true;
   }

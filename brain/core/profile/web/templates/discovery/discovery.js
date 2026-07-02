@@ -656,20 +656,33 @@ class DiscoveryFlow {
   // donde dos get()/set() concurrentes sobre la misma clave se pisaban entre sí
   // (lost update: el segundo set() en completar sobreescribía con una copia
   // del estado leída ANTES de que el primero terminara de escribir).
-  async _updateVaultState(fingerprint) {
+  async _updateVaultState(fingerprint, provider = 'github') {
     const result = await chrome.storage.local.get('bloom_profile_state');
     const state = result.bloom_profile_state || { vaults: [] };
     if (!Array.isArray(state.vaults)) state.vaults = [];
-    state.vaults.push({
-      provider:    'github',
-      fingerprint: fingerprint,
-      storage:     'chrome.storage.local',
-      status:      'active',
-      created_at:  Date.now()
-    });
+
+    // FIX: antes esto siempre hacía push(), sin chequear si ya existía un
+    // vault para este provider. Si _updateVaultState() se llama más de una
+    // vez para el mismo provider (reconexión, reintento del harness, etc.)
+    // terminaba duplicando la entrada en el array. Ahora se actualiza in-place
+    // si ya existe.
+    const entry = {
+      provider,
+      fingerprint,
+      storage:    'chrome.storage.local',
+      status:     'active',
+      created_at: Date.now()
+    };
+    const idx = state.vaults.findIndex(v => v.provider === provider);
+    if (idx >= 0) {
+      state.vaults[idx] = entry;
+    } else {
+      state.vaults.push(entry);
+    }
+
     state.last_updated = Date.now();
     await chrome.storage.local.set({ bloom_profile_state: state });
-    console.log('[Discovery] bloom_profile_state — vault agregado, fingerprint:', fingerprint);
+    console.log('[Discovery] bloom_profile_state — vault agregado/actualizado:', provider, fingerprint);
   }
 
   async _updateAccountState(provider, username) {
@@ -799,6 +812,22 @@ class OnboardingFlow {
       if (msg.command === 'onboarding_navigate' && msg.payload?.step) {
         console.log('[Onboarding] Remote navigate to step:', msg.payload.step);
         window.BLOOM_VALIDATOR?.routeToStep?.(msg.payload.step);
+      }
+
+      // FIX: VAULT_INITIALIZED (harness/host) nunca escribía en
+      // bloom_profile_state.vaults. _updateVaultState() solo se llamaba
+      // desde GithubAuthFlow._saveToken(), atada al flujo real de
+      // clipboard/paste del token en la pantalla github-login — un evento
+      // de vault simulado o empujado por el host directamente (bypaseando
+      // esa UI) nunca pasaba por ahí. Landing ya escucha VAULT_INITIALIZED
+      // y recarga bloom_profile_state (ver landing.js setupMessageListener),
+      // pero necesitaba que algo escribiera el vault primero. Este listener
+      // cierra ese hueco.
+      if (msg.event === 'VAULT_INITIALIZED') {
+        console.log('[Onboarding] VAULT_INITIALIZED recibido — actualizando bloom_profile_state.vaults');
+        const provider    = msg.provider || 'github';
+        const fingerprint = msg.token_fingerprint || msg.vault_key || 'unknown';
+        window.BLOOM_VALIDATOR?._updateVaultState?.(fingerprint, provider);
       }
     });
   }

@@ -244,6 +244,13 @@ class LandingFlow {
         case 'GITHUB_TOKEN_STORED':
         case 'GITHUB_ACCOUNT_CREATED':
         case 'ACCOUNT_REGISTERED':
+        // FIX: VAULT_INITIALIZED llegaba a este listener (ver console.log de
+        // arriba, "Mensaje recibido: VAULT_INITIALIZED") pero no estaba en el
+        // switch, así que caía sin hacer nada — el panel de Vaults nunca se
+        // volvía a renderizar cuando el vault de GitHub (o cualquier otro
+        // provider) terminaba de crearse. Incluido acá junto al resto de los
+        // eventos que disparan el mismo recargo de bloom_profile_state.
+        case 'VAULT_INITIALIZED':
           // Recargar bloom_profile_state y re-renderizar el panel
           chrome.storage.local.get('bloom_profile_state', (result) => {
             console.log('[Landing] Actualizando dashboard por evento:', msg.event);
