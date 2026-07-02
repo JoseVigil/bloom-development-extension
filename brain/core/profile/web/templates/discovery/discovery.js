@@ -651,45 +651,61 @@ class DiscoveryFlow {
     console.log('[Discovery] bloom_profile_state inicializado');
   }
 
-  _updateVaultState(fingerprint) {
-    chrome.storage.local.get('bloom_profile_state', (result) => {
-      const state = result.bloom_profile_state || { vaults: [] };
-      if (!Array.isArray(state.vaults)) state.vaults = [];
-      state.vaults.push({
-        provider:    'github',
-        fingerprint: fingerprint,
-        storage:     'chrome.storage.local',
-        status:      'active',
-        created_at:  Date.now()
-      });
-      state.last_updated = Date.now();
-      chrome.storage.local.set({ bloom_profile_state: state });
-      console.log('[Discovery] bloom_profile_state — vault agregado, fingerprint:', fingerprint);
-    });
+  // NOTA: convertidas a async/await (en vez de callback fire-and-forget) para
+  // que _saveToken() pueda encadenarlas con `await` y evitar la race condition
+  // donde dos get()/set() concurrentes sobre la misma clave se pisaban entre sí
+  // (lost update: el segundo set() en completar sobreescribía con una copia
+  // del estado leída ANTES de que el primero terminara de escribir).
+  async _updateVaultState(fingerprint, provider = 'github') {
+    const result = await chrome.storage.local.get('bloom_profile_state');
+    const state = result.bloom_profile_state || { vaults: [] };
+    if (!Array.isArray(state.vaults)) state.vaults = [];
+
+    // FIX: antes esto siempre hacía push(), sin chequear si ya existía un
+    // vault para este provider. Si _updateVaultState() se llama más de una
+    // vez para el mismo provider (reconexión, reintento del harness, etc.)
+    // terminaba duplicando la entrada en el array. Ahora se actualiza in-place
+    // si ya existe.
+    const entry = {
+      provider,
+      fingerprint,
+      storage:    'chrome.storage.local',
+      status:     'active',
+      created_at: Date.now()
+    };
+    const idx = state.vaults.findIndex(v => v.provider === provider);
+    if (idx >= 0) {
+      state.vaults[idx] = entry;
+    } else {
+      state.vaults.push(entry);
+    }
+
+    state.last_updated = Date.now();
+    await chrome.storage.local.set({ bloom_profile_state: state });
+    console.log('[Discovery] bloom_profile_state — vault agregado/actualizado:', provider, fingerprint);
   }
 
-  _updateAccountState(provider, username) {
-    chrome.storage.local.get('bloom_profile_state', (result) => {
-      const state = result.bloom_profile_state || { accounts: [] };
-      if (!Array.isArray(state.accounts)) state.accounts = [];
-      const account = state.accounts.find(a => a.provider === provider);
-      if (account) {
-        account.status     = 'active';
-        account.username   = username;
-        account.created_at = Date.now();
-      } else {
-        state.accounts.push({
-          provider:   provider,
-          status:     'active',
-          username:   username,
-          email:      null,
-          created_at: Date.now()
-        });
-      }
-      state.last_updated = Date.now();
-      chrome.storage.local.set({ bloom_profile_state: state });
-      console.log('[Discovery] bloom_profile_state — cuenta actualizada:', provider, username);
-    });
+  async _updateAccountState(provider, username) {
+    const result = await chrome.storage.local.get('bloom_profile_state');
+    const state = result.bloom_profile_state || { accounts: [] };
+    if (!Array.isArray(state.accounts)) state.accounts = [];
+    const account = state.accounts.find(a => a.provider === provider);
+    if (account) {
+      account.status     = 'connected';
+      account.username   = username || null;
+      account.created_at = Date.now();
+    } else {
+      state.accounts.push({
+        provider:   provider,
+        status:     'connected',
+        username:   username || null,
+        email:      null,
+        created_at: Date.now()
+      });
+    }
+    state.last_updated = Date.now();
+    await chrome.storage.local.set({ bloom_profile_state: state });
+    console.log('[Discovery] bloom_profile_state — cuenta actualizada:', provider, username || '(username no resuelto)');
   }
 
   _populateVaultReceipt() {
@@ -796,6 +812,22 @@ class OnboardingFlow {
       if (msg.command === 'onboarding_navigate' && msg.payload?.step) {
         console.log('[Onboarding] Remote navigate to step:', msg.payload.step);
         window.BLOOM_VALIDATOR?.routeToStep?.(msg.payload.step);
+      }
+
+      // FIX: VAULT_INITIALIZED (harness/host) nunca escribía en
+      // bloom_profile_state.vaults. _updateVaultState() solo se llamaba
+      // desde GithubAuthFlow._saveToken(), atada al flujo real de
+      // clipboard/paste del token en la pantalla github-login — un evento
+      // de vault simulado o empujado por el host directamente (bypaseando
+      // esa UI) nunca pasaba por ahí. Landing ya escucha VAULT_INITIALIZED
+      // y recarga bloom_profile_state (ver landing.js setupMessageListener),
+      // pero necesitaba que algo escribiera el vault primero. Este listener
+      // cierra ese hueco.
+      if (msg.event === 'VAULT_INITIALIZED') {
+        console.log('[Onboarding] VAULT_INITIALIZED recibido — actualizando bloom_profile_state.vaults');
+        const provider    = msg.provider || 'github';
+        const fingerprint = msg.token_fingerprint || msg.vault_key || 'unknown';
+        window.BLOOM_VALIDATOR?._updateVaultState?.(fingerprint, provider);
       }
     });
   }
@@ -1061,13 +1093,18 @@ class GithubAuthFlow {
     // Calcular fingerprint para el evento — token real NUNCA sale en el mensaje
     const fingerprint = await this.sha256Prefix(token);
 
-    // Actualizar bloom_profile_state con el vault recién creado
-    this.discovery._updateVaultState(fingerprint);
+    // Actualizar bloom_profile_state con el vault recién creado.
+    // IMPORTANTE: awaited y en secuencia con el siguiente update — llamar a
+    // ambos sin esperar producía una race condition (dos get/set concurrentes
+    // sobre bloom_profile_state, el segundo en terminar pisaba al primero con
+    // una copia del estado leída antes de que el otro escribiera).
+    await this.discovery._updateVaultState(fingerprint);
 
-    // Actualizar bloom_profile_state con la cuenta de GitHub (si la tenemos)
-    if (vault.github_user) {
-      this.discovery._updateAccountState('github', vault.github_user);
-    }
+    // Actualizar bloom_profile_state con la cuenta de GitHub. Se llama SIEMPRE
+    // que el token se guardó, ya no depende de que la resolución del username
+    // (fetch a api.github.com, best-effort) haya tenido éxito — si falla,
+    // username queda null pero el estado se marca "connected" igual.
+    await this.discovery._updateAccountState('github', vault.github_user || null);
 
     // ── ACCOUNT_REGISTERED ────────────────────────────────────────────────────
     // Evento canónico de milestone: el usuario tiene cuenta activa en el servicio

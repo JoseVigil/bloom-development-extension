@@ -1,503 +1,393 @@
 /* ============================================================================
-   SYNAPSE LANDING - COCKPIT STYLES
+   BTIPS — Landing (Persistent Profile Anchor)
+   Implements: Deep Work Visual Calm, Paleta Calm-First, Minimalismo Cognitivo,
+   indicador ▌▌▌ como lenguaje visual de estado.
+   Landing = "hogar": baja densidad, sin ruido, sin branding innecesario.
    ============================================================================ */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
 
 :root {
-  /* Fondos */
-  --color-bg: #0f0f1e;
-  --color-surface: #1a1a2e;
-  --color-surface-hover: #242438;
-  
-  /* Primarios */
-  --color-primary: #a855f7;
-  --color-primary-light: #c084fc;
-  --color-secondary: #ec4899;
-  
-  /* Funcionales */
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-error: #ef4444;
-  
-  /* Texto */
-  --color-text: #e2e8f0;
-  --color-text-muted: #94a3b8;
-  
-  /* Sombras */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  /* Surfaces — dark base, capas sutiles, sin saltos de contraste agresivos */
+  --bg-0: #0e1012;
+  --bg-1: #15171a;
+  --bg-2: #1b1e22;
+  --bg-3: #22262b;
+  --border: #2a2e34;
+  --border-subtle: #202329;
+
+  /* Texto — jerarquía por opacidad, no por color */
+  --text-primary: #e6e8eb;
+  --text-secondary: #9aa1a9;
+  --text-tertiary: #666c73;
+
+  /* Acento — usado con cuentagotas, nunca como fondo extenso */
+  --accent: #7c98f0;
+  --accent-soft: rgba(124, 152, 240, 0.12);
+
+  /* Estado — versiones desaturadas, no semáforo puro */
+  --status-connected: #5fb98a;
+  --status-pending: #c9a24a;
+  --status-error: #cf7a6c;
+  --status-idle: #565b62;
+
+  /* Escala */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  background: linear-gradient(135deg, var(--color-bg) 0%, #1e1e3f 100%);
-  color: var(--color-text);
-  min-height: 100vh;
-  overflow-x: hidden;
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ============================================================================
-   SCREENS
-   ============================================================================ */
+#app { height: 100%; }
 
 .screen {
   display: none;
-  min-height: 100vh;
-  padding: 40px;
+  height: 100%;
 }
-
 .screen.active {
-  display: block;
-  animation: fadeIn 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* ── Estado ▌▌▌ ──────────────────────────────────────────────────────────
+   Reemplaza el dot de color plano por el indicador prescripto en la
+   doctrina: tres barras, legible en segundos, sin necesitar texto. */
+.status-dot {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  width: 12px;
 }
+.status-dot span {
+  width: 2px;
+  background: var(--status-idle);
+  border-radius: 1px;
+  transition: background 0.2s ease;
+}
+.status-dot span:nth-child(1) { height: 40%; }
+.status-dot span:nth-child(2) { height: 70%; }
+.status-dot span:nth-child(3) { height: 100%; }
 
-/* ============================================================================
-   LOADING SCREEN
-   ============================================================================ */
+.status-dot.checking span { background: var(--status-idle); }
+.status-dot.connected span { background: var(--status-connected); }
+.status-dot.error span { background: var(--status-error); }
 
+/* ── Loading ─────────────────────────────────────────────────────────── */
 .loading-container {
+  margin: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  text-align: center;
+  gap: var(--space-5);
+  color: var(--text-secondary);
 }
-
 .spinner {
-  width: 100px;
-  height: 100px;
-  border: 6px solid var(--color-surface);
-  border-top: 6px solid var(--color-primary);
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 40px;
+  animation: spin 0.9s linear infinite;
 }
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
+@keyframes spin { to { transform: rotate(360deg); } }
 .loading-message {
-  font-size: 28px;
-  color: var(--color-text);
-  margin-bottom: 48px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.01em;
 }
-
 .status-indicators {
   display: flex;
-  gap: 40px;
-  margin-top: 40px;
+  gap: var(--space-6);
 }
-
 .status-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 20px;
-  color: var(--color-text-muted);
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
-.status-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  transition: all 0.3s ease;
-}
-
-.status-dot.checking {
-  background: #6c757d;
-  animation: pulse 1.5s infinite;
-}
-
-.status-dot.connected {
-  background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success);
-}
-
-.status-dot.error {
-  background: var(--color-error);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.2);
-    opacity: 1;
-  }
-}
-
-/* ============================================================================
-   DASHBOARD SCREEN
-   ============================================================================ */
-
+/* ── Dashboard shell ─────────────────────────────────────────────────── */
 #screen-dashboard {
-  max-width: 1800px;
+  max-width: 760px;
+  width: 100%;
   margin: 0 auto;
+  padding: var(--space-7) var(--space-5) var(--space-6);
+  gap: var(--space-6);
 }
 
-/* Header */
 .header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 40px;
-  background: var(--color-surface);
-  border-radius: 20px;
-  margin-bottom: 32px;
-  box-shadow: var(--shadow-md);
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .identity {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--space-4);
 }
 
 .avatar {
-  width: 80px;
-  height: 80px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 36px;
-  font-weight: 600;
-  color: white;
+  font-weight: 500;
+  font-size: 15px;
 }
 
 .identity h1 {
-  font-size: 36px;
-  font-weight: 600;
-  margin-bottom: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
-.role {
-  color: var(--color-text-muted);
-  font-size: 20px;
+.identity .role {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .status-bar {
   display: flex;
-  gap: 24px;
+  gap: var(--space-5);
+}
+.status-bar .status-item span {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
-/* Stats Grid */
+/* ── Stats — jerarquía en dos niveles ────────────────────────────────────
+   Solo las señales de continuidad (Intents, Last Sync) se muestran como
+   "hero". Total Launches / Uptime son telemetría secundaria y viven
+   junto a system-info, más chico y menos protagónico. */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
 }
 
 .stat-card {
-  background: var(--color-surface);
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  background: var(--bg-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: var(--space-4);
 }
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
 .stat-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: var(--color-text-muted);
-  font-size: 18px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin-bottom: var(--space-2);
 }
-
 .stat-value {
-  font-size: 48px;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Content Grid */
+/* ── Content cards (Accounts / Vaults) ───────────────────────────────── */
 .content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 32px;
-  margin-bottom: 32px;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
 }
 
 .content-card {
-  background: var(--color-surface);
-  border-radius: 20px;
-  padding: 36px;
-  box-shadow: var(--shadow-md);
+  background: var(--bg-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: var(--space-4);
 }
 
 .content-card h2 {
-  font-size: 26px;
-  font-weight: 600;
-  margin-bottom: 28px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  margin: 0 0 var(--space-3);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
-/* Linked Accounts */
 .accounts-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-2);
 }
 
 .account-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 18px;
-  background: var(--color-bg);
-  border-radius: 12px;
-  transition: all 0.2s ease;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-sm);
 }
+.account-item:hover { background: var(--bg-3); }
 
-.account-item:hover {
-  background: var(--color-surface-hover);
+/* ── Disabled state — cuentas/vaults que todavía no existen ─────────────
+   Antes solo el punto de estado (account-status) distinguía connected vs
+   pending, y el resto del row se veía igual de "activo" para las 3 cuentas
+   sin importar el estado real. Ahora se atenúa el item completo: avatar,
+   texto, y se fuerza el punto a --status-idle (gris), pisando el ámbar de
+   .pending que se leía casi tan "vivo" como el verde de conectado. */
+.account-item.is-disabled {
+  opacity: 0.45;
+}
+.account-item.is-disabled:hover { background: transparent; }
+.account-item.is-disabled .account-avatar {
+  color: var(--text-tertiary);
+}
+.account-item.is-disabled .account-status {
+  background: var(--status-idle);
 }
 
 .account-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: 24px;
-  color: white;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
-.account-info {
-  flex: 1;
-}
-
+.account-info { flex: 1; min-width: 0; }
 .account-provider {
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--color-text);
-  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-transform: capitalize;
 }
-
 .account-email {
-  font-size: 16px;
-  color: var(--color-text-muted);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-status {
-  width: 12px;
-  height: 12px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--color-success);
+  flex-shrink: 0;
+  background: var(--status-idle);
 }
-
-.account-status.inactive {
-  background: var(--color-text-muted);
-}
-
-.account-status.error {
-  background: var(--color-error);
-}
+.account-status.connected,
+.account-status.active { background: var(--status-connected); }
+.account-status.pending { background: var(--status-pending); }
+.account-status.error { background: var(--status-error); }
 
 .empty-state {
-  text-align: center;
-  color: var(--color-text-muted);
-  padding: 48px;
-  font-size: 18px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  padding: var(--space-3) var(--space-1);
+  margin: 0;
 }
 
-/* Quick Actions */
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.action-btn {
-  background: var(--color-bg);
-  border: 1px solid transparent;
-  border-radius: 16px;
-  padding: 24px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  color: var(--color-text);
-}
-
-.action-btn:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.action-btn .icon {
-  font-size: 36px;
-  margin-bottom: 12px;
-}
-
-.action-btn .title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.action-btn .subtitle {
-  font-size: 16px;
-  color: var(--color-text-muted);
-}
-
-/* System Info */
+/* ── System info — metadata de baja jerarquía, incluye telemetría ─────── */
 .system-info {
-  background: var(--color-surface);
-  border-radius: 16px;
-  padding: 24px 36px;
   display: flex;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 24px;
-  font-size: 18px;
-  color: var(--color-text-muted);
-  box-shadow: var(--shadow-sm);
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-1) 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
-
-.system-info div {
-  display: flex;
-  gap: 12px;
-}
-
 .system-info span {
-  color: var(--color-text);
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
 }
 
-/* ============================================================================
-   ERROR SCREEN
-   ============================================================================ */
-
+/* ── Error screen ────────────────────────────────────────────────────── */
 .error-container {
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.status-icon.error-icon {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto var(--space-4);
+  border-radius: 50%;
+  border: 1px solid var(--status-error);
+  color: var(--status-error);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  text-align: center;
-  padding: 60px;
-}
-
-.status-icon {
-  font-size: 120px;
-  margin-bottom: 32px;
-}
-
-.error-icon {
-  color: var(--color-error);
-}
-
-.error-container h1 {
-  font-size: 48px;
-  margin-bottom: 24px;
-  color: var(--color-text);
-}
-
-.error-message {
-  font-size: 22px;
-  color: var(--color-text-muted);
-  margin-bottom: 32px;
-}
-
-.error-details {
-  background: var(--color-surface);
-  border-radius: 12px;
-  padding: 24px;
-  font-family: 'Courier New', monospace;
   font-size: 16px;
+}
+.error-container h1 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2);
+}
+.error-message {
+  font-size: 13px;
+  margin: 0 0 var(--space-4);
+}
+.error-details {
   text-align: left;
-  color: var(--color-error);
-  max-width: 800px;
-  max-height: 400px;
-  overflow: auto;
-  margin-bottom: 32px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  overflow-x: auto;
+  margin: 0 0 var(--space-5);
 }
-
-/* ============================================================================
-   BUTTONS
-   ============================================================================ */
-
 .btn {
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  padding: 18px 48px;
-  border-radius: 12px;
-  font-size: 20px;
-  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
+.btn:hover { background: rgba(124, 152, 240, 0.2); }
 
-.btn:hover {
-  background: var(--color-primary-light);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.4);
-}
-
-/* ============================================================================
-   RESPONSIVE
-   ============================================================================ */
-
-@media (max-width: 768px) {
-  .header {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .content-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .actions-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .system-info {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+@media (max-width: 620px) {
+  .content-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr; }
 }

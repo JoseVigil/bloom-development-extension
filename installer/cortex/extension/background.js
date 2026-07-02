@@ -1034,6 +1034,51 @@ async function loadProtocolSchemas() {
   }
 }
 
+/**
+ * updateAccountInProfileState(service, username, timestamp)
+ *
+ * Actualiza chrome.storage.local.bloom_profile_state marcando la cuenta
+ * `service` como conectada. Mismo shape que discovery.js#_updateAccountState.
+ *
+ * 🔧 FIX: discovery.js solo escribe bloom_profile_state cuando el flujo de
+ * confirmación de token corre DENTRO de su propia UI (popup de onboarding).
+ * Pero ACCOUNT_REGISTERED también puede llegar acá directamente desde una
+ * fuente externa (native host confirmando por su cuenta, o el harness de
+ * testing) sin que discovery.js haya corrido ese código. En ese caso, antes
+ * de este fix, nadie escribía bloom_profile_state y Landing quedaba con el
+ * checklist inicial en "pending" para siempre. Este handler ahora escribe
+ * el storage él mismo, sea cual sea el origen del evento.
+ */
+async function updateAccountInProfileState(service, username, timestamp) {
+  if (!service) return;
+  try {
+    const result = await chrome.storage.local.get('bloom_profile_state');
+    const state = result.bloom_profile_state || { accounts: [] };
+    if (!Array.isArray(state.accounts)) state.accounts = [];
+
+    const account = state.accounts.find(a => a.provider === service);
+    if (account) {
+      account.status     = 'connected';
+      account.username   = username || account.username || null;
+      account.created_at = timestamp || Date.now();
+    } else {
+      state.accounts.push({
+        provider:   service,
+        status:     'connected',
+        username:   username || null,
+        email:      null,
+        created_at: timestamp || Date.now()
+      });
+    }
+    state.last_updated = Date.now();
+
+    await chrome.storage.local.set({ bloom_profile_state: state });
+    console.log('[Synapse] bloom_profile_state — cuenta actualizada desde background.js:', service, username || '(sin username)');
+  } catch (err) {
+    console.error('[Synapse] Error actualizando bloom_profile_state en ACCOUNT_REGISTERED:', err);
+  }
+}
+
 function registerOnboardingHandlers() {
   const accountRegisteredSchema = discoverySchema?.messages?.find(
     m => m.id === 'account_registered'
@@ -1045,6 +1090,11 @@ function registerOnboardingHandlers() {
     }
 
     console.log('[Synapse] ✓ ACCOUNT_REGISTERED recibido desde discovery.js — service:', msg.service);
+
+    // 🔧 FIX: escribir bloom_profile_state acá, independientemente de si el
+    // origen fue discovery.js (UI local) o una fuente externa (native host,
+    // harness). Ver comentario de updateAccountInProfileState() arriba.
+    updateAccountInProfileState(msg.service, msg.username, msg.timestamp);
 
     forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
       _dir:              'in',
@@ -1350,10 +1400,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       timestamp:         msg.timestamp   || Date.now()
     });
 
-    forwardToDebugPanel('synapse', 'GITHUB_TOKEN_STORED', {
-      vault_key: msg.vault_key || 'sk_bloom_pat'
-    }, msg.profile_id || config?.profileId);
-
     chrome.runtime.sendMessage({
       event: 'GITHUB_TOKEN_STORED',
       token_fingerprint: msg.token_fingerprint,
@@ -1362,6 +1408,41 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     }).catch(() => {});
 
     console.log('[Synapse] ✓ GITHUB_TOKEN_STORED → forwarding to native host');
+
+    // ── VAULT_INITIALIZED ──────────────────────────────────────────────────
+    // FIX: este paso creaba el vault_key pero solo lo mandaba a
+    // forwardToDebugPanel() (debug panel + harness log), reutilizando el
+    // nombre de evento GITHUB_TOKEN_STORED. Eso significaba que Brain nunca
+    // se enteraba de que el vault se había creado: ONBOARDING_EVENTS incluye
+    // VAULT_INITIALIZED (ver synapse-bridge.js) y el Milestone Registry mapea
+    // ese evento al step vault_init — pero como nunca salía por sendToHost(),
+    // el MilestoneReactor nunca disparaba _onVaultInitComplete() y Landing
+    // nunca se abría. Ahora se emite como su propio evento, con su propio
+    // nombre, hacia el host — igual que GITHUB_TOKEN_STORED arriba.
+    const vaultKey = msg.vault_key || 'sk_bloom_pat';
+
+    sendToHost({
+      event:      'VAULT_INITIALIZED',
+      vault_key:  vaultKey,
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id:  msg.launch_id  || config?.launchId,
+      timestamp:  Date.now()
+    });
+
+    forwardToDebugPanel('synapse', 'VAULT_INITIALIZED', {
+      vault_key: vaultKey
+    }, msg.profile_id || config?.profileId);
+
+    chrome.runtime.sendMessage({
+      event:              'VAULT_INITIALIZED',
+      vault_key:          vaultKey,
+      token_fingerprint:  msg.token_fingerprint,
+      profile_id:         msg.profile_id || config?.profileId,
+      launch_id:          msg.launch_id  || config?.launchId,
+    }).catch(() => {});
+
+    console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host');
+
     sendResp({ received: true });
     return true;
   }
@@ -1369,6 +1450,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   // ── GITHUB_ACCOUNT_CREATED ─────────────────────────────────────────────────
   if (event === 'GITHUB_ACCOUNT_CREATED') {
     console.log('[Synapse] 📥 GITHUB_ACCOUNT_CREATED recibido — username:', msg.username);
+
+    // 🔧 FIX: mismo problema que ACCOUNT_REGISTERED — este handler nunca
+    // escribía bloom_profile_state. Ver updateAccountInProfileState() arriba.
+    updateAccountInProfileState('github', msg.username, msg.timestamp);
 
     sendToHost({
       event:      'GITHUB_ACCOUNT_CREATED',
@@ -1381,6 +1466,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     forwardToDebugPanel('synapse', 'GITHUB_ACCOUNT_CREATED', {
       username: msg.username
     }, msg.profile_id || config?.profileId);
+
+    // 🔧 FIX: a diferencia de GITHUB_TOKEN_STORED y ACCOUNT_REGISTERED, este
+    // handler nunca reenviaba el evento hacia el resto de la extensión —
+    // solo lo mandaba al native host. Landing (setupMessageListener) escucha
+    // explícitamente 'GITHUB_ACCOUNT_CREATED' para refrescar accounts-list en
+    // caliente; sin este broadcast, ese listener nunca se disparaba.
+    chrome.runtime.sendMessage({
+      event: 'GITHUB_ACCOUNT_CREATED',
+      username: msg.username,
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id: msg.launch_id || config?.launchId,
+    }).catch(() => {});
 
     console.log('[Synapse] ✓ GITHUB_ACCOUNT_CREATED → forwarding to native host');
     sendResp({ received: true });

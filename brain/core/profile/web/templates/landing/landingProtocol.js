@@ -3,7 +3,27 @@
 // Protocol for profile cockpit UI and messaging
 // ============================================================================
 
-const PROTOCOL = {
+// 🔧 FIX: todo el archivo va envuelto en un IIFE. Antes, `const PROTOCOL` se
+// declaraba en el scope global de un script clásico (no módulo); si el mismo
+// <script src="landingProtocol.js"> se ejecuta más de una vez en el mismo
+// documento (harness re-inyectando el script, recarga dinámica, etc.), la
+// segunda ejecución choca contra la declaración global anterior y tira
+// "Uncaught SyntaxError: Identifier 'PROTOCOL' has already been declared".
+// Con el IIFE, `const PROTOCOL` queda en un scope local nuevo cada vez que el
+// script corre, y el guard de abajo evita rehacer todo el trabajo si ya está
+// cargado.
+// 🔧 FIX (v2): el IIFE se mantiene para aislar el scope de `const PROTOCOL` y
+// evitar el SyntaxError de redeclaración cuando varios *Protocol.js (harness,
+// discovery, landing) se cargan en el mismo documento (harness/index.html).
+// PERO el guard de "si window.PROTOCOL ya existe, no hacer nada" que había acá
+// antes era el bug real: discoveryProtocol.js carga ANTES que landingProtocol.js
+// en la secuencia de boot del harness (ver harness.js boot sequence), así que
+// window.PROTOCOL ya estaba tomado por el protocolo de Discovery cuando le
+// tocaba el turno a Landing — y el guard impedía que el PROTOCOL de Landing se
+// instalara nunca. Cada protocolo tiene que poder pisar window.PROTOCOL con el
+// suyo; por eso ahora se reasigna siempre, sin gate.
+(function () {
+  const PROTOCOL = {
   // ═══════════════════════════════════════════════════════════════════
   // CONFIGURATION
   // ═══════════════════════════════════════════════════════════════════
@@ -32,7 +52,6 @@ const PROTOCOL = {
     profileRole: null,
     statsGrid: null,
     accountsList: null,
-    actionsGrid: null,
     systemInfo: null,
     
     // Error screen
@@ -59,7 +78,6 @@ const PROTOCOL = {
     this.elements.profileRole = document.getElementById('profile-role');
     this.elements.statsGrid = document.getElementById('stats-grid');
     this.elements.accountsList = document.getElementById('accounts-list');
-    this.elements.actionsGrid = document.getElementById('actions-grid');
     this.elements.systemInfo = document.getElementById('system-info');
     
     this.elements.errorScreen = document.getElementById('screen-error');
@@ -94,7 +112,7 @@ const PROTOCOL = {
   phases: {
     initialization(context) {
       this.showScreen('loading');
-      this.updateLoadingMessage('🔄 Initializing...');
+      this.updateLoadingMessage('Initializing…');
       this.updateStatusDots('checking');
       
       if (this.config.debugMode) {
@@ -104,7 +122,7 @@ const PROTOCOL = {
 
     loading(context) {
       this.showScreen('loading');
-      this.updateLoadingMessage('⏳ Loading profile data...');
+      this.updateLoadingMessage('Loading profile data…');
       this.updateStatusDots('checking');
       
       if (this.config.debugMode) {
@@ -196,6 +214,10 @@ const PROTOCOL = {
   // DASHBOARD RENDERING
   // ═══════════════════════════════════════════════════════════════════
   renderDashboard(profile) {
+    // 🔧 FIX: el <title> quedaba literalmente como "Bloom - {{PROFILE_ALIAS}} Cockpit"
+    // porque nada reemplazaba ese placeholder en runtime.
+    document.title = `Bloom - ${profile.alias || 'Worker'} Cockpit`;
+
     // Profile identity
     if (this.elements.profileAvatar) {
       this.elements.profileAvatar.textContent = (profile.alias || 'B')[0].toUpperCase();
@@ -216,9 +238,6 @@ const PROTOCOL = {
     // Vaults
     this.renderVaults(profile.vaults);
 
-    // Quick actions
-    this.renderActions();
-
     // System info
     this.renderSystemInfo(profile.system);
   },
@@ -226,22 +245,31 @@ const PROTOCOL = {
   renderStats(stats) {
     if (!this.elements.statsGrid || !stats) return;
 
+    // 🎨 Doctrina: el modelo Mandate→Intent es la jerarquía central del sistema
+    // y Landing es el "ancla de continuidad" — así que las métricas que se
+    // muestran en primer plano son las que hablan de continuidad (Intents
+    // completados, última sincronización). Total Launches / Uptime son
+    // telemetría de sistema, no señales cognitivas: se muestran igual, pero
+    // con menor jerarquía, junto a system-info (ver renderSystemInfo).
     const statsConfig = [
-      { icon: '📊', label: 'Total Launches', value: stats.totalLaunches || 0 },
-      { icon: '⏱️', label: 'Uptime', value: this.formatUptime(stats.uptime || 0) },
-      { icon: '✅', label: 'Intents Done', value: stats.intentsCompleted || 0 },
-      { icon: '⚡', label: 'Last Sync', value: this.formatLastSync(stats.lastSync) }
+      { label: 'Intents Completed', value: stats.intentsCompleted || 0 },
+      { label: 'Last Sync', value: this.formatLastSync(stats.lastSync) }
     ];
 
     this.elements.statsGrid.innerHTML = statsConfig.map(stat => `
       <div class="stat-card">
         <div class="stat-header">
-          <span>${stat.icon}</span>
           <span>${stat.label}</span>
         </div>
         <div class="stat-value">${stat.value}</div>
       </div>
     `).join('');
+
+    // Telemetría secundaria — se guarda para que renderSystemInfo la incluya.
+    this._secondaryStats = {
+      totalLaunches: stats.totalLaunches || 0,
+      uptime: this.formatUptime(stats.uptime || 0)
+    };
   },
 
   renderAccounts(accounts) {
@@ -252,25 +280,40 @@ const PROTOCOL = {
       return;
     }
 
-    this.elements.accountsList.innerHTML = accounts.map(account => `
-      <div class="account-item">
-        <div class="account-avatar">${(account.provider || 'A')[0].toUpperCase()}</div>
-        <div class="account-info">
-          <div class="account-provider">${account.provider || 'Unknown'}</div>
-          <div class="account-email">${account.email || account.username || '-'}</div>
+    // 🎨 FIX UX: antes solo el punto de estado (account-status) reflejaba
+    // connected vs pending — el resto del row (avatar, nombre, email) se
+    // veía igual de "vivo" para las 3 cuentas sin importar el estado real,
+    // así que era imposible distinguir a simple vista qué está habilitado.
+    // Ahora el item completo se atenúa (is-disabled) cuando no está conectado.
+    this.elements.accountsList.innerHTML = accounts.map(account => {
+      const isConnected = account.status === 'connected' || account.status === 'active';
+      const itemClass = isConnected ? 'account-item' : 'account-item is-disabled';
+      const secondaryText = account.email || account.username || (isConnected ? '-' : 'Not linked');
+
+      return `
+        <div class="${itemClass}">
+          <div class="account-avatar">${(account.provider || 'A')[0].toUpperCase()}</div>
+          <div class="account-info">
+            <div class="account-provider">${account.provider || 'Unknown'}</div>
+            <div class="account-email">${secondaryText}</div>
+          </div>
+          <div class="account-status ${account.status || 'unknown'}"></div>
         </div>
-        <div class="account-status ${account.status || 'unknown'}"></div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   },
 
   renderVaults(vaults) {
     const container = document.getElementById('vaults-list');
     if (!container) return;
 
+    // NOTA: Google se removió de esta lista a propósito. El auth de Google
+    // no persiste ninguna key en el vault (es solo OAuth de cuenta) — mostrarlo
+    // acá como "pending" para siempre era engañoso, ya que nunca iba a pasar
+    // a "active". Los únicos providers que efectivamente guardan una key en
+    // el vault son GitHub (PAT) y Gemini (API key).
     const ALL_VAULTS = [
       { provider: 'github', label: 'GitHub' },
-      { provider: 'google', label: 'Google' },
       { provider: 'gemini', label: 'Gemini' }
     ];
 
@@ -278,9 +321,12 @@ const PROTOCOL = {
       const vault = (vaults || []).find(v => v.provider === def.provider);
       const status      = vault ? 'active'   : 'pending';
       const statusLabel = vault ? '● activo' : '○ pendiente';
-      const fingerprint = vault ? vault.fingerprint : '—';
+      const fingerprint = vault ? vault.fingerprint : 'Not created';
+      // Mismo criterio que renderAccounts: atenuar el item completo, no
+      // solo el punto de estado, cuando el vault todavía no existe.
+      const itemClass   = vault ? 'account-item' : 'account-item is-disabled';
       return `
-        <div class="account-item">
+        <div class="${itemClass}">
           <div class="account-avatar">${def.label[0]}</div>
           <div class="account-info">
             <div class="account-provider">${def.label}</div>
@@ -292,42 +338,17 @@ const PROTOCOL = {
     }).join('');
   },
 
-  renderActions() {
-    if (!this.elements.actionsGrid) return;
-
-    const actions = [
-      { icon: '🛡️', title: 'Sync Nucleus', subtitle: 'Update projects', command: 'nucleus sync' },
-      { icon: '📋', title: 'View Intents', subtitle: 'Active tasks', command: 'intent list' },
-      { icon: '✅', title: 'Health Check', subtitle: 'System status', command: 'health full-stack' },
-      { icon: '👤', title: 'All Profiles', subtitle: 'Manage workers', command: 'profile list' }
-    ];
-
-    this.elements.actionsGrid.innerHTML = actions.map(action => `
-      <button class="action-btn" data-command="${action.command}">
-        <div class="icon">${action.icon}</div>
-        <div class="title">${action.title}</div>
-        <div class="subtitle">${action.subtitle}</div>
-      </button>
-    `).join('');
-
-    // Attach event listeners
-    this.elements.actionsGrid.querySelectorAll('.action-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const command = btn.getAttribute('data-command');
-        if (command && window.executeCommand) {
-          window.executeCommand(command);
-        }
-      });
-    });
-  },
-
   renderSystemInfo(system) {
     if (!this.elements.systemInfo || !system) return;
+
+    const secondary = this._secondaryStats || {};
 
     this.elements.systemInfo.innerHTML = `
       <div>Profile ID: <span>${system.id || '-'}</span></div>
       <div>Created: <span>${this.formatDate(system.created)}</span></div>
       <div>Last Launch: <span>${this.formatDateTime(system.lastLaunch)}</span></div>
+      <div>Total Launches: <span>${secondary.totalLaunches ?? 0}</span></div>
+      <div>Uptime: <span>${secondary.uptime ?? '0s'}</span></div>
     `;
   },
 
@@ -400,21 +421,21 @@ const PROTOCOL = {
 // ============================================================================
 
 if (typeof window !== 'undefined') {
-  window.PROTOCOL = PROTOCOL;
-  console.log('[PROTOCOL] ⚙️ Landing Protocol loaded at:', new Date().toISOString());
-}
+    window.PROTOCOL = PROTOCOL;
+    console.log('[PROTOCOL] ⚙️ Landing Protocol loaded at:', new Date().toISOString());
+  }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = PROTOCOL;
-}
-// ============================================================================
-// LANDING PROTOCOL MANIFEST
-// Autodescriptive contract for the Harness ProtocolReader.
-// Append-only — does NOT modify the PROTOCOL object above.
-// ============================================================================
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = PROTOCOL;
+  }
+  // ============================================================================
+  // LANDING PROTOCOL MANIFEST
+  // Autodescriptive contract for the Harness ProtocolReader.
+  // Append-only — does NOT modify the PROTOCOL object above.
+  // ============================================================================
 
-if (typeof self !== 'undefined') {
-  self.LANDING_PROTOCOL_MANIFEST = {
+  if (typeof self !== 'undefined') {
+    self.LANDING_PROTOCOL_MANIFEST = {
     version: "1.0.0",
     protocol: "landing",
     description: "Profile cockpit — session state, stats, linked accounts, quick actions",
@@ -587,7 +608,10 @@ if (typeof self !== 'undefined') {
       "HEALTH_CHECK_RESULT",
       "GITHUB_TOKEN_STORED",
       "GITHUB_ACCOUNT_CREATED",
-      "ACCOUNT_REGISTERED"
+      "ACCOUNT_REGISTERED",
+      "VAULT_INITIALIZED"
     ]
-  };
-}
+    };
+  }
+})();
+

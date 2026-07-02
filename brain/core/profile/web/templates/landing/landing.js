@@ -127,6 +127,35 @@ class LandingFlow {
       this.profileData = this.buildProfileFromConfig(self.SYNAPSE_CONFIG);
       console.log('[Landing] ✓ Data built from SYNAPSE_CONFIG');
     }
+
+    // 🔧 FIX: linked_accounts (launch_flags) se leía y se guardaba en
+    // this.linkedAccounts pero nunca se aplicaba a profileData.accounts.
+    // Este es el canal más fresco disponible: Sentinel lo puebla en el
+    // instante en que abre Landing tras completar un registro (ej. github
+    // recién creado en el onboarding), así que debe tener prioridad sobre
+    // cualquier accounts[] vacío heredado de BLOOM_PROFILE_DATA / SYNAPSE_CONFIG.
+    this.applyLinkedAccounts();
+  }
+
+  applyLinkedAccounts() {
+    if (!this.profileData) return;
+    if (!this.linkedAccounts || this.linkedAccounts.length === 0) return;
+
+    const existing = this.profileData.accounts || [];
+    const merged = new Map(existing.map(a => [a.provider, a]));
+
+    for (const acc of this.linkedAccounts) {
+      if (!acc?.provider) continue;
+      merged.set(acc.provider, {
+        provider: acc.provider,
+        username: acc.username || null,
+        email:    acc.email    || null,
+        status:   acc.status   || 'connected'
+      });
+    }
+
+    this.profileData.accounts = Array.from(merged.values());
+    console.log('[Landing] ✓ linked_accounts fusionadas en profileData.accounts:', this.profileData.accounts);
   }
 
   buildProfileFromConfig(config) {
@@ -183,15 +212,25 @@ class LandingFlow {
   }
 
   mergeProfileState(profileData, bloomState) {
+    const bloomAccounts = (bloomState.accounts || []).map(a => ({
+      provider: a.provider,
+      username: a.username || null,
+      email:    a.email    || null,
+      status:   a.status   || 'pending'
+    }));
+
+    // 🔧 FIX: antes esto pisaba profileData.accounts con [] cada vez que
+    // bloom_profile_state todavía no traía el array poblado (carrera con
+    // discovery.js, que es quien lo escribe). Resultado observable: la
+    // cuenta de GitHub aparecía y luego "desaparecía" del panel apenas
+    // llegaba el próximo evento. Si bloomState no trae nada, conservamos
+    // lo que ya teníamos (incluye lo resuelto desde linked_accounts).
+    const accounts = bloomAccounts.length > 0 ? bloomAccounts : (profileData.accounts || []);
+
     return {
       ...profileData,
-      accounts: (bloomState.accounts || []).map(a => ({
-        provider: a.provider,
-        username: a.username || null,
-        email:    a.email    || null,
-        status:   a.status   || 'pending'
-      })),
-      vaults: bloomState.vaults || [],
+      accounts,
+      vaults: bloomState.vaults || profileData.vaults || [],
       onboarding_complete: bloomState.onboarding_complete || false
     };
   }
@@ -205,6 +244,13 @@ class LandingFlow {
         case 'GITHUB_TOKEN_STORED':
         case 'GITHUB_ACCOUNT_CREATED':
         case 'ACCOUNT_REGISTERED':
+        // FIX: VAULT_INITIALIZED llegaba a este listener (ver console.log de
+        // arriba, "Mensaje recibido: VAULT_INITIALIZED") pero no estaba en el
+        // switch, así que caía sin hacer nada — el panel de Vaults nunca se
+        // volvía a renderizar cuando el vault de GitHub (o cualquier otro
+        // provider) terminaba de crearse. Incluido acá junto al resto de los
+        // eventos que disparan el mismo recargo de bloom_profile_state.
+        case 'VAULT_INITIALIZED':
           // Recargar bloom_profile_state y re-renderizar el panel
           chrome.storage.local.get('bloom_profile_state', (result) => {
             console.log('[Landing] Actualizando dashboard por evento:', msg.event);
