@@ -1,5 +1,12 @@
 bloom-development-extension/
 └── sensor/
+    ├── BloomNucleus/
+    │   └── logs/
+    │       └── sensor/
+    │           ├── sensor_20260628.log
+    │           ├── sensor_20260630.log
+    │           ├── sensor_20260701.log
+    │           └── sensor_20260702.log
     ├── README.md
     ├── cmd/
     │   └── main.go

@@ -42,6 +42,26 @@
       ]
     },
     {
+      "id": "api_key_detected_gemini",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Simulate clipboard monitor detecting a Gemini API key (provider: gemini, per API_KEY_PATTERNS in background.js — there is no generic 'google' key pattern)",
+      "payload_template": {
+        "event": "API_KEY_DETECTED",
+        "provider": "gemini",
+        "key": "$KEY"
+      },
+      "parameters": [
+        {
+          "name": "key",
+          "type": "string",
+          "variable": "$KEY",
+          "default": "AIzaSy_simulatedKey"
+        }
+      ]
+    },
+    {
       "id": "github_token_stored",
       "type": "event",
       "direction": "harness_to_background",
@@ -138,7 +158,7 @@
           "name": "service",
           "type": "enum",
           "variable": "$SERVICE",
-          "options": ["github"],
+          "options": ["github", "google", "gemini"],
           "default": "github"
         },
         {
