@@ -10,6 +10,17 @@
 
 ---
 
+## 0. Declaración de arquitectura (para README / doc de Arquitectura general)
+
+> Cognituum no automatiza registros ni maneja credenciales de terceros en
+> producción. El onboarding se gestiona por monitoreo de portapapeles
+> (human-in-the-loop). Cualquier archivo `.ion` con capacidades de
+> `dom_type` o `dom_click` pertenece estrictamente al entorno de
+> Testing/Harness para simulación de flujos de desarrollo, y **no está
+> gateado a nivel de build/runtime todavía** — ver §6 para el estado real
+> de ese límite y el trabajo pendiente para que sea una garantía técnica
+> y no solo una convención de qué se dispara hoy.
+
 ## 1. El principio, en una frase
 
 > **Cognituum lleva al usuario hasta la puerta. El usuario cruza la puerta
@@ -21,33 +32,108 @@ selección de scopes/permisos, y generación del secreto en sí (API key,
 token, etc.). Todos esos pasos son 100% manuales, hechos por un humano,
 en su propia sesión de navegador.
 
-## 2. Qué hace Cognituum en realidad (mecanismo verificado en `background.js`)
+## 2. Qué hace Cognituum en realidad (mecanismos verificados)
 
-El flujo real, confirmado leyendo el código — no un manifest ni una
-descripción — es:
+Hay **dos** mecanismos de detección human-gate en producción, no uno solo.
+Cuál se usa depende de si el paso produce un secreto copiable o no.
+
+### 2.1 `HUMAN_GATE_CLIPBOARD` — cuando hay un secreto (GitHub PAT, Gemini key)
+
+Confirmado en `background.js`:
 
 1. `onboarding_state` entra en un estado de espera (`api_waiting`,
-   `gemini_api_waiting`, etc.) cuando el usuario llega a ese paso del
-   Discovery.
-2. `startClipboardMonitoring()` se activa. **Esto es pasivo**: no navega,
-   no inyecta JS en la página del proveedor, no observa el DOM del
-   formulario de registro.
-3. El usuario hace la registración/login/generación de key **a mano**,
-   en la puerta real del proveedor (`accounts.google.com`,
-   `aistudio.google.com`, `github.com/settings/tokens`, etc.).
-4. El usuario copia su propio secreto real (Ctrl+C / botón "Copy" del
-   proveedor).
-5. `detectAPIKeyProvider()` corre un regex sobre el contenido del
-   clipboard (ej. `/^AIzaSy[0-9A-Za-z_-]{33}$/` para Gemini,
-   `/^ghp_[A-Za-z0-9]{36,}$/` para GitHub) para identificar de qué
-   proveedor es y validar que tiene forma de secreto real.
-6. Si matchea, se emite `API_KEY_DETECTED` y el secreto se registra
-   localmente (Vault de Nucleus).
+   `gemini_api_waiting`, etc.) cuando el usuario llega a ese paso.
+2. `startClipboardMonitoring()` se activa. Pasivo: no navega, no
+   inyecta JS, no observa el DOM del formulario.
+3. El usuario se registra/genera la key a mano, en la puerta real del
+   proveedor.
+4. El usuario copia su propio secreto.
+5. `detectAPIKeyProvider()` corre un regex sobre el clipboard
+   (`AIzaSy...` para Gemini, `ghp_...` para GitHub) y emite
+   `*_DETECTED`.
 
-**No hay ningún punto en esta cadena donde Cognituum escriba texto en un
-campo de un formulario de terceros.** El único input que Cognituum lee
-es el clipboard, y solo después de que el usuario ya hizo el paste por su
-cuenta.
+### 2.2 `HUMAN_GATE_URL_WATCH` — cuando NO hay secreto (registro de cuenta de Google)
+
+Google no emite nada copiable al crear una cuenta — no hay PAT ni key
+que el clipboard monitor pueda interceptar. La señal en este caso es
+**a qué URL navegó la tab**, no su contenido:
+
+1. `onboarding_state.currentStep` pasa a `google_waiting` cuando
+   Discovery abre la puerta (`accounts.google.com/signup` o `/signin`).
+2. Un listener de `chrome.tabs.onUpdated` (nuevo, simétrico a
+   `startClipboardMonitoring()`, ver `startGoogleAuthWatcher()` en §2.3)
+   se activa mientras `currentStep === 'google_waiting'`.
+3. El usuario completa el registro/login a mano.
+4. Cuando la tab navega a una URL que solo es alcanzable con sesión
+   activa (ej. `mail.google.com/mail/*`), el listener lo detecta por
+   **coincidencia de URL únicamente** — nunca lee el DOM de esa página,
+   nunca la tab de Gmail, solo el string de la URL — y emite
+   `ACCOUNT_REGISTERED` con `service: "google"`.
+
+Esto es *menos* invasivo que 2.1: no requiere `clipboard_read`, no
+requiere content script en `google.com`, no requiere ningún
+`host_permission` sobre el contenido de la página — `chrome.tabs`
+expone la URL de una tab sin necesidad de leer nada dentro de ella.
+
+### 2.3 Propuesta de implementación — `startGoogleAuthWatcher()`
+
+Patrón de dos capas, porque el destino post-login/post-signup de Google
+no es único: depende de si el usuario registró cuenta nueva (suele
+aterrizar en `myaccount.google.com/welcome`) o logueó una existente
+(Google redirige al `continue=` original de la URL, que puede ser
+cualquier cosa). Apostar a un solo destino deja el watcher esperando
+indefinidamente en el otro camino.
+
+```js
+// Capa 1 — señales específicas, rápidas y de bajo falso-positivo.
+const GOOGLE_AUTH_SUCCESS_PATTERNS = [
+  /^https:\/\/mail\.google\.com\/mail\/.*/,
+  /^https:\/\/myaccount\.google\.com\/(welcome)?.*/,
+];
+
+// Capa 2 — catch-all: cualquier salida de accounts.google.com hacia
+// otro subdominio de google.com que no sea parte de la cadena de auth
+// (excluye pantallas intermedias: /signin/rejected, /speedbump,
+// /signin/v2/challenge, /o/oauth2/*, /ServiceLogin, etc.)
+const GOOGLE_AUTH_INTERSTITIAL_PATTERNS = [
+  /^https:\/\/accounts\.google\.com\/(signin|speedbump|o\/oauth2|ServiceLogin|v3\/signin)\/.*/,
+];
+
+function looksLikeAuthenticatedGoogleSurface(url) {
+  if (!/^https:\/\/[a-z0-9.-]*\.?google\.com\//.test(url)) return false;
+  if (url.startsWith('https://accounts.google.com/')) {
+    return !GOOGLE_AUTH_INTERSTITIAL_PATTERNS.some(p => p.test(url));
+  }
+  return true; // salió de accounts.google.com hacia otro subdominio
+}
+
+function startGoogleAuthWatcher(tabId) {
+  const listener = (updatedTabId, changeInfo) => {
+    if (updatedTabId !== tabId || !changeInfo.url) return;
+
+    const isKnownSuccess = GOOGLE_AUTH_SUCCESS_PATTERNS.some(p => p.test(changeInfo.url));
+    const isGenericSuccess = looksLikeAuthenticatedGoogleSurface(changeInfo.url);
+
+    if (isKnownSuccess || isGenericSuccess) {
+      chrome.tabs.onUpdated.removeListener(listener);
+      // emitir ACCOUNT_REGISTERED { service: 'google', ... }
+      // avanzar onboarding_state.currentStep → 'ai_provider_setup'
+    }
+  };
+  chrome.tabs.onUpdated.addListener(listener);
+}
+```
+
+Pendiente de confirmar contra el código real de `background.js`: nombre
+exacto de la función que abre la tab de Google, y si conviene un
+timeout explícito (ej. 10 min) que emita `emit_pending` en vez de
+esperar para siempre si el usuario abandona el flujo.
+
+Nunca lee `tab.title`, nunca inyecta `executeScript`, nunca toca
+`chrome.tabs.get(tabId).url` más allá de lo que ya expone el evento —
+la superficie de acceso es mínima a propósito.
+
+
 
 ## 3. Por qué esto se malinterpretó dos veces (y cómo evitarlo)
 
