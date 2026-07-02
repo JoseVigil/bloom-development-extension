@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bloom - {{PROFILE_ALIAS}} Cockpit</title>
+  <!-- 🔧 FIX: {{PROFILE_ALIAS}} nunca se reemplazaba en runtime porque nada lo procesaba.
+       Dejamos un título neutro acá; landingProtocol.js#renderDashboard ahora setea
+       document.title dinámicamente en cuanto el perfil resuelve (ver PROTOCOL.renderDashboard). -->
+  <title>Bloom - Cockpit</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -12,14 +15,14 @@
     <div id="screen-loading" class="screen active">
       <div class="loading-container">
         <div class="spinner"></div>
-        <p class="loading-message" id="loading-message">🔄 Initializing Cockpit...</p>
+        <p class="loading-message" id="loading-message">Initializing…</p>
         <div class="status-indicators">
           <div class="status-item">
-            <div class="status-dot checking" id="status-dot-extension"></div>
+            <div class="status-dot checking" id="status-dot-extension"><span></span><span></span><span></span></div>
             <span>Extension</span>
           </div>
           <div class="status-item">
-            <div class="status-dot checking" id="status-dot-host"></div>
+            <div class="status-dot checking" id="status-dot-host"><span></span><span></span><span></span></div>
             <span>Native Host</span>
           </div>
         </div>
@@ -39,52 +42,46 @@
         
         <div class="status-bar">
           <div class="status-item">
-            <div class="status-dot checking" id="dashboard-status-extension"></div>
+            <div class="status-dot checking" id="dashboard-status-extension"><span></span><span></span><span></span></div>
             <span>Extension</span>
           </div>
           <div class="status-item">
-            <div class="status-dot checking" id="dashboard-status-host"></div>
+            <div class="status-dot checking" id="dashboard-status-host"><span></span><span></span><span></span></div>
             <span>Native Host</span>
           </div>
         </div>
       </div>
 
       <div class="stats-grid" id="stats-grid">
-        <!-- Stats will be injected here -->
+        <!-- Stats will be injected here (Intents Completed, Last Sync — señales de continuidad) -->
       </div>
 
       <div class="content-grid">
         <div class="content-card">
-          <h2>🔗 Linked Accounts</h2>
+          <h2>Linked Accounts</h2>
           <div class="accounts-list" id="accounts-list">
             <!-- Accounts will be injected here -->
           </div>
         </div>
 
         <div class="content-card">
-          <h2>🔐 Vaults</h2>
+          <h2>Vaults</h2>
           <div class="accounts-list" id="vaults-list">
             <!-- Vaults will be injected here -->
           </div>
         </div>
 
-        <div class="content-card">
-          <h2>⚡ Quick Actions</h2>
-          <div class="actions-grid" id="actions-grid">
-            <!-- Actions will be injected here -->
-          </div>
-        </div>
       </div>
 
       <div class="system-info" id="system-info">
-        <!-- System info will be injected here -->
+        <!-- System info + telemetría secundaria (Total Launches, Uptime) will be injected here -->
       </div>
     </div>
 
     <!-- ERROR SCREEN -->
     <div id="screen-error" class="screen">
       <div class="error-container">
-        <div class="status-icon error-icon">❌</div>
+        <div class="status-icon error-icon">!</div>
         <h1>Connection Error</h1>
         <p class="error-message" id="error-message">Unable to establish connection</p>
         <pre class="error-details" id="error-details"></pre>
