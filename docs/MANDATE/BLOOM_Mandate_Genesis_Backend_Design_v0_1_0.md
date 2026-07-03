@@ -5,6 +5,10 @@
 **Depende de:** `BLOOM_Mandate_CLI_Command_Surface_v0_2_0.md`
 **Alcance:** Solo `mandateType: genesis` y `mandateType: domain_expansion`. No modifica el diseño ya cerrado de `standard` en §2–§5 del Command Surface — lo **reutiliza** en la Fase 4.
 
+**Historial de revisión:**
+- v0.1.0 — versión original (§0–§8).
+- Consolidación posterior — se agrega §9 (Control Plane / eventos WebSocket, `:4124`) y §2.5 (topología de implementación de los handlers Fastify). No hay cambios de modelo en §1–§8: el ciclo de vida, el filesystem (`gen_state.json` / `mandate.json` / `mandate_state.json`) y los schemas quedan tal como estaban — esta consolidación es aditiva, documenta la capa de eventos que ya estaba implícita en D-B2/D-B3 pero no tenía contrato formal.
+
 ---
 
 ## 0. Resumen ejecutivo de las tres decisiones de diseño
@@ -86,6 +90,61 @@ Reglas de existencia de archivos, porque son la forma más barata de que `nucleu
 | Ni uno ni otro | El `mandateId` no existe |
 
 No propongo un `.lock` file separado para el estado de pausa — el campo `status` dentro de `gen_state.json`/`mandate_state.json` es la única fuente de verdad. Un lock file adicional sería una segunda fuente de verdad que puede desincronizarse (ver el gap de "buffer de Sentinel sin definición de durabilidad" que señalamos en el análisis anterior — no quiero repetir ese patrón acá).
+
+### 2.5 Topología de implementación — módulos Fastify
+
+Esto **no** es el árbol de arriba. El árbol de 2. es el filesystem de *datos en runtime* (`.bloom/.nucleus-{org}/.mandates/{id}/...`), que el Daemon lee y escribe. Lo de acá es el layout de *código fuente* del propio Daemon — dónde vive cada pieza de §5 y §6 dentro del paquete de Nucleus.
+
+```
+<raíz del paquete del Daemon — sin confirmar todavía en qué monorepo/carpeta cuelga>/
+└── src/
+    ├── schemas/
+    │   └── create-mandate.schema.ts        # §5.1 — CreateMandateBody y la unión discriminada
+    │
+    ├── hooks/
+    │   └── assert-base-genesis-completed.hook.ts   # §5.2 — preHandler, valida contra filesystem
+    │
+    ├── types/
+    │   └── gen-state.types.ts              # §3 — GenState, PhaseRecord, HumanSyncRecord, DomainCandidate
+    │
+    ├── fs/
+    │   └── mandate-paths.ts                # resuelve mandatePath()/genStatePath()/mandateJsonPath()
+    │                                        # usado por §5.2, §5.4, §7.4
+    │
+    ├── workflows/
+    │   └── genesis-build-workflow.types.ts # input de MandateGenesisBuildWorkflow (§6.1)
+    │
+    ├── temporal/
+    │   └── client.ts                       # arranca MandateGenesisBuildWorkflow (§6.1) vía WorkflowClient
+    │
+    ├── events/
+    │   ├── ws-events.ts                    # §9 — contrato completo de eventos del Control Plane
+    │   └── mandate-event-publisher.ts      # wrapper tipado sobre el broadcaster de :4124
+    │
+    ├── handlers/
+    │   └── create-mandate.handler.ts       # §5.4 — createMandateHandler
+    │
+    └── routes/
+        └── mandates.routes.ts              # registra POST /mandates: schema + preHandler + handler
+```
+
+Grafo de dependencias internas (quién importa a quién, sin las libs externas):
+
+```
+routes/mandates.routes.ts
+  ├─→ schemas/create-mandate.schema.ts
+  ├─→ hooks/assert-base-genesis-completed.hook.ts ──→ schemas/create-mandate.schema.ts
+  │                                                 ──→ fs/mandate-paths.ts
+  │                                                 ──→ types/gen-state.types.ts
+  ├─→ handlers/create-mandate.handler.ts ──→ schemas/create-mandate.schema.ts
+  │                                       ──→ fs/mandate-paths.ts
+  │                                       ──→ types/gen-state.types.ts
+  │                                       ──→ temporal/client.ts ──→ workflows/genesis-build-workflow.types.ts
+  │                                       ──→ events/mandate-event-publisher.ts ──→ events/ws-events.ts
+  └─→ events/mandate-event-publisher.ts
+```
+
+**Pendiente, no resuelto en esta consolidación:** en qué carpeta del monorepo cuelga la raíz `src/` de arriba (nombre del paquete del Daemon, si convive con código de otros dominios de Nucleus o si Mandates tiene su propio paquete). Ningún documento de este dominio lo define — queda para resolver contra el repo real, no por diseño en abstracto.
 
 ---
 
