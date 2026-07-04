@@ -8,7 +8,8 @@ https://github.com/temporalio/cli/releases/tag/v1.5.1
 node v2.11 (windows-darwin) y 2.22.3 linux
 https://nodejs.org/en/download
 
-
+ollama
+https://ollama.com/download
 
 
 Python Build Standalone (Astral) — macOS Runtime para Bloom
