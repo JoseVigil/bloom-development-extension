@@ -443,10 +443,27 @@ async function openDiscoveryTab() {
     const existingTab = allTabs.find(t => t.url && t.url.startsWith(discoveryUrl));
 
     if (existingTab) {
-      // La tab existe pero probablemente tiene ERR_BLOCKED_BY_CLIENT.
-      // Recargarla ahora que la extensión está lista.
-      await chrome.tabs.update(existingTab.id, { url: discoveryUrl, active: true });
-      console.log('[Discovery] ✓ Tab existente recargada (id:', existingTab.id + ')');
+      // FIX (handshake spam): antes esto siempre reescribía `url`, lo cual
+      // fuerza un reload completo de la tab (DOMContentLoaded de nuevo →
+      // discovery.js vuelve a correr los 5 stages del handshake animado).
+      // openDiscoveryTab() se llama en CADA host_ready — y el service worker
+      // de MV3 se suspende por inactividad durante la espera humana del
+      // onboarding (crear token, loguearse, copiar key), así que al
+      // despertar puede reconectar y volver a llamar acá. Si la tab ya está
+      // sana, alcanza con traerla al frente — no hace falta recargarla.
+      // El reload real (reescribir `url`) se reserva para el caso que motivó
+      // este código originalmente: ERR_BLOCKED_BY_CLIENT en ungoogled-chromium.
+      const isHealthy = existingTab.status === 'complete'
+        && !!existingTab.url
+        && !existingTab.url.startsWith('chrome-error://');
+
+      if (isHealthy) {
+        await chrome.tabs.update(existingTab.id, { active: true });
+        console.log('[Discovery] ✓ Tab existente sana — solo foco, sin reload (id:', existingTab.id + ')');
+      } else {
+        await chrome.tabs.update(existingTab.id, { url: discoveryUrl, active: true });
+        console.log('[Discovery] ✓ Tab existente rota — recargada (id:', existingTab.id + ')');
+      }
     } else {
       const newTab = await chrome.tabs.create({ url: discoveryUrl, active: true });
       console.log('[Discovery] ✓ Tab creada (id:', newTab.id + ')');
@@ -1134,8 +1151,135 @@ function registerOnboardingHandlers() {
       launch_id: msg.launch_id || config?.launchId,
     }).catch(() => {});
 
+    // ── VAULT_INITIALIZED ────────────────────────────────────────────────────
+    // FIX (HANDOFF-fix-vault-onboarding, sección 3): este bloque vivía colgado
+    // del handler GITHUB_TOKEN_STORED, un evento que nadie emite en producción
+    // (discovery.js solo emite ACCOUNT_REGISTERED). Como resultado, Brain nunca
+    // recibía VAULT_INITIALIZED, milestone-registry.js nunca resolvía el step
+    // vault_init, y milestone-reactor.js nunca corría _onVaultInitComplete() —
+    // el wizard quedaba esperando la confirmación del vault para siempre.
+    // Movido acá, adentro del handler real que SÍ dispara en producción, con
+    // guard por service para que solo corra cuando GitHub (la cuenta que crea
+    // el vault) termina de registrarse.
+    if (msg.service === 'github') {
+      const vaultKey = msg.vault_key || 'sk_bloom_pat';
+
+      sendToHost({
+        event:      'VAULT_INITIALIZED',
+        vault_key:  vaultKey,
+        profile_id: msg.profile_id || config?.profileId,
+        launch_id:  msg.launch_id  || config?.launchId,
+        timestamp:  Date.now()
+      });
+
+      forwardToDebugPanel('synapse', 'VAULT_INITIALIZED', {
+        vault_key: vaultKey
+      }, msg.profile_id || config?.profileId);
+
+      chrome.runtime.sendMessage({
+        event:              'VAULT_INITIALIZED',
+        vault_key:          vaultKey,
+        token_fingerprint:  msg.token_fingerprint,
+        profile_id:         msg.profile_id || config?.profileId,
+        launch_id:          msg.launch_id  || config?.launchId,
+      }).catch(() => {});
+
+      console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host (desde ACCOUNT_REGISTERED, service=github)');
+    }
+
     return true;
   });
+}
+
+// ============================================================================
+// GOOGLE LOGIN WATCHER — detección pasiva de fin de login
+// No lee el DOM de Google, no hace clics, no automatiza nada. Solo compara
+// la URL de la pestaña observada contra dos listas: hosts terminales
+// (login real completo) y paths intermedios (todavía dentro del propio
+// flujo de login de Google, no cuenta como "llegó").
+// Se registra scoped a UN tabId puntual — la pestaña que el propio usuario
+// abrió desde el botón "Open Google" — y se autodesregistra apenas dispara
+// o cuando la tab se cierra, para no dejar listeners húérfanos acumulándose
+// en sesiones largas.
+// ============================================================================
+
+const GOOGLE_TERMINAL_HOSTS = ['myaccount.google.com', 'mail.google.com'];
+const GOOGLE_INTERMEDIATE_PATTERNS = ['/speedbump', '/oauth2', '/ServiceLogin', '/signin/', '/o/oauth2'];
+
+const googleLoginWatchers = new Map(); // tabId -> { onUpdated, onRemoved, timeoutId }
+
+function isGoogleIntermediateUrl(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    return GOOGLE_INTERMEDIATE_PATTERNS.some(p => u.pathname.includes(p));
+  } catch (_) {
+    return false;
+  }
+}
+
+function isGoogleTerminalUrl(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    return GOOGLE_TERMINAL_HOSTS.includes(u.hostname) && !isGoogleIntermediateUrl(urlStr);
+  } catch (_) {
+    return false;
+  }
+}
+
+function stopWatchingGoogleTab(tabId) {
+  const watcher = googleLoginWatchers.get(tabId);
+  if (!watcher) return;
+  chrome.tabs.onUpdated.removeListener(watcher.onUpdated);
+  chrome.tabs.onRemoved.removeListener(watcher.onRemoved);
+  clearTimeout(watcher.timeoutId);
+  googleLoginWatchers.delete(tabId);
+}
+
+function watchGoogleLoginTab(tabId) {
+  // Si ya había un watcher para esta tab (doble click en "Open Google"),
+  // reemplazarlo en vez de acumular listeners duplicados.
+  stopWatchingGoogleTab(tabId);
+
+  console.log('[GoogleWatcher] Observando pasivamente tab', tabId);
+
+  const onUpdated = (updatedTabId, changeInfo) => {
+    if (updatedTabId !== tabId || !changeInfo.url) return;
+
+    if (isGoogleTerminalUrl(changeInfo.url)) {
+      const hostname = new URL(changeInfo.url).hostname;
+      console.log('[GoogleWatcher] ✓ Host terminal detectado:', hostname);
+
+      chrome.runtime.sendMessage({
+        event: 'GOOGLE_LOGIN_DETECTED',
+        tabId,
+        detected_host: hostname,
+        profile_id: config?.profileId,
+        launch_id: config?.launchId,
+        timestamp: Date.now()
+      }).catch(() => {});
+
+      forwardToDebugPanel('sentinel', 'GOOGLE_LOGIN_DETECTED', { detected_host: hostname, tabId }, config?.profileId);
+
+      stopWatchingGoogleTab(tabId);
+    }
+  };
+
+  const onRemoved = (removedTabId) => {
+    if (removedTabId !== tabId) return;
+    console.log('[GoogleWatcher] Tab cerrada antes de detectar login — watcher liberado');
+    stopWatchingGoogleTab(tabId);
+  };
+
+  // Timeout de cortesía: si el usuario abandona el login, no dejar el
+  // listener vivo para siempre.
+  const timeoutId = setTimeout(() => {
+    console.log('[GoogleWatcher] Timeout sin detección — watcher liberado (tab', tabId + ')');
+    stopWatchingGoogleTab(tabId);
+  }, 10 * 60 * 1000); // 10 minutos
+
+  chrome.tabs.onUpdated.addListener(onUpdated);
+  chrome.tabs.onRemoved.addListener(onRemoved);
+  googleLoginWatchers.set(tabId, { onUpdated, onRemoved, timeoutId });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
@@ -1184,6 +1328,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   // ── HARNESS: abrir landing tab directamente ──────────────────────────────
   if (event === 'HARNESS_OPEN_LANDING') {
     openLandingTab();
+    sendResp({ received: true });
+    return true;
+  }
+
+  // ── AWAITING_HUMAN_AUTH ───────────────────────────────────────────────────
+  // discovery.js pide observar pasivamente una tab que EL USUARIO ya abrió y
+  // está operando a mano (login de Google). No hay automatización de login
+  // acá — solo se mira a qué hostname termina llegando esa tab puntual.
+  if (event === 'AWAITING_HUMAN_AUTH' && msg.service === 'google' && msg.tabId) {
+    watchGoogleLoginTab(msg.tabId);
+    sendResp({ received: true });
+    return true;
+  }
+
+  // ── TEST_HANDSHAKE_ANIMATION ──────────────────────────────────────────────
+  // Comando manual de QA/demo. La animación en sí la corre discovery.js
+  // (replayHandshakeAnimationForTesting) — acá solo la reenviamos a la tab.
+  if (event === 'TEST_HANDSHAKE_ANIMATION') {
+    chrome.tabs.query({ url: chrome.runtime.getURL('discovery/index.html') }, (tabs) => {
+      tabs.forEach(t => chrome.tabs.sendMessage(t.id, { event: 'TEST_HANDSHAKE_ANIMATION' }).catch(() => {}));
+    });
     sendResp({ received: true });
     return true;
   }
@@ -1410,38 +1575,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     console.log('[Synapse] ✓ GITHUB_TOKEN_STORED → forwarding to native host');
 
     // ── VAULT_INITIALIZED ──────────────────────────────────────────────────
-    // FIX: este paso creaba el vault_key pero solo lo mandaba a
-    // forwardToDebugPanel() (debug panel + harness log), reutilizando el
-    // nombre de evento GITHUB_TOKEN_STORED. Eso significaba que Brain nunca
-    // se enteraba de que el vault se había creado: ONBOARDING_EVENTS incluye
-    // VAULT_INITIALIZED (ver synapse-bridge.js) y el Milestone Registry mapea
-    // ese evento al step vault_init — pero como nunca salía por sendToHost(),
-    // el MilestoneReactor nunca disparaba _onVaultInitComplete() y Landing
-    // nunca se abría. Ahora se emite como su propio evento, con su propio
-    // nombre, hacia el host — igual que GITHUB_TOKEN_STORED arriba.
-    const vaultKey = msg.vault_key || 'sk_bloom_pat';
-
-    sendToHost({
-      event:      'VAULT_INITIALIZED',
-      vault_key:  vaultKey,
-      profile_id: msg.profile_id || config?.profileId,
-      launch_id:  msg.launch_id  || config?.launchId,
-      timestamp:  Date.now()
-    });
-
-    forwardToDebugPanel('synapse', 'VAULT_INITIALIZED', {
-      vault_key: vaultKey
-    }, msg.profile_id || config?.profileId);
-
-    chrome.runtime.sendMessage({
-      event:              'VAULT_INITIALIZED',
-      vault_key:          vaultKey,
-      token_fingerprint:  msg.token_fingerprint,
-      profile_id:         msg.profile_id || config?.profileId,
-      launch_id:          msg.launch_id  || config?.launchId,
-    }).catch(() => {});
-
-    console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host');
+    // MOVIDO (HANDOFF-fix-vault-onboarding, sección 3): este bloque emitía
+    // VAULT_INITIALIZED colgado de GITHUB_TOKEN_STORED, un evento que nadie
+    // dispara en producción — por eso el vault nunca se confirmaba. La
+    // emisión real ahora vive en el handler de ACCOUNT_REGISTERED (arriba,
+    // línea ~1104), guardada por service === 'github'. Este bloque queda
+    // muerto a propósito; no se elimina el handler GITHUB_TOKEN_STORED en sí
+    // porque el Harness/simulación puede seguir emitiéndolo para testing.
 
     sendResp({ received: true });
     return true;

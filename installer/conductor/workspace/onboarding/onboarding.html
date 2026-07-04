@@ -553,6 +553,28 @@ body::after {
 .acc-icon.active .acc-icon-ring svg { opacity: 1; }
 .acc-icon:not(.active) .acc-icon-ring svg { opacity: 0.2; }
 
+/* RF-02: sub-steps todavía no alcanzados por el wizard — atenuados y sin
+   affordance de click (el onclick inline ya se sacó del HTML; esto cubre
+   el estado visual). */
+.acc-icon.pending {
+  cursor: default;
+  pointer-events: none;
+}
+.acc-icon.pending .acc-icon-ring { opacity: 0.4; }
+.acc-icon.pending .acc-label { color: var(--text-dim); }
+
+/* RF-04: sub-step actualmente en curso — esperando confirmación de Cortex.
+   Distinto de 'pending' (no alcanzado) y de 'active' (ya confirmado). */
+@keyframes acc-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 var(--accent-glow); }
+  50%      { box-shadow: 0 0 10px var(--accent-glow); }
+}
+.acc-icon.in-progress .acc-icon-ring {
+  border-color: var(--accent-dim);
+  animation: acc-icon-pulse 1.6s ease-in-out infinite;
+}
+.acc-icon.in-progress .acc-icon-ring svg { opacity: 0.6; }
+
 .acc-label {
   font-family: var(--font-mono);
   font-size: 8px;
@@ -1502,7 +1524,7 @@ body::after {
 
       <div class="account-icons">
         <!-- GitHub -->
-        <div class="acc-icon" id="acc-github" onclick="toggleAccount('github')">
+        <div class="acc-icon" id="acc-github">
           <div class="acc-icon-ring">
             <div class="acc-badge">
               <svg width="9" height="9" viewBox="0 0 32 32" fill="none">
@@ -1518,7 +1540,7 @@ body::after {
           <div class="acc-label">GitHub</div>
         </div>
         <!-- Google -->
-        <div class="acc-icon" id="acc-google" onclick="toggleAccount('google')">
+        <div class="acc-icon" id="acc-google">
           <div class="acc-icon-ring">
             <div class="acc-badge">
               <svg width="9" height="9" viewBox="0 0 32 32" fill="none">
@@ -1537,7 +1559,7 @@ body::after {
           <div class="acc-label">Google</div>
         </div>
         <!-- Gemini -->
-        <div class="acc-icon" id="acc-gemini" onclick="toggleAccount('gemini')">
+        <div class="acc-icon" id="acc-gemini">
           <div class="acc-icon-ring">
             <div class="acc-badge">
               <svg width="9" height="9" viewBox="0 0 32 32" fill="none">
@@ -1590,10 +1612,14 @@ body::after {
         <div class="state-line">
           <div class="state-dot"></div>
           <span class="state-key">Vault</span>
-          <span class="state-val">activo · cifrado local</span>
+          <span class="state-val" id="vault-state-val">pendiente…</span>
         </div>
       </div>
-      <button class="btn-primary" onclick="goTo(5)">Continuar a Proyectos →</button>
+      <button class="btn-primary" id="btn-continue-vault" style="min-width:200px;" disabled>Inicializando vault…</button>
+      <div id="vault-poll-status" class="poll-status" style="display:none">
+        <div class="poll-dot"></div>
+        <span id="vault-poll-label">Esperando confirmación del vault…</span>
+      </div>
     </div>
   </div>
 

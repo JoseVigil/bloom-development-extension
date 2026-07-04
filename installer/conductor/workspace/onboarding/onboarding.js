@@ -1,13 +1,22 @@
+console.log('%c[ONBOARDING BUILD] rf08-fix-v2 (github→vault→google→gemini, startLabel fix)', 'background:#222;color:#0f0;font-size:14px;padding:4px;');
+
 // onboarding.js — Bloom Conductor (Synapse Protocol v4.0)
-// Correcciones aplicadas:
-//   Fix 1: REQUIRED_ACCOUNTS = ['github'] — GitHub primero, Google/Gemini después del vault
-//   Fix 2: navigate manda 'github_auth', no 'google_login'
-//   Fix 3: poll mapea result.steps.github_auth, no result.accounts
-//   Fix 4: goTo(4) llama runNucleusTerminal()
-//   Fix 5: toggleAccount() desactivado — los íconos los activa solo el poll
-//   Fix 6: info popup dinámico por step, contenido desde STEP_INFO[]
 //
-// CAMBIOS (sesión 2026-06) — Cambio 7 de 8:
+// NOTA (RF-11): el header de cambios referencia requerimientos
+// (requerimientos_onboarding_ui.md, RF-XX) en vez de números de "Fix" locales.
+// Un "Fix N" sin contexto es lo que causó que este mismo header mintiera sobre
+// REQUIRED_ACCOUNTS en la v1 de este archivo (ver RF-08/RF-11) — referenciar el
+// RF permite que cualquier sesión nueva vuelva al documento y confirme el
+// estado real en vez de confiar ciegamente en el comentario.
+//
+// Correcciones aplicadas (histórico, pre-RF):
+//   navigate manda 'github_auth', no 'google_login'
+//   poll mapea result.steps.github_auth, no result.accounts
+//   goTo(4) llama runNucleusTerminal()  [ver nota más abajo — esto era goTo(2)]
+//   toggleAccount() desactivado — los íconos los activa solo el poll
+//   info popup dinámico por step, contenido desde STEP_INFO[]
+//
+// CAMBIOS (sesión 2026-06):
 //   - Listeners de milestone:reached y onboarding:step-ui-update registrados en DOMContentLoaded
 //   - handleMilestoneReached() maneja el avance automático por hito
 //   - setInterval en kickoffDiscovery se mantiene como FALLBACK (renombrado a _pollFallbackTimer)
@@ -15,6 +24,22 @@
 //     llega por el canal push o cuando el poll confirma github_auth.
 //   - STEP_TO_NODE: mapa stepId → nombre de nodo del stepper, para que los handlers
 //     de milestone puedan actualizar el stepper sin conocer los índices internos.
+//
+// CAMBIOS (sesión actual):
+//   - RF-08: IDENTITY_STEPS/advanceIdentityWizard reordenados a github → vault →
+//     google → gemini, para coincidir con `requires` de milestone-registry.js
+//     (vault_init requiere github_token; google_auth y ai_provider_setup
+//     requieren vault_initialized). Antes el wizard pedía Google/Gemini antes
+//     de que el vault existiera.
+//   - RF-01: título + bloque de instrucciones de screen-identity ahora se
+//     derivan de IDENTITY_STEPS[identityStepIndex] (ver IDENTITY_SCREEN_COPY /
+//     _renderIdentityScreenCopy) en vez de quedar hardcodeados a GitHub.
+//   - RF-02/RF-04: los íconos de cuenta ahora tienen 3 estados reales
+//     (pending / in-progress / active), ver _refreshAccountIconStates().
+//   - RF-03: resumeOnboarding() arma el mensaje de "✓ X confirmado" a partir
+//     del step restaurado, no de un string fijo.
+//   - RF-05/RF-09: screen-vault ahora dispara runVaultInit() al entrar
+//     (goTo(4)) y su botón queda disabled hasta que vault_init se confirma.
 
 // ── LOGGING ────────────────────────────────────────────────────────────────
 function log(level, msg) {
@@ -88,12 +113,126 @@ function closeInfo() {
   document.getElementById('info-popup').classList.remove('open');
 }
 
+// ── IDENTITY SUB-WIZARD ────────────────────────────────────────────────────
+// Screen 3 (identity) ya no es un único paso de GitHub — es un sub-wizard
+// secuencial de 3 sub-steps: GitHub → Google → Gemini. Cada entrada mapea:
+//   id          → clave corta usada en activeAccounts / STEP_INFO
+//   key         → stepId real que entiende el backend (navigate, milestones)
+//   label       → texto legible para el status del poll / notificaciones
+//   buttonText  → texto del botón "Continue" mientras este sub-step está activo
+//   startLabel  → texto del botón ANTES de confirmarse (arranca el sub-step)
+//   infoStep    → key en STEP_INFO para el popup de ayuda (?)
+// RF-08: buttonText refleja el orden real de dependencias del registry
+// (github → vault → google → gemini), no el orden secuencial dentro de este
+// array — 'github' salta a Vault (screen 4), no al siguiente índice.
+//
+// startLabel es el texto del botón ANTES de que este sub-step se confirme
+// (lo que dispara kickoffIdentityStep para ESTE step). Es un campo separado
+// de buttonText a propósito: buttonText describe adónde lleva COMPLETAR el
+// sub-step actual, startLabel describe cómo ARRANCARLO. Antes de RF-08
+// coincidían por accidente (buttonText del sub-step anterior decía
+// literalmente "Continue to {este step}") — dejaron de coincidir en cuanto
+// el orden de ejecución dejó de ser el mismo que el orden del array.
+const IDENTITY_STEPS = [
+  { id: 'github', key: 'github_auth',       label: 'GitHub', buttonText: 'Continue to Vault',   startLabel: 'Validate',             infoStep: 'github' },
+  { id: 'google', key: 'google_auth',       label: 'Google', buttonText: 'Continue to Gemini',  startLabel: 'Continue to Google',   infoStep: 'google' },
+  { id: 'gemini', key: 'ai_provider_setup', label: 'Gemini', buttonText: 'Continue to Projects', startLabel: 'Continue to Gemini',   infoStep: 'gemini' },
+];
+
+// stepId (backend) → sub-step de IDENTITY_STEPS, para rutear milestones
+// entrantes sin tener que buscar en el array cada vez.
+const IDENTITY_KEY_TO_SUBSTEP = Object.fromEntries(IDENTITY_STEPS.map(s => [s.key, s]));
+
+// RF-01: título + bloque de instrucciones de screen-identity, por sub-step.
+// Antes esto era HTML estático hardcodeado a GitHub (onboarding.html) — ver
+// _renderIdentityScreenCopy(), que es el único lugar que debe escribir
+// .stage-title / .identity-instruction para screen-identity.
+const IDENTITY_SCREEN_COPY = {
+  github: {
+    title: 'Conectá tu cuenta<br>de GitHub.',
+    steps: [
+      'En el Chrome que abrió Bloom, andá a <strong>GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong>',
+      'Creá un token con permisos: <code>repo</code> · <code>read:org</code> · <code>read:user</code>',
+      'Pegá el token en el campo que aparece en Chrome. Bloom lo detecta automáticamente.',
+    ],
+  },
+  google: {
+    title: 'Conectá tu cuenta<br>de Google.',
+    steps: [
+      'En el Chrome que abrió Bloom, iniciá sesión con la cuenta de Google que querés usar.',
+      'Confirmá los permisos que Bloom solicita para acceder a Google Cloud y AI Studio.',
+      'Bloom detecta la sesión automáticamente — no hace falta pegar nada.',
+    ],
+  },
+  gemini: {
+    title: 'Conectá tu API key<br>de Gemini.',
+    steps: [
+      'En el Chrome que abrió Bloom, andá a <strong>aistudio.google.com → Get API key</strong>',
+      'Generá o copiá una API key existente.',
+      'Pegá la key en el campo que aparece en Chrome. Bloom la detecta automáticamente.',
+    ],
+  },
+};
+
+// Escribe título + instrucciones de screen-identity para el sub-step dado.
+// Único punto de escritura para estos dos elementos (RF-01) — llamar cada
+// vez que el sub-step activo cambia: kickoffIdentityStep() (avance normal)
+// y _wireIdentityButtonToResumeStep() (resume a mitad de camino).
+function _renderIdentityScreenCopy(step) {
+  const copy = IDENTITY_SCREEN_COPY[step?.id];
+  if (!copy) return;
+
+  const titleEl = document.querySelector('#screen-identity .stage-title');
+  if (titleEl) titleEl.innerHTML = copy.title;
+
+  const instructionEl = document.querySelector('#screen-identity .identity-instruction');
+  if (instructionEl) {
+    instructionEl.innerHTML = copy.steps.map((text, i) => `
+      <div class="instruction-step">
+        <span class="step-num">${i + 1}</span>
+        <span>${text}</span>
+      </div>
+    `).join('');
+  }
+}
+
+// RF-02/RF-04: aplica el estado visual correcto (pending / in-progress /
+// active) a cada ícono de cuenta según activeAccounts + identityStepIndex.
+// Único punto de escritura de estas 3 clases — llamar cada vez que cambia
+// el sub-step activo o se confirma uno.
+function _refreshAccountIconStates() {
+  IDENTITY_STEPS.forEach((step, i) => {
+    const el = document.getElementById(`acc-${step.id}`);
+    if (!el) return;
+    el.classList.remove('pending', 'in-progress', 'active');
+    if (activeAccounts.has(step.id)) {
+      el.classList.add('active');
+    } else if (i === identityStepIndex) {
+      el.classList.add('in-progress');
+    } else {
+      el.classList.add('pending');
+    }
+  });
+}
+
+// Índice del sub-step actualmente activo dentro del sub-wizard de identity.
+let identityStepIndex = 0;
+
+// Si ya lanzamos la ventana de Discovery en ESTA sesión de la app.
+// NO usar `identityStepIndex === 0` para esto: tras un resumeOnboarding()
+// el índice puede arrancar en 1 o 2 (ej: GitHub ya confirmado en una sesión
+// anterior) mientras que en esta sesión nueva la ventana de Chrome todavía
+// no existe. Sin este flag separado, kickoffIdentityStep() saltea
+// launchDiscovery() creyendo que la ventana ya está abierta, y navigate()
+// falla silenciosamente porque no hay nada donde navegar.
+let _discoveryLaunchedThisSession = false;
+
 // ── STATE ──────────────────────────────────────────────────────────────────
 const activeAccounts = new Set();
 
-// Fix 1: Solo GitHub en Screen 1. Google y Gemini van después del vault
-// (onboarding_steps.json: google_auth requiere vault_initialized)
-const REQUIRED_ACCOUNTS = ['github'];
+// Los 3 sub-steps de IDENTITY_STEPS son requeridos, en orden, antes de
+// avanzar a Vault (screen 4).
+const REQUIRED_ACCOUNTS = IDENTITY_STEPS.map(s => s.id);
 
 let selectedOrg         = null;
 let selectedFolderPath  = null;
@@ -103,6 +242,11 @@ let selectedProject     = null; // { name, path }
 let _pollFallbackTimer  = null; // renombrado de identityPollTimer — es un fallback ahora
 let identityTimeoutId   = null;
 let userEmail           = null;
+
+// RF-09: estado del disparo de vault_init — separado del _pollFallbackTimer
+// de identity porque corren en pantallas distintas y no deben pisarse.
+let _vaultInitTriggered    = false;
+let _vaultPollFallbackTimer = null;
 
 // Variables de estado para copy dinámico (§7 del spec)
 const state = {
@@ -301,6 +445,7 @@ async function goTo(n) {
   // Screen 5: project selection (vault establecido)
   if (n === 2) runNucleusTerminal();
   if (n === 3) { setStepperEstablished('workspace'); }
+  if (n === 4) runVaultInit(); // RF-09: antes no había ningún efecto para n===4
   if (n === 5) { setStepperEstablished('identity'); loadRepos(); }
   if (n === 6) {
     setStepperEstablished('project');
@@ -373,18 +518,37 @@ function handleMilestoneReached(stepId, data) {
   }
 }
 
+// Punto único de "un sub-step del identity wizard fue confirmado".
+// Idempotente: si el sub-step ya estaba marcado activo, no repite trabajo.
+// No decide navegación por sí sola — delega en advanceIdentityWizard(),
+// que sólo actúa si el sub-step confirmado es el que está actualmente activo.
+function _completeIdentitySubstep(subStepId, _data) {
+  if (activeAccounts.has(subStepId)) return; // idempotente
+
+  activeAccounts.add(subStepId);
+  _refreshAccountIconStates();
+
+  const step = IDENTITY_STEPS.find(s => s.id === subStepId);
+  const stepLabel = step?.label || subStepId;
+
+  // Actualizar poll status a confirmado
+  const pollStatus = document.getElementById('identity-poll-status');
+  const pollLabel  = document.getElementById('identity-poll-label');
+  if (pollLabel)  pollLabel.textContent = `✓ ${stepLabel} confirmado`;
+  if (pollStatus) pollStatus.classList.add('confirmed');
+
+  // Limpiar el poll de fallback del sub-step activo — ya no lo necesitamos
+  _clearPollFallback();
+
+  advanceIdentityWizard();
+}
+
 function _onMilestoneGithubAuth(data) {
   if (activeAccounts.has('github')) return;  // idempotente
-
-  activeAccounts.add('github');
-  document.getElementById('acc-github')?.classList.add('active');
   log('info', 'milestone: github_auth confirmado por Brain');
 
   const userLabel = data?.username ? ` — @${data.username}` : '';
   addNotification(`GitHub connected${userLabel}`, { icon: '✓', type: 'success' });
-
-  // Limpiar el poll de fallback — ya no necesitamos el setInterval
-  _clearPollFallback();
 
   // Capturar username/org para copy dinámico si Brain los incluyó en el payload
   if (data?.username) {
@@ -396,33 +560,48 @@ function _onMilestoneGithubAuth(data) {
     if (vaultOrg)  vaultOrg.textContent  = data.org || '—';
   }
 
-  // Actualizar poll status a confirmado
-  const pollStatus = document.getElementById('identity-poll-status');
-  const pollLabel  = document.getElementById('identity-poll-label');
-  if (pollLabel)  pollLabel.textContent = '✓ Token detectado';
-  if (pollStatus) pollStatus.classList.add('confirmed');
-
-  checkIdentityReady();
+  _completeIdentitySubstep('github', data);
 }
 
 function _onMilestoneVaultInit(_data) {
+  if (activeAccounts.has('vault_init')) return; // idempotente
   log('info', 'milestone: vault_init confirmado por Brain');
+
+  activeAccounts.add('vault_init');
   addNotification('Vault initialized', { icon: '🔒', type: 'success' });
   setStepperEstablished('identity');   // ← era 'vault', que no existe en STEPPER_NODES
-  showCortex('Vault initialized. Setting up workspace…');
+  showCortex('Vault initialized.');
+  _clearVaultPollFallback();
+
+  // RF-05/RF-09: el botón de screen-vault queda disabled hasta este punto.
+  // RF-08: al confirmarse, vuelve a screen-identity y retoma el wizard en
+  // 'google' — vault ya está listo, así que ya no hace falta pasar por acá
+  // de nuevo antes de llegar a Project.
+  const btn = document.getElementById('btn-continue-vault');
+  if (btn) {
+    btn.textContent = 'Continuar →';
+    btn.disabled    = false;
+    btn.onclick     = () => {
+      log('info', 'vault confirmado — retomando identity wizard en Google');
+      goTo(3);
+      advanceToNextIdentityStep();
+    };
+  }
 }
 
-function _onMilestoneGoogleAuth(_data) {
+function _onMilestoneGoogleAuth(data) {
+  if (activeAccounts.has('google')) return;  // idempotente
   log('info', 'milestone: google_auth confirmado por Brain');
   addNotification('Google account connected', { icon: '✓', type: 'success' });
-  showCortex('Google connected.');
+  _completeIdentitySubstep('google', data);
 }
 
 function _onMilestoneAiProviderSetup(data) {
+  if (activeAccounts.has('gemini')) return;  // idempotente
   log('info', `milestone: ai_provider_setup confirmado por Brain — provider: ${data?.provider || 'n/a'}`);
   const providerLabel = data?.provider ? ` (${data.provider})` : '';
   addNotification(`AI provider configured${providerLabel}`, { icon: '✓', type: 'success' });
-  showCortex('AI provider configured.');
+  _completeIdentitySubstep('gemini', data);
 }
 
 function _onMilestoneProjectCreate(_data) {
@@ -437,7 +616,21 @@ function _onMilestoneProjectCreate(_data) {
   }
 }
 
-// ── SCREEN 1 — Identity ────────────────────────────────────────────────────
+// ── SCREEN 1 — Identity (sub-wizard: GitHub → Google → Gemini) ────────────
+//
+// El screen 3 (identity) recorre IDENTITY_STEPS en orden. Cada sub-step:
+//   1. kickoffIdentityStep()     — abre/navega Discovery al step correspondiente
+//   2. usuario completa la acción en Chrome (token, login, API key)
+//   3. milestone push (o poll fallback) confirma el sub-step
+//   4. advanceIdentityWizard()   — habilita el botón "Continue to X"
+//   5. usuario clickea — RF-08: el destino depende del sub-step, no de la
+//      posición en el array: 'github' → goTo(4) (Vault, interrumpe el wizard);
+//      'google' → advanceToNextIdentityStep() (sigue a gemini); 'gemini'
+//      (último) → goTo(5) (Project — vault ya pasó entre github y google).
+//
+// Solo el primer sub-step (github) requiere launchDiscovery — abre la ventana
+// de Chrome del perfil. Los siguientes (google, gemini) reusan esa misma
+// ventana y solo necesitan navigate() al step correspondiente.
 
 // Fix 5: toggleAccount() ya no hace nada — los íconos los activa solo el poll/milestone.
 // El onclick en el HTML queda por compatibilidad pero no cambia estado.
@@ -448,41 +641,82 @@ function toggleAccount(name) {
 async function handleIdentityBtn() {
   log('info', 'click — btn-continue-identity');
 
+  identityStepIndex = 0;
+  const step = IDENTITY_STEPS[identityStepIndex];
+
   const btn = document.getElementById('btn-continue-identity');
-  btn.textContent = 'Esperando GitHub…';
+  btn.textContent = `Esperando ${step.label}…`;
   btn.disabled = true;
   btn.onclick  = null;
 
-  // Actualizar el info popup al step actual (github) antes de abrir Discovery
-  currentInfoStep = 'github';
+  // Actualizar el info popup al sub-step actual antes de abrir Discovery
+  currentInfoStep = step.infoStep;
 
-  await kickoffDiscovery();
+  await kickoffIdentityStep();
 }
 
-async function kickoffDiscovery() {
-  // Fase 1: lanzar Discovery
-  showCortex("Opening Discovery window…");
-  log('info', 'IPC → onboarding:launch-discovery — email: ' + (userEmail || '(none)'));
+// Avanza identityStepIndex al siguiente sub-step y lo arranca.
+// Llamado desde el onclick de "Continue to Google" / "Continue to Gemini".
+function advanceToNextIdentityStep() {
+  identityStepIndex += 1;
+  const next = IDENTITY_STEPS[identityStepIndex];
+  if (!next) return; // no debería pasar — el último step navega a goTo(5) desde advanceIdentityWizard(), no acá
 
-  const result = await window.onboarding.launchDiscovery({ email: userEmail });
-  log(result.success ? 'info' : 'error',
-      `IPC ← onboarding:launch-discovery — success: ${result.success}`);
+  log('info', `identity wizard → avanzando a sub-step "${next.id}"`);
+  currentInfoStep = next.infoStep;
 
-  if (!result.success) {
-    showCortex("Could not launch Discovery. Retry.");
-    const btn = document.getElementById('btn-continue-identity');
-    btn.textContent = 'Validate';
-    btn.disabled    = false;
-    btn.onclick     = handleIdentityBtn;
-    return;
+  const btn = document.getElementById('btn-continue-identity');
+  if (btn) {
+    btn.textContent = `Esperando ${next.label}…`;
+    btn.disabled    = true;
+    btn.onclick     = null;
   }
 
-  // Fase 2: navegar a github_auth en Chrome
-  showCortex("Connecting to GitHub…");
-  log('info', 'IPC → onboarding:navigate — step: github_auth');
+  kickoffIdentityStep();
+}
+
+// Arranca (o continúa) el flujo de Discovery para el sub-step activo
+// (IDENTITY_STEPS[identityStepIndex]). Sólo el primer sub-step (github)
+// lanza una ventana de Discovery nueva; los siguientes navegan dentro de
+// la misma sesión ya abierta.
+async function kickoffIdentityStep() {
+  const step = IDENTITY_STEPS[identityStepIndex];
+
+  // RF-01/RF-02/RF-04: título, instrucciones e íconos deben reflejar el
+  // sub-step que arranca ahora, no quedar en lo que dejó el sub-step anterior.
+  _renderIdentityScreenCopy(step);
+  _refreshAccountIconStates();
+
+  if (!_discoveryLaunchedThisSession) {
+    // Fase 1: lanzar Discovery — una sola vez por sesión de la app, sin
+    // importar en qué sub-step del wizard estemos (puede ser google o
+    // gemini directamente si venimos de un resume con github ya confirmado
+    // en una sesión previa).
+    showCortex("Opening Discovery window…");
+    log('info', 'IPC → onboarding:launch-discovery — email: ' + (userEmail || '(none)'));
+
+    const result = await window.onboarding.launchDiscovery({ email: userEmail });
+    log(result.success ? 'info' : 'error',
+        `IPC ← onboarding:launch-discovery — success: ${result.success}`);
+
+    if (!result.success) {
+      showCortex("Could not launch Discovery. Retry.");
+      const btn = document.getElementById('btn-continue-identity');
+      btn.textContent = 'Validate';
+      btn.disabled    = false;
+      btn.onclick     = handleIdentityBtn;
+      return;
+    }
+
+    _discoveryLaunchedThisSession = true;
+  }
+
+  // Fase 2: navegar al step correspondiente en Chrome
+  showCortex(`Connecting to ${step.label}…`);
+  log('info', `IPC → onboarding:navigate — step: ${step.key}`);
 
   const navResult = await window.onboarding.navigate({
-    step:  'github_auth',
+    step:  step.key,
     email: userEmail
   });
   log(navResult.success ? 'info' : 'warn',
@@ -491,18 +725,16 @@ async function kickoffDiscovery() {
   if (!navResult.success) {
     log('warn', 'navigate falló — Chrome puede ya estar activo, continuando');
     showCortex(
-      "Chrome open — follow the (?) instructions to create your GitHub token and copy it."
+      `Chrome open — follow the (?) instructions for ${step.label}.`
     );
   }
 
-  // Fase 3: instrucción al usuario
-  showCortex(
-    "In Chrome: Settings → Developer Settings → Personal access tokens → Tokens (classic) → Generate → select repo & read:org → copy."
-  );
+  // Fase 3: instrucción al usuario, específica del sub-step
+  showCortex(_identityInstructionFor(step));
 
   // Timeout de 3 minutos — mensaje de ayuda si el usuario tarda
   identityTimeoutId = setTimeout(() => {
-    if (activeAccounts.has('github')) return;
+    if (activeAccounts.has(step.id)) return;
     showCortex(
       "Taking longer than expected. Click (?) for step-by-step instructions."
     );
@@ -511,15 +743,15 @@ async function kickoffDiscovery() {
   // Fase 4: mostrar el indicador de poll y arrancar el fallback poll
   //
   // El canal push (milestone:reached) es el mecanismo principal.
-  // El setInterval es un FALLBACK para el caso en que Brain no emita
-  // GITHUB_TOKEN_STORED (builds viejos, race condition, etc.).
+  // El setInterval es un FALLBACK para el caso en que Brain no emita el
+  // evento correspondiente (builds viejos, race condition, etc.).
   // Se limpia automáticamente cuando llega el milestone o cuando el poll confirma.
   document.getElementById('identity-poll-status').style.display = 'flex';
 
   _pollFallbackTimer = setInterval(async () => {
     // Si el milestone ya llegó por el canal push, el timer ya se limpió.
     // Esta guarda es por si hay un tick residual.
-    if (activeAccounts.has('github')) {
+    if (activeAccounts.has(step.id)) {
       _clearPollFallback();
       return;
     }
@@ -527,15 +759,99 @@ async function kickoffDiscovery() {
     const pollResult = await window.onboarding.pollIdentity();
     if (!pollResult.success) return;
 
-    if (pollResult.steps?.github_auth) {
-      log('info', 'poll fallback: github_auth confirmado vía pollIdentity');
+    if (pollResult.steps?.[step.key]) {
+      log('info', `poll fallback: ${step.key} confirmado vía pollIdentity`);
       // Tratar igual que si hubiera llegado el milestone push
-      _onMilestoneGithubAuth({
+      handleMilestoneReached(step.key, {
         username: pollResult.username || null,
         org:      pollResult.org      || null,
+        provider: pollResult.provider || null,
       });
     }
   }, 3000);
+}
+
+// Texto de instrucción mostrado en la cortex bar mientras se espera la
+// confirmación de cada sub-step.
+function _identityInstructionFor(step) {
+  switch (step.id) {
+    case 'github':
+      return "In Chrome: Settings → Developer Settings → Personal access tokens → Tokens (classic) → Generate → select repo & read:org → copy.";
+    case 'google':
+      return "In Chrome: sign in with your Google account and confirm access.";
+    case 'gemini':
+      return "In Chrome: aistudio.google.com → Get API key → copy it.";
+    default:
+      return `Follow the instructions in Chrome for ${step.label}.`;
+  }
+}
+
+// RF-09: dispara vault_init activamente al entrar a screen 4, en vez de
+// dejar la pantalla puramente pasiva esperando un evento que Cortex podía
+// o no decidir emitir. Sigue el mismo patrón de kickoffIdentityStep():
+// navigate() (canal principal) + poll de fallback (por si el push no llega).
+//
+// SUPUESTO A VERIFICAR: se asume que onboarding-handlers.js expone el step
+// 'vault_init' en window.onboarding.navigate() igual que expone
+// 'github_auth' / 'google_auth' / 'ai_provider_setup'. No tenemos ese
+// archivo (ni workspace-synapse-handlers.js) en este set de fixes — si el
+// contrato real es otro (otro nombre de step, otro método IPC), este
+// bloque necesita el nombre correcto antes de mergear.
+async function runVaultInit() {
+  if (_vaultInitTriggered) return;          // ya disparado en esta sesión
+  if (activeAccounts.has('vault_init')) return; // ya confirmado (ej: resume)
+  _vaultInitTriggered = true;
+
+  const btn = document.getElementById('btn-continue-vault');
+  if (btn) {
+    btn.textContent = 'Inicializando vault…';
+    btn.disabled    = true;
+    btn.onclick     = null;
+  }
+
+  showCortex('Setting up vault…');
+  log('info', 'IPC → onboarding:navigate — step: vault_init');
+
+  const navResult = await window.onboarding.navigate({ step: 'vault_init', email: userEmail });
+  log(navResult.success ? 'info' : 'warn',
+      `IPC ← onboarding:navigate (vault_init) — success: ${navResult.success}`);
+
+  if (!navResult.success) {
+    log('warn', 'navigate(vault_init) falló — dejando el poll fallback como único camino');
+  }
+
+  const pollStatus = document.getElementById('vault-poll-status');
+  if (pollStatus) pollStatus.style.display = 'flex';
+
+  // Timeout de 3 minutos — mismo criterio que identity: avisar, no bloquear.
+  const vaultTimeoutId = setTimeout(() => {
+    if (activeAccounts.has('vault_init')) return;
+    showCortex('Vault is taking longer than expected…');
+  }, 3 * 60 * 1000);
+
+  _vaultPollFallbackTimer = setInterval(async () => {
+    if (activeAccounts.has('vault_init')) {
+      _clearVaultPollFallback(vaultTimeoutId);
+      return;
+    }
+
+    const pollResult = await window.onboarding.pollIdentity();
+    if (!pollResult.success) return;
+
+    if (pollResult.steps?.vault_init) {
+      log('info', 'poll fallback: vault_init confirmado vía pollIdentity');
+      handleMilestoneReached('vault_init', {});
+    }
+  }, 3000);
+}
+
+function _clearVaultPollFallback(vaultTimeoutId) {
+  if (_vaultPollFallbackTimer) {
+    clearInterval(_vaultPollFallbackTimer);
+    _vaultPollFallbackTimer = null;
+    log('info', 'vault poll fallback timer limpiado');
+  }
+  if (vaultTimeoutId) clearTimeout(vaultTimeoutId);
 }
 
 function _clearPollFallback() {
@@ -550,18 +866,93 @@ function _clearPollFallback() {
   }
 }
 
-function checkIdentityReady() {
-  const allDone = REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a));
-  if (!allDone) return;
+// Reacciona a la confirmación de un sub-step: si el sub-step confirmado es
+// el que está actualmente activo en el wizard, habilita el botón "Continue"
+// con el texto correspondiente (buttonText).
+//
+// RF-08: el destino del click ya no es "el siguiente índice del array salvo
+// que sea el último" — es el orden real de dependencias del registry:
+//   - github  → Vault (screen 4). vault_init requiere github_token, así que
+//     el wizard SE INTERRUMPE acá; no sigue directo a Google. El botón de
+//     screen-vault retoma el wizard en 'google' una vez que vault_init se
+//     confirma (ver _onMilestoneVaultInit()).
+//   - google  → sigue al siguiente sub-step del array (gemini) como antes.
+//   - gemini (último sub-step) → Project (screen 5), no Vault — el vault ya
+//     se hizo entre github y google.
+function advanceIdentityWizard() {
+  const current = IDENTITY_STEPS[identityStepIndex];
+  if (!current) return;
 
-  log('info', 'github confirmed — identity ready');
-  setStepperEstablished('identity');
-  showCortex("GitHub connected. Setting up vault…");
+  // Si el sub-step confirmado no es el activo (ej: llegó fuera de orden,
+  // o vía push mientras el usuario todavía no arrancó ese sub-step),
+  // no tocamos el botón — cuando el wizard llegue a ese sub-step,
+  // activeAccounts ya lo va a tener marcado y avanzará inmediatamente.
+  if (!activeAccounts.has(current.id)) return;
+
+  log('info', `identity wizard — sub-step "${current.id}" listo`);
+  showCortex(`${current.label} connected.`);
+  _refreshAccountIconStates();
 
   const btn = document.getElementById('btn-continue-identity');
-  btn.textContent = 'Continue';
+  if (!btn) return;
+
+  const isLastStep = identityStepIndex === IDENTITY_STEPS.length - 1;
+
+  btn.textContent = current.buttonText;
   btn.disabled    = false;
-  btn.onclick     = () => goTo(4);
+
+  if (current.id === 'github') {
+    btn.onclick = () => {
+      log('info', 'identity wizard — GitHub confirmado, yendo a Vault antes de Google/Gemini');
+      showCortex("GitHub connected. Setting up vault…");
+      goTo(4);
+    };
+  } else if (isLastStep) {
+    btn.onclick = () => {
+      log('info', 'identity wizard completo — GitHub + Vault + Google + Gemini confirmados');
+      setStepperEstablished('identity');
+      showCortex("Identity complete. Setting up project…");
+      goTo(5);
+    };
+  } else {
+    btn.onclick = advanceToNextIdentityStep;
+  }
+}
+
+// Wire #btn-continue-identity to RESUME the sub-step currently pointed at by
+// identityStepIndex (used only from resumeOnboarding(), when that sub-step
+// has NOT been confirmed yet — otherwise advanceIdentityWizard() applies).
+// Clicking the button kicks off Discovery/navigate for that exact sub-step
+// without touching identityStepIndex, so progress from a previous session
+// isn't lost. Mirrors the text/disable pattern used in
+// handleIdentityBtn()/advanceToNextIdentityStep(), just without resetting
+// the index to 0.
+function _wireIdentityButtonToResumeStep() {
+  const step = IDENTITY_STEPS[identityStepIndex];
+  const btn = document.getElementById('btn-continue-identity');
+  if (!step || !btn) return;
+
+  // RF-01/RF-02/RF-04: un resume a mitad de camino debe mostrar el
+  // título/instrucciones/íconos del sub-step que se está retomando, no los
+  // de GitHub por default.
+  _renderIdentityScreenCopy(step);
+  _refreshAccountIconStates();
+
+  // step.buttonText describe a dónde lleva COMPLETAR este sub-step — no es
+  // el label correcto para arrancarlo. step.startLabel es el campo pensado
+  // para esto (ver definición de IDENTITY_STEPS).
+  const label = step.startLabel;
+
+  btn.textContent = label;
+  btn.disabled    = false;
+  btn.onclick = () => {
+    log('info', `identity wizard — retomando sub-step "${step.id}" desde resume`);
+    btn.textContent = `Esperando ${step.label}…`;
+    btn.disabled    = true;
+    btn.onclick     = null;
+    currentInfoStep = step.infoStep;
+    kickoffIdentityStep();
+  };
 }
 
 // ── SCREEN 1 — Workspace (nucleus_create) ─────────────────────────────────
@@ -1068,12 +1459,15 @@ function switchTab(name) {
 const RESUME_STEP_SCREEN = {
   nucleus_create: 3,   // → identity (github_auth)
   github_auth:    4,   // → vault confirmation
-  vault_init:     5,   // → project selection
+  vault_init:     3,   // → identity — retomar el sub-wizard en 'google' (RF-08)
   project_create: 6,   // → milestone
 };
 
 // Orden canónico de steps — de más avanzado a menos avanzado.
-// Usado para encontrar el step más alto completado.
+// NOTA: ya no se usa para calcular targetScreen (ver el bloque "4. Calcular
+// pantalla de destino" en resumeOnboarding — ahora tiene lógica explícita
+// para el sub-wizard de identity). Se deja por si algún otro código externo
+// la referencia; si no es el caso, se puede eliminar con seguridad.
 const RESUME_STEP_ORDER = ['project_create', 'vault_init', 'github_auth', 'nucleus_create'];
 
 /**
@@ -1162,26 +1556,39 @@ async function resumeOnboarding() {
     }
   }
 
-  // ── 2. Restaurar github_auth (identity) ────────────────────────────────
-  if (completedSteps.includes('github_auth')) {
-    activeAccounts.add('github');
-    document.getElementById('acc-github')?.classList.add('active');
+  // ── 2. Restaurar sub-wizard de identity (github → google → gemini) ────
+  // Recorremos IDENTITY_STEPS en orden y marcamos como activo cada sub-step
+  // cuyo stepId aparece en completedSteps. identityStepIndex queda apuntando
+  // al primer sub-step NO completado (o al último si los 3 lo están),
+  // exactamente lo que kickoffIdentityStep()/advanceIdentityWizard() esperan.
+  let anyIdentityStepRestored = false;
+  let lastRestoredIdentityStep = null; // RF-03: para armar el mensaje de poll dinámico
+  for (let i = 0; i < IDENTITY_STEPS.length; i++) {
+    const step = IDENTITY_STEPS[i];
+    if (!completedSteps.includes(step.key)) {
+      identityStepIndex = i;
+      break;
+    }
 
-    // Estado del poll indicator
+    anyIdentityStepRestored = true;
+    lastRestoredIdentityStep = step;
+    identityStepIndex = i;
+    activeAccounts.add(step.id);
+    document.getElementById(`acc-${step.id}`)?.classList.add('active');
+    log('info', `resumeOnboarding: ${step.key} restaurado — sub-step "${step.id}" activo`);
+  }
+  _refreshAccountIconStates();
+
+  if (anyIdentityStepRestored) {
+    // RF-03: el mensaje refleja la CUENTA restaurada, no un string genérico
+    // ("✓ Token detectado" no significa nada si lo que se restauró fue Google
+    // o Gemini). Mismo criterio que _completeIdentitySubstep() en el flujo en vivo.
     const pollLabel  = document.getElementById('identity-poll-label');
     const pollStatus = document.getElementById('identity-poll-status');
-    if (pollLabel)  pollLabel.textContent = '✓ Token detectado';
+    if (pollLabel)  pollLabel.textContent = `✓ ${lastRestoredIdentityStep.label} confirmado`;
     if (pollStatus) {
       pollStatus.style.display = 'flex';
       pollStatus.classList.add('confirmed');
-    }
-
-    // Botón de identity en estado "Continue" ya que GitHub está confirmado
-    const identityBtn = document.getElementById('btn-continue-identity');
-    if (identityBtn) {
-      identityBtn.textContent = 'Continue';
-      identityBtn.disabled    = false;
-      identityBtn.onclick     = () => goTo(4);
     }
 
     // Restaurar username/org en el vault screen si los tenemos
@@ -1196,7 +1603,28 @@ async function resumeOnboarding() {
       if (vaultOrg) vaultOrg.textContent = ws.githubOrg;
     }
 
-    log('info', `resumeOnboarding: github_auth restaurado — @${ws.githubUsername || '?'}`);
+    // Dejar el botón listo para el estado correcto: si todos los sub-steps
+    // están confirmados, "Continue to Projects" (RF-08: vault ya pasó entre
+    // github y google, no queda pendiente); si no, hay que dejarlo listo
+    // para RETOMAR el sub-step actualmente activo (identityStepIndex), que
+    // todavía NO está confirmado — por eso NO podemos usar advanceIdentityWizard()
+    // acá: esa función sólo actúa si activeAccounts.has(current.id), y en un
+    // resume a mitad de camino el sub-step actual, por definición, todavía no
+    // fue confirmado. Sin este branch, el botón queda con el onclick default
+    // (handleIdentityBtn), que resetea identityStepIndex a 0 y relanza Discovery
+    // desde GitHub, perdiendo el progreso ya hecho.
+    const allIdentityDone = REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a));
+    const identityBtn = document.getElementById('btn-continue-identity');
+    if (identityBtn && allIdentityDone) {
+      const lastStep = IDENTITY_STEPS[IDENTITY_STEPS.length - 1];
+      identityBtn.textContent = lastStep.buttonText;
+      identityBtn.disabled    = false;
+      identityBtn.onclick     = () => goTo(5);
+    } else if (identityBtn) {
+      _wireIdentityButtonToResumeStep();
+    }
+
+    log('info', `resumeOnboarding: identity wizard restaurado — identityStepIndex=${identityStepIndex}`);
   }
 
   // ── 3. Marcar stepper nodes como established ───────────────────────────
@@ -1214,15 +1642,51 @@ async function resumeOnboarding() {
   }
   for (const nodeName of toEstablish) setStepperEstablished(nodeName);
 
-  // ── 4. Calcular pantalla de destino ────────────────────────────────────
-  // Recorrer de más avanzado a menos para encontrar el primer step completo.
-  let targetScreen = 1; // default: workspace (primer step real)
-  for (const stepId of RESUME_STEP_ORDER) {
-    if (completedSteps.includes(stepId)) {
-      targetScreen = RESUME_STEP_SCREEN[stepId];
-      log('info', `resumeOnboarding: step más avanzado="${stepId}" → screen ${targetScreen}`);
-      break;
+  // ── 3.5 Restaurar vault_init ─────────────────────────────────────────────
+  // RF-07/RF-08: vault_init ahora es un step intermedio (github → vault →
+  // google → gemini), no algo que sólo importa "después de identity". Si ya
+  // está confirmado, reflejarlo en activeAccounts (lo que usa runVaultInit()
+  // para no re-disparar) y dejar el botón de screen-vault ya habilitado por
+  // si el usuario vuelve a esa pantalla manualmente.
+  if (completedSteps.includes('vault_init')) {
+    activeAccounts.add('vault_init');
+    const vaultBtn = document.getElementById('btn-continue-vault');
+    if (vaultBtn) {
+      vaultBtn.textContent = 'Continuar →';
+      vaultBtn.disabled    = false;
+      vaultBtn.onclick     = () => { goTo(3); advanceToNextIdentityStep(); };
     }
+    log('info', 'resumeOnboarding: vault_init restaurado — activeAccounts + botón de vault habilitados');
+  }
+
+  // ── 4. Calcular pantalla de destino ────────────────────────────────────
+  // RF-08: el orden real es github → vault → google → gemini → project, así
+  // que el destino no puede depender solo de "¿identity terminó?" — hay que
+  // distinguir explícitamente si vault_init ya pasó o todavía falta.
+  const identityKeys      = IDENTITY_STEPS.map(s => s.key);
+  const allIdentityDone   = identityKeys.every(k => completedSteps.includes(k));
+  const anyIdentityDone   = identityKeys.some(k => completedSteps.includes(k));
+
+  let targetScreen = 1; // default: workspace (primer step real)
+  if (completedSteps.includes('project_create')) {
+    targetScreen = RESUME_STEP_SCREEN.project_create; // 6 — milestone
+    log('info', `resumeOnboarding: step más avanzado="project_create" → screen ${targetScreen}`);
+  } else if (allIdentityDone) {
+    // github + vault + google + gemini, todos confirmados → Project.
+    targetScreen = 5;
+    log('info', `resumeOnboarding: identity + vault completos → screen ${targetScreen}`);
+  } else if (completedSteps.includes('vault_init')) {
+    // Vault listo, retomando google/gemini.
+    targetScreen = RESUME_STEP_SCREEN.vault_init; // 3 — identity
+    log('info', `resumeOnboarding: vault_init completo, identity incompleto → screen ${targetScreen}`);
+  } else if (completedSteps.includes('github_auth')) {
+    // GitHub confirmado pero vault todavía no — la pantalla de vault
+    // dispara runVaultInit() sola al entrar (goTo(4) → RF-09).
+    targetScreen = RESUME_STEP_SCREEN.github_auth; // 4 — vault
+    log('info', `resumeOnboarding: github_auth completo, vault_init pendiente → screen ${targetScreen}`);
+  } else if (anyIdentityDone || completedSteps.includes('nucleus_create')) {
+    targetScreen = 3; // identity — retomar el sub-wizard donde quedó
+    log('info', `resumeOnboarding: identity wizard incompleto o recién arrancado → screen ${targetScreen}`);
   }
 
   if (completedSteps.length > 0) {
@@ -1248,6 +1712,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // sin estado (ni active ni established) — necesario para que el estilo CSS
   // y la navegación libre del stepper sean consistentes desde el primer render.
   refreshStepperPendingStates();
+
+  // RF-02/RF-04: mismo criterio para los íconos de cuenta — sin esto, Google
+  // y Gemini se ven clickeables/sin atenuar desde el primer render aunque
+  // el wizard todavía ni arrancó.
+  _refreshAccountIconStates();
 
   // ── Workspace screen (Step 1) handlers ────────────────────────────────────
   const wsPathInput = document.getElementById('ws-path-input');

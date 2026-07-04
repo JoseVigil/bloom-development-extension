@@ -9,6 +9,70 @@
 //   5. Listener onboarding_navigate para resume remoto desde Nucleus
 // ============================================================================
 
+// ============================================================================
+// STEP SEQUENCE — fuente de verdad única para numeración de pasos
+// Reemplaza los badges "Step X of Y" hardcodeados en cada screen del HTML.
+// Solo lista milestones VISIBLES para el usuario — los pasos host-driven sin
+// UI propia (nucleus_create, project_create) no ocupan un lugar acá: no
+// mueven el contador porque el usuario nunca los ve.
+//
+// Varias pantallas pueden pertenecer al mismo step (ej: github-login,
+// github-confirm y github-stored son todas sub-estados de "github_auth").
+// El badge muestra el MISMO "Paso N de TOTAL" para todas ellas — no fingimos
+// granularidad fina que el usuario no puede verificar.
+// ============================================================================
+const STEP_SEQUENCE = [
+  { id: 'github_auth',       label: 'GitHub' },
+  { id: 'vault_init',        label: 'Vault' },
+  { id: 'google_auth',       label: 'Google' },
+  { id: 'ai_provider_setup', label: 'Gemini API' },
+  { id: 'success',           label: 'Listo' }
+];
+
+// screenName (el sufijo usado en id="screen-<screenName>") → stepId en STEP_SEQUENCE.
+// 'secondary' = pantalla fuera del chain principal (ej: agregar otro provider
+// después de terminar el onboarding) — no tiene número global, se lo deja como
+// vino en el HTML (data-step-id="secondary" en index.html).
+const SCREEN_STEP_MAP = {
+  'github-login':        'github_auth',
+  'github-confirm':      'github_auth',
+  'github-stored':       'github_auth',
+  'vault-created':       'vault_init',
+  'google-auth-login':   'google_auth',
+  'google-auth-confirm': 'google_auth',
+  'api-waiting':         'ai_provider_setup',
+  'api-success':         'ai_provider_setup',
+  'onboarding-success':  'success'
+};
+
+/**
+ * syncStepUI(screenName)
+ * Busca los elementos #progress-fill--<screenName> y #step-indicator--<screenName>
+ * en la pantalla activa y los completa con el número/porcentaje real, calculado
+ * contra STEP_SEQUENCE. No hace nada si la pantalla no participa del chain
+ * principal (no está en SCREEN_STEP_MAP) — evita reventar en pantallas legacy
+ * o en la grilla de "agregar otro provider".
+ */
+function syncStepUI(screenName) {
+  const stepId = SCREEN_STEP_MAP[screenName];
+  if (!stepId) return;
+
+  const index = STEP_SEQUENCE.findIndex(s => s.id === stepId);
+  if (index === -1) return;
+
+  const total = STEP_SEQUENCE.length;
+  const humanStep = index + 1;
+  const pct = Math.round((humanStep / total) * 100);
+
+  const fillEl = document.getElementById(`progress-fill--${screenName}`);
+  const badgeEl = document.getElementById(`step-indicator--${screenName}`);
+
+  if (fillEl) fillEl.style.width = `${pct}%`;
+  if (badgeEl) badgeEl.textContent = `Step ${humanStep} of ${total}`;
+
+  console.log(`[StepUI] ${screenName} → step ${humanStep}/${total} (${stepId}, ${pct}%)`);
+}
+
 class DiscoveryFlow {
   constructor() {
     this.protocol = window.PROTOCOL;
@@ -60,12 +124,28 @@ class DiscoveryFlow {
     this.displayProfileAlias();
 
     this.protocol.init();
-    
-    // Stage 1: Initializing
-    this.showStage(0);
-    await this.delay(800);
-    this.completeCurrentStage();
-    
+
+    // ── HANDSHAKE GATE ──────────────────────────────────────────────────────
+    // El handshake animado (5 stages) solo tiene sentido la PRIMERA vez que el
+    // usuario abre la registración — es lo que le muestra que el sistema está
+    // vivo. En pasos posteriores (google_auth, ai_provider_setup, etc.) esta
+    // misma página puede volver a cargar — ver openDiscoveryTab() en
+    // background.js — y antes replayaba las 5 fases cada vez, generando el
+    // "espamento" reportado. Se gatea por launch_id en storage porque es lo
+    // único que sobrevive a un reload de la tab.
+    const { synapse_handshake_seen } = await chrome.storage.local.get('synapse_handshake_seen');
+    const currentLaunchId = self.SYNAPSE_CONFIG?.launchId || null;
+    this.skipHandshakeAnimation = !!currentLaunchId && synapse_handshake_seen?.launch_id === currentLaunchId;
+
+    if (this.skipHandshakeAnimation) {
+      console.log('[Discovery] Handshake ya visto para este launch_id — modo silencioso');
+    } else {
+      // Stage 1: Initializing
+      this.showStage(0);
+      await this.delay(800);
+      this.completeCurrentStage();
+    }
+
     this.protocol.executePhase('initialization', { validator: this });
 
     if (!this.extensionId) {
@@ -77,8 +157,10 @@ class DiscoveryFlow {
     }
 
     // Stage 2: Searching
-    this.showStage(1);
-    await this.delay(600);
+    if (!this.skipHandshakeAnimation) {
+      this.showStage(1);
+      await this.delay(600);
+    }
 
     this.setupStorageListener();
 
@@ -181,6 +263,14 @@ class DiscoveryFlow {
   }
 
   setupStorageListener() {
+    // Comando manual de QA/demo — corre la animación de handshake una vez,
+    // sin afectar synapse_handshake_seen ni el estado real de conexión.
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.event === 'TEST_HANDSHAKE_ANIMATION') {
+        this.replayHandshakeAnimationForTesting();
+      }
+    });
+
     if (!chrome?.storage?.onChanged) {
       console.error('[Discovery] Chrome storage API not available');
       return;
@@ -276,26 +366,43 @@ class DiscoveryFlow {
     if (this.config.debugMode) {
       console.log('[Discovery] ✓ SYSTEM_READY received:', payload);
     }
-    
-    // Complete searching stage
-    this.completeCurrentStage();
-    await this.delay(400);
-    
-    // Stage 3: Handshake
-    this.showStage(2);
-    await this.delay(800);
-    this.completeCurrentStage();
-    
-    // Stage 4: Heartbeat
-    this.showStage(3);
-    await this.delay(700);
-    this.completeCurrentStage();
-    
-    // Stage 5: Ready
-    this.showStage(4);
-    await this.delay(600);
-    this.completeCurrentStage();
-    
+
+    if (!this.skipHandshakeAnimation) {
+      // Complete searching stage
+      this.completeCurrentStage();
+      await this.delay(400);
+
+      // Stage 3: Handshake
+      this.showStage(2);
+      await this.delay(800);
+      this.completeCurrentStage();
+
+      // Stage 4: Heartbeat
+      this.showStage(3);
+      await this.delay(700);
+      this.completeCurrentStage();
+
+      // Stage 5: Ready
+      this.showStage(4);
+      await this.delay(600);
+      this.completeCurrentStage();
+
+      // Handshake completo y visto por el usuario — persistir para que, si esta
+      // tab se recarga más adelante en el mismo launch (ver openDiscoveryTab en
+      // background.js), no se vuelva a animar. Ver comando TEST_HANDSHAKE_ANIMATION
+      // para poder re-disparar la animación manualmente sin tocar este flag.
+      const launchId = self.SYNAPSE_CONFIG?.launchId || null;
+      if (launchId) {
+        try {
+          await chrome.storage.local.set({
+            synapse_handshake_seen: { launch_id: launchId, timestamp: Date.now() }
+          });
+        } catch (e) {
+          console.warn('[Discovery] No se pudo persistir synapse_handshake_seen:', e);
+        }
+      }
+    }
+
     // Si es modo heartbeat, enviar evento y preparar cierre
     if (this.heartbeatMode && !this.requiresRegistration) {
       console.log('[Discovery] Heartbeat mode detected - sending HEARTBEAT_SUCCESS');
@@ -409,7 +516,12 @@ class DiscoveryFlow {
         }
         break;
       case 'google_auth':
-        this.showScreen('google-login');
+        console.log('[Discovery] Routing to google_auth flow (passive discovery)');
+        this.showScreen('google-auth-login');
+        if (!window.GOOGLE_FLOW) {
+          window.GOOGLE_FLOW = new GoogleAuthFlow(this);
+          window.GOOGLE_FLOW.init();
+        }
         break;
       case 'nucleus_create':
         console.log('[Discovery] nucleus_create — paso gestionado por host, esperando siguiente step');
@@ -421,8 +533,18 @@ class DiscoveryFlow {
         this._populateVaultReceipt();
         break;
       case 'ai_provider_setup':
-        console.log('[Discovery] Routing to ai_provider_setup flow');
-        this.showScreen('provider-select');
+        // En este chain el proveedor ya está decidido (Gemini) — mostrar la
+        // grilla de 4 opciones acá sería preguntarle al usuario algo que el
+        // flujo ya resolvió. La grilla (screen-provider-select) queda para el
+        // flujo secundario "Agregar otra key" post-éxito, donde el usuario sí
+        // elige a propósito.
+        console.log('[Discovery] Routing to ai_provider_setup flow — Gemini directo');
+        if (window.ONBOARDING?.selectProvider) {
+          window.ONBOARDING.selectProvider('gemini');
+        } else {
+          console.warn('[Discovery] window.ONBOARDING.selectProvider no disponible aún — fallback a grilla');
+          this.showScreen('provider-select');
+        }
         break;
       case 'project_create':
         console.log('[Discovery] project_create — paso gestionado por host, esperando siguiente step');
@@ -443,6 +565,9 @@ class DiscoveryFlow {
 
     switch (service) {
       case 'google':
+        // Bloom intro screen → OnboardingFlow.startOnboarding() lleva a
+        // google-auth-login, la misma pantalla pasiva que usa el chain
+        // host-driven. Una sola implementación de Google auth, no dos.
         console.log('[Discovery] Routing to Google flow');
         this.showScreen('onboarding-welcome');
         break;
@@ -584,10 +709,40 @@ class DiscoveryFlow {
     
     if (screen) {
       screen.classList.add('active');
+      syncStepUI(screenName);
       console.log('[Discovery] Screen activated:', screenName);
     } else {
       console.error('[Discovery] Screen NOT FOUND:', `screen-${screenName}`);
     }
+  }
+
+  // ============================================================================
+  // TEST HOOK — replay cosmético del handshake, para QA/demo
+  // No toca synapse_handshake_seen ni el estado real de conexión: es puramente
+  // visual, para poder mostrar/probar la animación sin afectar el gate de
+  // producción (que solo debe correr una vez por launch_id).
+  // ============================================================================
+  async replayHandshakeAnimationForTesting() {
+    console.log('[Discovery] TEST_HANDSHAKE_ANIMATION — replay cosmético iniciado');
+    for (let i = 0; i < this.stages.length; i++) {
+      this.stages[i].completed = false;
+    }
+    this.showStage(0);
+    await this.delay(500);
+    this.completeCurrentStage();
+    this.showStage(1);
+    await this.delay(500);
+    this.completeCurrentStage();
+    this.showStage(2);
+    await this.delay(500);
+    this.completeCurrentStage();
+    this.showStage(3);
+    await this.delay(500);
+    this.completeCurrentStage();
+    this.showStage(4);
+    await this.delay(500);
+    this.completeCurrentStage();
+    console.log('[Discovery] TEST_HANDSHAKE_ANIMATION — replay completo');
   }
 
   // ============================================================================
@@ -767,18 +922,13 @@ class OnboardingFlow {
 
   setupButtons() {
     const btnStart = document.getElementById('btn-start-onboarding');
-    const btnGoogleLogin = document.getElementById('btn-google-login');
-    const btnAIStudio = document.getElementById('btn-open-aistudio');
-
     if (btnStart) {
       btnStart.addEventListener('click', () => this.startOnboarding());
     }
-    if (btnGoogleLogin) {
-      btnGoogleLogin.addEventListener('click', () => this.openGoogleLogin());
-    }
-    if (btnAIStudio) {
-      btnAIStudio.addEventListener('click', () => this.openAIStudio());
-    }
+    // Los botones de la vieja pantalla google-login/gemini-api standalone
+    // (btn-google-login, btn-open-aistudio) ya no existen en el HTML — la
+    // pantalla real es google-auth-login/confirm, manejada por GoogleAuthFlow,
+    // y api-waiting/api-success, manejada por MultiProviderOnboarding.
   }
 
   async loadUserEmail() {
@@ -832,29 +982,16 @@ class OnboardingFlow {
     });
   }
 
+  // NOTA: la vieja pareja checkResume()/syncWithState() esperaba que algo
+  // escribiera onboarding_state.googleEmail / .geminiKeyValidated en storage,
+  // pero nada en background.js ni en discovery.js escribía esos campos —
+  // era código muerto que nunca se disparaba. El resume real ya lo cubre
+  // DiscoveryFlow: lee stepCurrent de synapseConfig al cargar y rutea con
+  // routeToStep(), que es lo mismo que usa la navegación en caliente desde
+  // el host (onboarding_navigate). No hace falta un segundo mecanismo de
+  // resume en paralelo — se eliminó para no tener dos fuentes de verdad.
   async checkResume() {
-    const result = await chrome.storage.local.get('onboarding_state');
-    const state = result.onboarding_state;
-
-    if (!state || !state.active) return;
-
-    if (state.googleEmail && !state.geminiKeyValidated) {
-      this.googleEmail = state.googleEmail;
-      this.showScreen('gemini-api');
-    } else if (state.geminiKeyValidated) {
-      this.showScreen('onboarding-success');
-    }
-  }
-
-  syncWithState(state) {
-    if (state.googleEmail && !this.googleEmail) {
-      this.googleEmail = state.googleEmail;
-      this.showScreen('gemini-api');
-    }
-    
-    if (state.geminiKeyValidated && !this.apiKeyValidated) {
-      this.handleApiKeyValidated();
-    }
+    console.log('[Onboarding] checkResume() — resume real delegado a DiscoveryFlow.stepCurrent');
   }
 
   showScreen(screenName) {
@@ -862,80 +999,26 @@ class OnboardingFlow {
     const screen = document.getElementById(`screen-${screenName}`);
     if (screen) {
       screen.classList.add('active');
+      syncStepUI(screenName);
       this.currentStep = screenName;
     }
   }
 
+  // Entrada del flujo standalone (routeToServiceFlow('google'), sin step
+  // dirigido por el host). Va directo a la MISMA pantalla pasiva de Google
+  // que usa el chain host-driven — una sola implementación, dos entradas.
   startOnboarding() {
     console.log('[Onboarding] startOnboarding() called');
-    
+
     chrome.runtime.sendMessage({
       event: 'onboarding_started'
     });
-    
-    this.showScreen('google-login');
-  }
 
-  openGoogleLogin() {
-    const email = this.userEmail || '';
-
-    const loginUrl = email
-      ? `https://accounts.google.com/ServiceLogin?Email=${encodeURIComponent(email)}&continue=https://myaccount.google.com/`
-      : 'https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/';
-
-    chrome.tabs.create({ url: loginUrl });
-    this.showScreen('google-waiting');
-
-    chrome.storage.local.set({
-      onboarding_state: {
-        active: true,
-        currentStep: 'google_login_waiting',
-        startedAt: Date.now()
-      }
-    });
-  }
-
-  openAIStudio() {
-    chrome.tabs.create({ 
-      url: 'https://aistudio.google.com/app/apikey' 
-    });
-    
-    this.showScreen('gemini-waiting');
-
-    chrome.storage.local.get('onboarding_state', (result) => {
-      const state = result.onboarding_state || {};
-      chrome.storage.local.set({
-        onboarding_state: {
-          ...state,
-          currentStep: 'gemini_api_waiting'
-        }
-      });
-    });
-  }
-
-  handleApiKeyValidated() {
-    this.apiKeyValidated = true;
-    
-    const emailEl = document.getElementById('final-email');
-    if (emailEl) {
-      emailEl.textContent = this.googleEmail || '-';
+    this.showScreen('google-auth-login');
+    if (!window.GOOGLE_FLOW) {
+      window.GOOGLE_FLOW = new GoogleAuthFlow(window.BLOOM_VALIDATOR);
+      window.GOOGLE_FLOW.init();
     }
-    
-    this.showScreen('onboarding-success');
-
-    setTimeout(() => {
-      chrome.runtime.sendMessage({
-        event: 'onboarding_complete',
-        payload: {
-          email: this.googleEmail,
-          api_key_validated: true
-        }
-      });
-
-      setTimeout(() => {
-        window.close();
-      }, 3000);
-    }, 2000);
   }
 }
 
@@ -1146,6 +1229,134 @@ class GithubAuthFlow {
     if (elPreview) elPreview.textContent = token.substring(0, 4) + '****';
 
     console.log('[GithubAuthFlow] github_auth step complete. Fingerprint:', fingerprint);
+  }
+}
+
+// ============================================================================
+// GOOGLE AUTH FLOW — Discovery de Registro/Login en Google
+// PASIVO: la extensión no interactúa con el DOM de accounts.google.com, no
+// hace clics, no lee campos. Solo observa a qué host TERMINA llegando la
+// pestaña que el propio usuario abrió (chrome.tabs.onUpdated en background.js,
+// scoped al tabId), excluyendo pantallas intermedias del propio login
+// (/speedbump, /oauth2, /ServiceLogin, /signin/). El usuario hace todo a mano.
+//
+// Maneja las pantallas google-auth-login (instrucción + apertura) y
+// google-auth-confirm (recibo de lo detectado, mismo patrón que GithubAuthFlow).
+// ============================================================================
+
+class GoogleAuthFlow {
+  constructor(discovery) {
+    this.discovery = discovery;
+    this._loginConfirmed = false;
+    this._watchedTabId = null;
+  }
+
+  init() {
+    console.log('[GoogleAuthFlow] init()');
+
+    const btnOpen = document.getElementById('btn-open-google-login');
+    if (btnOpen) {
+      btnOpen.addEventListener('click', () => this._openGoogleLogin());
+    }
+
+    const btnConfirm = document.getElementById('btn-confirm-google-login');
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', () => this._confirmLogin());
+    }
+
+    const btnReject = document.getElementById('btn-reject-google-login');
+    if (btnReject) {
+      btnReject.addEventListener('click', () => {
+        this._loginConfirmed = false;
+        this.discovery.showScreen('google-auth-login');
+        this._openGoogleLogin();
+      });
+    }
+
+    // Evento pasivo emitido por background.js cuando la tab observada llega
+    // a un host terminal (myaccount.google.com, mail.google.com), excluyendo
+    // las pantallas intermedias del propio flujo de login de Google.
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.event === 'GOOGLE_LOGIN_DETECTED' && msg.tabId === this._watchedTabId) {
+        this._handleLoginDetected(msg);
+      }
+    });
+  }
+
+  async _openGoogleLogin() {
+    const email = self.SYNAPSE_CONFIG?.email || null;
+    const loginUrl = email
+      ? `https://accounts.google.com/ServiceLogin?Email=${encodeURIComponent(email)}&continue=https://myaccount.google.com/`
+      : 'https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/';
+
+    const tab = await chrome.tabs.create({ url: loginUrl });
+    this._watchedTabId = tab.id;
+
+    // AWAITING_HUMAN_AUTH — le pide a background.js que arme un watcher
+    // pasivo (chrome.tabs.onUpdated) scoped a este tabId. background.js NO
+    // lee nada de la página; solo compara el hostname/path contra la lista
+    // de hosts terminales vs. intermedios.
+    chrome.runtime.sendMessage({
+      event: 'AWAITING_HUMAN_AUTH',
+      service: 'google',
+      tabId: tab.id,
+      profile_id: self.SYNAPSE_CONFIG?.profileId,
+      launch_id: self.SYNAPSE_CONFIG?.launchId,
+      timestamp: Date.now()
+    });
+
+    this._showWaitingState();
+  }
+
+  _showWaitingState() {
+    const waitMsg = document.getElementById('google-waiting-message');
+    if (waitMsg) waitMsg.style.display = 'block';
+    const btnOpen = document.getElementById('btn-open-google-login');
+    if (btnOpen) btnOpen.textContent = '↗ Google abierto — completá el login';
+  }
+
+  _handleLoginDetected(msg) {
+    console.log('[GoogleAuthFlow] GOOGLE_LOGIN_DETECTED — mostrando recibo:', msg.detected_host);
+
+    this.discovery.showScreen('google-auth-confirm');
+
+    const elHost = document.getElementById('google-detected-host');
+    if (elHost) elHost.textContent = msg.detected_host || '—';
+  }
+
+  async _confirmLogin() {
+    if (this._loginConfirmed) return;
+    this._loginConfirmed = true;
+
+    console.log('[GoogleAuthFlow] Login confirmado por el usuario');
+
+    await this.discovery._updateAccountState('google', self.SYNAPSE_CONFIG?.email || null);
+
+    // ACCOUNT_REGISTERED — mismo evento de milestone que usa GitHub, con
+    // service:'google'. No inventamos un evento nuevo por proveedor: el
+    // milestone es genérico, lo que cambia es el campo `service`.
+    chrome.runtime.sendMessage({
+      event:      'ACCOUNT_REGISTERED',
+      service:    'google',
+      username:   self.SYNAPSE_CONFIG?.email || '',
+      profile_id: self.SYNAPSE_CONFIG?.profileId,
+      launch_id:  self.SYNAPSE_CONFIG?.launchId,
+      timestamp:  Date.now()
+    });
+
+    console.log('[GoogleAuthFlow] ACCOUNT_REGISTERED emitido — service: google');
+
+    // Si este flujo corre DENTRO del chain host-driven (stepCurrent seteado),
+    // no avanzamos nosotros — el host manda el siguiente step vía
+    // onboarding_navigate cuando le llegue el ACCOUNT_REGISTERED de arriba.
+    // Si corre standalone (entrada legacy routeToServiceFlow('google'), sin
+    // stepCurrent), avanzamos nosotros mismos a Gemini.
+    if (!this.discovery.stepCurrent) {
+      console.log('[GoogleAuthFlow] Flujo standalone — avanzando a Gemini directamente');
+      if (window.ONBOARDING?.selectProvider) {
+        window.ONBOARDING.selectProvider('gemini');
+      }
+    }
   }
 }
 

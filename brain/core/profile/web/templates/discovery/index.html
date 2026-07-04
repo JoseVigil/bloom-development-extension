@@ -69,9 +69,9 @@
     ═══════════════════════════════════════════ -->
 
     <!-- Provider Selection (Step 2) -->
-    <div id="screen-provider-select" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 40%"></div></div>
-      <div class="step-indicator">Step 2 of 4</div>
+    <div id="screen-provider-select" class="screen" data-step-id="secondary">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--provider-select" style="width: 100%"></div></div>
+      <div class="step-indicator" id="step-indicator--provider-select">Add a provider</div>
       <div class="status-icon">🔑</div>
       <h1>Select AI Provider</h1>
       <p>Choose the AI service to configure for this profile.</p>
@@ -110,9 +110,9 @@
     </div>
 
     <!-- API Key Waiting (Step 3) -->
-    <div id="screen-api-waiting" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
-      <div class="step-indicator">Step 3 of 4</div>
+    <div id="screen-api-waiting" class="screen" data-step-id="ai_provider_setup">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--api-waiting" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--api-waiting">—</div>
       <div class="spinner"></div>
       <h1>Waiting for API Key</h1>
       <p>Create and copy your API key from <strong id="provider-name-display">Gemini</strong>. It will be detected automatically when copied.</p>
@@ -135,8 +135,9 @@
     </div>
 
     <!-- API Key Persistent (Step 4) -->
-    <div id="screen-api-success" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+    <div id="screen-api-success" class="screen" data-step-id="ai_provider_setup">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--api-success" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--api-success">—</div>
       <div class="success-checkmark">✓</div>
       <h1>Key Persistent</h1>
       <p>Your <strong id="success-provider-name">Gemini</strong> key is stored and active.</p>
@@ -158,9 +159,9 @@
     ═══════════════════════════════════════════ -->
 
     <!-- Step 1: Instrucciones + botón de apertura -->
-    <div id="screen-github-login" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 25%"></div></div>
-      <div class="step-indicator">Step 1 of 4</div>
+    <div id="screen-github-login" class="screen" data-step-id="github_auth">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--github-login" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--github-login">—</div>
       <div class="status-icon">🐙</div>
       <h1>Connect GitHub</h1>
       <p>Generate a Personal Access Token to link your GitHub account. The token is detected automatically when copied.</p>
@@ -186,9 +187,9 @@
     </div>
 
     <!-- Step 2: Recibo de confirmación del token detectado -->
-    <div id="screen-github-confirm" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 60%"></div></div>
-      <div class="step-indicator">Step 2 of 4</div>
+    <div id="screen-github-confirm" class="screen" data-step-id="github_auth">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--github-confirm" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--github-confirm">—</div>
       <div class="status-icon">🔍</div>
       <h1>Token Detected</h1>
       <p>Review the token before it is stored. The raw value is never transmitted outside this device.</p>
@@ -208,9 +209,9 @@
     </div>
 
     <!-- Step 3: Confirmación de token guardado -->
-    <div id="screen-github-stored" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
-      <div class="step-indicator">Step 4 of 4</div>
+    <div id="screen-github-stored" class="screen" data-step-id="github_auth">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--github-stored" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--github-stored">—</div>
       <div class="success-checkmark">✓</div>
       <h1>GitHub Connected</h1>
       <p>Your token is stored and encrypted. Profile registration will continue automatically.</p>
@@ -225,9 +226,9 @@
     <!-- ═══════════════════════════════════════════
          VAULT CREATED SCREEN
     ═══════════════════════════════════════════ -->
-    <div id="screen-vault-created" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 75%"></div></div>
-      <div class="step-indicator">Step 3 of 4</div>
+    <div id="screen-vault-created" class="screen" data-step-id="vault_init">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--vault-created" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--vault-created">—</div>
       <div class="status-icon">🔐</div>
       <h1>Key Stored Securely</h1>
       <p>Your token is encrypted in the Chrome shield. Only a fingerprint leaves this device.</p>
@@ -259,49 +260,58 @@
       <button class="btn" id="btn-start-onboarding">Initialize</button>
     </div>
 
-    <div id="screen-google-login" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
-      <div class="step-indicator">Step 2 of 3</div>
+    <!-- ═══════════════════════════════════════════
+         GOOGLE AUTH DISCOVERY (chain: github_auth → vault_init → google_auth → ...)
+         Pasivo: la extensión NO automatiza el login. Solo observa a qué host
+         termina llegando la pestaña que el usuario abrió y opera a mano.
+    ═══════════════════════════════════════════ -->
+
+    <!-- Paso: instrucciones + apertura de Google -->
+    <div id="screen-google-auth-login" class="screen" data-step-id="google_auth">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--google-auth-login" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--google-auth-login">—</div>
       <div class="status-icon">🔐</div>
-      <h1>Google Auth</h1>
-      <p>Sign in with your Google account to continue.</p>
-      <button class="btn" id="btn-google-login">Sign in with Google</button>
-    </div>
+      <h1>Connect Google</h1>
+      <p>Sign in to your Google account. Bloom never touches the Google page — it only watches, passively, when the tab reaches your account.</p>
 
-    <div id="screen-google-waiting" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
-      <div class="step-indicator">Step 2 of 3</div>
-      <div class="spinner"></div>
-      <h1>Waiting for auth</h1>
-      <p>Complete sign-in in the tab that opened. This window will detect it automatically.</p>
-    </div>
-
-    <div id="screen-gemini-api" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
-      <div class="step-indicator">Step 3 of 3</div>
-      <div class="status-icon">🔑</div>
-      <h1>Gemini API Key</h1>
       <div class="info-box">
         <h3>Instructions</h3>
         <ol>
-          <li>Click "Create API Key" in the new tab</li>
-          <li>Copy the generated key</li>
-          <li>This window will detect it automatically</li>
+          <li>Click <strong style="color: var(--color-accent); text-transform: none; font-size: inherit; letter-spacing: 0;">Open Google</strong> — a new tab opens at the sign-in page</li>
+          <li>Log in as you normally would</li>
+          <li>Return here — detection is automatic once you land on your account</li>
         </ol>
       </div>
-      <button class="btn" id="btn-open-aistudio">Open AI Studio</button>
+
+      <div id="google-waiting-message" style="display: none; font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); letter-spacing: 0.10em; text-align: center; margin: var(--space-sm) 0;">
+        Waiting for sign-in — complete it in the Google tab...
+      </div>
+
+      <button class="btn" id="btn-open-google-login">Open Google</button>
     </div>
 
-    <div id="screen-gemini-waiting" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
-      <div class="step-indicator">Step 3 of 3</div>
-      <div class="spinner"></div>
-      <h1>Waiting for key</h1>
-      <p>Create and copy your API key in AI Studio. Detection is automatic.</p>
+    <!-- Paso: recibo de confirmación del login detectado -->
+    <div id="screen-google-auth-confirm" class="screen" data-step-id="google_auth">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--google-auth-confirm" style="width: 0%"></div></div>
+      <div class="step-indicator" id="step-indicator--google-auth-confirm">—</div>
+      <div class="status-icon">🔍</div>
+      <h1>Sign-In Detected</h1>
+      <p>Bloom noticed your Google tab reached an authenticated page. Nothing was read from that page — only the fact that you're signed in.</p>
+
+      <div class="info-box">
+        <p><strong>Detected at</strong> &nbsp; <span id="google-detected-host">—</span></p>
+        <p><strong>Bloom read</strong> &nbsp; nothing — passive detection only</p>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn" id="btn-confirm-google-login">Confirm &amp; Continue</button>
+        <button class="btn-secondary" id="btn-reject-google-login">Try a different account</button>
+      </div>
     </div>
 
-    <div id="screen-onboarding-success" class="screen">
-      <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+    <div id="screen-onboarding-success" class="screen" data-step-id="success">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill--onboarding-success" style="width: 100%"></div></div>
+      <div class="step-indicator" id="step-indicator--onboarding-success">—</div>
       <div class="success-checkmark">✓</div>
       <h1>System Active</h1>
       <p>Profile established. This window will close automatically.</p>

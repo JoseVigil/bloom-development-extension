@@ -317,8 +317,8 @@ bloom-development-extension/
     │   │           ├── harness/
     │   │           │   ├── __init__.py
     │   │           │   ├── harness.js
-    │   │           │   ├── index.html
-    │   │           │   └── harnessProtocol.js
+    │   │           │   ├── harnessProtocol.js
+    │   │           │   └── index.html
     │   │           └── landing/
     │   │               ├── __init__.py
     │   │               ├── data-loader.js

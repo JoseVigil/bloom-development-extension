@@ -187,23 +187,28 @@ BloomNucleus/
 │   ├── onboarding/
 │   │   └── onboarding_steps.json
 │   ├── profile/
-│   │   └── 2133d519-9680-4798-9cfc-a3f07623f21e/
-│   │       ├── com.bloom.synapse.2133d519.json
+│   │   └── 45b704ac-f4db-482f-a9e1-849f4a71b6ae/
+│   │       ├── com.bloom.synapse.45b704ac.json
 │   │       └── ignition_spec.json
 │   ├── profiles.json
 │   └── sentinel/
 │       └── sentinel-config.json
 ├── history/
 │   ├── profiles/
-│   │   └── 2133d519-9680-4798-9cfc-a3f07623f21e/
+│   │   └── 45b704ac-f4db-482f-a9e1-849f4a71b6ae/
 │   │       ├── launches/
-│   │       │   └── 20260701.ndjson
+│   │       │   ├── 20260702.ndjson
+│   │       │   └── 20260703.ndjson
 │   │       └── sessions/
-│   │           ├── 001_2133d519_170055.ndjson
-│   │           ├── 002_2133d519_170335.ndjson
-│   │           └── 003_2133d519_170703.ndjson
+│   │           ├── 001_45b704ac_224247.ndjson
+│   │           ├── 002_45b704ac_224526.ndjson
+│   │           ├── 003_45b704ac_224727.ndjson
+│   │           ├── 004_45b704ac_152502.ndjson
+│   │           ├── 005_45b704ac_195858.ndjson
+│   │           ├── 006_45b704ac_225059.ndjson
+│   │           └── 007_45b704ac_175237.ndjson
 │   └── workers/
-│       ├── capabilities_711826.json
+│       ├── capabilities_1440.json
 │       └── nucleus_worker.pid
 ├── hooks/
 │   ├── post_launch/
@@ -216,13 +221,30 @@ BloomNucleus/
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   └── brain_core_20260701.log
+│   │   │   ├── brain_core_20260701.log
+│   │   │   ├── brain_core_20260702.log
+│   │   │   ├── brain_core_20260702.log.1
+│   │   │   ├── brain_core_20260702.log.2
+│   │   │   ├── brain_core_20260703.log
+│   │   │   └── brain_core_20260704.log
 │   │   ├── profile/
-│   │   │   └── brain_profile_20260701.log
+│   │   │   ├── brain_profile_20260701.log
+│   │   │   ├── brain_profile_20260702.log
+│   │   │   ├── brain_profile_20260703.log
+│   │   │   └── brain_profile_20260704.log
 │   │   ├── server/
 │   │   │   ├── brain_server_20260701.log
+│   │   │   ├── brain_server_20260702.log
+│   │   │   ├── brain_server_20260703.log
+│   │   │   ├── brain_server_20260704.log
 │   │   │   ├── brain_server_event_bus_20260701.log
-│   │   │   └── brain_server_manager_20260701.log
+│   │   │   ├── brain_server_event_bus_20260702.log
+│   │   │   ├── brain_server_event_bus_20260703.log
+│   │   │   ├── brain_server_event_bus_20260704.log
+│   │   │   ├── brain_server_manager_20260701.log
+│   │   │   ├── brain_server_manager_20260702.log
+│   │   │   ├── brain_server_manager_20260703.log
+│   │   │   └── brain_server_manager_20260704.log
 │   │   └── service/
 │   │       ├── brain_service.log
 │   │       └── brain_service_20260701.log
@@ -230,54 +252,96 @@ BloomNucleus/
 │   ├── chromium/
 │   ├── conductor/
 │   │   ├── onboarding/
-│   │   │   └── conductor_onboarding_20260701.log
+│   │   │   ├── conductor_onboarding_20260702.log
+│   │   │   ├── conductor_onboarding_20260703.log
+│   │   │   └── conductor_onboarding_20260704.log
 │   │   └── setup/
-│   │       └── conductor_setup_20260701.log
+│   │       └── conductor_setup_20260702.log
 │   ├── host/
 │   │   ├── nm_init_diag.log
 │   │   └── profiles/
-│   │       └── 2133d519-9680-4798-9cfc-a3f07623f21e/
-│   │           ├── 001_2133d519_170055/
-│   │           │   ├── cortex_extension_20260701.log
-│   │           │   ├── host_20260701.log
-│   │           │   ├── host_boot_001_2133d519_170055.log
-│   │           │   └── nm_init_diag_001_2133d519_170055.log
-│   │           ├── 002_2133d519_170335/
-│   │           │   ├── cortex_extension_20260701.log
-│   │           │   ├── host_20260701.log
-│   │           │   ├── host_boot_002_2133d519_170335.log
-│   │           │   └── nm_init_diag_002_2133d519_170335.log
-│   │           └── 003_2133d519_170703/
-│   │               ├── cortex_extension_20260701.log
-│   │               ├── host_20260701.log
-│   │               └── nm_init_diag_003_2133d519_170703.log
+│   │       └── 45b704ac-f4db-482f-a9e1-849f4a71b6ae/
+│   │           ├── 001_45b704ac_224247/
+│   │           │   ├── cortex_extension_20260702.log
+│   │           │   ├── host_20260702.log
+│   │           │   ├── host_boot_001_45b704ac_224247.log
+│   │           │   └── nm_init_diag_001_45b704ac_224247.log
+│   │           ├── 002_45b704ac_224526/
+│   │           │   ├── cortex_extension_20260702.log
+│   │           │   ├── host_20260702.log
+│   │           │   ├── host_boot_002_45b704ac_224526.log
+│   │           │   └── nm_init_diag_002_45b704ac_224526.log
+│   │           ├── 003_45b704ac_224727/
+│   │           │   ├── cortex_extension_20260702.log
+│   │           │   ├── host_20260702.log
+│   │           │   └── nm_init_diag_003_45b704ac_224727.log
+│   │           ├── 004_45b704ac_152502/
+│   │           │   ├── cortex_extension_20260702.log
+│   │           │   ├── host_20260702.log
+│   │           │   ├── host_boot_004_45b704ac_152502.log
+│   │           │   └── nm_init_diag_004_45b704ac_152502.log
+│   │           ├── 005_45b704ac_195858/
+│   │           │   ├── cortex_extension_20260702.log
+│   │           │   ├── host_20260702.log
+│   │           │   ├── host_boot_005_45b704ac_195858.log
+│   │           │   └── nm_init_diag_005_45b704ac_195858.log
+│   │           ├── 006_45b704ac_225059/
+│   │           │   ├── cortex_extension_20260703.log
+│   │           │   ├── host_20260703.log
+│   │           │   ├── host_boot_006_45b704ac_225059.log
+│   │           │   └── nm_init_diag_006_45b704ac_225059.log
+│   │           └── 007_45b704ac_175237/
+│   │               ├── cortex_extension_20260703.log
+│   │               ├── host_20260703.log
+│   │               ├── host_boot_007_45b704ac_175237.log
+│   │               └── nm_init_diag_007_45b704ac_175237.log
 │   ├── install/
 │   ├── metamorph/
 │   │   ├── metamorph_core_20260701.log
-│   │   └── metamorph_operations_20260701.log
+│   │   └── metamorph_operations_20260702.log
 │   ├── nucleus/
 │   │   ├── control_plane/
-│   │   │   └── nucleus_control_plane_20260701.log
+│   │   │   ├── nucleus_control_plane_20260701.log
+│   │   │   └── nucleus_control_plane_20260702.log
 │   │   ├── harness/
 │   │   │   └── harness.log
 │   │   ├── hooks/
 │   │   │   ├── post_launch/
-│   │   │   │   └── nucleus_post_launch_20260701.log
+│   │   │   │   ├── nucleus_post_launch_20260701.log
+│   │   │   │   ├── nucleus_post_launch_20260702.log
+│   │   │   │   └── nucleus_post_launch_20260703.log
 │   │   │   ├── profile_disconnected/
-│   │   │   │   └── nucleus_profile_disconnected_20260701.log
+│   │   │   │   ├── nucleus_profile_disconnected_20260702.log
+│   │   │   │   └── nucleus_profile_disconnected_20260703.log
 │   │   │   └── system_health/
-│   │   │       └── nucleus_system_health_20260701.log
+│   │   │       ├── nucleus_system_health_20260701.log
+│   │   │       ├── nucleus_system_health_20260702.log
+│   │   │       ├── nucleus_system_health_20260703.log
+│   │   │       └── nucleus_system_health_20260704.log
 │   │   ├── nucleus_brain_poller_20260701.log
+│   │   ├── nucleus_brain_poller_20260702.log
 │   │   ├── nucleus_orchestration_20260701.log
+│   │   ├── nucleus_orchestration_20260702.log
+│   │   ├── nucleus_orchestration_20260704.log
 │   │   ├── nucleus_synapse_20260701.log
+│   │   ├── nucleus_synapse_20260702.log
+│   │   ├── nucleus_synapse_20260703.log
+│   │   ├── nucleus_synapse_20260704.log
 │   │   ├── nucleus_temporal_20260701.log
+│   │   ├── nucleus_temporal_20260702.log
+│   │   ├── nucleus_temporal_20260703.log
+│   │   ├── nucleus_temporal_20260704.log
 │   │   ├── service/
 │   │   │   ├── nucleus_service.log
-│   │   │   └── nucleus_service_20260701.log
+│   │   │   ├── nucleus_service_20260701.log
+│   │   │   └── nucleus_service_20260702.log
 │   │   ├── svelte_dev/
-│   │   │   └── nucleus_svelte_dev_20260701.log
+│   │   │   ├── nucleus_svelte_dev_20260701.log
+│   │   │   └── nucleus_svelte_dev_20260702.log
 │   │   └── worker/
-│   │       └── worker_manager_20260701.log
+│   │       ├── nucleus_workers_snapshot_20260704.log
+│   │       ├── worker_manager_20260701.log
+│   │       └── worker_manager_20260702.log
 │   ├── ollama/
 │   │   └── service/
 │   │       └── ollama_service.log
@@ -286,40 +350,53 @@ BloomNucleus/
 │   │   └── bloom-sensor.log
 │   ├── sentinel/
 │   │   ├── onboarding/
-│   │   │   └── onboarding_2133d519-9680-4798-9cfc-a3f07623f21e_20260701.log
+│   │   │   ├── onboarding_45b704ac-f4db-482f-a9e1-849f4a71b6ae_20260701.log
+│   │   │   ├── onboarding_45b704ac-f4db-482f-a9e1-849f4a71b6ae_20260702.log
+│   │   │   └── onboarding_45b704ac-f4db-482f-a9e1-849f4a71b6ae_20260703.log
 │   │   ├── profiles/
-│   │   │   ├── 2133d519-9680-4798-9cfc-a3f07623f21e/
-│   │   │   │   ├── 001_2133d519_170055_debug.log
-│   │   │   │   ├── 001_2133d519_170055_engine_mining.log
-│   │   │   │   ├── 001_2133d519_170055_engine_read.log
-│   │   │   │   ├── 001_2133d519_170055_netlog.json
-│   │   │   │   ├── 003_2133d519_170703_debug.log
-│   │   │   │   ├── 003_2133d519_170703_engine_mining.log
-│   │   │   │   └── 003_2133d519_170703_engine_read.log
-│   │   │   └── sentinel_2133d519-9680-4798-9cfc-a3f07623f21e_20260701.log
-│   │   └── sentinel_core_20260701.log
+│   │   │   ├── 45b704ac-f4db-482f-a9e1-849f4a71b6ae/
+│   │   │   │   ├── 001_45b704ac_224247_debug.log
+│   │   │   │   ├── 001_45b704ac_224247_engine_mining.log
+│   │   │   │   ├── 001_45b704ac_224247_engine_read.log
+│   │   │   │   ├── 001_45b704ac_224247_netlog.json
+│   │   │   │   ├── 003_45b704ac_224727_debug.log
+│   │   │   │   ├── 003_45b704ac_224727_engine_mining.log
+│   │   │   │   └── 003_45b704ac_224727_engine_read.log
+│   │   │   ├── sentinel_45b704ac-f4db-482f-a9e1-849f4a71b6ae_20260701.log
+│   │   │   ├── sentinel_45b704ac-f4db-482f-a9e1-849f4a71b6ae_20260702.log
+│   │   │   └── sentinel_45b704ac-f4db-482f-a9e1-849f4a71b6ae_20260703.log
+│   │   ├── sentinel_core_20260701.log
+│   │   ├── sentinel_core_20260702.log
+│   │   └── sentinel_core_20260703.log
 │   ├── synapse_trace/
-│   │   ├── synapse_trace_001_2133d519_170055.log
-│   │   ├── synapse_trace_002_2133d519_170335.log
-│   │   └── synapse_trace_003_2133d519_170703.log
+│   │   ├── synapse_trace_001_45b704ac_224247.log
+│   │   ├── synapse_trace_002_45b704ac_224526.log
+│   │   ├── synapse_trace_003_45b704ac_224727.log
+│   │   ├── synapse_trace_004_45b704ac_152502.log
+│   │   ├── synapse_trace_005_45b704ac_195858.log
+│   │   ├── synapse_trace_006_45b704ac_225059.log
+│   │   └── synapse_trace_007_45b704ac_175237.log
 │   ├── telemetry.json
 │   ├── temporal/
 │   │   └── server/
-│   │       └── temporal_server_20260701.log
+│   │       ├── temporal_server_20260701.log
+│   │       └── temporal_server_20260702.log
 │   └── workspace/
 │       └── setup/
+├── models/
+│   ├── blobs/
+│   └── manifests/
 ├── profiles/
-│   └── 2133d519-9680-4798-9cfc-a3f07623f21e/
+│   └── 45b704ac-f4db-482f-a9e1-849f4a71b6ae/
 │       ├── ActorSafetyLists/
 │       ├── AmountExtractionHeuristicRegexes/
-│       ├── BrowserMetrics/
+│       ├── BrowserMetrics-spare.pma
 │       ├── CaptchaProviders/
 │       ├── CertificateRevocation/
 │       ├── Crowd Deny/
 │       ├── Default/ [... chromium profile data]
-│       ├── DeferredBrowserMetrics/
-│       │   └── BrowserMetrics-6A457368-AE87A.pma
 │       ├── DevToolsActivePort
+│       ├── Dictionaries/
 │       ├── FirstPartySetsPreloaded/
 │       ├── GrShaderCache/ [... chromium cache]
 │       ├── GraphiteDawnCache/ [... chromium cache]
@@ -327,7 +404,7 @@ BloomNucleus/
 │       ├── Local State
 │       ├── MEIPreload/
 │       ├── NativeMessagingHosts/
-│       │   └── com.bloom.synapse.2133d519.json
+│       │   └── com.bloom.synapse.45b704ac.json
 │       ├── OnDeviceHeadSuggestModel/
 │       ├── OptimizationHints/
 │       ├── OriginTrials/
@@ -336,9 +413,6 @@ BloomNucleus/
 │       ├── SSLErrorAssistant/
 │       ├── SafetyTips/
 │       ├── ShaderCache/ [... chromium cache]
-│       ├── SingletonCookie [NOT FOUND]
-│       ├── SingletonLock [NOT FOUND]
-│       ├── SingletonSocket
 │       ├── Subresource Filter/
 │       │   └── Unindexed Rules/
 │       ├── TrustTokenKeyCommitments/
@@ -392,17 +466,6 @@ BloomNucleus/
 │           ├── ukm_db
 │           └── ukm_db-wal
 ├── run/
-├── tree/
-│   ├── appdata_tree.txt
-│   ├── brain_tree.txt
-│   ├── conductor_tree.txt
-│   ├── cortex_tree.txt
-│   ├── installer_tree.txt
-│   ├── native_tree.txt
-│   ├── nucleus_tree.txt
-│   ├── sentinel_tree.txt
-│   ├── src_tree.txt
-│   └── webview_tree.txt
 ├── users/
 └── workers/
     └── brain/

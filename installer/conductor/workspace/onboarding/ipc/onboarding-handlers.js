@@ -1,3 +1,5 @@
+console.log('[ONBOARDING-HANDLERS BUILD] marker-vault-diag-v1 — archivo confirmado en runtime main process');
+
 // workspace/onboarding/ipc/onboarding-handlers.js
 // Handlers IPC exclusivos del módulo onboarding.
 // Paso 1: github_auth — steps como strings, poll lee completed_steps[] de nucleus.json
