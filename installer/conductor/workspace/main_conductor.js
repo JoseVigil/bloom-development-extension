@@ -539,7 +539,7 @@ app.whenReady().then(async () => {
     createOnboardingWindow();
     // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
     // para que los handlers siempre resuelvan la ventana actual
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor);
+    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, registry);
     // Inicializar el bridge de synapse para el onboarding.
     // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
     // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
@@ -564,7 +564,7 @@ app.on('activate', () => {
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor);
+        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, registry);
         initOnboardingBridge();
       }
     }

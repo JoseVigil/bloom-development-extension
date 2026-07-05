@@ -25,7 +25,8 @@ const ONBOARDING_STEP_IDS = [
   'project_create',
 ];
 
-function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor) {
+function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, registry) {
+  const { resolveEntryPoint } = require('./resolution-engine');
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
   // Paso 1: github_auth es el primer step.
@@ -428,6 +429,17 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         '--project', project,
         '--path', projectPath
       ]);
+      if (result.success !== false) {
+        try {
+          const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+          data.onboarding = data.onboarding || {};
+          data.onboarding.project_path = projectPath;
+          data.onboarding.updated_at = new Date().toISOString();
+          fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+        } catch (e) {
+          log.warn('[IPC] onboarding:create-mandate — could not persist project_path:', e.message);
+        }
+      }
       return { success: result.success !== false, result };
     } catch (err) {
       log.error('[IPC] onboarding:create-mandate — FAILED:', err.message);
@@ -519,56 +531,16 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   ipcMain.handle('onboarding:get-resume-state', async () => {
     log.info('[IPC] onboarding:get-resume-state');
     try {
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const ob   = data.onboarding || {};
+      const { stepId, produced } = resolveEntryPoint(registry.steps, NUCLEUS_JSON);
 
-      const completedSteps = ob.completed_steps || [];
-      const hasProgress    = !!ob.started && !ob.completed;
-      const completed      = !!ob.completed;
+      log.success('[IPC] onboarding:get-resume-state — ok:', JSON.stringify({ stepId, produced }));
 
-      // Recuperar ruta y org del workspace — persistidos por onboarding:init-nucleus
-      // al completar nucleus_create. Si nucleus_create no llegó a completar (ej: el
-      // usuario cerró la app mientras `nucleus create` corría), caemos a los campos
-      // *_pending escritos ANTES del spawn — así no se pierde lo que el usuario tipeó,
-      // aunque el step formalmente no esté en completed_steps todavía.
-      // Fallback final a bloom_base para builds más viejos sin estos campos.
-      const bloomBase = data.system_map?.bloom_base || null;
-
-      // github_username / github_org: persistidos opcionalmente por Brain cuando
-      // procesa GITHUB_TOKEN_STORED. Permiten al renderer restaurar vault-username
-      // y vault-org sin hacer un poll adicional al reabrir el onboarding.
-      const workspaceState = {
-        path:           ob.workspace_path  || ob.workspace_path_pending || (bloomBase ? require('path').dirname(bloomBase) : null),
-        org:            ob.workspace_org   || ob.workspace_org_pending  || null,
-        pending:        !ob.workspace_path && !!ob.workspace_path_pending,
-        githubUsername: ob.github_username || ob.github_user || null,
-        githubOrg:      ob.github_org      || ob.workspace_org || ob.workspace_org_pending || null,
-      };
-
-      log.success('[IPC] onboarding:get-resume-state — ok:', JSON.stringify({
-        hasProgress, completed, completedSteps, currentStep: ob.current_step || null,
-        workspaceState: { path: workspaceState.path, org: workspaceState.org },
-      }));
-
-      return {
-        success:        true,
-        hasProgress,
-        completed,
-        completedSteps,
-        currentStep:    ob.current_step    || null,
-        startedAt:      ob.started_at      || null,
-        workspaceState,
-      };
+      return { success: true, stepId, produced };
     } catch (err) {
       log.error('[IPC] onboarding:get-resume-state — FAILED:', err.message);
-      return {
-        success:        false,
-        hasProgress:    false,
-        completed:      false,
-        completedSteps: [],
-        currentStep:    null,
-        workspaceState: { path: null, org: null, pending: false, githubUsername: null, githubOrg: null },
-      };
+      // Fallback seguro: si el motor falla, arrancar desde el primer step
+      // es preferible a bloquear el onboarding completo.
+      return { success: false, stepId: registry.steps[0]?.id ?? null, produced: [] };
     }
   });
 

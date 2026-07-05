@@ -154,7 +154,7 @@ class MilestoneReactor {
 
   async _onGithubAuthComplete(enriched) {
     this._log(`_onGithubAuthComplete (evento: ${enriched.event || 'n/a'})`);
-    await this._persistStepComplete('github_auth');
+    await this._persistStepComplete('github_auth', this._registry.getStep('github_auth'));
 
     // Bug 3 fix: github_auth puede recibir varios eventos Cortex distintos
     // (ACCOUNT_REGISTERED, GITHUB_TOKEN_STORED, GITHUB_PAT_DETECTED...) y el
@@ -186,21 +186,21 @@ class MilestoneReactor {
 
   async _onNucleusCreateComplete(enriched) {
     this._log('_onNucleusCreateComplete');
-    await this._persistStepComplete('nucleus_create');
+    await this._persistStepComplete('nucleus_create', this._registry.getStep('nucleus_create'));
     this._emitMilestone('nucleus_create', {});
     this._emitStepUiUpdate('nucleus_create', { phase: 'ESTABLISHED' });
   }
 
   async _onVaultInitComplete(enriched) {
     this._log('_onVaultInitComplete');
-    await this._persistStepComplete('vault_init');
+    await this._persistStepComplete('vault_init', this._registry.getStep('vault_init'));
     this._emitMilestone('vault_init', {});
     this._emitStepUiUpdate('vault_init', { phase: 'ESTABLISHED' });
   }
 
   async _onGoogleAuthComplete(enriched) {
     this._log('_onGoogleAuthComplete');
-    await this._persistStepComplete('google_auth');
+    await this._persistStepComplete('google_auth', this._registry.getStep('google_auth'));
     this._emitMilestone('google_auth', {
       email: enriched.data?.email || null,
     });
@@ -209,7 +209,7 @@ class MilestoneReactor {
 
   async _onAiProviderSetupComplete(enriched) {
     this._log('_onAiProviderSetupComplete');
-    await this._persistStepComplete('ai_provider_setup');
+    await this._persistStepComplete('ai_provider_setup', this._registry.getStep('ai_provider_setup'));
     this._emitMilestone('ai_provider_setup', {
       provider: enriched.data?.provider || null,
     });
@@ -218,7 +218,7 @@ class MilestoneReactor {
 
   async _onProjectCreateComplete(enriched) {
     this._log('_onProjectCreateComplete');
-    await this._persistStepComplete('project_create');
+    await this._persistStepComplete('project_create', this._registry.getStep('project_create'));
     this._emitMilestone('project_create', {
       project: enriched.data?.project || null,
     });
@@ -238,7 +238,7 @@ class MilestoneReactor {
 
   async _defaultReaction(stepId, enriched) {
     this._log(`_defaultReaction: "${stepId}"`);
-    await this._persistStepComplete(stepId);
+    await this._persistStepComplete(stepId, this._registry.getStep(stepId));
     this._emitMilestone(stepId, {});
     this._emitStepUiUpdate(stepId, { phase: 'ESTABLISHED' });
   }
@@ -342,7 +342,7 @@ class MilestoneReactor {
    * Persiste un step en onboarding.completed_steps[] de nucleus.json.
    * Idempotente en disco — no duplica si ya existe.
    */
-  async _persistStepComplete(stepId) {
+  async _persistStepComplete(stepId, step = null) {
     try {
       const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
       data.onboarding = data.onboarding || {};
@@ -350,6 +350,12 @@ class MilestoneReactor {
 
       if (!data.onboarding.completed_steps.includes(stepId)) {
         data.onboarding.completed_steps.push(stepId);
+        // Requerimiento 1 (resume inteligente): además del flag en completed_steps,
+        // persistir el artefacto real bajo su nombre `produces`, para que
+        // step-verifiers.js pueda confirmarlo sin depender de un puntero a "último paso".
+        if (step?.produces) {
+          data.onboarding[step.produces] = true;
+        }
         data.onboarding.updated_at = new Date().toISOString();
         fs.writeFileSync(this._NUCLEUS_JSON, JSON.stringify(data, null, 2));
         this._log(`_persistStepComplete: "${stepId}" escrito en nucleus.json`);

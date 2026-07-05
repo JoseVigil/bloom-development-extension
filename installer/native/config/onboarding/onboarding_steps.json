@@ -1,66 +1,96 @@
 {
-  "_version": "1.0.0",
-  "_comment": "Fuente de verdad única de los steps de onboarding de Bloom Conductor. Paso 1: github_auth. Modificado: agrega github_auth como primer step, steps como strings con metadatos completos.",
+  "_version": "2.0.0",
+  "_comment": "SSOT único de steps de onboarding — Bloom Conductor. Consumido por MilestoneRegistry (Main, vía fs) y expuesto al Renderer vía IPC (getStepsConfig). Cualquier cambio de orden, requires o verificación se hace acá, no en onboarding.js.",
   "steps": [
     {
       "id": "github_auth",
+      "view": "identity",
       "label": "Conectar GitHub",
-      "screen": "github-login",
-      "vault_required": false,
       "requires": [],
       "produces": "github_token",
-      "storage": "chrome.storage.bloom_vault_temp",
-      "description": "Conecta tu cuenta de GitHub para que Bloom pueda acceder a tus repositorios y organizaciones."
+      "verify": "json_field_any",
+      "verifyArgs": {
+        "fields": [
+          "onboarding.github_token_fingerprint",
+          "onboarding.github_token_stored",
+          "onboarding.vault_github_stored"
+        ]
+      },
+      "blocking": true,
+      "cortex_events": ["GITHUB_PAT_DETECTED", "GITHUB_TOKEN_STORED", "ACCOUNT_REGISTERED"],
+      "conductor_reaction": "markStepComplete"
     },
     {
       "id": "nucleus_create",
+      "view": "workspace",
       "label": "Crear Nucleus",
-      "screen": "nucleus-create",
-      "vault_required": false,
       "requires": ["github_token"],
-      "produces": "nucleus_path",
-      "storage": "chrome.storage.bloom_vault_temp",
-      "description": "Inicializa el directorio .bloom local donde se almacenará la configuración de tu espacio de trabajo."
+      "produces": "workspace_path",
+      "verify": "fs_marker",
+      "verifyArgs": {
+        "jsonField": "onboarding.workspace_path",
+        "markerFile": ".nucleus"
+      },
+      "blocking": true,
+      "cortex_events": [],
+      "conductor_reaction": "markStepComplete"
     },
     {
       "id": "vault_init",
+      "view": "identity",
       "label": "Inicializar Vault",
-      "screen": "vault-init",
-      "vault_required": false,
-      "requires": ["github_token", "nucleus_path"],
+      "requires": ["github_token", "workspace_path"],
       "produces": "vault_initialized",
-      "storage": "chrome.storage.bloom_vault",
-      "description": "Crea el vault seguro donde se guardarán tus credenciales, cifradas por el sistema operativo."
+      "verify": "json_field",
+      "verifyArgs": {
+        "field": "onboarding.vault_initialized"
+      },
+      "blocking": true,
+      "cortex_events": ["VAULT_INITIALIZED", "VAULT_INIT"],
+      "conductor_reaction": "markStepComplete"
     },
     {
       "id": "google_auth",
+      "view": "providers",
       "label": "Conectar Google",
-      "screen": "google-login",
-      "vault_required": true,
       "requires": ["vault_initialized"],
       "produces": "google_account",
-      "storage": "chrome.storage.bloom_vault",
-      "description": "Conecta tu cuenta de Google para acceder a los servicios de Google Cloud y AI Studio."
+      "verify": "json_field",
+      "verifyArgs": {
+        "field": "onboarding.google_account"
+      },
+      "blocking": false,
+      "cortex_events": ["GOOGLE_AUTH_COMPLETE"],
+      "conductor_reaction": "markStepComplete"
     },
     {
       "id": "ai_provider_setup",
+      "view": "providers",
       "label": "Configurar proveedor de IA",
-      "screen": "provider-select",
-      "vault_required": true,
       "requires": ["vault_initialized"],
       "produces": "ai_provider_key",
-      "storage": "chrome.storage.bloom_vault",
-      "description": "Agrega la API key de tu proveedor de IA preferido (Gemini, Claude, OpenAI, Grok)."
+      "verify": "json_field",
+      "verifyArgs": {
+        "field": "onboarding.ai_provider_key"
+      },
+      "blocking": false,
+      "cortex_events": ["AI_PROVIDER_CONFIGURED"],
+      "conductor_reaction": "markStepComplete"
     },
     {
       "id": "project_create",
+      "view": "project",
       "label": "Crear proyecto",
-      "screen": "project-create",
-      "vault_required": true,
       "requires": ["vault_initialized", "github_token"],
       "produces": "project_mandate",
-      "storage": "chrome.storage.bloom_vault",
-      "description": "Crea tu primer proyecto Bloom conectado a un repositorio de GitHub."
+      "verify": "fs_marker",
+      "verifyArgs": {
+        "jsonField": "onboarding.project_path",
+        "markerFile": "genesis.mandate"
+      },
+      "blocking": true,
+      "cortex_events": ["PROJECT_CREATED", "DISCOVERY_COMPLETE"],
+      "conductor_reaction": "onOnboardingSuccess"
     }
   ]
 }
