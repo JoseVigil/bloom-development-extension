@@ -1,8 +1,9 @@
-# Protocolo Synapse — Auditoría de Homologación v2
+# Protocolo Synapse — Auditoría de Homologación v3
 
-**Estado:** documento reconstruido a partir de lectura directa del código fuente real (v1 se había generado sin verlo).
-**Archivos auditados en esta ronda (16):** `synapse-bridge.js` (2 pasadas), `discoveryProtocol.js`, `background.js`, `landingProtocol.js`, `harnessProtocol.js`, `server_manager.py`, `workspace-synapse-handlers.js`, `discovery.js`, `landing.js`, `discovery.schema.json`, `milestone-registry.js`, `onboarding_steps.json`, `main_conductor.js`, `preload-synapse.js`, `milestone-reactor.js`, `content.js`.
-**Archivos pendientes:** ver sección 7.
+**Estado:** documento reconstruido a partir de lectura directa del código fuente real (v1 se había generado sin verlo). v3 integra la investigación de Harness/IonPump y una relectura línea por línea de `discoveryProtocol.js` real, con hallazgos verificados contra el código — ver sección 9.
+**Archivos auditados en la ronda v2 (16):** `synapse-bridge.js` (2 pasadas), `discoveryProtocol.js`, `background.js`, `landingProtocol.js`, `harnessProtocol.js`, `server_manager.py`, `workspace-synapse-handlers.js`, `discovery.js`, `landing.js`, `discovery.schema.json`, `milestone-registry.js`, `onboarding_steps.json`, `main_conductor.js`, `preload-synapse.js`, `milestone-reactor.js`, `content.js`.
+**Archivos/documentos incorporados en v3:** `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` (fusión de los dos SOT de Harness, con código real de `harness_generator.py`/`harness.js` citado ahí) y **relectura directa de `discoveryProtocol.js` real**, que resuelve una contradicción entre la v2 y el SOT de Harness — ver §9.2.
+**Archivos pendientes:** ver sección 7 (actualizada en v3 — una fila se cierra, una fila nueva de mayor prioridad se abre en §9.4).
 
 ---
 
@@ -91,26 +92,28 @@ El comentario de `milestone-registry.js` afirma: *"El hardcode es idéntico al J
 
 ## 3. Catálogo maestro de eventos (estado final)
 
-Leyenda: ✅ consistente y confirmado · ⚠️ activo pero mal/parcialmente documentado · 💀 código muerto real · 🧟 zombie intencional (simulable, sin efecto real en producción) · ❓ no resoluble sin archivos pendientes
+Leyenda: ✅ consistente y confirmado · ⚠️ activo pero mal/parcialmente documentado · 💀 código muerto real · 🧟 zombie intencional (simulable, sin efecto real en producción) · ❓ no resoluble sin archivos pendientes · 🆕 hallazgo nuevo de v3 (Harness/IonPump)
 
 | Evento | Estado | Nota |
 |---|---|---|
 | `ACCOUNT_REGISTERED` | ✅ / 🔴 | Evento en sí consistente y bien diseñado (genérico, discriminado por `service`). Su **resolución a stepId está rota** para `service: 'google'` — ver bug crítico §2. |
 | `DISCOVERY_COMPLETE` | ✅ / 🟠 | Emisión consistente. Sospecha fuerte de **cierre prematuro de `project_create`** — ver bug medio §2. |
 | `VAULT_INITIALIZED` | ✅ (fix confirmado) | Bug histórico (nunca escribía en `bloom_profile_state.vaults` si venía simulado/empujado por host) arreglado en `discovery.js` y `landing.js`, ambos confirmados en código. |
-| `GITHUB_TOKEN_STORED` | 🧟 | Handler completo en `background.js` y case en `landing.js`, pero confirmado por comentario explícito en `discovery.js`: **nunca fue responsabilidad de la extensión emitirlo**. `server_manager.py` sí lo maneja por TCP — sigue apuntando al Chrome Host nativo, no confirmado (archivo no visto). |
-| `GITHUB_PAT_DETECTED` | ⚠️ | Vivo end-to-end (clipboard monitor → `background.js` → `discovery.js`). Ausente de `observable_events` en `harnessProtocol.js` Y en `discovery.schema.json` (nuevo sistema) — el patrón transversal persiste incluso en el reemplazo. |
+| `GITHUB_TOKEN_STORED` | 🧟 | Handler completo en `background.js` y case en `landing.js`, pero confirmado por comentario explícito en `discovery.js`: **nunca fue responsabilidad de la extensión emitirlo**. `server_manager.py` sí lo maneja por TCP — sigue apuntando al Chrome Host nativo, no confirmado (archivo no visto). **Confirmado en v3:** también declarado como simulador completo en `discoveryProtocol.js`, también ausente de `observable_events` — mismo patrón que `GITHUB_PAT_DETECTED`. Ver §9.2. |
+| `GITHUB_PAT_DETECTED` | ⚠️ (confirmado en v3) | Vivo end-to-end (clipboard monitor → `background.js` → `discovery.js`). **Confirmado por lectura directa de `discoveryProtocol.js` real (v3):** declarado como simulador completo en `messages` (con `payload_template` y parámetros) pero ausente de `observable_events` — el patrón transversal persiste incluso en el reemplazo. Se descarta la hipótesis de que esté deprecado por un cambio de política de clipboard: no hay ningún comentario ni marca de deprecación en el archivo real, y la descripción del simulador sigue en presente ("Simulate clipboard monitor..."). Ver §9.2. |
 | `GITHUB_ACCOUNT_CREATED` | ✅ (efecto confirmado) | `landing.js` confirma que recarga el dashboard. Doc sigue incompleta en otros manifests (problema solo documental). |
 | `ONBOARDING_STEP_COMPLETE` | ✅ | Contrato dual (Formato A envuelto / Formato B directo) confirmado y bien diseñado en `synapse-bridge.js`, con manejo explícito del caso `data.original_event` ausente. |
 | `GOOGLE_LOGIN_DETECTED` | ✅ (por diseño) | Confirmado 100% interno a la extensión — diseño intencional "pasivo" (nunca interactúa con el DOM de Google), no un bug. |
 | `GOOGLE_AUTH_COMPLETE` | 💀 (alta confianza) | Esperado por diseño en el registry, nunca implementado. Reemplazado de facto por `ACCOUNT_REGISTERED` genérico sin migrar el mapeo — causa directa del bug crítico §2. |
 | `AI_PROVIDER_CONFIGURED`, `PROJECT_CREATED`, `VAULT_INIT` | 💀 (tentativo, intencional) | Confirmado que son alias/eventos intencionales por diseño (están en `cortex_events` y en `ONBOARDING_EVENTS`), pero sin emisor confirmado en ningún archivo de extensión visto. Requieren el host nativo o Brain para cerrar. |
 | `SITE_READY` | 🧟 (nuevo) | Vivo en clasificación (`ONBOARDING_EVENTS` de `synapse-bridge.js`), pero **huérfano en el registry** — no está en `cortex_events` de ningún step. Se clasifica pero nunca resuelve a un stepId. |
-| `HOST_READY` | ❓ (nuevo) | Declarado en `discovery.schema.json` como simulable ("bloom-host señalando que está listo"), sin rastro en `background.js` ni `synapse-bridge.js`. Apunta al Chrome Host nativo, no confirmable sin ese archivo. |
+| `HOST_READY` | ⚠️ (mejora en v3) | **Confirmado en `discoveryProtocol.js` real:** declarado como simulador completo Y presente en `observable_events` — el único de los tres eventos "nuevos" de esta sección que está internamente consistente en ese archivo. Sigue sin rastro de un listener real en `background.js` (ya auditado en v2) ni en `synapse-bridge.js`. Apunta al Chrome Host nativo, no confirmable sin ese archivo — ver §7. |
+| `HARNESS_SIMULATE_HANDSHAKE` | 🆕 🔴 (v3, alta prioridad) | No documentado en ninguna ronda anterior. Comando real en `discoveryProtocol.js`, declarado explícitamente como *"Bypass del handshake nativo — fuerza `handshakeState` a `CONFIRMED` sin native host"*. Presente en `observable_events`. Ver §9.4 — cruzado con el hallazgo del SOT de Harness de que el Harness ya no es exclusivo de `dev_mode`. |
+| `HARNESS_OPEN_LANDING` | 🆕 (v3) | No documentado en ninguna ronda anterior. Comando real en `discoveryProtocol.js`: abre/trae al frente la tab de Landing directamente desde el Harness, sin pasar por el flujo real. Presente en `observable_events`. Ver §9.4. |
 | `PROFILE_CONNECTED` | ✅ | Confirmado en `server_manager.py` y en la lógica de discriminación `HANDSHAKE` vs `PROFILE` de `synapse-bridge.js`. |
 | `HANDSHAKE` con `_recovered: true` | ✅ (nuevo, aclarado) | Evento **sintético**, generado localmente por `main_conductor.js` en el flujo de catch-up — nunca viene de Brain. No confundir con `HANDSHAKE_CONFIRMED` real. |
-| `ION_INSPECT_RESULT` | ⚠️ | Implementado y reenviado en `background.js`, ausente de `observable_events` en `harnessProtocol.js` (declara solo 5 de 6). |
-| `DOM_NAVIGATE`, `DOM_WATCH`, `DOM_WATCH_URL`, `DOM_UNWATCH` | ✅ (confirmado) | Los 4 están **completamente implementados y funcionales** en `content.js`. El gap era exclusivamente de documentación en `harnessProtocol.js` (solo cubre 6 de 10 comandos DOM). |
+| `ION_INSPECT_RESULT` | ⚠️ | Implementado y reenviado en `background.js`, ausente de `observable_events` en `harnessProtocol.js` (declara solo 5 de 6). **Sin novedad en v3:** no aparece en el SOT de Harness/IonPump ni en `discoveryProtocol.js` real. Sigue abierto — requeriría releer `harnessProtocol.js` puntualmente. |
+| `DOM_NAVIGATE`, `DOM_WATCH`, `DOM_WATCH_URL`, `DOM_UNWATCH` | ✅ (confirmado, explicado en v3) | Los 4 están **completamente implementados y funcionales** en `content.js`. El gap era exclusivamente de documentación en `harnessProtocol.js` (solo cubre 6 de 10 comandos DOM). **Explicación aportada por el SOT de Harness/IonPump:** esos 6 (`DOM_WAIT`, `DOM_CLICK`, `DOM_TYPE`, `DOM_FOCUS`, `DOM_SCROLL`, `DOM_EXTRACT`) son exactamente el set que la tabla `ion step type → comando DOM` de IonPump traduce desde recipes `.ion`. No es que `harnessProtocol.js` se haya olvidado de los otros 4 — nunca los necesitó, porque IonPump (su único consumidor real para automatización) no los usa. Pasa de "gap de documentación" a "comportamiento explicado por diseño". |
 | `DOM_EXTRACT` | ✅ | Alias intencional y documentado de `DOM_READ`, para compatibilidad con `HARNESS_PROTOCOL_MANIFEST v2.0`. No es duplicación accidental. |
 | `NUCLEUS_SYNC_RESULT`, `INTENT_LIST_RESULT` | 🧟 (probable) | Reenviados por `background.js`, pero sin ningún `case` en el único listener real de `landing.js` (`setupMessageListener`). Mismo patrón que `SESSION_STATUS`/`STATS_UPDATE`. |
 | `SESSION_STATUS`, `STATS_UPDATE` | 🧟 (confirmado) | Declarados simulables en `LANDING_PROTOCOL_MANIFEST`. Confirmado: **sin listener real en `landing.js`**. Simulables desde Harness, sin ningún efecto observable en producción. |
@@ -179,7 +182,9 @@ No bloquean lo anterior, pero cerrarían el mapa por completo:
 | `preload_onboarding.js` / `preload_conductor.js` | Confirmar que no colisionan al exponer `bloomSynapse` vía `contextBridge` (solo puede llamarse una vez por nombre). |
 | `debug.html` | Consumidor de `synapse:raw-event` — cierra el "Camino C" de debug mencionado en `workspace-synapse-handlers.js`. |
 | `discoveryProtocol.js` (relectura puntual) | Confirmar o descartar la divergencia sospechada entre `ONBOARDING_EVENTS` (`synapse-bridge.js`) y el `DISCOVERY_PROTOCOL_MANIFEST` que dice ser su fuente. |
-| `HANDOFF-fix-vault-onboarding`, `HARNESS_SOURCE_OF_TRUTH` | Documentos referenciados por `background.js`, nunca vistos — podrían tener contexto histórico sobre varios de los hallazgos de esta sesión. |
+| `HANDOFF-fix-vault-onboarding` | Documento referenciado por `background.js`, nunca visto — podría tener contexto histórico sobre varios de los hallazgos de esta sesión. |
+| ~~`HARNESS_SOURCE_OF_TRUTH`~~ | **Cerrado en v3.** Incorporado como `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` (fusión de los dos SOT de Harness + código real de `harness_generator.py`/`harness.js`). Ver §9. |
+| **Decisión de negocio (nueva, v3, alta prioridad):** ¿es intencional que `harness_simulate_handshake`/`harness_open_landing` (bypasses reales del handshake nativo) queden expuestos en perfiles de producción, dado que el SOT de Harness confirma que `harness_generator.py` ya no respeta `dev_mode`? | Ver §9.4. No resoluble solo con lectura de código — requiere a alguien con visibilidad del repo y del criterio de producto. |
 
 ---
 
@@ -191,3 +196,50 @@ No bloquean lo anterior, pero cerrarían el mapa por completo:
 4. Confirmar y, si aplica, corregir el cierre prematuro de `project_create` por `DISCOVERY_COMPLETE`.
 5. Unificar la lógica duplicada de conexión bridge→registry→reactor entre `main_conductor.js` y `workspace-synapse-handlers.js`.
 6. Adoptar el mecanismo de validación cruzada de manifests descrito en §5 para evitar que el problema se siga repitiendo con cada nuevo sistema de documentación.
+7. **(Nuevo, v3)** Confirmar con el equipo si `harness_simulate_handshake`/`harness_open_landing` deben quedar accesibles en perfiles de producción, dado que el Harness ya no se despliega solo en `--dev` — ver §9.4. Se ubica junto a los bugs críticos de §2 por el tipo de exposición que implica, no por estar aún confirmado como explotable.
+
+---
+
+## 9. Integración de Harness / IonPump (v3)
+
+### 9.1 Qué resuelve esta ronda
+
+`HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` — la fusión de los dos documentos de fuente de verdad de Harness (`HARNESS_SOURCE_OF_TRUTH.md` e `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md`), enriquecida con código real de `harness_generator.py` y `harness.js` — es exactamente el documento que la v2 dejaba como pendiente sin ver (§7). Se cierra esa fila. Además, esta ronda incorporó lectura directa de `discoveryProtocol.js` real, que no estaba disponible como archivo en la v2 (se había auditado indirectamente vía `discovery.schema.json`).
+
+Dos hallazgos de la v2 quedan **explicados** por el SOT de Harness, sin cambiar su severidad:
+
+- El gap de documentación de `DOM_NAVIGATE`/`DOM_WATCH`/`DOM_WATCH_URL`/`DOM_UNWATCH` en `harnessProtocol.js` (§3) tiene una causa concreta: los 6 comandos DOM que sí cubre (`DOM_WAIT`, `DOM_CLICK`, `DOM_TYPE`, `DOM_FOCUS`, `DOM_SCROLL`, `DOM_EXTRACT`) son exactamente el set que la tabla de traducción `ion step → comando DOM` de IonPump usa. El manifest nunca fue pensado para cubrir el total de `content.js`, sino el subset que IonPump consume. Deja de ser "bug de documentación" y pasa a ser "alcance documentado, con nombre poco claro".
+- `HOST_READY` (§3, antes ❓) se confirma declarado como simulador completo y presente en `observable_events` de `discoveryProtocol.js` real — internamente consistente. Sigue sin confirmarse el efecto real en `background.js`/host nativo (pendiente de siempre, §7).
+
+### 9.2 Contradicción resuelta: `GITHUB_PAT_DETECTED` / `GITHUB_TOKEN_STORED`
+
+El SOT de Harness/IonPump (§6 de ese documento) afirmaba que el `observable_events` de `discoveryProtocol.js` incluía `GITHUB_PAT_DETECTED` y `GITHUB_TOKEN_STORED`. La lectura directa del archivo real —confirmada línea por línea, `observable_events` en líneas 518-526— muestra que **no están**:
+
+```javascript
+observable_events: [
+  "HOST_READY", "HANDSHAKE_CONFIRMED", "API_KEY_REGISTERED",
+  "ACCOUNT_REGISTERED", "DISCOVERY_COMPLETE",
+  "HARNESS_SIMULATE_HANDSHAKE", "HARNESS_OPEN_LANDING"
+]
+```
+
+**Veredicto: la v2 tenía razón.** El SOT de Harness/IonPump tiene un error de hecho en ese punto — no se usa como fuente para esto de acá en adelante. Ambos eventos siguen declarados como simuladores completos (con `payload_template` y parámetros armados) en `messages`, pero ausentes de `observable_events`: el mismo patrón transversal descrito en §5, ahora confirmado también en el "reemplazo nuevo".
+
+Se evaluó y **se descarta** una hipótesis alternativa (circulada fuera de esta sesión) de que `GITHUB_PAT_DETECTED` esté deprecado por una decisión de producto de dejar de leer el clipboard (políticas de Manifest V3/Google). No hay ningún comentario, flag de deprecación, ni cambio de tiempo verbal en el archivo real que la sostenga — la descripción del simulador sigue en presente: *"Simulate clipboard monitor detecting a GitHub PAT"*. Si en el futuro aparece evidencia real de ese cambio de diseño (por ejemplo en el Chrome Host nativo o en un HANDOFF no visto), se actualiza este punto — hasta entonces, el estado documentado es el de la v2 original: vivo end-to-end, solo mal documentado.
+
+### 9.3 Confirmado por código, no visto en ninguna ronda anterior
+
+Dos comandos reales existen en `discoveryProtocol.js` sin precedente en la v2 ni en el SOT de Harness:
+
+| Comando | Descripción textual en el código | Nota |
+|---|---|---|
+| `HARNESS_SIMULATE_HANDSHAKE` | *"Bypass del handshake nativo — fuerza `handshakeState` a `CONFIRMED` sin native host"* | Ver §9.4 |
+| `HARNESS_OPEN_LANDING` | Abre/trae al frente la tab de Landing directamente desde el Harness | Ver §9.4 |
+
+Ambos están en `messages` y en `observable_events` — internamente consistentes, no hay bug de documentación acá. El punto no es que estén mal documentados; es lo que habilitan.
+
+### 9.4 El cruce que más importa de esta ronda
+
+El SOT de Harness/IonPump confirma (su §0.2) que `harness_generator.py` **ya no respeta `dev_mode`**: el Harness se despliega en todos los perfiles, no solo en `--dev`. Cruzado con el hallazgo de §9.3, la superficie resultante es: un comando real, presente en el manifest de producción, que **bypasea el handshake nativo completo** sin pasar por el host.
+
+Esto no está confirmado como explotable — no vimos `background.js` en esta ronda para saber si valida origen/contexto antes de aceptar ese comando, ni si el propio `web_accessible_resources` del manifest expone el Harness a cualquier origen o solo a la extensión. Pero la combinación de los dos hechos (deploy incondicional + bypass real de handshake) es suficiente para que esto no se trate como un hallazgo más de documentación. Se lista en §7 y §8 como decisión de negocio pendiente, no como bug a corregir directamente — porque puede ser una herramienta de debug intencional que simplemente nunca se documentó como tal, y esa distinción la tiene que hacer alguien con visibilidad del repo, no esta auditoría.
