@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import path from 'path';
+import os from 'os';
 import type { FastifyInstance } from 'fastify';
 import type * as vscode from 'vscode';
 import { WebSocketManager } from '../server/WebSocketManager';
@@ -15,6 +16,10 @@ import { profileRoutes } from './routes/profile.routes';
 import { authRoutes } from './routes/auth.routes';
 import { explorerRoutes } from './routes/explorer.routes';
 import { internalRoutes } from './routes/internal.routes';
+import { registerMandateRoutes } from './routes/mandates.routes';
+import internalMandateEventRoutes from './routes/internal-mandate-event.routes';
+import { resolveOrg } from '../utils/org-resolver';
+import type { MandateFsContext } from '../utils/mandate-paths';
 
 // ✅ FIX: Import GitHubOAuthServer class (not singleton instance)
 import { GitHubOAuthServer } from '../auth/GitHubOAuthServer';
@@ -203,6 +208,31 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
   await fastify.register(explorerRoutes, { prefix: '/api/v1/explorer' });
   await fastify.register(internalRoutes, { prefix: '/api/internal' });
+
+  // --- Mandate routes ---
+  // fsCtx se resuelve acá, una sola vez al levantar el server, en vez de
+  // en cada request (a diferencia del handler de create-mandate, que hoy
+  // recalcula `org` por request — ver nota en create-mandate.handler.ts).
+  // Mismas dos env vars que usa el handler, mismo criterio: bloomBase para
+  // la org, workspacePath para el árbol de mandates.
+  const bloomBase =
+    process.env.LOCALAPPDATA || path.join(os.homedir(), '.local', 'share', 'BloomNucleus');
+  const workspacePath = process.env.BLOOM_NUCLEUS_PATH;
+
+  if (!workspacePath) {
+    console.warn(
+      '[Server] ⚠️  BLOOM_NUCLEUS_PATH no está definida — /mandates y /internal/mandate-event no se registran',
+    );
+  } else {
+    const org = await resolveOrg(bloomBase);
+    const fsCtx: MandateFsContext = { workspacePath, org };
+
+    await fastify.register(
+      async (instance) => registerMandateRoutes(instance, { fsCtx }),
+      { prefix: '/api/v1' },
+    );
+    await fastify.register(internalMandateEventRoutes, { prefix: '/api/internal' });
+  }
 
 
   // Error handler (must be last)

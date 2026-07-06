@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — darwin
-# Generated: 2026-06-27 11:00:42
+# Generated: 2026-07-06 18:29:32
 
 ---
 brain/__build__.py
@@ -21,17 +21,17 @@ brain/build_number.txt
 ---
 installer/conductor/setup/build_info.json
 {
-  "name": "bloom-nucleus-installer",
-  "product_name": "Bloom Nucleus Installer",
+  "name": "bloom-setup",
+  "product_name": "Bloom Conductor Setup",
   "version": "1.0.0",
-  "build": 103,
-  "full_version": "1.0.0+build.103",
+  "build": 104,
+  "full_version": "1.0.0+build.104",
   "channel": "stable",
-  "built_at": "2026-06-10T23:49:59.016Z",
-  "git_commit": "d32fbfa",
+  "built_at": "2026-06-28T14:57:28.141Z",
+  "git_commit": "b35fdc5",
   "platform": "linux",
   "arch": "win64",
-  "node_version": "v18.19.1",
+  "node_version": "v20.20.2",
   "electron_version": "^28.0.0"
 }
 
@@ -41,7 +41,7 @@ installer/conductor/setup/version.json
   "major": 1,
   "minor": 0,
   "patch": 0,
-  "build": 103,
+  "build": 104,
   "semver": "1.0.0",
   "channel": "stable"
 }
@@ -68,7 +68,7 @@ const BuildTime = "19:35:00"
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
-37
+43
 
 ---
 installer/sentinel/scripts/build_number.effective.txt

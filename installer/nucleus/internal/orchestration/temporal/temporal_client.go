@@ -2,11 +2,13 @@ package temporal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
 	"nucleus/internal/core"
@@ -397,4 +399,29 @@ type OnboardingResult struct {
 	Status    string `json:"status"`
 	Error     string `json:"error,omitempty"`
 	Timestamp int64  `json:"timestamp"`
+}
+
+// StartMandateGenesisBuildWorkflow dispara Mandate Genesis Build. Fire-and-forget
+// (mismo criterio que ExecuteOnboardingWorkflow): la Fase 3 del workflow es un
+// Human Sync Point que puede durar horas — no hay we.Get() acá.
+func (c *Client) StartMandateGenesisBuildWorkflow(
+	ctx context.Context,
+	mandateID string,
+	input workflows.GenesisBuildInput,
+) (client.WorkflowRun, error) {
+	workflowID := fmt.Sprintf("mandate_genesis_%s", mandateID)
+
+	options := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "mandate-orchestration",
+	}
+
+	return c.client.ExecuteWorkflow(ctx, options, "MandateGenesisBuildWorkflow", input)
+}
+
+// IsAlreadyStarted distingue "ya estaba corriendo" (esperado en restarts o
+// eventos duplicados de fsnotify) de un error real.
+func IsAlreadyStarted(err error) bool {
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	return errors.As(err, &alreadyStarted)
 }

@@ -354,6 +354,26 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			logger.Success("✅ Activities registradas")
 
+			// ── Worker dedicado a mandate-orchestration ──────────────────────
+			// MandateGenesisBuildWorkflow (y su child MandateExecutionWorkflow)
+			// arrancan siempre con TaskQueue "mandate-orchestration" (hardcoded
+			// en temporal_client_addition.go y mandate_genesis_build_workflow.go).
+			// El worker principal solo escucha `taskQueue` (profile-orchestration
+			// por default) — sin este worker separado, esos workflows quedan
+			// disparados en Temporal sin nadie que los ejecute.
+			mandateWorker := NewWorker(temporalClient.GetClient(), "mandate-orchestration")
+			mandateWorker.RegisterWorkflow(temporalworkflows.MandateGenesisBuildWorkflow)
+			mandateWorker.RegisterWorkflow(temporalworkflows.MandateExecutionWorkflow)
+			mandateWorker.RegisterActivity(activities.ScaffoldDomainActivity)
+			mandateWorker.RegisterActivity(activities.PublishMandateEventActivity)
+
+			if err := mandateWorker.Start(); err != nil {
+				logger.Error("Fallo al iniciar mandate worker: %v", err)
+				os.Exit(1)
+			}
+			logger.Success("✅ Mandate worker iniciado (task queue: mandate-orchestration)")
+			// ── fin worker mandate-orchestration ──────────────────────────────
+
 			// Iniciar worker
 			logger.Info("Iniciando worker...")
 			if err := w.Start(); err != nil {
@@ -410,6 +430,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"SeedWorkflow",
 					"OnboardingWorkflow",
 					"SystemHealthWorkflow",
+					"MandateGenesisBuildWorkflow",
+					"MandateExecutionWorkflow",
 				},
 				[]string{
 					"sentinel.LaunchSentinel",
@@ -420,6 +442,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"RunPostLaunchHooksActivity",
 					"RunSystemHealthActivity",
 					"RunProfileDisconnectedHooksActivity",
+					"ScaffoldDomainActivity",
+					"PublishMandateEventActivity",
 				},
 			)
 
@@ -437,6 +461,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			cancel()
 
 			w.Stop()
+			mandateWorker.Stop()
 			logger.Success("✅ Worker detenido exitosamente")
 		},
 	}

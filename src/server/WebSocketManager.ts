@@ -42,9 +42,9 @@ interface AIExecutionProcess {
 // llamar a este método en lugar de broadcast() directo para que los
 // eventos aparezcan en el feed del debug panel.
 //
-// Categorías conocidas: 'nucleus' | 'synapse' | 'temporal' | 'brain' | 'sentinel' | 'health'
+// Categorías conocidas: 'nucleus' | 'synapse' | 'temporal' | 'brain' | 'sentinel' | 'health' | 'mandate'
 export interface SystemEventPayload {
-  category: 'nucleus' | 'synapse' | 'temporal' | 'brain' | 'sentinel' | 'health';
+  category: 'nucleus' | 'synapse' | 'temporal' | 'brain' | 'sentinel' | 'health' | 'mandate';
   event: string;
   data: Record<string, any>;
   profile_id: string | null;
