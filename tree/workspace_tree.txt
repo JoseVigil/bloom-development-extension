@@ -1,4 +1,4 @@
-bloom-development-extension/
+/home/jose/repos/bloom-development-extension/
 └── workspace/
     ├── assets/
     │   ├── bloom.icns
@@ -28,7 +28,9 @@ bloom-development-extension/
     │   ├── milestone-registry.js
     │   ├── onboarding.html
     │   ├── onboarding.js
-    │   └── preload_onboarding.js
+    │   ├── preload_onboarding.js
+    │   ├── resolution-engine.js
+    │   └── step-verifiers.js
     ├── package-lock.json
     ├── package.json
     ├── shared/

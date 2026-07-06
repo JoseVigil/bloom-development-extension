@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── nucleus/
-    ├── .DS_Store
     ├── .gitignore
     ├── README.md
     ├── VERSION
@@ -13,7 +12,6 @@ bloom-development-extension/
     ├── go.mod
     ├── go.sum
     ├── internal/
-    │   ├── .DS_Store
     │   ├── analytics/
     │   │   └── heartbeat.go
     │   ├── cli/
@@ -22,7 +20,6 @@ bloom-development-extension/
     │   ├── client/
     │   │   └── api_client.go
     │   ├── core/
-    │   │   ├── .DS_Store
     │   │   ├── build_info.go
     │   │   ├── core.go
     │   │   ├── logger.go
@@ -48,12 +45,10 @@ bloom-development-extension/
     │   │   ├── mandate_types.go
     │   │   └── system_health_activity.go
     │   ├── orchestration/
-    │   │   ├── .DS_Store
     │   │   ├── activities/
     │   │   │   ├── brain_poller.go
     │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
-    │   │   │   ├── .DS_Store
     │   │   │   ├── synapse.go
     │   │   │   ├── sysproc_other.go
     │   │   │   └── sysproc_windows.go
@@ -63,9 +58,7 @@ bloom-development-extension/
     │   │   │   ├── brain_events.go
     │   │   │   └── system_events.go
     │   │   ├── temporal/
-    │   │   │   ├── .DS_Store
     │   │   │   ├── bootstrap/
-    │   │   │   │   ├── .DS_Store
     │   │   │   │   ├── bootstrap.go
     │   │   │   │   ├── cleanup.go
     │   │   │   │   ├── diagnostics.go
@@ -95,7 +88,6 @@ bloom-development-extension/
     │   │       ├── recovery_flow.go
     │   │       └── system_gate.go
     │   ├── supervisor/
-    │   │   ├── .DS_Store
     │   │   ├── dev_start.go
     │   │   ├── health.go
     │   │   ├── health_resources_darwin.go
@@ -114,7 +106,6 @@ bloom-development-extension/
     ├── main.go
     ├── nucleus-governance.json
     └── scripts/
-        ├── .DS_Store
         ├── build-darwin.sh
         ├── build-linux.sh
         ├── build_number.darwin.txt
