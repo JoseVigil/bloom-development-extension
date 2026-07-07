@@ -8,18 +8,30 @@
 > código real (`background.js`, etc.) parece contradecir lo que dice acá,
 > **este documento gana** hasta que se corrija la fuente en conflicto.
 
+**Versión:** 2.0 — actualizada tras remoción del Clipboard Monitor de Gemini.
+
+| Versión | Fecha | Cambio |
+|---|---|---|
+| 1.0 | (original) | Documenta `HUMAN_GATE_CLIPBOARD` como mecanismo único para todo secreto copiable (GitHub PAT y Gemini key por igual). |
+| **2.0** | **2026-07-07** | **El Clipboard Monitor para la API key de Gemini fue removido por incumplir política** (decisión de producto, no un hallazgo de esta auditoría). Reemplazado por entrada manual en Discovery Page, ya reflejado en `Cognituum_Companion_Implementation_Guide_v1_2.md` (changelog v1.2, 2026-07-04) y en `BTIPS_Bloom_Technical_Intent_Package_v6_0.md`. Esta versión de `AUTHORITY_BOUNDARY.md` corrige §0, §2 y §6, que hasta ahora describían el mecanismo viejo como vigente para Gemini. **`HUMAN_GATE_CLIPBOARD` sigue vigente para GitHub** — el cambio es específico a Gemini, no una deprecación general de clipboard monitoring. |
+
 ---
 
 ## 0. Declaración de arquitectura (para README / doc de Arquitectura general)
 
 > Cognituum no automatiza registros ni maneja credenciales de terceros en
-> producción. El onboarding se gestiona por monitoreo de portapapeles
-> (human-in-the-loop). Cualquier archivo `.ion` con capacidades de
-> `dom_type` o `dom_click` pertenece estrictamente al entorno de
-> Testing/Harness para simulación de flujos de desarrollo, y **no está
-> gateado a nivel de build/runtime todavía** — ver §6 para el estado real
-> de ese límite y el trabajo pendiente para que sea una garantía técnica
-> y no solo una convención de qué se dispara hoy.
+> producción. El onboarding es human-in-the-loop, pero el mecanismo de
+> detección varía según el proveedor y el tipo de paso: monitoreo pasivo
+> de portapapeles para GitHub (§2.2), entrada manual por formulario para
+> la API key de Gemini (§2.1 — **el Clipboard Monitor de Gemini fue
+> removido por incumplir política**, ver changelog v2.0 arriba), y
+> observación de URL de tab para el registro de cuenta de Google (§2.3).
+> Cualquier archivo `.ion` con capacidades de `dom_type` o `dom_click`
+> pertenece estrictamente al entorno de Testing/Harness para simulación
+> de flujos de desarrollo, y **no está gateado a nivel de build/runtime
+> todavía** — ver §6 para el estado real de ese límite y el trabajo
+> pendiente para que sea una garantía técnica y no solo una convención
+> de qué se dispara hoy.
 
 ## 1. El principio, en una frase
 
@@ -34,25 +46,56 @@ en su propia sesión de navegador.
 
 ## 2. Qué hace Cognituum en realidad (mecanismos verificados)
 
-Hay **dos** mecanismos de detección human-gate en producción, no uno solo.
-Cuál se usa depende de si el paso produce un secreto copiable o no.
+Hay **tres** mecanismos de detección human-gate en producción. Cuál se
+usa depende del proveedor y de si el paso produce un secreto copiable
+o no — ya no es una regla binaria "hay secreto → clipboard", porque
+Gemini es un caso de secreto copiable que **no** usa clipboard (ver
+2.1 abajo).
 
-### 2.1 `HUMAN_GATE_CLIPBOARD` — cuando hay un secreto (GitHub PAT, Gemini key)
+### 2.1 `HUMAN_GATE_MANUAL_FORM` — Gemini API key (mecanismo actual, reemplaza clipboard)
+
+**El Clipboard Monitor para la API key de Gemini fue removido por
+incumplir política.** Confirmado en `Cognituum_Companion_Implementation_Guide_v1_2.md`
+(changelog v1.2, 2026-07-04) y `BTIPS_Bloom_Technical_Intent_Package_v6_0.md`:
+
+1. El usuario genera su API key a mano, en la puerta real de Gemini
+   (`aistudio.google.com` o equivalente) — igual que en cualquier otro
+   mecanismo, Cognituum no toca ese paso.
+2. El usuario **pega o tipea la key en un formulario propio de
+   Cognituum** (`discovery/onboarding.js`, Discovery Page) — no hay
+   lectura pasiva del portapapeles del sistema operativo.
+3. Al enviar el formulario, el código valida el formato localmente
+   (regex `AIzaSy...`) y dispara `API_KEY_REGISTERED` con
+   `service: 'gemini'`.
+4. `navigator.clipboard.read()` no se invoca en ningún punto de este
+   flujo. `clipboardRead` no se declara en el manifest de producción.
+
+Esto es **más restrictivo** que `HUMAN_GATE_CLIPBOARD` (2.2): no hay
+ninguna API del navegador que lea contenido fuera del formulario que
+el propio usuario completa y envía explícitamente.
+
+### 2.2 `HUMAN_GATE_CLIPBOARD` — GitHub PAT (único proveedor que sigue usando este mecanismo)
 
 Confirmado en `background.js`:
 
-1. `onboarding_state` entra en un estado de espera (`api_waiting`,
-   `gemini_api_waiting`, etc.) cuando el usuario llega a ese paso.
+1. `onboarding_state` entra en un estado de espera (`api_waiting`, etc.)
+   cuando el usuario llega a ese paso.
 2. `startClipboardMonitoring()` se activa. Pasivo: no navega, no
    inyecta JS, no observa el DOM del formulario.
-3. El usuario se registra/genera la key a mano, en la puerta real del
-   proveedor.
+3. El usuario se registra/genera el PAT a mano, en la puerta real de
+   GitHub.
 4. El usuario copia su propio secreto.
 5. `detectAPIKeyProvider()` corre un regex sobre el clipboard
-   (`AIzaSy...` para Gemini, `ghp_...` para GitHub) y emite
-   `*_DETECTED`.
+   (`ghp_...`) y emite `GITHUB_PAT_DETECTED`.
 
-### 2.2 `HUMAN_GATE_URL_WATCH` — cuando NO hay secreto (registro de cuenta de Google)
+> Nota de alcance: este mecanismo aplicaba antes a Gemini también
+> (`AIzaSy...` en el mismo diccionario de regex). Ya no es así — ver
+> 2.1. Si el diccionario `API_KEY_PATTERNS` en el código real todavía
+> contiene la entrada de Gemini, confirmar que ya no está conectada a
+> `startClipboardMonitoring()` y que solo se usa, si acaso, para la
+> validación de formato local del formulario manual de 2.1.
+
+### 2.3 `HUMAN_GATE_URL_WATCH` — cuando NO hay secreto (registro de cuenta de Google)
 
 Google no emite nada copiable al crear una cuenta — no hay PAT ni key
 que el clipboard monitor pueda interceptar. La señal en este caso es
@@ -61,7 +104,7 @@ que el clipboard monitor pueda interceptar. La señal en este caso es
 1. `onboarding_state.currentStep` pasa a `google_waiting` cuando
    Discovery abre la puerta (`accounts.google.com/signup` o `/signin`).
 2. Un listener de `chrome.tabs.onUpdated` (nuevo, simétrico a
-   `startClipboardMonitoring()`, ver `startGoogleAuthWatcher()` en §2.3)
+   `startClipboardMonitoring()`, ver `startGoogleAuthWatcher()` en §2.4)
    se activa mientras `currentStep === 'google_waiting'`.
 3. El usuario completa el registro/login a mano.
 4. Cuando la tab navega a una URL que solo es alcanzable con sesión
@@ -70,12 +113,12 @@ que el clipboard monitor pueda interceptar. La señal en este caso es
    nunca la tab de Gmail, solo el string de la URL — y emite
    `ACCOUNT_REGISTERED` con `service: "google"`.
 
-Esto es *menos* invasivo que 2.1: no requiere `clipboard_read`, no
+Esto es *menos* invasivo que 2.2: no requiere `clipboard_read`, no
 requiere content script en `google.com`, no requiere ningún
 `host_permission` sobre el contenido de la página — `chrome.tabs`
 expone la URL de una tab sin necesidad de leer nada dentro de ella.
 
-### 2.3 Propuesta de implementación — `startGoogleAuthWatcher()`
+### 2.4 Propuesta de implementación — `startGoogleAuthWatcher()`
 
 Patrón de dos capas, porque el destino post-login/post-signup de Google
 no es único: depende de si el usuario registró cuenta nueva (suele
@@ -149,16 +192,23 @@ leen antes que el código:
 
 **La regla que se desprende:** cualquier `.ion`, manifest, o doc que
 describa un flujo de credenciales de terceros tiene que declarar
-explícitamente, en su propio texto, cuál de los dos mecanismos usa:
+explícitamente, en su propio texto, cuál de estos mecanismos usa:
 
-- `HUMAN_GATE_CLIPBOARD` → el mecanismo real: espera pasiva + clipboard regex.
-- `HUMAN_GATE_DOM_WATCH` → mecanismo alternativo (el que yo diseñé antes):
-  observa el DOM del proveedor para detectar el resultado, sin clipboard.
+- `HUMAN_GATE_CLIPBOARD` → espera pasiva + clipboard regex (GitHub, §2.2).
+- `HUMAN_GATE_MANUAL_FORM` → el usuario pega/tipea el secreto en un
+  formulario propio de Cognituum, sin lectura de portapapeles del
+  sistema (Gemini, §2.1 — reemplaza clipboard desde v2.0 de este doc).
+- `HUMAN_GATE_URL_WATCH` → observa a qué URL navegó la tab, sin leer
+  contenido de la página (Google, §2.3).
+- `HUMAN_GATE_DOM_WATCH` → mecanismo alternativo descartado (observa el
+  DOM del proveedor para detectar el resultado, sin clipboard) — no
+  está en uso en producción, se documenta acá solo porque generó
+  confusión en `.ion` de una sesión anterior (ver tabla arriba).
 
-Ninguno de los dos escribe en el formulario del proveedor. La diferencia
+Ninguno de estos escribe en el formulario del proveedor. La diferencia
 es solo *cómo* se detecta que el usuario terminó. Pero si un archivo no
-dice cuál de los dos es, un lector (humano o modelo) va a asumir el
-patrón más parecido a lo que ya vio — que es exactamente lo que pasó acá.
+dice cuál usa, un lector (humano o modelo) va a asumir el patrón más
+parecido a lo que ya vio — que es exactamente lo que pasó acá.
 
 ## 4. Checklist para cualquier `.ion` o manifest nuevo que toque un proveedor externo
 
@@ -166,17 +216,23 @@ Antes de mergear un `.ion` que interactúe con `accounts.google.com`,
 `github.com`, o cualquier dominio de un proveedor de identidad/API:
 
 - [ ] ¿El manifest declara `dom_type` o `dom_click` como capability? →
-      Si el flujo es `HUMAN_GATE_CLIPBOARD`, **no debería declararlos**.
+      Si el flujo es `HUMAN_GATE_CLIPBOARD` o `HUMAN_GATE_MANUAL_FORM`,
+      **no debería declararlos**.
 - [ ] ¿Hay algún `type:` step apuntando a un selector de
       username/password/email en la page.ion del proveedor? → Si existe,
       tiene que estar marcado explícitamente como legado/mock, con un
       comentario que diga por qué no refleja producción.
 - [ ] ¿El fragmento que verifica "sesión completa" usa `wait_signal` sobre
-      un DOM del proveedor, o `clipboard_read` + regex? → Declararlo en
-      la primera línea del `description:`.
+      un DOM del proveedor, `clipboard_read` + regex, o el submit de un
+      formulario propio? → Declarar cuál de los tres en la primera línea
+      del `description:`.
 - [ ] ¿El `description:` del fragment/action menciona explícitamente
       "el usuario completa este paso manualmente"? Si no lo dice, un
       lector no tiene forma de saberlo sin leer los steps uno por uno.
+- [ ] Si el proveedor es Gemini: ¿el código todavía invoca
+      `navigator.clipboard.read()` o declara `clipboardRead` en el
+      manifest para este flujo? → Si sí, está desactualizado respecto a
+      §2.1 y debe corregirse antes de mergear.
 
 ## 5. Dónde vive este documento y quién lo referencia
 
@@ -199,16 +255,22 @@ Referenciarlo desde:
 
 Confirmado leyendo `background.js` completo (no solo grep):
 
-- **GitHub usa el mismo mecanismo de clipboard que Gemini**, no un login
-  automatizado. `API_KEY_PATTERNS.github` (`/^ghp_[A-Za-z0-9]{36,}$/`)
-  vive en el mismo diccionario que Gemini/Claude/OpenAI/Grok, y
-  `startClipboardMonitoring()` tiene una rama explícita
+- **GitHub usa el mecanismo de clipboard**, no un login automatizado.
+  `API_KEY_PATTERNS.github` (`/^ghp_[A-Za-z0-9]{36,}$/`) y
+  `startClipboardMonitoring()` tienen una rama explícita
   `if (detected.provider === 'github')` que emite `GITHUB_PAT_DETECTED`
-  por clipboard — igual que cualquier otro proveedor.
+  por clipboard. **Esto ya no aplica a Gemini** — el Clipboard Monitor
+  para Gemini fue removido por incumplir política (ver changelog v2.0
+  y §2.1); si el diccionario de regex todavía incluye la entrada de
+  Gemini, es solo para la validación de formato local del formulario
+  manual, no para escaneo de portapapeles.
 - **El disparador de la vida real es `onboarding_state`.** El listener
   de `chrome.storage.onChanged` arranca el clipboard monitor cuando
-  `currentStep` incluye `api_waiting`/`gemini_api_waiting`. Eso es lo
-  único que corre automáticamente durante el onboarding de un usuario.
+  `currentStep` incluye `api_waiting` (GitHub). El paso equivalente
+  para Gemini (`gemini_api_waiting` o el nombre que tenga hoy) ya no
+  dispara clipboard monitoring — dispara la espera del submit del
+  formulario manual (§2.1). Confirmar el nombre exacto del estado
+  contra el `background.js`/`onboarding.js` real antes de asumirlo.
 - **`ION_EXECUTE_FLOW`** — el comando que dispararía `generate_pat.ion`
   y, con él, los steps `type`/`click` de `session_guard.ion` — está
   documentado en el propio código como *"Harness → background →
@@ -222,7 +284,9 @@ real y funcional — el pipeline de `DOM_TYPE`/`DOM_CLICK` en
 punto de entrada es el Harness de debug (un developer simulando el
 evento para no gastar cuentas reales al testear la UI repetidamente).
 **Nunca se invocan como parte del onboarding real de un usuario**, que
-corre 100% por `HUMAN_GATE_CLIPBOARD` (sección 2).
+corre por `HUMAN_GATE_CLIPBOARD` para GitHub (§2.2), `HUMAN_GATE_MANUAL_FORM`
+para Gemini (§2.1), y `HUMAN_GATE_URL_WATCH` para Google (§2.3) — nunca
+por automatización de DOM sobre el formulario de un proveedor.
 
 Acción recomendada sobre el archivo en sí: agregar un comentario en la
 cabecera de `session_guard.ion` que deje esto explícito, para que la
