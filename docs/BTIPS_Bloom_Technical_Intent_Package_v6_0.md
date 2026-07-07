@@ -1,6 +1,15 @@
-### 📦 BTIPS (Bloom Technical Intent Package) — v4.0
+### 📦 BTIPS (Bloom Technical Intent Package) — v6.0
 
 BTIP convierte la interacción con inteligencia artificial en un proceso de ingeniería reproducible, donde cada intención técnica queda formalizada, versionada y gobernada por contexto real.
+
+---
+
+## 📝 Registro de cambios
+
+| Versión | Cambios |
+|---|---|
+| v4.0 | Línea base: Bloom Runtime (Sentinel, Synapse, Nucleus), Bloom Cortex (Discovery/Landing/Harness), Bloom Conductor, VS Code Plugin, Brain/IonPump, Bloom Sensor, Metamorph, Nucleus, Intents, Mandates, Batcave, Alfred, App Mobile. |
+| **v6.0** | **Nuevo:** Bloom Companion incorporado como **cuarto activo nativo de Cortex** (§2.3), junto a Discovery/Landing/Harness. A diferencia de Harness (dev-only), Companion es un activo de **producción** orientado al ingeniero final: panel lateral de segunda opinión cognitiva embebido en el navegador, con su propio `COMPANION_PROTOCOL_MANIFEST` y schema de validación de payload. Su gating de activación depende de `linked_accounts` **y** del handshake Synapse de 3 fases (§2.3, subsección Companion). Fuente: `Cognituum_Companion_Implementation_Guide_v1_2.md`. Ver también `AUTHORITY_BOUNDARY.md` para el límite de autoridad sobre credenciales de terceros, que este feature respeta sin excepción (no automatiza login/registro de ningún proveedor). |
 
 ---
 
@@ -109,6 +118,10 @@ flowchart LR
             Anthropic"]
             GrokSite["⚡ Grok
             xAI"]
+            CompanionSite["🪞 Companion
+            Side Panel (Gemini webview)"]
+            GeminiWebSite["🔷 Gemini Web
+            google.com · sesión propia"]
         end
 
         subgraph AIProviders["🤖 AI Providers"]
@@ -159,6 +172,12 @@ flowchart LR
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
         Ext --> GrokSite
+        Ext <--> CompanionSite
+        CompanionSite --> GeminiWebSite
+
+        CompanionSite -.contexto BISP.-> ChatGPTSite
+        CompanionSite -.contexto BISP.-> ClaudeSite
+        CompanionSite -.contexto BISP.-> GrokSite
 
         Brain <--> GeminiAPI
     end
@@ -218,16 +237,18 @@ El runtime de Cortex incluye tres páginas web locales que operan sobre el mismo
 * **Discovery** — Onboarding del usuario. Guía el flujo desde la instalación hasta tener GitHub auth, API key y cuenta registrada en Nucleus.
 * **Landing** — Dashboard del perfil activo. Estado de sesión, cuentas vinculadas, stats de uso y acciones rápidas post-onboarding.
 * **Harness** — Herramienta de debug y observabilidad del protocolo. Existe **únicamente en builds dev** — no se despliega en producción.
+* **Companion** *(v6.0)* — Panel lateral de segunda opinión cognitiva. A diferencia de Harness, **sí es un activo de producción**: vive permanentemente disponible para el ingeniero, gateado por onboarding completo + handshake Synapse confirmado. Ver subsección dedicada más abajo.
 
 Cortex es deliberadamente **stateless**, delegando autoridad, versionado y despliegue a Sentinel, y razonamiento profundo a Brain.
 
 #### El Protocolo Synapse y los Manifests Autodescriptivos
 
-Los tres activos de Cortex comparten un canal único de **Chrome Native Messaging** con Brain. Cada activo se autodescribe mediante un objeto `*_PROTOCOL_MANIFEST` expuesto en `self.*`:
+Los cuatro activos de Cortex comparten un canal único de **Chrome Native Messaging** con Brain. Cada activo se autodescribe mediante un objeto `*_PROTOCOL_MANIFEST` expuesto en `self.*`:
 
 * `DISCOVERY_PROTOCOL_MANIFEST` — mensajes del flujo de onboarding
 * `LANDING_PROTOCOL_MANIFEST` — mensajes del dashboard del perfil
 * `HARNESS_PROTOCOL_MANIFEST` — comandos DOM y eventos de automatización web
+* `COMPANION_PROTOCOL_MANIFEST` *(v6.0)* — mensajes de inyección de contexto (`INJECT_BISP`, `INJECT_BRIEF`, `INJECT_TEXT`, `NEW_SESSION`) y su contraparte saliente (`SLAVE_MODE_CHANGED`)
 
 Este mecanismo garantiza que agregar un mensaje al protocolo actualice automáticamente cualquier componente que los consuma — sin pasos adicionales, sin builds separados.
 
@@ -245,6 +266,31 @@ Sus cuatro paneles:
 **Activación:** `sentinel seed <alias> <master> --dev`. En producción, `generate_harness_page()` es un no-op y el directorio `harness/` nunca se crea. **El Harness no requiere rebuild de Cortex para actualizarse** — un re-seed es suficiente.
 
 ---
+
+#### Companion — Segunda Opinión Cognitiva *(nuevo v6.0)*
+
+El Companion es el **cuarto activo Synapse**, y el primero de los cuatro pensado para uso continuo en producción por el ingeniero (no solo por developers de Bloom). Es un panel lateral (`chrome.sidePanel`) que embebe la web de Gemini (`<webview>` nativo, sesión propia del usuario, costo $0 para el sistema) para dar una segunda opinión técnica sin interrumpir ni "ensuciar" la sesión principal que el ingeniero mantiene con la AI web de turno (Claude, ChatGPT, Grok).
+
+**Principio de Sesión Prístina:** la sesión de la AI web principal contiene solo la conversación técnica del ingeniero. Ninguna verificación de consistencia contra el BISP ni ruido de gobernanza se inyecta ahí — eso vive exclusivamente en el Companion, que el ingeniero abre y consulta bajo su propio criterio.
+
+**Gating de activación** — dos condiciones necesarias, ninguna suficiente por sí sola:
+
+1. `linked_accounts` del perfil incluye `google` y `gemini` con `status: active`, completados durante el onboarding de Discovery (Condición 1 vía `HUMAN_GATE_URL_WATCH`/`startGoogleAuthWatcher()`, Condición 2 vía formulario de entrada manual de API key — ninguna de las dos automatiza el formulario del proveedor; ver `AUTHORITY_BOUNDARY.md`).
+2. El handshake Synapse de 3 fases (`extension_ready → host_ready → handshake_confirm`) está confirmado. Antes de eso el Companion puede estar abierto pero permanece pasivo — no recibe ni emite mensajes de `COMPANION_PROTOCOL_MANIFEST`.
+
+El botón de activación vive en Landing (`isCompanionAvailable()`), nunca en Discovery, porque solo en Landing coexisten sesión de Google ya autenticada y handshake potencialmente confirmado.
+
+**Privilegio Mínimo:** `host_permissions` restringidos a los cuatro dominios de ingeniería (`gemini.google.com`, `claude.ai`, `chatgpt.com`, `github.com`). Sin `clipboardRead` en el manifest de producción — el onboarding de credenciales es 100% manual, consistente con `AUTHORITY_BOUNDARY.md` §1.
+
+**BISP como contexto nativo:** cuando Brain termina de procesar un intent, `context.js` emite `STORE_BISP` con un resumen estructurado (`intentType`, `summary`, `openDecision`, `findingsSummary`, `domainTags`). Si el ingeniero navega a una AI web con el handshake confirmado, `background.js` inyecta ese BISP en el Companion en segundo plano (`INJECT_BISP`, validado contra `companion.schema.json` antes de tocar el webview). El Companion queda así "al tanto" de la sesión sin que el ingeniero tenga que explicárselo — estado `SILENT_MONITORING` en el statusbar.
+
+**Nota de diseño abierta:** la inyección silenciosa (`autoSend: true` para el contexto BISP) y el forzado de user-agent móvil para obtener la UI colapsada de Gemini son decisiones de UX ya tomadas en la guía de implementación (v1.2). Vale dejarlas explícitas acá porque son la clase de detalle que un ToS de un proveedor de terceros puede tratar de forma distinta a una extensión que solo lee `tabs.onUpdated` — el Kickoff Intent (ver `.bloom/.intents/.dev/`) incluye un ítem de revisión de esa superficie antes de merge a producción, no como bloqueo sino como checklist de higiene.
+
+**Companion no depende de Harness — y no debe llegar a depender.** Son activos ortogonales: Harness es dev-only (§16 restricción #4 de `HARNESS_SOURCE_OF_TRUTH_1_2.md`: *"El Harness NO existe en prod"*), Companion es de producción continua. Companion tiene su propio manifiesto (`COMPANION_PROTOCOL_MANIFEST`) y su propio mecanismo de inyección (`executeScript()`/`insertCSS()` directo sobre su `<webview>`) — en ningún punto invoca `ION_EXECUTE_FLOW`, comandos DOM de IonPump, ni nada de `content.js`/`harnessProtocol.js`. Salvedad a tener presente: lo que está gateado a `--dev` en `harness_generator.py` es solo la UI (`harness/index.html`); el routing de esos comandos en `background.js`/`content.js` no está condicionado al mismo flag y existe en todo build. Companion no debe, bajo ningún diseño futuro, invocar esa vía — mantenerlo así es lo que preserva la separación limpia entre "activo de producción" y "herramienta de debug".
+
+---
+
+
 
 ### 2.4️⃣ Bloom Conductor (Sovereign Intent Interface)
 
