@@ -66,6 +66,15 @@ class MilestoneReactor {
     // Si el proceso reinicia, el estado persiste en nucleus.json.
     this._processed = new Set();
 
+    // FIX (auditoría Synapse v3, §2 — bug crítico "allBlockingDone"):
+    // Set separado, indexado SOLO por stepId (nunca "stepId:event"), que
+    // refleja "este step ya completó" sin importar cuántos eventos internos
+    // lo compusieron. _processed no sirve para esto porque sus claves son
+    // compuestas ("stepId:event") por diseño — ver comentario en
+    // handleMilestone(). blockingSteps.every() debe evaluar contra este Set,
+    // nunca contra _processed directamente.
+    this._completedSteps = new Set();
+
     // Set separado para dedupe de EMISIÓN al renderer (Bug 3).
     // _processed usa clave "stepId:event" porque github_auth necesita procesar
     // varios eventos del mismo step (ACCOUNT_REGISTERED abre Landing,
@@ -141,10 +150,18 @@ class MilestoneReactor {
     try {
       const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
       const completed = data.onboarding?.completed_steps || [];
+      // FIX (auditoría Synapse v3, §2): nucleus.json guarda stepIds pelados
+      // ("vault_init", no "vault_init:VAULT_INITIALIZED"). Antes esto se
+      // agregaba a _processed, mezclando formato de clave con el compuesto
+      // que usa handleMilestone() en la sesión activa — lo cual además
+      // rompía silenciosamente el chequeo de allBlockingDone. Ahora va a
+      // _completedSteps, que es exactamente el Set bare-stepId que ese
+      // chequeo necesita. _processed queda intacto para su único propósito:
+      // dedupe por evento dentro de la sesión activa.
       for (const stepId of completed) {
-        this._processed.add(stepId);
+        this._completedSteps.add(stepId);
       }
-      this._log(`rehydrateFromDisk: ${this._processed.size} steps ya completados`);
+      this._log(`rehydrateFromDisk: ${this._completedSteps.size} steps ya completados`);
     } catch (e) {
       this._log(`rehydrateFromDisk: no se pudo leer nucleus.json — ${e.message}`);
     }
@@ -224,9 +241,13 @@ class MilestoneReactor {
     });
     this._emitStepUiUpdate('project_create', { phase: 'ESTABLISHED' });
 
-    // Verificar si todos los steps bloqueantes están completos
+    // Verificar si todos los steps bloqueantes están completos.
+    // FIX (auditoría Synapse v3, §2): antes comparaba contra _processed, cuyas
+    // claves son compuestas ("stepId:event") y nunca matchean un s.id pelado
+    // — allBlockingDone daba false siempre. Ahora compara contra
+    // _completedSteps, que sí es bare-stepId.
     const allBlockingDone = this._registry.blockingSteps.every(
-      s => this._processed.has(s.id)
+      s => this._completedSteps.has(s.id)
     );
 
     if (allBlockingDone) {
@@ -343,6 +364,11 @@ class MilestoneReactor {
    * Idempotente en disco — no duplica si ya existe.
    */
   async _persistStepComplete(stepId, step = null) {
+    // FIX (auditoría Synapse v3, §2): registrar acá, no en el caller, para
+    // que _completedSteps quede correcto sin importar qué handler llame a
+    // este método (todos pasan por acá) y sin duplicar esta línea en cada
+    // uno de los seis handlers de arriba.
+    this._completedSteps.add(stepId);
     try {
       const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
       data.onboarding = data.onboarding || {};

@@ -151,7 +151,12 @@ function _connectMilestoneReactor(bridge, registry, reactor) {
 
     // El evento en el mensaje es el nombre del evento Cortex (ej: 'GITHUB_TOKEN_STORED').
     // El registry resuelve ese nombre al stepId del onboarding (ej: 'github_auth').
-    const stepId = registry.resolveEvent(enriched.event);
+    // FIX (auditoría Synapse v3, §2 — bug crítico google_auth/ACCOUNT_REGISTERED):
+    // se pasa el payload como segundo argumento para que resolveEvent pueda
+    // discriminar eventos genéricos por "service" (ver milestone-registry.js).
+    // Sin esto, ACCOUNT_REGISTERED con service:'google' resolvía igual a
+    // 'github_auth' porque era el primer step registrado para ese evento.
+    const stepId = registry.resolveEvent(enriched.event, enriched.data ?? enriched);
 
     if (!stepId) {
       // Evento clasificado como ONBOARDING_MILESTONE pero sin mapeo en el registry.

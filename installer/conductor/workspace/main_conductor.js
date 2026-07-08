@@ -278,7 +278,12 @@ function initOnboardingBridge() {
   _onboardingBridge.on('message', (enriched) => {
     if (enriched.type !== 'ONBOARDING_MILESTONE') return;
 
-    const stepId = registry.resolveEvent(enriched.event);
+    // FIX (auditoría Synapse v3, §2 — bug crítico google_auth/ACCOUNT_REGISTERED):
+    // resolveEvent ahora necesita el payload como segundo argumento para
+    // discriminar eventos genéricos por "service" (ej: ACCOUNT_REGISTERED
+    // compartido por github_auth y google_auth). Sin esto, siempre resolvía
+    // al primer step registrado para ese evento — ver milestone-registry.js.
+    const stepId = registry.resolveEvent(enriched.event, enriched.data ?? enriched);
     if (!stepId) {
       log.warn('[SYNAPSE] ONBOARDING_MILESTONE sin mapeo en registry:', enriched.event);
       return;

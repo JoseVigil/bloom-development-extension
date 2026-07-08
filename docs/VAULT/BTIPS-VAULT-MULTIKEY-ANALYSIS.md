@@ -1,9 +1,11 @@
 # 🔐 BTIPS VAULT MULTI-KEY ANALYSIS
 ## Investigación del Sistema de Registro y Almacenamiento de API Keys
 
-**Fecha:** 13 de Febrero, 2026  
+**Fecha:** 13 de Febrero, 2026 · **Revisado:** 07 de Julio, 2026 (v1.1)  
 **Objetivo:** Evaluar y expandir el sistema de gestión de API keys desde Gemini (único) hacia Claude, ChatGPT y Grok  
 **Scope:** Protocolo SYNAPSE, Discovery Page, Vault Architecture
+
+> **Nota de revisión v1.1:** esta versión corrige dos contradicciones detectadas respecto a la arquitectura de seguridad real: (1) Vault.go como stub que permite usar el Keyring sin autorización de Nucleus, y (2) un mecanismo de detección de clipboard que depende de una API de Chrome inexistente y viola el principio de "sin automatización de captura" ya establecido en `AUTHORITY_BOUNDARY.md`. Los cambios están marcados inline con `🔧 CORRECCIÓN v1.1`.
 
 ---
 
@@ -79,6 +81,24 @@ func RequestKey(keyID string) (string, error) {
 
 **Archivo esperado pero AUSENTE:**
 - `vault_keys.json` - Existe en código pero nunca se puebla con keys reales
+
+**🔧 CORRECCIÓN v1.1 — fix requerido antes de expandir a más providers:**
+
+El problema no es solo que `RequestKey` devuelva basura — es que su existencia como stub permite que `GeminiKeyManager` (ver punto 3 más abajo) hable directo con el Keyring del OS **sin pasar nunca por esta función**. Eso significa que hoy Nucleus no es realmente la autoridad que firma el acceso a las keys; es un componente decorativo que el código real ignora.
+
+El fix correcto:
+```go
+// Vault.go DEBE ser el único punto de entrada al Keyring.
+// Nucleus valida rol/scope ANTES de esta llamada, no después.
+func RequestKey(keyID string, requesterRole Role, scope string) (string, error) {
+    if !nucleus.Authorize(requesterRole, scope, keyID) {
+        return "", ErrUnauthorized
+    }
+    // Recién acá se toca el Keyring real del OS
+    return osKeyring.Get(SERVICE_NAME, keyID)
+}
+```
+Y `credentials.py` (Python) deja de llamar a `keyring.set_password`/`get_password` directamente — pasa a comunicarse con Vault.go vía el mismo canal `VAULT_GET_KEY` que ya existe en el Event Bus (Sentinel↔Brain). Un solo camino de autorización, no dos sistemas paralelos que hay que mantener sincronizados.
 
 #### 2. **Flujo de Registro NO Conectado a Vault**
 
@@ -235,47 +255,67 @@ class XAIKeyInfo(APIKeyInfo):
 │    [OpenAI] → Platform OpenAI              │
 │    [Grok] → xAI Console                    │
 │                                             │
-│ 2. Usuario copia key en clipboard         │
+│ 2. Usuario vuelve a Discovery y PEGA la    │
+│    key en el campo de texto del provider   │
+│    correspondiente                         │
 └─────────────────────────────────────────────┘
                     ↓
 ```
 
-#### **FASE 2: Background Detecta Clipboard**
+#### **FASE 2: Captura por Input Manual (🔧 CORRECCIÓN v1.1)**
+
+**Por qué se reemplaza el enfoque anterior:** la v1.0 de este documento proponía `chrome.clipboard.onChanged`, una API que **no existe** en Chrome (el propio documento lo reconocía más abajo, en "Decisiones Pendientes #2"). Las dos alternativas que planteaba esa sección — polling con permiso `clipboardRead`, o content script inyectado en las páginas de los providers — violan directamente el principio ya establecido en `AUTHORITY_BOUNDARY.md`: nada de automatizar la captura de credenciales, nada de tocar el DOM de sitios de terceros.
+
+La solución correcta es más simple que el problema que se estaba tratando de resolver: un campo de texto normal en tu propia UI. Pegar en un `<input>` propio no requiere ningún permiso de Chrome — es simplemente recibir texto que el usuario tipeó o pegó en un formulario que vos controlás, igual que un campo de login.
 
 ```javascript
-// background.js - NUEVO LISTENER
-chrome.clipboard.onChanged.addListener((clipData) => {
-    const keyPattern = detectAPIKeyPattern(clipData);
-    
-    if (keyPattern) {
-        console.log('[Synapse] API Key detected:', keyPattern.provider);
-        
-        sendToHost({
-            event: "API_KEY_DETECTED",
-            provider: keyPattern.provider,
-            key: clipData,  // ⚠️ Solo viaja por Native Messaging, nunca filesystem
-            timestamp: Date.now()
-        });
-    }
+// discovery.js — reemplaza el listener de clipboard
+// Sin permisos especiales: es un input estándar en tu propia página.
+document.querySelectorAll('.api-key-input').forEach((input) => {
+    input.addEventListener('change', (e) => {
+        const provider = e.target.dataset.provider; // ej. "claude"
+        const rawValue = e.target.value.trim();
+
+        const keyPattern = detectAPIKeyPattern(rawValue, provider);
+
+        if (keyPattern) {
+            console.log('[Synapse] API Key format válido:', keyPattern.provider);
+
+            sendToHost({
+                event: "API_KEY_SUBMITTED",
+                provider: keyPattern.provider,
+                key: rawValue,  // Solo viaja por Native Messaging, nunca filesystem
+                timestamp: Date.now()
+            });
+
+            e.target.value = '';           // no dejar la key en el DOM
+            e.target.type = 'password';    // enmascarar mientras se procesa
+        } else {
+            showInlineError(provider, 'Formato de key no reconocido');
+        }
+    });
 });
 
-function detectAPIKeyPattern(text) {
+function detectAPIKeyPattern(text, expectedProvider) {
     const patterns = {
         gemini: /^AIzaSy[A-Za-z0-9_-]{33}$/,
         claude: /^sk-ant-[A-Za-z0-9_-]+$/,
         openai: /^sk-[A-Za-z0-9]{48}$/,
         xai: /^xai-[A-Za-z0-9_-]+$/
     };
-    
-    for (const [provider, regex] of Object.entries(patterns)) {
-        if (regex.test(text)) {
-            return { provider, matched: true };
-        }
+
+    const regex = patterns[expectedProvider];
+    if (regex && regex.test(text)) {
+        return { provider: expectedProvider, matched: true };
     }
-    
     return null;
 }
 ```
+
+**Diferencias clave respecto al enfoque descartado:**
+- Manifest de la extensión: **sin `clipboardRead`**, consistente con `AUTHORITY_BOUNDARY.md` §1.
+- El evento pasa de `API_KEY_DETECTED` (pasivo, "algo apareció en el portapapeles") a `API_KEY_SUBMITTED` (activo, "el usuario confirmó este valor en este campo"). El segundo deja intención explícita del usuario; el primero era ambiguo sobre qué texto era y por qué se capturaba.
+- El campo asocia el valor pegado a un provider conocido de antemano (`data-provider`) en vez de adivinar el provider a partir del patrón del texto — menos falsos positivos.
 
 #### **FASE 3: Synapse Protocol Relay**
 
@@ -285,7 +325,7 @@ class SynapseProtocol:
     def handle_message(self, message: Dict[str, Any]):
         event = message.get('event')
         
-        if event == 'API_KEY_DETECTED':
+        if event == 'API_KEY_SUBMITTED':
             self.handle_api_key_registration(message)
     
     def handle_api_key_registration(self, message: Dict[str, Any]):
@@ -764,26 +804,14 @@ Contras:
 - Vault.go se refactoriza para leer de Keyring en lugar de filesystem
 - Permite migrar a Opción A después si se necesita team sharing
 
-### **2. Clipboard Detection: ¿Browser API o Content Script?**
+### **2. Clipboard Detection: RESUELTO en v1.1 — ninguna de las dos opciones**
 
-Chrome no tiene `clipboard.onChanged` nativo. Opciones:
+La v1.0 de este documento dejaba esto como decisión pendiente entre dos opciones de clipboard. Ambas quedan descartadas:
 
-**Opción A: Polling desde Discovery Page**
-```javascript
-setInterval(() => {
-    navigator.clipboard.readText().then(checkIfAPIKey);
-}, 1000);
-```
-Requiere permisos `clipboardRead` en manifest.
+- ~~Opción A: Polling desde Discovery Page con `clipboardRead`~~ — permiso innecesario para el problema real.
+- ~~Opción B: Content Script en Provider Pages~~ — invasivo, viola `AUTHORITY_BOUNDARY.md`.
 
-**Opción B: Content Script en Provider Pages**
-```javascript
-// Inject script en AI Studio, Anthropic Console, etc.
-document.addEventListener('copy', detectAPIKey);
-```
-Más invasivo pero más preciso.
-
-**RECOMENDACIÓN:** Opción A (polling) para MVP, Opción B para v2.
+**Decisión final:** input manual en un campo de la propia UI de Discovery (ver Fase 2 arriba). Cero permisos de clipboard, cero scripts inyectados en sitios de terceros. El usuario pega donde vos controlás, no donde controla el navegador en general.
 
 ### **3. Multi-Key Rotation Strategy Cross-Provider**
 

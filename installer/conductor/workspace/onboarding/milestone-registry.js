@@ -67,7 +67,14 @@ const FALLBACK_STEPS = [
     requires:           ['nucleus_path'],
     produces:           'github_token',
     blocking:           true,
-    cortex_events:      ['GITHUB_PAT_DETECTED', 'GITHUB_TOKEN_STORED', 'ACCOUNT_REGISTERED'],
+    // FIX (auditoría Synapse v3, §2 — bug crítico google_auth/ACCOUNT_REGISTERED):
+    // ACCOUNT_REGISTERED es un evento genérico compartido con google_auth,
+    // discriminado por el campo "service" del payload (confirmado en
+    // GithubAuthFlow._saveToken() / GoogleAuthFlow._confirmLogin() de
+    // discovery.js). El sufijo ":github" le dice a loadSteps() que este
+    // mapeo solo aplica cuando payload.service === 'github' — ver
+    // resolveEvent() más abajo.
+    cortex_events:      ['GITHUB_PAT_DETECTED', 'GITHUB_TOKEN_STORED', 'ACCOUNT_REGISTERED:github'],
     conductor_reaction: 'markStepComplete',
   },
   {
@@ -89,7 +96,14 @@ const FALLBACK_STEPS = [
     requires:           ['vault_initialized'],
     produces:           'google_account',
     blocking:           false,
-    cortex_events:      ['GOOGLE_AUTH_COMPLETE'],
+    // FIX (auditoría Synapse v3, §2): GOOGLE_AUTH_COMPLETE nunca se
+    // implementó (confirmado 💀 en el catálogo maestro, §3) — de facto fue
+    // reemplazado por ACCOUNT_REGISTERED genérico sin migrar este mapeo,
+    // que es la causa raíz del bug. Se retira el evento muerto y se agrega
+    // el discriminado real. Si en algún momento aparece evidencia de que
+    // GOOGLE_AUTH_COMPLETE sí se emite en algún lugar no auditado, se puede
+    // sumar de nuevo sin sufijo.
+    cortex_events:      ['ACCOUNT_REGISTERED:google'],
     conductor_reaction: 'markStepComplete',
   },
   {
@@ -166,16 +180,60 @@ class MilestoneRegistry {
     this._steps = steps.map(step => this._normalizeStep(step));
 
     // Construir mapa inverso: evento Cortex → stepId
+    //
+    // FIX (auditoría Synapse v3, §2 — bug crítico google_auth/ACCOUNT_REGISTERED):
+    // el mapa era plano por nombre de evento, así que un evento genérico
+    // compartido por dos steps (ej. ACCOUNT_REGISTERED para github_auth y
+    // google_auth) siempre resolvía al primero que se registraba, sin
+    // importar el "service" real del payload. Ahora un cortex_event puede
+    // declararse como "EVENTO:service" (ver FALLBACK_STEPS) para indicar que
+    // necesita discriminación. En ese caso el valor guardado en
+    // _eventToStepId no es un stepId (string) sino un Map<service, stepId>
+    // — resolveEvent() distingue ambos casos en tiempo de lectura.
     this._eventToStepId.clear();
     for (const step of this._steps) {
-      for (const ev of (step.cortex_events || [])) {
-        const key = ev.toUpperCase();
-        if (this._eventToStepId.has(key)) {
-          console.warn(
-            `[MilestoneRegistry] evento duplicado "${key}" en steps "${this._eventToStepId.get(key)}" y "${step.id}" — se usa el primero`
-          );
+      for (const rawEvent of (step.cortex_events || [])) {
+        const [evName, service] = rawEvent.split(':');
+        const key = evName.toUpperCase();
+
+        if (service) {
+          let bucket = this._eventToStepId.get(key);
+          if (bucket instanceof Map) {
+            // ya es un bucket discriminado — sumar este service
+          } else if (bucket !== undefined) {
+            // había un mapeo plano previo para esta misma clave — no debería
+            // pasar si todos los steps que comparten el evento lo declaran
+            // discriminado, pero no lo pisamos en silencio.
+            console.warn(
+              `[MilestoneRegistry] "${key}" ya estaba mapeado de forma plana a "${bucket}" — se ignora ese mapeo al agregar la variante discriminada "${key}:${service}" de "${step.id}". Revisar si el step "${bucket}" también necesita sufijo ":service".`
+            );
+            bucket = new Map();
+            this._eventToStepId.set(key, bucket);
+          } else {
+            bucket = new Map();
+            this._eventToStepId.set(key, bucket);
+          }
+
+          if (bucket.has(service)) {
+            console.warn(
+              `[MilestoneRegistry] evento duplicado "${key}:${service}" en steps "${bucket.get(service)}" y "${step.id}" — se usa el primero`
+            );
+          } else {
+            bucket.set(service, step.id);
+          }
         } else {
-          this._eventToStepId.set(key, step.id);
+          const existing = this._eventToStepId.get(key);
+          if (existing instanceof Map) {
+            console.warn(
+              `[MilestoneRegistry] "${key}" ya está registrado como evento discriminado por service — se ignora el registro plano de "${step.id}". Si "${step.id}" también necesita discriminarse, agregale el sufijo ":service" en su cortex_events.`
+            );
+          } else if (existing) {
+            console.warn(
+              `[MilestoneRegistry] evento duplicado "${key}" en steps "${existing}" y "${step.id}" — se usa el primero`
+            );
+          } else {
+            this._eventToStepId.set(key, step.id);
+          }
         }
       }
     }
@@ -204,12 +262,49 @@ class MilestoneRegistry {
   /**
    * Resuelve un nombre de evento Cortex al stepId correspondiente.
    *
-   * @param {string} cortexEvent  Ej: 'GITHUB_TOKEN_STORED'
+   * FIX (auditoría Synapse v3, §2): algunos eventos son genéricos y están
+   * mapeados a más de un step, discriminados por el campo "service" del
+   * payload (ver ACCOUNT_REGISTERED → github_auth | google_auth). Para esos
+   * casos hay que pasar el payload/enriched del mensaje como segundo
+   * argumento, o resolveEvent no puede saber a cuál de los dos steps
+   * corresponde y devuelve null (con warning) en vez de adivinar.
+   *
+   * CALLERS: este cambio de firma requiere actualizar los dos lugares que
+   * llaman a resolveEvent() — main_conductor.js y workspace-synapse-handlers.js
+   * (lógica duplicada, ver auditoría §2 "medio") — para que pasen
+   * `enriched.data ?? enriched` como segundo argumento. No tocado en este
+   * pase porque esos archivos no están disponibles todavía en este chat.
+   *
+   * @param {string} cortexEvent  Ej: 'GITHUB_TOKEN_STORED' o 'ACCOUNT_REGISTERED'
+   * @param {object} [payload]    El enriched/data del mensaje. Necesario solo
+   *                              para eventos discriminados por service.
    * @returns {string|null}       Ej: 'github_auth', o null si no hay mapeo
+   *                              (o si hacía falta "service" y no llegó).
    */
-  resolveEvent(cortexEvent) {
+  resolveEvent(cortexEvent, payload = null) {
     if (!cortexEvent) return null;
-    return this._eventToStepId.get(cortexEvent.toUpperCase()) ?? null;
+    const key = cortexEvent.toUpperCase();
+    const entry = this._eventToStepId.get(key);
+    if (entry === undefined) return null;
+
+    if (entry instanceof Map) {
+      const service = payload?.service ?? payload?.data?.service ?? null;
+      if (!service) {
+        console.warn(
+          `[MilestoneRegistry] resolveEvent: "${key}" requiere "service" en el payload para discriminar (candidatos: ${[...entry.keys()].join(', ')}) y no llegó ninguno — devolviendo null en vez de adivinar`
+        );
+        return null;
+      }
+      const stepId = entry.get(service) ?? null;
+      if (!stepId) {
+        console.warn(
+          `[MilestoneRegistry] resolveEvent: "${key}:${service}" no tiene step mapeado (candidatos: ${[...entry.keys()].join(', ')})`
+        );
+      }
+      return stepId;
+    }
+
+    return entry;
   }
 
   /**
