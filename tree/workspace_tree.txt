@@ -1,4 +1,4 @@
-/home/jose/repos/bloom-development-extension/
+bloom-development-extension/
 └── workspace/
     ├── assets/
     │   ├── bloom.icns
@@ -29,6 +29,20 @@
     │   ├── onboarding.html
     │   ├── onboarding.js
     │   ├── preload_onboarding.js
+    │   ├── renderer/
+    │   │   ├── core/
+    │   │   │   ├── ipc-bridge.js
+    │   │   │   ├── navigation.js
+    │   │   │   ├── notifications.js
+    │   │   │   ├── shared-state.js
+    │   │   │   ├── tab-system.js
+    │   │   │   └── ui-stepper.js
+    │   │   └── steps/
+    │   │       ├── step-identity.js
+    │   │       ├── step-milestone.js
+    │   │       ├── step-project.js
+    │   │       ├── step-vault.js
+    │   │       └── step-workspace.js
     │   ├── resolution-engine.js
     │   └── step-verifiers.js
     ├── package-lock.json

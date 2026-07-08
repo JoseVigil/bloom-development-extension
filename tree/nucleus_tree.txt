@@ -47,8 +47,10 @@ bloom-development-extension/
     │   ├── orchestration/
     │   │   ├── activities/
     │   │   │   ├── brain_poller.go
+    │   │   │   ├── mandate_genesis_activities.go
     │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
+    │   │   │   ├── mandate.go
     │   │   │   ├── synapse.go
     │   │   │   ├── sysproc_other.go
     │   │   │   └── sysproc_windows.go
@@ -78,12 +80,16 @@ bloom-development-extension/
     │   │   │   ├── temporal_client.go
     │   │   │   ├── worker.go
     │   │   │   └── workflows/
+    │   │   │       ├── mandate_execution_workflow.go
+    │   │   │       ├── mandate_genesis_build_workflow.go
     │   │   │       ├── onboarding_workflow.go
     │   │   │       ├── profile_lifecycle.go
     │   │   │       ├── system_health_workflow.go
     │   │   │       └── system_workflows.go
     │   │   ├── types/
     │   │   │   └── orchestration.go
+    │   │   ├── watchers/
+    │   │   │   └── mandate_watcher.go
     │   │   └── workflows/
     │   │       ├── recovery_flow.go
     │   │       └── system_gate.go
@@ -96,6 +102,7 @@ bloom-development-extension/
     │   │   ├── health_unix.go
     │   │   ├── health_windows.go
     │   │   ├── logs.go
+    │   │   ├── mandate_config.go
     │   │   ├── onboarding_harness.go
     │   │   ├── service.go
     │   │   └── workers.go

@@ -3,6 +3,21 @@
   "_comment": "SSOT único de steps de onboarding — Bloom Conductor. Consumido por MilestoneRegistry (Main, vía fs) y expuesto al Renderer vía IPC (getStepsConfig). Cualquier cambio de orden, requires o verificación se hace acá, no en onboarding.js.",
   "steps": [
     {
+      "id": "nucleus_create",
+      "view": "workspace",
+      "label": "Crear Nucleus",
+      "requires": [],
+      "produces": "workspace_path",
+      "verify": "fs_marker",
+      "verifyArgs": {
+        "jsonField": "onboarding.workspace_path",
+        "markerFile": ".nucleus"
+      },
+      "blocking": true,
+      "cortex_events": [],
+      "conductor_reaction": "markStepComplete"
+    },
+    {
       "id": "github_auth",
       "view": "identity",
       "label": "Conectar GitHub",
@@ -18,21 +33,6 @@
       },
       "blocking": true,
       "cortex_events": ["GITHUB_PAT_DETECTED", "GITHUB_TOKEN_STORED", "ACCOUNT_REGISTERED"],
-      "conductor_reaction": "markStepComplete"
-    },
-    {
-      "id": "nucleus_create",
-      "view": "workspace",
-      "label": "Crear Nucleus",
-      "requires": ["github_token"],
-      "produces": "workspace_path",
-      "verify": "fs_marker",
-      "verifyArgs": {
-        "jsonField": "onboarding.workspace_path",
-        "markerFile": ".nucleus"
-      },
-      "blocking": true,
-      "cortex_events": [],
       "conductor_reaction": "markStepComplete"
     },
     {
