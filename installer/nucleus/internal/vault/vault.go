@@ -69,9 +69,18 @@ const vaultServiceNameConst = "bloom-brain"
 
 func vaultServiceName() string { return vaultServiceNameConst }
 
+// keyringBackend abstracts the OS keyring so it can be swapped for a fake
+// in tests, without touching the real OS secret service (which usually
+// isn't available in CI / headless containers anyway).
+type keyringBackend interface {
+	Get(service, key string) (string, error)
+	Set(service, key, value string) error
+	Delete(service, key string) error
+}
+
 type osKeyringT struct{}
 
-var osKeyring = osKeyringT{}
+var osKeyring keyringBackend = osKeyringT{}
 
 func (osKeyringT) Get(service, key string) (string, error) {
 	return keyring.Get(service, key)

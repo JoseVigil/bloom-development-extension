@@ -16,21 +16,21 @@
 //
 // ⚠️ HALLAZGO IMPORTANTE — léase antes de deployar este módulo:
 // El SSOT (`onboarding_steps.json`) declara:
-//     nucleus_create.requires = ["github_token"]
+//     nucleus_create.requires = ["github_app_token"]
 // pero la UI actual (goTo(1) = workspace ANTES que goTo(3) = identity/
 // github) hace exactamente lo contrario: crea el workspace primero y recién
 // después pide GitHub. Si resolution-engine.js pasa a ser la única fuente
 // de verdad para "en qué step entra el usuario" (que es literalmente lo
 // que pide esta misión), el primer entryStepId que va a devolver al bootear
-// sin progreso previo es `github_auth`, no `nucleus_create` — porque
-// `github_auth.requires = []` y es el primero del array que cumple
+// sin progreso previo es `github_app_auth`, no `nucleus_create` — porque
+// `github_app_auth.requires = []` y es el primero del array que cumple
 // "requires ok, produces vacío". Este módulo implementa la navegación fiel
 // al SSOT (así lo pide el Requerimiento 1); el cambio de ORDEN resultante
 // (github antes que workspace) es una consecuencia real del dato tal cual
 // está hoy en el JSON, no una decisión de este archivo. Si el orden
 // pretendido sigue siendo "workspace primero", hay que corregir `requires`
-// en onboarding_steps.json (quitarle `github_token` a nucleus_create) antes
-// de este deploy — no alcanza con tocar el renderer.
+// en onboarding_steps.json (quitarle `github_app_token` a nucleus_create)
+// antes de este deploy — no alcanza con tocar el renderer.
 
 import { log } from './ipc-bridge.js';
 import { setStepperActive, setStepperEstablished, refreshStepperPendingStates } from './ui-stepper.js';
@@ -46,7 +46,7 @@ const SCREEN_IDS = new Set([
 
 // stepId (SSOT) → screen física. Existe porque la granularidad de "screen"
 // es más fina que la de "view" del SSOT:
-//   - github_auth y vault_init comparten view:"identity" pero son DOS
+//   - github_app_auth y vault_init comparten view:"identity" pero son DOS
 //     screens distintas (identity vs vault) — vault_init es la screen 4,
 //     no un sub-estado dentro de screen-identity.
 //   - google_auth y ai_provider_setup comparten view:"providers" pero
@@ -56,7 +56,7 @@ const SCREEN_IDS = new Set([
 // Si el HTML alguna vez agrega una screen-providers real, este es el único
 // lugar que hay que tocar.
 const STEP_SCREEN = {
-  github_auth: 'identity',
+  github_app_auth: 'identity',
   nucleus_create: 'workspace',
   vault_init: 'vault',
   google_auth: 'identity',
@@ -274,12 +274,12 @@ export async function resumeFromEntryPoint() {
 // Copia 1:1 de onboarding_steps.json al momento de este refactor. Borrar
 // en cuanto exista window.onboarding.getStepsConfig().
 const FALLBACK_STEPS = [
-  { id: 'github_auth', view: 'identity', requires: [], produces: 'github_token' },
-  { id: 'nucleus_create', view: 'workspace', requires: ['github_token'], produces: 'workspace_path' },
-  { id: 'vault_init', view: 'identity', requires: ['github_token', 'workspace_path'], produces: 'vault_initialized' },
+  { id: 'github_app_auth', view: 'identity', requires: [], produces: 'github_app_token' },
+  { id: 'nucleus_create', view: 'workspace', requires: ['github_app_token'], produces: 'workspace_path' },
+  { id: 'vault_init', view: 'identity', requires: ['github_app_token', 'workspace_path'], produces: 'vault_initialized' },
   { id: 'google_auth', view: 'providers', requires: ['vault_initialized'], produces: 'google_account' },
   { id: 'ai_provider_setup', view: 'providers', requires: ['vault_initialized'], produces: 'ai_provider_key' },
-  { id: 'project_create', view: 'project', requires: ['vault_initialized', 'github_token'], produces: 'project_mandate' },
+  { id: 'project_create', view: 'project', requires: ['vault_initialized', 'github_app_token'], produces: 'project_mandate' },
 ];
 
 export { refreshStepperPendingStates };

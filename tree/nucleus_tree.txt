@@ -109,7 +109,8 @@ bloom-development-extension/
     │   ├── system/
     │   │   └── info.go
     │   └── vault/
-    │       └── vault.go
+    │       ├── vault.go
+    │       └── vault_test.go
     ├── main.go
     ├── nucleus-governance.json
     └── scripts/

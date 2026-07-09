@@ -1164,33 +1164,49 @@ function registerOnboardingHandlers() {
   // handler, VAULT_INITIALIZED nunca se disparaba y el onboarding quedaba
   // colgado en el step vault_init.
   registerHandler('GITHUB_APP_AUTHORIZED', null, (msg, sender, sendResp) => {
-    console.log('[Synapse] ✓ GITHUB_APP_AUTHORIZED recibido — user:', msg.username);
-
-    updateAccountInProfileState('github', msg.username, msg.timestamp);
-
-    const vaultKey = msg.token_fingerprint || 'sk_bloom_github_app';
-
-    sendToHost({
-      event:      'VAULT_INITIALIZED',
-      vault_key:  vaultKey,
-      scopes:     msg.scopes,
-      profile_id: msg.profile_id || config?.profileId,
-      launch_id:  msg.launch_id  || config?.launchId,
-      timestamp:  Date.now()
-    });
-
-    chrome.runtime.sendMessage({
-      event:             'VAULT_INITIALIZED',
-      vault_key:         vaultKey,
-      token_fingerprint: msg.token_fingerprint,
-      profile_id:        msg.profile_id || config?.profileId,
-      launch_id:         msg.launch_id  || config?.launchId,
-    }).catch(() => {});
-
-    console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host (desde GITHUB_APP_AUTHORIZED)');
+    reactToGithubAppAuthorized(msg);
     sendResp({ received: true });
     return true;
   });
+}
+
+// ── reactToGithubAppAuthorized ─────────────────────────────────────────────
+// Extraído del registerHandler de arriba para poder invocarse por llamada
+// directa desde background-github-device-flow.js, que corre en el MISMO
+// frame que este dispatcher (se importa dentro de este mismo service
+// worker). chrome.runtime.sendMessage nunca entrega al frame que originó
+// el mensaje (comportamiento documentado de Chrome: "fired in every frame
+// of your extension except for the sender's frame"), así que el
+// registerHandler de arriba NUNCA se dispara para el GITHUB_APP_AUTHORIZED
+// real que emite el device flow — solo se dispararía si algún día llegara
+// desde un frame distinto. Se deja registrado por las dudas, pero la
+// llamada real tiene que ser directa. Ver handleAuthorized() en
+// background-github-device-flow.js.
+function reactToGithubAppAuthorized(msg) {
+  console.log('[Synapse] ✓ GITHUB_APP_AUTHORIZED recibido — user:', msg.username);
+
+  updateAccountInProfileState('github', msg.username, msg.timestamp);
+
+  const vaultKey = msg.token_fingerprint || 'sk_bloom_github_app';
+
+  sendToHost({
+    event:      'VAULT_INITIALIZED',
+    vault_key:  vaultKey,
+    scopes:     msg.scopes,
+    profile_id: msg.profile_id || config?.profileId,
+    launch_id:  msg.launch_id  || config?.launchId,
+    timestamp:  Date.now()
+  });
+
+  chrome.runtime.sendMessage({
+    event:             'VAULT_INITIALIZED',
+    vault_key:         vaultKey,
+    token_fingerprint: msg.token_fingerprint,
+    profile_id:        msg.profile_id || config?.profileId,
+    launch_id:         msg.launch_id  || config?.launchId,
+  }).catch(() => {});
+
+  console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host (desde GITHUB_APP_AUTHORIZED)');
 }
 
 // ============================================================================
@@ -1712,7 +1728,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 // UTILS
 // ============================================================================
 
-export { sendToHost };
+export { sendToHost, config, reactToGithubAppAuthorized };
 
 function sendToHost(msg) {
   if (nativePort && connectionState === 'CONNECTED') {

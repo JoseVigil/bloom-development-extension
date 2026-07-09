@@ -234,7 +234,29 @@ class MilestoneReactor {
   }
 
   async _onProjectCreateComplete(enriched) {
-    this._log('_onProjectCreateComplete');
+    this._log(`_onProjectCreateComplete (evento: ${enriched.event || 'n/a'})`);
+
+    // FIX (auditoría Synapse v3, §2 — bug medio "DISCOVERY_COMPLETE cierra
+    // project_create antes de tiempo"): discovery.js emite DISCOVERY_COMPLETE
+    // apenas el handshake inicial (ping/pong) tiene éxito, ANTES de que
+    // arranque cualquier step real del onboarding. Pero project_create lo
+    // tiene listado en cortex_events junto a PROJECT_CREATED (semántica OR
+    // del registry), así que sin discriminar, este handler completaba
+    // project_create -- y podía disparar _onOnboardingSuccess() -- con solo
+    // el handshake, no con el proyecto real creado. Este bug estaba
+    // enmascarado por el bug crítico de allBlockingDone (Ticket 1): al
+    // arreglar ese, este se volvió visible (confirmado con simulación).
+    // Igual que _onGithubAuthComplete discrimina ACCOUNT_REGISTERED del
+    // resto de eventos de github_auth, acá discriminamos PROJECT_CREATED
+    // del resto: solo PROJECT_CREATED representa la finalización real de
+    // este step. DISCOVERY_COMPLETE ya cumplió su propósito en otro punto
+    // del flujo (confirmar el handshake) -- no le corresponde completar
+    // project_create, así que se ignora acá sin persistir ni emitir nada.
+    if (enriched.event && enriched.event !== 'PROJECT_CREATED') {
+      this._log(`_onProjectCreateComplete: evento "${enriched.event}" no completa project_create -- ignorando`);
+      return;
+    }
+
     await this._persistStepComplete('project_create', this._registry.getStep('project_create'));
     this._emitMilestone('project_create', {
       project: enriched.data?.project || null,

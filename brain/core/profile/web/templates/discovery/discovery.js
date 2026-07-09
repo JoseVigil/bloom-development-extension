@@ -19,7 +19,46 @@
 // ============================================================================
 
 // ============================================================================
-// STEP SEQUENCE — fuente de verdad única para numeración de pasos
+// VAULT_HARDENED — flag temporal, borrar cuando el vault deje de ser un stub.
+//
+// El vault real (Go, host-side) todavía es un stub: recibe GITHUB_APP_TOKEN
+// por Native Messaging pero no está confirmado que lo persista de forma
+// segura del otro lado. Mientras eso sea así, la pantalla 'vault-created'
+// (step vault_init) no puede prometerle al usuario una garantía de seguridad
+// que el sistema todavía no cumple — mismo tipo de error que el texto viejo
+// "encrypted in the Chrome shield" que reemplazamos.
+//
+// Poner en `true` SOLO cuando:
+//   1. El fix de vault.go esté mergeado (persistencia real del token, no stub)
+//   2. El handler de Nucleus que recibe GITHUB_APP_TOKEN esté verificado
+//      end-to-end (Prompts 1 y 1B — ver HANDOFF)
+//
+// Hasta entonces, dejar en `false`. Con `false` se muestra la copy con
+// advertencia explícita, pensada para el caso de que alguien fuera de tu
+// control (tester externo, otro dev) llegue a esta pantalla antes de que el
+// vault esté terminado. Con `true` se muestra la copy honesta-optimista,
+// pensada para cuando la arquitectura real ya cumple lo que dice.
+const VAULT_HARDENED = false;
+
+const VAULT_RECEIPT_COPY = {
+  // Versión honesta-optimista — vault.go terminado y verificado.
+  hardened: {
+    title:    'Key Sent to Bloom',
+    subtitle: "Your GitHub token was forwarded directly to the Bloom host app. It isn't stored in Chrome.",
+    delivery: 'Native Messaging',
+    footer:   "Your token doesn't stay in the browser. Only this fingerprint remains here, for reference."
+  },
+  // Versión con advertencia explícita — vault.go todavía stub.
+  unhardened: {
+    title:    'Key Sent to Bloom',
+    subtitle: "Your GitHub token was forwarded directly to the Bloom host app. It isn't stored in Chrome.",
+    delivery: 'Native Messaging (in development)',
+    footer:   "Currently in development — end-to-end key protection on the host is not yet finalized."
+  }
+};
+// ============================================================================
+
+
 // Reemplaza los badges "Step X of Y" hardcodeados en cada screen del HTML.
 // Solo lista milestones VISIBLES para el usuario — los pasos host-driven sin
 // UI propia (nucleus_create, project_create) no ocupan un lugar acá: no
@@ -899,9 +938,20 @@ class DiscoveryFlow {
 
       const elUsername    = document.getElementById('vault-username');
       const elFingerprint = document.getElementById('vault-fingerprint');
+      const elTitle       = document.getElementById('vault-created-title');
+      const elSubtitle    = document.getElementById('vault-created-subtitle');
+      const elDelivery    = document.getElementById('vault-delivery-method');
+      const elFooter      = document.getElementById('vault-created-footer');
 
       if (elUsername) elUsername.textContent = githubAccount?.username || vault.github_user || '—';
       if (elFingerprint) elFingerprint.textContent = latestVault?.fingerprint || '—';
+
+      // Copy swap según VAULT_HARDENED — ver comentario junto al flag arriba.
+      const copy = VAULT_RECEIPT_COPY[VAULT_HARDENED ? 'hardened' : 'unhardened'];
+      if (elTitle)    elTitle.textContent    = copy.title;
+      if (elSubtitle) elSubtitle.textContent = copy.subtitle;
+      if (elDelivery) elDelivery.textContent = copy.delivery;
+      if (elFooter)   elFooter.textContent   = copy.footer;
 
       // Botón continuar → avanza al siguiente step (el host lo emitirá vía onboarding_navigate,
       // pero también habilitamos un avance manual para el caso de dev/fallback)

@@ -60,25 +60,45 @@ const FALLBACK_STEPS = [
     conductor_reaction: 'markStepComplete',
   },
   {
-    id:                 'github_app_auth',
-    label:              'Conectar GitHub (App)',
-    screen:             'github-app-start',
-    vault_required:     false,
-    requires:           ['nucleus_path'],
-    produces:           'github_app_token',
-    blocking:           true,
-    cortex_events:      ['GITHUB_APP_AUTHORIZED'],
-    conductor_reaction: 'markStepComplete',
-  },
-  {
     id:                 'vault_init',
     label:              'Inicializar Vault',
     screen:             'vault-init',
     vault_required:     false,
-    requires:           ['github_token', 'nucleus_path'],
+    // FIX (HANDOFF §5.2 — step github_app_auth): este step ya no requiere
+    // 'github_token'. Ese artefacto lo producía el viejo step ad-hoc
+    // "github_auth" (OAuth clásica), que este proyecto reemplaza por completo
+    // (ver HANDOFF §3, decisiones 1-2). El requires apuntaba a un produces
+    // que ningún step del array emite más — dependencia colgante, no un AND
+    // real. vault_init solo depende de que exista el nucleus.
+    requires:           ['nucleus_path'],
     produces:           'vault_initialized',
     blocking:           true,
     cortex_events:      ['VAULT_INITIALIZED', 'VAULT_INIT'],
+    conductor_reaction: 'markStepComplete',
+  },
+  {
+    id:                 'github_app_auth',
+    label:              'Autorizar Batcave (GitHub App)',
+    screen:             'github-app-auth',
+    // FIX (HANDOFF §5.2, aprobado — ver justificación en el mensaje de
+    // respuesta): vault_required:true y requires:['vault_initialized'], y
+    // en ESE orden respecto de vault_init (arriba). El token de la GitHub
+    // App (Device Flow, scopes Contents/Administration/Members) se guarda
+    // en el Vault (ver BTIPS-VAULT-MULTIKEY-ANALYSIS.md v1.1: Nucleus debe
+    // Authorize() antes de tocar el Keyring real) — guardar un secreto con
+    // permisos de push/create-repo requiere que el Vault ya esté
+    // inicializado, por eso este step va DESPUÉS de vault_init, no antes.
+    //
+    // NO agregar 'GITHUB_APP_AUTHORIZED' a los cortex_events de vault_init:
+    // esa lista es OR (cualquier evento completa el step) y github_app_auth /
+    // vault_init son dos hechos independientes que necesitan un AND — es
+    // exactamente el bug ya arreglado en el Ticket 1 de la auditoría Synapse
+    // (allBlockingDone). Cada uno es su propio step bloqueante.
+    vault_required:     true,
+    requires:           ['vault_initialized'],
+    produces:           'github_app_token',
+    blocking:           true,
+    cortex_events:      ['GITHUB_APP_AUTHORIZED'],
     conductor_reaction: 'markStepComplete',
   },
   {

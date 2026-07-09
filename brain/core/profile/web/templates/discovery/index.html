@@ -224,18 +224,18 @@
       <div class="progress-bar"><div class="progress-fill" id="progress-fill--vault-created" style="width: 0%"></div></div>
       <div class="step-indicator" id="step-indicator--vault-created">—</div>
       <div class="status-icon">🔐</div>
-      <h1>Key Stored Securely</h1>
-      <p>Your token is encrypted in the Chrome shield. Only a fingerprint leaves this device.</p>
+      <h1 id="vault-created-title">Key Sent to Bloom</h1>
+      <p id="vault-created-subtitle">Your GitHub token was forwarded directly to the Bloom host app. It isn't stored in Chrome.</p>
 
       <div class="info-box">
         <p><strong>Provider</strong> &nbsp; GitHub</p>
         <p><strong>Account</strong> &nbsp; <span id="vault-username">—</span></p>
-        <p><strong>Stored in</strong> &nbsp; chrome.storage.local</p>
+        <p><strong>Delivered via</strong> &nbsp; <span id="vault-delivery-method">Native Messaging</span></p>
         <p><strong>Fingerprint</strong> &nbsp; <span id="vault-fingerprint" style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;">—</span></p>
       </div>
 
-      <p style="font-family: var(--font-mono); font-size: 10px; color: var(--color-text-secondary); letter-spacing: 0.10em; text-align: center; margin-top: var(--space-sm);">
-        Your key never leaves Chrome. Only the fingerprint travels to the system.
+      <p id="vault-created-footer" style="font-family: var(--font-mono); font-size: 10px; color: var(--color-text-secondary); letter-spacing: 0.10em; text-align: center; margin-top: var(--space-sm);">
+        Your token doesn't stay in the browser. Only this fingerprint remains here, for reference.
       </p>
 
       <button class="btn" id="btn-vault-continue">Continue →</button>

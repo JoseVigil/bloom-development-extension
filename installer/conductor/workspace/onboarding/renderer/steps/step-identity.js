@@ -1,6 +1,6 @@
 // workspace/onboarding/renderer/steps/step-identity.js
 //
-// Sub-wizard de identity: github_auth → google_auth → ai_provider_setup,
+// Sub-wizard de identity: github_app_auth → google_auth → ai_provider_setup,
 // los tres dentro de la misma screen física (screen-identity).
 //
 // DECISIÓN DE DISEÑO — por qué UN solo archivo y no step-github.js /
@@ -40,20 +40,25 @@ import { identityWizard, activeAccounts, state, userEmail } from '../core/shared
 // ── INFO POPUP — contenido por cuenta ─────────────────────────────────────
 const STEP_INFO = {
   github: {
+    // DRAFT — reemplaza el flujo de Personal Access Token (eliminado con la
+    // migración a GitHub App Device Flow, ver HANDOFF §3). Pendiente de
+    // validar contra la copy real que Discovery vaya a mostrar en la nueva
+    // pantalla 'github-app-auth' — este texto es un placeholder razonable,
+    // no la copy final aprobada.
     label: 'Step 1 — GitHub',
-    title: 'Creating a Personal\nAccess Token.',
+    title: 'Authorizing Bloom\nvia GitHub App.',
     body: `
-      Bloom necesita un <strong>token clásico</strong> de GitHub con dos permisos:<br>
-      <strong>repo</strong> y <strong>read:org</strong>.<br><br>
-      Cómo crearlo:<br>
-      1. Abrí GitHub → avatar → <strong>Settings</strong><br>
-      2. Bajá hasta <strong>Developer settings</strong> (último ítem)<br>
-      3. <strong>Personal access tokens → Tokens (classic)</strong><br>
-      4. <strong>Generate new token (classic)</strong><br>
-      5. Marcá <strong>repo</strong> y <strong>read:org</strong><br>
-      6. Generá y <strong>copiá</strong> el token<br><br>
-      ⚠ Usá <em>Tokens (classic)</em>, no Fine-grained.<br>
-      El token empieza con <strong>ghp_</strong> — la extensión lo detecta automáticamente al copiarlo.
+      Bloom se conecta a GitHub a través de una <strong>GitHub App</strong>
+      instalada en tu organización — ya no hace falta crear ni pegar ningún
+      token manualmente.<br><br>
+      Cómo funciona:<br>
+      1. En la ventana de Chrome que abrió Bloom, vas a ver un código de
+      dispositivo<br>
+      2. Confirmalo en <strong>github.com/login/device</strong><br>
+      3. Autorizá el acceso de Bloom a tu organización<br><br>
+      Bloom verifica automáticamente que seas miembro de la organización y
+      queda habilitado para clonar, pushear y crear repositorios según los
+      permisos que la GitHub App tenga instalados.
     `,
   },
   google: {
@@ -103,7 +108,7 @@ export function closeInfo() {
 // startLabel  → texto del botón ANTES de confirmarse (arranca el sub-step)
 // infoStep    → key en STEP_INFO para el popup de ayuda (?)
 export const IDENTITY_STEPS = [
-  { id: 'github', key: 'github_auth', label: 'GitHub', buttonText: 'Continue to Vault', startLabel: 'Validate', infoStep: 'github' },
+  { id: 'github', key: 'github_app_auth', label: 'GitHub', buttonText: 'Continue to Vault', startLabel: 'Validate', infoStep: 'github' },
   { id: 'google', key: 'google_auth', label: 'Google', buttonText: 'Continue to Gemini', startLabel: 'Continue to Google', infoStep: 'google' },
   { id: 'gemini', key: 'ai_provider_setup', label: 'Gemini', buttonText: 'Continue to Projects', startLabel: 'Continue to Gemini', infoStep: 'gemini' },
 ];
@@ -112,11 +117,12 @@ const IDENTITY_KEY_TO_SUBSTEP = Object.fromEntries(IDENTITY_STEPS.map(s => [s.ke
 
 const IDENTITY_SCREEN_COPY = {
   github: {
+    // DRAFT — ver nota en STEP_INFO.github sobre reemplazo de copy PAT → Device Flow.
     title: 'Conectá tu cuenta<br>de GitHub.',
     steps: [
-      'En el Chrome que abrió Bloom, andá a <strong>GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong>',
-      'Creá un token con permisos: <code>repo</code> · <code>read:org</code> · <code>read:user</code>',
-      'Pegá el token en el campo que aparece en Chrome. Bloom lo detecta automáticamente.',
+      'En el Chrome que abrió Bloom, vas a ver un código de dispositivo para autorizar la GitHub App de Bloom.',
+      'Andá a <strong>github.com/login/device</strong> e ingresá ese código.',
+      'Autorizá el acceso — Bloom detecta la confirmación automáticamente, no hace falta pegar nada.',
     ],
   },
   google: {
@@ -289,7 +295,10 @@ export async function kickoffIdentityStep() {
 function _identityInstructionFor(step) {
   switch (step.id) {
     case 'github':
-      return 'In Chrome: Settings → Developer Settings → Personal access tokens → Tokens (classic) → Generate → select repo & read:org → copy.';
+      // DRAFT — reemplaza el texto de PAT (ghp_/clipboard), que ya no aplica
+      // con GitHub App Device Flow (ver HANDOFF §3). Pendiente de validar
+      // contra la copy real que Discovery muestra en pantalla.
+      return 'In Chrome: enter the device code shown at github.com/login/device and authorize Bloom.';
     case 'google':
       return 'In Chrome: sign in with your Google account and confirm access.';
     case 'gemini':
@@ -394,7 +403,7 @@ function _completeIdentitySubstep(subStepId, _data) {
 // ── Milestone handlers (registrados en ipc-bridge.js) ──────────────────────
 function onMilestoneGithubAuth(data) {
   if (activeAccounts.has('github')) return;
-  log('info', 'milestone: github_auth confirmado por Brain');
+  log('info', 'milestone: github_app_auth confirmado por Brain');
 
   const userLabel = data?.username ? ` — @${data.username}` : '';
   addNotification(`GitHub connected${userLabel}`, { icon: '✓', type: 'success' });
@@ -431,12 +440,12 @@ function onMilestoneAiProviderSetup(data) {
 // un milestone real. No confundir con ipc-bridge.handleMilestoneReached,
 // que es el dispatcher global: este es un wrapper de conveniencia interno.
 function handleMilestoneReached(stepId, data) {
-  if (stepId === 'github_auth') return onMilestoneGithubAuth(data);
+  if (stepId === 'github_app_auth') return onMilestoneGithubAuth(data);
   if (stepId === 'google_auth') return onMilestoneGoogleAuth(data);
   if (stepId === 'ai_provider_setup') return onMilestoneAiProviderSetup(data);
 }
 
-registerMilestoneHandler('github_auth', onMilestoneGithubAuth);
+registerMilestoneHandler('github_app_auth', onMilestoneGithubAuth);
 registerMilestoneHandler('google_auth', onMilestoneGoogleAuth);
 registerMilestoneHandler('ai_provider_setup', onMilestoneAiProviderSetup);
 
@@ -449,7 +458,7 @@ function onEnterIdentity() {
   _refreshAccountIconStates();
 }
 
-registerStepHandler('github_auth', { onEnter: onEnterIdentity });
+registerStepHandler('github_app_auth', { onEnter: onEnterIdentity });
 registerStepHandler('google_auth', { onEnter: onEnterIdentity });
 registerStepHandler('ai_provider_setup', {
   onEnter: onEnterIdentity,

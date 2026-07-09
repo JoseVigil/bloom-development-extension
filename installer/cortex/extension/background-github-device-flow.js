@@ -74,7 +74,12 @@ function notifyDiscovery(message) {
 // respuesta HTTP de GitHub — nunca se manda a discovery.js ni se guarda en
 // chrome.storage más tiempo del necesario para el polling (ver
 // clearDeviceFlowState() en el flujo de éxito).
-import { sendToHost } from './background.js';
+// FIX (verificado contra background.js real): self.SYNAPSE_CONFIG no existe
+// en ningún lado — la config vive en la variable de módulo `config` de
+// background.js, poblada por loadConfig(). Se importa esa (binding vivo de
+// ES modules: aunque background.js la reasigne con `config = {...}`, esta
+// importación siempre ve el valor actual, no una copia congelada).
+import { sendToHost, config, reactToGithubAppAuthorized } from './background.js';
 
 function forwardTokenToHost({ token, username, scopes, profile_id, launch_id }) {
   sendToHost({
@@ -113,8 +118,8 @@ async function startGithubDeviceFlow() {
         device_code: data.device_code,
         interval:    data.interval || 5,
         expires_at:  expiresAt,
-        profile_id:  self.SYNAPSE_CONFIG?.profileId ?? null,
-        launch_id:   self.SYNAPSE_CONFIG?.launchId ?? null
+        profile_id:  config?.profileId ?? null,
+        launch_id:   config?.launchId ?? null
       }
     });
 
@@ -265,7 +270,7 @@ async function handleAuthorized(token, state) {
     launch_id:  state.launch_id
   });
 
-  notifyDiscovery({
+  const authorizedMsg = {
     event:             'GITHUB_APP_AUTHORIZED',
     username:          username || '',
     token_fingerprint: fingerprint,
@@ -273,7 +278,17 @@ async function handleAuthorized(token, state) {
     profile_id:        state.profile_id,
     launch_id:         state.launch_id,
     timestamp:         Date.now()
-  });
+  };
+
+  // discovery.js corre en otra tab/frame → sendMessage SÍ le llega.
+  notifyDiscovery(authorizedMsg);
+
+  // background.js (este mismo service worker) NO recibe su propio
+  // sendMessage — Chrome no entrega runtime.onMessage al frame emisor.
+  // Por eso la reacción de background.js (VAULT_INITIALIZED hacia el host)
+  // se llama directo acá en vez de depender del round-trip. Ver comentario
+  // en background.js junto a reactToGithubAppAuthorized().
+  reactToGithubAppAuthorized(authorizedMsg);
 
   console.log('[GithubDeviceFlow] GITHUB_APP_AUTHORIZED emitido — user:', username || '(sin resolver)');
 }
