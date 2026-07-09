@@ -60,21 +60,14 @@ const FALLBACK_STEPS = [
     conductor_reaction: 'markStepComplete',
   },
   {
-    id:                 'github_auth',
-    label:              'Conectar GitHub',
-    screen:             'github-login',
+    id:                 'github_app_auth',
+    label:              'Conectar GitHub (App)',
+    screen:             'github-app-start',
     vault_required:     false,
     requires:           ['nucleus_path'],
-    produces:           'github_token',
+    produces:           'github_app_token',
     blocking:           true,
-    // FIX (auditoría Synapse v3, §2 — bug crítico google_auth/ACCOUNT_REGISTERED):
-    // ACCOUNT_REGISTERED es un evento genérico compartido con google_auth,
-    // discriminado por el campo "service" del payload (confirmado en
-    // GithubAuthFlow._saveToken() / GoogleAuthFlow._confirmLogin() de
-    // discovery.js). El sufijo ":github" le dice a loadSteps() que este
-    // mapeo solo aplica cuando payload.service === 'github' — ver
-    // resolveEvent() más abajo.
-    cortex_events:      ['GITHUB_PAT_DETECTED', 'GITHUB_TOKEN_STORED', 'ACCOUNT_REGISTERED:github'],
+    cortex_events:      ['GITHUB_APP_AUTHORIZED'],
     conductor_reaction: 'markStepComplete',
   },
   {
@@ -122,7 +115,7 @@ const FALLBACK_STEPS = [
     label:              'Crear proyecto',
     screen:             'project-create',
     vault_required:     true,
-    requires:           ['vault_initialized', 'github_token'],
+    requires:           ['vault_initialized', 'github_app_token'],
     produces:           'project_mandate',
     blocking:           true,
     cortex_events:      ['PROJECT_CREATED', 'DISCOVERY_COMPLETE'],

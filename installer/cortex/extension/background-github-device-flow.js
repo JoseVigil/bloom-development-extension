@@ -66,38 +66,22 @@ function notifyDiscovery(message) {
   });
 }
 
-// ── INTEGRACIÓN REQUERIDA #3 ──────────────────────────────────────────────
-// Reenviar el token real al host (Brain/Nucleus) por Native Messaging. Este
-// es el único lugar donde el access token completo existe fuera de la
+// ── Reenviar el token real al host (Brain/Nucleus) por Native Messaging ───
+// Reusa la conexión nativa ya administrada por background.js (sendToHost)
+// en vez de abrir una segunda conexión propia con connectNative — evitaba
+// desalinearse del config.bridge_name real y duplicaba el canal nativo.
+// Este es el único lugar donde el access token completo existe fuera de la
 // respuesta HTTP de GitHub — nunca se manda a discovery.js ni se guarda en
 // chrome.storage más tiempo del necesario para el polling (ver
 // clearDeviceFlowState() en el flujo de éxito).
-//
-// No tengo tu implementación real del native port (nombre del host nativo
-// registrado, si usás connectNative persistente o sendNativeMessage puntual,
-// etc.). Dejo un stub con la forma más común (connectNative + postMessage) —
-// reemplazalo por tu mecanismo real antes de mergear.
+import { sendToHost } from './background.js';
+
 function forwardTokenToHost({ token, username, scopes, profile_id, launch_id }) {
-  try {
-    const port = chrome.runtime.connectNative('com.bloom.host'); // TODO: nombre real del host nativo
-    port.postMessage({
-      type: 'GITHUB_APP_TOKEN',
-      token,             // el token completo — única vez que sale de este service worker
-      username,
-      scopes,
-      profile_id,
-      launch_id,
-      timestamp: Date.now()
-    });
-    port.disconnect();
-  } catch (e) {
-    console.error('[GithubDeviceFlow] No se pudo reenviar el token al host:', e.message);
-    // Si esto falla, GITHUB_APP_AUTHORIZED igual se manda a discovery.js más
-    // abajo — el usuario ve éxito en la UI aunque el host no haya recibido el
-    // token. Vale la pena decidir si esto debería bloquear el evento de éxito
-    // en vez de degradar silenciosamente; lo dejo así por ahora porque no sé
-    // cómo tu host reporta reconexión/reintento.
-  }
+  sendToHost({
+    event: 'GITHUB_APP_TOKEN',
+    token, username, scopes, profile_id, launch_id,
+    timestamp: Date.now()
+  });
 }
 
 // ============================================================================

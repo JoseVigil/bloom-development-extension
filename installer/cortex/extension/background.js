@@ -1,5 +1,7 @@
 'use strict';
 
+import './background-github-device-flow.js';
+
 // ============================================================================
 // SYNAPSE THIN CLIENT - ROUTER CON HANDSHAKE DE 3 FASES
 // ============================================================================
@@ -1151,42 +1153,42 @@ function registerOnboardingHandlers() {
       launch_id: msg.launch_id || config?.launchId,
     }).catch(() => {});
 
-    // ── VAULT_INITIALIZED ────────────────────────────────────────────────────
-    // FIX (HANDOFF-fix-vault-onboarding, sección 3): este bloque vivía colgado
-    // del handler GITHUB_TOKEN_STORED, un evento que nadie emite en producción
-    // (discovery.js solo emite ACCOUNT_REGISTERED). Como resultado, Brain nunca
-    // recibía VAULT_INITIALIZED, milestone-registry.js nunca resolvía el step
-    // vault_init, y milestone-reactor.js nunca corría _onVaultInitComplete() —
-    // el wizard quedaba esperando la confirmación del vault para siempre.
-    // Movido acá, adentro del handler real que SÍ dispara en producción, con
-    // guard por service para que solo corra cuando GitHub (la cuenta que crea
-    // el vault) termina de registrarse.
-    if (msg.service === 'github') {
-      const vaultKey = msg.vault_key || 'sk_bloom_pat';
+    return true;
+  });
 
-      sendToHost({
-        event:      'VAULT_INITIALIZED',
-        vault_key:  vaultKey,
-        profile_id: msg.profile_id || config?.profileId,
-        launch_id:  msg.launch_id  || config?.launchId,
-        timestamp:  Date.now()
-      });
+  // ── GITHUB_APP_AUTHORIZED ──────────────────────────────────────────────
+  // Reemplaza el guard `if (msg.service === 'github')` que vivía dentro del
+  // handler de ACCOUNT_REGISTERED. GitHub ya no emite ACCOUNT_REGISTERED —
+  // el evento real tras el Device Flow de la GitHub App es
+  // GITHUB_APP_AUTHORIZED (ver background-github-device-flow.js). Sin este
+  // handler, VAULT_INITIALIZED nunca se disparaba y el onboarding quedaba
+  // colgado en el step vault_init.
+  registerHandler('GITHUB_APP_AUTHORIZED', null, (msg, sender, sendResp) => {
+    console.log('[Synapse] ✓ GITHUB_APP_AUTHORIZED recibido — user:', msg.username);
 
-      forwardToDebugPanel('synapse', 'VAULT_INITIALIZED', {
-        vault_key: vaultKey
-      }, msg.profile_id || config?.profileId);
+    updateAccountInProfileState('github', msg.username, msg.timestamp);
 
-      chrome.runtime.sendMessage({
-        event:              'VAULT_INITIALIZED',
-        vault_key:          vaultKey,
-        token_fingerprint:  msg.token_fingerprint,
-        profile_id:         msg.profile_id || config?.profileId,
-        launch_id:          msg.launch_id  || config?.launchId,
-      }).catch(() => {});
+    const vaultKey = msg.token_fingerprint || 'sk_bloom_github_app';
 
-      console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host (desde ACCOUNT_REGISTERED, service=github)');
-    }
+    sendToHost({
+      event:      'VAULT_INITIALIZED',
+      vault_key:  vaultKey,
+      scopes:     msg.scopes,
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id:  msg.launch_id  || config?.launchId,
+      timestamp:  Date.now()
+    });
 
+    chrome.runtime.sendMessage({
+      event:             'VAULT_INITIALIZED',
+      vault_key:         vaultKey,
+      token_fingerprint: msg.token_fingerprint,
+      profile_id:        msg.profile_id || config?.profileId,
+      launch_id:         msg.launch_id  || config?.launchId,
+    }).catch(() => {});
+
+    console.log('[Synapse] ✓ VAULT_INITIALIZED → forwarding to native host (desde GITHUB_APP_AUTHORIZED)');
+    sendResp({ received: true });
     return true;
   });
 }
@@ -1709,6 +1711,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 // ============================================================================
 // UTILS
 // ============================================================================
+
+export { sendToHost };
 
 function sendToHost(msg) {
   if (nativePort && connectionState === 'CONNECTED') {
