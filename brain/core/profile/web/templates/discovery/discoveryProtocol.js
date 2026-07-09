@@ -275,7 +275,7 @@ if (typeof self !== 'undefined') {
   self.DISCOVERY_PROTOCOL_MANIFEST = {
     version: "1.0.0",
     protocol: "discovery",
-    description: "Onboarding flow — extension handshake, GitHub auth, API key detection, account registration",
+    description: "Onboarding flow — extension handshake, GitHub App authorization (Device Flow), API key detection, account registration",
 
     messages: [
       {
@@ -297,60 +297,64 @@ if (typeof self !== 'undefined') {
             // que no son steps que Discovery rutee (son screens propias del stepper VSCode).
             // nucleus_create, vault_init y project_create son host-driven: Discovery los acepta
             // sin mostrar UI propia. success dispara onboarding-success. (Actualizado Jun 19 2026)
-            options: ["github_auth", "nucleus_create", "vault_init", "google_auth", "ai_provider_setup", "project_create", "success"]
+            options: ["github_app_auth", "nucleus_create", "vault_init", "google_auth", "ai_provider_setup", "project_create", "success"]
           }
         ]
       },
       {
-        id: "github_pat_detected",
+        id: "github_device_code",
         type: "event",
         direction: "harness_to_background",
         channel: "runtime",
-        description: "Simulate clipboard monitor detecting a GitHub PAT",
+        description: "Simulate background.js recibiendo el device code de GitHub (POST /login/device/code), para que Discovery lo pinte en screen-github-app-device",
         payload_template: {
-          event: "GITHUB_PAT_DETECTED",
-          token: "$TOKEN"
+          event: "GITHUB_DEVICE_CODE",
+          user_code: "$USER_CODE",
+          verification_uri: "$VERIFICATION_URI",
+          expires_in: "$EXPIRES_IN"
         },
         parameters: [
-          {
-            name: "token",
-            type: "string",
-            variable: "$TOKEN",
-            default: "ghp_simulatedToken123456789"
-          }
+          { name: "user_code", type: "string", variable: "$USER_CODE", default: "WDJB-MJHT" },
+          { name: "verification_uri", type: "string", variable: "$VERIFICATION_URI", default: "https://github.com/login/device" },
+          { name: "expires_in", type: "number", variable: "$EXPIRES_IN", default: 900 }
         ]
       },
       {
-        id: "github_token_stored",
+        id: "github_app_authorized",
         type: "event",
         direction: "harness_to_background",
         channel: "runtime",
-        description: "Simulate user confirming GitHub token storage",
+        description: "Simulate background.js confirmando que el Device Flow fue autorizado. Nunca lleva el token completo — solo fingerprint/scopes, misma política que el contrato real background.js → discovery.js (el token completo viaja solo por Native Messaging hacia Brain).",
         payload_template: {
-          event: "GITHUB_TOKEN_STORED",
-          token_fingerprint: "$FINGERPRINT",
+          event: "GITHUB_APP_AUTHORIZED",
+          username: "$USERNAME",
+          token_fingerprint: "$TOKEN_FINGERPRINT",
+          scopes: "$SCOPES",
           profile_id: "$PROFILE_ID",
-          launch_id: "$LAUNCH_ID"
+          launch_id: "$LAUNCH_ID",
+          timestamp: "$TIMESTAMP"
         },
         parameters: [
-          {
-            name: "token_fingerprint",
-            type: "string",
-            variable: "$FINGERPRINT",
-            default: "ghp_...abc123"
-          },
-          {
-            name: "profile_id",
-            type: "auto",
-            variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
-          },
-          {
-            name: "launch_id",
-            type: "auto",
-            variable: "$LAUNCH_ID",
-            source: "SYNAPSE_CONFIG.launchId"
-          }
+          { name: "username", type: "string", variable: "$USERNAME", default: "octocat" },
+          { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ghu_simulatedFingerprint" },
+          { name: "scopes", type: "string", variable: "$SCOPES", default: "contents:write,administration:write,members:read" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
+          { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
+        ]
+      },
+      {
+        id: "github_device_flow_error",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate background.js reportando una falla del Device Flow (denied, expired_token, access_denied) — para probar que Discovery vuelve a github-app-start con mensaje de error en vez de colgarse. NOTA: agregado proactivamente para completar el contrato de 4 mensajes acordado; no estaba pedido explícitamente — remover si no se quiere en este pase.",
+        payload_template: {
+          event: "GITHUB_DEVICE_FLOW_ERROR",
+          reason: "$REASON"
+        },
+        parameters: [
+          { name: "reason", type: "enum", variable: "$REASON", options: ["access_denied", "expired_token", "denied"], default: "expired_token" }
         ]
       },
       {
@@ -391,7 +395,12 @@ if (typeof self !== 'undefined') {
         type: "event",
         direction: "harness_to_background",
         channel: "runtime",
-        description: "Simulate account registration completion",
+        // Ajustado: GitHub ya no pasa por ACCOUNT_REGISTERED (retirado en
+        // favor de GITHUB_APP_AUTHORIZED, evento propio no discriminado —
+        // ver milestone-registry.js). El único "service" vigente hoy es
+        // "google". Se deja como enum (no string fijo) por si en el futuro
+        // se suma otro provider que sí use este evento genérico.
+        description: "Simulate account registration completion (hoy: solo google_auth)",
         payload_template: {
           event: "ACCOUNT_REGISTERED",
           profile_id: "$PROFILE_ID",
@@ -403,9 +412,9 @@ if (typeof self !== 'undefined') {
         parameters: [
           { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
           { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
-          { name: "service", type: "enum", variable: "$SERVICE", options: ["github"], default: "github" },
-          { name: "username", type: "string", variable: "$USERNAME", default: "octocat" },
-          { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ghp_simulatedToken" }
+          { name: "service", type: "enum", variable: "$SERVICE", options: ["google"], default: "google" },
+          { name: "username", type: "string", variable: "$USERNAME", default: "user@gmail.com" },
+          { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ya29_simulatedToken" }
         ]
       },
       {
@@ -515,11 +524,20 @@ if (typeof self !== 'undefined') {
       }
     ],
 
+    // FIX: GITHUB_DEVICE_CODE y GITHUB_DEVICE_FLOW_ERROR estaban declarados en
+    // `messages` (arriba) pero no acá — exactamente el patrón "zombie" que la
+    // auditoría de Synapse encontró con GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED
+    // (HANDOFF §5.3, último bullet: "no repetir el patrón"). Un evento que solo
+    // vive en `messages` puede simularse desde el Harness pero el
+    // ProtocolReader nunca lo reconoce como observable real.
     observable_events: [
       "HOST_READY",
       "HANDSHAKE_CONFIRMED",
       "API_KEY_REGISTERED",
       "ACCOUNT_REGISTERED",
+      "GITHUB_DEVICE_CODE",
+      "GITHUB_APP_AUTHORIZED",
+      "GITHUB_DEVICE_FLOW_ERROR",
       "DISCOVERY_COMPLETE",
       "HARNESS_SIMULATE_HANDSHAKE",
       "HARNESS_OPEN_LANDING"

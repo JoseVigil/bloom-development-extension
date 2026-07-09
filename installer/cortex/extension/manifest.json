@@ -14,19 +14,14 @@
     "alarms",
     "identity",
     "identity.email",
-    "cookies",
     "webNavigation",
-    "clipboardRead",
     "notifications"
   ],
-  
+
   "host_permissions": [
-    "<all_urls>",
-    "*://*.google.com/*",
-    "*://aistudio.google.com/*",
-    "https://console.anthropic.com/*",
-    "https://platform.openai.com/*",
-    "https://console.x.ai/*"
+    "https://github.com/*",
+    "https://api.github.com/*",
+    "https://accounts.google.com/*"
   ],
   
   "background": {
@@ -40,26 +35,15 @@
 
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://github.com/*"],
       "js": ["content.js"],
-      "run_at": "document_start",
-      "all_frames": true
-    },
-    {
-      "matches": [
-        "*://aistudio.google.com/app/apikey*",
-        "https://console.anthropic.com/*",
-        "https://platform.openai.com/*",
-        "https://console.x.ai/*"
-      ],
-      "js": ["discovery/content-aistudio.js"],
       "run_at": "document_idle"
     }
   ],
 
   "web_accessible_resources": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://github.com/*"],
       "resources": [
         "protocols/discovery.schema.json",
         "protocols/landing.schema.json",

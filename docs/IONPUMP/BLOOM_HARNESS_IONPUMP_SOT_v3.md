@@ -1,6 +1,8 @@
-# Bloom — Harness + IonPump: Fuente de Verdad
-## Versión fusionada · 17 de junio 2026
-### Supersede a: `HARNESS_SOURCE_OF_TRUTH.md`, `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md`, y todos los documentos que ambos listaban como fuente.
+# Bloom Nucleus Bridge — Harness + IonPump: Fuente de Verdad
+## v3 · 8 de julio 2026
+### Supersede a: `HARNESS_SOURCE_OF_TRUTH.md`, `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` (v1 y v2 fusionada del 17 de junio de 2026), y todos los documentos que estos listaban como fuente.
+
+> **Nota de esta revisión (v3):** el 8 de julio de 2026 se hizo una revisión de seguridad de la extensión (`CLEANUP_NOTES.md`) que eliminó del código real varios mecanismos que la v2 de este documento describía como parte de la arquitectura "canónica" de IonPump/Harness — en particular, extracción de tokens de GitHub vía scraping de `/settings/tokens*` y un monitor de clipboard que reenviaba credenciales completas a un host nativo. Esta revisión actualiza el documento para que coincida con el código real post-limpieza. Ver §0.3 para el detalle punto por punto y §21 para las reglas que quedan vigentes hacia adelante.
 
 ---
 
@@ -30,6 +32,21 @@ Durante esta fusión se aportó el código real de `harness_generator.py` y `har
 El docstring real de `generate_harness_page()` dice textualmente que el parámetro `dev_mode` **"se mantiene por compatibilidad pero ya no suprime el deploy"**, y que el Harness **"siempre se despliega igual que discovery y landing"**. Hay un `TODO` confirmando que es una decisión consciente, no un bug: *"dev_mode puede usarse a futuro para assets o config adicional de desarrollo. Por ahora harness siempre se despliega igual que discovery y landing."*
 
 Esto contradice directamente el principio que ambos documentos previos trataban como fundacional: que el Harness existe exclusivamente en builds dev "por construcción", y que `harness_generator.py` es no-op cuando `dev_mode=False`. Con el código actual, **el Harness se copia a `extension/harness/` en todos los perfiles, dev o no**. Las implicancias en cascada de esto (¿se sigue escribiendo `harness.synapse.config.js` en producción? ¿la URL `harness/index.html` queda accesible en perfiles de usuarios finales?) se documentan en §10 y §18 — no se inventan respuestas donde no hay evidencia.
+
+### 0.3 Revisión de seguridad del 8 de julio de 2026 — qué invalida en este documento
+
+La v2 de este documento (17 de junio) documentaba como arquitectura de referencia un mecanismo de obtención de PAT de GitHub que una auditoría de seguridad posterior (`CLEANUP_NOTES.md`) identificó como indistinguible, en su patrón, de robo de credenciales — independientemente de la intención original. Esa auditoría **eliminó código**, no solo lo restringió. Este documento se actualiza para dejar de describir ese código eliminado como si siguiera vigente:
+
+| # | Qué documentaba la v2 | Qué se eliminó del código real | Reemplazo documentado en esta versión |
+|---|---|---|---|
+| 1 | §5.4: el `.ion` de ejemplo de `github.com` tenía un flow `handle_pat_detected` que emitía `GITHUB_PAT_DETECTED` con `$CONTEXT.clipboard_value`, y una variable `settings_url` apuntando a `/settings/tokens` | `generate_pat.ion`, `tokens_page.page.ion`, `new_token_page.page.ion` — Ions que navegaban a `/settings/tokens/new`, completaban el formulario y extraían el token del DOM | El único camino aceptable para obtener un token es el **OAuth Device Flow** vía `background-github-device-flow.js`. Ningún `.ion` recipe debe navegar a `/settings/*` ni a `/login*` con intención de generar o extraer credenciales (regla general en §21). |
+| 2 | §5.5: `ion.manifest.json` de ejemplo declaraba `"capabilities": ["auth", "clipboard_monitor"]` y el trigger `on_pat_clipboard` | El objeto `API_KEY_PATTERNS`, `detectAPIKeyProvider()`, `clipboardMonitor` y ambas funciones de start/stop de monitoreo en `background.js` | `clipboard_monitor` deja de existir como capability. La detección de que una página está lista para el Device Flow es responsabilidad de `content.js`/IonPump vía `SITE_READY`, no de un monitor de portapapeles. |
+| 3 | §12.1: la tabla de onboarding y el texto that la sigue afirmaban que el paso `github_auth` esperaba que "el usuario genere un PAT" y que emitía `GITHUB_PAT_DETECTED (token)`, y que *"el clipboard monitor sigue siendo el mecanismo de detección del PAT"* | Toda la sección `CLIPBOARD API KEY DETECTOR` de `background.js` (polling de `navigator.clipboard.readText()` cada 1s, matching contra 5 proveedores, reenvío del secreto completo a un host nativo y a `localhost:48215`) | El paso `github_auth` espera confirmación del usuario en una pestaña real de `github.com/login/device` y el token llega vía polling autorizado del Device Flow — nunca por lectura de clipboard. |
+| 4 | §4.9: `web_accessible_resources` con `"matches": ["<all_urls>"]` | `host_permissions` de `<all_urls>` + consolas de terceros, restringido a `github.com`, `api.github.com`, `accounts.google.com` | El ejemplo de `manifest.json` en §4.9 se actualiza a `"matches": ["github.com"]`. |
+| 5 | §8: `files_to_copy` de `discovery_generator.py` incluía `content-aistudio.js` | El content script en `<all_urls>` con `run_at: document_start`, `all_frames: true`, y el script específico apuntado a `aistudio.google.com`, `console.anthropic.com`, `platform.openai.com`, `console.x.ai` | `content-aistudio.js` se retira del listado de assets que Discovery copia (§8). |
+| 6 | (implícito en todo lo anterior) `session_guard.ion` no estaba documentado en la v2, pero el principio de "automatizar un poco el login" que motivó su versión activa original sí es el que esta v3 prohíbe explícitamente | `session_guard.ion` pasó de escribir usuario/contraseña y hacer submit, a solo emitir `SESSION_ACTIVE` / `SESSION_REQUIRED` sin tocar campos | Regla general codificada en §21: ningún Ion escribe en campos de usuario/contraseña/token; el login lo hace el humano en su propia pestaña. |
+
+Ninguno de estos seis puntos es una preferencia de estilo — son código que existía, hacía exfiltración de credenciales (propias o de terceros) de forma silenciosa, y fue borrado enteramente. Este documento ya no lo trata como "la arquitectura", precisamente para que nadie lo reconstruya leyendo el SOT y asumiendo que describe el estado deseado.
 
 ---
 
@@ -260,7 +277,7 @@ Tipos de parámetro: `auto` (se resuelve solo, invisible), `string` (campo edita
 {
   "web_accessible_resources": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["github.com"],
       "resources": [
         "harness/index.html",
         "harness/harness.js",
@@ -273,13 +290,21 @@ Tipos de parámetro: `auto` (se resuelve solo, invisible), `string` (campo edita
 }
 ```
 
+> **Cambio respecto a v2:** la revisión de seguridad del 8 de julio restringió `matches` de `<all_urls>` a `github.com` (junto con `host_permissions`, ver §21). Estos assets nunca necesitaron ser accesibles desde cualquier origen — solo desde el flujo de onboarding de GitHub.
+
 ---
 
 ## 5. Arquitectura de IonPump
 
 ### 5.1 Qué es y qué no es
 
-Runtime de automatización web dentro de Brain. No es CLI de usuario, no es extensión de Cortex, no modifica el protocolo Synapse, no toca `content.js`. Traduce recipes `.ion` a comandos Synapse atómicos que `content.js` ya sabe ejecutar.
+**El ideal de IonPump — Capa de Agilidad de Bloom.** El ecosistema de IAs web (Claude, ChatGPT, Grok, y los que se agreguen) cambia de estructura DOM con frecuencia. IonPump existe para que esa volatilidad no obligue a un rebuild de Cortex ni de Brain cada vez que un sitio cambia un selector: la lógica de interacción por sitio vive en recetas `.ion` versionadas y reemplazables en caliente (§5.9, watchdog), separadas del código core. Es el puente entre el **Intent** (la voluntad del usuario, ya autorizada) y el **DOM** (la realidad cambiante de la página) — nunca al revés: el DOM no genera intents por su cuenta.
+
+Dicho esto — es un runtime de automatización web dentro de Brain. No es CLI de usuario, no es extensión de Cortex, no modifica el protocolo Synapse, no toca `content.js`. Traduce recipes `.ion` a comandos Synapse atómicos que `content.js` ya sabe ejecutar.
+
+**Agilidad no es lo mismo que apertura sin revisión.** Que el objetivo sea que agregar o corregir un sitio sea rápido no implica que un sitio nuevo entre al catálogo sin que un humano lo revise contra §21.5 al menos una vez. La velocidad la da el mecanismo de recarga en caliente, no la ausencia de revisión.
+
+**Fundamento de diseño:** el sistema está pensado para actualización frecuente, no para reescritura frecuente. Un cambio en el DOM de un tercero (Claude, ChatGPT, Grok, o cualquier sitio que se agregue después) se resuelve actualizando el `.ion` correspondiente, no parcheando `content.js` ni Cortex. El protocolo Synapse es el lenguaje estable; los `.ion` son la capa que absorbe el cambio de cada sitio individual.
 
 ### 5.2 Posición en el stack — con capa IPC
 
@@ -314,27 +339,25 @@ BloomNucleus/run/ipc_{launch_id}.port    # entero plano = puerto TCP, escrito po
 
 ```yaml
 # github.com/auth.ion
-version: 1.0.0
+#
+# ALCANCE (post revisión de seguridad, §0.3): este recipe da contexto sobre
+# el estado de la página de GitHub durante el onboarding. NO genera, NO
+# extrae y NO detecta tokens/PATs. La obtención del token es responsabilidad
+# exclusiva del OAuth Device Flow (background-github-device-flow.js),
+# fuera del runtime de IonPump. Ningún flow de este archivo navega a
+# /settings/tokens* ni a /login*, ni lee el clipboard.
+version: 2.0.0
 site: github.com
-description: "GitHub PAT authentication flow for Bloom onboarding"
+description: "Contexto de página para el onboarding de GitHub de Bloom (no maneja credenciales)"
 
 entrypoints:
   on_load: bootstrap
-  on_pat_clipboard: handle_pat_detected
-
-variables:
-  settings_url: "https://github.com/settings/tokens"
 
 flows:
   bootstrap:
     steps:
       - wait: { selector: "body", timeout: 10s }
       - emit: { event: "SITE_READY", payload: { site: "github.com" } }
-  handle_pat_detected:
-    requires: ["SITE_READY"]
-    steps:
-      - emit: { event: "GITHUB_PAT_DETECTED", payload: { token: "$CONTEXT.clipboard_value" } }
-      - transition: { to: "await_confirmation" }
 
 error_handlers:
   timeout: { retry: 1, fallback: "emit_error" }
@@ -368,14 +391,16 @@ ionsites/
 ```json
 {
   "site": "github.com",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "entrypoint": "auth.ion",
-  "flows": ["bootstrap", "handle_pat_detected", "await_confirmation"],
-  "triggers": { "on_load": "bootstrap", "on_pat_clipboard": "handle_pat_detected" },
-  "capabilities": ["auth", "clipboard_monitor"],
+  "flows": ["bootstrap"],
+  "triggers": { "on_load": "bootstrap" },
+  "capabilities": ["page_context"],
   "requires_cortex_version": ">=1.2.0"
 }
 ```
+
+> `clipboard_monitor` ya no existe como capability válida para ningún Ion — ver §0.3 y §21. Un `.ion` recipe puede declarar `page_context` (observar/dar contexto) o `authorized_action` (ejecutar algo que el humano ya decidió), nunca capacidades que impliquen leer clipboard, DOM de páginas de credenciales, o escribir en campos de login.
 
 > Si `ionsites/` no existe en una instalación fresca, `IonLoader.discover_all()` debe **crearlo silenciosamente** y retornar 0 — no es un error.
 
@@ -450,6 +475,10 @@ if intent.subtype == "web_automation":
 
 No bloquea el resto de las fases (core runtime, IPC, hot-reload, admin commands, Metamorph inspect).
 
+**Principio de diseño — el Paquete de Intent como mecanismo de autorización.** Aunque la integración esté `DEFERRED`, el principio que la va a gobernar ya está decidido y no depende de que se confirme el dispatcher: `IonPumpManager` nunca inicia una acción sobre un sitio por su cuenta — solo actúa cuando `IntentExecutor` se lo pide, con un paquete que identifica **qué sitio** (`target_site`), **qué flow** (`automation_flow`) y **con qué datos** (el resto de `intent.context`, que incluye lo que haya que inyectar — ej. el texto de un prompt). Esto es lo que cierra la puerta a que IonPump "vague" por la web: no hay camino de ejecución sin un Intent explícito que lo respalde. La automatización es una extensión de una decisión ya tomada por el usuario, no un proceso autónomo — mismo principio que ya aplica a `session_guard.ion` y a las reglas de §21.5.1.
+
+Esto es un principio de diseño a respetar cuando se implemente, no una confirmación de que la integración ya existe — la salvedad de `intent_executor.py` no confirmado sigue vigente.
+
 ### 5.10 Comandos admin
 
 ```bash
@@ -463,7 +492,9 @@ brain ionpump test github.com bootstrap [--dry-run]
 
 ## 6. Manifests de protocolo — `DISCOVERY_PROTOCOL_MANIFEST`
 
-6 mensajes del milestone GitHub, agregados al final de `discoveryProtocol.js`: `onboarding_navigate` (command, enum `step`), `github_pat_detected` (event, string `token`), `github_token_stored` (event, string + 2 auto), `account_registered` (event, 2 auto), `host_ready` (command, sin parámetros), `discovery_complete` (event, 2 auto). Todos `channel: "runtime"`, dirección `harness_to_background`. `observable_events`: `HANDSHAKE_CONFIRMED`, `API_KEY_REGISTERED`, `ACCOUNT_REGISTERED`, `DISCOVERY_COMPLETE`, `GITHUB_PAT_DETECTED`, `GITHUB_TOKEN_STORED`.
+5 mensajes del milestone GitHub, agregados al final de `discoveryProtocol.js`: `onboarding_navigate` (command, enum `step`), `github_token_stored` (event, string + 2 auto), `account_registered` (event, 2 auto), `host_ready` (command, sin parámetros), `discovery_complete` (event, 2 auto). Todos `channel: "runtime"`, dirección `harness_to_background`. `observable_events`: `HANDSHAKE_CONFIRMED`, `API_KEY_REGISTERED`, `ACCOUNT_REGISTERED`, `DISCOVERY_COMPLETE`, `GITHUB_TOKEN_STORED`.
+
+> **Cambio respecto a v2:** el mensaje `github_pat_detected` (evento que transportaba el string crudo del token) se elimina del manifest. Correspondía al handler `GITHUB_PAT_DETECTED` de `background.js` que reenviaba al host cualquier string con formato de token sin verificar su origen — eliminado en la revisión de seguridad (§0.3). El único evento de este flujo que sigue existiendo es `github_token_stored`, emitido después de que el Device Flow completó su polling autorizado; no transporta el token crudo, solo confirmación + fingerprint.
 
 **Agregar un sitio nuevo a IonPump (ej. `perplexity.ai`):** crear `ionsites/perplexity.ai/{message.ion, ion.manifest.json}` (IonPumpManager lo detecta por hot-reload); agregar el dominio a `matches` del content script si falta; agregar `perplexity.ai` a `options` del parámetro `site` en `HARNESS_PROTOCOL_MANIFEST`. **El Harness no se toca** — `ProtocolReader` refleja el cambio automáticamente en runtime.
 
@@ -520,9 +551,11 @@ def _generate_profile_pages(self, profile_id, profile_name, dev_mode=False):
 files_to_copy = [
     "index.html", "discovery.js", "script.js", "discoveryProtocol.js",
     "harnessProtocol.js",  # copia para el contexto de discovery
-    "content-aistudio.js", "onboarding.js", "styles.css",
+    "onboarding.js", "styles.css",
 ]
 ```
+
+> **Cambio respecto a v2:** `content-aistudio.js` se retira de este listado. Era el content script apuntado a `aistudio.google.com` que la revisión de seguridad eliminó junto con los scripts equivalentes para `console.anthropic.com`, `platform.openai.com` y `console.x.ai` — content scripts en consolas de terceros con `run_at: document_start` no tienen lugar en Discovery (§21).
 
 **Fases de implementación:** Fase 1 (Core: models → registry → loader → validator → state) · Fase 2 (IPC + Execution Engine) · Fase 3 (Intent Integration, DEFERRED, §5.9) · Fase 4 (Hot-reload, prerrequisito watchdog) · Fase 5 (Admin commands) · Fase 6a (Metamorph inspect, implementable ahora) · Fase 6b (Metamorph reconcile, BLOCKED por Bartcave) · Fase 7 (recipes adicionales: chatgpt.com, grok.com, perplexity.ai).
 
@@ -605,18 +638,20 @@ Proceso previsto: inspect → comparar versiones → descargar a staging → ver
 ### 12.1 El flujo
 
 ```
-welcome → github_auth [GITHUB_PAT_DETECTED] → github_confirm [GITHUB_TOKEN_STORED]
+welcome → github_auth [GITHUB_TOKEN_STORED] → github_confirm [SESSION_ACTIVE]
         → api_key [API_KEY_REGISTERED] → complete [DISCOVERY_COMPLETE] → Landing activa
 ```
 
 | Paso | Espera | Emite | Resultado |
 |---|---|---|---|
-| `github_auth` | Usuario genera PAT en GitHub | `GITHUB_PAT_DETECTED` (token) | background.js inicia almacenamiento |
-| `github_confirm` | Usuario confirma el token | `GITHUB_TOKEN_STORED` (fingerprint) | Token cifrado en Chrome Storage |
-| `api_key` | Usuario pega API key | `API_KEY_REGISTERED` | API key cifrada |
+| `github_auth` | Usuario confirma el `user_code` en `github.com/login/device` (pestaña real, Device Flow) | `GITHUB_TOKEN_STORED` (fingerprint) | `background-github-device-flow.js` hace polling autorizado y reenvía el token una sola vez al host nativo; Token cifrado en Chrome Storage |
+| `github_confirm` | `session_guard.ion` detecta selector de sesión activa | `SESSION_ACTIVE` (o `SESSION_REQUIRED` si no hay sesión) | El humano hace login en su propia pestaña si hace falta; ningún Ion escribe usuario/contraseña |
+| `api_key` | Usuario pega API key en un campo propio de Bloom | `API_KEY_REGISTERED` | API key cifrada |
 | `complete` | Todo lo anterior | `DISCOVERY_COMPLETE` | Sentinel genera `landing.synapse.config.js` |
 
-Cuando IonPump está activo, `IonPumpManager` corre el flow `bootstrap` de `github.com` al navegar a `github_auth`; `content.js` emite `SITE_READY`. El clipboard monitor sigue siendo el mecanismo de detección del PAT — IonPump no lo reemplaza, automatiza la verificación de que la página está lista.
+> **Cambio respecto a v2 (ver §0.3):** el paso `github_auth` ya no depende de un monitor de clipboard ni de un PAT extraído del DOM de `/settings/tokens`. El único mecanismo vigente es el OAuth Device Flow.
+
+Cuando IonPump está activo, `IonPumpManager` corre el flow `bootstrap` de `github.com` al navegar a `github_auth`; `content.js` emite `SITE_READY`. Ese flow solo da contexto de que la página cargó — no detecta, no lee ni reemplaza al Device Flow como mecanismo de obtención del token.
 
 ### 12.2 Caso A — Observar el flujo real
 
@@ -626,11 +661,11 @@ Verificar en **Config** que `launchId` coincide con la sesión activa → abrir 
 
 ### 12.3 Caso B — Simular un evento puntual
 
-Click en el mensaje (ej. `github_pat_detected`) → completar/ajustar el campo editable → **Send** → Log muestra `[SEND]` con el payload y `[ACK]` con la respuesta. ACK `null` puede ser fire-and-forget esperado, o el handler no reconoció el evento. `ERR` indica que el mensaje no llegó — revisar `extension_id` en Config y que el host esté conectado.
+Click en el mensaje (ej. `github_token_stored`) → completar/ajustar el campo editable → **Send** → Log muestra `[SEND]` con el payload y `[ACK]` con la respuesta. ACK `null` puede ser fire-and-forget esperado, o el handler no reconoció el evento. `ERR` indica que el mensaje no llegó — revisar `extension_id` en Config y que el host esté conectado.
 
 ### 12.4 Caso C — Flujo completo desde cero
 
-Secuencia con ACK entre cada uno: `onboarding_navigate(github_auth)` → `github_pat_detected` → `github_token_stored` → `api_key_registered` → `account_registered` → `discovery_complete`.
+Secuencia con ACK entre cada uno: `onboarding_navigate(github_auth)` → `github_token_stored` → `api_key_registered` → `account_registered` → `discovery_complete`. (En v2 esta secuencia incluía `github_pat_detected` antes de `github_token_stored`; ese mensaje ya no existe — ver §6.)
 
 ### 12.5 Troubleshooting por síntoma
 
@@ -794,4 +829,62 @@ Fase siguiente (no bloquea milestone GitHub)
 
 ---
 
-*Documento fusionado el 17 de junio de 2026 a partir de `HARNESS_SOURCE_OF_TRUTH.md`, `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md`, y el código real de `harness_generator.py` y `harness.js` aportado en esta sesión. Ambos documentos fuente quedan archivados — no usar como fuente de verdad para nuevas decisiones. Las secciones marcadas con ⚠️ en §0.2, §18.1 y §18.2 requieren una decisión humana, no son inferencias a resolver por este documento.*
+## 21. Reglas de seguridad para Ions y para el manejo de credenciales (vigentes desde el 8 de julio de 2026)
+
+Esta sección codifica, para que no se pierda en el futuro, la política que resultó de la revisión de seguridad documentada en `CLEANUP_NOTES.md` y detallada punto por punto en §0.3. Aplica a todo `.ion` recipe presente o futuro, y a cualquier código de `background.js` que interactúe con clipboard, DOM de páginas de terceros, o almacenamiento de credenciales.
+
+### 21.1 Regla general para Ions
+
+Un Ion **es aceptable** si:
+- Lee/observa una página para dar contexto al humano (ej. estructura de un repo, si una página terminó de cargar).
+- Ejecuta una acción que el humano ya decidió explícitamente (ej. crear un Issue después de una decisión tomada en el Conductor).
+
+Un Ion **no es aceptable** si:
+- Navega a páginas de `/settings/`, `/login/`, o de gestión de credenciales de cualquier proveedor (GitHub, Google, Anthropic, OpenAI, xAI, etc.).
+- Escribe en campos de usuario/contraseña/token.
+- Extrae valores de tokens, contraseñas o llaves del DOM.
+- Depende de `clipboardRead` o de permisos `<all_urls>`.
+
+### 21.2 Obtención de tokens y sesión
+
+- El único mecanismo aceptable para obtener un token de acceso de GitHub es el **OAuth Device Flow** (`background-github-device-flow.js`). Ningún Ion debe automatizar la generación o extracción de un PAT, sin importar cuánto "ahorre un clic" — ver el cierre de `CLEANUP_NOTES.md` sobre este punto exacto.
+- La detección de sesión activa (`session_guard.ion` u otro Ion equivalente) es **pasiva**: emite `SESSION_ACTIVE` / `SESSION_REQUIRED`, nunca escribe usuario/contraseña ni hace submit. El login lo hace siempre el humano, en su propia pestaña.
+- Si en el futuro Bloom necesita guardar una API key de otro proveedor en el Vault, el único flujo aceptable es que el usuario la pegue explícitamente en un campo de un formulario propio de Bloom — nunca detección pasiva de clipboard ni de DOM de terceros.
+
+### 21.3 Permisos de manifest y content scripts
+
+- `host_permissions` y `web_accessible_resources` se declaran por dominio explícito (hoy: `github.com`, `api.github.com`, `accounts.google.com`), nunca `<all_urls>`.
+- No se registran content scripts en `<all_urls>` con `run_at: document_start` ni `all_frames: true`, ni content scripts apuntados a consolas de terceros (`aistudio.google.com`, `console.anthropic.com`, `platform.openai.com`, `console.x.ai` u otras).
+- `clipboardRead` y `cookies` no se declaran salvo que haya una razón concreta, documentada y revisada — no "por si acaso".
+
+### 21.4 Qué hacer si la tentación vuelve
+
+Cualquier propuesta futura de "automatizar un poco" el login o la generación de un token para ahorrar un clic se rechaza por default. Ese paso es exactamente el que convierte un asistente de contexto en un robador de credenciales, y el patrón es indistinguible del de un infostealer aunque la intención sea legítima. El Device Flow existe para no tener que elegir entre comodidad y seguridad — usarlo no es negociable.
+
+### 21.5 Reglas para Superficies de Interacción (sitios de AI providers: Claude, ChatGPT, Grok, y los que se agreguen)
+
+A diferencia de las páginas de credenciales, las páginas de chat de un AI provider son una **categoría propia y permitida** — la "Superficie de Interacción" — porque ahí no hay extracción de secretos, sino ejecución de la tarea que el ingeniero le pidió a Bloom. Esta sección la formaliza. No reemplaza a §21.1–§21.4: una página de chat de `claude.ai` puede ser Superficie de Interacción en `/chat` y Superficie de Credenciales en `/settings` al mismo tiempo — el alcance del Ion decide cuál aplica, no el dominio.
+
+**1. Gatillo por Intent, nunca espontáneo.** Ninguna acción de escritura (`DOM_TYPE`, `DOM_CLICK`) ni de lectura extensiva (`DOM_EXTRACT` sobre el historial completo de una conversación) sobre un AI provider puede dispararse por `on_load`, por un watcher pasivo, o por cualquier trigger que no sea la ejecución directa de un Intent iniciado por el usuario o por el pipeline de razonamiento ya autorizado. Mismo principio que `session_guard.ion`: observar pasivamente está bien, actuar sin que un Intent lo pidió no.
+
+**2. Transparencia de lectura — y exclusividad del canal.** Todo dato extraído de una conversación de IA por un Ion se emite al Event Bus local (Synapse), visible en el Conductor/Harness. Esto no es solo "hay que emitirlo ahí" — es que **ese es el único destino permitido**. Un Ion no tiene capability de red saliente propia ni un segundo canal de emisión; si `IonExecutor` no lo traduce a un `SynapseCommand` dirigido al bus, no sale. Esta exclusividad es la que impide reconstruir, con otro nombre, el patrón del monitor de clipboard que reenviaba secretos a un endpoint paralelo mientras "también" notificaba al usuario. En otras palabras: no hay invasión porque no hay secreto — pero eso solo es cierto mientras el Event Bus siga siendo el *único* espejo, no *uno de varios*.
+
+**3. Aislamiento de propósito — Companion e IonPump no se tocan entre sí.** IonPump ejecuta tareas (Intents); Companion da contexto pasivo (§2.3). Aunque ambos puedan operar sobre la misma página de AI provider, ninguno de los dos invoca ni modifica el estado del otro: IonPump no escribe en el webview de Companion, Companion no dispara `ION_EXECUTE_FLOW` ni comandos DOM de IonPump. Esta separación ya está fijada para Companion (§2.3, cierre de la subsección); acá se declara la contraparte simétrica para IonPump.
+
+**4. Exclusión de gestión de cuenta.** Un `.ion` con capability sobre `claude.ai/chat` (o el equivalente de otro provider) tiene prohibido actuar sobre `/settings`, planes de pago, exportación de datos de cuenta, o cualquier superficie de credenciales de ese mismo dominio. El alcance se limita estrictamente a la caja de chat y el historial de conversación — el dominio compartido no amplía el alcance.
+
+**5. Revisión humana antes de sumar un sitio nuevo — no negociable, aunque sea liviana.** "Agilidad" (§5.1) es velocidad de iteración una vez que un sitio ya está aprobado — no es ausencia de aprobación inicial. Antes de que el primer `.ion` de un sitio nuevo entre a `ionsites/`, alguien con autoridad de seguridad lo revisa contra los puntos 1–4 de esta sección. Un validador automático de selectores es un complemento útil (detecta lo obvio: un selector apuntando a `/settings`), pero no reemplaza esa revisión — un selector puede resolverse dinámicamente y un flow puede evadir un chequeo estático sin evadir a un humano leyéndolo. Una vez aprobado, actualizar ese `.ion` (arreglar un selector roto) no requiere pasar de nuevo por el mismo proceso — ahí sí aplica la agilidad de re-seed/hot-reload.
+
+**6. Superficie de terceros (`.ion` no escritos por Bloom) — visión a futuro, explícitamente NO resuelta por este documento.** El objetivo de largo plazo es que la comunidad de ingenieros pueda crear y compartir recipes `.ion` para sitios nuevos (Kimi, NotebookLM, y lo que se agregue) — eso es una dirección de producto válida. Pero la idea de que **"el riesgo se gestiona en el Protocolo, no en el Sitio"** solo es cierta el día que se cumplan, en código, las tres condiciones de abajo — hoy es una meta de diseño, no un control activo, y este documento no debe describirla como si ya operara:
+
+- **Firma verificable** del recipe antes de que `IonLoader` lo acepte.
+- **Enforcement de capabilities en tiempo de ejecución por `IonExecutor`** — no alcanza con que el `.ion` esté bien formado o que un validador estático lo revise en reposo; el intérprete tiene que rechazar en runtime cualquier paso que exceda las capabilities declaradas (ej. un `extract` que resuelva a un selector fuera de la caja de chat), porque un selector puede resolverse dinámicamente y evadir un chequeo estático sin evadir la ejecución real.
+- **Revisión equivalente a la humana de §21.5.5, aplicada por autor externo** — alguien de Bloom (o un proceso equivalente) revisa el primer `.ion` de cada autor/sitio nuevo antes de que se distribuya, igual que se hace hoy para los `.ion` propios.
+
+Hasta que las tres existan, el invariante vigente sigue siendo el de §7: **solo Metamorph escribe en `ionsites/`.** Ningún `.ion` de tercero entra al catálogo por fuera de ese camino, sin importar cuán bien cumpla, en el papel, con "Superficie de Interacción" y no "Superficie de Credenciales" — el papel no reemplaza al enforcement.
+
+**7. Nota de ToS de terceros.** Automatizar `type`/`extract` sobre la UI de un AI provider (enviar mensajes, leer respuestas) puede chocar con los términos de servicio de ese provider, independientemente de que Bloom lo haga con buena intención y de forma transparente. Companion ya tiene este mismo ítem de checklist antes de merge a producción (§2.3, nota de diseño abierta); todo `.ion` nuevo sobre un AI provider hereda el mismo requisito — no es un bloqueo automático, es una revisión explícita que alguien tiene que hacer y dejar registrada.
+
+---
+
+*Documento fusionado originalmente el 17 de junio de 2026 (v2) a partir de `HARNESS_SOURCE_OF_TRUTH.md`, `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md`, y el código real de `harness_generator.py` y `harness.js`. Revisado el 8 de julio de 2026 (v3) para incorporar los hallazgos de una auditoría de seguridad de la extensión (`CLEANUP_NOTES.md`) que eliminó mecanismos de scraping de credenciales y monitoreo de clipboard que la v2 documentaba como arquitectura vigente — ver §0.3 y §21. Extendido el mismo 8 de julio (v3, misma versión) con el framework de "Superficie de Interacción vs. Superficie de Credenciales" (§5.1, §21.5) para la ampliación planeada de IonPump hacia sitios de AI providers (Claude, ChatGPT, Grok). Los documentos fuente v1/v2 quedan archivados — no usar como fuente de verdad para nuevas decisiones. Las secciones marcadas con ⚠️ en §0.2, §18.1 y §18.2, y el punto 6 de §21.5 (superficie de terceros), requieren una decisión humana, no son inferencias a resolver por este documento.*

@@ -30,6 +30,12 @@
  *   y así no quedarse esperando eternamente un evento que ya pasó.
  *   Ver: connectToBrain() y el handler install:start en main.js.
  *
+ * CAMBIOS v4 (sesión 2026-07 — GitHub App / Device Flow):
+ *   1. ONBOARDING_EVENTS: retirado GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED
+ *      (PAT clásico, reemplazado por completo) y GOOGLE_AUTH_COMPLETE (evento
+ *      muerto, mismo retiro ya hecho en milestone-registry.js Ticket 2).
+ *      Agregado GITHUB_APP_AUTHORIZED (evento propio del Device Flow).
+ *
  * CAMBIOS v3 (sesión 2026-06):
  *   1. ONBOARDING_EVENTS: Set exportado con los eventos de hitos del onboarding
  *   2. _classifyMessage: nuevo case ONBOARDING_MILESTONE — captura todos los eventos
@@ -110,17 +116,27 @@ function getBloomRoot() {
 // declarados en config/onboarding/milestone-config.json (ver milestone-registry.js).
 //
 const ONBOARDING_EVENTS = new Set([
-  // ── Discovery / GitHub ────────────────────────────────────────────────────
-  'GITHUB_PAT_DETECTED',        // Cortex detectó un PAT en clipboard — pre-confirmación
-  'GITHUB_TOKEN_STORED',        // Brain persistió el fingerprint del PAT en nucleus.json
-  'ACCOUNT_REGISTERED',         // Cuenta creada en Nucleus con el token validado
+  // ── Discovery / GitHub App (Device Flow) ──────────────────────────────────
+  // Reemplaza por completo GITHUB_PAT_DETECTED / GITHUB_TOKEN_STORED (PAT
+  // clásico, retirado — ver milestone-registry.js, step "github_app_auth").
+  // Evento propio, no discriminado por "service".
+  'GITHUB_APP_AUTHORIZED',      // GitHub App autorizada vía Device Flow
+
+  // ── Cuentas genéricas ──────────────────────────────────────────────────────
+  'ACCOUNT_REGISTERED',         // Cuenta creada en Nucleus — hoy solo lo usa
+                                 // google_auth (discriminado por "service",
+                                 // ver milestone-registry.js). GitHub ya no
+                                 // pasa por acá.
 
   // ── Vault ────────────────────────────────────────────────────────────────
   'VAULT_INITIALIZED',          // Vault creado y cifrado correctamente
   'VAULT_INIT',                 // Alias alternativo que algunos builds de Brain emiten
 
   // ── Google / AI providers ────────────────────────────────────────────────
-  'GOOGLE_AUTH_COMPLETE',       // OAuth Google completado
+  // GOOGLE_AUTH_COMPLETE retirado — nunca se implementó (confirmado 💀 en el
+  // catálogo maestro, §3). De facto fue reemplazado por ACCOUNT_REGISTERED
+  // genérico; milestone-registry.js ya hizo este mismo retiro (Ticket 2).
+  // Dejarlo acá era el mismo tipo de referencia zombie — se saca en este pase.
   'AI_PROVIDER_CONFIGURED',     // API key de proveedor IA almacenada en vault
 
   // ── Proyecto ─────────────────────────────────────────────────────────────
@@ -495,7 +511,7 @@ class SynapseBridge extends EventEmitter {
    *   { event: 'HANDSHAKE_CONFIRMED', ... }
    *   { event: 'HOST_READY', ... }
    *   { event: 'INTENT_STARTED', ... }
-   *   { event: 'GITHUB_TOKEN_STORED', ... }   ← ahora → ONBOARDING_MILESTONE
+   *   { event: 'GITHUB_APP_AUTHORIZED', ... }   ← ahora → ONBOARDING_MILESTONE
    *   { event: 'ONBOARDING_STEP_COMPLETE', ... } ← ahora → ONBOARDING_MILESTONE
    */
   _classifyMessage(msg) {
@@ -566,7 +582,7 @@ class SynapseBridge extends EventEmitter {
     // El MilestoneRegistry puede extender este Set en runtime sin tocar este archivo.
     //
     if (ONBOARDING_EVENTS.has(event)) {
-      // Brain colapsa GITHUB_TOKEN_STORED / ACCOUNT_REGISTERED en
+      // Brain colapsa GITHUB_APP_AUTHORIZED / ACCOUNT_REGISTERED en
       // ONBOARDING_STEP_COMPLETE, pero ahora preserva el discriminador
       // original en data.original_event (ver server_manager.py v1.1.0+).
       // Contrato explícito, no heurístico: si falta, se loguea y se

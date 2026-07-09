@@ -1,12 +1,21 @@
 // ============================================================================
 // SYNAPSE DISCOVERY + ONBOARDING - UNIFIED SCRIPT
-// v1.1.0 — Paso 1 github_auth
-// Cambios:
+// v1.2.0 — GitHub App / Device Flow (reemplaza el viejo flujo de PAT)
+// Cambios v1.1.0 (base):
 //   1. loadSynapseConfig: stepCurrent ahora string (no numero)
 //   2. transitionToOnboarding: routeToStep() por step string
 //   3. Nueva pantalla github-login via routeToStep("github_auth")
 //   4. Nueva clase GithubAuthFlow: clipboard, recibo, guardado en vault_temp
 //   5. Listener onboarding_navigate para resume remoto desde Nucleus
+// Cambios v1.2.0 (esta sesión — ver HANDOFF-github-app-batcave-synapse.md):
+//   6. Step renombrado github_auth → github_app_auth (alineado con
+//      milestone-registry.js y DISCOVERY_PROTOCOL_MANIFEST)
+//   7. GithubAuthFlow (PAT + clipboard) reemplazada por GithubAppAuthFlow
+//      (Device Flow): pantallas github-app-start / github-app-device /
+//      github-app-stored. El token real ya no pasa por esta capa — viaje
+//      background.js → host por Native Messaging.
+//   8. _populateVaultReceipt() ahora lee el username de github desde
+//      bloom_profile_state.accounts en vez de bloom_vault_temp.github_user
 // ============================================================================
 
 // ============================================================================
@@ -16,13 +25,18 @@
 // UI propia (nucleus_create, project_create) no ocupan un lugar acá: no
 // mueven el contador porque el usuario nunca los ve.
 //
-// Varias pantallas pueden pertenecer al mismo step (ej: github-login,
-// github-confirm y github-stored son todas sub-estados de "github_auth").
+// Varias pantallas pueden pertenecer al mismo step (ej: github-app-start,
+// github-app-device y github-app-stored son todas sub-estados de "github_app_auth").
 // El badge muestra el MISMO "Paso N de TOTAL" para todas ellas — no fingimos
 // granularidad fina que el usuario no puede verificar.
 // ============================================================================
+// NOTA (migración GitHub App): el step se renombró de 'github_auth' a
+// 'github_app_auth' para quedar alineado 1:1 con milestone-registry.js
+// (HANDOFF §5.2) y con DISCOVERY_PROTOCOL_MANIFEST.messages[0].parameters
+// options en discoveryProtocol.js, que YA declaraba 'github_app_auth' como
+// único valor válido — este archivo era el que había quedado desincronizado.
 const STEP_SEQUENCE = [
-  { id: 'github_auth',       label: 'GitHub' },
+  { id: 'github_app_auth',   label: 'GitHub' },
   { id: 'vault_init',        label: 'Vault' },
   { id: 'google_auth',       label: 'Google' },
   { id: 'ai_provider_setup', label: 'Gemini API' },
@@ -34,9 +48,9 @@ const STEP_SEQUENCE = [
 // después de terminar el onboarding) — no tiene número global, se lo deja como
 // vino en el HTML (data-step-id="secondary" en index.html).
 const SCREEN_STEP_MAP = {
-  'github-login':        'github_auth',
-  'github-confirm':      'github_auth',
-  'github-stored':       'github_auth',
+  'github-app-start':    'github_app_auth',
+  'github-app-device':   'github_app_auth',
+  'github-app-stored':   'github_app_auth',
   'vault-created':       'vault_init',
   'google-auth-login':   'google_auth',
   'google-auth-confirm': 'google_auth',
@@ -506,12 +520,12 @@ class DiscoveryFlow {
   routeToStep(step) {
     console.log('[Discovery] routeToStep() - step:', step);
     switch (step) {
-      case 'github_auth':
-        console.log('[Discovery] Routing to github_auth flow');
-        this.showScreen('github-login');
-        // Inicializar el flujo de GitHub auth
+      case 'github_app_auth':
+        console.log('[Discovery] Routing to github_app_auth flow (Device Flow)');
+        this.showScreen('github-app-start');
+        // Inicializar el flujo de GitHub App auth (Device Flow)
         if (!window.GITHUB_FLOW) {
-          window.GITHUB_FLOW = new GithubAuthFlow(this);
+          window.GITHUB_FLOW = new GithubAppAuthFlow(this);
           window.GITHUB_FLOW.init();
         }
         break;
@@ -573,10 +587,10 @@ class DiscoveryFlow {
         break;
 
       case 'github':
-        console.log('[Discovery] Routing to GitHub auth flow');
-        this.showScreen('github-login');
+        console.log('[Discovery] Routing to GitHub App auth flow (Device Flow)');
+        this.showScreen('github-app-start');
         if (!window.GITHUB_FLOW) {
-          window.GITHUB_FLOW = new GithubAuthFlow(this);
+          window.GITHUB_FLOW = new GithubAppAuthFlow(this);
           window.GITHUB_FLOW.init();
         }
         break;
@@ -588,10 +602,10 @@ class DiscoveryFlow {
 
       default:
         // Sin service definido → GitHub es el primer paso de registro
-        console.log('[Discovery] No service specified, defaulting to github_auth');
-        this.showScreen('github-login');
+        console.log('[Discovery] No service specified, defaulting to github_app_auth');
+        this.showScreen('github-app-start');
         if (!window.GITHUB_FLOW) {
-          window.GITHUB_FLOW = new GithubAuthFlow(this);
+          window.GITHUB_FLOW = new GithubAppAuthFlow(this);
           window.GITHUB_FLOW.init();
         }
         break;
@@ -872,10 +886,21 @@ class DiscoveryFlow {
         ? state.vaults[state.vaults.length - 1]
         : null;
 
+      // FIX (migración GitHub App): GithubAppAuthFlow ya no escribe
+      // bloom_vault_temp.github_user — el token real nunca toca esta capa,
+      // viaja background.js → host por Native Messaging (ver HANDOFF §3).
+      // El username ahora se lee de bloom_profile_state.accounts, poblado
+      // por _updateAccountState('github', username) en GithubAppAuthFlow.
+      // Se deja vault.github_user como fallback legacy por si queda un
+      // perfil viejo con residuo del flujo PAT.
+      const githubAccount = Array.isArray(state.accounts)
+        ? state.accounts.find(a => a.provider === 'github')
+        : null;
+
       const elUsername    = document.getElementById('vault-username');
       const elFingerprint = document.getElementById('vault-fingerprint');
 
-      if (elUsername) elUsername.textContent = vault.github_user || '—';
+      if (elUsername) elUsername.textContent = githubAccount?.username || vault.github_user || '—';
       if (elFingerprint) elFingerprint.textContent = latestVault?.fingerprint || '—';
 
       // Botón continuar → avanza al siguiente step (el host lo emitirá vía onboarding_navigate,
@@ -1024,211 +1049,215 @@ class OnboardingFlow {
 
 
 // ============================================================================
-// GITHUB AUTH FLOW — Paso 1
-// Maneja la pantalla github-login: instrucciones, clipboard monitor,
-// recibo de confirmación y guardado en chrome.storage.local.bloom_vault_temp.
-// El token real de GitHub NUNCA sale de chrome.storage ni de esta clase.
+// GITHUB APP AUTH FLOW — Device Flow (reemplaza el viejo flujo de PAT)
+// Maneja las pantallas github-app-start / github-app-device / github-app-stored.
+//
+// Contrato de mensajes (ver DISCOVERY_PROTOCOL_MANIFEST en discoveryProtocol.js
+// y HANDOFF §3/§5.3):
+//   discovery.js → background.js : { action: 'startGithubDeviceFlow' }
+//   background.js → discovery.js : { event: 'GITHUB_DEVICE_CODE', user_code, verification_uri, expires_in }
+//   background.js → discovery.js : { event: 'GITHUB_APP_AUTHORIZED', username, token_fingerprint, scopes, ... }
+//   background.js → discovery.js : { event: 'GITHUB_DEVICE_FLOW_ERROR', reason }
+//
+// El token real NUNCA llega a esta clase ni a discovery.js: background.js lo
+// recibe de GitHub, lo manda por Native Messaging directo al host (Brain/
+// Nucleus) y solo notifica acá con username + fingerprint + scopes. Por eso
+// esta clase no toca chrome.storage.local.bloom_vault_temp — a diferencia del
+// viejo GithubAuthFlow (PAT), acá no hay ningún secreto que guardar local.
+// El step 'vault_init' (pantalla vault-created) sigue existiendo aparte y se
+// puebla vía VAULT_INITIALIZED — ver OnboardingFlow.setupListeners().
 // ============================================================================
 
-class GithubAuthFlow {
+class GithubAppAuthFlow {
   constructor(discovery) {
     this.discovery = discovery;
-    this._tokenSaved = false;
-  }
-
-  // ── SHA-256 primeros 8 chars del token (fingerprint) ──
-  async sha256Prefix(text) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    const hex = Array.from(new Uint8Array(hash))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-    return hex.substring(0, 8);
-  }
-
-  // ── Detectar OS para mostrar info de cifrado ──
-  osEncryptionLabel() {
-    const platform = navigator.platform || navigator.userAgent;
-    if (platform.toLowerCase().includes('win')) return 'DPAPI (Windows Data Protection API)';
-    if (platform.toLowerCase().includes('mac')) return 'macOS Keychain';
-    return 'OS-level encryption';
+    this._authorized = false;
+    this._countdownInterval = null;
   }
 
   init() {
-    console.log('[GithubAuthFlow] init()');
+    console.log('[GithubAppAuthFlow] init()');
 
-    // Botón "Abrir GitHub" → abre la URL de tokens con scopes preseleccionados
-    const btnOpen = document.getElementById('btn-open-github-tokens');
-    if (btnOpen) {
-      btnOpen.addEventListener('click', () => {
-        const url = 'https://github.com/settings/tokens/new'
-          + '?scopes=repo,read:org'
-          + '&description=Bloom+Conductor';
-        chrome.tabs.create({ url });
-        this._startClipboardMonitor();
-        this._showWaitingState();
+    // Botón "Conectar GitHub" en github-app-start → pide un device code nuevo.
+    const btnStart = document.getElementById('btn-start-github-device-flow');
+    if (btnStart && !btnStart._bound) {
+      btnStart._bound = true;
+      btnStart.addEventListener('click', () => this._requestDeviceCode());
+    }
+
+    // Botón "Cancelar" en github-app-device — vuelve al start sin dejar el
+    // alarm de polling corriendo en background.js.
+    const btnCancel = document.getElementById('btn-cancel-github-device');
+    if (btnCancel && !btnCancel._bound) {
+      btnCancel._bound = true;
+      btnCancel.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'cancelGithubDeviceFlow' });
+        this._resetToStart();
       });
     }
 
-    // Botón de rechazo en pantalla de confirmación
-    const btnReject = document.getElementById('btn-reject-github-token');
-    if (btnReject) {
-      btnReject.addEventListener('click', () => {
-        this._tokenSaved = false;
-        this.discovery.showScreen('github-login');
-        this._startClipboardMonitor();
-      });
+    // Botón "Copiar código" en github-app-device.
+    const btnCopy = document.getElementById('btn-copy-github-code');
+    if (btnCopy && !btnCopy._bound) {
+      btnCopy._bound = true;
+      btnCopy.addEventListener('click', () => this._copyCode(btnCopy));
     }
 
-    // Botón de confirmación en pantalla de confirmación
-    const btnConfirm = document.getElementById('btn-confirm-github-token');
-    if (btnConfirm) {
-      btnConfirm.addEventListener('click', async () => {
-        const token = this._pendingToken;
-        if (!token) return;
-        await this._saveToken(token);
-      });
+    // Reintentar desde github-app-start después de un error.
+    const btnRetry = document.getElementById('btn-retry-github-device-flow');
+    if (btnRetry && !btnRetry._bound) {
+      btnRetry._bound = true;
+      btnRetry.addEventListener('click', () => this._requestDeviceCode());
     }
 
-    // Escuchar el token detectado desde background.js
     chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.event === 'GITHUB_PAT_DETECTED' && msg.token && !this._tokenSaved) {
-        this._handleTokenDetected(msg.token);
+      if (msg.event === 'GITHUB_DEVICE_CODE') {
+        this._handleDeviceCode(msg);
+      }
+      if (msg.event === 'GITHUB_APP_AUTHORIZED' && !this._authorized) {
+        this._handleAuthorized(msg);
+      }
+      if (msg.event === 'GITHUB_DEVICE_FLOW_ERROR') {
+        this._handleError(msg);
       }
     });
   }
 
-  _startClipboardMonitor() {
-    chrome.runtime.sendMessage({ action: 'startClipboardMonitoring' });
-    console.log('[GithubAuthFlow] Clipboard monitoring started');
+  _requestDeviceCode() {
+    console.log('[GithubAppAuthFlow] Requesting device code');
+    this._authorized = false;
+    this._setStatus('Requesting code from GitHub…');
+
+    const btnStart = document.getElementById('btn-start-github-device-flow');
+    if (btnStart) btnStart.disabled = true;
+
+    // El POST a /login/device/code vive en background.js (service worker con
+    // host_permissions), nunca acá — una página normal no puede pegarle a
+    // github.com por CORS. Ver HANDOFF §3.
+    chrome.runtime.sendMessage({ action: 'startGithubDeviceFlow' });
   }
 
-  _showWaitingState() {
-    const waitMsg = document.getElementById('github-waiting-message');
-    if (waitMsg) waitMsg.style.display = 'block';
-    const btnOpen = document.getElementById('btn-open-github-tokens');
-    if (btnOpen) btnOpen.textContent = '↗ GitHub abierto — pegá el token';
+  _resetToStart() {
+    clearInterval(this._countdownInterval);
+    this._authorized = false;
+    this.discovery.showScreen('github-app-start');
+    const btnStart = document.getElementById('btn-start-github-device-flow');
+    if (btnStart) btnStart.disabled = false;
+    this._setStatus('');
   }
 
-  async _handleTokenDetected(token) {
-    console.log('[GithubAuthFlow] Token detected — showing confirmation receipt');
-    this._pendingToken = token;
-
-    const fingerprint = await this.sha256Prefix(token);
-    const preview = token.substring(0, 8) + '****...';
-
-    // Mostrar pantalla de recibo/confirmación
-    this.discovery.showScreen('github-confirm');
-
-    // Poblar los campos del recibo
-    const elPreview   = document.getElementById('github-token-preview');
-    const elStorage   = document.getElementById('github-storage-location');
-    const elEncrypt   = document.getElementById('github-os-encryption');
-    const elBloomSees = document.getElementById('github-bloom-sees');
-
-    if (elPreview)   elPreview.textContent   = preview;
-    if (elStorage)   elStorage.textContent   = 'Chrome Storage — solo este equipo';
-    if (elEncrypt)   elEncrypt.textContent   = this.osEncryptionLabel();
-    if (elBloomSees) elBloomSees.textContent = token.substring(0, 4) + '****';
-
-    // Guardar fingerprint para referencia
-    const elFingerprint = document.getElementById('github-token-fingerprint');
-    if (elFingerprint) elFingerprint.textContent = fingerprint;
+  _setStatus(text) {
+    const elStatus = document.getElementById('github-app-request-status');
+    if (elStatus) elStatus.textContent = text;
   }
 
-  async _saveToken(token) {
-    if (this._tokenSaved) return;
-    this._tokenSaved = true;
-
-    console.log('[GithubAuthFlow] Saving token to bloom_vault_temp');
-
-    // Leer vault_temp existente (o crear vacío)
-    let vault = {};
+  async _copyCode(btnCopy) {
+    const code = document.getElementById('github-device-user-code')?.textContent;
+    if (!code || code === '—') return;
     try {
-      const result = await chrome.storage.local.get('bloom_vault_temp');
-      vault = result.bloom_vault_temp || {};
-    } catch (_) {}
-
-    // Guardar token en vault_temp
-    vault.github_token = token;
-
-    // Intentar obtener el username via GitHub API (best-effort, no bloquea)
-    try {
-      const resp = await fetch('https://api.github.com/user', {
-        headers: {
-          'Authorization': `token ${token}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
-      if (resp.ok) {
-        const user = await resp.json();
-        vault.github_user = user.login;
-        console.log('[GithubAuthFlow] GitHub user resolved:', user.login);
-      }
+      await navigator.clipboard.writeText(code.replace(/\s/g, ''));
+      const original = btnCopy.textContent;
+      btnCopy.textContent = 'Copied!';
+      setTimeout(() => { btnCopy.textContent = original; }, 1500);
     } catch (e) {
-      console.warn('[GithubAuthFlow] Could not resolve GitHub user (non-fatal):', e.message);
+      console.warn('[GithubAppAuthFlow] Clipboard write failed (non-fatal):', e.message);
+    }
+  }
+
+  _handleDeviceCode({ user_code, verification_uri, expires_in }) {
+    console.log('[GithubAppAuthFlow] GITHUB_DEVICE_CODE received:', user_code);
+
+    this.discovery.showScreen('github-app-device');
+
+    const elCode = document.getElementById('github-device-user-code');
+    const elLink = document.getElementById('github-device-verification-link');
+    if (elCode) elCode.textContent = user_code || '—';
+    if (elLink) {
+      elLink.href = verification_uri || 'https://github.com/login/device';
+      elLink.textContent = verification_uri || 'https://github.com/login/device';
     }
 
-    await chrome.storage.local.set({ bloom_vault_temp: vault });
-    console.log('[GithubAuthFlow] bloom_vault_temp updated');
+    // Abrimos la pestaña de verificación automáticamente — el usuario solo
+    // tiene que pegar/tipear el código que ya tiene copiado.
+    if (verification_uri) {
+      chrome.tabs.create({ url: verification_uri });
+    }
 
-    // Calcular fingerprint para el evento — token real NUNCA sale en el mensaje
-    const fingerprint = await this.sha256Prefix(token);
+    this._startExpiryCountdown(expires_in || 900);
+  }
 
-    // Actualizar bloom_profile_state con el vault recién creado.
-    // IMPORTANTE: awaited y en secuencia con el siguiente update — llamar a
-    // ambos sin esperar producía una race condition (dos get/set concurrentes
-    // sobre bloom_profile_state, el segundo en terminar pisaba al primero con
-    // una copia del estado leída antes de que el otro escribiera).
-    await this.discovery._updateVaultState(fingerprint);
+  _startExpiryCountdown(seconds) {
+    clearInterval(this._countdownInterval);
+    let remaining = seconds;
+    const elCountdown = document.getElementById('github-device-expiry');
 
-    // Actualizar bloom_profile_state con la cuenta de GitHub. Se llama SIEMPRE
-    // que el token se guardó, ya no depende de que la resolución del username
-    // (fetch a api.github.com, best-effort) haya tenido éxito — si falla,
-    // username queda null pero el estado se marca "connected" igual.
-    await this.discovery._updateAccountState('github', vault.github_user || null);
-
-    // ── ACCOUNT_REGISTERED ────────────────────────────────────────────────────
-    // Evento canónico de milestone: el usuario tiene cuenta activa en el servicio
-    // y Bloom la reconoció. Dispara github_auth en MilestoneReactor → Landing.
-    //
-    // background.js recibe este evento y SOLO lo forwarding al host como ACCOUNT_REGISTERED.
-    // CORREGIDO: no emite GITHUB_TOKEN_STORED internamente — eso nunca estuvo implementado.
-    // El token ya se guardó antes (arriba, en _saveToken) directo a bloom_vault_temp; ese guardado
-    // es local y NO produce ningún evento GITHUB_TOKEN_STORED hacia el host desde este flujo.
-    //
-    chrome.runtime.sendMessage({
-      event:             'ACCOUNT_REGISTERED',
-      service:           'github',
-      username:          vault.github_user  || '',
-      token_fingerprint: fingerprint,
-      profile_id:        self.SYNAPSE_CONFIG?.profileId,
-      launch_id:         self.SYNAPSE_CONFIG?.launchId,
-      timestamp:         Date.now(),
-    });
-    console.log('[GithubAuthFlow] ACCOUNT_REGISTERED emitido — service: github, user:', vault.github_user || '(sin resolver)');
-
-    // Actualizar onboarding_state local
-    await chrome.storage.local.set({
-      onboarding_state: {
-        active:       true,
-        currentStep:  'github_auth_complete',
-        githubUser:   vault.github_user || null,
-        startedAt:    Date.now()
+    const tick = () => {
+      if (elCountdown) {
+        const m = Math.floor(Math.max(remaining, 0) / 60);
+        const s = String(Math.max(remaining, 0) % 60).padStart(2, '0');
+        elCountdown.textContent = `${m}:${s}`;
       }
-    });
+      if (remaining <= 0) {
+        clearInterval(this._countdownInterval);
+        // No forzamos un error local: background.js es la fuente de verdad
+        // del expires_in real (recibido de GitHub) y va a mandar
+        // GITHUB_DEVICE_FLOW_ERROR con reason:'expired_token' por su cuenta.
+        // Este contador es solo feedback visual para el usuario.
+        return;
+      }
+      remaining--;
+    };
+    tick();
+    this._countdownInterval = setInterval(tick, 1000);
+  }
 
-    // Mostrar pantalla de éxito
-    this.discovery.showScreen('github-stored');
+  async _handleAuthorized(msg) {
+    if (this._authorized) return;
+    this._authorized = true;
+    clearInterval(this._countdownInterval);
 
-    // Poblar datos en la pantalla de éxito
-    const elUser    = document.getElementById('github-stored-user');
-    const elPreview = document.getElementById('github-stored-preview');
-    if (elUser && vault.github_user) elUser.textContent = vault.github_user;
-    if (elPreview) elPreview.textContent = token.substring(0, 4) + '****';
+    console.log('[GithubAppAuthFlow] GITHUB_APP_AUTHORIZED — user:', msg.username);
 
-    console.log('[GithubAuthFlow] github_auth step complete. Fingerprint:', fingerprint);
+    // Actualiza el estado user-facing (bloom_profile_state.accounts). No se
+    // llama a _updateVaultState() acá — ese es el step 'vault_init', separado,
+    // y se puebla cuando llega VAULT_INITIALIZED desde el host (ver
+    // OnboardingFlow.setupListeners). Mezclar los dos sería reproducir el
+    // bug de "step AND vs OR" que la propuesta de milestone-registry (HANDOFF
+    // §5.2) explícitamente evita.
+    await this.discovery._updateAccountState('github', msg.username || null);
+
+    this.discovery.showScreen('github-app-stored');
+
+    const elUser   = document.getElementById('github-app-stored-user');
+    const elScopes = document.getElementById('github-app-stored-scopes');
+    if (elUser)   elUser.textContent   = msg.username || '—';
+    if (elScopes) elScopes.textContent = msg.scopes    || '—';
+
+    // NOTA: a diferencia del viejo flujo PAT, acá NO emitimos ACCOUNT_REGISTERED.
+    // GITHUB_APP_AUTHORIZED ya ES el evento de milestone — background.js lo
+    // reenvía al host tal cual (sin traducirlo), y milestone-registry.js
+    // reacciona directo a 'GITHUB_APP_AUTHORIZED' en el step github_app_auth
+    // (HANDOFF §5.2). Emitir ACCOUNT_REGISTERED acá también sería duplicar
+    // el milestone con dos eventos para el mismo hecho.
+    console.log('[GithubAppAuthFlow] github_app_auth step complete.');
+  }
+
+  _handleError({ reason }) {
+    console.warn('[GithubAppAuthFlow] GITHUB_DEVICE_FLOW_ERROR:', reason);
+    clearInterval(this._countdownInterval);
+    this._authorized = false;
+
+    this.discovery.showScreen('github-app-start');
+
+    const messages = {
+      access_denied: 'Authorization was denied on GitHub. Try again.',
+      expired_token: 'The code expired. Request a new one.',
+      denied:        'GitHub rejected the request. Try again.'
+    };
+    this._setStatus(messages[reason] || 'Something went wrong. Try again.');
+
+    const btnStart = document.getElementById('btn-start-github-device-flow');
+    if (btnStart) btnStart.disabled = false;
   }
 }
 

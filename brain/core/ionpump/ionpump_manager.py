@@ -339,7 +339,7 @@ class IonPumpManager:
 
         Args:
             domain:      Dominio del ion (e.g. "github.com").
-            action_name: Nombre del action (e.g. "generate_pat").
+            action_name: Nombre del action (e.g. "open_repo_issues").
             context:     Dict opcional con valores para resolver $CONTEXT.*.
                          Si None se usa dict vacío (sin resolución de vars).
 
@@ -349,17 +349,21 @@ class IonPumpManager:
               - El action no existe en el manifest.
               - El action no tiene ningún step ``navigate``.
 
+        Nota (SOT v3 §21): ningún action vigente puede navegar a
+        ``/settings/*`` ni a ``/login*`` con intención de generar o extraer
+        credenciales — ese patrón (ej. el ``generate_pat`` que existía antes
+        de la revisión de seguridad del 8 de julio de 2026) fue eliminado.
+        El único camino para obtener un token de GitHub es el OAuth Device
+        Flow vía ``background-github-device-flow.js``, fuera de IonPump.
+
         Example::
 
             url = ion_pump_manager.get_ion_entry_url(
                 domain="github.com",
-                action_name="generate_pat",
-                context={
-                    "required_scopes": "repo,read:org",
-                    "token_description": "Bloom+Conductor",
-                },
+                action_name="open_repo_issues",
+                context={"repo": "acme/widgets"},
             )
-            # → "https://github.com/settings/tokens/new?scopes=repo,read:org&description=Bloom+Conductor"
+            # → "https://github.com/acme/widgets/issues"
         """
         ctx = context or {}
 

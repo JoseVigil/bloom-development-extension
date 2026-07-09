@@ -734,12 +734,12 @@ function handleHostMessage(msg) {
     return;
   }
 
-  // API Key responses
-  if (msg.event === 'API_KEY_REGISTERED' || 
-      msg.event === 'API_KEY_REGISTRATION_FAILED') {
-    handleAPIKeyResponse(msg);
-    return;
-  }
+  // NOTA DE SEGURIDAD: se eliminó acá el routing a handleAPIKeyResponse()
+  // porque ese handler solo existía para el monitor de portapapeles
+  // (ver CLEANUP_NOTES.md). Si en el futuro se necesita un flujo de
+  // registro de API keys, debe ser iniciado explícitamente por el usuario
+  // (ej. pegar la key en un campo del formulario de Discovery), nunca por
+  // detección pasiva de clipboard.
 
   // Landing responses — forward a la landing page
   if (['PROFILE_LOADED', 'HEALTH_CHECK_RESULT',
@@ -1522,30 +1522,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   }
 
   // ── GITHUB_PAT_DETECTED ────────────────────────────────────────────────────
-  if (event === 'GITHUB_PAT_DETECTED') {
-    console.log('[Synapse] 📥 GITHUB_PAT_DETECTED recibido');
-
-    if (!msg.token || !msg.token.startsWith('ghp_')) {
-      console.warn('[Synapse] ⚠️  GITHUB_PAT_DETECTED — token inválido o ausente:', msg.token);
-    }
-
-    sendToHost({
-      event:      'GITHUB_PAT_DETECTED',
-      token:      msg.token,
-      profile_id: msg.profile_id  || config?.profileId,
-      launch_id:  msg.launch_id   || config?.launchId,
-      timestamp:  msg.timestamp   || Date.now()
-    });
-
-    // Notificar al debug panel — token fingerprint solamente (nunca el token completo)
-    forwardToDebugPanel('synapse', 'GITHUB_PAT_DETECTED', {
-      token_fingerprint: msg.token ? msg.token.substring(0, 10) + '…' : null
-    }, msg.profile_id || config?.profileId);
-
-    console.log('[Synapse] ✓ GITHUB_PAT_DETECTED → forwarding to native host');
-    sendResp({ received: true });
-    return true;
-  }
+  // ELIMINADO A PROPÓSITO. Este handler reenviaba un token completo al host
+  // nativo con solo con validar que empezara con "ghp_" — cualquier mensaje
+  // interno con ese shape hubiera sido reenviado sin verificar de dónde salió
+  // el token ni pedir confirmación del usuario. Su única fuente real era el
+  // monitor de portapapeles (ver CLEANUP_NOTES.md), que también se eliminó.
+  // El único camino soportado para tokens de GitHub ahora es el Device Flow
+  // en background-github-device-flow.js, que ya emite GITHUB_APP_AUTHORIZED
+  // con el token viajando solo dentro del service worker hacia el host.
 
   // ── GITHUB_TOKEN_STORED ────────────────────────────────────────────────────
   // CORREGIDO (ver HARNESS_SOURCE_OF_TRUTH): el handler de ACCOUNT_REGISTERED NO emite
@@ -1657,28 +1641,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // Manual clipboard check
-  if (msg.action === 'checkClipboard') {
-    navigator.clipboard.readText().then(text => {
-      const detected = detectAPIKeyProvider(text);
-      sendResp({ detected: detected });
-    }).catch(error => {
-      sendResp({ error: error.message });
-    });
-    return true;
-  }
-
-  if (msg.action === 'startClipboardMonitoring') {
-    startClipboardMonitoring();
-    sendResp({ monitoring: true });
-    return true;
-  }
-
-  if (msg.action === 'stopClipboardMonitoring') {
-    stopClipboardMonitoring();
-    sendResp({ monitoring: false });
-    return true;
-  }
+  // NOTA DE SEGURIDAD: se eliminaron acá los handlers 'checkClipboard',
+  // 'startClipboardMonitoring' y 'stopClipboardMonitoring'. Ver
+  // CLEANUP_NOTES.md — el permiso 'clipboardRead' ya no existe en el
+  // manifest, así que estos handlers habrían fallado en runtime igual,
+  // pero se eliminan del código para que no quede la superficie disponible
+  // si alguna vez se reintroduce el permiso por error.
 
   // ─────────────────────────────────────────────────────────────────────
   // IONPUMP COMMAND HANDLERS — Harness → background → Brain/IonPump
@@ -1807,200 +1775,21 @@ function setupKeepalive() {
 }
 
 // ============================================================================
-// CLIPBOARD API KEY DETECTOR
+// [ELIMINADO] CLIPBOARD API KEY DETECTOR
+//
+// Este bloque monitoreaba el portapapeles del sistema cada 1s, detectaba
+// API keys de Gemini/Claude/OpenAI/xAI/GitHub por regex, y reenviaba el
+// secreto COMPLETO a un host nativo y a un endpoint HTTP local — antes de
+// avisarle al usuario. Ese patrón (vigilancia pasiva + exfiltración
+// silenciosa de credenciales de terceros) es indistinguible del de un
+// infostealer, independientemente del destino final ("Bloom Vault").
+//
+// Se eliminó por completo, no se reemplaza. Si en el futuro Bloom necesita
+// guardar una API key en el Vault, el flujo correcto es: el usuario la pega
+// explícitamente en un campo de un formulario de Bloom (acción humana
+// consciente, con contexto de qué se está guardando y para qué), nunca por
+// detección pasiva de clipboard o DOM. Ver CLEANUP_NOTES.md.
 // ============================================================================
-
-const API_KEY_PATTERNS = {
-  gemini: {
-    regex: /^AIzaSy[A-Za-z0-9_-]{33}$/,
-    name: 'Gemini',
-    console_url: 'https://aistudio.google.com/app/apikey'
-  },
-  claude: {
-    regex: /^sk-ant-api\d{2}-[A-Za-z0-9_-]{95,}$/,
-    name: 'Claude',
-    console_url: 'https://console.anthropic.com/settings/keys'
-  },
-  openai: {
-    regex: /^sk-[A-Za-z0-9]{48}$/,
-    name: 'ChatGPT',
-    console_url: 'https://platform.openai.com/api-keys'
-  },
-  xai: {
-    regex: /^xai-[A-Za-z0-9_-]{32,}$/,
-    name: 'Grok',
-    console_url: 'https://console.x.ai/keys'
-  },
-  github: {
-    regex: /^ghp_[A-Za-z0-9]{36,}$/,
-    name: 'GitHub',
-    console_url: 'https://github.com/settings/tokens'
-  }
-};
-
-function detectAPIKeyProvider(text) {
-  if (!text || typeof text !== 'string') {
-    return null;
-  }
-
-  const cleaned = text.trim();
-
-  for (const [provider, config] of Object.entries(API_KEY_PATTERNS)) {
-    if (config.regex.test(cleaned)) {
-      return {
-        provider: provider,
-        name: config.name,
-        key: cleaned,
-        matched: true
-      };
-    }
-  }
-
-  return null;
-}
-
-let clipboardMonitor = {
-  isMonitoring: false,
-  intervalId: null,
-  lastClipboard: '',
-  detectedKeys: new Set()
-};
-
-function startClipboardMonitoring() {
-  if (clipboardMonitor.isMonitoring) {
-    console.log('[Clipboard] Already monitoring');
-    return;
-  }
-
-  console.log('[Clipboard] Starting monitoring...');
-  clipboardMonitor.isMonitoring = true;
-
-  clipboardMonitor.intervalId = setInterval(async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-
-      if (text === clipboardMonitor.lastClipboard) {
-        return;
-      }
-
-      clipboardMonitor.lastClipboard = text;
-
-      const detected = detectAPIKeyProvider(text);
-
-      if (detected) {
-        const keyHash = detected.key.substring(0, 20);
-        if (clipboardMonitor.detectedKeys.has(keyHash)) {
-          console.log('[Clipboard] Key already detected, skipping');
-          return;
-        }
-
-        clipboardMonitor.detectedKeys.add(keyHash);
-        console.log('[Clipboard] ✓ API Key detected:', detected.name);
-
-        if (detected.provider === 'github') {
-          sendToHost({
-            event:      'GITHUB_PAT_DETECTED',
-            token:      detected.key,
-            profile_id: config?.profileId,
-            launch_id:  config?.launchId,
-            timestamp:  Date.now()
-          });
-
-          chrome.runtime.sendMessage({
-            event:  'GITHUB_PAT_DETECTED',
-            token:  detected.key,
-            timestamp: Date.now()
-          }).catch(() => {});
-
-          // Notificar al debug panel — fingerprint solamente
-          forwardToDebugPanel('synapse', 'GITHUB_PAT_DETECTED', {
-            token_fingerprint: detected.key.substring(0, 10) + '…',
-            source: 'clipboard_monitor'
-          }, config?.profileId);
-
-        } else {
-          sendToHost({
-            event:     'API_KEY_DETECTED',
-            provider:  detected.provider,
-            key:       detected.key,
-            timestamp: Date.now()
-          });
-        }
-
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'icons/icon128.png',
-          title: `${detected.name} API Key Detected`,
-          message: 'Registering key in Bloom Vault...',
-          priority: 2
-        });
-      }
-    } catch (error) {
-      if (error.message.includes('clipboard-read')) {
-        console.error('[Clipboard] Missing clipboard-read permission');
-        stopClipboardMonitoring();
-      }
-    }
-  }, 1000);
-}
-
-function stopClipboardMonitoring() {
-  if (!clipboardMonitor.isMonitoring) {
-    return;
-  }
-
-  console.log('[Clipboard] Stopping monitoring');
-  clearInterval(clipboardMonitor.intervalId);
-  clipboardMonitor.isMonitoring = false;
-  clipboardMonitor.intervalId = null;
-}
-
-function handleAPIKeyResponse(message) {
-  const { event, provider, profile_name, error, status } = message;
-
-  if (event === 'API_KEY_REGISTERED' && status === 'success') {
-    console.log('[Clipboard] ✓ Key registered:', provider, profile_name);
-
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: 'API Key Registered',
-      message: `${provider.toUpperCase()} key saved as "${profile_name}"`,
-      priority: 2
-    });
-
-    chrome.runtime.sendMessage({
-      event: 'API_KEY_REGISTERED',
-      provider: provider,
-      profile_name: profile_name
-    });
-  } 
-  else if (event === 'API_KEY_REGISTRATION_FAILED') {
-    console.error('[Clipboard] ✗ Registration failed:', error);
-
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: 'API Key Registration Failed',
-      message: `${provider.toUpperCase()}: ${error}`,
-      priority: 2
-    });
-  }
-}
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.onboarding_state) {
-    const state = changes.onboarding_state.newValue;
-
-    if (state?.currentStep?.includes('api_waiting') || 
-        state?.currentStep?.includes('gemini_api_waiting')) {
-      startClipboardMonitoring();
-    }
-    else if (state?.completed === true) {
-      stopClipboardMonitoring();
-    }
-  }
-});
 
 // ============================================================================
 // STARTUP
