@@ -22,6 +22,19 @@ Este documento es la fuente de verdad unificada para el sistema de Mandates de B
 
 ---
 
+> ## ⚠️ RESOLUCIÓN v1.1 — este documento tiene una contradicción interna (§5.10 vs §6.8) y entra en conflicto con `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md` y con el código ya implementado. Leer esto antes que nada.
+>
+> | Punto | Este documento decía | Queda cerrado así |
+> |---|---|---|
+> | Nombres de evento — **contradicción interna** | §5.10 (Sentinel) usa `GENESIS_INGEST_STARTED` estilo MAYÚSCULA_CON_GUION. §6.8 (Conductor) usa `genesis:ingest:started` estilo minúscula-con-dos-puntos, **para el mismo receptor**, sin reconciliar entre sí. | Ninguna de las dos. Contrato real: `mandate:{namespace}:{event}` — `mandate:genesis:*`, `mandate:action:*`, `mandate:draft:*`, ya compilado en `ws-events.ts`. Tanto §5.10 como §6.8 quedan superados. |
+> | `mandateId` / carpeta | `"genesis-{project-name}-{uuid}"`, carpeta `.genesis-{name}-{uuid}/` (§3.1, §5.9) | UUID plano, carpeta sin prefijo ni punto. `mandate.go` (Go, ya implementado) depende de ese formato — cambiar esto implica tocar Go, no solo este documento. |
+> | Ubicación de `gen_state.json` | Dentro de `.intents/.gen/.genesis-{name}-{uuid}/`, separado de `.mandates/` (§3.1) | `gen_state.json` no existe. Las fases viven embebidas en `mandate_state.json`, dentro de `.mandates/{uuid}/`, junto con `mandate.json`. |
+> | Intent único `.gen` para las 4 fases (§5.7) | Marcado explícitamente en el propio documento como "pendiente de confirmación" | Sigue abierto — no es uno de los 4 puntos cerrados acá, se resuelve al implementar Fase 4. No bloquea Fases 2-3. |
+>
+> **Lo que SÍ sigue vigente de este documento sin cambios:** las 4 fases y sus actores (§5.5, §5.6), el diagrama de flujo paso a paso (§5.9, salvo el nombre de archivo `gen_state.json` y el formato de `mandateId`), el vocabulario y wireframes de UX/UI del Conductor (§6, salvo los nombres de evento de §6.8), y §7 (plugin VS Code).
+
+---
+
 ## 1. QUÉ ES UN MANDATE — DEFINICIÓN FORMAL Y LÍMITES
 
 ### 1.1 Glosario mínimo
@@ -175,6 +188,8 @@ nucleus mandate status {mandateId}           # Estado actual de ejecución
 ## 3. DÓNDE VIVEN LOS MANDATES EN EL FILESYSTEM
 
 ### 3.1 Estructura en disco
+
+> ⚠️ SUPERADO por RESOLUCIÓN v1.1 (arriba): sin `gen_state.json` separado, sin `.genesis-{name}-{uuid}/`. Ver tabla al inicio del documento.
 
 ```
 workspace/
@@ -553,6 +568,8 @@ La alternativa (N intents independientes por dominio) crearía intents sin Fases
 
 ### 5.9 Schema extendido del `mandate_state.json` para el genesis
 
+> ⚠️ El `mandateId` de ejemplo abajo (`"genesis-my-project-a1b2c3"`) usa el formato SUPERADO por RESOLUCIÓN v1.1. En el código real es un UUID plano sin prefijo (ej. `"a1b2c3d4-..."`). El resto de la estructura de campos (`genesisPhase`, `domainsProposed`, etc.) sigue siendo válida como concepto — solo se relocalizan dentro de la forma real de `mandate_state.json` documentada en `mandate-state.types.ts`.
+
 ```json
 {
   "mandateId": "genesis-my-project-a1b2c3",
@@ -584,6 +601,8 @@ La alternativa (N intents independientes por dominio) crearía intents sin Fases
 | `mandateJsonSignedAt` | Timestamp de la firma. `null` hasta la confirmación. |
 
 ### 5.10 Rol de Sentinel en el Genesis
+
+> ⚠️ SUPERADO por RESOLUCIÓN v1.1 (arriba): los nombres de evento `GENESIS_*` de esta sección no se usan. Contrato real en `ws-events.ts` (`mandate:genesis:*`). El rol funcional de Sentinel descrito acá sigue siendo válido, solo cambian los nombres.
 
 Sentinel es el canal de comunicación entre Nucleus, Brain y Conductor durante el genesis. No gestiona infraestructura — transmite eventos de estado.
 
@@ -916,6 +935,8 @@ La pantalla de decisión no debe mezclarse con el Monitor general. Cuando hay un
 **El Event Bus Feed es observabilidad, no log de errores.** Lo que muestra son eventos de negocio (mandate iniciado, domains propuestos, intent completado), no traza de pipeline interna. El diseño del Feed no debe parecer una consola de terminal.
 
 ### 6.8 Eventos WebSocket que el Conductor consume
+
+> ⚠️ SUPERADO por RESOLUCIÓN v1.1 (arriba): esta sección contradecía a §5.10 dentro del mismo documento (dos convenciones para el mismo receptor). Ninguna de las dos rige — contrato real en `ws-events.ts` (`mandate:genesis:*`, `mandate:action:*`).
 
 El Conductor se conecta al WebSocket en `:4124`. Esta lista define qué transiciones de estado son automáticas en la UI.
 

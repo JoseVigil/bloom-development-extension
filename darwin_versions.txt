@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — darwin
-# Generated: 2026-07-06 18:29:32
+# Generated: 2026-07-09 12:52:55
 
 ---
 brain/__build__.py
@@ -68,7 +68,7 @@ const BuildTime = "19:35:00"
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
-43
+46
 
 ---
 installer/sentinel/scripts/build_number.effective.txt

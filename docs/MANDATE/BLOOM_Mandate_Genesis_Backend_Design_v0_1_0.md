@@ -8,6 +8,19 @@
 **Historial de revisión:**
 - v0.1.0 — versión original (§0–§8).
 - Consolidación posterior — se agrega §9 (Control Plane / eventos WebSocket, `:4124`) y §2.5 (topología de implementación de los handlers Fastify). No hay cambios de modelo en §1–§8: el ciclo de vida, el filesystem (`gen_state.json` / `mandate.json` / `mandate_state.json`) y los schemas quedan tal como estaban — esta consolidación es aditiva, documenta la capa de eventos que ya estaba implícita en D-B2/D-B3 pero no tenía contrato formal.
+  - **Corrección: ese §9 nunca se escribió.** El archivo termina en §8. La referencia a `ws-events.ts # §9` en el árbol de §2 quedó apuntando a una sección fantasma. Ver resolución abajo.
+
+> ## ⚠️ RESOLUCIÓN v1.1 — este documento entra en conflicto con `bloom-mandate-arquitectura-genesis-conductor.md` (v2.0) Y con el código ya implementado. Leer esto antes que nada.
+>
+> | Punto | Este documento decía | Queda cerrado así |
+> |---|---|---|
+> | Archivo de fases pre-firma | `gen_state.json` separado (§2, §3) | **`gen_state.json` no existe.** Todo vive embebido en `mandate_state.json` desde `create()`. Ver `mandate_state.json` real ya escrito por `create-mandate.handler.ts`. |
+> | Human Sync (Fase 3) | D-B3: `Signal` de Temporal bloqueando `MandateGenesisBuildWorkflow` | **No hay Temporal en pre-firma.** El propio `create-mandate.handler.ts` implementado dice explícitamente "ya no depende de Temporal". Confirmar es un evento (`mandate:genesis:domains_confirmed`) que dispara la escritura de `mandate.json`, no un Signal liberando un workflow. |
+> | Workflow discreto por fase (D-B2) | `MandateGenesisBuildWorkflow` con 1 `EXECUTE_INTENT` por fase | **No existe ese workflow.** Fases 1-3 las maneja Brain + el watcher de Nucleus (Go) reaccionando a eventos sobre `mandate_state.json`, sin un workflow de Temporal orquestando desde arriba. |
+> | Nombres de evento (§9) | No llegó a escribirse — ver nota arriba | Contrato real: `mandate:{namespace}:{event}` (`mandate:genesis:*`, `mandate:action:*`, `mandate:draft:*`). Es el que ya está compilado en `ws-events.ts`. |
+> | `mandateId` / carpeta | No especificado explícitamente acá | UUID plano, carpeta sin prefijo ni punto — ya implementado, y `mandate.go` (Go) ya depende de ese formato. |
+>
+> **Lo que SÍ sigue vigente de este documento sin cambios:** D-B1 (Fase 4 reutiliza el motor de Actions de `mandate run`, no hay mecanismo propio de Genesis post-firma), los schemas de `PhaseRecord` / `HumanSyncRecord` / `DomainCandidate` de §1 (solo cambia dónde viven, no su forma), y los comandos CLI de §7 (`genesis domains list/confirm/reject`).
 
 ---
 
@@ -16,8 +29,8 @@
 | # | Decisión | Por qué |
 |---|---|---|
 | D-B1 | Fase 4 (scaffold) **no** es un mecanismo propio de Genesis. Una vez firmado el `mandate.json`, cada dominio confirmado se materializa como una `Action` normal (`type: run_intent`, `intentType: gen`, `subPhase: scaffold`) dentro del mismo `operational.actions[]`, y se ejecuta con el `MandateExecutionWorkflow` que ya existe para `mandate run`. | Evita duplicar la máquina de estados Action→Intent→Persistencia. `pause`/`resume`/`status` post-firma quedan gratis — no hay lógica nueva que mantener para Genesis en ese tramo. |
-| D-B2 | Pre-firma (Fases 1–3) usa un workflow propio, `MandateGenesisBuildWorkflow`, con **un `EXECUTE_INTENT` discreto por fase** (`ingest`, `cluster`) — nunca un intent único de larga duración cubriendo las 4 fases. | Mismo patrón que ya usa `mandate pipeline` en el Command Surface (§3): un fallo puntual no obliga a recomenzar desde cero, y Sentinel puede recuperar por `sequence number` sin ambigüedad sobre "en qué sub-paso estaba". |
-| D-B3 | La Fase 3 (validate / Human Sync Point) **no es un intent**. Es una señal de Temporal (`Signal`) que bloquea el workflow hasta que el CLI dispare `nucleus mandate genesis domains confirm`. | El punto de sincronización humana es, por definición, algo que Nucleus gobierna directamente — no tiene sentido enrutarlo como intent hacia Brain, que no tiene autoridad para decidir en nombre de un humano. |
+| D-B2 ⚠️ SUPERADA | ~~Pre-firma (Fases 1–3) usa un workflow propio, `MandateGenesisBuildWorkflow`, con un `EXECUTE_INTENT` discreto por fase~~ | Ver RESOLUCIÓN v1.1 arriba: no existe ese workflow de Temporal. Brain + watcher Go sobre eventos, sin orquestador propio. |
+| D-B3 ⚠️ SUPERADA | ~~La Fase 3 es una señal de Temporal (`Signal`) que bloquea el workflow~~ | Ver RESOLUCIÓN v1.1 arriba: es un evento simple (`mandate:genesis:domains_confirmed`), no un Signal. |
 
 Consecuencia directa de D-B1 + D-B2: la pregunta "¿intent único o múltiples sub-intents en Fase 4?" tiene dos respuestas distintas según el lado de la firma:
 
@@ -65,6 +78,8 @@ Recorre exactamente el mismo diagrama de 1.2, con dos restricciones adicionales 
 ---
 
 ## 2. Filesystem — `.bloom/.nucleus-{org}/.mandates/{id}/`
+
+> ⚠️ SUPERADO por RESOLUCIÓN v1.1 (arriba): en toda esta sección (y en §3, §6, §7 donde se repite), reemplazar mentalmente cada mención a `gen_state.json` por "campos embebidos en `mandate_state.json`". No hay dos archivos — hay uno solo, desde `create()`. La tabla de "qué archivos existen según la fase" de abajo queda: **`mandate_state.json` con `status: building*`** (pre-firma) → **`mandate_state.json` con `status: running/paused/completed/failed` + `mandate.json`** (post-firma). El resto del razonamiento de esta sección (por qué `mandate.json` es inmutable hasta la firma, por qué no hace falta un `.lock` aparte) sigue siendo válido tal cual.
 
 ```
 .bloom/.nucleus-{org}/.mandates/{id}/
