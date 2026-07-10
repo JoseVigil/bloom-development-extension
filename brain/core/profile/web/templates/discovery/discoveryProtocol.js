@@ -362,19 +362,40 @@ if (typeof self !== 'undefined') {
         type: "event",
         direction: "harness_to_background",
         channel: "runtime",
-        description: "Simulate successful API key registration",
+        // Contrato unificado con discovery.js MultiProviderOnboarding.handleAPIKeyRegistered()
+        // (ver HANDOFF — fix del onboarding roto tras la limpieza de clipboardRead).
+        // La key completa NUNCA viaja en este mensaje — solo key_fingerprint
+        // (últimos caracteres), mismo criterio que token_fingerprint en
+        // account_registered/github_app_authorized.
+        description: "Simulate successful API key registration (entrada manual, reemplaza el viejo flujo de clipboard)",
         payload_template: {
           event: "API_KEY_REGISTERED",
+          provider: "$PROVIDER",
+          profile_name: "$PROFILE_NAME",
           key_fingerprint: "$KEY_FINGERPRINT",
           profile_id: "$PROFILE_ID",
-          launch_id: "$LAUNCH_ID"
+          launch_id: "$LAUNCH_ID",
+          timestamp: "$TIMESTAMP"
         },
         parameters: [
+          {
+            name: "provider",
+            type: "enum",
+            variable: "$PROVIDER",
+            options: ["gemini", "claude", "openai", "xai"],
+            default: "gemini"
+          },
+          {
+            name: "profile_name",
+            type: "string",
+            variable: "$PROFILE_NAME",
+            default: "Bloom Profile"
+          },
           {
             name: "key_fingerprint",
             type: "string",
             variable: "$KEY_FINGERPRINT",
-            default: "sk-...xyz789"
+            default: "xyz789"
           },
           {
             name: "profile_id",
@@ -387,6 +408,12 @@ if (typeof self !== 'undefined') {
             type: "auto",
             variable: "$LAUNCH_ID",
             source: "SYNAPSE_CONFIG.launchId"
+          },
+          {
+            name: "timestamp",
+            type: "auto",
+            variable: "$TIMESTAMP",
+            source: "Date.now()"
           }
         ]
       },

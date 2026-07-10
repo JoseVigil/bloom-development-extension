@@ -1586,24 +1586,44 @@ class MultiProviderOnboarding extends OnboardingFlow {
       chrome.tabs.create({ url: config.consoleUrl });
     };
 
-    // Start clipboard monitoring
-    chrome.runtime.sendMessage({ action: 'startClipboardMonitoring' });
-
     // Transition to waiting screen
+    // (el flujo de captura de la key ya no pasa por clipboard — retirado en
+    // la limpieza de seguridad que sacó el permiso clipboardRead, ver NOTA
+    // DE SEGURIDAD en background.js. La key se captura por otra vía y llega
+    // acá como evento API_KEY_REGISTERED — ver setupAPIKeyListeners()).
     this.showScreen('api-waiting');
   }
 
-  handleAPIKeyRegistered(message) {
-    const { provider, profile_name } = message;
+  async handleAPIKeyRegistered(message) {
+    const { provider, profile_name, key_fingerprint, timestamp } = message;
     const config = PROVIDER_CONFIG[provider];
 
-    // Stop clipboard monitoring
-    chrome.runtime.sendMessage({ action: 'stopClipboardMonitoring' });
+    if (!config) {
+      console.error('[MultiProviderOnboarding] API_KEY_REGISTERED con provider desconocido:', provider);
+      return;
+    }
+
+    // Dedup: por si el mismo evento llega más de una vez (reintento del
+    // origen que lo emite, o una simulación repetida del Harness).
+    const dedupeKey = `${provider}:${key_fingerprint}:${timestamp}`;
+    this._processedAPIKeyEvents = this._processedAPIKeyEvents || new Set();
+    if (this._processedAPIKeyEvents.has(dedupeKey)) {
+      console.log('[MultiProviderOnboarding] API_KEY_REGISTERED duplicado — ignorado:', dedupeKey);
+      return;
+    }
+    this._processedAPIKeyEvents.add(dedupeKey);
+
+    // Persistencia — igual que hace GithubAppAuthFlow con VAULT_INITIALIZED:
+    // la key es un secreto, va a bloom_profile_state.vaults (no a .accounts).
+    // Sin esto linked_accounts/vaults nunca refleja la key agregada
+    // (prerrequisito duro para Companion, §2.1 del Companion Implementation
+    // Guide).
+    await window.BLOOM_VALIDATOR?._updateVaultState?.(key_fingerprint, provider);
 
     // Update success screen
     document.getElementById('success-provider-name').textContent = config.displayName;
     document.getElementById('success-provider-display').textContent = config.displayName;
-    document.getElementById('success-profile-name').textContent = profile_name;
+    document.getElementById('success-profile-name').textContent = profile_name || '—';
 
     // Setup action buttons
     document.getElementById('btn-add-another-key').onclick = () => {
