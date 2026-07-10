@@ -33,6 +33,13 @@ Este documento es la fuente de verdad unificada para el sistema de Mandates de B
 >
 > **Lo que SÍ sigue vigente de este documento sin cambios:** las 4 fases y sus actores (§5.5, §5.6), el diagrama de flujo paso a paso (§5.9, salvo el nombre de archivo `gen_state.json` y el formato de `mandateId`), el vocabulario y wireframes de UX/UI del Conductor (§6, salvo los nombres de evento de §6.8), y §7 (plugin VS Code).
 
+> ## ⚠️ RESOLUCIÓN v1.2 — corrección de la ruta de `nucleus-config.json` documentada en §3.2/§7.3, y nota sobre Temporal en pre-firma (ver detalle completo en `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md`).
+>
+> | Punto | Este documento decía (§3.2, §7.3) | Queda cerrado así |
+> |---|---|---|
+> | Ruta de `nucleus-config.json` para el fix del plugin VS Code | `.bloom/.nucleus-{workspaceName}/.core/.nucleus-config.json` (con punto antes de `nucleus-config.json`) | **Corregido: sin ese punto.** `.bloom/.nucleus-{slug}/.core/nucleus-config.json`. Confirmado contra `supervisor.go` (Go, backend real) y contra `org-resolver.ts` (`NUCLEUS_CONFIG_REL_PATH = path.join('.core', 'nucleus-config.json')`), ambos ya implementados y consistentes entre sí. El fix documentado acá para `NucleusManager.detectExistingNucleus()` tiene el nombre de archivo mal escrito — corregir antes de aplicarlo al plugin real, o el plugin seguirá sin detectar el Nucleus. |
+> | Rol de Temporal en pre-firma (§5.10, ya marcado superado por v1.1 de este documento) | v1.1 de este documento remite a la resolución del Backend Design. | Ver RESOLUCIÓN v1.2 del Backend Design: hay evidencia de código real (`mandate_watcher.go`) de que sí existe un Workflow Temporal real con Start+Signal en pre-firma — el rol funcional de Sentinel descrito en §5.10 (qué evento hace qué) sigue siendo válido conceptualmente, pero la afirmación de "no hay Temporal" ya no se puede sostener sin matices. No re-litigar acá — remitir al lector a la v1.2 del otro documento en vez de duplicar la tabla. |
+
 ---
 
 ## 1. QUÉ ES UN MANDATE — DEFINICIÓN FORMAL Y LÍMITES
@@ -234,8 +241,10 @@ El plugin detecta Mandates leyendo `.bloom/.nucleus-{org}/.mandates/`. Si ese di
 // ACTUAL (roto) — NucleusManager.detectExistingNucleus() busca:
 '.bloom/core/nucleus-config.json'
 
-// CORRECTO — la ruta real en producción:
-'.bloom/.nucleus-{workspaceName}/.core/.nucleus-config.json'
+// CORRECTO — la ruta real en producción (confirmado contra supervisor.go
+// y org-resolver.ts, backend ya implementado — sin punto antes de
+// "nucleus-config.json"):
+'.bloom/.nucleus-{workspaceName}/.core/nucleus-config.json'
 ```
 
 Sin este fix, el plugin no puede detectar ningún Nucleus y todo lo que depende de esa detección falla silenciosamente.
@@ -1026,8 +1035,10 @@ El plugin puede tener un botón que abra el Conductor — no el Genesis ni el St
 // ACTUAL (roto):
 '.bloom/core/nucleus-config.json'
 
-// CORRECTO:
-'.bloom/.nucleus-{workspaceName}/.core/.nucleus-config.json'
+// CORRECTO — la ruta real en producción (confirmado contra supervisor.go
+// y org-resolver.ts, backend ya implementado — sin punto antes de
+// "nucleus-config.json"):
+'.bloom/.nucleus-{workspaceName}/.core/nucleus-config.json'
 ```
 
 Sin este fix, el plugin no puede detectar ningún Nucleus y todo lo que depende de esa detección falla silenciosamente.
@@ -1147,6 +1158,12 @@ El endpoint `GET /api/nucleus/onboarding-status` ya existe (confirmado en `nucle
 **Definición de `ws-events.ts`:** todos los eventos WebSocket listados en §6.8 deben definirse como tipos TypeScript antes de implementar el Conductor.
 
 **Fix en `NucleusManager.detectExistingNucleus()`** (§3.2): bloqueante para cualquier trabajo de Mandate en el plugin.
+  - **Actualización RESOLUCIÓN v1.2:** el fix documentado en §3.2 tenía el
+    nombre de archivo mal escrito (`.nucleus-config.json` con punto extra).
+    La ruta correcta, confirmada contra código backend real, es
+    `.core/nucleus-config.json` sin ese punto. Corregir el fix del plugin
+    contra la ruta correcta, no contra la que estaba documentada acá
+    originalmente.
 
 ### 9.2 Preguntas abiertas de arquitectura
 

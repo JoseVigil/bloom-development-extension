@@ -22,6 +22,16 @@
 >
 > **Lo que SÍ sigue vigente de este documento sin cambios:** D-B1 (Fase 4 reutiliza el motor de Actions de `mandate run`, no hay mecanismo propio de Genesis post-firma), los schemas de `PhaseRecord` / `HumanSyncRecord` / `DomainCandidate` de §1 (solo cambia dónde viven, no su forma), y los comandos CLI de §7 (`genesis domains list/confirm/reject`).
 
+> ## ⚠️ RESOLUCIÓN v1.2 — corrección y cierre de puntos que v1.1 dejó mal resueltos o abiertos, en base a código real (no solo comentarios) de `org-resolver.ts`, `supervisor.go`, `mandate_watcher.go` y `temporal_client.go`.
+>
+> | Punto | v1.1 decía | Queda cerrado/corregido así |
+> |---|---|---|
+> | Resolución de organización (Go vs TS) | No se había verificado si `resolveOrg()` (TS) y `supervisor.LoadNucleusConfig()` (Go) hacían lo mismo — quedó como punto abierto en sesión 5. | **CERRADO.** `org-resolver.ts` (`resolveOrg` → `resolveOrganization`) implementa exactamente el mismo mecanismo que `supervisor.go`: sube desde un directorio de partida buscando `.bloom`, encuentra una única carpeta `.nucleus-{slug}`, lee `.core/nucleus-config.json` (**sin punto** antes de `nucleus-config.json`) y valida `organization.slug` contra el nombre de carpeta. Única diferencia deliberada: el lado TS acepta `BLOOM_ORGANIZATION` como aserción post-scan (si está seteada y no coincide con el slug encontrado, error explícito) — el lado Go no tiene ese override. Documentar esta asimetría como decisión intencional, no como bug. |
+> | ⚠️ Workflow de Temporal en pre-firma (D-B2/D-B3) | "No existe `MandateGenesisBuildWorkflow`... no hay Temporal en pre-firma... es un evento simple, no un Signal." | **PARCIALMENTE REVERTIDO — código real contradice esto.** `mandate_watcher.go` llama `StartMandateGenesisBuildWorkflow` (arranca un Workflow Temporal real, ID `mandate_genesis_{mandateID}`, confirmado en `temporal_client.go`) cuando `ingest` empieza, y usa `SignalWorkflow(ctx, workflowID, "", "ingest_complete"/"cluster_complete", nil)` para avanzar de fase — **sí hay Signals**, sobre un workflow real. Lo que sigue sin confirmarse: si `MandateGenesisBuildWorkflow` (cuyo cuerpo no se ha visto todavía) efectivamente tiene `setHandler` para esas señales, o si el mecanismo de confirmación humana (`genesis domains confirm`) dispara otro Signal o un evento simple — eso no está en ningún archivo revisado hasta ahora. **No documentar el Human Sync como resuelto en ninguna dirección hasta ver el código de esa parte.** |
+> | Formato de `mandateId` / carpeta | UUID plano, sin prefijo ni punto. | Sin cambios — confirmado también en `mandate.go` (`uuid.New().String()`) y en `org-resolver.ts`/`supervisor.go` (que no tocan el formato de ID, pero sí dependen del mismo `.mandates/{uuid}/`). |
+> | `mandate_state.json` embebido, sin `gen_state.json` | Confirmado. | Sin cambios — reconfirmado en `mandate.go`, `mandate_watcher.go` y `create-mandate.handler.ts`, los tres escriben/leen el mismo shape (`mandateId`, `mandateType`, `project`, `source`, `status`, `currentPhase`, `phases`). |
+> | Convención de nombres de evento | `mandate:{namespace}:{event}` | Sin cambios en el contrato en sí, pero el archivo que lo define aparece con dos nombres distintos entre sesiones (`ws-events.js` en sesión 1, `ws-events.ts` en sesión 4) y nunca se confirmó su contenido real — ver punto abierto D-11 nuevo en §8. |
+
 ---
 
 ## 0. Resumen ejecutivo de las tres decisiones de diseño
@@ -133,7 +143,9 @@ Esto **no** es el árbol de arriba. El árbol de 2. es el filesystem de *datos e
     │   └── client.ts                       # arranca MandateGenesisBuildWorkflow (§6.1) vía WorkflowClient
     │
     ├── events/
-    │   ├── ws-events.ts                    # §9 — contrato completo de eventos del Control Plane
+    │   ├── ws-events.ts                    # §9 — contrato de eventos del Control Plane.
+    │                                        # NOTA: recibido en una sesión como `ws-events.js` — no se
+    │                                        # confirmó cuál es el nombre/extensión real en el repo.
     │   └── mandate-event-publisher.ts      # wrapper tipado sobre el broadcaster de :4124
     │
     ├── handlers/
@@ -157,7 +169,10 @@ routes/mandates.routes.ts
   │                                       ──→ temporal/client.ts ──→ workflows/genesis-build-workflow.types.ts
   │                                       ──→ events/mandate-event-publisher.ts ──→ events/ws-events.ts
   └─→ events/mandate-event-publisher.ts
+  ├→ handlers/create-mandate.handler.ts ──→ utils/org-resolver.ts (resolveOrg)
 ```
+
+**Nota RESOLUCIÓN v1.2:** la flecha `create-mandate.handler.ts → utils/org-resolver.ts (resolveOrg)` no estaba mapeada en el grafo original — el `create-mandate.handler.ts` real (ya implementado) importa `resolveOrg` desde `../../utils/org-resolver`, que no aparecía en esta consolidación previa.
 
 **Pendiente, no resuelto en esta consolidación:** en qué carpeta del monorepo cuelga la raíz `src/` de arriba (nombre del paquete del Daemon, si convive con código de otros dominios de Nucleus o si Mandates tiene su propio paquete). Ningún documento de este dominio lo define — queda para resolver contra el repo real, no por diseño en abstracto.
 
@@ -360,6 +375,18 @@ El `preHandler` acá valida contra `gen_state.json`, no contra el body en sí: c
 
 ### 6.1 `MandateGenesisBuildWorkflow` — pre-firma
 
+> **Nota RESOLUCIÓN v1.2:** este pseudocódigo fue marcado como no-existente
+> por RESOLUCIÓN v1.1. Código real posterior (`mandate_watcher.go`,
+> `temporal_client.go`) muestra que SÍ existe un workflow real arrancado vía
+> `StartMandateGenesisBuildWorkflow` y señalizado vía `SignalWorkflow` con
+> `ingest_complete`/`cluster_complete` — la forma general de este
+> pseudocódigo (condition() esperando señales entre fases) puede ser más
+> cercana a la implementación real de lo que v1.1 asumió. No se puede
+> confirmar el detalle exacto (Local Activity de `sign()`, mecanismo preciso
+> del Human Sync) sin el archivo fuente del workflow. Tratar este bloque
+> como "probablemente vigente en su forma general, no verificado en
+> detalle" en vez de "superado".
+
 ```typescript
 export async function MandateGenesisBuildWorkflow(input: GenesisBuildInput): Promise<void> {
   let paused = false
@@ -460,6 +487,8 @@ async function getMandateStatus(mandateId: string, project: string) {
 | D-7 | ¿`domain_expansion` puede tener como `--base-genesis` otro `domain_expansion` ya completado, o solo un `genesis` raíz? Hoy el `preHandler` de §5.2 lo rechaza explícitamente | Afecta si el modelo de dominios termina siendo un árbol o una lista plana anclada siempre a un único genesis |
 | D-8 | ¿`gen_state.json` se conserva indefinidamente post-firma como auditoría, o se archiva/comprime luego de un tiempo? Lo dejé "vive para siempre" en §2 por default, pero eso puede no ser sostenible en volumen | Impacta diseño de storage, no solo de comandos |
 | D-9 (heredado) | `confirmedBy` en `HumanSyncRecord` depende del mismo mecanismo de identidad que ya señalamos sin resolver para `evidence record decision` en el documento anterior | Bloquea que `genesis domains confirm` tenga atribución real, hoy sería un campo sin fuente de verdad |
+| D-10 | ¿`MandateGenesisBuildWorkflow` define `setHandler` para `ingest_complete`/`cluster_complete`? `mandate_watcher.go` ya envía esas señales asumiendo que sí, pero el cuerpo del workflow nunca se confirmó contra código real. | Si no las escucha, las señales se entregan sin efecto y el genesis queda trabado en `building` indefinidamente sin error visible. |
+| D-11 | Nombre real del archivo de contrato de eventos: ¿`ws-events.js` o `ws-events.ts`? Apareció con ambos nombres en sesiones distintas, nunca se leyó su contenido real. | Bloquea confirmar el contrato exacto de eventos (`mandate:{namespace}:{event}`) contra una fuente de verdad real en vez de inferirlo de los handlers que lo consumen. |
 
 ---
 
