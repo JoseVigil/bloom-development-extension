@@ -3,7 +3,6 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import path from 'path';
-import os from 'os';
 import type { FastifyInstance } from 'fastify';
 import type * as vscode from 'vscode';
 import { WebSocketManager } from '../server/WebSocketManager';
@@ -213,10 +212,8 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   // fsCtx se resuelve acá, una sola vez al levantar el server, en vez de
   // en cada request (a diferencia del handler de create-mandate, que hoy
   // recalcula `org` por request — ver nota en create-mandate.handler.ts).
-  // Mismas dos env vars que usa el handler, mismo criterio: bloomBase para
-  // la org, workspacePath para el árbol de mandates.
-  const bloomBase =
-    process.env.LOCALAPPDATA || path.join(os.homedir(), '.local', 'share', 'BloomNucleus');
+  // Mismo criterio que el handler: workspacePath sirve tanto para resolver
+  // la org (workspace-scan) como para el árbol de mandates.
   const workspacePath = process.env.BLOOM_NUCLEUS_PATH;
 
   if (!workspacePath) {
@@ -224,8 +221,12 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
       '[Server] ⚠️  BLOOM_NUCLEUS_PATH no está definida — /mandates y /internal/mandate-event no se registran',
     );
   } else {
-    const org = await resolveOrg(bloomBase);
-    const fsCtx: MandateFsContext = { workspacePath, org };
+    // Mismo fix que en create-mandate.handler.ts: resolveOrg hace
+    // workspace-scan (paridad con supervisor.LoadNucleusConfig(), Go) y
+    // necesita la raíz del workspace, no el dir de datos de máquina.
+    const org = await resolveOrg(workspacePath);
+    // Mismo fix que en create-mandate.handler.ts: org es el slug (string).
+    const fsCtx: MandateFsContext = { workspacePath, org: org.name };
 
     await fastify.register(
       async (instance) => registerMandateRoutes(instance, { fsCtx }),

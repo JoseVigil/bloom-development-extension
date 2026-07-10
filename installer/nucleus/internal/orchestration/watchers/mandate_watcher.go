@@ -89,6 +89,25 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 	return true
 }
 
+// Nombres de señal para MandateGenesisBuildWorkflow. Debieran vivir como
+// constantes tipadas en nucleus/internal/orchestration/signals (mismo
+// paquete que ya define signals.SignalLaunch / signals.SignalShutdown,
+// confirmado en temporal_client.go) — no las movimos ahí todavía porque no
+// tenemos el contenido de ese archivo y no queremos arriesgar una colisión
+// de nombres a ciegas. Migrar cuando se confirme ese archivo.
+const (
+	signalIngestComplete  = "ingest_complete"
+	signalClusterComplete = "cluster_complete"
+)
+
+// genesisWorkflowID reconstruye el mismo Workflow ID que usa
+// StartMandateGenesisBuildWorkflow (temporal_client.go) — "mandate_genesis_{id}".
+// Debe permanecer igual a esa función; si alguna cambia, la otra rompe en
+// silencio (SignalWorkflow contra un ID que no corresponde a ningún run).
+func genesisWorkflowID(mandateID string) string {
+	return "mandate_genesis_" + mandateID
+}
+
 type MandateWatcher struct {
 	mandatesRoot string
 	tc           *temporal.Client
@@ -248,10 +267,10 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		w.startGenesisWorkflow(ctx, ms)
 
 	case ms.CurrentPhase == "ingest" && ms.Phases.Ingest.Status == "completed":
-		w.sendPhaseSignal(ctx, ms.MandateID, "ingest_complete")
+		w.sendPhaseSignal(ctx, ms.MandateID, signalIngestComplete)
 
 	case ms.CurrentPhase == "cluster" && ms.Phases.Cluster.Status == "completed":
-		w.sendPhaseSignal(ctx, ms.MandateID, "cluster_complete")
+		w.sendPhaseSignal(ctx, ms.MandateID, signalClusterComplete)
 
 	default:
 		// Otras transiciones (validate, sign, etc.) — todavía no
@@ -260,12 +279,14 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 	}
 }
 
-// startGenesisWorkflow arranca MandateGenesisBuildWorkflow. Usa el
-// mandateID como Workflow ID (asumido — no confirmado contra
-// temporal/client.go, que no tengo) para que un segundo evento de fsnotify
-// sobre la misma escritura (fsnotify puede duplicar eventos) no dispare un
-// segundo workflow: StartWorkflow con el mismo ID debe devolver
-// "already started", que ya se maneja abajo igual que en el código previo.
+// startGenesisWorkflow arranca MandateGenesisBuildWorkflow. El Workflow ID
+// real (confirmado en temporal_client.go) es "mandate_genesis_{mandateID}",
+// no el mandateID pelado — StartMandateGenesisBuildWorkflow lo arma así
+// internamente, acá no hace falta reconstruirlo porque el propio método
+// lo recibe como parámetro separado. Esto hace que un segundo evento de
+// fsnotify sobre la misma escritura (fsnotify puede duplicar eventos) no
+// dispare un segundo workflow: mismo Workflow ID → Temporal devuelve
+// WorkflowExecutionAlreadyStarted, manejado abajo vía IsAlreadyStarted.
 func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateState) {
 	_, err := w.tc.StartMandateGenesisBuildWorkflow(ctx, ms.MandateID, workflows.GenesisBuildInput{
 		MandateID:     ms.MandateID,
@@ -288,20 +309,27 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 // sendPhaseSignal señaliza al workflow en curso que una fase terminó, para
 // que avance a la siguiente Activity.
 //
-// ⚠️ PENDIENTE DE VERIFICAR: no tengo internal/orchestration/temporal/client.go,
-// así que no conozco la firma real del método de señalización sobre
-// *temporal.Client (si existe todavía). SignalMandateGenesisPhase de abajo
-// es un nombre propuesto, no confirmado. Tampoco conozco si
-// MandateGenesisBuildWorkflow (cuyo cuerpo tampoco tengo) ya define
-// setHandler() para una señal con este nombre — si no lo define, esta
-// llamada no tiene ningún efecto del lado del workflow aunque compile.
-// No lo puedo resolver sin esos dos archivos — dejarlo así hasta
-// confirmarlos, en vez de inventar una interfaz que capaz no coincide.
+// Confirmado contra temporal_client.go: *temporal.Client no tiene
+// SignalMandateGenesisPhase (nombre que habíamos propuesto sin verificar) —
+// tiene SignalWorkflow(ctx, workflowID, runID, signalName, arg), el mismo
+// método genérico que ya usan ShutdownProfile y ExecuteLaunchWorkflow. El
+// runID vacío ("") apunta al run activo, mismo patrón que ShutdownProfile.
+//
+// El workflowID no es el mandateID pelado — StartMandateGenesisBuildWorkflow
+// lo registra como "mandate_genesis_{mandateID}" (ver temporal_client.go).
+// genesisWorkflowID() reconstruye ese mismo patrón acá.
+//
+// PENDIENTE, todavía no resuelto: esta llamada compila y le pega al
+// workflow correcto, pero no tenemos el cuerpo de MandateGenesisBuildWorkflow
+// — si ese workflow no define setHandler() para "ingest_complete" /
+// "cluster_complete", la señal se entrega y no tiene ningún efecto. Eso no
+// se puede confirmar sin ese archivo.
 func (w *MandateWatcher) sendPhaseSignal(ctx context.Context, mandateID, signalName string) {
-	err := w.tc.SignalMandateGenesisPhase(ctx, mandateID, signalName, nil)
+	workflowID := genesisWorkflowID(mandateID)
+	err := w.tc.SignalWorkflow(ctx, workflowID, "", signalName, nil)
 	if err != nil {
-		log.Printf("[mandate_watcher] error al señalizar %q para mandate %s: %v", signalName, mandateID, err)
+		log.Printf("[mandate_watcher] error al señalizar %q para mandate %s (workflow %s): %v", signalName, mandateID, workflowID, err)
 		return
 	}
-	log.Printf("[mandate_watcher] señal %q enviada para mandate %s", signalName, mandateID)
+	log.Printf("[mandate_watcher] señal %q enviada para mandate %s (workflow %s)", signalName, mandateID, workflowID)
 }

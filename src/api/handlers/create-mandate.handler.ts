@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Static } from '@sinclair/typebox';
 
@@ -29,8 +28,6 @@ export async function createMandateHandler(
   // mandateId no existe en 'standard'.
   const mandateId = (body as any).mandateId ?? randomUUID();
 
-  const bloomBase =
-    process.env.LOCALAPPDATA || path.join(os.homedir(), '.local', 'share', 'BloomNucleus');
   const workspacePath = process.env.BLOOM_NUCLEUS_PATH!;
 
   if (!workspacePath) {
@@ -40,8 +37,18 @@ export async function createMandateHandler(
     });
   }
 
-  const org = await resolveOrg(bloomBase);
-  const fsCtx: MandateFsContext = { workspacePath, org };
+  // resolveOrg hace workspace-scan (sube desde workspacePath buscando
+  // .bloom/.nucleus-{slug}/.core/nucleus-config.json), igual que
+  // supervisor.LoadNucleusConfig() (Go). Antes se le pasaba `bloomBase`
+  // (LOCALAPPDATA / dir de datos de máquina) en vez de `workspacePath`
+  // (raíz del workspace) — con eso nunca iba a encontrar `.bloom`, porque
+  // esa carpeta vive en el workspace, no en el directorio de datos de la
+  // app. Ver org-resolver.ts para el mecanismo completo.
+  const org = await resolveOrg(workspacePath);
+  // MandateFsContext.org es el slug (string), no el OrganizationContext
+  // completo — paridad con Config.Slug en supervisor.go, que es lo que
+  // arma el path .bloom/.nucleus-{slug}/.mandates en MandatesRoot().
+  const fsCtx: MandateFsContext = { workspacePath, org: org.name };
   const dir = mandateDir(fsCtx, mandateId);
 
   await mkdir(dir, { recursive: true });
