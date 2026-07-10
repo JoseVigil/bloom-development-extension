@@ -305,9 +305,13 @@ bloom-development-extension/
     │   │       ├── landing_generator.py
     │   │       └── templates/
     │   │           ├── __init__.py
+    │   │           ├── companion/
+    │   │           │   ├── companion.js
+    │   │           │   ├── companionProtocol.js
+    │   │           │   ├── index.html
+    │   │           │   └── styles.css
     │   │           ├── discovery/
     │   │           │   ├── __init__.py
-    │   │           │   ├── content-aistudio.js
     │   │           │   ├── discovery.js
     │   │           │   ├── discoveryProtocol.js
     │   │           │   ├── index.html

@@ -60,7 +60,6 @@ def _copy_static_assets(discovery_dir: Path) -> None:
         "script.js",
         "discoveryProtocol.js",
         "harnessProtocol.js",
-        "content-aistudio.js",
         "onboarding.js",
         "styles.css"        
     ]

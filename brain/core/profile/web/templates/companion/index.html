@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognituum Companion</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="companion-app">
+
+    <!-- Toolbar: estado del motor + colapso visual del panel (NO del motor) -->
+    <div id="toolbar">
+      <div id="engine-status" data-state="SLEEPING">
+        <span class="status-dot"></span>
+        <span class="status-label" id="engine-status-label">En espera</span>
+      </div>
+      <div id="toolbar-actions">
+        <button id="reopen-engine" class="btn-reopen" hidden>Reabrir motor</button>
+        <button id="btn-collapse" title="Minimizar panel" aria-label="Minimizar panel">»</button>
+      </div>
+    </div>
+
+    <div id="panel-body">
+
+      <!-- Header: Mandate en curso -->
+      <header id="header-block" hidden>
+        <p class="eyebrow" id="mandate-intent">—</p>
+        <h1 id="mandate-name">Sin Mandate activo</h1>
+        <p id="mandate-description"></p>
+      </header>
+
+      <!-- Respuesta refinada: lo único que ve el usuario por default -->
+      <main id="response-area">
+        <h2 class="section-label">Respuesta refinada</h2>
+        <div id="refined-response" data-state="empty">
+          Todavía no hay una respuesta para este Mandate.
+        </div>
+      </main>
+
+      <!-- Expander: Detalle técnico, colapsado por default (auditoría opcional) -->
+      <details id="technical-expander">
+        <summary>
+          Detalle técnico
+          <span class="summary-hint">registro de comandos enviados al motor</span>
+        </summary>
+        <ul id="technical-log-list">
+          <li class="log-empty">Sin actividad registrada todavía.</li>
+        </ul>
+      </details>
+
+    </div>
+  </div>
+
+  <!-- Orden importa: protocolo primero, luego la lógica que lo consume -->
+  <script src="companionProtocol.js"></script>
+  <script src="companion.js"></script>
+</body>
+</html>

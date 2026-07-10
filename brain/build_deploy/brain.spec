@@ -209,10 +209,12 @@ hiddenimports = [
     'brain.core.profile.profile_state_manager',
     'brain.core.profile.session1_launcher',
     'brain.core.profile.web',
+    'brain.core.profile.web.companion_generator',
     'brain.core.profile.web.discovery_generator',
     'brain.core.profile.web.harness_generator',
     'brain.core.profile.web.landing_generator',
     'brain.core.profile.web.templates',
+    'brain.core.profile.web.templates.companion',
     'brain.core.profile.web.templates.discovery',
     'brain.core.profile.web.templates.harness',
     'brain.core.profile.web.templates.landing',
@@ -251,7 +253,6 @@ datas = [
     (str(templates_src / 'discovery' / 'index.html'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'script.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'styles.css'), 'brain/core/profile/web/templates/discovery'),
-    (str(templates_src / 'discovery' / 'content-aistudio.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'discovery.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'discoveryProtocol.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'onboarding.js'), 'brain/core/profile/web/templates/discovery'),
@@ -271,14 +272,20 @@ datas = [
 
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
 
+    (str(templates_src / 'companion' / '__init__.py'), 'brain/core/profile/web/templates/companion'),
+    (str(templates_src / 'companion' / 'index.html'), 'brain/core/profile/web/templates/companion'),
+    (str(templates_src / 'companion' / 'companion.js'), 'brain/core/profile/web/templates/companion'),
+    (str(templates_src / 'companion' / 'companionProtocol.js'), 'brain/core/profile/web/templates/companion'),
+    (str(templates_src / 'companion' / 'styles.css'), 'brain/core/profile/web/templates/companion'),
+
     # === ionpump data ===
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'auth.ion'), 'brain/commands/ionpump'),
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'ion.manifest.json'), 'brain/commands/ionpump'),
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
 ]
 
 datas += collect_data_files('chromadb')
@@ -297,6 +304,7 @@ datas.extend([
     (str(core_profile_src / 'web' / 'discovery_generator.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'harness_generator.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'landing_generator.py'), 'brain/core/profile/web'),
+    (str(core_profile_src / 'web' / 'companion_generator.py'), 'brain/core/profile/web'),
 ])
 
 # =============================================================================

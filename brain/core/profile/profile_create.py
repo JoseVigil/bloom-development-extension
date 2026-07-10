@@ -219,7 +219,7 @@ class ProfileCreator:
 
     def _generate_profile_pages(self, profile_id: str, profile_name: str, dev_mode: bool = False) -> None:
         """
-        Generate discovery and landing pages for the profile.
+        Generate discovery, landing, harness and companion pages for the profile.
         
         Uses web generators to create HTML pages inside the extension directory.
         The generators handle directory creation and template copying internally.
@@ -240,6 +240,7 @@ class ProfileCreator:
             from brain.core.profile.web.discovery_generator import generate_discovery_page
             from brain.core.profile.web.landing_generator import generate_profile_landing
             from brain.core.profile.web.harness_generator import generate_harness_page
+            from brain.core.profile.web.companion_generator import generate_companion_page
         except ImportError as e:
             logger.error(f"❌ Page generators not available: {e}")
             raise ImportError(f"Cannot import page generators: {e}")
@@ -290,6 +291,14 @@ class ProfileCreator:
         except Exception as e:
             logger.error(f"❌ Failed to generate harness page: {e}", exc_info=True)
             raise Exception(f"Harness page generation failed: {e}")
+
+        # Generate companion page
+        try:
+            generate_companion_page(extension_dir, profile_data)
+            logger.info(f"✅ Companion page generated")
+        except Exception as e:
+            logger.error(f"❌ Failed to generate companion page: {e}", exc_info=True)
+            raise Exception(f"Companion page generation failed: {e}")
 
     def _get_master_profile(self) -> Dict[str, Any]:
         """

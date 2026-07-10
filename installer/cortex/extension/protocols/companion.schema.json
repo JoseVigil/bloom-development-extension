@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Companion Protocol Payloads",
+  "definitions": {
+    "bisp": {
+      "type": "object",
+      "required": ["intentType", "summary"],
+      "properties": {
+        "intentType":      { "type": "string" },
+        "summary":         { "type": "string" },
+        "openDecision":    { "type": ["string", "null"] },
+        "findingsSummary": { "type": ["string", "null"] },
+        "domainTags":      { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "brief": {
+      "type": "object",
+      "required": ["intentType", "summary"],
+      "properties": {
+        "intentType":     { "type": "string" },
+        "summary":        { "type": "string" },
+        "openDecision":   { "type": ["string", "null"] },
+        "suggestedQuery": { "type": ["string", "null"] }
+      }
+    },
+    "freeText": {
+      "type": "object",
+      "required": ["text", "autoSend"],
+      "properties": {
+        "text":     { "type": "string" },
+        "autoSend": { "type": "boolean" }
+      }
+    }
+  }
+}

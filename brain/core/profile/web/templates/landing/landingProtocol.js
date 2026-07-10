@@ -413,6 +413,101 @@
 
   getMessage(key, lang = 'en') {
     return this.messages[lang]?.[key] || key;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // COMPANION — Condición de disponibilidad (Companion Guide v1.2 §10.2)
+  // ═══════════════════════════════════════════════════════════════════
+  /**
+   * isCompanionAvailable(profileData)
+   *
+   * Condición DOBLE, ambas deben cumplirse (§2.4 de la guía, AUTHORITY_BOUNDARY §3.1/§3.2):
+   *
+   *   1. linked_accounts trae 'google' Y 'gemini', ambas con status
+   *      que indique conexión confirmada (no basta con que el flujo haya
+   *      arrancado). Para 'gemini' esto significa que el vault ya confirmó
+   *      la escritura de la key (ver AUTHORITY_BOUNDARY §3.1 punto 5) —
+   *      esta función NO valida eso por sí misma, solo lee el status que
+   *      ya viene resuelto en profileData.accounts. Si _updateVaultState()
+   *      en discovery.js no marca status:'active' hasta que el vault nativo
+   *      confirma, esta función hereda esa garantía gratis. Si el contrato
+   *      real del vault termina exponiendo otro nombre de status, hay que
+   *      ajustar STATUS_CONNECTED acá, no reinventar la lógica.
+   *
+   *   2. El ducto Synapse llegó a handshake_confirm (background.js,
+   *      handshakeState === 'CONFIRMED'). Se consulta vía sendMessage
+   *      porque handshakeState vive en el service worker, no en esta page.
+   *      Reutiliza el mismo action:'checkHost' que ya expone background.js
+   *      (línea ~1454 de background.js), en vez de inventar un mensaje nuevo.
+   *
+   * No hace falta ningún dato de context.js ni del contrato del vault nativo
+   * para esto — ambos bloqueantes del handoff quedan fuera del alcance de
+   * esta función.
+   */
+  // FIX (Meta 2, auditoría de Companion): 'google' y 'gemini' NO viven en el
+  // mismo array. discovery.js escribe 'google' en profileData.accounts (vía
+  // _updateAccountState) pero 'gemini' en profileData.vaults (vía
+  // _updateVaultState, porque es un secreto/key, no una cuenta) — ver
+  // mergeProfileState() en landing.js, que las mantiene separadas a
+  // propósito. La versión anterior de esta función buscaba 'gemini' en
+  // accounts, así que siempre daba `false` en silencio. Separar los
+  // providers por el array real donde efectivamente aparecen.
+  COMPANION_REQUIRED_ACCOUNT_PROVIDERS: ['google'],
+  COMPANION_REQUIRED_VAULT_PROVIDERS: ['gemini'],
+  COMPANION_STATUS_CONNECTED: ['active', 'connected'], // valores aceptados como "conectado"; ajustar si el vault expone otro string
+
+  hasRequiredAccountsForCompanion(profileData) {
+    const accounts = profileData?.accounts || [];
+    const vaults = profileData?.vaults || [];
+
+    const accountsOk = this.COMPANION_REQUIRED_ACCOUNT_PROVIDERS.every(provider => {
+      const acc = accounts.find(a => a.provider === provider);
+      return !!acc && this.COMPANION_STATUS_CONNECTED.includes(acc.status);
+    });
+
+    const vaultsOk = this.COMPANION_REQUIRED_VAULT_PROVIDERS.every(provider => {
+      const vault = vaults.find(v => v.provider === provider);
+      return !!vault && this.COMPANION_STATUS_CONNECTED.includes(vault.status);
+    });
+
+    return accountsOk && vaultsOk;
+  },
+
+  checkHandshakeConfirmed() {
+    // Envuelve chrome.runtime.sendMessage en una Promise; no asumimos que
+    // background.js esté disponible (misma cautela que el resto del archivo
+    // usa para chrome.storage).
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ action: 'checkHost' }, (resp) => {
+          if (chrome.runtime.lastError) {
+            console.warn('[PROTOCOL] checkHandshakeConfirmed — sendMessage error:', chrome.runtime.lastError.message);
+            resolve(false);
+            return;
+          }
+          resolve(resp?.handshake_confirmed === true);
+        });
+      } catch (e) {
+        console.warn('[PROTOCOL] checkHandshakeConfirmed — excepción:', e.message);
+        resolve(false);
+      }
+    });
+  },
+
+  async isCompanionAvailable(profileData) {
+    const accountsOk = this.hasRequiredAccountsForCompanion(profileData);
+    if (!accountsOk) {
+      console.log('[PROTOCOL] Companion no disponible — faltan cuentas requeridas (google + gemini) en linked_accounts');
+      return false;
+    }
+
+    const handshakeOk = await this.checkHandshakeConfirmed();
+    if (!handshakeOk) {
+      console.log('[PROTOCOL] Companion no disponible — handshake Synapse aún no llegó a CONFIRMED');
+      return false;
+    }
+
+    return true;
   }
 };
 

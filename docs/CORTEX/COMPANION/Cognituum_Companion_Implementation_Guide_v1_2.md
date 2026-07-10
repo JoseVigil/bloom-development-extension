@@ -17,7 +17,7 @@ Este documento describe la arquitectura, decisiones de diseño e instrucciones d
 |---|---|---|
 | v1.0 | 2026-05-23 | Implementación inicial: webview Gemini, inyección de briefs, screenshot, system prompt. |
 | v1.1 | 2026-06-29 | BISP como contexto nativo del Companion. Nuevo flujo `INJECT_BISP` con push automático al detectar UI de AI web. Principio de Sesión Prístina. Estado `SILENT_MONITORING`. Nuevo tipo de mensaje `NEW_SESSION`. Tabla de mensajes extendida. |
-| **v1.2** | **2026-07-04** | **Store-Ready Edition.** El Companion pasa de módulo independiente (`panel.html`/`panel.js`) a **cuarto activo nativo** de Cortex, ubicado en `extension/companion/` con su propio `companionProtocol.js`. `host_permissions` restringidos a dominios de ingeniería declarados (Privilegio Mínimo). **Eliminado el Clipboard Monitor** para la API key de Gemini — sustituido por entrada manual en la Discovery Page (`HUMAN_GATE_CLIPBOARD` deja de aplicar a este flujo; ver `AUTHORITY_BOUNDARY.md`). La activación del Companion pasa a depender del handshake Synapse de 3 fases, no solo de `linked_accounts`. Nuevo `companion.schema.json` en `protocols/`. |
+| **v1.2** | **2026-07-04** | **Store-Ready Edition.** El Companion pasa de módulo independiente (`panel.html`/`panel.js`) a **cuarto activo nativo** de Cortex, ubicado en `extension/companion/` con su propio `companionProtocol.js`. `host_permissions` restringidos a dominios de ingeniería declarados (Privilegio Mínimo). **Eliminado el Clipboard Monitor** para la API key de Gemini — sustituido por entrada manual en la Discovery Page (`HUMAN_GATE_CLIPBOARD` deja de aplicar a este flujo; ver `AUTHORITY_BOUNDARY.md`). La activación del Companion pasa a depender del handshake Synapse de 3 fases, no solo de `linked_accounts`. Nuevo `companion.schema.json` en `protocols/`. **Eliminada la funcionalidad de captura de pantalla** (`CAPTURE_TAB_SCREENSHOT`, botón `#btn-screenshot`) por no ser compatible con las políticas de publicación de la Chrome Web Store. |
 
 ---
 
@@ -204,7 +204,7 @@ Este principio se mantiene como eje central en v1.2 y ahora convive explícitame
 | Archivo | Descripción |
 |---|---|
 | `companion/index.html` | Estructura visual del panel lateral (antes `panel.html`). Define el `<webview>`, toolbar de acciones y statusbar. |
-| `companion/companion.js` | Lógica de control (antes `panel.js`): ciclo de vida del webview, CSS injection, inyección de briefs y BISP, captura de screenshot, bridge con Cortex. |
+| `companion/companion.js` | Lógica de control (antes `panel.js`): ciclo de vida del webview, CSS injection, inyección de briefs y BISP, bridge con Cortex. |
 | `companion/companionProtocol.js` | **Nuevo.** Manifiesto del protocolo Companion: declara los tipos de mensaje (`INJECT_BISP`, `INJECT_BRIEF`, `INJECT_TEXT`, `NEW_SESSION`), su dirección (Brain → Companion / Companion → Brain) y su contrato de payload. Es el equivalente, para este activo, de lo que `discoveryProtocol.js`/`landingProtocol.js` son para sus respectivos activos. |
 | `companion/styles.css` | Estilos del panel: toolbar, statusbar, overlay de carga. |
 | `protocols/companion.schema.json` | **Nuevo.** Schema de validación para los mensajes `INJECT_BISP` / `STORE_BISP`, asegurando que el payload BISP tenga la forma esperada antes de ser inyectado en el webview. |
@@ -277,7 +277,6 @@ Cortex (context.js)
 | ID | Función |
 |---|---|
 | `#btn-brief` | Solicita el último brief almacenado en `background.js` y lo inyecta en el chat de Gemini con `autoSend=false`. El ingeniero ve el texto y decide si enviarlo. |
-| `#btn-screenshot` | Captura la pestaña activa del navegador y la envía al companion para análisis visual. |
 | `#btn-reset` | Recarga el webview manteniendo las cookies de sesión e inyecta el system prompt base de Cognituum. Si hay un BISP activo, lo re-inyecta también. |
 
 ### 4.4 Statusbar — estados
@@ -453,11 +452,7 @@ sobre consistencia de arquitectura. Para eso estás vos.
 
 > **Nota de mantenimiento:** Cualquier cambio en el system prompt de sesión es un cambio de comportamiento del Companion. Versionarlo junto al BISP package.
 
-### 5.7 `captureAndSendScreenshot()`
-
-Captura la pestaña activa via `chrome.tabs.captureVisibleTab()` (ejecutado en `background.js`, ya que `companion.js` no tiene acceso directo a tabs fuera del panel) y envía la imagen al companion simulando un evento `paste` con `DataTransfer`.
-
-### 5.8 Bridge de mensajes (`chrome.runtime`)
+### 5.7 Bridge de mensajes (`chrome.runtime`)
 
 `companion.js` escucha los mensajes definidos formalmente en `companionProtocol.js` (ver §6), entrantes desde `background.js` o Cortex:
 
@@ -521,33 +516,7 @@ export const COMPANION_PROTOCOL = {
 
 El `background.js` incorpora las siguientes responsabilidades para que el Companion, como cuarto activo Synapse, funcione en v1.2.
 
-### 7.1 Captura de pantalla de pestaña activa
-
-`companion.js` no puede llamar a `chrome.tabs.captureVisibleTab()` directamente porque opera en el contexto del Side Panel. `background.js` actúa como proxy:
-
-```javascript
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type === 'CAPTURE_TAB_SCREENSHOT') {
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      if (!tab) { sendResponse({ error: 'No active tab found' }); return; }
-      chrome.tabs.captureVisibleTab(
-        tab.windowId,
-        { format: 'png', quality: 90 },
-        (dataUrl) => {
-          if (chrome.runtime.lastError) {
-            sendResponse({ error: chrome.runtime.lastError.message });
-          } else {
-            sendResponse({ dataUrl });
-          }
-        }
-      );
-    });
-    return true;
-  }
-});
-```
-
-### 7.2 Almacenamiento del último brief y del BISP activo
+### 7.1 Almacenamiento del último brief y del BISP activo
 
 ```javascript
 // Variables en memoria (se pierden al cerrar el navegador — comportamiento esperado)
@@ -581,7 +550,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 ```
 
-### 7.3 Detección de UI de AI web — Push automático del BISP
+### 7.2 Detección de UI de AI web — Push automático del BISP
 
 Cuando el ingeniero navega a una UI de AI web dentro de los dominios declarados en `host_permissions` y hay un BISP activo en memoria, `background.js` dispara automáticamente la inyección en el Companion — siempre que el handshake ya esté confirmado (§2.6):
 
@@ -613,11 +582,11 @@ async function loadActiveBispIfPresent() {
 }
 ```
 
-### 7.4 `startGoogleAuthWatcher()` — Condición 1 del onboarding
+### 7.3 `startGoogleAuthWatcher()` — Condición 1 del onboarding
 
 Ver `AUTHORITY_BOUNDARY.md` §2.3 para la implementación de referencia completa. En resumen: un listener de `chrome.tabs.onUpdated` observa la tab de registro de Google mientras `onboarding_state.currentStep === 'google_waiting'`, y emite `ACCOUNT_REGISTERED` al detectar una URL alcanzable solo con sesión activa (dos capas de patrones: éxito conocido e interstitial de `accounts.google.com`). Nunca lee el DOM ni el título de la tab.
 
-### 7.5 Ruteo del ducto Synapse hacia el activo `companion`
+### 7.4 Ruteo del ducto Synapse hacia el activo `companion`
 
 `background.js` extiende su ruteador de mensajes para reconocer `companion` como destino/origen válido, consultando `COMPANION_PROTOCOL` (§6) antes de reenviar:
 
@@ -633,7 +602,7 @@ function routeToCompanion(msg) {
 }
 ```
 
-### 7.6 Integración desde Cortex (`context.js`)
+### 7.5 Integración desde Cortex (`context.js`)
 
 Cuando Cortex termina de procesar un intent, registra tanto el brief manual como el BISP de sesión:
 
@@ -764,9 +733,9 @@ Este schema es la fuente de verdad que `injectBisp()` (§5.5) usa para descartar
 
 > **Sin `clipboardRead`:** eliminado por completo del manifest de producción. Ningún flujo del Companion ni del onboarding depende de leer el portapapeles — ver §2.1 Condición 2.
 
-> **`host_permissions` (Privilegio Mínimo):** restringido a los cuatro dominios de ingeniería declarados. Sin él, `webview.executeScript()` e `insertCSS()` sobre `gemini.google.com` fallarían silenciosamente en Manifest V3; para `claude.ai`/`chatgpt.com`/`github.com` habilita la detección de UI de AI web por URL (§7.3), no inyección de contenido en esas páginas.
+> **`host_permissions` (Privilegio Mínimo):** restringido a los cuatro dominios de ingeniería declarados. Sin él, `webview.executeScript()` e `insertCSS()` sobre `gemini.google.com` fallarían silenciosamente en Manifest V3; para `claude.ai`/`chatgpt.com`/`github.com` habilita la detección de UI de AI web por URL (§7.2), no inyección de contenido en esas páginas.
 
-> **`tabs`:** Requerido tanto para `captureVisibleTab` (screenshot) como para `chrome.tabs.onUpdated` (detección de UI de AI web y `startGoogleAuthWatcher`). Sin este permiso, el push automático del BISP no funciona.
+> **`tabs`:** Requerido para `chrome.tabs.onUpdated` (detección de UI de AI web y `startGoogleAuthWatcher`). Sin este permiso, el push automático del BISP no funciona.
 
 > **`nativeMessaging`:** Requerido para el ducto Synapse hacia Brain — es la base de todo el handshake de 3 fases descrito en §2.6.
 
@@ -782,7 +751,7 @@ Este schema es la fuente de verdad que `injectBisp()` (§5.5) usa para descartar
 - [ ] `protocols/companion.schema.json` implementado (§8).
 
 ### 10.2 Archivos modificados
-- [ ] `background.js`: ruteador extendido para el activo `companion` vía `routeToCompanion()` (§7.5). Handlers `CAPTURE_TAB_SCREENSHOT`, `STORE_BRIEF`, `GET_LAST_BRIEF`, `STORE_BISP`, `GET_ACTIVE_BISP` mantenidos. Listener `chrome.tabs.onUpdated` con detección de AI web condicionada a `handshake_confirm`. `startGoogleAuthWatcher()` implementado según `AUTHORITY_BOUNDARY.md` §2.3.
+- [ ] `background.js`: ruteador extendido para el activo `companion` vía `routeToCompanion()` (§7.4). Handlers `STORE_BRIEF`, `GET_LAST_BRIEF`, `STORE_BISP`, `GET_ACTIVE_BISP` mantenidos. Listener `chrome.tabs.onUpdated` con detección de AI web condicionada a `handshake_confirm`. `startGoogleAuthWatcher()` implementado según `AUTHORITY_BOUNDARY.md` §2.3.
 - [ ] `manifest.json`: `host_permissions` restringidos a Gemini/Claude/ChatGPT/GitHub. Sin `clipboardRead`. `side_panel.default_path` apunta a `companion/index.html`. Versión `3.0.0`.
 - [ ] `discovery/onboarding.js`: Clipboard Monitor para Gemini eliminado. Formulario de entrada manual para API key de Gemini implementado, dispara `API_KEY_REGISTERED` (§2.1 Condición 2).
 - [ ] `context.js` (Cortex): llamadas a `STORE_BRIEF` y `STORE_BISP` después de procesar cada intent (sin cambios respecto a v1.1).
@@ -796,7 +765,6 @@ Este schema es la fuente de verdad que `injectBisp()` (§5.5) usa para descartar
 - [ ] Gemini carga en formato móvil (sin sidebar, sin header completo).
 - [ ] El system prompt base se envía y Gemini responde `"Companion activo. ¿Qué analizamos?"`.
 - [ ] El botón "Brief" recupera e inyecta el último intent de Cortex en el campo de chat con `autoSend=false`.
-- [ ] El botón "Screenshot" captura la pestaña activa y la imagen aparece en el chat.
 - [ ] El botón "Reset" inicia un nuevo chat con el system prompt base re-inyectado.
 - [ ] El login de Google persiste al cerrar y reabrir el panel lateral.
 
@@ -846,7 +814,7 @@ Si el statusbar nunca cambia a `SILENT_MONITORING` a pesar de haber procesado un
 
 1. Verificar que `context.js` ejecuta `STORE_BISP` después del intent y que `_activeBisp` en `background.js` no es `null`.
 2. Verificar que `chrome.tabs.onUpdated` está registrado y que la URL del tab activo coincide con alguna entrada de `AI_WEB_URLS`.
-3. Verificar que el handshake Synapse está en `handshake_confirm` — si no lo está, `background.js` descarta el `INJECT_BISP` por diseño (§7.3, §7.5).
+3. Verificar que el handshake Synapse está en `handshake_confirm` — si no lo está, `background.js` descarta el `INJECT_BISP` por diseño (§7.2, §7.4).
 4. Si el Companion se abrió antes de navegar a la AI web, verificar que `loadActiveBispIfPresent()` se ejecuta en `onDomReady()` y que `GET_ACTIVE_BISP` retorna el BISP correcto.
 5. Revisar los permisos de `tabs` en `manifest.json` — sin ellos, `chrome.tabs.onUpdated` no dispara.
 6. **(nuevo v1.2)** Verificar que el BISP no fue descartado silenciosamente por no cumplir `companion.schema.json` en `injectBisp()` — revisar el log de consola del webview.

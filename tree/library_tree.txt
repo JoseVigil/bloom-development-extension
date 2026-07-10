@@ -203,7 +203,7 @@ BloomNucleus/
 │   │           ├── 002_809c06be_142011.ndjson
 │   │           └── 003_809c06be_142212.ndjson
 │   └── workers/
-│       ├── capabilities_441280.json
+│       ├── capabilities_1442.json
 │       └── nucleus_worker.pid
 ├── hooks/
 │   ├── post_launch/
@@ -238,29 +238,37 @@ BloomNucleus/
 │   │   │   ├── brain_core_20260707.log.4
 │   │   │   ├── brain_core_20260708.log
 │   │   │   ├── brain_core_20260708.log.1
-│   │   │   └── brain_core_20260708.log.2
+│   │   │   ├── brain_core_20260708.log.2
+│   │   │   ├── brain_core_20260708.log.3
+│   │   │   ├── brain_core_20260709.log
+│   │   │   ├── brain_core_20260709.log.1
+│   │   │   └── brain_core_20260709.log.2
 │   │   ├── profile/
 │   │   │   ├── brain_profile_20260704.log
 │   │   │   ├── brain_profile_20260705.log
 │   │   │   ├── brain_profile_20260706.log
 │   │   │   ├── brain_profile_20260707.log
-│   │   │   └── brain_profile_20260708.log
+│   │   │   ├── brain_profile_20260708.log
+│   │   │   └── brain_profile_20260709.log
 │   │   ├── server/
 │   │   │   ├── brain_server_20260704.log
 │   │   │   ├── brain_server_20260705.log
 │   │   │   ├── brain_server_20260706.log
 │   │   │   ├── brain_server_20260707.log
 │   │   │   ├── brain_server_20260708.log
+│   │   │   ├── brain_server_20260709.log
 │   │   │   ├── brain_server_event_bus_20260704.log
 │   │   │   ├── brain_server_event_bus_20260705.log
 │   │   │   ├── brain_server_event_bus_20260706.log
 │   │   │   ├── brain_server_event_bus_20260707.log
 │   │   │   ├── brain_server_event_bus_20260708.log
+│   │   │   ├── brain_server_event_bus_20260709.log
 │   │   │   ├── brain_server_manager_20260704.log
 │   │   │   ├── brain_server_manager_20260705.log
 │   │   │   ├── brain_server_manager_20260706.log
 │   │   │   ├── brain_server_manager_20260707.log
-│   │   │   └── brain_server_manager_20260708.log
+│   │   │   ├── brain_server_manager_20260708.log
+│   │   │   └── brain_server_manager_20260709.log
 │   │   └── service/
 │   │       ├── brain_service.log
 │   │       └── brain_service_20260704.log
@@ -291,10 +299,12 @@ BloomNucleus/
 │   ├── install/
 │   ├── metamorph/
 │   │   ├── metamorph_core_20260704.log
-│   │   └── metamorph_operations_20260708.log
+│   │   ├── metamorph_operations_20260708.log
+│   │   └── metamorph_operations_20260709.log
 │   ├── nucleus/
 │   │   ├── control_plane/
-│   │   │   └── nucleus_control_plane_20260704.log
+│   │   │   ├── nucleus_control_plane_20260704.log
+│   │   │   └── nucleus_control_plane_20260709.log
 │   │   ├── harness/
 │   │   │   └── harness.log
 │   │   ├── hooks/
@@ -307,23 +317,30 @@ BloomNucleus/
 │   │   │       ├── nucleus_system_health_20260705.log
 │   │   │       ├── nucleus_system_health_20260706.log
 │   │   │       ├── nucleus_system_health_20260707.log
-│   │   │       └── nucleus_system_health_20260708.log
+│   │   │       ├── nucleus_system_health_20260708.log
+│   │   │       └── nucleus_system_health_20260709.log
 │   │   ├── nucleus_brain_poller_20260704.log
+│   │   ├── nucleus_brain_poller_20260709.log
 │   │   ├── nucleus_orchestration_20260704.log
 │   │   ├── nucleus_orchestration_20260705.log
 │   │   ├── nucleus_orchestration_20260707.log
 │   │   ├── nucleus_orchestration_20260708.log
+│   │   ├── nucleus_orchestration_20260709.log
 │   │   ├── nucleus_synapse_20260704.log
 │   │   ├── nucleus_synapse_20260705.log
 │   │   ├── nucleus_temporal_20260704.log
 │   │   ├── nucleus_temporal_20260705.log
+│   │   ├── nucleus_temporal_20260709.log
 │   │   ├── service/
 │   │   │   ├── nucleus_service.log
-│   │   │   └── nucleus_service_20260704.log
+│   │   │   ├── nucleus_service_20260704.log
+│   │   │   └── nucleus_service_20260709.log
 │   │   ├── svelte_dev/
-│   │   │   └── nucleus_svelte_dev_20260704.log
+│   │   │   ├── nucleus_svelte_dev_20260704.log
+│   │   │   └── nucleus_svelte_dev_20260709.log
 │   │   └── worker/
-│   │       └── worker_manager_20260704.log
+│   │       ├── worker_manager_20260704.log
+│   │       └── worker_manager_20260709.log
 │   ├── ollama/
 │   │   └── service/
 │   │       └── ollama_service.log
@@ -351,9 +368,13 @@ BloomNucleus/
 │   ├── telemetry.json
 │   ├── temporal/
 │   │   └── server/
-│   │       └── temporal_server_20260704.log
+│   │       ├── temporal_server_20260704.log
+│   │       └── temporal_server_20260709.log
 │   └── workspace/
 │       └── setup/
+├── models/
+│   ├── blobs/
+│   └── manifests/
 ├── profiles/
 │   └── 809c06be-67b2-401c-a52f-506030dd6ff5/
 │       ├── ActorSafetyLists/
@@ -398,6 +419,7 @@ BloomNucleus/
 │       │   │   ├── 128x128.png
 │       │   │   ├── icon128.png
 │       │   │   └── icon16.png
+│       │   ├── background-github-device-flow.js
 │       │   ├── background.js
 │       │   ├── content.js
 │       │   ├── discovery/

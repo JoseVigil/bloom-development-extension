@@ -1,6 +1,7 @@
 'use strict';
 
 import './background-github-device-flow.js';
+import './background-companion.js';
 
 // ============================================================================
 // SYNAPSE THIN CLIENT - ROUTER CON HANDSHAKE DE 3 FASES

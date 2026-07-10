@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Bloom Nucleus Bridge",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Multi-provider AI key management for Bloom",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvpLkwKzeLGXF3Me4LckWSMQO6ktiL7gbLC3E8d3jpKfZLTL+lhCOXULTygRUi4vSvWQyy0KrI1eVTUYPrvA6s3pYGhn7GFfmCDXA6JvZjANc+4pq3hcxdVZdMa02E4f1UsIJm17qKBlk5Z6Jv1wD1LtXi2yk+lI/NcAq0XsQSTBDVElDp4/t8QpxRRHGm1WuaoN7DCu7Tmmzq1ztMC434+nmnjqkfMrxG6uC/iC+z+qDLUvolC1eWNPnMFbi2NG+KiZo/ZXEnTpc17OOo3VewOt2/ogTdHp8kpcK1OwXM9d+RUdls9DEUB5QdyWX7uUDsGKISsSawb+j5NiQbgACcQIDAQAB",
-  
+
   "permissions": [
+    "sidePanel",
     "tabs",
     "scripting",
     "activeTab",
@@ -21,12 +22,19 @@
   "host_permissions": [
     "https://github.com/*",
     "https://api.github.com/*",
-    "https://accounts.google.com/*"
+    "https://accounts.google.com/*",
+    "https://gemini.google.com/*",
+    "https://claude.ai/*",
+    "https://chatgpt.com/*"
   ],
   
   "background": {
     "service_worker": "background.js",
     "type": "module"  
+  },
+
+  "side_panel": {
+    "default_path": "companion_index.html"
   },
 
   "action": {
