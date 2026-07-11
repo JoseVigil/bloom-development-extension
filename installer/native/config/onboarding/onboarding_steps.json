@@ -1,6 +1,7 @@
 {
-  "_version": "2.0.0",
+  "_version": "3.0.0",
   "_comment": "SSOT único de steps de onboarding — Bloom Conductor. Consumido por MilestoneRegistry (Main, vía fs) y expuesto al Renderer vía IPC (getStepsConfig). Cualquier cambio de orden, requires o verificación se hace acá, no en onboarding.js.",
+  "_changelog": "v3.0.0 (2026-07-10): Migración GitHub App / Device Flow. Retirado el step 'github_auth' (PAT clásico, GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED). Reemplazado por 'github_app_auth', reordenado DESPUÉS de vault_init (el token de la App se guarda en el Vault — Nucleus debe Authorize() antes de tocar el Keyring real, ver BTIPS-VAULT-MULTIKEY-ANALYSIS.md v1.1 y milestone-registry.js FALLBACK_STEPS). google_auth migrado de GOOGLE_AUTH_COMPLETE (nunca implementado) a ACCOUNT_REGISTERED:google discriminado por 'service'. Este JSON es el SSOT en disco: si diverge del fallback hardcoded de milestone-registry.js, el fallback pierde — sincronizar ambos ante cualquier cambio futuro.",
   "steps": [
     {
       "id": "nucleus_create",
@@ -18,28 +19,10 @@
       "conductor_reaction": "markStepComplete"
     },
     {
-      "id": "github_auth",
-      "view": "identity",
-      "label": "Conectar GitHub",
-      "requires": [],
-      "produces": "github_token",
-      "verify": "json_field_any",
-      "verifyArgs": {
-        "fields": [
-          "onboarding.github_token_fingerprint",
-          "onboarding.github_token_stored",
-          "onboarding.vault_github_stored"
-        ]
-      },
-      "blocking": true,
-      "cortex_events": ["GITHUB_PAT_DETECTED", "GITHUB_TOKEN_STORED", "ACCOUNT_REGISTERED"],
-      "conductor_reaction": "markStepComplete"
-    },
-    {
       "id": "vault_init",
       "view": "identity",
       "label": "Inicializar Vault",
-      "requires": ["github_token", "workspace_path"],
+      "requires": ["workspace_path"],
       "produces": "vault_initialized",
       "verify": "json_field",
       "verifyArgs": {
@@ -47,6 +30,20 @@
       },
       "blocking": true,
       "cortex_events": ["VAULT_INITIALIZED", "VAULT_INIT"],
+      "conductor_reaction": "markStepComplete"
+    },
+    {
+      "id": "github_app_auth",
+      "view": "identity",
+      "label": "Autorizar Batcave (GitHub App)",
+      "requires": ["vault_initialized"],
+      "produces": "github_app_token",
+      "verify": "json_field",
+      "verifyArgs": {
+        "field": "onboarding.github_app_token"
+      },
+      "blocking": true,
+      "cortex_events": ["GITHUB_APP_AUTHORIZED"],
       "conductor_reaction": "markStepComplete"
     },
     {
@@ -60,7 +57,7 @@
         "field": "onboarding.google_account"
       },
       "blocking": false,
-      "cortex_events": ["GOOGLE_AUTH_COMPLETE"],
+      "cortex_events": ["ACCOUNT_REGISTERED:google"],
       "conductor_reaction": "markStepComplete"
     },
     {
@@ -81,7 +78,7 @@
       "id": "project_create",
       "view": "project",
       "label": "Crear proyecto",
-      "requires": ["vault_initialized", "github_token"],
+      "requires": ["vault_initialized", "github_app_token"],
       "produces": "project_mandate",
       "verify": "fs_marker",
       "verifyArgs": {

@@ -2,7 +2,7 @@ console.log('[ONBOARDING-HANDLERS BUILD] marker-vault-diag-v1 — archivo confir
 
 // workspace/onboarding/ipc/onboarding-handlers.js
 // Handlers IPC exclusivos del módulo onboarding.
-// Paso 1: github_auth — steps como strings, poll lee completed_steps[] de nucleus.json
+// Paso 1: github_app_auth — steps como strings, poll lee completed_steps[] de nucleus.json
 'use strict';
 
 const fs   = require('fs');
@@ -16,10 +16,12 @@ const log = getLogger('onboarding');
 
 // ── Steps válidos — espejo del JSON canónico en config/onboarding/onboarding_steps.json
 // No se hardcodean reglas aquí, solo los IDs para validación local.
+// v3.0.0 (2026-07-10): 'github_auth' (PAT clásico) retirado y reemplazado por
+// 'github_app_auth' (GitHub App / Device Flow). Ver onboarding_steps.json _changelog.
 const ONBOARDING_STEP_IDS = [
-  'github_auth',
   'nucleus_create',
   'vault_init',
+  'github_app_auth',
   'google_auth',
   'ai_provider_setup',
   'project_create',
@@ -29,7 +31,8 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   const { resolveEntryPoint } = require('./resolution-engine');
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
-  // Paso 1: github_auth es el primer step.
+  // Paso 1: github_app_auth es el primer step de Chrome/Discovery
+  // (nucleus_create y vault_init lo preceden pero no pasan por Chrome).
   // Se pasan --override-service y --override-step en el launch para que
   // background.js los reciba con valores válidos desde el primer mensaje
   // del Native Messaging host. Sin estos flags, el config llega con
@@ -66,7 +69,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         '--override-register',  'true',
         '--override-heartbeat', 'false',
         '--override-service',   'github',
-        '--override-step',      'github_auth',
+        '--override-step',      'github_app_auth',
       ];
       if (skipPreflight) args.push('--skip-preflight');
       if (email) args.push('--override-email', email);
@@ -192,7 +195,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // Este handler lee esa lista directamente — no llama a synapse status.
   //
   // CONTRATO ESPERADO en nucleus.json:
-  //   { "onboarding": { "completed_steps": ["github_auth", ...] } }
+  //   { "onboarding": { "completed_steps": ["github_app_auth", ...] } }
   //
   // Si completed_steps no existe aún (Brain no escribió todavía), retorna todo false.
   ipcMain.handle('onboarding:poll-identity', async () => {
@@ -208,20 +211,28 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         steps[id] = completedSteps.includes(id);
       }
 
-      // Detección dual del PAT de GitHub:
-      // 1. completed_steps[] contiene 'github_auth' (escrito por Brain o por mark-step-complete)
-      // 2. Brain escribe onboarding.github_token_fingerprint cuando procesa GITHUB_TOKEN_STORED
-      // Cualquiera de las dos condiciones indica que el token llegó.
-      const githubTokenStored = !!(
-        nucleusData.onboarding?.github_token_fingerprint ||
-        nucleusData.onboarding?.github_token_stored      ||
-        nucleusData.onboarding?.vault_github_stored       // nombre alternativo que usa Brain
+      // Detección del token de la GitHub App (Device Flow):
+      // 1. completed_steps[] contiene 'github_app_auth' (escrito por Brain o por mark-step-complete)
+      // 2. Brain escribe onboarding.github_app_token cuando procesa GITHUB_APP_AUTHORIZED
+      //    (convención "onboarding.<produces>" del step, ver onboarding_steps.json)
+      //
+      // v3.0.0 (2026-07-10): reemplaza la detección dual de PAT clásico
+      // (github_token_fingerprint / github_token_stored / vault_github_stored),
+      // que el Device Flow ya no escribe — esos campos quedaron muertos y
+      // dejaban 'github_app_auth' sin forma de resolverse vía poll, aunque el
+      // milestone ya hubiera llegado y quedara persistido en completed_steps[].
+      // Se mantiene el nombre de campo tentativo (onboarding.github_app_token)
+      // pendiente de confirmar contra milestone-reactor.js/step-verifiers.js
+      // (no auditados en esta sesión) — si el reactor escribe otro nombre,
+      // ajustar acá y en onboarding_steps.json en el mismo commit.
+      const githubAppAuthorized = !!(
+        nucleusData.onboarding?.github_app_token
       );
-      if (githubTokenStored) {
-        steps['github_auth'] = true;
+      if (githubAppAuthorized) {
+        steps['github_app_auth'] = true;
         // Persistir en completed_steps para que relecturas futuras sean consistentes
-        if (!completedSteps.includes('github_auth')) {
-          completedSteps.push('github_auth');
+        if (!completedSteps.includes('github_app_auth')) {
+          completedSteps.push('github_app_auth');
           nucleusData.onboarding = nucleusData.onboarding || {};
           nucleusData.onboarding.completed_steps = completedSteps;
           try {
@@ -270,7 +281,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
 
   // ── HANDLER: Crear workspace con nucleus create (streaming de output) ────
   // Corrección #2: usa `nucleus create`, no `nucleus init`.
-  // `nucleus init` corre en el step 2 (github_auth), después de tener github_id.
+  // `nucleus init` corre en el step 3 (github_app_auth), después de tener github_id.
   // Este handler solo crea el árbol .bloom/.nucleus-{org}/ en disco.
   //
   // Payload:
@@ -519,7 +530,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   //     success: true,
   //     hasProgress: boolean,      // true si onboarding.started && !completed
   //     completed: boolean,        // true si onboarding.completed === true
-  //     completedSteps: string[],  // ej: ['nucleus_create', 'github_auth']
+  //     completedSteps: string[],  // ej: ['nucleus_create', 'github_app_auth']
   //     currentStep: string|null,  // último step navegado (persistido en navigate handler)
   //     workspaceState: {          // datos necesarios para restaurar variables globales
   //       path: string|null,
@@ -559,7 +570,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // que Brain emita el evento — útil para testear el flujo de UI completo.
   //
   // Payload: { stepId: string, data?: object }
-  // Ejemplo: { stepId: 'github_auth', data: { username: 'test-user', org: 'bloom-labs' } }
+  // Ejemplo: { stepId: 'github_app_auth', data: { username: 'test-user', org: 'bloom-labs' } }
   ipcMain.handle('harness:inject-milestone', async (event, { stepId, data = {} }) => {
     if (app.isPackaged) {
       log.warn('[HARNESS] inject-milestone rechazado — build empaquetado');
@@ -592,10 +603,15 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     }
   });
   // ── HANDLER: Persistir datos de GitHub para el mecanismo de resume ──────────
-  // Llamado por el renderer cuando el milestone de github_auth llega con payload
+  // Llamado por el renderer cuando el milestone de github_app_auth llega con payload
   // completo y Brain no escribió github_username en nucleus.json por su cuenta.
   //
   // Payload: { username: string, org: string|null }
+  // NOTA: este handler persiste username/org para UI de resume — no toca
+  // onboarding.github_app_token, que es el campo que poll-identity usa para
+  // resolver el step (ver más arriba). Si Brain no escribe ese campo al
+  // procesar GITHUB_APP_AUTHORIZED, poll-identity seguirá sin destrabar el
+  // step aunque username/org ya estén guardados acá.
   ipcMain.handle('onboarding:persist-github-data', async (event, { username, org }) => {
     if (!username || typeof username !== 'string') {
       return { success: false, error: 'username is required' };
