@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "protocol": "ionpump",
   "description": "IonPump runtime — web automation DOM commands and event triggers for registered ion sites",
   "messages": [
@@ -225,14 +225,13 @@
           "type": "enum",
           "variable": "$EVENT_NAME",
           "options": [
-            "GITHUB_PAT_DETECTED",
-            "GITHUB_TOKEN_STORED",
+            "GITHUB_DEVICE_CODE",
+            "GITHUB_APP_AUTHORIZED",
+            "GITHUB_DEVICE_FLOW_ERROR",
             "ACCOUNT_REGISTERED",
             "ION_FLOW_STARTED",
             "ION_FLOW_COMPLETED",
-            "ION_FLOW_ERROR",
-            "google",
-            "gemini"
+            "ION_FLOW_ERROR"
           ]
         }
       ]

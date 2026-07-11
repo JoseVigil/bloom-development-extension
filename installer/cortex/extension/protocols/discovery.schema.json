@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "protocol": "discovery",
-  "description": "Onboarding flow — extension handshake, GitHub auth, API key detection, account registration",
+  "description": "Onboarding flow — extension handshake, GitHub App authorization (Device Flow), manual API key registration, account registration",
   "messages": [
     {
       "id": "onboarding_navigate",
@@ -18,80 +18,64 @@
           "name": "step",
           "type": "enum",
           "variable": "$STEP",
-          "options": ["github_auth", "nucleus_create", "vault_init", "google_auth", "ai_provider_setup", "project_create", "success"]
+          "options": ["github_app_auth", "nucleus_create", "vault_init", "google_auth", "ai_provider_setup", "project_create", "success"]
         }
       ]
     },
     {
-      "id": "github_pat_detected",
+      "id": "github_device_code",
       "type": "event",
       "direction": "harness_to_background",
       "channel": "runtime",
-      "description": "Simulate clipboard monitor detecting a GitHub PAT",
+      "description": "Simulate background.js recibiendo el device code de GitHub (POST /login/device/code), para que Discovery lo pinte en screen-github-app-device sin depender de que el client_id real esté cargado.",
       "payload_template": {
-        "event": "GITHUB_PAT_DETECTED",
-        "token": "$TOKEN"
+        "event": "GITHUB_DEVICE_CODE",
+        "user_code": "$USER_CODE",
+        "verification_uri": "$VERIFICATION_URI",
+        "expires_in": "$EXPIRES_IN"
       },
       "parameters": [
-        {
-          "name": "token",
-          "type": "string",
-          "variable": "$TOKEN",
-          "default": "ghp_simulatedToken123456789"
-        }
+        { "name": "user_code", "type": "string", "variable": "$USER_CODE", "default": "WDJB-MJHT" },
+        { "name": "verification_uri", "type": "string", "variable": "$VERIFICATION_URI", "default": "https://github.com/login/device" },
+        { "name": "expires_in", "type": "number", "variable": "$EXPIRES_IN", "default": 900 }
       ]
     },
     {
-      "id": "api_key_detected_gemini",
+      "id": "github_app_authorized",
       "type": "event",
       "direction": "harness_to_background",
       "channel": "runtime",
-      "description": "Simulate clipboard monitor detecting a Gemini API key (provider: gemini, per API_KEY_PATTERNS in background.js — there is no generic 'google' key pattern)",
+      "description": "Simulate background.js confirmando que el Device Flow fue autorizado. Nunca lleva el token completo — solo fingerprint/scopes, misma política que el resto de los eventos de auth (el token completo viaja solo por Native Messaging hacia Brain).",
       "payload_template": {
-        "event": "API_KEY_DETECTED",
-        "provider": "gemini",
-        "key": "$KEY"
-      },
-      "parameters": [
-        {
-          "name": "key",
-          "type": "string",
-          "variable": "$KEY",
-          "default": "AIzaSy_simulatedKey"
-        }
-      ]
-    },
-    {
-      "id": "github_token_stored",
-      "type": "event",
-      "direction": "harness_to_background",
-      "channel": "runtime",
-      "description": "Simulate user confirming GitHub token storage",
-      "payload_template": {
-        "event": "GITHUB_TOKEN_STORED",
-        "token_fingerprint": "$FINGERPRINT",
+        "event": "GITHUB_APP_AUTHORIZED",
+        "username": "$USERNAME",
+        "token_fingerprint": "$TOKEN_FINGERPRINT",
+        "scopes": "$SCOPES",
         "profile_id": "$PROFILE_ID",
-        "launch_id": "$LAUNCH_ID"
+        "launch_id": "$LAUNCH_ID",
+        "timestamp": "$TIMESTAMP"
       },
       "parameters": [
-        {
-          "name": "token_fingerprint",
-          "type": "string",
-          "variable": "$FINGERPRINT",
-          "default": "ghp_...abc123"
-        },
-        {
-          "name": "profile_id",
-          "type": "auto",
-          "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
-        },
-        {
-          "name": "launch_id",
-          "type": "auto",
-          "variable": "$LAUNCH_ID",
-          "source": "SYNAPSE_CONFIG.launchId"
-        }
+        { "name": "username", "type": "string", "variable": "$USERNAME", "default": "octocat" },
+        { "name": "token_fingerprint", "type": "string", "variable": "$TOKEN_FINGERPRINT", "default": "ghu_simulatedFingerprint" },
+        { "name": "scopes", "type": "string", "variable": "$SCOPES", "default": "contents:write,administration:write,members:read" },
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
+        { "name": "timestamp", "type": "auto", "variable": "$TIMESTAMP", "source": "Date.now()" }
+      ]
+    },
+    {
+      "id": "github_device_flow_error",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Simulate background.js reportando una falla del Device Flow (denied, expired_token, access_denied) — incluye el caso real que dispara un client_id inválido o no registrado (GitHub responde 404/access_denied y el flujo cae en el catch de !resp.ok). Sirve para probar que Discovery vuelve a github-app-start con mensaje de error en vez de colgarse.",
+      "payload_template": {
+        "event": "GITHUB_DEVICE_FLOW_ERROR",
+        "reason": "$REASON"
+      },
+      "parameters": [
+        { "name": "reason", "type": "enum", "variable": "$REASON", "options": ["access_denied", "expired_token", "denied"], "default": "expired_token" }
       ]
     },
     {
@@ -99,32 +83,23 @@
       "type": "event",
       "direction": "harness_to_background",
       "channel": "runtime",
-      "description": "Simulate successful API key registration",
+      "description": "Simulate successful API key registration (entrada manual — reemplaza el flujo viejo de detección por clipboard). La key completa NUNCA viaja en este mensaje, solo key_fingerprint.",
       "payload_template": {
         "event": "API_KEY_REGISTERED",
+        "provider": "$PROVIDER",
+        "profile_name": "$PROFILE_NAME",
         "key_fingerprint": "$KEY_FINGERPRINT",
         "profile_id": "$PROFILE_ID",
-        "launch_id": "$LAUNCH_ID"
+        "launch_id": "$LAUNCH_ID",
+        "timestamp": "$TIMESTAMP"
       },
       "parameters": [
-        {
-          "name": "key_fingerprint",
-          "type": "string",
-          "variable": "$KEY_FINGERPRINT",
-          "default": "sk-...xyz789"
-        },
-        {
-          "name": "profile_id",
-          "type": "auto",
-          "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
-        },
-        {
-          "name": "launch_id",
-          "type": "auto",
-          "variable": "$LAUNCH_ID",
-          "source": "SYNAPSE_CONFIG.launchId"
-        }
+        { "name": "provider", "type": "enum", "variable": "$PROVIDER", "options": ["gemini", "claude", "openai", "xai"], "default": "gemini" },
+        { "name": "profile_name", "type": "string", "variable": "$PROFILE_NAME", "default": "Bloom Profile" },
+        { "name": "key_fingerprint", "type": "string", "variable": "$KEY_FINGERPRINT", "default": "xyz789" },
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
+        { "name": "timestamp", "type": "auto", "variable": "$TIMESTAMP", "source": "Date.now()" }
       ]
     },
     {
@@ -132,7 +107,7 @@
       "type": "event",
       "direction": "harness_to_background",
       "channel": "runtime",
-      "description": "Simulate account registration completion",
+      "description": "Simulate account registration completion. GitHub ya no pasa por este evento genérico (retirado en favor de GITHUB_APP_AUTHORIZED) — hoy el único service vigente es google_auth. Se deja como enum, no como string fijo, por si se suma otro provider que sí use este evento genérico.",
       "payload_template": {
         "event": "ACCOUNT_REGISTERED",
         "profile_id": "$PROFILE_ID",
@@ -142,37 +117,11 @@
         "token_fingerprint": "$TOKEN_FINGERPRINT"
       },
       "parameters": [
-        {
-          "name": "profile_id",
-          "type": "auto",
-          "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
-        },
-        {
-          "name": "launch_id",
-          "type": "auto",
-          "variable": "$LAUNCH_ID",
-          "source": "SYNAPSE_CONFIG.launchId"
-        },
-        {
-          "name": "service",
-          "type": "enum",
-          "variable": "$SERVICE",
-          "options": ["github", "google", "gemini"],
-          "default": "github"
-        },
-        {
-          "name": "username",
-          "type": "string",
-          "variable": "$USERNAME",
-          "default": "octocat"
-        },
-        {
-          "name": "token_fingerprint",
-          "type": "string",
-          "variable": "$TOKEN_FINGERPRINT",
-          "default": "ghp_simulatedToken"
-        }
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
+        { "name": "service", "type": "enum", "variable": "$SERVICE", "options": ["google"], "default": "google" },
+        { "name": "username", "type": "string", "variable": "$USERNAME", "default": "user@gmail.com" },
+        { "name": "token_fingerprint", "type": "string", "variable": "$TOKEN_FINGERPRINT", "default": "ya29_simulatedToken" }
       ]
     },
     {
@@ -187,18 +136,8 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        {
-          "name": "profile_id",
-          "type": "auto",
-          "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
-        },
-        {
-          "name": "launch_id",
-          "type": "auto",
-          "variable": "$LAUNCH_ID",
-          "source": "SYNAPSE_CONFIG.launchId"
-        }
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
       ]
     },
     {
@@ -213,18 +152,8 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        {
-          "name": "profile_id",
-          "type": "auto",
-          "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
-        },
-        {
-          "name": "launch_id",
-          "type": "auto",
-          "variable": "$LAUNCH_ID",
-          "source": "SYNAPSE_CONFIG.launchId"
-        }
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
       ]
     },
     {
@@ -239,19 +168,36 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        {
-          "name": "profile_id",
-          "type": "auto",
-          "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
-        },
-        {
-          "name": "launch_id",
-          "type": "auto",
-          "variable": "$LAUNCH_ID",
-          "source": "SYNAPSE_CONFIG.launchId"
-        }
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
       ]
+    },
+    {
+      "id": "harness_simulate_handshake",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Bypass del handshake nativo — fuerza handshakeState a CONFIRMED sin necesidad del native host.",
+      "payload_template": {
+        "event": "HARNESS_SIMULATE_HANDSHAKE",
+        "profile_id": "$PROFILE_ID",
+        "launch_id": "$LAUNCH_ID"
+      },
+      "parameters": [
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
+      ]
+    },
+    {
+      "id": "harness_open_landing",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Abre o trae al frente la tab de landing directamente desde el Harness",
+      "payload_template": {
+        "event": "HARNESS_OPEN_LANDING"
+      },
+      "parameters": []
     }
   ],
   "observable_events": [
@@ -259,6 +205,11 @@
     "HANDSHAKE_CONFIRMED",
     "API_KEY_REGISTERED",
     "ACCOUNT_REGISTERED",
-    "DISCOVERY_COMPLETE"
+    "GITHUB_DEVICE_CODE",
+    "GITHUB_APP_AUTHORIZED",
+    "GITHUB_DEVICE_FLOW_ERROR",
+    "DISCOVERY_COMPLETE",
+    "HARNESS_SIMULATE_HANDSHAKE",
+    "HARNESS_OPEN_LANDING"
   ]
 }

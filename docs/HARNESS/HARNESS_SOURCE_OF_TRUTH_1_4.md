@@ -1,12 +1,34 @@
 # Bloom — Harness + IonPump: Fuente de Verdad
-## Versión consolidada · v1.2 — Jul 1 2026 (corrección de la cascada ACCOUNT_REGISTERED → GITHUB_TOKEN_STORED)
+## Versión consolidada · v1.4 — Jul 11 2026 (Conductor Workspace / debug.html — mismo drift del Device Flow, del lado Electron)
 ### Supersede: todos los documentos del directorio `/docs/HARNESS/`
 
-> **v1.2 — resumen del cambio:** la revisión Jun 25 (v1.1) afirmaba que el handler de
+> **v1.4 — resumen del cambio:** el mismo drift corregido en §23 para `discovery.schema.json`
+> existía, en espejo, del lado de **Conductor Workspace** — la app Electron que es la contraparte
+> de Harness pero corriendo del lado host/Cortex en vez de dentro de la extensión de Chrome.
+> `debug.html` (hoy vive en `onboarding/`, va a mudarse a `core/`) tenía su propio panel de
+> "Simulate" con el mismo par retirado `GITHUB_PAT_DETECTED` / `GITHUB_TOKEN_STORED` hardcodeado en
+> tres lugares (`sim-select`, `EVENT_LEVELS`, `AUTO_EVENTS`), sin ningún rastro del Device Flow. Ver
+> §24 para el detalle completo.
+
+> **v1.3 — resumen del cambio:** `discoveryProtocol.js` fue actualizado (573 líneas, vs. las 503
+> verificadas en v1.2) para reemplazar el flujo de detección de PAT por clipboard
+> (`GITHUB_PAT_DETECTED` / `GITHUB_TOKEN_STORED` / `API_KEY_DETECTED`) por GitHub App Device Flow
+> (`GITHUB_DEVICE_CODE` / `GITHUB_APP_AUTHORIZED` / `GITHUB_DEVICE_FLOW_ERROR`), más entrada manual
+> de API keys (`api_key_registered` ya no depende de clipboard). Ese cambio **nunca se propagó** a
+> `discovery.schema.json` (la fuente de verdad real que lee el Harness vía `fetch`) ni a este
+> documento. Resultado: el Harness seguía ofreciendo simular un flujo que ya no existe, y no tenía
+> forma de simular el Device Flow — que es justamente el flujo real que falla hoy cuando
+> `GITHUB_APP_CLIENT_ID` es un placeholder (`'TODO_GITHUB_APP_CLIENT_ID'`) sin registrar. Ver §23
+> para el detalle completo.
+>
+> **v1.2 — resumen del cambio (histórico):** la revisión Jun 25 (v1.1) afirmaba que el handler de
 > `ACCOUNT_REGISTERED` en `background.js` emitía internamente `GITHUB_TOKEN_STORED` al host. Esa
 > cascada no existe en el código: son dos handlers independientes, y `GITHUB_TOKEN_STORED` es un
 > evento sintético del Harness que solo se dispara si se simula manualmente. Ver §22 para el
 > detalle completo y la lista de secciones corregidas (§9.1, §9.4, §12.2, §13, §15, §17, §20).
+> **Nota v1.3:** `GITHUB_TOKEN_STORED` fue retirado del manifest en esta revisión — ver §23. La
+> explicación de §22 sobre por qué no había cascada sigue siendo históricamente correcta, pero el
+> evento sintético que describe ya no está disponible para simular desde el Harness.
 
 > **Jerarquía de fuentes para esta revisión:**
 > 1. `background.js` — verificado Jun 25 2026 (1680 líneas)
@@ -45,6 +67,8 @@
 20. [Adenda — auditoría Jun 25 2026 (esta revisión)](#20-adenda--auditoría-jun-25-2026-esta-revisión)
 21. [Adenda — Fase 5: migración a JSON schemas (Jun 26 2026)](#21-adenda--fase-5-migración-a-json-schemas-jun-26-2026)
 22. [Adenda — corrección cascada ACCOUNT_REGISTERED / GITHUB_TOKEN_STORED (v1.2, Jul 1 2026)](#22-adenda--corrección-cascada-account_registered--github_token_stored-v12-jul-1-2026)
+23. [Adenda — migración a GitHub Device Flow, retiro del clipboard flow (v1.3, Jul 11 2026)](#23-adenda--migración-a-github-device-flow-retiro-del-clipboard-flow-v13-jul-11-2026)
+24. [Adenda — Conductor Workspace / debug.html, mismo drift del lado Electron (v1.4, Jul 11 2026)](#24-adenda--conductor-workspace--debughtml-mismo-drift-del-lado-electron-v14-jul-11-2026)
 
 ---
 
@@ -1681,4 +1705,199 @@ independientemente de si el origen es este artefacto de testing u otro futuro.
 afirmación errónea de una cascada interna `ACCOUNT_REGISTERED → GITHUB_TOKEN_STORED` en
 `background.js`. Ver §22.*
 
-**VERSIÓN: 1.2**
+---
+
+## 23. Adenda — migración a GitHub Device Flow, retiro del clipboard flow (v1.3, Jul 11 2026)
+
+> **Número de versión de este documento: 1.3**
+
+**Archivos releídos para esta corrección:** `discoveryProtocol.js` (573 líneas — versión posterior
+a las 503 líneas verificadas en v1.2), `discovery.schema.json`, `harness.schema.json`,
+`ARCHITECTURE_HarnessProtocol.md` (v1.0, Post-Fase 5, actualizado Jun 26 2026).
+
+### Qué cambió en el flujo real
+
+`discoveryProtocol.js` reemplazó el flujo de detección de token por clipboard monitor por
+**GitHub App Device Flow**. El manifest legacy (`self.DISCOVERY_PROTOCOL_MANIFEST`) hoy declara:
+
+| Evento viejo (retirado) | Evento nuevo |
+|---|---|
+| `GITHUB_PAT_DETECTED` (clipboard monitor detecta un PAT pegado) | `GITHUB_DEVICE_CODE` (background recibe el device code de `POST /login/device/code`) |
+| — | `GITHUB_APP_AUTHORIZED` (Device Flow autorizado — reemplaza también a `ACCOUNT_REGISTERED` con `service: "github"`) |
+| — | `GITHUB_DEVICE_FLOW_ERROR` (denied / expired_token / access_denied — incluye el caso de un `client_id` inválido) |
+| `API_KEY_DETECTED` (clipboard monitor detecta una API key) | `api_key_registered` ahora documentado explícitamente como entrada **manual**, no detección |
+| `GITHUB_TOKEN_STORED` (evento sintético de testing, ver §22) | Retirado del manifest — ya no aparece en `messages` ni en `observable_events` de `discoveryProtocol.js` |
+
+`onboarding_navigate` también cambió su enum: el step pasó de `"github_auth"` a
+`"github_app_auth"`, consistente con la screen `screen-github-app-device` que pinta el `user_code`
+y `verification_uri` del Device Flow.
+
+`account_registered` (el evento genérico) quedó restringido a `service: ["google"]` — GitHub ya no
+lo usa, tiene su propio evento (`GITHUB_APP_AUTHORIZED`).
+
+Se agregaron además dos comandos de bypass para debugging que no existían en ninguna revisión
+anterior de este documento: `harness_simulate_handshake` (fuerza `handshakeState` a `CONFIRMED` sin
+native host) y `harness_open_landing` (abre la tab de landing directamente desde el Harness).
+
+### El gap que causó el problema original
+
+Según **Regla 4** de `ARCHITECTURE_HarnessProtocol.md` (§7), los schemas se cargan exclusivamente
+vía `chrome.runtime.getURL(...)` + `fetch()` — nunca se importan los archivos `*Protocol.js` como
+fuente para el Harness una vez completada la Fase 5. Eso significa que, en la práctica, el Harness
+**no veía nada del Device Flow**: seguía leyendo `discovery.schema.json`, que todavía tenía
+`github_pat_detected`, `api_key_detected_gemini` y `github_token_stored` como si fueran el flujo
+vigente, y un `onboarding_navigate` con `"github_auth"` en vez de `"github_app_auth"`.
+
+`discoveryProtocol.js` sí tenía el contrato correcto — pero ese archivo está marcado para
+eliminación (§8 de `ARCHITECTURE_HarnessProtocol.md`, "Fase 5") y `ProtocolReader.discover()` solo
+lo usa como *fallback* legacy si el schema JSON no cargó. En un build donde el schema JSON carga
+sin error (el caso normal), el manifest correcto del `.js` nunca se renderiza en el simulador.
+
+Esto es exactamente el patrón "zombie" que ya había sido señalado dentro del propio
+`discoveryProtocol.js` (comentario junto a `observable_events`, línea ~554): un evento declarado
+en `messages` pero no reflejado donde el simulador realmente lo necesita — en este caso, invertido:
+declarado en el `.js` legacy pero no en el JSON que manda.
+
+### Consecuencia práctica (caso que originó esta revisión)
+
+Con el schema desactualizado, no había forma de simular `GITHUB_DEVICE_CODE` /
+`GITHUB_APP_AUTHORIZED` / `GITHUB_DEVICE_FLOW_ERROR` desde el Harness. La única opción para
+avanzar el onboarding pasando por GitHub era correr el Device Flow real — que falla con
+`404 Not Found` en `POST https://github.com/login/device/code` mientras
+`GITHUB_APP_CLIENT_ID` en `background-github-device-flow.js` siga siendo el placeholder literal
+`'TODO_GITHUB_APP_CLIENT_ID'` en vez de un client_id de una GitHub App registrada. Ese bug de
+`client_id` es un problema de configuración de producto, no del Harness — pero la ausencia de
+simulación en el Harness es lo que obligaba a pegarse contra el flujo real para poder seguir
+probando el resto del onboarding.
+
+### Corrección aplicada
+
+- `discovery.schema.json` → `1.1.0`: se agregaron `github_device_code`, `github_app_authorized`,
+  `github_device_flow_error`, `harness_simulate_handshake`, `harness_open_landing`; se retiraron
+  `github_pat_detected`, `api_key_detected_gemini`, `github_token_stored`; se corrigió el enum de
+  `onboarding_navigate` (`github_auth` → `github_app_auth`) y el de `account_registered.service`
+  (limitado a `["google"]`); se actualizó `api_key_registered` con los campos `provider`,
+  `profile_name` y `timestamp` que ya tenía el `.js` legacy y que el JSON no reflejaba.
+- `harness.schema.json` → `1.1.0`: el enum de `event_emit.event_name` tenía `"google"` y
+  `"gemini"` como si fueran nombres de evento (no lo son — parecen resto de un copy-paste del enum
+  de `provider`) y ofrecía `GITHUB_PAT_DETECTED` / `GITHUB_TOKEN_STORED`, que ya no son eventos
+  reales del flujo. Se reemplazaron por `GITHUB_DEVICE_CODE`, `GITHUB_APP_AUTHORIZED` y
+  `GITHUB_DEVICE_FLOW_ERROR` para mantener paridad con Discovery.
+
+### Pendiente — fuera de alcance de este documento
+
+1. **`GITHUB_APP_CLIENT_ID` sin registrar** en `background-github-device-flow.js` — bug de
+   producción real, no de Harness. No se toca acá; requiere que alguien cargue el client_id de la
+   GitHub App registrada.
+2. **`landing.schema.json`** no fue releído en esta revisión — si tiene los mismos eventos de
+   clipboard flow como `observable_events` (ver §19, línea ~625: listaba `GITHUB_TOKEN_STORED` y
+   `GITHUB_ACCOUNT_CREATED`), probablemente tenga el mismo drift y valga la pena auditarlo con el
+   mismo criterio.
+3. **`harnessProtocol.js`** (el legacy `.js` de IonPump) no incluía `"google"`/`"gemini"` en su
+   propio manifest — o sea que ese bug se introdujo *solo* en `harness.schema.json`, probablemente
+   a mano, sin sincronizar contra el `.js`. Vale la pena revisar si hay más divergencias entre ese
+   par que no haya sido cubiertas acá.
+4. Confirmar si `discoveryProtocol.js` y `harnessProtocol.js` ya pueden borrarse del bundle
+   (Fase 5, paso 3 de `ARCHITECTURE_HarnessProtocol.md` §8) ahora que el JSON quedó al día, o si
+   siguen actuando como fallback necesario en algún build.
+
+---
+
+*Documento consolidado — v1.3 · Jul 11 2026*
+*Corrección aplicada sobre v1.2 (Jul 1 2026): propaga al schema JSON la migración a GitHub Device
+Flow que ya estaba en `discoveryProtocol.js` pero nunca llegó a `discovery.schema.json` ni a este
+documento. Ver §23.*
+
+---
+
+## 24. Adenda — Conductor Workspace / debug.html, mismo drift del lado Electron (v1.4, Jul 11 2026)
+
+> **Número de versión de este documento: 1.4**
+
+**Archivo releído para esta corrección:** `debug.html` (1345 líneas), ubicado hoy dentro de
+`onboarding/` en Conductor Workspace, con nota del equipo de que se va a mudar a `core/` más
+adelante.
+
+### Qué es Conductor Workspace y cómo se relaciona con Harness
+
+Conductor Workspace es la app Electron que corre del lado host (Nucleus/Cortex), no dentro de la
+extensión de Chrome. `debug.html` es su panel de debugging: observa en tiempo real todo lo que
+cruza por el `SynapseBridge` — vía WebSocket (`ws://localhost:4124`) para el feed categorizado y
+filtrable, y vía un canal separado sin filtrar ("Synapse raw", `SYNAPSE_RAW_EVENT`/`SYNAPSE_EVENT`
+por `postMessage` o por el bridge de `preload` según el frame) para ver el tráfico crudo tal cual
+llega.
+
+Además de observar, tiene su propio botón **Simulate**: un `<select>` con eventos predefinidos que
+al hacer `POST /api/internal/system-event` (puerto `48215`) inyecta un evento sintético en el
+pipeline — con fallback a `postMessage` si el `fetch` directo falla por CSP, y como último recurso
+ingesta solo local (UI, sin llegar a Cortex) si ninguna de las dos vías responde. Es, en espíritu,
+exactamente lo mismo que el "Simulate" del Harness dentro de la extensión, pero mirando el sistema
+desde el lado del host en vez del lado del navegador — de ahí que el usuario lo describa como "la
+contraparte de Harness en Cortex".
+
+### El mismo drift, en tres lugares distintos del archivo
+
+`debug.html` tenía el par retirado `GITHUB_PAT_DETECTED` / `GITHUB_TOKEN_STORED` (ver §23 — mismo
+flujo de clipboard ya reemplazado por Device Flow en `discoveryProtocol.js` y ahora en
+`discovery.schema.json`) hardcodeado, sin ninguna referencia a `GITHUB_DEVICE_CODE`,
+`GITHUB_APP_AUTHORIZED` o `GITHUB_DEVICE_FLOW_ERROR`, en tres puntos independientes:
+
+1. **`<select id="sim-select">`, optgroup `synapse`** — las opciones que arma el dropdown de
+   simulación manual.
+2. **`EVENT_LEVELS`** — el mapa que decide el color/nivel (`success` / `info` / `warn` / `error`)
+   con el que se pinta cada evento en el feed.
+3. **`AUTO_EVENTS`** — la secuencia que reproduce el botón "Auto" (un evento por segundo, en loop),
+   pensada como demo/replay del happy path del onboarding.
+
+A diferencia de `discovery.schema.json`, acá no hay un `.js` legacy "más actualizado" del que
+copiar — los tres arrays estaban escritos a mano, directo en el HTML, sin ningún archivo de
+schema que los generara. Es la misma clase de problema que describe la Regla 1 de
+`ARCHITECTURE_HarnessProtocol.md` (§7) — "nunca hardcodear defaults de mensajes de protocolo en un
+`.js`" — solo que acá el hardcodeo está en un tercer lugar que esa regla no cubre todavía: el panel
+de debug de Conductor Workspace.
+
+### Corrección aplicada
+
+En `debug.html`:
+
+- **`sim-select`** → se retiraron las opciones `GITHUB_PAT_DETECTED` y `GITHUB_TOKEN_STORED`; se
+  agregaron `GITHUB_DEVICE_CODE`, `GITHUB_APP_AUTHORIZED`, `GITHUB_DEVICE_FLOW_ERROR`,
+  `API_KEY_REGISTERED` y `ACCOUNT_REGISTERED` (con payloads espejados de los `payload_template` de
+  `discovery.schema.json` — mismos nombres de campo, mismos valores default) para no volver a
+  divergir del schema real.
+- **`EVENT_LEVELS`** → se quitaron las entradas de los dos eventos retirados; se agregaron
+  `GITHUB_DEVICE_CODE: 'info'` (esperando que el usuario autorice — mismo nivel que tenía
+  `GITHUB_PAT_DETECTED`), `GITHUB_APP_AUTHORIZED: 'success'`, `GITHUB_DEVICE_FLOW_ERROR: 'error'`,
+  `API_KEY_REGISTERED: 'success'` y `ACCOUNT_REGISTERED: 'success'`.
+- **`AUTO_EVENTS`** → el paso `GITHUB_PAT_DETECTED → GITHUB_TOKEN_STORED` de la secuencia de replay
+  se reemplazó por `GITHUB_DEVICE_CODE → GITHUB_APP_AUTHORIZED`, manteniendo el resto de la
+  secuencia (`WORKFLOW_STATE_CHANGED`, `PROFILE_LAUNCHED`, `EXTENSION_LOADED`,
+  `DISCOVERY_COMPLETE`, `INTENT_COMPLETED`, `BOOTSTRAP_READY`) sin cambios.
+
+No se tocó nada del layout, el WebSocket, el feed raw, ni el mecanismo de `fireSimEvent()` — el
+drift estaba únicamente en los datos hardcodeados de los eventos GitHub, no en la lógica del panel.
+
+### Pendiente — fuera de alcance de este documento
+
+1. **Sin fuente de verdad compartida.** `debug.html` no lee `discovery.schema.json` ni ningún otro
+   schema — los payloads de simulación están escritos a mano en el HTML. Esto significa que
+   cualquier cambio futuro al protocolo va a requerir, otra vez, actualizar este archivo a mano en
+   un tercer lugar (además de `discovery.schema.json` y, mientras exista, `discoveryProtocol.js`).
+   Si Conductor Workspace puede hacer `fetch` a los mismos `.schema.json` de la extensión (o a una
+   copia empaquetada), sería el mismo cambio de arquitectura que ya se hizo en Harness vía Fase 5,
+   aplicado ahora del lado Electron — pero eso es una decisión de arquitectura, no un fix de datos,
+   y queda fuera de esta revisión.
+2. **Migración `onboarding/` → `core/`.** El usuario mencionó que `debug.html` va a mudarse de
+   carpeta. No se tocaron rutas ni imports en esta revisión — cuando ese move ocurra, hay que
+   confirmar que el `Content-Security-Policy` (`ws://localhost:4124`, `http://localhost:48215`) y
+   los endpoints hardcodeados sigan siendo válidos en la nueva ubicación.
+3. Igual que en §23, sigue pendiente auditar `landing.schema.json` por el mismo patrón de drift.
+
+---
+
+*Documento consolidado — v1.4 · Jul 11 2026*
+*Corrección aplicada sobre v1.3 (Jul 11 2026): mismo drift de GitHub Device Flow que en §23, ahora
+corregido en `debug.html` (Conductor Workspace, contraparte de Harness del lado Electron/host). Ver
+§24.*
+
+**VERSIÓN: 1.4**

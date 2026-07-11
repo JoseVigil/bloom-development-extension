@@ -28,6 +28,7 @@ const log = getLogger('onboarding');
 // reemitirlos al renderer via synapse:raw-event para el debug panel.
 let _onboardingBridge = null;
 let _reactor          = null;
+let _registry          = null;
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const BLOOM_BASE   = paths.bloomBase;
@@ -258,11 +259,11 @@ function initOnboardingBridge() {
   //   - en ACCOUNT_REGISTERED: abre Landing vía `nucleus synapse launch --mode landing`
   //   - cuando todos los steps bloqueantes completan: llama _onOnboardingSuccess()
   const bloomRoot = path.join(NUCLEUS_EXE, '..', '..'); // BloomNucleus root relativo al binario
-  const registry = new MilestoneRegistry({ bloomRoot, ONBOARDING_EVENTS });
-  registry.loadSteps();
+  _registry = new MilestoneRegistry({ bloomRoot, ONBOARDING_EVENTS });
+  _registry.loadSteps();
 
   _reactor = new MilestoneReactor({
-    registry,
+    registry: _registry,
     getWindow:    () => mainWindow,
     execNucleus,
     NUCLEUS_JSON,
@@ -283,7 +284,7 @@ function initOnboardingBridge() {
     // discriminar eventos genéricos por "service" (ej: ACCOUNT_REGISTERED
     // compartido por github_auth y google_auth). Sin esto, siempre resolvía
     // al primer step registrado para ese evento — ver milestone-registry.js.
-    const stepId = registry.resolveEvent(enriched.event, enriched.data ?? enriched);
+    const stepId = _registry.resolveEvent(enriched.event, enriched.data ?? enriched);
     if (!stepId) {
       log.warn('[SYNAPSE] ONBOARDING_MILESTONE sin mapeo en registry:', enriched.event);
       return;
@@ -544,7 +545,7 @@ app.whenReady().then(async () => {
     createOnboardingWindow();
     // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
     // para que los handlers siempre resuelvan la ventana actual
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, registry);
+    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
     // Inicializar el bridge de synapse para el onboarding.
     // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
     // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
@@ -569,7 +570,7 @@ app.on('activate', () => {
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, registry);
+        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
         initOnboardingBridge();
       }
     }

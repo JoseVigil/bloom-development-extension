@@ -27,8 +27,8 @@ const ONBOARDING_STEP_IDS = [
   'project_create',
 ];
 
-function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, registry) {
-  const { resolveEntryPoint } = require('./resolution-engine');
+function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, getRegistry) {
+  const { resolveEntryPoint } = require('../resolution-engine');
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
   // Paso 1: github_app_auth es el primer step de Chrome/Discovery
@@ -542,7 +542,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   ipcMain.handle('onboarding:get-resume-state', async () => {
     log.info('[IPC] onboarding:get-resume-state');
     try {
-      const { stepId, produced } = resolveEntryPoint(registry.steps, NUCLEUS_JSON);
+      const { stepId, produced } = resolveEntryPoint(getRegistry().steps, NUCLEUS_JSON);
 
       log.success('[IPC] onboarding:get-resume-state — ok:', JSON.stringify({ stepId, produced }));
 
@@ -551,7 +551,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       log.error('[IPC] onboarding:get-resume-state — FAILED:', err.message);
       // Fallback seguro: si el motor falla, arrancar desde el primer step
       // es preferible a bloquear el onboarding completo.
-      return { success: false, stepId: registry.steps[0]?.id ?? null, produced: [] };
+      return { success: false, stepId: getRegistry().steps[0]?.id ?? null, produced: [] };
     }
   });
 

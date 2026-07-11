@@ -725,8 +725,11 @@ body::after {
       <span id="sim-label">Simulate →</span>
       <select id="sim-select">
         <optgroup label="synapse">
-          <option value='{"category":"synapse","event":"GITHUB_PAT_DETECTED","data":{"token_fingerprint":"ghp_...abc"},"profile_id":"2183af25"}'>synapse · GITHUB_PAT_DETECTED</option>
-          <option value='{"category":"synapse","event":"GITHUB_TOKEN_STORED","data":{"vault_key":"sk_bloom_pat"},"profile_id":"2183af25"}'>synapse · GITHUB_TOKEN_STORED</option>
+          <option value='{"category":"synapse","event":"GITHUB_DEVICE_CODE","data":{"user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","expires_in":900},"profile_id":"2183af25"}'>synapse · GITHUB_DEVICE_CODE</option>
+          <option value='{"category":"synapse","event":"GITHUB_APP_AUTHORIZED","data":{"username":"octocat","token_fingerprint":"ghu_simulatedFingerprint","scopes":"contents:write,administration:write,members:read"},"profile_id":"2183af25"}'>synapse · GITHUB_APP_AUTHORIZED</option>
+          <option value='{"category":"synapse","event":"GITHUB_DEVICE_FLOW_ERROR","data":{"reason":"expired_token"},"profile_id":"2183af25"}'>synapse · GITHUB_DEVICE_FLOW_ERROR</option>
+          <option value='{"category":"synapse","event":"API_KEY_REGISTERED","data":{"provider":"gemini","key_fingerprint":"xyz789"},"profile_id":"2183af25"}'>synapse · API_KEY_REGISTERED</option>
+          <option value='{"category":"synapse","event":"ACCOUNT_REGISTERED","data":{"service":"google","username":"user@gmail.com"},"profile_id":"2183af25"}'>synapse · ACCOUNT_REGISTERED</option>
           <option value='{"category":"synapse","event":"DISCOVERY_COMPLETE","data":{"steps_done":5},"profile_id":"2183af25"}'>synapse · DISCOVERY_COMPLETE</option>
           <option value='{"category":"synapse","event":"HANDSHAKE_CONFIRMED","data":{"extension_id":"bloom-ext"},"profile_id":"2183af25"}'>synapse · HANDSHAKE_CONFIRMED</option>
         </optgroup>
@@ -795,22 +798,25 @@ const filters = {
 
 const EVENT_LEVELS = {
   DISCOVERY_COMPLETE:      'success',
-  GITHUB_TOKEN_STORED:     'success',
+  GITHUB_APP_AUTHORIZED:   'success',
+  API_KEY_REGISTERED:      'success',
+  ACCOUNT_REGISTERED:      'success',
   PROFILE_LAUNCHED:        'success',
   HANDSHAKE_CONFIRMED:     'success',
   EXTENSION_LOADED:        'success',
   BOOTSTRAP_READY:         'success',
   INTENT_COMPLETED:        'success',
   WORKFLOW_STATE_CHANGED:  'info',
-  GITHUB_PAT_DETECTED:     'info',
+  GITHUB_DEVICE_CODE:      'info',
   COMPONENT_STATE_CHANGED: 'warn',
+  GITHUB_DEVICE_FLOW_ERROR:'error',
   INTENT_FAILED:           'error',
 };
 
 const AUTO_EVENTS = [
   {category:'temporal', event:'WORKFLOW_STATE_CHANGED', data:{from:'PENDING',to:'RUNNING'}, profile_id:'2183af25'},
-  {category:'synapse',  event:'GITHUB_PAT_DETECTED',    data:{token_fingerprint:'ghp_...abc'}, profile_id:'2183af25'},
-  {category:'synapse',  event:'GITHUB_TOKEN_STORED',    data:{vault_key:'sk_bloom_pat'}, profile_id:'2183af25'},
+  {category:'synapse',  event:'GITHUB_DEVICE_CODE',     data:{user_code:'WDJB-MJHT',verification_uri:'https://github.com/login/device',expires_in:900}, profile_id:'2183af25'},
+  {category:'synapse',  event:'GITHUB_APP_AUTHORIZED',  data:{username:'octocat',token_fingerprint:'ghu_simulatedFingerprint',scopes:'contents:write,administration:write,members:read'}, profile_id:'2183af25'},
   {category:'brain',    event:'PROFILE_LAUNCHED',       data:{chrome_pid:14392,debug_port:9222}, profile_id:'2183af25'},
   {category:'sentinel', event:'EXTENSION_LOADED',       data:{manifest_version:3}, profile_id:'2183af25'},
   {category:'synapse',  event:'DISCOVERY_COMPLETE',     data:{steps_done:5}, profile_id:'2183af25'},
