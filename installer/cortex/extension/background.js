@@ -92,6 +92,62 @@ function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
 }
 
 // ============================================================================
+// NAVIGATION HEALTH TRACKING — páginas propias de la extensión
+// (Discovery / Harness / Landing)
+//
+// Motivación (ver ERR_BLOCKED_BY_CLIENT del 2026-07-11): Chrome puede dejar
+// una tab con status === 'complete' y url === la URL esperada AUNQUE la
+// navegación haya terminado en la interstitial de "Chromium ha bloqueado
+// esta página" — no siempre reescribe tab.url a chrome-error://. El chequeo
+// viejo (status + prefijo chrome-error://) no detecta ese caso. Acá se
+// trackea el resultado real de cada navegación vía webNavigation, y además
+// se verifica que el DOM tenga contenido renderizado antes de dar por sana
+// una tab existente.
+// ============================================================================
+
+const brokenNavTabs = new Set();
+const EXTENSION_URL_PREFIX = chrome.runtime.getURL('');
+
+chrome.webNavigation.onErrorOccurred.addListener((details) => {
+  if (details.frameId !== 0) return; // solo frame principal
+  brokenNavTabs.add(details.tabId);
+  console.warn('[NavHealth] ⚠️ onErrorOccurred tab', details.tabId, details.error, details.url);
+}, { url: [{ urlPrefix: EXTENSION_URL_PREFIX }] });
+
+chrome.webNavigation.onCompleted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  brokenNavTabs.delete(details.tabId); // navegación posterior OK — se levanta la marca
+}, { url: [{ urlPrefix: EXTENSION_URL_PREFIX }] });
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  brokenNavTabs.delete(tabId);
+});
+
+// Verificación de contenido real, más allá de status/url — cubre el caso
+// en que Chrome reporta la navegación como "completa" pero el DOM quedó
+// vacío (interstitial de bloqueo, página en blanco, etc).
+async function hasRenderedContent(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => !!document.body && document.body.innerText.trim().length > 0
+    });
+    return !!(results && results[0] && results[0].result);
+  } catch (err) {
+    console.warn('[NavHealth] ⚠️ No se pudo verificar contenido de tab', tabId, err.message);
+    return false;
+  }
+}
+
+async function isExtensionTabHealthy(tab) {
+  if (!tab || !tab.url) return false;
+  if (tab.status !== 'complete') return false;
+  if (tab.url.startsWith('chrome-error://')) return false;
+  if (brokenNavTabs.has(tab.id)) return false;
+  return hasRenderedContent(tab.id);
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
@@ -454,18 +510,24 @@ async function openDiscoveryTab() {
       // onboarding (crear token, loguearse, copiar key), así que al
       // despertar puede reconectar y volver a llamar acá. Si la tab ya está
       // sana, alcanza con traerla al frente — no hace falta recargarla.
-      // El reload real (reescribir `url`) se reserva para el caso que motivó
-      // este código originalmente: ERR_BLOCKED_BY_CLIENT en ungoogled-chromium.
-      const isHealthy = existingTab.status === 'complete'
-        && !!existingTab.url
-        && !existingTab.url.startsWith('chrome-error://');
+      // El reload real (reescribir `url`) se reserva para tabs rotas.
+      //
+      // FIX 2026-07-11 (ERR_BLOCKED_BY_CLIENT no detectado): el chequeo
+      // viejo (status === 'complete' + prefijo chrome-error://) daba falsos
+      // positivos — Chrome puede terminar la navegación con status
+      // 'complete' y tab.url === discoveryUrl aunque haya mostrado la
+      // interstitial de "Chromium ha bloqueado esta página". isExtensionTabHealthy()
+      // además chequea errores reales de webNavigation para esa tab y que el
+      // DOM tenga contenido renderizado, no solo el estado superficial.
+      const isHealthy = await isExtensionTabHealthy(existingTab);
 
       if (isHealthy) {
         await chrome.tabs.update(existingTab.id, { active: true });
         console.log('[Discovery] ✓ Tab existente sana — solo foco, sin reload (id:', existingTab.id + ')');
       } else {
         await chrome.tabs.update(existingTab.id, { url: discoveryUrl, active: true });
-        console.log('[Discovery] ✓ Tab existente rota — recargada (id:', existingTab.id + ')');
+        brokenNavTabs.delete(existingTab.id);
+        console.log('[Discovery] ✓ Tab existente rota/vacía — recargada (id:', existingTab.id + ')');
       }
     } else {
       const newTab = await chrome.tabs.create({ url: discoveryUrl, active: true });

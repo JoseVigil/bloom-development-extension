@@ -27,14 +27,10 @@
     "https://claude.ai/*",
     "https://chatgpt.com/*"
   ],
-  
+
   "background": {
     "service_worker": "background.js",
-    "type": "module"  
-  },
-
-  "side_panel": {
-    "default_path": "companion_index.html"
+    "type": "module"
   },
 
   "action": {
@@ -56,21 +52,34 @@
         "protocols/discovery.schema.json",
         "protocols/landing.schema.json",
         "protocols/harness.schema.json",
+        "protocols/companion.schema.json",
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
         "harness.synapse.config.js",
+        "companion.synapse.config.js",
         "discovery/*",
-        "landing/*",
         "discovery/index.html",
         "discovery/styles.css",
         "discovery/discovery.js",
         "discovery/discoveryProtocol.js",
+        "discovery/onboarding.js",
+        "discovery/script.js",
+        "landing/*",
         "landing/index.html",
         "landing/styles.css",
         "landing/landing.js",
+        "landing/landingProtocol.js",
+        "landing/data-loader.js",
+        "landing/script.js",
+        "harness/*",
         "harness/index.html",
+        "harness/harness.js",
         "harness/harnessProtocol.js",
-        "harness/*"
+        "companion/*",
+        "companion/index.html",
+        "companion/styles.css",
+        "companion/companion.js",
+        "companion/companionProtocol.js"
       ]
     }
   ],

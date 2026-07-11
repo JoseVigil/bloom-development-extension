@@ -61,6 +61,102 @@ const COMMAND_EVENTS = [
 ];
 
 // ============================================================================
+// VISIBILIDAD DEL SIDE PANEL — activación estrictamente condicional
+//
+// Vive acá y no en background.js porque es política del Companion, no del
+// router de handshake: decide EN QUÉ TABS existe el Side Panel, antes de
+// que companion.js llegue siquiera a conectar el Port 'companion-link' de
+// la sección de abajo.
+//
+// Requisito: el Side Panel NUNCA debe abrirse en las páginas core de la
+// propia extensión (discovery/harness/landing) ni en sitios generales
+// (github.com, etc) — solo se activa en dominios de IA (ChatGPT, Claude,
+// Gemini), donde carga companion/index.html.
+//
+// manifest.json declara solo "side_panel": { "enabled": true } (sin
+// "default_path"), así que el path se asigna acá, por tab, vía
+// chrome.sidePanel.setOptions.
+// ============================================================================
+
+// Superset de ENGINE_TAB_URL (gemini.google.com, arriba): acá cubrimos
+// además chatgpt.com y claude.ai, que no tienen motor propio pero sí deben
+// mostrar el panel según lo pedido.
+const AI_SIDE_PANEL_DOMAINS = ['chatgpt.com', 'claude.ai', 'gemini.google.com'];
+const COMPANION_PANEL_PATH = 'companion/index.html';
+
+function hostMatchesAiDomain(hostname) {
+  if (!hostname) return false;
+  return AI_SIDE_PANEL_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+}
+
+async function updateSidePanelForTab(tabId, url) {
+  if (typeof tabId !== 'number') return;
+
+  let hostname = null;
+  try {
+    hostname = url ? new URL(url).hostname : null;
+  } catch (_) {
+    hostname = null; // URLs internas (chrome-extension://, about:blank, etc)
+  }
+
+  try {
+    if (hostMatchesAiDomain(hostname)) {
+      await chrome.sidePanel.setOptions({ tabId, path: COMPANION_PANEL_PATH, enabled: true });
+      console.log('[CognituumEngine][SidePanel] ✓ Habilitado para tab', tabId, `(${hostname})`);
+    } else {
+      // Cubre explícitamente: tabs de discovery/harness/landing/companion
+      // (chrome-extension://<id>/...) y cualquier sitio general (github,
+      // etc) — todo lo que no matchee un dominio de IA queda deshabilitado.
+      await chrome.sidePanel.setOptions({ tabId, enabled: false });
+    }
+  } catch (err) {
+    // Puede fallar si la tab se cerró entre el evento y esta llamada async
+    // — no es un error real de la lógica, se ignora silenciosamente.
+    console.warn('[CognituumEngine][SidePanel] ⚠️ No se pudo actualizar tab', tabId, err.message);
+  }
+}
+
+function registerSidePanelLifecycle() {
+  // El ícono de la extensión NO debe abrir el panel por click directo —
+  // la apertura es 100% por dominio, vía updateSidePanelForTab.
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch((err) => {
+    console.warn('[CognituumEngine][SidePanel] ⚠️ setPanelBehavior falló:', err.message);
+  });
+
+  // Default global: deshabilitado. Toda tab nueva arranca sin side panel
+  // hasta que onUpdated/onActivated confirme que es un dominio de IA.
+  chrome.sidePanel.setOptions({ enabled: false }).catch((err) => {
+    console.warn('[CognituumEngine][SidePanel] ⚠️ No se pudo fijar default global:', err.message);
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url || changeInfo.status === 'complete') {
+      updateSidePanelForTab(tabId, tab.url);
+    }
+  });
+
+  chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      updateSidePanelForTab(tabId, tab.url);
+    } catch (_) {
+      // Tab cerrada entre el evento onActivated y el query — ignorar.
+    }
+  });
+
+  // Barrido inicial: tabs que ya existían cuando el service worker arrancó
+  // (ej. tras un reciclado por inactividad de MV3) no disparan onUpdated ni
+  // onActivated por sí solas — hay que evaluarlas a mano una vez al boot.
+  chrome.tabs.query({}).then(tabs => {
+    for (const tab of tabs) {
+      updateSidePanelForTab(tab.id, tab.url);
+    }
+  }).catch(() => {});
+}
+
+registerSidePanelLifecycle();
+
+// ============================================================================
 // GESTIÓN DE PUERTOS — Side Panel <-> background-companion.js
 //
 // El Side Panel se conecta mediante chrome.runtime.connect({name:
