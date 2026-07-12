@@ -1,11 +1,13 @@
 # 🔐 BTIPS VAULT MULTI-KEY ANALYSIS
 ## Investigación del Sistema de Registro y Almacenamiento de API Keys
 
-**Fecha:** 13 de Febrero, 2026 · **Revisado:** 07 de Julio, 2026 (v1.1)  
+**Fecha:** 13 de Febrero, 2026 · **Revisado:** 07 de Julio, 2026 (v1.1) · **Corregido:** 12 de Julio, 2026 (v1.2)  
 **Objetivo:** Evaluar y expandir el sistema de gestión de API keys desde Gemini (único) hacia Claude, ChatGPT y Grok  
 **Scope:** Protocolo SYNAPSE, Discovery Page, Vault Architecture
 
 > **Nota de revisión v1.1:** esta versión corrige dos contradicciones detectadas respecto a la arquitectura de seguridad real: (1) Vault.go como stub que permite usar el Keyring sin autorización de Nucleus, y (2) un mecanismo de detección de clipboard que depende de una API de Chrome inexistente y viola el principio de "sin automatización de captura" ya establecido en `AUTHORITY_BOUNDARY.md`. Los cambios están marcados inline con `🔧 CORRECCIÓN v1.1`.
+>
+> **Nota de revisión v1.2 (2026-07-12):** el punto (1) de arriba estaba mal — contra el `vault.go` real, la autorización de Nucleus SÍ está gateada (no es un stub decorativo). Se corrige esa sección y se documenta en su lugar un bug real de inicialización (`saveVaultStatus()` sin `MkdirAll`). Además, se cierra el hilo abierto sobre si `vault_key` (JS/Python) es lo mismo que `masterKeyID` (Go): no hay puente entre ambos mundos, y `InitializeVault()` es inalcanzable hoy (sin caller, sin subcomando CLI `init`). Queda un único cabo suelto: el native host de Chrome, no auditado todavía. Marcado inline con `🔧 CORRECCIÓN 2026-07` y `⚠️ CIERRE 2026-07`.
 
 ---
 
@@ -61,44 +63,32 @@ class OnboardingFlow {
 
 ### ⚠️ **PUNTOS CRÍTICOS DETECTADOS**
 
-#### 1. **Vault.go - Implementación Incompleta**
+#### 1. **Vault.go - Autorización Real, Bug de Inicialización**
 
-```go
-// ❌ PROBLEMA: Vault.go es un STUB, no una implementación funcional
-func RequestKey(keyID string) (string, error) {
-    // ⚠️ Devuelve un HASH ALEATORIO, no la key real
-    hash := sha256.Sum256([]byte(keyID + time.Now().String()))
-    return hex.EncodeToString(hash[:]), nil
-}
-```
+**🔧 CORRECCIÓN 2026-07 — Vault.go NO es un stub.** La afirmación previa (v1.1: "RequestKey() devuelve un hash random, no persiste ni encripta nada") estaba desactualizada. Confirmado contra el `vault.go` real:
 
-**Estado actual:**
-- ✅ Tiene comandos CLI (`vault-lock`, `vault-unlock`, `vault-status`)
-- ✅ Gestiona estado locked/unlocked
-- ❌ **NO almacena keys reales** - solo metadata
-- ❌ **NO encripta nada** - solo cuenta keys
-- ❌ **NO integra con chrome.storage.local**
+- `RequestKey`/`SetKey`/`DeleteKey` pegan contra el keyring real del SO (`github.com/zalando/go-keyring`), gateado por `Authorize(role, scope, keyID)` — exige `core.RoleMaster` antes de tocar el keyring.
+- `VaultStatus` se persiste en `~/.bloom/.nucleus/vault.json`.
+- `AddVaultKey` guarda metadata (id, label, created_at, access_count) en `vault_keys.json` — el hash es del ID, no del secreto; el secreto real nunca toca ese archivo.
+- Cobertura de test confirmada en `vault_test.go`: happy path, rol no-master rechazado sin tocar el keyring, scope inválido rechazado incluso para master, vault locked falla ANTES de `Authorize()` (no después).
 
-**Archivo esperado pero AUSENTE:**
-- `vault_keys.json` - Existe en código pero nunca se puebla con keys reales
+En otras palabras, la preocupación central de v1.1 — que Nucleus fuera "un componente decorativo que el código real ignora" — no aplica tal como estaba descrita: la autorización sí está gateada en el código real. (Sigue pendiente confirmar si `credentials.py` efectivamente pasa por este camino en vez de llamar al keyring directo — ver punto 3 más abajo, que no cambia con este hallazgo.)
 
-**🔧 CORRECCIÓN v1.1 — fix requerido antes de expandir a más providers:**
+**🐛 BUG NUEVO confirmado (no documentado antes):** `saveVaultStatus()` no crea su directorio padre (no hay `MkdirAll`). `InitializeVault()` llama a `saveVaultStatus()` directamente, así que si `~/.bloom/.nucleus/` no existe todavía en un setup fresco, la escritura de `vault.json` falla. El propio `vault_test.go` lo confirma en un comentario del helper `writeVaultStatus()` ("the real vault.json is only ever written after `InitializeVault()`, which has the same gap") y lo evita a mano con `os.MkdirAll` en el setup del test — algo que el código de producción no hace.
 
-El problema no es solo que `RequestKey` devuelva basura — es que su existencia como stub permite que `GeminiKeyManager` (ver punto 3 más abajo) hable directo con el Keyring del OS **sin pasar nunca por esta función**. Eso significa que hoy Nucleus no es realmente la autoridad que firma el acceso a las keys; es un componente decorativo que el código real ignora.
+**⚠️ CIERRE 2026-07 — masterKeyID / vault_key: pregunta mal planteada, no sin respuesta.** La pregunta original ("¿`vault_key` es lo que se pasa como `masterKeyID`?") asumía que existía un punto de mapping a encontrar. La investigación con acceso a Brain/Python y al código Go de nucleus más allá de `vault.go` confirma que esa asunción es incorrecta: **no hay ningún puente entre el mundo JS/Python (donde `vault_key` vive, viaja y muere — `background.js` → `discovery.js` → `synapse-bridge.js` → `server_manager.py`) y el mundo Go (donde `masterKeyID` sería consumido por `InitializeVault()`)**. No son dos conceptos distintos que comparten momento en el flujo — son dos sistemas que todavía no están cableados entre sí.
 
-El fix correcto:
-```go
-// Vault.go DEBE ser el único punto de entrada al Keyring.
-// Nucleus valida rol/scope ANTES de esta llamada, no después.
-func RequestKey(keyID string, requesterRole Role, scope string) (string, error) {
-    if !nucleus.Authorize(requesterRole, scope, keyID) {
-        return "", ErrUnauthorized
-    }
-    // Recién acá se toca el Keyring real del OS
-    return osKeyring.Get(SERVICE_NAME, keyID)
-}
-```
-Y `credentials.py` (Python) deja de llamar a `keyring.set_password`/`get_password` directamente — pasa a comunicarse con Vault.go vía el mismo canal `VAULT_GET_KEY` que ya existe en el Event Bus (Sentinel↔Brain). Un solo camino de autorización, no dos sistemas paralelos que hay que mantener sincronizados.
+Evidencia adicional que refuerza esto: `createVaultCommand()` en `vault.go` no expone ningún subcomando `init` — el CLI de nucleus solo tiene `lock/unlock/status/request/set/delete`. No hay forma de invocar `InitializeVault()` ni automáticamente (no hay caller) ni manualmente (no hay subcomando CLI). La función está completamente inalcanzable en el sistema actual, no solo "sin caller confirmado".
+
+**Consecuencia práctica:** el step `vault_init` se marca `complete` (vía el fix ya aplicado en `server_manager.py`) sin que exista ningún camino, hoy, para que un vault Go real llegue a inicializarse como reacción a ese evento. La distinción "evento confirmado" vs. "vault seguro" que veníamos señalando no es un matiz — es el estado real y actual del sistema.
+
+**✅ CIERRE DEFINITIVO 2026-07-12 — native host auditado, cadena completa cerrada.** El punto pendiente de arriba asumía que el native host (`bloom-host`) era Go. Confirmado contra el código real (`bloom-host.cpp`): **es C++**, no Go. Esto no solo descarta la vía por ausencia de evidencia — la descarta por incompatibilidad de plataforma: un binario C++ no puede importar un paquete Go (`nucleus/internal/vault`) ni linkear contra él. La vía (a) del punto pendiente queda eliminada por diseño, no por falta de caller.
+
+Grep exhaustivo sobre `bloom-host.cpp` de los mismos términos (`InitializeVault`, `import.*vault`, `nucleus/internal/vault`, `exec.Command.*nucleus`, `masterKeyID`, `MasterKeyID`, `vault_key`, `VAULT_INITIALIZED`): **cero hits.** Las únicas apariciones de "nucleus" son el nombre del directorio de datos (`BloomNucleus`, resuelto por `get_default_base_dir()`), sin relación con el paquete Go.
+
+Confirmado también el destino del token de GitHub (vía (b) del punto pendiente, subprocess): no aplica, porque tampoco hay ningún `exec`/`system`/spawn de `nucleus` en todo el archivo. `handle_chrome_message()` (el único punto de entrada para mensajes desde `background.js`) solo bifurca sobre `command`/`type`/`bloom_chunk` para logging y reensamblado de chunks; cualquier otro payload —incluido el que trae `vault_key` o el token— se re-serializa tal cual (`msg.dump()`) y se reenvía crudo por TCP hacia Brain vía `write_to_service()`. El host es transporte puro: no interpreta, no decodea, no bifurca sobre el contenido semántico del token ni del `vault_key`.
+
+**Conclusión final de toda la cadena, sin matices pendientes:** en ningún lenguaje (Go, Python, C++), en ninguna capa (CLI, Brain, background.js/discovery.js/synapse-bridge.js, native host), automática ni manualmente, existe hoy un camino que llame a `InitializeVault()`. El vault real definido en `vault.go` nunca se inicializa en ningún flujo de onboarding conocido del sistema. Esto es un bug de producto de primer orden — no un gap de investigación ni una pregunta abierta.
 
 #### 2. **Flujo de Registro NO Conectado a Vault**
 
@@ -926,6 +916,6 @@ installer/nucleus/vault/vault.go  # (Decisión pendiente: refactor o deprecar)
 
 ---
 
-**Última actualización:** 13 de Febrero, 2026  
+**Última actualización:** 12 de Julio, 2026 (v1.3 — cierre cadena native host) — versión original: 13 de Febrero, 2026  
 **Autor:** BTIPS Research Team  
 **Status:** Draft - Pending Team Review

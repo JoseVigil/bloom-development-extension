@@ -1,6 +1,15 @@
 # Bloom — Harness + IonPump: Fuente de Verdad
-## Versión consolidada · v1.4 — Jul 11 2026 (Conductor Workspace / debug.html — mismo drift del Device Flow, del lado Electron)
+## Versión consolidada · v1.5 — Jul 12 2026 (VAULT_INITIALIZED — institucionalización, 6ta instancia del patrón transversal §5)
 ### Supersede: todos los documentos del directorio `/docs/HARNESS/`
+
+> **v1.5 — resumen del cambio:** ronda de institucionalización de `VAULT_INITIALIZED` verificada
+> capa por capa (`background.js` → `discovery.js` → `synapse-bridge.js` → `server_manager.py` →
+> `milestone-registry.js`). No requiere cambios en `harness_schema.json` (protocolo `ionpump`) ni en
+> `harness_generator.py`. Hallazgo principal: `discoveryProtocol.js` (legacy manifest ya identificado
+> en §5 como instancia #1 del patrón) sigue sin `vault_initialized`/`VAULT_INITIALIZED` en su propia
+> copia de `messages`/`observable_events`, lo que puede neutralizar el fix de `discovery_schema.json`
+> en cualquier contexto donde `harness.js` priorice el legacy global sobre el JSON. Ver §25 para el
+> detalle completo.
 
 > **v1.4 — resumen del cambio:** el mismo drift corregido en §23 para `discovery.schema.json`
 > existía, en espejo, del lado de **Conductor Workspace** — la app Electron que es la contraparte
@@ -69,6 +78,7 @@
 22. [Adenda — corrección cascada ACCOUNT_REGISTERED / GITHUB_TOKEN_STORED (v1.2, Jul 1 2026)](#22-adenda--corrección-cascada-account_registered--github_token_stored-v12-jul-1-2026)
 23. [Adenda — migración a GitHub Device Flow, retiro del clipboard flow (v1.3, Jul 11 2026)](#23-adenda--migración-a-github-device-flow-retiro-del-clipboard-flow-v13-jul-11-2026)
 24. [Adenda — Conductor Workspace / debug.html, mismo drift del lado Electron (v1.4, Jul 11 2026)](#24-adenda--conductor-workspace--debughtml-mismo-drift-del-lado-electron-v14-jul-11-2026)
+25. [Adenda — VAULT_INITIALIZED, institucionalización (v1.5, Jul 12 2026)](#25-adenda--vault_initialized-institucionalización-v15-jul-12-2026)
 
 ---
 
@@ -1900,4 +1910,61 @@ drift estaba únicamente en los datos hardcodeados de los eventos GitHub, no en 
 corregido en `debug.html` (Conductor Workspace, contraparte de Harness del lado Electron/host). Ver
 §24.*
 
-**VERSIÓN: 1.4**
+---
+
+## 25. Adenda — VAULT_INITIALIZED, institucionalización (v1.5, Jul 12 2026)
+
+> **Número de versión de este documento: 1.5**
+
+**Archivos releídos para esta corrección:** `background.js`, `discovery.js`, `synapse-bridge.js`,
+`server_manager.py`, `milestone-registry.js` — verificación capa por capa del evento
+`VAULT_INITIALIZED` a través de toda la cadena. Ver `discovery_schema.json` y
+`prompt_update_harness_vault_initialized.md` para el detalle completo de esa verificación; esta
+sección resume lo que aporta la ronda específicamente sobre el Harness.
+
+### Qué cambia (y qué no) en el Harness
+
+- **`harness_schema.json` (protocolo `ionpump`) — sin cambios.** No corresponde agregar
+  `VAULT_INITIALIZED` al enum `event_name` de `event_emit`. Ese protocolo es para automatización DOM
+  sobre ion sites reales (`github.com`, `claude.ai`, `anthropic.com`); `vault_initialized` es
+  host-driven, sin manifestación DOM en ningún sitio registrado. `discovery_schema.json` es la única
+  fuente que necesita el evento.
+- **`harness_generator.py` — sin cambios.** Solo copia estáticos (`index.html`, `harness.js`,
+  `harnessProtocol.js`); no tiene listas de eventos hardcodeadas, así que no hay drift que corregir
+  ahí.
+- **`harness.js` (`ProtocolReader`) — sin cambios de código, pero relevante para el hallazgo de abajo.**
+  Deriva la UI dinámicamente de los tres JSON schemas vía `fetch()`, pero da prioridad a los
+  "legacy globals" (`window.DISCOVERY_PROTOCOL_MANIFEST`, etc.) sobre el JSON: si el legacy global
+  está presente, el JSON schema correspondiente se salta por completo (`discoverFromJSON()`, chequeo
+  `alreadyLoaded`).
+
+### Hallazgo nuevo — 6ta instancia del patrón transversal (§5, PROTOCOLO v3)
+
+`discoveryProtocol.js` — el legacy manifest #1 ya identificado en §5 (el mismo archivo del par
+retirado `GITHUB_PAT_DETECTED`/`GITHUB_TOKEN_STORED`, ver §23) — define `self.DISCOVERY_PROTOCOL_MANIFEST`
+con su propia copia de `messages`/`observable_events`, y esa copia **sigue sin**
+`vault_initialized`/`VAULT_INITIALIZED` (línea 275, línea 560-571).
+
+Como `ProtocolReader` prioriza el legacy global sobre el JSON, el fix de `discovery_schema.json`
+puede quedar neutralizado en cualquier contexto donde `discoveryProtocol.js` esté cargado junto con
+`harness.js`: el Harness mostraría el manifest viejo (sin `VAULT_INITIALIZED`) aunque el JSON ya esté
+al día, exactamente el mismo mecanismo de drift que ya se documentó cinco veces antes en §5.
+
+### Pendiente — fuera de alcance de este documento
+
+1. Aplicar el mismo fix (agregar el mensaje `vault_initialized` y `VAULT_INITIALIZED` a
+   `observable_events`) directamente en `discoveryProtocol.js` — o, mejor, dado el patrón repetido en
+   §5, evaluar deprecar el legacy global una vez confirmado que el JSON alcanza en todos los
+   contextos donde hoy corre `discoveryProtocol.js`.
+2. **`harnessProtocol.js`** (análogo legacy del protocolo Harness) — no estuvo disponible en esta
+   sesión, no confirmado si tiene el mismo problema.
+3. Sigue pendiente, igual que en §23-24, auditar `landing.schema.json` por el mismo patrón de drift.
+
+---
+
+*Documento consolidado — v1.5 · Jul 12 2026*
+*Corrección aplicada sobre v1.4 (Jul 11 2026): institucionalización de `VAULT_INITIALIZED` verificada
+capa por capa; identificada 6ta instancia del patrón de drift entre legacy global y JSON schema
+(§5), esta vez en `discoveryProtocol.js` respecto de `vault_initialized`. Ver §25.*
+
+**VERSIÓN: 1.5**

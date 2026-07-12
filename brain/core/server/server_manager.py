@@ -607,6 +607,34 @@ class ServerManager:
                         'status': 'ok',
                     })
 
+                elif msg_type == 'VAULT_INITIALIZED':
+                    # Paso 2 vault_init — Cortex confirmó creación del vault (GitHub App Device Flow).
+                    profile_id = msg.get('profile_id')
+                    launch_id  = msg.get('launch_id')
+                    vault_key  = msg.get('vault_key')
+                    token_fingerprint = msg.get('token_fingerprint', '')
+                    scopes     = msg.get('scopes', '')
+                    logger.info(
+                        f"🔐 [{conn_id}] VAULT_INITIALIZED: "
+                        f"profile={profile_id[:8] if profile_id else '?'} vault_key={vault_key}"
+                    )
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id':        profile_id,
+                            'step':              'vault_init',
+                            'original_event':    'VAULT_INITIALIZED',
+                            'vault_key':         vault_key,
+                            'token_fingerprint': token_fingerprint,
+                            'scopes':            scopes,
+                        }
+                    )
+                    await self._broadcast_event(event)
+                    await self._send_to_writer(writer, {
+                        'type':   'VAULT_INITIALIZED_ACK',
+                        'status': 'ok',
+                    })
+
                 elif msg_type == 'UNREGISTER_HOST':
                     # bloom-host.exe signals intentional shutdown before closing socket.
                     # Payload: { type, profile_id, launch_id, reason, timestamp }

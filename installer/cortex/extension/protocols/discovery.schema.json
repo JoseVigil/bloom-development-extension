@@ -65,6 +65,30 @@
       ]
     },
     {
+      "id": "vault_initialized",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Simulate Brain confirming vault creation after the GitHub App Device Flow. Cierra el step 'vault_init'. HALLAZGO 2026-07: este evento existía en background.js (reactToGithubAppAuthorized(), líneas ~1248-1272) y en discovery.js (listener de OnboardingFlow, línea ~1051) y en synapse-bridge.js (ONBOARDING_EVENTS) y en milestone-registry.js (cortex_events de vault_init) pero NUNCA estuvo declarado acá — mismo patrón transversal documentado en PROTOCOLO-synapse-homologacion-v3.md §5. Además, server_manager.py (Brain) no tenía handler explícito para msg_type VAULT_INITIALIZED — caía al routing genérico y nunca llegaba a los Sentinels (mismo bug que tuvo ACCOUNT_REGISTERED antes de su fix). Fix de server_manager.py aplicado el 2026-07-11; pendiente de validar end-to-end con un run real del Device Flow (no solo simulado desde Harness) — ver notas en el HANDOFF de esta sesión. NOTA: background.js emite este evento con dos shapes de payload ligeramente distintas (una hacia el host nativo, con scopes+timestamp; otra como broadcast interno, con token_fingerprint) — el payload_template de abajo es el superset de ambas. NOTA 2: background.js nunca manda 'provider'; discovery.js lo defaultea a 'github' si falta — no asumas que este campo viaja siempre.",
+      "payload_template": {
+        "event": "VAULT_INITIALIZED",
+        "vault_key": "$VAULT_KEY",
+        "token_fingerprint": "$TOKEN_FINGERPRINT",
+        "scopes": "$SCOPES",
+        "profile_id": "$PROFILE_ID",
+        "launch_id": "$LAUNCH_ID",
+        "timestamp": "$TIMESTAMP"
+      },
+      "parameters": [
+        { "name": "vault_key", "type": "string", "variable": "$VAULT_KEY", "default": "sk_bloom_github_app" },
+        { "name": "token_fingerprint", "type": "string", "variable": "$TOKEN_FINGERPRINT", "default": "ghu_simulatedFingerprint" },
+        { "name": "scopes", "type": "string", "variable": "$SCOPES", "default": "contents:write,administration:write,members:read" },
+        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
+        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
+        { "name": "timestamp", "type": "auto", "variable": "$TIMESTAMP", "source": "Date.now()" }
+      ]
+    },
+    {
       "id": "github_device_flow_error",
       "type": "event",
       "direction": "harness_to_background",
@@ -205,6 +229,7 @@
     "HANDSHAKE_CONFIRMED",
     "API_KEY_REGISTERED",
     "ACCOUNT_REGISTERED",
+    "VAULT_INITIALIZED",
     "GITHUB_DEVICE_CODE",
     "GITHUB_APP_AUTHORIZED",
     "GITHUB_DEVICE_FLOW_ERROR",
