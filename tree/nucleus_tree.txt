@@ -105,6 +105,7 @@ bloom-development-extension/
     │   │   ├── mandate_config.go
     │   │   ├── onboarding_harness.go
     │   │   ├── service.go
+    │   │   ├── supervisor.go
     │   │   └── workers.go
     │   ├── system/
     │   │   └── info.go

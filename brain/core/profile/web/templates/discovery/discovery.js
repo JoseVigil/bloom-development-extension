@@ -75,8 +75,8 @@ const VAULT_RECEIPT_COPY = {
 // options en discoveryProtocol.js, que YA declaraba 'github_app_auth' como
 // único valor válido — este archivo era el que había quedado desincronizado.
 const STEP_SEQUENCE = [
-  { id: 'github_app_auth',   label: 'GitHub' },
   { id: 'vault_init',        label: 'Vault' },
+  { id: 'github_app_auth',   label: 'GitHub' },
   { id: 'google_auth',       label: 'Google' },
   { id: 'ai_provider_setup', label: 'Gemini API' },
   { id: 'success',           label: 'Listo' }

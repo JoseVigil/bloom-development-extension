@@ -357,26 +357,45 @@ const Simulator = {
       const target = extensionId || chrome.runtime.id;
       Logger.log('SEND', `→ ${msg.id} [${channel}] target=${target} ${JSON.stringify(payload)}`);
 
+      // 🔧 FIX: msg.type distingue 'command' (espera sendResponse) de 'event'
+      // (fire-and-forget, como VAULT_INITIALIZED). background.js emite los
+      // eventos reales con .catch(() => {}) y sin callback — ningún listener
+      // les llama sendResponse() a propósito. Si igual les pedimos callback
+      // acá, Chrome cierra el puerto sin respuesta → "message port closed
+      // before a response was received", aunque en producción ese mismo
+      // mensaje funcione perfecto.
+      const isEvent = msg.type === 'event';
+
       try {
         // No pasar extensionId explícito: desde una página interna de la extensión,
         // sendMessage sin target ya enruta al propio background.
         // Con target explícito Chrome trata el mensaje como cross-extension y lo rechaza
         // a menos que manifest.json declare externally_connectable.
-        chrome.runtime.sendMessage(payload, (response) => {
-          const err = chrome.runtime.lastError; // consumir sincrónicamente
-          if (err) {
-            Logger.log('ERR', err.message);
-            statusEl.textContent = '✗ Error';
-            statusEl.className = 'error';
-            Harness.notify(err.message, 'error');
-          } else {
-            const responseStr = response !== undefined ? JSON.stringify(response) : 'null (fire-and-forget)';
-            Logger.log('ACK', responseStr);
-            statusEl.textContent = '✓ Sent';
-            statusEl.className = 'ok';
-            Harness.notify(`${msg.id} sent`, 'success');
-          }
-        });
+        if (isEvent) {
+          // Sin callback: no hay canal esperando respuesta, no puede haber
+          // "port closed" porque no le pedimos nada a nadie.
+          chrome.runtime.sendMessage(payload);
+          Logger.log('ACK', 'fire-and-forget (event, sin respuesta esperada)');
+          statusEl.textContent = '✓ Sent';
+          statusEl.className = 'ok';
+          Harness.notify(`${msg.id} sent`, 'success');
+        } else {
+          chrome.runtime.sendMessage(payload, (response) => {
+            const err = chrome.runtime.lastError; // consumir sincrónicamente
+            if (err) {
+              Logger.log('ERR', err.message);
+              statusEl.textContent = '✗ Error';
+              statusEl.className = 'error';
+              Harness.notify(err.message, 'error');
+            } else {
+              const responseStr = response !== undefined ? JSON.stringify(response) : 'null (fire-and-forget)';
+              Logger.log('ACK', responseStr);
+              statusEl.textContent = '✓ Sent';
+              statusEl.className = 'ok';
+              Harness.notify(`${msg.id} sent`, 'success');
+            }
+          });
+        }
       } catch (e) {
         Logger.log('ERR', e.message);
         statusEl.textContent = '✗ Exception';

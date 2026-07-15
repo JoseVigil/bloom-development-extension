@@ -86,7 +86,7 @@ class MilestoneReactor {
 
     // Mapa de stepId → handler. Permite extensión sin tocar el switch.
     this._handlers = {
-      github_auth:       (enriched) => this._onGithubAuthComplete(enriched),
+      github_app_auth:   (enriched) => this._onGithubAuthComplete(enriched),
       nucleus_create:    (enriched) => this._onNucleusCreateComplete(enriched),
       vault_init:        (enriched) => this._onVaultInitComplete(enriched),
       google_auth:       (enriched) => this._onGoogleAuthComplete(enriched),
@@ -171,7 +171,7 @@ class MilestoneReactor {
 
   async _onGithubAuthComplete(enriched) {
     this._log(`_onGithubAuthComplete (evento: ${enriched.event || 'n/a'})`);
-    await this._persistStepComplete('github_auth', this._registry.getStep('github_auth'));
+    await this._persistStepComplete('github_app_auth', this._registry.getStep('github_app_auth'));
 
     // Bug 3 fix: github_auth puede recibir varios eventos Cortex distintos
     // (ACCOUNT_REGISTERED, GITHUB_TOKEN_STORED, GITHUB_PAT_DETECTED...) y el
@@ -181,22 +181,24 @@ class MilestoneReactor {
     // step-ui-update) debe emitirse una sola vez por step, no una vez por
     // evento interno — de lo contrario el stepper recibe el mismo milestone
     // duplicado en el mismo segundo. Se dedupea por stepId solamente.
-    if (!this._emitted.has('github_auth')) {
-      this._emitted.add('github_auth');
-      this._emitMilestone('github_auth', {
+    if (!this._emitted.has('github_app_auth')) {
+      this._emitted.add('github_app_auth');
+      this._emitMilestone('github_app_auth', {
         username: enriched.data?.username || null,
         org:      enriched.data?.org      || null,
       });
-      this._emitStepUiUpdate('github_auth', { phase: 'ESTABLISHED' });
+      this._emitStepUiUpdate('github_app_auth', { phase: 'ESTABLISHED' });
     } else {
       this._log('_onGithubAuthComplete: milestone ya emitido al renderer — solo procesando side-effect');
     }
 
-    // ACCOUNT_REGISTERED = el usuario completó el login de GitHub y la cuenta
-    // está creada. En este punto Landing puede abrirse para mostrar el workspace.
-    // GITHUB_PAT_DETECTED y GITHUB_TOKEN_STORED llegan después (clipboard),
-    // para esos eventos solo marcamos el step — Landing ya está abierta.
-    if (enriched.event === 'ACCOUNT_REGISTERED') {
+    // ACCOUNT_REGISTERED = nombre legacy, pre-migración. El evento real que
+    // Cortex emite hoy para "usuario completó el login de GitHub y la cuenta
+    // está creada" es GITHUB_APP_AUTHORIZED (confirmado en
+    // conductor_onboarding_20260714.log — ACCOUNT_REGISTERED no aparece en
+    // ningún punto del flujo real). En este punto Landing puede abrirse para
+    // mostrar el workspace.
+    if (enriched.event === 'GITHUB_APP_AUTHORIZED') {
       await this._openLandingTab();
     }
   }

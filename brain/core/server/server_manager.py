@@ -635,6 +635,41 @@ class ServerManager:
                         'status': 'ok',
                     })
 
+                elif msg_type == 'GITHUB_APP_AUTHORIZED':
+                    # Paso github_app_auth — Cortex confirmó Device Flow autorizado.
+                    #
+                    # Sin handler explícito este msg_type caía al `else` (línea 658)
+                    # y rutea por target_profile — como background.js no lo incluye,
+                    # terminaba en broadcast a hosts. Los Sentinels/Conductor (tipo
+                    # 'cli') nunca lo recibían. ONBOARDING_STEP_COMPLETE nunca se
+                    # emitía → MilestoneReactor nunca marcaba github_app_auth como
+                    # completo. Mismo bug que ya tuvo ACCOUNT_REGISTERED (ver arriba).
+                    profile_id        = msg.get('profile_id')
+                    launch_id         = msg.get('launch_id')
+                    username          = msg.get('username', '')
+                    token_fingerprint = msg.get('token_fingerprint', '')
+                    scopes            = msg.get('scopes', '')
+                    logger.info(
+                        f"🔑 [{conn_id}] GITHUB_APP_AUTHORIZED: "
+                        f"profile={profile_id[:8] if profile_id else '?'} username={username}"
+                    )
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id':        profile_id,
+                            'step':              'github_app_auth',
+                            'original_event':    'GITHUB_APP_AUTHORIZED',
+                            'username':          username,
+                            'token_fingerprint': token_fingerprint,
+                            'scopes':            scopes,
+                        }
+                    )
+                    await self._broadcast_event(event)
+                    await self._send_to_writer(writer, {
+                        'type':   'GITHUB_APP_AUTHORIZED_ACK',
+                        'status': 'ok',
+                    })
+
                 elif msg_type == 'UNREGISTER_HOST':
                     # bloom-host.exe signals intentional shutdown before closing socket.
                     # Payload: { type, profile_id, launch_id, reason, timestamp }

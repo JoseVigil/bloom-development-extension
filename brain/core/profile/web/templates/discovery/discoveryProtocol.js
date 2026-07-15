@@ -344,6 +344,37 @@ if (typeof self !== 'undefined') {
         ]
       },
       {
+        id: "vault_initialized",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        // Paridad con discovery_schema.json v1.1.0 — este mensaje faltaba por
+        // completo acá (no solo en observable_events), mismo patrón transversal
+        // documentado en PROTOCOLO-synapse-homologacion-v3.md §5. Ver también
+        // NOTA sobre las dos shapes de payload distintas que emite background.js
+        // (reactToGithubAppAuthorized(), ~líneas 1248-1272): una hacia el host
+        // nativo con scopes+timestamp, otra como broadcast interno con
+        // token_fingerprint. El payload_template de abajo es el superset de ambas.
+        description: "Simulate Brain confirmando la creación del vault tras el GitHub App Device Flow. Cierra el step 'vault_init'.",
+        payload_template: {
+          event: "VAULT_INITIALIZED",
+          vault_key: "$VAULT_KEY",
+          token_fingerprint: "$TOKEN_FINGERPRINT",
+          scopes: "$SCOPES",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID",
+          timestamp: "$TIMESTAMP"
+        },
+        parameters: [
+          { name: "vault_key", type: "string", variable: "$VAULT_KEY", default: "sk_bloom_github_app" },
+          { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ghu_simulatedFingerprint" },
+          { name: "scopes", type: "string", variable: "$SCOPES", default: "contents:write,administration:write,members:read" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
+          { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
+        ]
+      },
+      {
         id: "github_device_flow_error",
         type: "event",
         direction: "harness_to_background",
@@ -565,6 +596,7 @@ if (typeof self !== 'undefined') {
       "GITHUB_DEVICE_CODE",
       "GITHUB_APP_AUTHORIZED",
       "GITHUB_DEVICE_FLOW_ERROR",
+      "VAULT_INITIALIZED",
       "DISCOVERY_COMPLETE",
       "HARNESS_SIMULATE_HANDSHAKE",
       "HARNESS_OPEN_LANDING"

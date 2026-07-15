@@ -904,21 +904,6 @@ function handleHostMessage(msg) {
     return;
   }
 
-  // Onboarding navigate
-  if (msg.command === 'onboarding_navigate') {
-    chrome.tabs.query({ url: chrome.runtime.getURL('discovery/index.html') }, (tabs) => {
-      if (!tabs || tabs.length === 0) {
-        console.warn('[BG] onboarding_navigate: no discovery tab found');
-        return;
-      }
-      chrome.tabs.sendMessage(tabs[0].id, {
-        command: 'onboarding_navigate',
-        payload: msg.payload || msg
-      });
-    });
-    return;
-  }
-
   // Generic commands
   if (msg.command) {
     executeCommand(msg);
@@ -1116,6 +1101,135 @@ async function loadProtocolSchemas() {
   }
 }
 
+// ============================================================================
+// forwardToHost — despachador único de eventos de onboarding hacia el host.
+//
+// Reemplaza el patrón anterior de cada reactToXxx() armando a mano el objeto
+// que le pasaba a sendToHost({ event: '...', campoA, campoB, ... }). Ahora la
+// FORMA del payload (qué campos tiene, de dónde sale cada uno, cuáles son
+// "auto") vive en un solo lugar: discovery.schema.json (payload_template +
+// parameters de cada mensaje). Este archivo deja de ser una copia a mano de
+// esa forma — la lee.
+//
+// Consecuencia directa para el bug de HALLAZGO 2026-07 (VAULT_INITIALIZED
+// declarado en el schema pero nunca emitido con esa forma desde ningún lado):
+// si un evento del schema no tiene ningún caller que haga
+// forwardToHost('ESE_EVENTO', msg), ahora queda registrado en
+// `neverForwardedEvents` (ver abajo) en vez de requerir una auditoría manual
+// función por función.
+// ============================================================================
+
+const forwardedEventNames = new Set();
+
+/**
+ * resolveParam(param, msg)
+ *
+ * Resuelve el valor de un único parámetro del payload_template contra:
+ *   1. El mensaje entrante (msg[param.name]), si está presente.
+ *   2. Los campos "auto" declarados en el schema (profile_id / launch_id /
+ *      timestamp) — se resuelven contra `config` y `Date.now()`, nunca contra
+ *      un valor hardcodeado.
+ *   3. El default declarado en el schema, si no vino nada mejor.
+ *
+ * NOTA: los "auto" del schema usan HARNESS_CONFIG.profileId /
+ * SYNAPSE_CONFIG.launchId como `source` porque ese schema también lo
+ * consume el Harness (que sí tiene esos objetos). Acá, en background.js, el
+ * equivalente real es `config.profileId` / `config.launchId` — por eso el
+ * mapeo es por NOMBRE de parámetro (profile_id/launch_id/timestamp), no por
+ * el string literal de `source`.
+ */
+function resolveParam(param, msg) {
+  if (!param) return undefined;
+
+  if (param.type === 'auto') {
+    switch (param.name) {
+      case 'profile_id':
+        return msg.profile_id ?? config?.profileId;
+      case 'launch_id':
+        return msg.launch_id ?? config?.launchId;
+      case 'timestamp':
+        return msg.timestamp ?? Date.now();
+      default:
+        // Otro campo "auto" no contemplado explícitamente — devolver lo que
+        // traiga el mensaje entrante como mejor esfuerzo.
+        return msg[param.name];
+    }
+  }
+
+  if (msg[param.name] !== undefined && msg[param.name] !== null) {
+    return msg[param.name];
+  }
+
+  return param.default; // puede ser undefined si el schema no declaró uno
+}
+
+/**
+ * forwardToHost(eventName, msg)
+ *
+ * Arma el payload de `eventName` leyendo su payload_template/parameters de
+ * discovery.schema.json y lo manda con sendToHost(). Si el evento no está
+ * declarado en el schema, NO inventa un shape — loguea el error y no manda
+ * nada, para no perpetuar el problema que se quiere eliminar (payloads
+ * armados a mano que divergen del schema).
+ */
+function forwardToHost(eventName, msg = {}) {
+  const schema = discoverySchema?.messages?.find(
+    m => m.payload_template?.event === eventName
+  );
+
+  if (!schema) {
+    console.error(`⚠️ Evento "${eventName}" no declarado en discovery.schema.json — no se puede reenviar`);
+    return;
+  }
+
+  const payload = {};
+  for (const [key, template] of Object.entries(schema.payload_template)) {
+    if (key === 'event') {
+      payload.event = eventName;
+      continue;
+    }
+
+    // template es el string de variable (ej. "$VAULT_KEY"), no un valor literal.
+    const param = schema.parameters.find(p => p.variable === template);
+    if (!param) {
+      // payload_template trae un literal fijo en vez de una variable — se
+      // manda tal cual (mismo comportamiento que el despachador propuesto).
+      payload[key] = template;
+      continue;
+    }
+
+    payload[key] = resolveParam(param, msg);
+  }
+
+  forwardedEventNames.add(eventName);
+  sendToHost(payload);
+}
+
+/**
+ * logNeverForwardedOnboardingEvents()
+ *
+ * Best-effort: al cerrar el onboarding (DISCOVERY_COMPLETE), compara el set
+ * de eventos que efectivamente pasaron por forwardToHost() contra la lista
+ * de onboarding en discovery.schema.json y loguea cuáles nunca se dispararon
+ * en esta sesión. No es una garantía de bug (algunos steps son opcionales:
+ * google_auth, ai_provider_setup) — es una señal para no tener que auditar
+ * función por función a mano, como en HALLAZGO 2026-07.
+ */
+function logNeverForwardedOnboardingEvents() {
+  const onboardingEventIds = [
+    'vault_initialized', 'github_app_authorized', 'github_device_code',
+    'github_device_flow_error', 'api_key_registered', 'account_registered'
+  ];
+  const declared = (discoverySchema?.messages || [])
+    .filter(m => onboardingEventIds.includes(m.id))
+    .map(m => m.payload_template.event);
+
+  const neverForwarded = declared.filter(e => !forwardedEventNames.has(e));
+  if (neverForwarded.length > 0) {
+    console.warn('[Synapse] ℹ️ Eventos de onboarding del schema nunca reenviados en esta sesión:', neverForwarded);
+  }
+}
+
 /**
  * updateAccountInProfileState(service, username, timestamp)
  *
@@ -1188,15 +1302,9 @@ function registerOnboardingHandlers() {
     });
 
     // 1. Forwarding del milestone al host → MilestoneReactor → Landing
-    sendToHost({
-      event:             'ACCOUNT_REGISTERED',
-      service:           msg.service,
-      username:          msg.username          || '',
-      token_fingerprint: msg.token_fingerprint || '',
-      profile_id:        msg.profile_id        || config?.profileId,
-      launch_id:         msg.launch_id         || config?.launchId,
-      timestamp:         msg.timestamp         || Date.now(),
-    });
+    //    🔧 Migrado a forwardToHost(): shape leído de discovery.schema.json
+    //    (mensaje "account_registered") en vez de armado a mano acá.
+    forwardToHost('ACCOUNT_REGISTERED', msg);
 
     sendResp({ received: true });
 
@@ -1250,16 +1358,34 @@ function reactToGithubAppAuthorized(msg) {
 
   updateAccountInProfileState('github', msg.username, msg.timestamp);
 
-  const vaultKey = msg.token_fingerprint || 'sk_bloom_github_app';
+  // 🔧 FIX (Bug #4 — github_app_auth nunca llegaba al Conductor): este
+  // handler mandaba solo el VAULT_INITIALIZED derivado, nunca el evento
+  // GITHUB_APP_AUTHORIZED en sí — que es el cortex_event que
+  // onboarding_steps.json declara para el step "github_app_auth". Sin este
+  // forward, MilestoneRegistry.resolveEvent('GITHUB_APP_AUTHORIZED') nunca
+  // se disparaba del lado del Conductor, aunque Discovery sí avanzara
+  // (Discovery no depende de este pipeline).
+  forwardToHost('GITHUB_APP_AUTHORIZED', msg);
 
-  sendToHost({
-    event:      'VAULT_INITIALIZED',
-    vault_key:  vaultKey,
-    scopes:     msg.scopes,
-    profile_id: msg.profile_id || config?.profileId,
-    launch_id:  msg.launch_id  || config?.launchId,
-    timestamp:  Date.now()
-  });
+  // 🔧 FIX (Bug #1 — payload de VAULT_INITIALIZED corrompido hacia el host):
+  // vaultKey NO puede derivarse de msg.token_fingerprint — son dos campos
+  // distintos con significado distinto (vault_key = slot/namespace del Vault
+  // donde se guarda el secreto; token_fingerprint = huella del token real).
+  // El bug anterior asignaba vaultKey = msg.token_fingerprint, y el objeto
+  // que se mandaba a sendToHost() ni siquiera incluía token_fingerprint —
+  // resultado: el host recibía vault_key con el valor que debería tener
+  // token_fingerprint, y token_fingerprint desaparecía del todo. Ver
+  // discovery_schema.json (mensaje "vault_initialized") para el shape
+  // correcto: vault_key y token_fingerprint son campos hermanos, ambos con
+  // su propio valor.
+  const vaultKey = 'sk_bloom_github_app';
+
+  // 🔧 Migrado a forwardToHost(): la forma del payload (vault_key,
+  // token_fingerprint, scopes, profile_id, launch_id, timestamp) ya no se
+  // arma acá a mano — se lee de discovery.schema.json (mensaje
+  // "vault_initialized"). msg.vault_key no viaja en GITHUB_APP_AUTHORIZED,
+  // así que se lo inyectamos al objeto que forwardToHost va a leer.
+  forwardToHost('VAULT_INITIALIZED', { ...msg, vault_key: vaultKey });
 
   chrome.runtime.sendMessage({
     event:             'VAULT_INITIALIZED',
@@ -1591,13 +1717,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   // Discovery complete
   if (event === 'DISCOVERY_COMPLETE' || command === 'discovery_complete') {
     console.log('[Synapse] ✓ Discovery complete');
-    sendToHost({
-      event: "DISCOVERY_COMPLETE",
-      payload: msg.payload || msg
-    });
+
+    // 🔧 Migrado a forwardToHost(): el shape anterior ({event, payload})
+    // NO coincidía con discovery.schema.json (mensaje "discovery_complete",
+    // que declara {event, profile_id, launch_id} — sin campo "payload").
+    // forwardToHost() arma el payload correcto leyendo el schema, en vez de
+    // perpetuar el shape divergente armado a mano acá.
+    forwardToHost('DISCOVERY_COMPLETE', msg);
+
     forwardToDebugPanel('synapse', 'DISCOVERY_COMPLETE', {
       steps_done: msg.payload?.steps_done || msg.steps_done || null
     }, config?.profileId);
+
+    // Best-effort: reportar qué eventos de onboarding del schema nunca se
+    // reenviaron en esta sesión (ver logNeverForwardedOnboardingEvents más
+    // arriba) — reemplaza la auditoría manual función por función.
+    logNeverForwardedOnboardingEvents();
+
     sendResp({ received: true });
     return true;
   }
@@ -1782,6 +1918,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
     sendResp({ received: true });
     return true;
+  }
+
+  // 🔧 FIX: onboarding_navigate llegaba por chrome.runtime.sendMessage (Harness,
+  // popup, Discovery) pero solo estaba manejado dentro de handleHostMessage,
+  // que escucha nativePort.onMessage (mensajes del native host), no de la
+  // extensión. Como nadie llamaba a sendResp() para este command, Chrome
+  // cerraba el canal solo → "The message port closed before a response was received."
+  if (command === 'onboarding_navigate') {
+    chrome.tabs.query({ url: chrome.runtime.getURL('discovery/index.html') }, (tabs) => {
+      if (!tabs || tabs.length === 0) {
+        console.warn('[BG] onboarding_navigate: no discovery tab found');
+        sendResp({ received: false, error: 'no_discovery_tab' });
+        return;
+      }
+      chrome.tabs.sendMessage(tabs[0].id, {
+        command: 'onboarding_navigate',
+        payload: msg.payload || msg
+      });
+      sendResp({ received: true });
+    });
+    return true; // canal async — chrome.tabs.query es asíncrono
   }
 
   return false;
