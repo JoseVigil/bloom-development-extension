@@ -555,6 +555,33 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     }
   });
 
+  // ── HANDLER: Exponer el SSOT de steps al renderer ───────────────────────
+  //
+  // Fix Bug #1 (auditoría 16/07/2026): navigation.js (renderer) llamaba a
+  // window.onboarding.getStepsConfig() desde su primer commit, pero este
+  // handler nunca se había implementado — el renderer caía SIEMPRE a su
+  // propio FALLBACK_STEPS embebido (con el orden viejo PAT), confirmado en
+  // producción por conductor_onboarding_20260717.log:
+  //   "navigation: window.onboarding.getStepsConfig no existe — usando
+  //    fallback embebido."
+  //
+  // Devuelve getRegistry().steps — el MISMO array que ya usa
+  // resolveEntryPoint() en onboarding:get-resume-state (línea de abajo).
+  // No relee el JSON de disco: MilestoneRegistry ya lo cargó una vez en
+  // loadSteps() al bootear (ver main_conductor.js). Un único punto de
+  // lectura de disco para todo el proceso Main.
+  ipcMain.handle('onboarding:get-steps-config', async () => {
+    log.info('[IPC] onboarding:get-steps-config');
+    try {
+      const steps = getRegistry().steps;
+      log.success(`[IPC] onboarding:get-steps-config — ok: ${steps.length} steps`);
+      return { success: true, steps };
+    } catch (err) {
+      log.error('[IPC] onboarding:get-steps-config — FAILED:', err.message);
+      return { success: false, steps: [], error: err.message };
+    }
+  });
+
   // ── HANDLER: Bridge de logging desde el renderer ────────────────────────
   ipcMain.handle('onboarding:log', async (event, { level, message }) => {
     const msg = `[RENDERER] ${message}`;

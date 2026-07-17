@@ -50,6 +50,15 @@ contextBridge.exposeInMainWorld('onboarding', {
   // y devuelve el JSON parseado. El debug panel lo usa para el sidebar.
   health: () => ipcRenderer.invoke('onboarding:health'),
 
+  // ── SSOT de steps — Fix Bug #1 (auditoría 16/07/2026) ─────────────────────
+  //
+  // navigation.js (renderer) espera este canal desde su primer commit para
+  // dejar de depender de su FALLBACK_STEPS embebido. No estaba expuesto acá
+  // — por eso el renderer caía SIEMPRE al fallback, confirmado en
+  // conductor_onboarding_20260717.log. Ver onboarding-handlers.js →
+  // 'onboarding:get-steps-config'.
+  getStepsConfig: () => ipcRenderer.invoke('onboarding:get-steps-config'),
+
   // ── Resume state — leer progreso persistido al arrancar ──────────────────
   //
   // Llamado en DOMContentLoaded de onboarding.js para detectar si hay un

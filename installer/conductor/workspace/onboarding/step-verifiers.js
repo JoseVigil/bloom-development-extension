@@ -17,7 +17,13 @@
  *   - 'json_field'      → onboarding.<algo> debe ser truthy
  *   - 'json_field_any'  → al menos uno de varios campos debe ser truthy
  *   - 'fs_marker'       → un directorio (leído de nucleus.json) debe contener
- *                          un archivo marcador específico
+ *                          un archivo marcador específico. markerFile admite
+ *                          el placeholder "{org}", interpolado con el valor
+ *                          de nucleus.json en verifyArgs.orgField (ej:
+ *                          ".bloom/.nucleus-{org}" + orgField:
+ *                          "onboarding.workspace_org" → ".bloom/.nucleus-elias-repos").
+ *                          Si se declara orgField pero el campo todavía no
+ *                          tiene valor, el artefacto se considera no producido.
  */
 
 const fs   = require('fs');
@@ -42,11 +48,25 @@ const VERIFIERS = {
     return fields.some(f => !!getField(nucleusData, f));
   },
 
-  fs_marker(nucleusData, { jsonField, markerFile }) {
+  fs_marker(nucleusData, { jsonField, markerFile, orgField }) {
     const dir = getField(nucleusData, jsonField);
     if (!dir) return false;
+
+    // Interpolación de {org}: onboarding_steps.json declara markerFile como
+    // plantilla (ej: ".bloom/.nucleus-{org}") + orgField apuntando al campo
+    // de nucleus.json que tiene el valor real (ej: "onboarding.workspace_org").
+    // Si el step declara orgField pero el valor todavía no está en nucleus.json
+    // (ej: create en curso, org no resuelto todavía), el artefacto no puede
+    // confirmarse como producido — false, no un match contra el literal "{org}".
+    let resolvedMarker = markerFile;
+    if (orgField) {
+      const orgValue = getField(nucleusData, orgField);
+      if (!orgValue) return false;
+      resolvedMarker = markerFile.replace(/\{org\}/g, orgValue);
+    }
+
     try {
-      return fs.existsSync(path.join(dir, markerFile));
+      return fs.existsSync(path.join(dir, resolvedMarker));
     } catch {
       return false;
     }

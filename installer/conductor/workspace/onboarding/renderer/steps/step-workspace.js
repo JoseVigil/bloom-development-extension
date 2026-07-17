@@ -170,7 +170,12 @@ export async function continueWorkspace() {
 
     // Antes: goTo(3) hardcodeado. Ahora: dejamos que el SSOT diga cuál es
     // el próximo step real en vez de asumir "siempre identity".
-    navigateTo('github_auth');
+    //
+    // FIX (auditoría 16/07/2026, Bug #4): decía 'github_auth' — el step PAT
+    // retirado, que no existe en ninguna copia del SSOT. navigation.js no
+    // encontraba el step y devolvía al usuario a screen-entry en silencio
+    // después de crear el workspace con éxito.
+    navigateTo('github_app_auth');
   } else {
     btn.disabled = false;
     btn.textContent = 'Continuar';
@@ -214,7 +219,9 @@ export async function useExistingWorkspace() {
   state.selectedOrg = orgSlug || null;
   state.selectedFolder = path;
   await window.onboarding.markStepComplete({ step: 'nucleus_create' });
-  navigateTo('github_auth');
+  // FIX (auditoría 16/07/2026, Bug #4): ver comentario idéntico en
+  // continueWorkspace() más arriba.
+  navigateTo('github_app_auth');
 }
 
 // ── Nucleus Init Terminal ────────────────────────────────────────────────

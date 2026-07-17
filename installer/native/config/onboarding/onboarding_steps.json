@@ -12,7 +12,8 @@
       "verify": "fs_marker",
       "verifyArgs": {
         "jsonField": "onboarding.workspace_path",
-        "markerFile": ".nucleus"
+        "markerFile": ".bloom/.nucleus-{org}",
+        "orgField": "onboarding.workspace_org"
       },
       "blocking": true,
       "cortex_events": [],

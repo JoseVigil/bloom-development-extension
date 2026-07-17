@@ -85,6 +85,13 @@ class MilestoneReactor {
     this._emitted = new Set();
 
     // Mapa de stepId → handler. Permite extensión sin tocar el switch.
+    //
+    // FIX (auditoría 16/07/2026, Bug #5): la key era 'github_auth' (stepId
+    // PAT retirado). MilestoneRegistry resuelve GITHUB_APP_AUTHORIZED al
+    // stepId real 'github_app_auth', que nunca matcheaba esta key — el
+    // evento caía siempre en _defaultReaction() genérico, y
+    // _onGithubAuthComplete() (con la lógica de abrir Landing y de incluir
+    // username/org en el milestone) quedaba muerto en la práctica.
     this._handlers = {
       github_app_auth:   (enriched) => this._onGithubAuthComplete(enriched),
       nucleus_create:    (enriched) => this._onNucleusCreateComplete(enriched),
@@ -169,36 +176,39 @@ class MilestoneReactor {
 
   // ── Handlers por step ───────────────────────────────────────────────────────
 
-  async _onGithubAuthComplete(enriched) {
+  // FIX (auditoría 16/07/2026, Bug #5): parametrizado por stepId en vez de
+  // hardcodear 'github_auth' — así, si el id vuelve a cambiar en el futuro,
+  // alcanza con actualizar la key del mapa _handlers de arriba y este
+  // método sigue funcionando sin tocarlo.
+  async _onGithubAuthComplete(enriched, stepId = 'github_app_auth') {
     this._log(`_onGithubAuthComplete (evento: ${enriched.event || 'n/a'})`);
-    await this._persistStepComplete('github_app_auth', this._registry.getStep('github_app_auth'));
+    await this._persistStepComplete(stepId, this._registry.getStep(stepId));
 
-    // Bug 3 fix: github_auth puede recibir varios eventos Cortex distintos
-    // (ACCOUNT_REGISTERED, GITHUB_TOKEN_STORED, GITHUB_PAT_DETECTED...) y el
-    // guard de handleMilestone() los deja pasar a todos a propósito, porque
-    // cada uno puede requerir una reacción distinta (ver _openLandingTab más
-    // abajo). Pero la notificación al renderer (milestone:reached /
-    // step-ui-update) debe emitirse una sola vez por step, no una vez por
-    // evento interno — de lo contrario el stepper recibe el mismo milestone
-    // duplicado en el mismo segundo. Se dedupea por stepId solamente.
-    if (!this._emitted.has('github_app_auth')) {
-      this._emitted.add('github_app_auth');
-      this._emitMilestone('github_app_auth', {
+    // Bug 3 fix: github_app_auth puede recibir varios eventos Cortex
+    // distintos (ACCOUNT_REGISTERED, GITHUB_TOKEN_STORED, GITHUB_PAT_DETECTED...)
+    // y el guard de handleMilestone() los deja pasar a todos a propósito,
+    // porque cada uno puede requerir una reacción distinta (ver
+    // _openLandingTab más abajo). Pero la notificación al renderer
+    // (milestone:reached / step-ui-update) debe emitirse una sola vez por
+    // step, no una vez por evento interno — de lo contrario el stepper
+    // recibe el mismo milestone duplicado en el mismo segundo. Se dedupea
+    // por stepId solamente.
+    if (!this._emitted.has(stepId)) {
+      this._emitted.add(stepId);
+      this._emitMilestone(stepId, {
         username: enriched.data?.username || null,
         org:      enriched.data?.org      || null,
       });
-      this._emitStepUiUpdate('github_app_auth', { phase: 'ESTABLISHED' });
+      this._emitStepUiUpdate(stepId, { phase: 'ESTABLISHED' });
     } else {
       this._log('_onGithubAuthComplete: milestone ya emitido al renderer — solo procesando side-effect');
     }
 
-    // ACCOUNT_REGISTERED = nombre legacy, pre-migración. El evento real que
-    // Cortex emite hoy para "usuario completó el login de GitHub y la cuenta
-    // está creada" es GITHUB_APP_AUTHORIZED (confirmado en
-    // conductor_onboarding_20260714.log — ACCOUNT_REGISTERED no aparece en
-    // ningún punto del flujo real). En este punto Landing puede abrirse para
-    // mostrar el workspace.
-    if (enriched.event === 'GITHUB_APP_AUTHORIZED') {
+    // ACCOUNT_REGISTERED = el usuario completó el login de GitHub y la cuenta
+    // está creada. En este punto Landing puede abrirse para mostrar el workspace.
+    // GITHUB_PAT_DETECTED y GITHUB_TOKEN_STORED llegan después (clipboard),
+    // para esos eventos solo marcamos el step — Landing ya está abierta.
+    if (enriched.event === 'ACCOUNT_REGISTERED') {
       await this._openLandingTab();
     }
   }
@@ -403,8 +413,23 @@ class MilestoneReactor {
         // Requerimiento 1 (resume inteligente): además del flag en completed_steps,
         // persistir el artefacto real bajo su nombre `produces`, para que
         // step-verifiers.js pueda confirmarlo sin depender de un puntero a "último paso".
+        //
+        // FIX (corrupción de artefactos fs_marker): esto NO debe pisar con un
+        // booleano un valor ya escrito por otro handler más específico. Steps
+        // como nucleus_create producen "workspace_path", que onboarding:init-nucleus
+        // (ipc/onboarding-handlers.js) ya persiste como el path real ANTES de que
+        // este método corra — sobreescribirlo acá con `true` rompe fs_marker
+        // (necesita el path real para construir jsonField/dir) y resetea el resume
+        // al primer step. Solo default a `true` si el campo todavía no tiene un
+        // valor real (steps sin persistencia propia, ej: vault_initialized,
+        // github_app_token, google_account, ai_provider_key).
         if (step?.produces) {
-          data.onboarding[step.produces] = true;
+          const existing = data.onboarding[step.produces];
+          if (existing === undefined || existing === null || existing === false) {
+            data.onboarding[step.produces] = true;
+          } else {
+            this._log(`_persistStepComplete: "${step.produces}" ya tiene valor real (${JSON.stringify(existing)}) — no se pisa`);
+          }
         }
         data.onboarding.updated_at = new Date().toISOString();
         fs.writeFileSync(this._NUCLEUS_JSON, JSON.stringify(data, null, 2));

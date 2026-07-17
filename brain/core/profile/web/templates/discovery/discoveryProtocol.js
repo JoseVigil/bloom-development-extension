@@ -375,34 +375,6 @@ if (typeof self !== 'undefined') {
         ]
       },
       {
-        id: "google_login_detected",
-        type: "event",
-        direction: "harness_to_background",
-        channel: "runtime",
-        // Paridad con discovery.schema.json v1.1.1 (Entregable 3) — agregado
-        // acá también porque loadScriptOptional() en harness.js carga este
-        // manifest legacy ANTES de que ProtocolReader.discoverFromJSON() lea
-        // el JSON, y discover() prioriza el global legacy si ya existe
-        // (discoverFromJSON lo salta con "legacy global present"). Sin este
-        // espejo, el mensaje del schema JSON nunca llega a la UI del Harness.
-        description: "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google. IMPORTANTE — orden de uso: el listener real en discovery.js (GoogleAuthFlow.init()) descarta el mensaje si tabId no coincide con window.GOOGLE_FLOW._watchedTabId, que solo existe después de clickear 'Open Google' en el flujo real. Secuencia: 1) abrir Discovery real y avanzar a google_auth, 2) click en 'Open Google', 3) recién ahí simular este mensaje.",
-        payload_template: {
-          event: "GOOGLE_LOGIN_DETECTED",
-          tabId: "$TAB_ID",
-          detected_host: "$DETECTED_HOST",
-          profile_id: "$PROFILE_ID",
-          launch_id: "$LAUNCH_ID",
-          timestamp: "$TIMESTAMP"
-        },
-        parameters: [
-          { name: "tabId", type: "auto", variable: "$TAB_ID", source: "GOOGLE_FLOW._watchedTabId" },
-          { name: "detected_host", type: "enum", variable: "$DETECTED_HOST", options: ["myaccount.google.com", "mail.google.com"], default: "myaccount.google.com" },
-          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
-          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
-          { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
-        ]
-      },
-      {
         id: "github_device_flow_error",
         type: "event",
         direction: "harness_to_background",
@@ -414,6 +386,52 @@ if (typeof self !== 'undefined') {
         },
         parameters: [
           { name: "reason", type: "enum", variable: "$REASON", options: ["access_denied", "expired_token", "denied"], default: "expired_token" }
+        ]
+      },
+      {
+        id: "google_login_detected",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        // Simula background.js (watchGoogleLoginTab) detectando que la tab
+        // observada llegó a un host terminal de Google (myaccount.google.com,
+        // mail.google.com), tras descartar patrones intermedios (/speedbump,
+        // /oauth2, /ServiceLogin, /signin/, /o/oauth2). Detección pasiva vía
+        // chrome.tabs.onUpdated — background.js no lee contenido de la
+        // página, solo compara changeInfo.url contra isGoogleTerminalUrl().
+        // discovery.js (GoogleAuthFlow) solo procesa el mensaje si
+        // msg.tabId === this._watchedTabId, seteado en _openGoogleLogin()
+        // al crear la tab real. Por eso este mensaje requiere que el
+        // usuario haya hecho clic en "Open Google" en Discovery ANTES de
+        // enviarlo desde el Harness — ver parámetro tab_id.
+        description: "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google (myaccount.google.com, mail.google.com), tras descartar patrones intermedios (/speedbump, /oauth2, /ServiceLogin, /signin/, /o/oauth2). Es detección pasiva vía chrome.tabs.onUpdated. Requiere que el usuario haya clickeado 'Open Google' en Discovery antes de enviarlo desde el Harness — ver parámetro tab_id.",
+        payload_template: {
+          event: "GOOGLE_LOGIN_DETECTED",
+          tabId: "$TAB_ID",
+          detected_host: "$DETECTED_HOST",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID",
+          timestamp: "$TIMESTAMP"
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "auto",
+            variable: "$TAB_ID",
+            source: "GOOGLE_FLOW._watchedTabId",
+            note: "Solo existe después de que el usuario clickeó 'Open Google' en screen-google-auth-login. Secuencia de uso: 1) abrir el flujo real de Google en Discovery, 2) recién después seleccionar/enviar este mensaje desde el Harness. Si se envía antes, msg.tabId no matchea this._watchedTabId (null) y GoogleAuthFlow lo ignora silenciosamente."
+          },
+          {
+            name: "detected_host",
+            type: "enum",
+            variable: "$DETECTED_HOST",
+            options: ["myaccount.google.com", "mail.google.com"],
+            default: "myaccount.google.com",
+            note: "Corresponde 1:1 a GOOGLE_TERMINAL_HOSTS en background.js — no son valores arbitrarios."
+          },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
+          { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
         ]
       },
       {
@@ -619,9 +637,9 @@ if (typeof self !== 'undefined') {
     observable_events: [
       "HOST_READY",
       "HANDSHAKE_CONFIRMED",
-      "GOOGLE_LOGIN_DETECTED",
       "API_KEY_REGISTERED",
       "ACCOUNT_REGISTERED",
+      "GOOGLE_LOGIN_DETECTED",
       "GITHUB_DEVICE_CODE",
       "GITHUB_APP_AUTHORIZED",
       "GITHUB_DEVICE_FLOW_ERROR",

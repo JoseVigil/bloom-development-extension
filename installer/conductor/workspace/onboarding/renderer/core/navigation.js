@@ -14,23 +14,16 @@
 // (onboarding_steps.json), no un índice hardcodeado ni un array paralelo
 // mantenido a mano.
 //
-// ⚠️ HALLAZGO IMPORTANTE — léase antes de deployar este módulo:
-// El SSOT (`onboarding_steps.json`) declara:
-//     nucleus_create.requires = ["github_app_token"]
-// pero la UI actual (goTo(1) = workspace ANTES que goTo(3) = identity/
-// github) hace exactamente lo contrario: crea el workspace primero y recién
-// después pide GitHub. Si resolution-engine.js pasa a ser la única fuente
-// de verdad para "en qué step entra el usuario" (que es literalmente lo
-// que pide esta misión), el primer entryStepId que va a devolver al bootear
-// sin progreso previo es `github_app_auth`, no `nucleus_create` — porque
-// `github_app_auth.requires = []` y es el primero del array que cumple
-// "requires ok, produces vacío". Este módulo implementa la navegación fiel
-// al SSOT (así lo pide el Requerimiento 1); el cambio de ORDEN resultante
-// (github antes que workspace) es una consecuencia real del dato tal cual
-// está hoy en el JSON, no una decisión de este archivo. Si el orden
-// pretendido sigue siendo "workspace primero", hay que corregir `requires`
-// en onboarding_steps.json (quitarle `github_app_token` a nucleus_create)
-// antes de este deploy — no alcanza con tocar el renderer.
+// ✅ RESUELTO (auditoría 16/07/2026, Bug #2) — el "hallazgo" que vivía acá
+// era una lectura incorrecta del propio FALLBACK_STEPS de este archivo, no
+// una contradicción real del SSOT. onboarding_steps.json real SIEMPRE
+// declaró nucleus_create.requires = [] (workspace primero, sin depender de
+// github) — el FALLBACK_STEPS embebido más abajo era el que tenía el dato
+// al revés (github primero), y como getStepsConfig() no estaba implementado
+// en Main, ese fallback corría siempre. Confirmado en producción por
+// conductor_onboarding_20260717.log. Ambos problemas corregidos en esta
+// misma sesión: se implementó onboarding:get-steps-config en
+// onboarding-handlers.js, y se corrigió el orden del FALLBACK_STEPS.
 
 import { log } from './ipc-bridge.js';
 import { setStepperActive, setStepperEstablished, refreshStepperPendingStates } from './ui-stepper.js';
@@ -271,12 +264,21 @@ export async function resumeFromEntryPoint() {
 }
 
 // ── Fallback embebido — ver comentario de init() más arriba ────────────────
-// Copia 1:1 de onboarding_steps.json al momento de este refactor. Borrar
-// en cuanto exista window.onboarding.getStepsConfig().
+// Copia 1:1 de onboarding_steps.json real (v3.0.0, migración GitHub App/
+// Device Flow). Solo se usa si window.onboarding.getStepsConfig() no existe
+// o falla — es una red de emergencia, no la fuente primaria.
+//
+// FIX (auditoría 16/07/2026, Bug #2): esta copia tenía el orden y los
+// requires del esquema PAT viejo (github primero, sin vault) — confirmado
+// en producción por conductor_onboarding_20260717.log: al no existir
+// getStepsConfig, este fallback era lo único que corría, y mandaba a
+// cualquier usuario que clickeara "Start" directo a Identity, saltándose
+// Workspace por completo. Corregido para reflejar el orden real:
+// nucleus_create → vault_init → github_app_auth → google_auth/ai_provider_setup → project_create.
 const FALLBACK_STEPS = [
-  { id: 'github_app_auth', view: 'identity', requires: [], produces: 'github_app_token' },
-  { id: 'nucleus_create', view: 'workspace', requires: ['github_app_token'], produces: 'workspace_path' },
-  { id: 'vault_init', view: 'identity', requires: ['github_app_token', 'workspace_path'], produces: 'vault_initialized' },
+  { id: 'nucleus_create', view: 'workspace', requires: [], produces: 'workspace_path' },
+  { id: 'vault_init', view: 'identity', requires: ['workspace_path'], produces: 'vault_initialized' },
+  { id: 'github_app_auth', view: 'identity', requires: ['vault_initialized'], produces: 'github_app_token' },
   { id: 'google_auth', view: 'providers', requires: ['vault_initialized'], produces: 'google_account' },
   { id: 'ai_provider_setup', view: 'providers', requires: ['vault_initialized'], produces: 'ai_provider_key' },
   { id: 'project_create', view: 'project', requires: ['vault_initialized', 'github_app_token'], produces: 'project_mandate' },

@@ -47,6 +47,22 @@ const path = require('path');
 //   cortex_events   — lista de eventos Brain/Cortex que confirman este step
 //   conductor_reaction — acción que el MilestoneReactor debe ejecutar al completar
 //
+// FIX (auditoría 16/07/2026, Bug #3 + Bug #7): esta constante divergía de
+// onboarding_steps.json real en dos formas, confirmadas en producción por
+// conductor_onboarding_20260717.log (corre porque el JSON real todavía no
+// está deployado en disco — "fallback a constante hardcoded — archivo no
+// encontrado"):
+//   Bug #3 — nombre de campo viejo: 'nucleus_path' en vez de 'workspace_path'
+//     (confirmado contra onboarding-handlers.js:386, que escribe
+//     data.onboarding.workspace_path).
+//   Bug #7 — faltaban 'verify'/'verifyArgs' en los 6 steps. Sin esos campos,
+//     step-verifiers.js.checkArtifact() nunca puede resolver step.verify
+//     (queda undefined) y loggea "tipo de verify desconocido" para cada
+//     step, siempre devolviendo false — es decir, resolution-engine.js
+//     jamás puede confirmar que un artefacto ya existe mientras este
+//     fallback esté activo. No se nota en un arranque fresh (produced:[]
+//     es lo esperado), pero rompe el resume apenas hay progreso real: el
+//     usuario vuelve a nucleus_create sin importar cuánto haya avanzado.
 const FALLBACK_STEPS = [
   {
     id:                 'nucleus_create',
@@ -54,7 +70,22 @@ const FALLBACK_STEPS = [
     screen:             'nucleus-create',
     vault_required:     false,
     requires:           [],
-    produces:           'nucleus_path',
+    produces:           'workspace_path',
+    verify:             'fs_marker',
+    // SYNC (auditoría 17/07/2026, Bug #8): este fallback seguía con el
+    // markerFile viejo ('.nucleus' en la raíz del workspace), divergente del
+    // SSOT real en disco (onboarding_steps.json v3.0.0), que usa
+    // '.bloom/.nucleus-{org}' + orgField para interpolar la organización.
+    // El propio changelog del JSON ya advertía esto: "si diverge del
+    // fallback hardcoded de milestone-registry.js, el fallback pierde".
+    // Sin este sync, arreglar solo _normalizeStep() no alcanza: si loadSteps()
+    // cae a este fallback (disco no encontrado), nucleus_create seguiría sin
+    // poder resolverse porque no tiene orgField para interpolar '{org}'.
+    verifyArgs:         {
+      jsonField: 'onboarding.workspace_path',
+      markerFile: '.bloom/.nucleus-{org}',
+      orgField: 'onboarding.workspace_org',
+    },
     blocking:           true,
     cortex_events:      [],             // iniciado por Conductor, no por Brain
     conductor_reaction: 'markStepComplete',
@@ -67,11 +98,12 @@ const FALLBACK_STEPS = [
     // FIX (HANDOFF §5.2 — step github_app_auth): este step ya no requiere
     // 'github_token'. Ese artefacto lo producía el viejo step ad-hoc
     // "github_auth" (OAuth clásica), que este proyecto reemplaza por completo
-    // (ver HANDOFF §3, decisiones 1-2). El requires apuntaba a un produces
-    // que ningún step del array emite más — dependencia colgante, no un AND
-    // real. vault_init solo depende de que exista el nucleus.
-    requires:           ['nucleus_path'],
+    // (ver HANDOFF §3, decisiones 1-2). vault_init solo depende de que
+    // exista el workspace.
+    requires:           ['workspace_path'],
     produces:           'vault_initialized',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.vault_initialized' },
     blocking:           true,
     cortex_events:      ['VAULT_INITIALIZED', 'VAULT_INIT'],
     conductor_reaction: 'markStepComplete',
@@ -97,6 +129,8 @@ const FALLBACK_STEPS = [
     vault_required:     true,
     requires:           ['vault_initialized'],
     produces:           'github_app_token',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.github_app_token' },
     blocking:           true,
     cortex_events:      ['GITHUB_APP_AUTHORIZED'],
     conductor_reaction: 'markStepComplete',
@@ -108,6 +142,8 @@ const FALLBACK_STEPS = [
     vault_required:     true,
     requires:           ['vault_initialized'],
     produces:           'google_account',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.google_account' },
     blocking:           false,
     // FIX (auditoría Synapse v3, §2): GOOGLE_AUTH_COMPLETE nunca se
     // implementó (confirmado 💀 en el catálogo maestro, §3) — de facto fue
@@ -126,6 +162,8 @@ const FALLBACK_STEPS = [
     vault_required:     true,
     requires:           ['vault_initialized'],
     produces:           'ai_provider_key',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.ai_provider_key' },
     blocking:           false,
     cortex_events:      ['AI_PROVIDER_CONFIGURED'],
     conductor_reaction: 'markStepComplete',
@@ -137,6 +175,8 @@ const FALLBACK_STEPS = [
     vault_required:     true,
     requires:           ['vault_initialized', 'github_app_token'],
     produces:           'project_mandate',
+    verify:             'fs_marker',
+    verifyArgs:         { jsonField: 'onboarding.project_path', markerFile: 'genesis.mandate' },
     blocking:           true,
     cortex_events:      ['PROJECT_CREATED', 'DISCOVERY_COMPLETE'],
     conductor_reaction: 'onOnboardingSuccess',
@@ -361,6 +401,20 @@ class MilestoneRegistry {
    * Normaliza un step del JSON asegurando que tiene los campos mínimos.
    * Los campos de runtime (blocking, cortex_events, conductor_reaction) tienen
    * defaults seguros si el JSON viene del disco sin ellos (compatibilidad futura).
+   *
+   * FIX (auditoría 17/07/2026, Bug #8 — resume roto tras Bug #7 "arreglado"):
+   * este método no copiaba 'verify' ni 'verifyArgs' al objeto normalizado.
+   * Daba igual que el JSON de disco o FALLBACK_STEPS ya tuvieran esos campos
+   * bien puestos (Bug #7) — _normalizeStep() los tiraba en el camino antes
+   * de que resolution-engine.js/step-verifiers.js pudieran verlos. Efecto:
+   * checkArtifact() siempre recibía step.verify === undefined, logueaba
+   * "tipo de verify desconocido" para los 6 steps y devolvía false siempre,
+   * así que resolveEntryPoint() nunca podía confirmar un artefacto ya
+   * producido y el resume caía siempre a nucleus_create — sin importar que
+   * rehydrateFromDisk() (otro subsistema, en milestone-reactor.js) sí leyera
+   * bien los steps completados. Confirmado en conductor_onboarding_20260717.log:
+   * "[step-verifiers] tipo de verify desconocido: 'undefined'" para los 6 steps,
+   * seguido de "onboarding:get-resume-state — ok: {"stepId":"nucleus_create"}".
    */
   _normalizeStep(raw) {
     return {
@@ -370,6 +424,8 @@ class MilestoneRegistry {
       vault_required:     raw.vault_required     ?? false,
       requires:           raw.requires           ?? [],
       produces:           raw.produces           ?? '',
+      verify:             raw.verify             ?? null,
+      verifyArgs:         raw.verifyArgs         ?? {},
       blocking:           raw.blocking           ?? false,
       cortex_events:      raw.cortex_events      ?? [],
       conductor_reaction: raw.conductor_reaction ?? 'markStepComplete',
