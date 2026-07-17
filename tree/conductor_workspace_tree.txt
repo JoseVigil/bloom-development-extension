@@ -1,0 +1,54 @@
+bloom-development-extension/
+└── workspace/
+    ├── assets/
+    │   ├── bloom.icns
+    │   └── bloom.ico
+    ├── bloom-conductor-version.ps1
+    ├── bloom-conductor-version.sh
+    ├── build_info.json
+    ├── build_number.darwin.txt
+    ├── build_number.linux.txt
+    ├── build_number.txt
+    ├── build_number.windows.txt
+    ├── core/
+    │   ├── core.html
+    │   ├── ipc/
+    │   │   ├── health-handlers.js
+    │   │   └── profiles-handlers.js
+    │   └── preload_core.js
+    ├── entitlements.plist
+    ├── ipc/
+    │   └── workspace-synapse-handlers.js
+    ├── main_conductor.js
+    ├── node_modules/ [... dependencies]
+    ├── onboarding/
+    │   ├── ipc/
+    │   │   └── onboarding-handlers.js
+    │   ├── milestone-reactor.js
+    │   ├── milestone-registry.js
+    │   ├── onboarding.html
+    │   ├── onboarding.js
+    │   ├── preload_onboarding.js
+    │   ├── renderer/
+    │   │   ├── core/
+    │   │   │   ├── ipc-bridge.js
+    │   │   │   ├── navigation.js
+    │   │   │   ├── notifications.js
+    │   │   │   ├── shared-state.js
+    │   │   │   ├── tab-system.js
+    │   │   │   └── ui-stepper.js
+    │   │   └── steps/
+    │   │       ├── step-identity.js
+    │   │       ├── step-milestone.js
+    │   │       ├── step-project.js
+    │   │       ├── step-vault.js
+    │   │       └── step-workspace.js
+    │   ├── resolution-engine.js
+    │   └── step-verifiers.js
+    ├── package-lock.json
+    ├── package.json
+    ├── shared/
+    │   └── debug.html
+    ├── tree/
+    │   └── btips_tree.txt
+    └── version.json

@@ -11,14 +11,24 @@
       "description": "Navigate Discovery to a specific onboarding step. nucleus_create, vault_init y project_create son host-driven (no tienen UI propia en Discovery). ai_provider_setup → provider-select. success → onboarding-success.",
       "payload_template": {
         "command": "onboarding_navigate",
-        "payload": { "step": "$STEP" }
+        "payload": {
+          "step": "$STEP"
+        }
       },
       "parameters": [
         {
           "name": "step",
           "type": "enum",
           "variable": "$STEP",
-          "options": ["github_app_auth", "nucleus_create", "vault_init", "google_auth", "ai_provider_setup", "project_create", "success"]
+          "options": [
+            "github_app_auth",
+            "nucleus_create",
+            "vault_init",
+            "google_auth",
+            "ai_provider_setup",
+            "project_create",
+            "success"
+          ]
         }
       ]
     },
@@ -35,9 +45,24 @@
         "expires_in": "$EXPIRES_IN"
       },
       "parameters": [
-        { "name": "user_code", "type": "string", "variable": "$USER_CODE", "default": "WDJB-MJHT" },
-        { "name": "verification_uri", "type": "string", "variable": "$VERIFICATION_URI", "default": "https://github.com/login/device" },
-        { "name": "expires_in", "type": "number", "variable": "$EXPIRES_IN", "default": 900 }
+        {
+          "name": "user_code",
+          "type": "string",
+          "variable": "$USER_CODE",
+          "default": "WDJB-MJHT"
+        },
+        {
+          "name": "verification_uri",
+          "type": "string",
+          "variable": "$VERIFICATION_URI",
+          "default": "https://github.com/login/device"
+        },
+        {
+          "name": "expires_in",
+          "type": "number",
+          "variable": "$EXPIRES_IN",
+          "default": 900
+        }
       ]
     },
     {
@@ -56,12 +81,42 @@
         "timestamp": "$TIMESTAMP"
       },
       "parameters": [
-        { "name": "username", "type": "string", "variable": "$USERNAME", "default": "octocat" },
-        { "name": "token_fingerprint", "type": "string", "variable": "$TOKEN_FINGERPRINT", "default": "ghu_simulatedFingerprint" },
-        { "name": "scopes", "type": "string", "variable": "$SCOPES", "default": "contents:write,administration:write,members:read" },
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
-        { "name": "timestamp", "type": "auto", "variable": "$TIMESTAMP", "source": "Date.now()" }
+        {
+          "name": "username",
+          "type": "string",
+          "variable": "$USERNAME",
+          "default": "octocat"
+        },
+        {
+          "name": "token_fingerprint",
+          "type": "string",
+          "variable": "$TOKEN_FINGERPRINT",
+          "default": "ghu_simulatedFingerprint"
+        },
+        {
+          "name": "scopes",
+          "type": "string",
+          "variable": "$SCOPES",
+          "default": "contents:write,administration:write,members:read"
+        },
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        },
+        {
+          "name": "timestamp",
+          "type": "auto",
+          "variable": "$TIMESTAMP",
+          "source": "Date.now()"
+        }
       ]
     },
     {
@@ -80,12 +135,42 @@
         "timestamp": "$TIMESTAMP"
       },
       "parameters": [
-        { "name": "vault_key", "type": "string", "variable": "$VAULT_KEY", "default": "sk_bloom_github_app" },
-        { "name": "token_fingerprint", "type": "string", "variable": "$TOKEN_FINGERPRINT", "default": "ghu_simulatedFingerprint" },
-        { "name": "scopes", "type": "string", "variable": "$SCOPES", "default": "contents:write,administration:write,members:read" },
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
-        { "name": "timestamp", "type": "auto", "variable": "$TIMESTAMP", "source": "Date.now()" }
+        {
+          "name": "vault_key",
+          "type": "string",
+          "variable": "$VAULT_KEY",
+          "default": "sk_bloom_github_app"
+        },
+        {
+          "name": "token_fingerprint",
+          "type": "string",
+          "variable": "$TOKEN_FINGERPRINT",
+          "default": "ghu_simulatedFingerprint"
+        },
+        {
+          "name": "scopes",
+          "type": "string",
+          "variable": "$SCOPES",
+          "default": "contents:write,administration:write,members:read"
+        },
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        },
+        {
+          "name": "timestamp",
+          "type": "auto",
+          "variable": "$TIMESTAMP",
+          "source": "Date.now()"
+        }
       ]
     },
     {
@@ -99,7 +184,70 @@
         "reason": "$REASON"
       },
       "parameters": [
-        { "name": "reason", "type": "enum", "variable": "$REASON", "options": ["access_denied", "expired_token", "denied"], "default": "expired_token" }
+        {
+          "name": "reason",
+          "type": "enum",
+          "variable": "$REASON",
+          "options": [
+            "access_denied",
+            "expired_token",
+            "denied"
+          ],
+          "default": "expired_token"
+        }
+      ]
+    },
+    {
+      "id": "google_login_detected",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google (myaccount.google.com, mail.google.com), tras descartar patrones intermedios (/speedbump, /oauth2, /ServiceLogin, /signin/, /o/oauth2). Es detección pasiva vía chrome.tabs.onUpdated — background.js no lee contenido de la página, solo compara changeInfo.url contra isGoogleTerminalUrl(). discovery.js (GoogleAuthFlow) solo procesa el mensaje si msg.tabId === this._watchedTabId, seteado en _openGoogleLogin() al crear la tab. Por eso este mensaje requiere que el usuario haya hecho clic en 'Open Google' en Discovery ANTES de enviarlo desde el Harness — ver parámetro tab_id.",
+      "payload_template": {
+        "event": "GOOGLE_LOGIN_DETECTED",
+        "tabId": "$TAB_ID",
+        "detected_host": "$DETECTED_HOST",
+        "profile_id": "$PROFILE_ID",
+        "launch_id": "$LAUNCH_ID",
+        "timestamp": "$TIMESTAMP"
+      },
+      "parameters": [
+        {
+          "name": "tab_id",
+          "type": "auto",
+          "variable": "$TAB_ID",
+          "source": "GOOGLE_FLOW._watchedTabId",
+          "note": "Solo existe después de que el usuario clickeó 'Open Google' en screen-google-auth-login (GoogleAuthFlow._openGoogleLogin() lo setea al crear la tab). Secuencia de uso: 1) abrir el flujo real de Google en Discovery, 2) recién después seleccionar/enviar este mensaje desde el Harness. Si se envía antes, msg.tabId no matchea this._watchedTabId (null) y GoogleAuthFlow lo ignora silenciosamente."
+        },
+        {
+          "name": "detected_host",
+          "type": "enum",
+          "variable": "$DETECTED_HOST",
+          "options": [
+            "myaccount.google.com",
+            "mail.google.com"
+          ],
+          "default": "myaccount.google.com",
+          "note": "Corresponde 1:1 a GOOGLE_TERMINAL_HOSTS en background.js — no son valores arbitrarios, son los únicos dos hosts que isGoogleTerminalUrl() acepta como terminales."
+        },
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        },
+        {
+          "name": "timestamp",
+          "type": "auto",
+          "variable": "$TIMESTAMP",
+          "source": "Date.now()"
+        }
       ]
     },
     {
@@ -118,12 +266,48 @@
         "timestamp": "$TIMESTAMP"
       },
       "parameters": [
-        { "name": "provider", "type": "enum", "variable": "$PROVIDER", "options": ["gemini", "claude", "openai", "xai"], "default": "gemini" },
-        { "name": "profile_name", "type": "string", "variable": "$PROFILE_NAME", "default": "Bloom Profile" },
-        { "name": "key_fingerprint", "type": "string", "variable": "$KEY_FINGERPRINT", "default": "xyz789" },
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
-        { "name": "timestamp", "type": "auto", "variable": "$TIMESTAMP", "source": "Date.now()" }
+        {
+          "name": "provider",
+          "type": "enum",
+          "variable": "$PROVIDER",
+          "options": [
+            "gemini",
+            "claude",
+            "openai",
+            "xai"
+          ],
+          "default": "gemini"
+        },
+        {
+          "name": "profile_name",
+          "type": "string",
+          "variable": "$PROFILE_NAME",
+          "default": "Bloom Profile"
+        },
+        {
+          "name": "key_fingerprint",
+          "type": "string",
+          "variable": "$KEY_FINGERPRINT",
+          "default": "xyz789"
+        },
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        },
+        {
+          "name": "timestamp",
+          "type": "auto",
+          "variable": "$TIMESTAMP",
+          "source": "Date.now()"
+        }
       ]
     },
     {
@@ -141,11 +325,39 @@
         "token_fingerprint": "$TOKEN_FINGERPRINT"
       },
       "parameters": [
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" },
-        { "name": "service", "type": "enum", "variable": "$SERVICE", "options": ["google"], "default": "google" },
-        { "name": "username", "type": "string", "variable": "$USERNAME", "default": "user@gmail.com" },
-        { "name": "token_fingerprint", "type": "string", "variable": "$TOKEN_FINGERPRINT", "default": "ya29_simulatedToken" }
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        },
+        {
+          "name": "service",
+          "type": "enum",
+          "variable": "$SERVICE",
+          "options": [
+            "google"
+          ],
+          "default": "google"
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "variable": "$USERNAME",
+          "default": "user@gmail.com"
+        },
+        {
+          "name": "token_fingerprint",
+          "type": "string",
+          "variable": "$TOKEN_FINGERPRINT",
+          "default": "ya29_simulatedToken"
+        }
       ]
     },
     {
@@ -160,8 +372,18 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        }
       ]
     },
     {
@@ -176,8 +398,18 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        }
       ]
     },
     {
@@ -192,8 +424,18 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        }
       ]
     },
     {
@@ -208,8 +450,18 @@
         "launch_id": "$LAUNCH_ID"
       },
       "parameters": [
-        { "name": "profile_id", "type": "auto", "variable": "$PROFILE_ID", "source": "HARNESS_CONFIG.profileId" },
-        { "name": "launch_id", "type": "auto", "variable": "$LAUNCH_ID", "source": "SYNAPSE_CONFIG.launchId" }
+        {
+          "name": "profile_id",
+          "type": "auto",
+          "variable": "$PROFILE_ID",
+          "source": "HARNESS_CONFIG.profileId"
+        },
+        {
+          "name": "launch_id",
+          "type": "auto",
+          "variable": "$LAUNCH_ID",
+          "source": "SYNAPSE_CONFIG.launchId"
+        }
       ]
     },
     {
@@ -233,6 +485,7 @@
     "GITHUB_DEVICE_CODE",
     "GITHUB_APP_AUTHORIZED",
     "GITHUB_DEVICE_FLOW_ERROR",
+    "GOOGLE_LOGIN_DETECTED",
     "DISCOVERY_COMPLETE",
     "HARNESS_SIMULATE_HANDSHAKE",
     "HARNESS_OPEN_LANDING"

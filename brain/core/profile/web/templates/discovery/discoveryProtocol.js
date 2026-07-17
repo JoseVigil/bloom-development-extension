@@ -375,6 +375,34 @@ if (typeof self !== 'undefined') {
         ]
       },
       {
+        id: "google_login_detected",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        // Paridad con discovery.schema.json v1.1.1 (Entregable 3) — agregado
+        // acá también porque loadScriptOptional() en harness.js carga este
+        // manifest legacy ANTES de que ProtocolReader.discoverFromJSON() lea
+        // el JSON, y discover() prioriza el global legacy si ya existe
+        // (discoverFromJSON lo salta con "legacy global present"). Sin este
+        // espejo, el mensaje del schema JSON nunca llega a la UI del Harness.
+        description: "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google. IMPORTANTE — orden de uso: el listener real en discovery.js (GoogleAuthFlow.init()) descarta el mensaje si tabId no coincide con window.GOOGLE_FLOW._watchedTabId, que solo existe después de clickear 'Open Google' en el flujo real. Secuencia: 1) abrir Discovery real y avanzar a google_auth, 2) click en 'Open Google', 3) recién ahí simular este mensaje.",
+        payload_template: {
+          event: "GOOGLE_LOGIN_DETECTED",
+          tabId: "$TAB_ID",
+          detected_host: "$DETECTED_HOST",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID",
+          timestamp: "$TIMESTAMP"
+        },
+        parameters: [
+          { name: "tabId", type: "auto", variable: "$TAB_ID", source: "GOOGLE_FLOW._watchedTabId" },
+          { name: "detected_host", type: "enum", variable: "$DETECTED_HOST", options: ["myaccount.google.com", "mail.google.com"], default: "myaccount.google.com" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
+          { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
+        ]
+      },
+      {
         id: "github_device_flow_error",
         type: "event",
         direction: "harness_to_background",
@@ -591,6 +619,7 @@ if (typeof self !== 'undefined') {
     observable_events: [
       "HOST_READY",
       "HANDSHAKE_CONFIRMED",
+      "GOOGLE_LOGIN_DETECTED",
       "API_KEY_REGISTERED",
       "ACCOUNT_REGISTERED",
       "GITHUB_DEVICE_CODE",
