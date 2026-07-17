@@ -103,7 +103,7 @@ https://claude.ai/chat/362eb104-1b63-4f2e-aa44-e038621dcc18
 padkite patch
 https://claude.ai/chat/cc2d7ac5-b353-4cc2-a488-487a9b00d52a
 Eslias libshdpci.so patch 
-https://claude.ai/chat/9cf3ec1b-2751-46e7-ac23-f25895d96708
+https://claude.ai/chat/9cf3ec1b-2751-46e7-ac23-f25895d96708/Users/josevigil/repos/bloom-development-extension
 noti gmail libshpa3.so initial patch
 https://grok.com/c/7d825cd4-c50a-4062-a8af-719632c762a2?rid=e12d9c25-2653-48c2-b03c-45d63bf5193f
 noti gmail libshpa3.so patch

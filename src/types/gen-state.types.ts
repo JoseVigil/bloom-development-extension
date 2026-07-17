@@ -5,6 +5,14 @@
  * Estos tipos son la ÚNICA fuente de verdad pre-firma (D-B1/D-B2 de §0).
  * `mandate_state.json` post-firma reutiliza el formato ya existente de
  * `standard` y no se redefine acá (ver nota al final de §3).
+ *
+ * CAMBIO (esta sesión): D-3 cerrado. Se agrega `DomainCandidate.dependsOn`
+ * — ver nota en el campo. No requiere clustering multi-dominio real para
+ * existir: es el campo que Brain poblaría *si* algún día detecta
+ * dependencias, y que signMandateActivity ya sabe consumir (ver
+ * mandate_genesis_activities.go). Con N=1 (alcance v1 actual, RESOLUCIÓN
+ * v1.4) este campo simplemente nunca se puebla — no cambia el
+ * comportamiento existente.
  */
 
 export type GenMandateType = 'genesis' | 'domain_expansion';
@@ -31,6 +39,19 @@ export interface DomainCandidate {
   suggestedActionCount: number;
   /** solo domain_expansion: domainId del genesis base si hay solapamiento */
   overlapsWithExisting?: string;
+  /**
+   * D-3 (CERRADO esta sesión): domainIds de otros candidatos de los que
+   * este dominio depende, según lo que Brain detecte en 'cluster'.
+   * Ausente o [] = sin dependencias, se scaffoldea en paralelo (default
+   * histórico, sin cambios). `signMandateActivity` traduce estos
+   * `domainId` a `actionId` ("gen-action-{domainName}") al firmar, y
+   * solo si el dominio referenciado también está confirmado — una
+   * dependencia hacia un dominio rechazado/no confirmado se descarta en
+   * silencio, documentado como decisión explícita en
+   * mandate_genesis_activities.go, no como comportamiento no
+   * especificado.
+   */
+  dependsOn?: string[];
 }
 
 export interface HumanSyncRecord {
@@ -39,7 +60,18 @@ export interface HumanSyncRecord {
   /** escrito por Nucleus al recibir el comando confirm */
   confirmedDomainIds?: string[];
   confirmedAt?: string;
-  /** D-9 (§8): sin fuente de verdad de identidad todavía — placeholder */
+  /**
+   * D-9 (PARCIALMENTE CERRADO esta sesión): sigue sin existir un
+   * mecanismo de identidad real compartido en el codebase (auth de
+   * sesión HTTP, JWT, etc. — no encontrado en ninguna fuente revisada).
+   * Lo que sí se cierra: el comando CLI `domains confirm`
+   * (mandate_genesis_domains_cmd.go) ya escribe este campo, usando la
+   * identidad del usuario del SO (`os/user.Current()`) como fuente
+   * interina. Esto cubre el path CLI. El path HTTP/API sigue abierto —
+   * necesita su propio mecanismo de sesión antes de poder poblar este
+   * campo con la misma seriedad. No se inventa un valor para ese path;
+   * queda vacío hasta que exista.
+   */
   confirmedBy?: string;
 }
 
