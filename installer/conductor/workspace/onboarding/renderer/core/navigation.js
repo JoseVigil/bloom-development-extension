@@ -57,6 +57,30 @@ const STEP_SCREEN = {
   project_create: 'project',
 };
 
+// stepId (SSOT) → nodo del sidebar (STEPPER_NODES en ui-stepper.js).
+//
+// BUG CONFIRMADO (18/07/2026, contra milestone-registry.js y
+// conductor_onboarding_20260717.log): navigateTo() y resumeFromEntryPoint()
+// usaban `step.view` para esto, asumiendo que el SSOT traía ese campo. El
+// SSOT real (JSON de disco y el fallback de MilestoneRegistry._normalizeStep,
+// milestone-registry.js) NO tiene campo `view` — tiene `screen`, con nombres
+// propios ('nucleus-create', 'vault-init', 'github-app-auth', 'google-login',
+// 'provider-select', 'project-create') que no coinciden con los nombres de
+// nodo del sidebar (workspace/identity/providers/project/mandate) ni sirven
+// para derivarlos automáticamente. Resultado: `step.view` siempre undefined,
+// setStepperActive()/setStepperEstablished() nunca se llamaban — confirmado
+// en el log por la ausencia total de líneas "stepper: active/established".
+// Igual que STEP_SCREEN, este mapa es el único lugar que hay que tocar si
+// el SSOT alguna vez agrega un campo dedicado a esto.
+const STEP_NODE = {
+  nucleus_create: 'workspace',
+  vault_init: 'identity',
+  github_app_auth: 'identity',
+  google_auth: 'providers',
+  ai_provider_setup: 'providers',
+  project_create: 'project',
+};
+
 // stepId especial que no es un step real del JSON.
 const ONBOARDING_COMPLETE = '__onboarding_complete__';
 
@@ -115,7 +139,7 @@ function getStep(stepId) {
 
 /** stepId → nombre de nodo del stepper (STEPPER_NODES en ui-stepper.js). */
 export function nodeForStep(stepId) {
-  return getStep(stepId)?.view;
+  return STEP_NODE[stepId];
 }
 
 // ── Screen activation ───────────────────────────────────────────────────────
@@ -156,7 +180,13 @@ export function navigateTo(stepId) {
   const screenName = STEP_SCREEN[stepId] || step.view;
   showScreen(screenName);
 
-  const node = step.view;
+  // Nodo del sidebar vía STEP_NODE — CONFIRMADO contra onboarding.html: existe
+  // un nodo dedicado sn-providers (data-step="2"), separado de sn-identity
+  // (data-step="1"), así que google_auth/ai_provider_setup deben activar ESE
+  // nodo, no "identity" — son cosas distintas del hecho de que ninguno de
+  // los dos tenga una screen física propia (screen-providers no existe;
+  // ambos se renderizan dentro de screen-identity, ver STEP_SCREEN arriba).
+  const node = STEP_NODE[stepId];
   if (node) setStepperActive(node);
 
   stepHandlers.get(stepId)?.onEnter?.();
@@ -194,9 +224,12 @@ export function getFirstStepId() {
 }
 
 export function navigateToNode(nodeName) {
-  const step = STEPS.find(s => s.view === nodeName);
+  // Primer step (en orden del SSOT) cuyo nodo de sidebar, vía STEP_NODE, es
+  // nodeName. Reemplaza la búsqueda por s.view, que no existe en el SSOT real
+  // (ver comentario en STEP_NODE más arriba).
+  const step = STEPS.find(s => STEP_NODE[s.id] === nodeName);
   if (!step) {
-    log('warn', `navigateToNode: ningún step del SSOT tiene view="${nodeName}"`);
+    log('warn', `navigateToNode: ningún step del SSOT mapea a nodo="${nodeName}" en STEP_NODE`);
     return;
   }
   navigateTo(step.id);
@@ -242,9 +275,16 @@ export async function resumeFromEntryPoint() {
   log('info', `resumeFromEntryPoint: entryStepId="${stepId}" produced=[${produced.join(', ')}]`);
 
   // Marcar established cada nodo cuyo `produces` ya existe.
+  // CONFIRMADO contra resolution-engine.js: `produced` se arma agregando
+  // siempre step.produces (nombre de artefacto) cuando checkArtifact()
+  // confirma que existe en nucleus.json — nunca agrega step.id. No hace
+  // falta chequear stepId acá.
+  // Nodo del sidebar vía STEP_NODE, no step.view (ver comentario en STEP_NODE
+  // más arriba — ese campo no existe en el SSOT real).
   for (const step of STEPS) {
-    if (step.produces && producedSet.has(step.produces) && step.view) {
-      setStepperEstablished(step.view);
+    const node = STEP_NODE[step.id];
+    if (step.produces && producedSet.has(step.produces) && node) {
+      setStepperEstablished(node);
     }
   }
 

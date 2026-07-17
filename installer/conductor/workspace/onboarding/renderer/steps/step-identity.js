@@ -458,16 +458,51 @@ function onEnterIdentity() {
   _refreshAccountIconStates();
 }
 
-registerStepHandler('github_app_auth', { onEnter: onEnterIdentity });
-registerStepHandler('google_auth', { onEnter: onEnterIdentity });
-registerStepHandler('ai_provider_setup', {
-  onEnter: onEnterIdentity,
-  restore(producedSet) {
-    // Restauración fina (qué sub-step ya está confirmado) requiere que
-    // get-resume-state exponga completedSteps, no solo `produced` a nivel
-    // de artefacto final. Ver mismo comentario en step-workspace.js.
-    if (producedSet.has('ai_provider_key')) {
-      log('info', 'restore(identity): ai_provider_key ya existe — wizard completo, listo para project_create');
+// stepId del SSOT (key en IDENTITY_STEPS) → artefacto que produce.
+// Duplica lo que ya sabe el SSOT (onboarding_steps.json / FALLBACK_STEPS
+// en navigation.js) porque step-identity.js no tiene acceso directo al
+// array STEPS de navigation.js (evita import circular) — si el SSOT
+// cambia el nombre de estos artefactos, actualizar acá también.
+const PRODUCES_BY_KEY = {
+  github_app_auth: 'github_app_token',
+  google_auth: 'google_account',
+  ai_provider_setup: 'ai_provider_key',
+};
+
+/**
+ * Restaura el estado del sub-wizard de identity en un resume frío.
+ * Reemplaza el restore() no-op que existía antes. Se registra en los TRES
+ * stepId del wizard — navigation.js la llama una vez por cada uno con el
+ * mismo producedSet (llamada idempotente, no hay problema en repetirla).
+ *
+ * Hace lo que `restore()` está pensado para hacer en cada step module
+ * (ver navigation.js): traducir producedSet → estado visual propio, sin
+ * que navigation.js conozca el detalle interno del sub-wizard.
+ */
+function _restoreIdentityFromResume(producedSet) {
+  IDENTITY_STEPS.forEach(step => {
+    const artifact = PRODUCES_BY_KEY[step.key];
+    if (artifact && producedSet.has(artifact)) {
+      activeAccounts.add(step.id);
     }
-  },
-});
+  });
+
+  const firstPendingIdx = IDENTITY_STEPS.findIndex(s => !activeAccounts.has(s.id));
+  identityWizard.stepIndex = firstPendingIdx === -1 ? IDENTITY_STEPS.length - 1 : firstPendingIdx;
+
+  log('info', `restore(identity): activeAccounts=[${[...activeAccounts]}] stepIndex=${identityWizard.stepIndex}`);
+
+  _renderIdentityScreenCopy(IDENTITY_STEPS[identityWizard.stepIndex]);
+  _refreshAccountIconStates();
+
+  // Si queda un sub-step pendiente, hay que re-wirear el botón para que
+  // retome ESE sub-step en vez de quedarse con el handler por defecto
+  // (handleIdentityBtn, que resetea todo a stepIndex=0 — ver onboarding.js).
+  if (firstPendingIdx !== -1) {
+    _wireIdentityButtonToResumeStep();
+  }
+}
+
+registerStepHandler('github_app_auth', { onEnter: onEnterIdentity, restore: _restoreIdentityFromResume });
+registerStepHandler('google_auth', { onEnter: onEnterIdentity, restore: _restoreIdentityFromResume });
+registerStepHandler('ai_provider_setup', { onEnter: onEnterIdentity, restore: _restoreIdentityFromResume });
