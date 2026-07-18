@@ -192,6 +192,18 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "Nombre del proyecto (requerido)")
 	cmd.Flags().StringVar(&source, "source", "cli", "Origen del mandate")
 	cmd.Flags().StringVar(&baseGenesisID, "base-genesis-id", "", "ID de genesis base (opcional)")
+
+	// CAMBIO esta sesión: wiring de `domains` (list/confirm/reject) como
+	// subcomando de `genesis` — ver mandate_genesis_domains_cmd.go.
+	// createDomainsSubcommand no se auto-registra (Sección 9 regla 6 de la
+	// Guía Maestra: los subcomandos anidados no llaman
+	// core.RegisterCommand por su cuenta, solo el padre de tope lo hace,
+	// que en este archivo ya es `mandate` vía init()). Sin esta línea, el
+	// código de domains compila igual (Go no marca error por función de
+	// paquete no invocada) pero queda inalcanzable desde el CLI — así
+	// pasó en el build anterior: compiló y no apareció en `nucleus help`.
+	cmd.AddCommand(createDomainsSubcommand(c))
+
 	return cmd
 }
 
