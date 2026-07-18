@@ -202,7 +202,7 @@
       "type": "event",
       "direction": "harness_to_background",
       "channel": "runtime",
-      "description": "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google (myaccount.google.com, mail.google.com), tras descartar patrones intermedios (/speedbump, /oauth2, /ServiceLogin, /signin/, /o/oauth2). Es detección pasiva vía chrome.tabs.onUpdated — background.js no lee contenido de la página, solo compara changeInfo.url contra isGoogleTerminalUrl(). discovery.js (GoogleAuthFlow) solo procesa el mensaje si msg.tabId === this._watchedTabId, seteado en _openGoogleLogin() al crear la tab. Por eso este mensaje requiere que el usuario haya hecho clic en 'Open Google' en Discovery ANTES de enviarlo desde el Harness — ver parámetro tab_id.",
+      "description": "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google (myaccount.google.com, mail.google.com), tras descartar patrones intermedios (/speedbump, /oauth2, /ServiceLogin, /signin/, /o/oauth2). Es detección pasiva vía chrome.tabs.onUpdated — background.js no lee contenido de la página, solo compara changeInfo.url contra isGoogleTerminalUrl(). discovery.js (GoogleAuthFlow) solo procesa el mensaje si msg.tabId === this._watchedTabId, seteado en _openGoogleLogin() al crear la tab. HALLAZGO 2026-07-17: el tab_id resuelto como \"auto\"/window-traversal (GOOGLE_FLOW._watchedTabId) NUNCA funcionó desde el Harness — no es un problema de timing, es estructural: el Harness corre en su propio documento/página de la extensión, y window.GOOGLE_FLOW vive en el window de discovery/index.html, un documento distinto. El traversal siempre devolvía null/undefined, que terminaba serializado como el string literal \"undefined\" en el payload — GoogleAuthFlow lo comparaba contra this._watchedTabId (nunca matchea) y descartaba el evento en silencio; nunca llegaba a background.js ni al host (confirmado en telemetry.json: no hay ni GOOGLE_LOGIN_DETECTED ni →HOST tras el SEND). Fix: tab_id ahora usa live_resolver 'google_watched_tab' — el Harness le pregunta a background.js (que sí ve ambos contextos) el estado real de su propio Map googleLoginWatchers vía el comando HARNESS_GET_WATCHED_GOOGLE_TAB. Requiere secuencia: 1) abrir el flujo real en Discovery (click 'Open Google'), 2) recién ahí clickear 'Detect' en el Harness.",
       "payload_template": {
         "event": "GOOGLE_LOGIN_DETECTED",
         "tabId": "$TAB_ID",
@@ -216,8 +216,9 @@
           "name": "tab_id",
           "type": "auto",
           "variable": "$TAB_ID",
-          "source": "GOOGLE_FLOW._watchedTabId",
-          "note": "Solo existe después de que el usuario clickeó 'Open Google' en screen-google-auth-login (GoogleAuthFlow._openGoogleLogin() lo setea al crear la tab). Secuencia de uso: 1) abrir el flujo real de Google en Discovery, 2) recién después seleccionar/enviar este mensaje desde el Harness. Si se envía antes, msg.tabId no matchea this._watchedTabId (null) y GoogleAuthFlow lo ignora silenciosamente."
+          "live_resolver": "google_watched_tab",
+          "live_resolver_hint": "Requiere haber clickeado 'Open Google' en Discovery antes — background.js expone esto vía HARNESS_GET_WATCHED_GOOGLE_TAB, no via window traversal.",
+          "note": "REEMPLAZA el resolver anterior (type:auto, source: GOOGLE_FLOW._watchedTabId), que era estructuralmente inalcanzable desde el Harness — window.GOOGLE_FLOW vive en el documento de discovery/index.html, no en el del Harness. Ver 'description' del mensaje para el detalle del bug real observado (tab_id:\"undefined\" en telemetry.json, evento descartado en silencio por GoogleAuthFlow). El campo queda editable manualmente como fallback si 'Detect' no encuentra nada."
         },
         {
           "name": "detected_host",
@@ -249,6 +250,17 @@
           "source": "Date.now()"
         }
       ]
+    },
+    {
+      "id": "harness_get_watched_google_tab",
+      "type": "command",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Utilitario solo-Harness (no es parte del flujo real de onboarding, igual que harness_simulate_handshake y harness_open_landing). Pide a background.js las tabIds actualmente en googleLoginWatchers — el Map real que mantiene watchGoogleLoginTab(). Es el mecanismo que usa el botón 'Detect' del campo tab_id en google_login_detected para resolver un valor real en vez de depender de window traversal, que no puede alcanzar variables de otro documento (discovery/index.html). Devuelve { tabIds: number[] }, normalmente 0 o 1 elemento.",
+      "payload_template": {
+        "command": "HARNESS_GET_WATCHED_GOOGLE_TAB"
+      },
+      "parameters": []
     },
     {
       "id": "api_key_registered",

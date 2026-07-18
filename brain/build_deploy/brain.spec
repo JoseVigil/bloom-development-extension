@@ -255,7 +255,6 @@ datas = [
     (str(templates_src / 'discovery' / 'styles.css'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'discovery.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'discoveryProtocol.js'), 'brain/core/profile/web/templates/discovery'),
-    (str(templates_src / 'discovery' / 'onboarding.js'), 'brain/core/profile/web/templates/discovery'),
 
     (str(templates_src / 'landing' / '__init__.py'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'index.html'), 'brain/core/profile/web/templates/landing'),
@@ -284,8 +283,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
 ]
 
 datas += collect_data_files('chromadb')

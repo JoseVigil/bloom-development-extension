@@ -1549,6 +1549,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // ── HARNESS_GET_WATCHED_GOOGLE_TAB ─────────────────────────────────────────
+  // Utilitario solo para el Harness — NO es parte del flujo real de onboarding.
+  // Resuelve el bug de tab_id:"undefined" en GOOGLE_LOGIN_DETECTED: el Harness
+  // corre en su propia página/contexto de la extensión y nunca puede leer
+  // window.GOOGLE_FLOW._watchedTabId porque esa variable vive en el window de
+  // discovery/index.html, un documento distinto. googleLoginWatchers (arriba,
+  // en este mismo archivo) es la única fuente de verdad *compartida* entre
+  // ambos contextos, porque vive acá, en background.js. Devolvemos las tabIds
+  // actualmente observadas (normalmente 0 o 1; más de 1 solo si el usuario
+  // clickeó "Open Google" más de una vez sin resolver la primera).
+  if (command === 'HARNESS_GET_WATCHED_GOOGLE_TAB') {
+    sendResp({ tabIds: Array.from(googleLoginWatchers.keys()) });
+    return true;
+  }
+
   // ── TEST_HANDSHAKE_ANIMATION ──────────────────────────────────────────────
   // Comando manual de QA/demo. La animación en sí la corre discovery.js
   // (replayHandshakeAnimationForTesting) — acá solo la reenviamos a la tab.

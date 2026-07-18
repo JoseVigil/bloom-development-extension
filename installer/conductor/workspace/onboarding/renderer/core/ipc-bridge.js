@@ -19,6 +19,16 @@
 // El click del usuario solo dispara la ACCIÓN (navigate/init-nucleus/etc.);
 // quien decide a qué pantalla ir después es siempre un milestone confirmado
 // o, en boot, resolution-engine.js vía onboarding:get-resume-state.
+//
+// CAMBIOS (2026-07-18 — bug ACCOUNT_REGISTERED resolviendo a github_auth):
+// onSynapseEvent llamaba a handleMilestoneReached() con el campo
+// data.data.step tal cual venía en el payload del mensaje, en paralelo a
+// la resolución oficial de onMilestone (que sí usa registry.resolveEvent()
+// en Main, con discriminación por "service"). Un payload con un "step"
+// legacy/hardcodeado (ej: simulado desde el Harness) pisaba silenciosamente
+// el milestone correcto. Se saca esa resolución de acá — onSynapseEvent
+// ahora solo reenvía el evento crudo al iframe de debug, que es su único
+// rol real. Ver hilo de debugging GOOGLE_LOGIN_DETECTED/ACCOUNT_REGISTERED.
 
 const milestoneHandlers = new Map();   // stepId → (data) => void
 const stepUpdateHandlers = new Map();  // stepId → (phase) => void
@@ -140,16 +150,22 @@ export function initIpcBridge({ addNotification, setStepperEstablished, nodeForS
         addNotification('Synapse handshake complete', { icon: '⚡', type: 'success' });
       }
 
-      // ONBOARDING_MILESTONE clasificado por SynapseBridge se trata
-      // exactamente igual que si hubiera llegado por el canal push
-      // dedicado (onMilestone) — data.data.step contiene el stepId.
-      if (data.type === 'ONBOARDING_MILESTONE') {
-        const stepId = data.data?.step;
-        if (stepId) {
-          log('info', `onSynapseEvent: ONBOARDING_MILESTONE → handleMilestoneReached('${stepId}')`);
-          handleMilestoneReached(stepId, data.data);
-        }
-      }
+      // FIX (2026-07-18 — bug ACCOUNT_REGISTERED/google_auth resolviendo a
+      // github_auth): este canal (onSynapseEvent) es el feed CRUDO para el
+      // panel de debug — antes también llamaba a handleMilestoneReached()
+      // usando data.data.step, es decir, el campo "step" tal cual viene
+      // escrito DENTRO del payload del mensaje (a veces puesto a mano por
+      // un simulador del Harness, con valores viejos/legacy tipo
+      // "github_auth"). Eso creaba una segunda resolución de milestone en
+      // paralelo a la oficial — la oficial es la que hace Main con
+      // registry.resolveEvent() (discrimina por "service", lee el SSOT en
+      // disco/fallback) y llega acá por el canal dedicado onMilestone, más
+      // arriba en este archivo. Confiar en un "step" que viaja dentro del
+      // payload del evento, en vez de en el stepId que Main ya resolvió,
+      // es lo que producía el milestone fantasma "github_auth" en paralelo
+      // al "google_auth" correcto. Se saca la llamada a
+      // handleMilestoneReached() de acá — este bloque ahora solo reenvía
+      // el evento crudo al iframe de debug, que es su único propósito real.
 
       // Reenvío al iframe de debug — siempre disponible
       const frame = document.getElementById('debug-frame');

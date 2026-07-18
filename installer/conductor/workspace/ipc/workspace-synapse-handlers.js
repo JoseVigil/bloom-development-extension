@@ -16,6 +16,13 @@
  * El workspace generalmente lanza perfiles ya existentes (launch, no seed),
  * pero seedAndLaunch está disponible por completitud.
  *
+ * CAMBIOS (sesión 2026-07-18 — diagnóstico GOOGLE_LOGIN_DETECTED):
+ *   - _connectMilestoneReactor: agregados console.log/warn de diagnóstico
+ *     (early-return silencioso si falta registry/reactor, arrival de cada
+ *     ONBOARDING_MILESTONE, y resultado de resolveEvent()). Ver comentarios
+ *     inline. Complementa el fix en synapse-bridge.js (ONBOARDING_EVENTS
+ *     no tenía GOOGLE_LOGIN_DETECTED).
+ *
  * CAMBIOS (sesión 2026-06):
  *   - Integración con MilestoneRegistry y MilestoneReactor.
  *   - bridge.on('message') conecta el bridge al reactor para eventos ONBOARDING_MILESTONE.
@@ -144,9 +151,39 @@ function registerSynapseHandlers(getWindow, opts = {}) {
  * @param {import('../onboarding/milestone-reactor').MilestoneReactor|null}   reactor
  */
 function _connectMilestoneReactor(bridge, registry, reactor) {
-  if (!registry || !reactor) return;
+  // DIAGNÓSTICO (2026-07-18 — investigación GOOGLE_LOGIN_DETECTED):
+  // Este early-return era 100% silencioso — si registerSynapseHandlers()
+  // se llamó sin opts.registry u opts.reactor (ej: falta pasarlos desde
+  // main_conductor.js), NINGÚN evento llega jamás al reactor, sin importar
+  // si está bien clasificado en synapse-bridge.js. Antes esto no dejaba
+  // rastro. Ahora al menos queda un log al conectar el bridge para poder
+  // descartar (o confirmar) esta causa de un vistazo.
+  if (!registry || !reactor) {
+    console.warn(
+      '[workspace-synapse-handlers] _connectMilestoneReactor: registry o reactor no ' +
+      `provistos (registry=${!!registry}, reactor=${!!reactor}) — el bridge NO está ` +
+      'conectado al MilestoneReactor, ningún ONBOARDING_MILESTONE va a procesarse.'
+    );
+    return;
+  }
+
+  console.log('[workspace-synapse-handlers] _connectMilestoneReactor: registry + reactor conectados ✓');
 
   bridge.on('message', (enriched) => {
+    // DIAGNÓSTICO: log de TODO mensaje clasificado como ONBOARDING_MILESTONE
+    // que llega a este listener, con su evento original. Antes de esto no
+    // había ningún rastro local de que el mensaje hubiera llegado hasta acá
+    // (el único log visible era el feed de debug del Harness, que no pasa
+    // por este código — ver CAMBIOS v4.1 en synapse-bridge.js). Con esto,
+    // grep 'GOOGLE_LOGIN_DETECTED' en la consola del main process debería
+    // mostrar esta línea si la clasificación (fix del Set) funcionó.
+    if (enriched.type === 'ONBOARDING_MILESTONE') {
+      console.log(
+        `[workspace-synapse-handlers] ONBOARDING_MILESTONE recibido — event=${enriched.event}` +
+        (enriched.originalEvent ? ` originalEvent=${enriched.originalEvent}` : '')
+      );
+    }
+
     if (enriched.type !== 'ONBOARDING_MILESTONE') return;
 
     // El evento en el mensaje es el nombre del evento Cortex (ej: 'GITHUB_TOKEN_STORED').
@@ -157,6 +194,15 @@ function _connectMilestoneReactor(bridge, registry, reactor) {
     // Sin esto, ACCOUNT_REGISTERED con service:'google' resolvía igual a
     // 'github_auth' porque era el primer step registrado para ese evento.
     const stepId = registry.resolveEvent(enriched.event, enriched.data ?? enriched);
+
+    // DIAGNÓSTICO: resultado de resolveEvent(), sea cual sea. Este es el
+    // segundo punto ciego posible después del fix del Set — si el registry
+    // no tiene mapeo para GOOGLE_LOGIN_DETECTED, stepId va a dar null y el
+    // warn de abajo (que ya existía) lo va a mostrar, pero ahora con este
+    // log previo queda claro que SÍ llegó hasta acá bien clasificado.
+    console.log(
+      `[workspace-synapse-handlers] resolveEvent(${enriched.event}) → stepId=${stepId ?? 'null'}`
+    );
 
     if (!stepId) {
       // Evento clasificado como ONBOARDING_MILESTONE pero sin mapeo en el registry.

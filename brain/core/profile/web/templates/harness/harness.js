@@ -217,7 +217,79 @@ const Simulator = {
       const label = document.createElement('div');
       label.className = 'field-label';
 
-      if (param.type === 'auto') {
+      if (param.type === 'auto' && param.live_resolver) {
+        // 🔧 live_resolver: params cuyo valor real vive en OTRO contexto de
+        // ejecución (ej: la página discovery/index.html, no la del Harness).
+        // window.<Foo> traversal (_resolveAutoParam) es estructuralmente
+        // incapaz de verlos — Harness y Discovery son documentos distintos,
+        // no comparten window aunque estén en la misma extensión. Para estos
+        // casos no mostramos un valor auto-resuelto (siempre iba a ser
+        // "(not available)" o, peor, el string literal "undefined" colándose
+        // en el payload como pasó con GOOGLE_LOGIN_DETECTED). En su lugar:
+        // botón "Detect" que le pregunta a background.js su propio estado
+        // interno (fuente de verdad real y compartida) + input editable como
+        // fallback manual si la detección no devuelve nada.
+        label.innerHTML = `
+          ${param.name}
+          <span class="field-type">${param.type}</span>
+          <span class="field-auto" style="background: rgba(210,153,34,0.12); color: var(--warning);">LIVE</span>
+        `;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; gap:6px; align-items:center;';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'field-input';
+        input.placeholder = '(not detected yet)';
+        input.value = '';
+        input.addEventListener('input', () => {
+          this.currentValues[param.variable] = input.value;
+          this._updatePreview();
+        });
+
+        const detectBtn = document.createElement('button');
+        detectBtn.type = 'button';
+        detectBtn.className = 'btn btn-secondary';
+        detectBtn.style.cssText = 'flex-shrink:0; white-space:nowrap;';
+        detectBtn.textContent = '🔍 Detect';
+
+        const hint = document.createElement('div');
+        hint.className = 'field-auto-source';
+        hint.style.marginTop = '4px';
+        hint.textContent = param.live_resolver_hint || '';
+
+        detectBtn.addEventListener('click', async () => {
+          detectBtn.disabled = true;
+          detectBtn.textContent = '…';
+          try {
+            const result = await this._resolveLiveParam(param.live_resolver);
+            if (result.ok) {
+              input.value = result.value;
+              this.currentValues[param.variable] = result.value;
+              this._updatePreview();
+              Harness.notify(`Detected ${param.name}: ${result.value}`, 'success');
+            } else {
+              Harness.notify(result.message || 'Nothing detected — check hint below', 'error');
+            }
+          } catch (e) {
+            Harness.notify(e.message, 'error');
+          } finally {
+            detectBtn.disabled = false;
+            detectBtn.textContent = '🔍 Detect';
+          }
+        });
+
+        row.appendChild(input);
+        row.appendChild(detectBtn);
+
+        this.currentValues[param.variable] = '';
+
+        group.appendChild(label);
+        group.appendChild(row);
+        if (hint.textContent) group.appendChild(hint);
+
+      } else if (param.type === 'auto') {
         label.innerHTML = `
           ${param.name}
           <span class="field-type">${param.type}</span>
@@ -289,6 +361,17 @@ const Simulator = {
 
   _resolveAutoParam(param) {
     if (!param.source) return null;
+
+    // 🔧 FIX: source "Date.now()" venía mandando timestamp:"undefined" en
+    // TODOS los eventos (confirmado en telemetría en github_app_authorized
+    // y vault_initialized, no solo en el caso de Google). El traversal de
+    // abajo hacía window['Date']['now()'] — busca una PROPIEDAD literal
+    // llamada "now()", no invoca el método now(). Caso especial explícito
+    // en vez de un parser de expresiones genérico, que sería overkill acá.
+    if (param.source === 'Date.now()') {
+      return String(Date.now());
+    }
+
     try {
       const parts = param.source.split('.');
       let obj = window;
@@ -299,6 +382,49 @@ const Simulator = {
     } catch (e) {
       return null;
     }
+  },
+
+  /**
+   * _resolveLiveParam(resolverName)
+   *
+   * Contraparte de _resolveAutoParam para valores que NO viven en el window
+   * del Harness. Cada resolver le pregunta a background.js (que sí tiene
+   * visibilidad real, porque el estado vive ahí) en vez de intentar leer
+   * un global de otro documento. Devuelve { ok: boolean, value?, message? }.
+   */
+  async _resolveLiveParam(resolverName) {
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+      return { ok: false, message: 'chrome.runtime not available' };
+    }
+
+    if (resolverName === 'google_watched_tab') {
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ command: 'HARNESS_GET_WATCHED_GOOGLE_TAB' }, (response) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            resolve({ ok: false, message: err.message });
+            return;
+          }
+          const tabIds = response?.tabIds || [];
+          if (tabIds.length === 0) {
+            resolve({
+              ok: false,
+              message: 'No hay ninguna tab en observación. Abrí el flujo real primero: click "Open Google" en Discovery.'
+            });
+          } else if (tabIds.length === 1) {
+            resolve({ ok: true, value: String(tabIds[0]) });
+          } else {
+            // Más de un watcher activo — devolvemos el más reciente
+            // (último insertado en el Map, orden de inserción) y avisamos.
+            const chosen = tabIds[tabIds.length - 1];
+            Logger.log('INFO', `Múltiples tabs en watch (${tabIds.join(', ')}) — usando la más reciente: ${chosen}`);
+            resolve({ ok: true, value: String(chosen) });
+          }
+        });
+      });
+    }
+
+    return { ok: false, message: `Unknown live_resolver: ${resolverName}` };
   },
 
   _buildPayload() {

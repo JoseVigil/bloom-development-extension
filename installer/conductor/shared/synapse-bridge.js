@@ -30,6 +30,32 @@
  *   y así no quedarse esperando eternamente un evento que ya pasó.
  *   Ver: connectToBrain() y el handler install:start en main.js.
  *
+ * CAMBIOS v4.1 (sesión 2026-07-18 — fix GOOGLE_LOGIN_DETECTED):
+ *   1. ONBOARDING_EVENTS: agregado GOOGLE_LOGIN_DETECTED. Faltaba en el Set
+ *      desde que se retiró GOOGLE_AUTH_COMPLETE (v4) — el retiro se llevó
+ *      por delante también a este evento, que SÍ sigue vivo en el
+ *      DISCOVERY_PROTOCOL_MANIFEST de Cortex y se sigue disparando en
+ *      producción (real: click "Open Google" en Discovery → content
+ *      script detecta myaccount.google.com → background.js emite
+ *      GOOGLE_LOGIN_DETECTED). Sin esta entrada, _classifyMessage()
+ *      nunca lo convertía en ONBOARDING_MILESTONE — caía al fallback
+ *      { type: 'SYNAPSE_EVENT' } y _connectMilestoneReactor() lo
+ *      descartaba en su primera línea (enriched.type !== 'ONBOARDING_MILESTONE').
+ *      El evento SÍ llegaba al panel de debug (synapse:raw-event, modo
+ *      verbose reenvía todo sin filtrar), lo que generaba la falsa
+ *      impresión de que "llegaba" cuando en realidad nunca tocaba el
+ *      MilestoneReactor ni el step google_auth del onboarding.
+ *      PENDIENTE (fuera de este archivo — revisar milestone-registry.js
+ *      y milestone-reactor.js, no disponibles en este pase):
+ *        - Confirmar que milestone-registry.js tiene el mapeo
+ *          cortex_events['GOOGLE_LOGIN_DETECTED'] → stepId 'google_auth'
+ *          (o el stepId que corresponda; no es lo mismo que 'account_registered').
+ *        - Confirmar que milestone-reactor.js tiene un handler para ese
+ *          stepId (aunque sea no-op de UI, ej. "esperando registro…").
+ *      Sin esos dos, el Set corregido no alcanza — el mensaje se
+ *      clasificará bien pero resolveEvent() devolverá null y quedará el
+ *      mismo síntoma (console.warn 'ONBOARDING_MILESTONE sin mapeo').
+ *
  * CAMBIOS v4 (sesión 2026-07 — GitHub App / Device Flow):
  *   1. ONBOARDING_EVENTS: retirado GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED
  *      (PAT clásico, reemplazado por completo) y GOOGLE_AUTH_COMPLETE (evento
@@ -137,6 +163,15 @@ const ONBOARDING_EVENTS = new Set([
   // catálogo maestro, §3). De facto fue reemplazado por ACCOUNT_REGISTERED
   // genérico; milestone-registry.js ya hizo este mismo retiro (Ticket 2).
   // Dejarlo acá era el mismo tipo de referencia zombie — se saca en este pase.
+  //
+  // GOOGLE_LOGIN_DETECTED — FIX v4.1: este evento SÍ está vivo (no confundir
+  // con GOOGLE_AUTH_COMPLETE, retirado arriba). Lo emite background.js cuando
+  // el content script detecta myaccount.google.com tras el click manual de
+  // "Open Google" en Discovery. Es el paso previo a ACCOUNT_REGISTERED
+  // (service: google) — llegaba al bus pero nunca se clasificaba como
+  // ONBOARDING_MILESTONE por faltar acá, así que el reactor lo descartaba
+  // en silencio. Ver CAMBIOS v4.1 arriba para el detalle completo.
+  'GOOGLE_LOGIN_DETECTED',      // Content script detectó sesión en myaccount.google.com
   'AI_PROVIDER_CONFIGURED',     // API key de proveedor IA almacenada en vault
 
   // ── Proyecto ─────────────────────────────────────────────────────────────
