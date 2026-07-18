@@ -9,6 +9,7 @@
 - v0.1.0 — versión original (§0–§8).
 - Consolidación posterior — se agrega §9 (Control Plane / eventos WebSocket, `:4124`) y §2.5 (topología de implementación de los handlers Fastify). No hay cambios de modelo en §1–§8: el ciclo de vida, el filesystem (`gen_state.json` / `mandate.json` / `mandate_state.json`) y los schemas quedan tal como estaban — esta consolidación es aditiva, documenta la capa de eventos que ya estaba implícita en D-B2/D-B3 pero no tenía contrato formal.
   - **Corrección: ese §9 nunca se escribió.** El archivo termina en §8. La referencia a `ws-events.ts # §9` en el árbol de §2 quedó apuntando a una sección fantasma. Ver resolución abajo.
+- **RESOLUCIÓN v1.3** — sesión de integración cruzada Arquitectura+Backend+Frontend, sobre código real de `mandate_genesis_activities.go`, `mandate_genesis_sign_activity.go`, `mandate_genesis_build_workflow.go`, `mandate_genesis_domains_cmd.go`, `mandate_execution_workflow.go`. Cierra D-3 a nivel de datos, confirma formato real de `domainId`, corrige y reabre matices de D-9/D-10/D-11, agrega D-12/D-13/D-14. Ver bloque de resolución más abajo.
 
 > ## ⚠️ RESOLUCIÓN v1.1 — este documento entra en conflicto con `bloom-mandate-arquitectura-genesis-conductor.md` (v2.0) Y con el código ya implementado. Leer esto antes que nada.
 >
@@ -31,6 +32,23 @@
 > | Formato de `mandateId` / carpeta | UUID plano, sin prefijo ni punto. | Sin cambios — confirmado también en `mandate.go` (`uuid.New().String()`) y en `org-resolver.ts`/`supervisor.go` (que no tocan el formato de ID, pero sí dependen del mismo `.mandates/{uuid}/`). |
 > | `mandate_state.json` embebido, sin `gen_state.json` | Confirmado. | Sin cambios — reconfirmado en `mandate.go`, `mandate_watcher.go` y `create-mandate.handler.ts`, los tres escriben/leen el mismo shape (`mandateId`, `mandateType`, `project`, `source`, `status`, `currentPhase`, `phases`). |
 > | Convención de nombres de evento | `mandate:{namespace}:{event}` | Sin cambios en el contrato en sí, pero el archivo que lo define aparece con dos nombres distintos entre sesiones (`ws-events.js` en sesión 1, `ws-events.ts` en sesión 4) y nunca se confirmó su contenido real — ver punto abierto D-11 nuevo en §8. |
+
+> ## ⚠️ RESOLUCIÓN v1.3 — sesión de integración cruzada (Arquitectura + Backend + Frontend), en base a código real de `mandate_genesis_activities.go`, `mandate_genesis_sign_activity.go`, `mandate_genesis_build_workflow.go`, `mandate_genesis_domains_cmd.go`, `mandate_execution_workflow.go` y `gen-state.types.ts`.
+>
+> | Punto | Estado previo | Queda cerrado/corregido así |
+>|---|---|---|
+> | Persistencia de la propuesta de Fase 2 | v1.1 decía "todo vive embebido en `mandate_state.json` desde `create()`" | **Matiz confirmado, no contradicción:** la propuesta de Fase 2 (dry-run) SÍ se escribe como archivo plano separado — `{mandatesRoot}/{mandateId}/domain_proposal.json` (`scaffoldDryRun`, confirmado en código). Lo que se embebe en `mandate_state.json` es la **confirmación** (Fase 3), vía `PersistHumanSyncActivity`, que escribe el mismo `phases.validate.humanSync` que ya usa el CLI. No existe `domain_confirmed.json` como archivo separado — ese concepto, presente en `bloom-mandate-arquitectura-genesis-conductor.md`, queda descartado a favor del campo embebido. |
+> | Formato de `domainId` | Campo tipado (`string`) sin formato definido | **Cerrado:** `dom_{slug(domainName)}_{sufijo hex de 4 chars}`, generado una única vez en Fase 2 (`newDomainID`). Decisión explícita: NO puede derivarse de `domainName` porque ese campo es mutable (rename es operación obligatoria del diseño) — un id derivado de un campo mutable rompe trazabilidad de eventos/carpetas ya emitidos. |
+> | D-3 (dependencias cruzadas) | Abierto | **Cerrado a nivel de datos.** `DomainCandidate.dependsOn?: string[]` (domainIds) → `signMandateActivity` lo traduce a `Action.dependsOn` (actionIds, formato `gen-action-{domainName}`) → y de ahí a `DomainAction.DependsOn` (domainNames) para el child workflow. Una dependencia hacia un dominio no confirmado se descarta en silencio, por decisión explícita. Sigue sin poblarse en la práctica porque no hay clustering real todavía — el mecanismo existe, el productor de datos no. |
+> | D-9 (`confirmedBy`) | "Bloqueado, sin mecanismo de identidad" | **Parcialmente cerrado, con una restricción nueva.** El path CLI (`mandate genesis domains confirm`) sí resuelve identidad vía `os/user.Current()` — implementado. Pero el path que resultó ser el real para firmar (señal de Temporal a `MandateGenesisBuildWorkflow`, no el CLI) **no puede** usar esa misma vía: un Workflow de Temporal debe ser determinista y no puede hacer syscalls. Por ese camino, `confirmedBy` llega vacío hoy. Sigue pendiente como decisión de producto: de dónde sale la identidad de quien confirma cuando la confirmación llega por señal. |
+> | D-B1 (Fase 4 vía Action, no mecanismo propio) | Vigente como diseño, no verificado en implementación | **Confirmado, con una corrección de implementación real de por medio:** una primera versión de `MandateGenesisBuildWorkflow` lo violó — llamaba `ScaffoldDomainActivity(Mode: real)` directo desde el workflow padre, dominio por dominio, sin pasar por `mandate.json`. Se corrigió para que la Fase 4 pase por `SignMandateActivity` (produce `mandate.json` firmado con `operational.actions[]`) antes de invocar el child `MandateExecutionWorkflow`. D-B1 queda confirmado como el modelo correcto, con evidencia de que es fácil violarlo por accidente si se implementa apurado. |
+> | D-10 (`setHandler` ingest_complete/cluster_complete) | Abierto | **Parcialmente respondido, con un matiz importante.** El `MandateGenesisBuildWorkflow` real que se pudo revisar **no usa Signals para Fase 1 (ingest) ni Fase 2 (cluster)** — ejecuta esas Activities de forma directa y secuencial, sin esperar señales externas. El único punto donde el workflow sí espera un Signal es Fase 3 (validate), vía `"mandate:genesis:validate"`. No se pudo confirmar si `mandate_watcher.go` todavía envía `ingest_complete`/`cluster_complete` a un workflow que no los escucha (ese archivo sigue sin revisarse completo) — si los envía, esas señales se pierden sin efecto, que es exactamente el riesgo que D-10 ya anticipaba, ahora confirmado del lado del workflow en vez de solo sospechado. |
+> | D-11 (`ws-events.ts`) | Abierto | **Sigue abierto**, con un requisito nuevo confirmado sobre él: el payload de `mandate:action:completed` HOY no incluía `domains[]` (confirmado por grep) — se agregó esta sesión, poblado solo cuando `Mode: dry_run`, para que el `domainId` real de cada dominio propuesto viaje en el evento y la UI no tenga que inventarlo localmente. El archivo `ws-events.ts` en sí sigue sin leerse completo — este cambio se hizo sobre el emisor (`publishMandateEvent`), no sobre el contrato tipado. |
+> | D-12 (nuevo) — Confiabilidad del canal de eventos | No existía como punto | `publishMandateEvent` hace POST HTTP **fire-and-forget** (goroutine, sin retry, sin persistencia) a `localhost:48215`. Si el consumidor (UI) no está escuchando en el instante exacto en que una fase completa, pierde el dato (por ejemplo el `domainId` real de Fase 2) sin forma de recuperarlo salvo leer `domain_proposal.json` directo del filesystem. No hay mecanismo de reintento ni cola — es un riesgo real para cualquier UI que dependa solo del evento sin un plan B de polling/lectura directa. |
+> | D-13 (nuevo) — `resultRef` no coincide con el árbol de carpetas documentado | No existía como punto | El `resultRef`/layout real hoy es plano: `{mandatesRoot}/{mandateId}/domain_proposal.json` (Fase 2) y `{mandatesRoot}/{mandateId}/scaffold/domain_{name}/` (Fase 4) — confirmado en código. Esto es distinto del layout anidado que documenta `bloom_project_tree_gen.txt` (`.bloom/.intents/.gen/{intent-uuid}/.pipeline/.../.response/report.json`). Ninguno de los dos se declaró explícitamente "el correcto" — queda como discrepancia abierta entre documentación de árbol de filesystem y código real, no resuelta esta sesión. |
+> | D-14 (nuevo) — Referencia a "§3.4.1 del contrato" sin sección correspondiente | No existía como punto | Comentarios en código (`mandate_genesis_sign_activity.go`, `mandate_execution_workflow.go`) citan una discrepancia "P4" como documentada en "§3.4.1 del contrato". **Ninguno de los dos documentos de diseño revisados (este ni `bloom-mandate-arquitectura-genesis-conductor.md`) tiene una sección §3.4.1.** O la cita corresponde a una versión de este documento que no se compartió en esta sesión, o es una referencia inexistente que se propagó entre sesiones de código sin verificarse contra la fuente. Marcado para no perder el rastro — no se inventa una sección para que la cita "cierre". |
+>
+> **Lo que sigue exactamente igual que en v1.2, sin tocar esta sesión:** D-1, D-6, D-7, D-8 (§8), y el modelo de `standard`/§1.1, §4, §5, §7.
 
 ---
 
@@ -224,15 +242,33 @@ interface HumanSyncRecord {
 }
 
 interface DomainCandidate {
+  // RESOLUCIÓN v1.3: formato confirmado en código — dom_{slug(domainName)}_{sufijo
+  // hex 4 chars}, generado una sola vez en Fase 2 (newDomainID). Deliberadamente
+  // NO derivado de domainName (mutable por rename) — ver RESOLUCIÓN v1.3 arriba.
   domainId: string;
   name: string;
   cohesionScore: number;          // 0.0–1.0, mismo rango que --min-cohesion en link-genes
   suggestedActionCount: number;   // preview, no las Actions reales todavía
   overlapsWithExisting?: string;  // solo domain_expansion: domainId del genesis base si hay solapamiento
+  // D-3 (CERRADO a nivel de datos en RESOLUCIÓN v1.3): domainIds de otros
+  // candidatos de los que este depende, según lo que Brain detecte en 'cluster'.
+  // Ausente o [] = sin dependencias (paralelo, comportamiento histórico). Se
+  // traduce a Action.dependsOn (actionIds) al firmar — ver §6.2. Hoy nunca se
+  // puebla: el mecanismo de traducción existe, el productor real (clustering
+  // de Brain) todavía no.
+  dependsOn?: string[];
 }
 ```
 
 `mandate_state.json` post-firma **no cambia de forma** respecto al que ya usa `standard` — cada dominio confirmado se vuelca a una `Action` en `operational.actions[]` con `intentType: 'gen'` y un campo `payload.subPhase: 'scaffold'`, y su progreso se seguimiento con el mismo `operationalState` que ya existe. No lo repito acá porque no hay nada nuevo que definir.
+
+> **RESOLUCIÓN v1.3 — nota de filesystem:** la propuesta de Fase 2 (antes de
+> confirmar) no vive únicamente en memoria/`mandate_state.json` — se escribe
+> además como archivo plano `{mandatesRoot}/{mandateId}/domain_proposal.json`
+> con el shape `{ status: "proposed", domains: ProposedDomain[] }`, donde cada
+> `ProposedDomain` espeja `DomainCandidate` de arriba (mismos campos, más
+> `files: string[]` que no vive en `DomainCandidate`). Ver RESOLUCIÓN v1.3 al
+> inicio del documento para el porqué de este layout híbrido.
 
 ---
 
@@ -386,6 +422,13 @@ El `preHandler` acá valida contra `gen_state.json`, no contra el body en sí: c
 > del Human Sync) sin el archivo fuente del workflow. Tratar este bloque
 > como "probablemente vigente en su forma general, no verificado en
 > detalle" en vez de "superado".
+>
+> **Nota RESOLUCIÓN v1.3 — ahora sí con el archivo fuente (`mandate_genesis_build_workflow.go`):**
+> el pseudocódigo de arriba se confirma solo parcialmente. Diferencias reales:
+> - **No hay `setHandler` de `pauseSignal`/`resumeSignal` en el archivo revisado.** Fase 1 y Fase 2 se ejecutan de forma directa y secuencial, sin ningún `condition()` esperando señal — contradice la premisa de D-10 de que el workflow escucha `ingest_complete`/`cluster_complete` como señales de avance. Si `mandate_watcher.go` las sigue enviando, hoy no tienen destinatario (ver D-10 actualizado en §8).
+> - **El Human Sync sí es un Signal real** (`workflow.GetSignalChannel(ctx, "mandate:genesis:validate")`, sin timeout — espera indefinida, consistente con la intención original de D-1), pero el payload no es un booleano de confirmación (`humanConfirmationReceived`) sino un objeto tipado (`GenesisValidateSignal{Approved, Domains[]}`) que ya trae la lista de dominios confirmados y sus renames — más rico que el pseudocódigo original.
+> - **`signMandateActivity` sí existe y sí es Local Activity conceptualmente correcta**, aunque en el código real se invoca como Activity normal (`workflow.ExecuteActivity`, no `ExecuteLocalActivity`) — matiz de implementación, no de diseño; sigue corriendo dentro del propio proceso de Nucleus, no se enruta a Brain.
+> - El workflow **si** termina disparando el child `MandateExecutionWorkflow` tal como predice el pseudocódigo, aunque no es `signMandateActivity` quien lo dispara — es el propio `MandateGenesisBuildWorkflow`, después de recibir el resultado de la firma.
 
 ```typescript
 export async function MandateGenesisBuildWorkflow(input: GenesisBuildInput): Promise<void> {
@@ -481,14 +524,17 @@ async function getMandateStatus(mandateId: string, project: string) {
 
 | # | Pendiente | Por qué importa |
 |---|---|---|
-| D-1 | `HUMAN_SYNC_TIMEOUT` — ¿cuánto tiempo espera el workflow una confirmación antes de fallar? ¿Hay timeout o el wait es indefinido? | Si es indefinido, un `genesis` puede quedar "vivo" en Temporal por semanas, consumiendo un workflow slot; si tiene timeout, hace falta definir qué pasa con `gen_state.json` al expirar (¿`building_failed`? ¿se puede re-disparar `validate` sin recorrer `ingest`/`cluster` de nuevo?) |
-| D-3 | Detección de dependencias cruzadas entre dominios confirmados — hoy asumo `workflow.type: 'parallel'` por default en Fase 4. Si Brain en `cluster` detecta que el dominio B depende de A, ¿dónde se registra esa relación para que `signMandateActivity` arme `dependsOn` en vez de paralelo puro? | Si no se resuelve, todo scaffold es paralelo siempre, lo cual puede ser incorrecto para dominios con dependencia real de código |
+| D-1 | `HUMAN_SYNC_TIMEOUT` — ¿cuánto tiempo espera el workflow una confirmación antes de fallar? ¿Hay timeout o el wait es indefinido? **Parcialmente respondido en RESOLUCIÓN v1.3:** el código real confirma wait indefinido (sin timeout) en el Signal de validate — sigue abierto si eso es deliberado o un olvido, y qué pasa si nunca llega. | Si es indefinido, un `genesis` puede quedar "vivo" en Temporal por semanas, consumiendo un workflow slot; si tiene timeout, hace falta definir qué pasa con `gen_state.json` al expirar (¿`building_failed`? ¿se puede re-disparar `validate` sin recorrer `ingest`/`cluster` de nuevo?) |
+| ~~D-3~~ **CERRADO (RESOLUCIÓN v1.3)** | ~~Detección de dependencias cruzadas entre dominios confirmados~~ | Resuelto a nivel de datos: `DomainCandidate.dependsOn` → `Action.dependsOn` → `DomainAction.DependsOn`, con traducción completa en `signMandateActivity`. Ver RESOLUCIÓN v1.3 y §3/§6.2. Sigue sin poblarse en la práctica (no hay clustering real), pero eso es un problema distinto (falta de Brain), no de diseño de datos. |
 | D-6 (heredado) | Idempotencia de Brain ante reintentos de Activity — ya señalado en el análisis anterior, se vuelve más urgente acá porque Fase 1 (`ingest`) puede ser costosa (leer un repo completo) y un reintento ciego la duplicaría | Afecta directamente el `retry policy` de `runGenIntentActivity` |
 | D-7 | ¿`domain_expansion` puede tener como `--base-genesis` otro `domain_expansion` ya completado, o solo un `genesis` raíz? Hoy el `preHandler` de §5.2 lo rechaza explícitamente | Afecta si el modelo de dominios termina siendo un árbol o una lista plana anclada siempre a un único genesis |
 | D-8 | ¿`gen_state.json` se conserva indefinidamente post-firma como auditoría, o se archiva/comprime luego de un tiempo? Lo dejé "vive para siempre" en §2 por default, pero eso puede no ser sostenible en volumen | Impacta diseño de storage, no solo de comandos |
-| D-9 (heredado) | `confirmedBy` en `HumanSyncRecord` depende del mismo mecanismo de identidad que ya señalamos sin resolver para `evidence record decision` en el documento anterior | Bloquea que `genesis domains confirm` tenga atribución real, hoy sería un campo sin fuente de verdad |
-| D-10 | ¿`MandateGenesisBuildWorkflow` define `setHandler` para `ingest_complete`/`cluster_complete`? `mandate_watcher.go` ya envía esas señales asumiendo que sí, pero el cuerpo del workflow nunca se confirmó contra código real. | Si no las escucha, las señales se entregan sin efecto y el genesis queda trabado en `building` indefinidamente sin error visible. |
-| D-11 | Nombre real del archivo de contrato de eventos: ¿`ws-events.js` o `ws-events.ts`? Apareció con ambos nombres en sesiones distintas, nunca se leyó su contenido real. | Bloquea confirmar el contrato exacto de eventos (`mandate:{namespace}:{event}`) contra una fuente de verdad real en vez de inferirlo de los handlers que lo consumen. |
+| D-9 (heredado) | `confirmedBy` en `HumanSyncRecord`. **Actualizado en RESOLUCIÓN v1.3:** el path CLI ya lo resuelve (`os/user.Current()`), pero el path que resultó ser el real para firmar (Signal de Temporal) no puede usar esa misma vía — un Workflow debe ser determinista. `confirmedBy` llega vacío por el camino que importa. | Bloquea que la firma real (vía Signal, no CLI) tenga atribución — sigue sin fuente de verdad para el caso que efectivamente se usa. |
+| D-10 | ¿`MandateGenesisBuildWorkflow` define `setHandler` para `ingest_complete`/`cluster_complete`? **Parcialmente respondido en RESOLUCIÓN v1.3:** el archivo real revisado NO tiene ningún `setHandler` ni Signal para esas dos fases — las ejecuta directo. Solo Fase 3 (validate) usa Signal. Sigue sin confirmarse si `mandate_watcher.go` todavía las envía a un destinatario que no escucha. | Si `mandate_watcher.go` las envía igual, se entregan sin efecto — no rompe nada visible, pero es señal de un supuesto de diseño (fases 1-2 señalizadas externamente) que el código real abandonó sin documentarlo. |
+| D-11 | Nombre real del archivo de contrato de eventos: ¿`ws-events.js` o `ws-events.ts`? Sigue sin leerse completo. **Nuevo en RESOLUCIÓN v1.3:** se confirmó (grep) que el payload de `mandate:action:completed` no traía `domains[]` — se agregó esta sesión sobre el emisor (`publishMandateEvent`), sin poder confirmar si eso coincide con lo que el contrato tipado de `ws-events.ts` espera, porque ese archivo sigue sin leerse. | Bloquea confirmar el contrato exacto de eventos contra una fuente de verdad real en vez de inferirlo de los handlers que lo consumen y ahora también de los emisores. |
+| D-12 (nuevo, RESOLUCIÓN v1.3) | Confiabilidad del canal de eventos: `publishMandateEvent` es HTTP fire-and-forget (goroutine, sin retry, sin persistencia) a `localhost:48215`. Si el consumidor no escucha en el instante exacto, el dato se pierde sin recuperación salvo leer el filesystem directo. | Cualquier UI o proceso que dependa solo del evento (sin plan B de polling/lectura directa) puede perder silenciosamente datos críticos como el `domainId` real de un dominio propuesto. |
+| D-13 (nuevo, RESOLUCIÓN v1.3) | El `resultRef`/layout de filesystem real (`{mandatesRoot}/{mandateId}/domain_proposal.json`, `.../scaffold/domain_{name}/` — plano) no coincide con el layout anidado que documenta `bloom_project_tree_gen.txt` (`.bloom/.intents/.gen/{intent-uuid}/.pipeline/.../.response/report.json`). Ningún lado se declaró "el correcto" todavía. | Bloquea saber si el código actual es una simplificación temporal a corregir, o si el árbol de diseño documenta una estructura que nunca se va a construir así. |
+| D-14 (nuevo, RESOLUCIÓN v1.3) | Comentarios en código (`mandate_genesis_sign_activity.go`, `mandate_execution_workflow.go`) citan una discrepancia "P4" documentada en "§3.4.1 del contrato" — ninguno de los documentos de diseño revisados tiene esa sección. | O la cita corresponde a una versión de este documento no compartida en esta sesión, o es una referencia que se propagó entre sesiones de código sin verificarse — hay que rastrear el origen antes de seguir citándola como si existiera. |
 
 ---
 

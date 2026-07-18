@@ -1,6 +1,7 @@
 # Bloom Mandate — Arquitectura, Genesis y Conductor UX/UI
-**Versión:** 2.0 — Documento unificado  
+**Versión:** 2.0 — Documento unificado (+ RESOLUCIÓN v1.1, v1.2, v1.3 — ver bloques marcados con ⚠️)
 **Fecha:** 2026-06-28  
+**Última actualización de resolución:** RESOLUCIÓN v1.3 — sesión de integración cruzada Arquitectura+Backend+Frontend, código Go real de Fase 2-4 del Genesis.
 **Fuentes:** BTIPS v5.0 · Mandate Domain Spec v1.0.0 · Genesis Intent Design v1.0 · GENESIS_INTENT_CREATE.md · relevamiento plugin VSCode · brain-schemas.ts · nucleus_schema.ts · project_schema.ts  
 **Audiencia:** Desarrolladores de arquitectura + diseñadores UX/UI
 
@@ -304,6 +305,17 @@ El Mandate vuelve al plugin vía FileSystemWatcher (Flujo A)
 ---
 
 ## 5. MANDATE GENESIS — ESPECIFICACIÓN COMPLETA
+
+> ## ⚠️ RESOLUCIÓN v1.3 — sesión de integración cruzada (Arquitectura + Backend + Frontend), en base a código Go real (`mandate_genesis_activities.go`, `mandate_genesis_sign_activity.go`, `mandate_genesis_build_workflow.go`, `mandate_genesis_domains_cmd.go`) y a `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md` (RESOLUCIÓN v1.3 del otro documento). Leer antes de tomar §5.4/§5.5/§5.6 como comportamiento actual. No repite la corrección de nombres de evento — ver RESOLUCIÓN v1.1 arriba, sigue vigente sin cambios.
+>
+> | Punto | Esta sección describe | Confirmado en código real |
+>|---|---|---|
+> | Quién escribe la confirmación de dominios | Brain escribe `domain_confirmed.json` (§5.4 Paso 4, §5.6) | **No existe `domain_confirmed.json` como archivo.** La confirmación se embebe en `mandate_state.json` (`phases.validate.humanSync.confirmedDomainIds`, vía `PersistHumanSyncActivity`), sea que llegue por CLI (`mandate genesis domains confirm`) o por Signal de Temporal. `domain_proposal.json` (Fase 2) sí existe como archivo plano — solo la parte de la confirmación cambió de modelo. |
+> | Orquestador de las 4 fases | Brain administra fases 1-3, Nucleus arma `mandate.json` recién en Paso 4 y arranca `MandateWorkflow` | Confirmado que sí hay un `MandateGenesisBuildWorkflow` de Temporal real orquestando Fase 1→2→3→firma→child workflow — pero corre en Nucleus (Go), no es Brain quien lo dispara ni quien escribe el archivo de confirmación. Dentro de ese workflow, Fases 1-2 se ejecutan directo (sin Signal externo); solo Fase 3 espera un Signal real. |
+> | `domainId` de cada dominio propuesto | No se especifica formato en esta sección | Confirmado: `dom_{slug(domainName)}_{sufijo hex}`, generado una sola vez en Fase 2, estable ante renames (ver §6.3 más abajo para el resto de las cuatro operaciones y por qué el id no puede derivarse del nombre). |
+> | Layout de filesystem de `.analysis/` (línea ~504) | `.bloom/.intents/.gen/.../.analysis/domain_proposal.json` (anidado) | El código real escribe plano: `{mandatesRoot}/{mandateId}/domain_proposal.json`. Discrepancia **no resuelta** — documentada como D-13 en `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md`, no se sabe todavía cuál layout es el que se va a sostener. |
+>
+> **Lo que sigue vigente sin cambios:** las cuatro razones de §5.1 (por qué Genesis es un caso especial), la decisión de Modelo B de §5.2, la forma del comando de §5.3, y las **cuatro operaciones de la pantalla de validación** de §6.3 (renombrar, fusionar, mover archivos, confirmar) — esas siguen siendo el requisito de producto, independientemente de qué proceso interno las implemente.
 
 ### 5.1 Por qué el Genesis es un caso especial
 
@@ -1146,16 +1158,21 @@ El endpoint `GET /api/nucleus/onboarding-status` ya existe (confirmado en `nucle
 ### 9.1 Bloqueantes de implementación
 
 **Decisión crítica — ¿Un intent `.gen` o N intents `.gen`?** (ver §5.7): impacta la arquitectura de `waitIntentResult` y el MandateWorkflow. Debe resolverse antes de implementar la Fase 4.
+  - **Actualización RESOLUCIÓN v1.3:** confirmado en código real — es **N Actions**, una por dominio confirmado (`type: run_intent`, `intentType: gen`, `payload.subPhase: scaffold`), armadas por `signMandateActivity` dentro de `operational.actions[]` de `mandate.json`. No es un intent monolítico. Ver D-B1/§6.2 de `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md`.
 
 **Extensión de `intentType` en el schema del Mandate:** agregar `gen` al enum `exp | cor | dev | doc` en el Mandate Domain Spec y en todas las validaciones existentes.
 
 **Schema completo de `domain_proposal.json`:** necesario antes de implementar la Fase 2 y la pantalla de validación del Conductor.
+  - **Actualización RESOLUCIÓN v1.3:** parcialmente cerrado. Campos confirmados en código: `id` (formato `dom_{slug}_{sufijo}`), `domainName`, `cohesionScore`, `suggestedActionCount`, `files`, y `dependsOn?` a nivel de `DomainCandidate` (aunque hoy nunca se puebla). Lo que sigue sin cerrar: el rango de 2–7 dominios que describe este documento no es real todavía — hoy `scaffoldDryRun` siempre devuelve exactamente 1 dominio (`input.Project`), porque no hay clustering real de Brain conectado. El schema de datos está listo para N; el productor de N dominios reales no existe.
 
 **Contrato de observación de `waitIntentResult` para intents `.gen`:** ¿qué path/campo observa para saber que el scaffold de un dominio específico completó? Propuesta: campo `genes_created` en `gen_state.json`, actualizado por Brain después de cada scaffold.
+  - **Nota RESOLUCIÓN v1.3:** sigue sin confirmarse contra código — `scaffoldReal()` (Fase 4 real) hoy solo escribe un marker (`_INCOMPLETE_SCAFFOLD.json`), no `genes_created` ni ningún campo de `gen_state.json`. `MandateExecutionWorkflow` (quien debería invocar el scaffold real) sigue siendo placeholder puro. Este punto sigue abierto, sin cambios de fondo.
 
 **Diseño completo de la pantalla de validación de dominios en Conductor** (§6.3 Zona 1): las cuatro operaciones (renombrar, fusionar, mover, confirmar) necesitan diseño de UX detallado antes de que Sentinel pueda especificar el payload de `GENESIS_DOMAINS_CONFIRMED`.
+  - **Nota RESOLUCIÓN v1.3:** el payload real de confirmación ya no se llama `GENESIS_DOMAINS_CONFIRMED` — es la señal de Temporal `mandate:genesis:validate` con forma `{approved: boolean, domains: [{id, domainName, rename?, files?}]}`. De las cuatro operaciones, solo **confirmar** y **renombrar** tienen contraparte en este payload hoy; **fusionar** y **mover archivos entre dominios** no tienen ningún campo que las represente todavía — bloqueante real para completar el diseño de UX, no solo pendiente de "pulir". Ver documento de rumbo UI (a redactar) para el detalle.
 
 **Definición de `ws-events.ts`:** todos los eventos WebSocket listados en §6.8 deben definirse como tipos TypeScript antes de implementar el Conductor.
+  - **Nota RESOLUCIÓN v1.3:** sigue sin leerse el archivo completo (D-11 en `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md`). Lo único confirmado es un requisito nuevo sobre el emisor: `mandate:action:completed` ahora incluye `domains[]` (con `id` real) cuando la fase es `dry_run` — confirmar si esto coincide con lo que el contrato tipado real espera sigue bloqueado hasta leer `ws-events.ts`.
 
 **Fix en `NucleusManager.detectExistingNucleus()`** (§3.2): bloqueante para cualquier trabajo de Mandate en el plugin.
   - **Actualización RESOLUCIÓN v1.2:** el fix documentado en §3.2 tenía el
