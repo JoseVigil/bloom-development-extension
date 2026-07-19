@@ -1,8 +1,0 @@
-workspace/
-├── src [NOT FOUND]
-├── installer [NOT FOUND]
-├── webview [NOT FOUND]
-├── brain [NOT FOUND]
-├── contracts [NOT FOUND]
-├── package.json
-└── tsconfig.json [NOT FOUND]

@@ -103,7 +103,7 @@ https://claude.ai/chat/362eb104-1b63-4f2e-aa44-e038621dcc18
 padkite patch
 https://claude.ai/chat/cc2d7ac5-b353-4cc2-a488-487a9b00d52a
 Eslias libshdpci.so patch 
-https://claude.ai/chat/9cf3ec1b-2751-46e7-ac23-f25895d96708/Users/josevigil/repos/bloom-development-extension
+https://claude.ai/chat/9cf3ec1b-2751-46e7-ac23-f25895d96708
 noti gmail libshpa3.so initial patch
 https://grok.com/c/7d825cd4-c50a-4062-a8af-719632c762a2?rid=e12d9c25-2653-48c2-b03c-45d63bf5193f
 noti gmail libshpa3.so patch
@@ -742,7 +742,6 @@ Companion Gemini
 Panel lateral companion en Chromium para sistema BTIPS
 https://claude.ai/chat/340d1dc7-7442-46a1-85d7-02ca2ef7ce3f
 
-
 gestureos
 resumen de documento e inicio de prompts nuevos debajo.
 https://claude.ai/chat/62f12713-b1e9-4342-ad68-63966e8a1744
@@ -750,7 +749,6 @@ https://claude.ai/chat/62f12713-b1e9-4342-ad68-63966e8a1744
 cellbio
 Validación de estrategia para integración de mandates en plugin vscode
 https://claude.ai/chat/cb018009-5fc6-40f1-8278-ac53a0dc9e4c
-
 
 noti gmail
 Mandetes marketplace
@@ -765,3 +763,15 @@ https://claude.ai/chat/cc86f2ef-8956-4e7c-9b49-b37ca08560cd
 uitool
 Verificar estándares de vault en documentación de nucleus
 https://claude.ai/chat/cd85286d-8d3f-42aa-9ab7-74f103e4b700
+
+daxes
+Webview Development Mandate
+https://claude.ai/chat/dbbfa366-ebc6-462a-a785-0887785827c8
+
+nenes
+Plan de busqueda trabajo linkedin
+https://claude.ai/chat/cb2b09ff-8c51-41ea-a51b-03ad2e02a7d8
+
+Elias
+Workspace - Análisis de estructura HTML y pipeline de procesamiento
+https://claude.ai/chat/3e4c906a-6fe1-4352-898a-fae94eaf00d3
