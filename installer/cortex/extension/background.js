@@ -272,6 +272,34 @@ async function initialize() {
   connectNative();
 }
 
+// ============================================================================
+// 🔧 FIX (race condition post-fix Gemini button / API_KEY_REGISTERED):
+// En Manifest V3 el service worker se apaga tras ~30s de inactividad. Cuando
+// llega un evento (ej. chrome.runtime.onMessage de Harness), Chrome despierta
+// el SW ejecutando TODO el script desde cero — incluyendo `let discoverySchema
+// = null;` y el `initialize()` de más abajo, que es fire-and-forget (async,
+// sin await). El listener de onMessage queda registrado de forma síncrona
+// apenas arranca el script, así que puede recibir y procesar el mensaje que
+// disparó el wake-up ANTES de que loadProtocolSchemas() haya terminado su
+// fetch() — con discoverySchema todavía en null. Eso hacía que forwardToHost()
+// cortara en silencio (schema no encontrado) para el primer mensaje después de
+// cada reinicio del SW, sin ningún log de envío ni error visible salvo un
+// console.error fácil de perder entre el resto de logs.
+//
+// ensureInitialized() memoiza la promesa de initialize() para que cualquier
+// código que dependa de discoverySchema / config / REGISTERED_HANDLERS pueda
+// esperar a que la inicialización haya terminado, sin volver a dispararla si
+// ya está en curso o ya terminó.
+// ============================================================================
+let _initPromise = null;
+
+function ensureInitialized() {
+  if (!_initPromise) {
+    _initPromise = initialize();
+  }
+  return _initPromise;
+}
+
 async function loadConfig() {
   try {
     const mode = await detectActiveMode();
@@ -1490,6 +1518,26 @@ function watchGoogleLoginTab(tabId) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
+  // 🔧 FIX (race condition): esperar a que la inicialización (config +
+  // discoverySchema, ver ensureInitialized() más arriba) haya terminado
+  // antes de procesar el mensaje. Sin esto, el primer mensaje que despierta
+  // al service worker (MV3 lo apaga tras inactividad) podía ejecutarse con
+  // discoverySchema todavía en null, haciendo que forwardToHost() cortara
+  // en silencio para eventos como API_KEY_REGISTERED.
+  //
+  // Devolvemos `true` siempre, de forma síncrona, para mantener el canal
+  // abierto — sendResp() se puede seguir llamando de forma asíncrona desde
+  // dentro de handleRuntimeMessage() una vez resuelta la inicialización,
+  // igual que antes.
+  ensureInitialized()
+    .then(() => handleRuntimeMessage(msg, sender, sendResp))
+    .catch(err => {
+      console.error('[Synapse] ✗ Error de inicialización procesando mensaje entrante:', err, msg);
+    });
+  return true;
+});
+
+function handleRuntimeMessage(msg, sender, sendResp) {
   const { event, command } = msg;
 
   // --- Registered handler dispatch (Harness Protocol SSoT) ---
@@ -1840,6 +1888,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // ── API_KEY_REGISTERED ───────────────────────────────────────────────────
+  // FIX: faltaba por completo. discovery.js escucha este evento vía
+  // chrome.runtime.onMessage (setupAPIKeyListeners) para actualizar la UI y
+  // guardar la key localmente, pero nada lo reenviaba al host nativo — el
+  // step "ai_provider_setup" del onboarding quedaba esperando para siempre.
+  // Mismo patrón que ACCOUNT_REGISTERED/GITHUB_APP_AUTHORIZED: forwardToHost()
+  // arma el payload leyendo discovery.schema.json (id "api_key_registered",
+  // ya declarado ahí — ver logNeverForwardedOnboardingEvents más arriba).
+  if (event === 'API_KEY_REGISTERED') {
+    console.log('[Synapse] 📥 API_KEY_REGISTERED recibido — provider:', msg.provider);
+
+    forwardToHost('API_KEY_REGISTERED', msg);
+
+    forwardToDebugPanel('synapse', 'API_KEY_REGISTERED', {
+      provider:         msg.provider          || null,
+      key_fingerprint:  msg.key_fingerprint   || null,
+      profile_id:       msg.profile_id        || config?.profileId,
+      launch_id:        msg.launch_id         || config?.launchId,
+    }, msg.profile_id || config?.profileId);
+
+    console.log('[Synapse] ✓ API_KEY_REGISTERED → forwarding to native host');
+    sendResp({ received: true });
+    return true;
+  }
+
   // Heartbeat success
   if (event === 'HEARTBEAT_SUCCESS') {
     console.log('[Synapse] ✓ Heartbeat validation successful');
@@ -1957,7 +2030,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   }
 
   return false;
-});
+}
 
 // ============================================================================
 // UTILS
@@ -2052,15 +2125,15 @@ function setupKeepalive() {
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[Synapse] 🔧 Extension installed/updated');
-  initialize();
+  ensureInitialized();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('[Synapse] 🚀 Browser startup');
-  initialize();
+  ensureInitialized();
 });
 
-initialize();
+ensureInitialized();
 
 chrome.runtime.onSuspend?.addListener(() => {
   console.log('[Synapse] 💤 Service worker suspending');

@@ -172,7 +172,8 @@ const ONBOARDING_EVENTS = new Set([
   // ONBOARDING_MILESTONE por faltar acá, así que el reactor lo descartaba
   // en silencio. Ver CAMBIOS v4.1 arriba para el detalle completo.
   'GOOGLE_LOGIN_DETECTED',      // Content script detectó sesión en myaccount.google.com
-  'AI_PROVIDER_CONFIGURED',     // API key de proveedor IA almacenada en vault
+  'API_KEY_REGISTERED',         // API key de proveedor IA almacenada en vault (reemplaza a
+                                 // AI_PROVIDER_CONFIGURED, que nunca se implementó)
 
   // ── Proyecto ─────────────────────────────────────────────────────────────
   'PROJECT_CREATED',            // Primer proyecto creado en Nucleus

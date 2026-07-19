@@ -165,7 +165,7 @@ const FALLBACK_STEPS = [
     verify:             'json_field',
     verifyArgs:         { field: 'onboarding.ai_provider_key' },
     blocking:           false,
-    cortex_events:      ['AI_PROVIDER_CONFIGURED'],
+    cortex_events:      ['API_KEY_REGISTERED'],
     conductor_reaction: 'markStepComplete',
   },
   {

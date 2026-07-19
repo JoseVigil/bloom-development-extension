@@ -1458,9 +1458,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('[Discovery] Lock release failed:', e);
   }
   
-  window.BLOOM_VALIDATOR = new DiscoveryFlow();
-  window.ONBOARDING = new OnboardingFlow();
-  
+  console.log('[Discovery][DIAG] init block reached — marker v1');
+
+  try {
+    window.BLOOM_VALIDATOR = new DiscoveryFlow();
+    console.log('[Discovery][DIAG] BLOOM_VALIDATOR creado OK');
+  } catch (e) {
+    console.error('[Discovery][DIAG] new DiscoveryFlow() lanzó excepción:', e);
+  }
+
+  try {
+    window.ONBOARDING = new MultiProviderOnboarding();
+    console.log('[Discovery][DIAG] ONBOARDING creado OK, instanceof MultiProviderOnboarding:', window.ONBOARDING instanceof MultiProviderOnboarding);
+  } catch (e) {
+    console.error('[Discovery][DIAG] new MultiProviderOnboarding() lanzó excepción:', e);
+  }
+
   await window.BLOOM_VALIDATOR.start();
   await window.ONBOARDING.checkResume();
   
@@ -1637,22 +1650,4 @@ class MultiProviderOnboarding extends OnboardingFlow {
     // Show success
     this.showScreen('api-success');
   }
-}
-
-// Update initialization to use MultiProviderOnboarding
-if (typeof document !== 'undefined') {
-  const originalDOMContentLoaded = document.addEventListener;
-  document.addEventListener = function(event, handler, ...args) {
-    if (event === 'DOMContentLoaded') {
-      const wrappedHandler = async function(e) {
-        await handler(e);
-        // Replace OnboardingFlow with MultiProviderOnboarding after initialization
-        if (window.ONBOARDING instanceof OnboardingFlow && !(window.ONBOARDING instanceof MultiProviderOnboarding)) {
-          window.ONBOARDING = new MultiProviderOnboarding();
-        }
-      };
-      return originalDOMContentLoaded.call(this, event, wrappedHandler, ...args);
-    }
-    return originalDOMContentLoaded.call(this, event, handler, ...args);
-  };
 }
