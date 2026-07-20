@@ -228,6 +228,19 @@ class MilestoneReactor {
   }
 
   async _onGoogleAuthComplete(enriched) {
+    // FIX (auditoría 19/07/2026, sesión de noche): GOOGLE_LOGIN_DETECTED es un
+    // evento precursor, no la finalización del step — Cortex detectó la sesión
+    // de Google pero todavía no confirmó el registro de la cuenta (eso lo hace
+    // ACCOUNT_REGISTERED:google, más abajo). Reaccionar solo con feedback de UI:
+    // no persistir en nucleus.json, no emitir milestone:reached. Mismo patrón de
+    // dispatch-por-evento que ya usa _onGithubAuthComplete para distinguir
+    // ACCOUNT_REGISTERED de sus eventos secundarios.
+    if (enriched.event === 'GOOGLE_LOGIN_DETECTED') {
+      this._log('_onGoogleAuthComplete: GOOGLE_LOGIN_DETECTED (precursor, sin persistir)');
+      this._emitStepUiUpdate('google_auth', { phase: 'LOGIN_DETECTED' });
+      return;
+    }
+
     this._log('_onGoogleAuthComplete');
     await this._persistStepComplete('google_auth', this._registry.getStep('google_auth'));
     this._emitMilestone('google_auth', {

@@ -607,6 +607,40 @@ class ServerManager:
                         'status': 'ok',
                     })
 
+                elif msg_type == 'GOOGLE_LOGIN_DETECTED':
+                    # Paso previo a ACCOUNT_REGISTERED:google — Cortex detectó sesión
+                    # activa en myaccount.google.com, todavía NO confirmó el registro
+                    # de la cuenta. No bloqueante, no completa el step — solo dispara
+                    # feedback de UI ("esperando registro...") mientras el usuario
+                    # sigue en la pestaña de Google.
+                    #
+                    # FIX (auditoría 19/07/2026, sesión de noche): 4ta instancia del
+                    # mismo bug ya documentado en ACCOUNT_REGISTERED/GITHUB_APP_AUTHORIZED/
+                    # API_KEY_REGISTERED — sin este elif, el evento caía al `else` de
+                    # ruteo (más abajo) y nunca se emitía a event_bus/Sentinels. Conductor
+                    # (registrado como 'cli') nunca se enteraba.
+                    profile_id = msg.get('profile_id')
+                    launch_id  = msg.get('launch_id')
+                    email      = msg.get('email', '')
+                    logger.info(
+                        f"🔎 [{conn_id}] GOOGLE_LOGIN_DETECTED: "
+                        f"profile={profile_id[:8] if profile_id else '?'} email={email}"
+                    )
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id':     profile_id,
+                            'step':           'google_auth',
+                            'original_event': 'GOOGLE_LOGIN_DETECTED',
+                            'email':          email,
+                        }
+                    )
+                    await self._broadcast_event(event)
+                    await self._send_to_writer(writer, {
+                        'type':   'GOOGLE_LOGIN_DETECTED_ACK',
+                        'status': 'ok',
+                    })
+
                 elif msg_type == 'VAULT_INITIALIZED':
                     # Paso 2 vault_init — Cortex confirmó creación del vault (GitHub App Device Flow).
                     profile_id = msg.get('profile_id')
@@ -667,6 +701,37 @@ class ServerManager:
                     await self._broadcast_event(event)
                     await self._send_to_writer(writer, {
                         'type':   'GITHUB_APP_AUTHORIZED_ACK',
+                        'status': 'ok',
+                    })
+
+                elif msg_type == 'API_KEY_REGISTERED':
+                    # FIX (auditoría 19/07/2026): mismo bug ya documentado arriba en
+                    # GITHUB_APP_AUTHORIZED/ACCOUNT_REGISTERED — sin handler explícito,
+                    # este msg_type caía al `else` de ruteo (más abajo) y nunca se
+                    # emitía a event_bus/Sentinels. Conductor (registrado como 'cli')
+                    # nunca se enteraba, así que ai_provider_setup nunca se persistía
+                    # en nucleus.json y el resume quedaba trabado ahí para siempre.
+                    profile_id      = msg.get('profile_id')
+                    launch_id       = msg.get('launch_id')
+                    provider        = msg.get('provider', '')
+                    key_fingerprint = msg.get('key_fingerprint', '')
+                    logger.info(
+                        f"🔑 [{conn_id}] API_KEY_REGISTERED: "
+                        f"profile={profile_id[:8] if profile_id else '?'} provider={provider}"
+                    )
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id':      profile_id,
+                            'step':            'ai_provider_setup',
+                            'original_event':  'API_KEY_REGISTERED',
+                            'provider':        provider,
+                            'key_fingerprint': key_fingerprint,
+                        }
+                    )
+                    await self._broadcast_event(event)
+                    await self._send_to_writer(writer, {
+                        'type':   'API_KEY_REGISTERED_ACK',
                         'status': 'ok',
                     })
 

@@ -493,25 +493,67 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // ── HANDLER: Marcar un step como completado ─────────────────────────────
   // Llamado por el renderer cuando recibe confirmación externa (ej: Brain notifica
   // via bloom-host → extension → Conductor), o como fallback manual.
-  // Escribe en onboarding.completed_steps[] en nucleus.json.
+  //
+  // FIX (auditoría 19/07/2026): antes esto escribía a mano un subconjunto de
+  // los campos (solo onboarding.completed_steps[]), nunca onboarding.<produces>
+  // (ej. ai_provider_key) — que es lo que resolveEntryPoint()/step-verifiers.js
+  // usan para decidir el resume. El próximo resume volvía siempre al mismo
+  // step aunque se llamara esto. Ahora reusa el camino 100% verificado que ya
+  // usa un milestone real: MilestoneReactor.handleMilestone() → dispara el
+  // handler nombrado del step → _persistStepComplete(), que escribe
+  // completed_steps[] Y produces juntos, y emite milestone:reached al
+  // renderer. Cero lógica nueva de persistencia acá.
+  //
+  // Steps con verify:'fs_marker' (nucleus_create, project_create) quedan
+  // bloqueados — ver FS_MARKER_STEPS más abajo — porque _persistStepComplete
+  // puede corromper su artefacto o, en el mejor caso, no sirve para nada.
+  const FS_MARKER_STEPS = ['nucleus_create', 'project_create'];
+
   ipcMain.handle('onboarding:mark-step-complete', async (event, { step }) => {
     log.info('[IPC] onboarding:mark-step-complete — step:', step);
     if (!step || !ONBOARDING_STEP_IDS.includes(step)) {
       log.warn('[IPC] onboarding:mark-step-complete — unknown step:', step);
       return { success: false, error: `Unknown step: ${step}` };
     }
+    // FIX: nucleus_create y project_create se verifican por artefacto real
+    // en filesystem (fs_marker), no por un flag booleano. Para nucleus_create,
+    // produces ('workspace_path') es EL MISMO campo que step-verifiers.js usa
+    // como directorio en fs_marker (verifyArgs.jsonField: 'onboarding.workspace_path').
+    // Si _persistStepComplete() escribe `true` ahí porque el path real todavía
+    // no existe, path.join() en el verifier tira TypeError (catch → false) y
+    // resolveEntryPoint() queda trabado en nucleus_create para siempre, sin
+    // poder recuperarse solo editando completed_steps[] — hay que limpiar
+    // nucleus.json a mano. project_create no corrompe nada (produces:
+    // 'project_mandate' ≠ verifyArgs.jsonField: 'onboarding.project_path'),
+    // pero tampoco destraba el resume: checkArtifact() para fs_marker nunca
+    // mira `produces`, solo jsonField/markerFile — completar este step acá
+    // sería un noop disfrazado de éxito.
+    if (FS_MARKER_STEPS.includes(step)) {
+      log.warn('[IPC] onboarding:mark-step-complete — rechazado, step fs_marker:', step);
+      return {
+        success: false,
+        error: `"${step}" se verifica por artefacto en filesystem, no se puede forzar manualmente sin riesgo de corromper el resume`,
+      };
+    }
     try {
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      data.onboarding = data.onboarding || {};
-      data.onboarding.completed_steps = data.onboarding.completed_steps || [];
-      if (!data.onboarding.completed_steps.includes(step)) {
-        data.onboarding.completed_steps.push(step);
-        data.onboarding.updated_at = new Date().toISOString();
-        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
-        log.success('[IPC] onboarding:mark-step-complete — persisted:', step);
-      } else {
-        log.info('[IPC] onboarding:mark-step-complete — already present:', step);
+      const reactor = getReactor();
+      if (!reactor) {
+        return { success: false, error: 'reactor no inicializado todavía' };
       }
+      // No se manda `event` en el enriched a propósito: algunos handlers del
+      // reactor (ej. _onProjectCreateComplete) discriminan por
+      // enriched.event === 'ALGO_ESPECIFICO' y devuelven sin persistir si no
+      // matchea. project_create ya está bloqueado arriba, pero dejamos el
+      // enriched "limpio" (sin event inventado) para que ningún handler
+      // futuro con un discriminador similar se rompa silenciosamente por un
+      // valor sintético que nunca vimos verificado contra el código real.
+      reactor.handleMilestone(step, {
+        type: 'ONBOARDING_MILESTONE',
+        data: {},
+        _manualOverride: true,
+        _ts: Date.now(),
+      });
+      log.success('[IPC] onboarding:mark-step-complete — reconciliado vía reactor:', step);
       return { success: true, step };
     } catch (err) {
       log.error('[IPC] onboarding:mark-step-complete — FAILED:', err.message);

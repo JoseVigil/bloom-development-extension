@@ -152,7 +152,16 @@ const FALLBACK_STEPS = [
     // el discriminado real. Si en algún momento aparece evidencia de que
     // GOOGLE_AUTH_COMPLETE sí se emite en algún lugar no auditado, se puede
     // sumar de nuevo sin sufijo.
-    cortex_events:      ['ACCOUNT_REGISTERED:google'],
+    //
+    // SYNC (auditoría 19/07/2026, sesión de noche): agregado 'GOOGLE_LOGIN_DETECTED'
+    // (plano, sin sufijo — no se discrimina por service) además del discriminado
+    // 'ACCOUNT_REGISTERED:google'. Es el evento precursor que Cortex emite al
+    // detectar sesión en myaccount.google.com, antes de confirmar el registro.
+    // milestone-reactor.js::_onGoogleAuthComplete distingue ambos por
+    // enriched.event — GOOGLE_LOGIN_DETECTED solo actualiza UI, no persiste.
+    // Sincronizado con onboarding_steps.json v3.1.0 — si diverge, este fallback
+    // pierde (ver _comment del JSON).
+    cortex_events:      ['ACCOUNT_REGISTERED:google', 'GOOGLE_LOGIN_DETECTED'],
     conductor_reaction: 'markStepComplete',
   },
   {

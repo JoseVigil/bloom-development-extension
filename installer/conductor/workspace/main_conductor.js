@@ -268,6 +268,13 @@ function initOnboardingBridge() {
     execNucleus,
     NUCLEUS_JSON,
     verbose:      !app.isPackaged,
+    // FIX (auditoría 19/07/2026): sin esto, MilestoneReactor defaultea a
+    // logger=console y sus _log() nunca llegan a conductor_onboarding_*.log
+    // — el propio "Bug 4" documentado en milestone-reactor.js, reintroducido
+    // acá porque el call site nunca pasó el logger inyectado. Sin este fix,
+    // no hay forma de confirmar por log si handleMilestone() corrió o no
+    // para ningún step (ver auditoría de conductor_onboarding_20260719.log).
+    logger:       log,
   });
 
   // Rehidratar desde disco para no re-ejecutar steps ya completados en
@@ -538,8 +545,24 @@ app.whenReady().then(async () => {
 
   // ── ABRIR VENTANA ────────────────────────────────────────────────────────
   if (onboardingDone) {
+    // FIX (auditoría 19/07/2026): antes de este fix, este branch NUNCA
+    // llamaba a initOnboardingBridge() — _onboardingBridge/_registry/_reactor
+    // quedaban null durante toda la sesión. Steps no-blocking que se
+    // completan DESPUÉS de project_create (ej. ai_provider_setup, que el
+    // usuario puede configurar desde el workspace en cualquier momento)
+    // emiten milestones que nunca llegan a ningún listener: no hay socket
+    // TCP a Brain abierto en este proceso. El síntoma es "stepper de
+    // workspace no reacciona a API_KEY_REGISTERED" tras cerrar y reabrir
+    // la app con onboarding.completed=true — dentro de la misma sesión que
+    // completa el onboarding no se nota, porque ahí el bridge sigue vivo
+    // (onboarding:complete solo hace win.loadURL() sobre la misma ventana).
+    // registerOnboardingHandlers también se registra acá: harness:inject-milestone
+    // y onboarding:mark-step-complete deben seguir funcionando post-onboarding
+    // (ej. reintentar un step no-blocking) y dependen de () => _reactor / () => _registry.
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:3000';
     createWorkspaceWindow(url);
+    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
+    initOnboardingBridge();
   } else {
     log.info('[BOOT] Loading onboarding window');
     createOnboardingWindow();
@@ -566,7 +589,12 @@ app.on('activate', () => {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       const onboardingDone = nucleusData?.onboarding?.completed === true;
       if (onboardingDone) {
+        // FIX (auditoría 19/07/2026): mismo gap que en app.whenReady() — ver
+        // comentario ahí. Sin esto, reactivar la app en macOS (dock icon) con
+        // onboarding ya completo tampoco levantaba el bridge.
         createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:3000');
+        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
+        initOnboardingBridge();
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
