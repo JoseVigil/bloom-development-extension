@@ -1518,6 +1518,8 @@ function watchGoogleLoginTab(tabId) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
+  console.log('🔴 RAW-ENTRY', JSON.stringify(msg));
+
   // 🔧 FIX (race condition): esperar a que la inicialización (config +
   // discoverySchema, ver ensureInitialized() más arriba) haya terminado
   // antes de procesar el mensaje. Sin esto, el primer mensaje que despierta

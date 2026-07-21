@@ -498,9 +498,17 @@ const Simulator = {
         // Con target explícito Chrome trata el mensaje como cross-extension y lo rechaza
         // a menos que manifest.json declare externally_connectable.
         if (isEvent) {
-          // Sin callback: no hay canal esperando respuesta, no puede haber
-          // "port closed" porque no le pedimos nada a nadie.
-          chrome.runtime.sendMessage(payload);
+          // Sin callback, chrome.runtime.sendMessage devuelve una Promise (MV3).
+          // Si no se atrapa el rechazo, un fallo silencioso (p.ej. "Extension
+          // context invalidated" tras recargar la extensión) queda invisible:
+          // el try/catch de más abajo NO cubre esto porque sendMessage retorna
+          // de inmediato, antes de que la Promise se resuelva o rechace.
+          chrome.runtime.sendMessage(payload).catch((err) => {
+            Logger.log('ERR', `sendMessage failed: ${err.message}`);
+            statusEl.textContent = '✗ Send failed';
+            statusEl.className = 'error';
+            Harness.notify(err.message, 'error');
+          });
           Logger.log('ACK', 'fire-and-forget (event, sin respuesta esperada)');
           statusEl.textContent = '✓ Sent';
           statusEl.className = 'ok';

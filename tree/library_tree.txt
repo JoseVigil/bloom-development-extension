@@ -178,26 +178,22 @@ BloomNucleus/
 │   ├── onboarding/
 │   │   └── onboarding_steps.json
 │   ├── profile/
-│   │   └── f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5/
-│   │       ├── com.bloom.synapse.f41a08d8.json
+│   │   └── c7f65be6-ccee-4711-a58c-8e659b437918/
+│   │       ├── com.bloom.synapse.c7f65be6.json
 │   │       └── ignition_spec.json
 │   ├── profiles.json
 │   └── sentinel/
 │       └── sentinel-config.json
 ├── history/
 │   ├── profiles/
-│   │   └── f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5/
+│   │   └── c7f65be6-ccee-4711-a58c-8e659b437918/
 │   │       ├── launches/
-│   │       │   └── 20260718.ndjson
+│   │       │   └── 20260720.ndjson
 │   │       └── sessions/
-│   │           ├── 001_f41a08d8_214713.ndjson
-│   │           ├── 002_f41a08d8_214915.ndjson
-│   │           ├── 003_f41a08d8_215117.ndjson
-│   │           ├── 004_f41a08d8_224024.ndjson
-│   │           ├── 005_f41a08d8_230635.ndjson
-│   │           └── 006_f41a08d8_140734.ndjson
+│   │           ├── 001_c7f65be6_095319.ndjson
+│   │           └── 002_c7f65be6_095521.ndjson
 │   └── workers/
-│       ├── capabilities_1543923.json
+│       ├── capabilities_2103645.json
 │       └── nucleus_worker.pid
 ├── hooks/
 │   ├── post_launch/
@@ -210,93 +206,62 @@ BloomNucleus/
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   ├── brain_core_20260717.log
-│   │   │   └── brain_core_20260718.log
+│   │   │   └── brain_core_20260720.log
 │   │   ├── profile/
-│   │   │   ├── brain_profile_20260717.log
-│   │   │   └── brain_profile_20260718.log
+│   │   │   └── brain_profile_20260720.log
 │   │   ├── server/
-│   │   │   ├── brain_server_20260717.log
-│   │   │   ├── brain_server_20260718.log
-│   │   │   ├── brain_server_event_bus_20260717.log
-│   │   │   ├── brain_server_event_bus_20260718.log
-│   │   │   ├── brain_server_manager_20260717.log
-│   │   │   └── brain_server_manager_20260718.log
+│   │   │   ├── brain_server_20260720.log
+│   │   │   ├── brain_server_event_bus_20260720.log
+│   │   │   └── brain_server_manager_20260720.log
 │   │   └── service/
-│   │       ├── brain_service.log
-│   │       └── brain_service_20260717.log
+│   │       └── brain_service.log
 │   ├── build/ [... build output]
 │   ├── chromium/
 │   ├── conductor/
 │   │   ├── onboarding/
-│   │   │   └── conductor_onboarding_20260718.log
+│   │   │   └── conductor_onboarding_20260720.log
 │   │   └── setup/
-│   │       └── conductor_setup_20260718.log
+│   │       └── conductor_setup_20260720.log
 │   ├── host/
 │   │   ├── nm_init_diag.log
 │   │   └── profiles/
-│   │       └── f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5/
-│   │           ├── 001_f41a08d8_214713/
-│   │           │   ├── cortex_extension_20260718.log
-│   │           │   ├── host_20260718.log
-│   │           │   ├── host_boot_001_f41a08d8_214713.log
-│   │           │   └── nm_init_diag_001_f41a08d8_214713.log
-│   │           ├── 002_f41a08d8_214915/
-│   │           │   ├── cortex_extension_20260718.log
-│   │           │   ├── host_20260718.log
-│   │           │   ├── host_boot_002_f41a08d8_214915.log
-│   │           │   └── nm_init_diag_002_f41a08d8_214915.log
-│   │           ├── 003_f41a08d8_215117/
-│   │           │   ├── cortex_extension_20260718.log
-│   │           │   ├── host_20260718.log
-│   │           │   └── nm_init_diag_003_f41a08d8_215117.log
-│   │           ├── 004_f41a08d8_224024/
-│   │           │   ├── cortex_extension_20260718.log
-│   │           │   ├── host_20260718.log
-│   │           │   ├── host_boot_004_f41a08d8_224024.log
-│   │           │   └── nm_init_diag_004_f41a08d8_224024.log
-│   │           ├── 005_f41a08d8_230635/
-│   │           │   ├── cortex_extension_20260718.log
-│   │           │   ├── host_20260718.log
-│   │           │   ├── host_boot_005_f41a08d8_230635.log
-│   │           │   └── nm_init_diag_005_f41a08d8_230635.log
-│   │           └── 006_f41a08d8_140734/
-│   │               ├── cortex_extension_20260718.log
-│   │               ├── host_20260718.log
-│   │               ├── host_boot_006_f41a08d8_140734.log
-│   │               └── nm_init_diag_006_f41a08d8_140734.log
+│   │       └── c7f65be6-ccee-4711-a58c-8e659b437918/
+│   │           ├── 001_c7f65be6_095319/
+│   │           │   ├── cortex_extension_20260720.log
+│   │           │   ├── host_20260720.log
+│   │           │   ├── host_boot_001_c7f65be6_095319.log
+│   │           │   └── nm_init_diag_001_c7f65be6_095319.log
+│   │           └── 002_c7f65be6_095521/
+│   │               ├── cortex_extension_20260720.log
+│   │               ├── host_20260720.log
+│   │               ├── host_boot_002_c7f65be6_095521.log
+│   │               └── nm_init_diag_002_c7f65be6_095521.log
 │   ├── install/
 │   ├── metamorph/
-│   │   └── metamorph_core_20260717.log
+│   │   └── metamorph_core_20260720.log
 │   ├── nucleus/
 │   │   ├── control_plane/
-│   │   │   └── nucleus_control_plane_20260717.log
+│   │   │   └── nucleus_control_plane_20260720.log
 │   │   ├── harness/
 │   │   │   └── harness.log
 │   │   ├── hooks/
 │   │   │   ├── post_launch/
-│   │   │   │   ├── nucleus_post_launch_20260717.log
-│   │   │   │   └── nucleus_post_launch_20260718.log
+│   │   │   │   └── nucleus_post_launch_20260720.log
 │   │   │   ├── profile_disconnected/
-│   │   │   │   ├── nucleus_profile_disconnected_20260717.log
-│   │   │   │   └── nucleus_profile_disconnected_20260718.log
+│   │   │   │   └── nucleus_profile_disconnected_20260720.log
 │   │   │   └── system_health/
-│   │   │       ├── nucleus_system_health_20260717.log
-│   │   │       └── nucleus_system_health_20260718.log
-│   │   ├── nucleus_brain_poller_20260717.log
-│   │   ├── nucleus_orchestration_20260717.log
-│   │   ├── nucleus_orchestration_20260718.log
-│   │   ├── nucleus_synapse_20260717.log
-│   │   ├── nucleus_synapse_20260718.log
-│   │   ├── nucleus_temporal_20260717.log
-│   │   ├── nucleus_temporal_20260718.log
+│   │   │       └── nucleus_system_health_20260720.log
+│   │   ├── nucleus_brain_poller_20260720.log
+│   │   ├── nucleus_orchestration_20260720.log
+│   │   ├── nucleus_synapse_20260720.log
+│   │   ├── nucleus_temporal_20260720.log
 │   │   ├── service/
 │   │   │   ├── nucleus_service.log
-│   │   │   └── nucleus_service_20260717.log
+│   │   │   └── nucleus_service_20260720.log
 │   │   ├── svelte_dev/
-│   │   │   └── nucleus_svelte_dev_20260717.log
+│   │   │   └── nucleus_svelte_dev_20260720.log
 │   │   └── worker/
-│   │       └── worker_manager_20260717.log
+│   │       └── worker_manager_20260720.log
 │   ├── ollama/
 │   │   └── service/
 │   │       └── ollama_service.log
@@ -304,35 +269,30 @@ BloomNucleus/
 │   │   ├── bloom-sensor.error.log
 │   │   └── bloom-sensor.log
 │   ├── sentinel/
-│   │   ├── onboarding/
-│   │   │   ├── onboarding_f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5_20260717.log
-│   │   │   └── onboarding_f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5_20260718.log
 │   │   ├── profiles/
-│   │   │   ├── f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5/
-│   │   │   │   ├── 001_f41a08d8_214713_debug.log
-│   │   │   │   ├── 001_f41a08d8_214713_engine_mining.log
-│   │   │   │   ├── 001_f41a08d8_214713_engine_network.log
-│   │   │   │   ├── 001_f41a08d8_214713_engine_read.log
-│   │   │   │   └── 001_f41a08d8_214713_netlog.json
-│   │   │   ├── sentinel_f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5_20260717.log
-│   │   │   └── sentinel_f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5_20260718.log
-│   │   ├── sentinel_core_20260717.log
-│   │   └── sentinel_core_20260718.log
+│   │   │   ├── c7f65be6-ccee-4711-a58c-8e659b437918/
+│   │   │   │   ├── 001_c7f65be6_095319_debug.log
+│   │   │   │   ├── 001_c7f65be6_095319_engine_mining.log
+│   │   │   │   ├── 001_c7f65be6_095319_engine_network.log
+│   │   │   │   ├── 001_c7f65be6_095319_engine_read.log
+│   │   │   │   └── 001_c7f65be6_095319_netlog.json
+│   │   │   └── sentinel_c7f65be6-ccee-4711-a58c-8e659b437918_20260720.log
+│   │   └── sentinel_core_20260720.log
 │   ├── synapse_trace/
-│   │   ├── synapse_trace_001_f41a08d8_214713.log
-│   │   ├── synapse_trace_002_f41a08d8_214915.log
-│   │   ├── synapse_trace_003_f41a08d8_215117.log
-│   │   ├── synapse_trace_004_f41a08d8_224024.log
-│   │   ├── synapse_trace_005_f41a08d8_230635.log
-│   │   └── synapse_trace_006_f41a08d8_140734.log
+│   │   ├── synapse_trace_001_c7f65be6_095319.log
+│   │   └── synapse_trace_002_c7f65be6_095521.log
 │   ├── telemetry.json
 │   ├── temporal/
 │   │   └── server/
-│   │       └── temporal_server_20260717.log
+│   │       └── temporal_server_20260720.log
 │   └── workspace/
 │       └── setup/
 ├── profiles/
-│   └── f41a08d8-84f8-4e2c-8c9c-c60a8027c4e5/
+│   ├── 2d86bce8-793d-4d76-b744-ec52e5eb2394/
+│   │   ├── Default/ [... chromium profile data]
+│   │   ├── ShaderCache/ [... chromium cache]
+│   │   └── chrome_debug.log
+│   └── c7f65be6-ccee-4711-a58c-8e659b437918/
 │       ├── ActorSafetyLists/
 │       ├── AmountExtractionHeuristicRegexes/
 │       ├── BrowserMetrics-spare.pma
@@ -341,7 +301,6 @@ BloomNucleus/
 │       ├── Crowd Deny/
 │       ├── Default/ [... chromium profile data]
 │       ├── DevToolsActivePort
-│       ├── Dictionaries/
 │       ├── FirstPartySetsPreloaded/
 │       ├── GrShaderCache/ [... chromium cache]
 │       ├── GraphiteDawnCache/ [... chromium cache]
@@ -349,7 +308,7 @@ BloomNucleus/
 │       ├── Local State
 │       ├── MEIPreload/
 │       ├── NativeMessagingHosts/
-│       │   └── com.bloom.synapse.f41a08d8.json
+│       │   └── com.bloom.synapse.c7f65be6.json
 │       ├── OnDeviceHeadSuggestModel/
 │       ├── OptimizationHints/
 │       ├── OriginTrials/
