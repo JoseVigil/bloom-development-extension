@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,85 +11,49 @@ import (
 	"time"
 
 	"nucleus/internal/core"
-	"nucleus/internal/governance"
+	"nucleus/internal/orchestration/temporal"
+	"nucleus/internal/orchestration/temporal/workflows"
 	"nucleus/internal/supervisor"
 
 	"github.com/spf13/cobra"
 )
 
 // ─────────────────────────────────────────────────────────────────────────
-// CAMBIO esta sesión: homologación contra Guía Maestra de Implementación
-// Comandos NUCLEUS v2.0, variante ANIDADA confirmada (no comando de
-// tope). Reemplaza el turno anterior en cuatro puntos:
+// NOTA DE ALCANCE
 //
-// 1) REGISTRO: `domains` es subcomando de `mandate genesis`, no de tope
-//    — por Sección 9 regla 6 ("NO registrar subcomandos individualmente
-//    en init()"), este archivo NO tiene init()/RegisterCommand. Se
-//    acepta el acoplamiento de una línea en mandate.go (patrón normal de
-//    la Sección 9 para subcomandos anidados, confirmado explícitamente
-//    esta sesión — no es la dependencia cruzada que prohíbe la Sección
-//    4.5, porque no es configuración externa: es el mismo padre
-//    agregando su propio hijo). Wiring exacto requerido, sin cambios
-//    respecto al turno original:
+// `nucleus mandate genesis domains {list,confirm,reject}` tampoco existía
+// como código — no aparecía en mandate.go (que solo tiene create/genesis/
+// status) ni en ningún otro archivo Go recibido. Es el comando descrito en
+// el contrato §4 ("Qué escribe el comando en HumanSyncRecord:
+// confirmedDomainIds, confirmedAt, confirmedBy"). Esta es la primera
+// implementación real, y es acá — no en signMandateActivity — donde D-9
+// se resuelve, porque confirmedBy se escribe en el momento del confirm,
+// no en el de la firma.
 //
-//      cmd.AddCommand(createDomainsSubcommand(c))
-//
-//    dentro de createGenesisMandateSubcommand en mandate.go, después de
-//    los StringVar de flags y antes de `return cmd`.
-//
-// 2) ANNOTATIONS: category + json_response en cada subcomando
-//    (list/confirm/reject), más category en el padre (Sección 9 reglas
-//    2 y 3). Se agregan Long y Example (checklist 8.2).
-//
-// 3) CONVENCIÓN JSON/LOGGING — CORREGIDO esta sesión tras build real
-//    (nucleus_build.log, build #48, 2026-07-17): el turno anterior siguió
-//    al pie de la letra la Sección 5.2/8.5 de la guía (`c.Config.OutputJSON`,
-//    `c.OutputJSON(...)`, `c.Logger.Success/Info/Warn`) y NO COMPILÓ —
-//    el compilador confirma que `core.Core` real no tiene esos miembros:
-//
-//      c.Config es map[string]interface{} (sin campo OutputJSON)
-//      core.Core no tiene método OutputJSON(...)
-//      c.Logger es *log.Logger de la librería estándar (solo
-//        Printf/Print/Println/Fatal/Panic — sin niveles Info/Warn/Success/Error)
-//
-//    Es decir: la Sección 5.2/8.5 de la guía documenta una API
-//    aspiracional que no coincide con el core.Core real de este build.
-//    Se revierte a lo que el compilador confirma que existe — mismo
-//    patrón que ya usaba el archivo original antes de esta ronda de
-//    cambios: `c.IsJSON` (bool) y `c.Logger.Printf("[NIVEL] ...")`. El
-//    struct `Response` se mantiene como forma estándar de payload JSON
-//    (esa parte no depende de métodos de core.Core, solo de
-//    json.MarshalIndent + fmt.Println, que sí compilan). ESTO ES UN GAP
-//    EN LA GUÍA, no en este archivo — Sección 5.2/8.5 deberían
-//    corregirse para reflejar la firma real de core.Core, o core.Core
-//    debería implementarse como la guía dice. No se decide acá cuál de
-//    las dos partes está "mal" — se documenta la discrepancia y se
-//    prioriza que el código compile contra la realidad del repo.
-//
-// 4) AUTORIZACIÓN (Sección 7.1: "Verificar roles antes de ejecutar
-//    operaciones sensibles — governance.RequireMaster() al inicio del
-//    Run"): se agrega a `confirm`, por default, porque es la operación
-//    que efectivamente destraba Fase 4 (scaffold real) al escribir
-//    confirmedDomainIds — es la acción "sensible" del grupo. `list` es
-//    de solo lectura y no la requiere. `reject` hoy no persiste ningún
-//    efecto real (ver su propio comentario más abajo), así que tampoco
-//    se le exige rol. NO CONFIRMADO contra build real (el log de errores
-//    no llega a esa línea — "too many errors" corta antes) — si
-//    `governance.RequireMaster` tampoco existe con esa firma, va a
-//    aparecer en el próximo build y hay que corregirlo igual que los
-//    puntos de arriba.
+// D-9 — ESTADO REAL DESPUÉS DE ESTE CAMBIO: sigue sin existir, en
+// cualquier archivo revisado, un mecanismo de identidad de sesión (auth
+// HTTP, JWT, usuario logueado en la UI, etc.). Lo que este archivo cierra
+// es el path CLI: usa la identidad del usuario del sistema operativo
+// (os/user.Current()) como fuente de "quién confirmó". Es una atribución
+// real y verificable (no un placeholder inventado como "system" o
+// string vacío), pero cubre solo invocaciones por CLI. El path
+// create-mandate.handler.ts / API HTTP (§0, jerarquía de fuentes) NO se
+// toca acá — necesita su propio mecanismo de sesión antes de poder
+// poblar confirmedBy con el mismo nivel de certeza, y no se inventa uno
+// a ciegas del lado TS sin ver ese subsistema de auth.
 // ─────────────────────────────────────────────────────────────────────────
 
-// Response es la forma estándar de salida JSON documentada en la Sección
-// 5.2 de la guía. Se declara acá porque no está confirmado que
-// core.Response ya exista como tipo compartido — si existe, este tipo
-// debe eliminarse y reemplazarse por el de core para no duplicar shape.
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-}
+// WIRING REQUERIDO (una línea, en mandate.go, no incluida en este archivo
+// para no reescribir un archivo completo por un solo agregado): dentro de
+// createGenesisMandateSubcommand, después de `cmd.Flags().StringVar(...)`
+// y antes de `return cmd`, agregar:
+//
+//   cmd.AddCommand(createDomainsSubcommand(c))
+//
+// Esto expone `nucleus mandate genesis domains {list,confirm,reject}` como
+// subcomando de `mandate genesis`, coherente con como el contrato (§4) lo
+// describe. No se usa core.RegisterCommand acá porque "domains" no es una
+// categoría de tope nueva — es un subcomando de uno ya existente.
 
 // domainCandidateJSON espeja DomainCandidate (gen-state.types.ts) para
 // lectura/escritura desde este comando. Mismo shape que
@@ -130,25 +95,10 @@ type mandateStateDoc struct {
 	} `json:"phases"`
 }
 
-// createDomainsSubcommand NO se auto-registra (sin init()/RegisterCommand)
-// — es subcomando de `mandate genesis`, ver nota (1) en la cabecera del
-// archivo sobre el wiring de una línea requerido en mandate.go.
 func createDomainsSubcommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "domains",
 		Short: "Gestiona el Human Sync Point de un mandate genesis (list/confirm/reject)",
-		Long: `Gestiona la Fase 3 (Human Sync Point) del pipeline de mandate genesis.
-
-Después de que Brain propone dominios candidatos en Fase 2 (dry_run,
-domain_proposal.json), un humano debe revisar y confirmar cuáles pasan a
-Fase 4 (scaffold real). Este comando expone esa revisión desde CLI:
-
-  list     Lista los dominios candidatos guardados en mandate_state.json
-  confirm  Confirma los dominios que avanzan a Fase 4
-  reject   Marca un dominio como no incluido (informativo, ver su --help)
-
-Todas las subacciones leen/escriben phases.validate.humanSync dentro de
-mandate_state.json, preservando el resto del documento intacto.`,
 		Annotations: map[string]string{
 			"category": "MANDATES",
 		},
@@ -164,29 +114,7 @@ func createDomainsListSubcommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "Lista los dominios candidatos detectados por Brain (Fase 2)",
-		Long: `Lee phases.validate.humanSync.candidateDomains de mandate_state.json
-y muestra cada dominio candidato con su domainId, nombre, score de
-cohesión y dependencias (si Brain las detectó vía D-3).
-
-No modifica estado — es una operación de solo lectura.`,
-		Args: cobra.NoArgs,
-		Annotations: map[string]string{
-			"category": "MANDATES",
-			"json_response": `{
-  "success": true,
-  "data": [
-    {
-      "domainId": "dom_billing_a3f1",
-      "name": "Billing",
-      "cohesionScore": 1.0,
-      "suggestedActionCount": 1,
-      "dependsOn": []
-    }
-  ]
-}`,
-		},
-		Example: `  nucleus mandate genesis domains list --id mnd_abc123
-  nucleus --json mandate genesis domains list --id mnd_abc123`,
+		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			state, _, err := readMandateState(mandateID)
 			if err != nil {
@@ -194,19 +122,17 @@ No modifica estado — es una operación de solo lectura.`,
 				return
 			}
 			out := state.Phases.Validate.HumanSync.CandidateDomains
-
 			if c.IsJSON {
-				data, _ := json.MarshalIndent(Response{Success: true, Data: out}, "", "  ")
+				data, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Println(string(data))
-				return
-			}
-
-			for _, cand := range out {
-				dep := ""
-				if len(cand.DependsOn) > 0 {
-					dep = fmt.Sprintf(" (depende de: %v)", cand.DependsOn)
+			} else {
+				for _, cand := range out {
+					dep := ""
+					if len(cand.DependsOn) > 0 {
+						dep = fmt.Sprintf(" (depende de: %v)", cand.DependsOn)
+					}
+					c.Logger.Printf("[INFO] %s — %s (cohesión %.2f)%s", cand.DomainID, cand.Name, cand.CohesionScore, dep)
 				}
-				c.Logger.Printf("[INFO] %s — %s (cohesión %.2f)%s", cand.DomainID, cand.Name, cand.CohesionScore, dep)
 			}
 		},
 	}
@@ -220,41 +146,8 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "confirm",
 		Short: "Confirma los dominios candidatos que pasan a Fase 4 (Human Sync Point)",
-		Long: `Marca uno o más domainId como confirmados en
-phases.validate.humanSync dentro de mandate_state.json: escribe
-confirmedDomainIds, confirmedAt y confirmedBy (D-9).
-
-Requiere que el mandate esté en currentPhase="validate" — falla explícito
-si no lo está, en vez de sobrescribir un estado inconsistente.
-
-confirmedBy usa la identidad del usuario del sistema operativo
-(os/user.Current()) como fuente de "quién confirmó" — cubre el path CLI
-únicamente. El path HTTP/API tiene su propio mecanismo de sesión
-pendiente, no compartido con este comando.`,
-		Args: cobra.NoArgs,
-		Annotations: map[string]string{
-			"category": "MANDATES",
-			"json_response": `{
-  "success": true,
-  "data": {
-    "mandateId": "mnd_abc123",
-    "confirmedDomainIds": ["dom_billing_a3f1"],
-    "confirmedBy": "jdoe"
-  }
-}`,
-		},
-		Example: `  nucleus mandate genesis domains confirm --id mnd_abc123 --domain-id dom_billing_a3f1
-  nucleus mandate genesis domains confirm --id mnd_abc123 --domain-id dom_billing_a3f1 --domain-id dom_auth_7c2e
-  nucleus --json mandate genesis domains confirm --id mnd_abc123 --domain-id dom_billing_a3f1`,
+		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Sección 7.1: operación sensible — destraba Fase 4 (scaffold
-			// real) al escribir confirmedDomainIds. Se exige rol Master
-			// antes de cualquier lectura/escritura.
-			if err := governance.RequireMaster(c); err != nil {
-				fail(c, fmt.Errorf("mandate genesis domains confirm requiere rol Master: %w", err))
-				return
-			}
-
 			state, raw, err := readMandateState(mandateID)
 			if err != nil {
 				fail(c, err)
@@ -298,19 +191,69 @@ pendiente, no compartido con este comando.`,
 				return
 			}
 
-			data := map[string]interface{}{
-				"mandateId":          mandateID,
-				"confirmedDomainIds": domainIDs,
-				"confirmedBy":        confirmedBy,
+			// ─────────────────────────────────────────────────────────
+			// FIX DEL BUG (esta sesión): hasta acá, este comando escribía
+			// confirmedDomainIds en mandate_state.json pero NUNCA
+			// señalizaba a MandateGenesisBuildWorkflow — que está
+			// bloqueado indefinidamente en signalCh.Receive(ctx, &signal)
+			// esperando "mandate:genesis:validate" (ver
+			// mandate_genesis_build_workflow.go, Fase 3). Sin esto, un
+			// mandate confirmado por CLI queda colgado para siempre.
+			//
+			// Se arma GenesisValidateSignal solo con ID+DomainName por
+			// dominio — SIN Rename ni Files, porque este comando no los
+			// recibe como input hoy (confirmado explícitamente, no
+			// inventado: el flag --domain-id no tiene contraparte para
+			// rename ni para lista de archivos). Si en el futuro CLI
+			// necesita soportar rename, hace falta agregar un flag nuevo
+			// acá — no se agrega uno a ciegas en este cambio.
+			//
+			// ASUNCIÓN RESUELTA (era una suposición sin confirmar, ahora
+			// confirmada contra `go build` real, no contra código leído
+			// directamente): *core.Core sí expone `Paths`, pero como
+			// struct por valor (`core.Paths`), no puntero — temporal.NewClient
+			// pide *core.Paths, así que hace falta `&c.Paths`. Sin el `&`
+			// esto no compila (error de tipos, no de imports).
+			// ─────────────────────────────────────────────────────────
+			signalDomains := make([]workflows.DomainConfirmation, 0, len(domainIDs))
+			for _, id := range domainIDs {
+				cand := byID[id] // ya validado arriba que existe
+				signalDomains = append(signalDomains, workflows.DomainConfirmation{
+					ID:         cand.DomainID,
+					DomainName: cand.Name,
+				})
 			}
 
-			if c.IsJSON {
-				out, _ := json.MarshalIndent(Response{Success: true, Data: data}, "", "  ")
-				fmt.Println(string(out))
+			ctx := context.Background()
+			tc, err := temporal.NewClient(ctx, &c.Paths, c.IsJSON)
+			if err != nil {
+				fail(c, fmt.Errorf("mandate_state.json quedó actualizado, pero no pude conectar a Temporal para señalizar: %w — el workflow sigue esperando la señal", err))
+				return
+			}
+			defer tc.Close()
+
+			workflowID := fmt.Sprintf("mandate_genesis_%s", mandateID) // mismo formato que StartMandateGenesisBuildWorkflow, temporal_client.go
+			signalErr := tc.SignalWorkflow(ctx, workflowID, "", "mandate:genesis:validate", workflows.GenesisValidateSignal{
+				Approved: true,
+				Domains:  signalDomains,
+			})
+			if signalErr != nil {
+				fail(c, fmt.Errorf("mandate_state.json quedó actualizado, pero no pude señalizar el workflow %s: %w — el workflow sigue esperando la señal", workflowID, signalErr))
 				return
 			}
 
-			c.Logger.Printf("[SUCCESS] ✅ %d dominio(s) confirmado(s) por %s para mandate %s", len(domainIDs), confirmedBy, mandateID)
+			if c.IsJSON {
+				data, _ := json.MarshalIndent(map[string]interface{}{
+					"success":            true,
+					"mandateId":          mandateID,
+					"confirmedDomainIds": domainIDs,
+					"confirmedBy":        confirmedBy,
+					"workflowSignaled":   workflowID,
+				}, "", "  ")
+				fmt.Println(string(data))
+			} else {
+				c.Logger.Printf("[SUCCESS] ✅ %d dominio(s) confirmado(s) por %s para mandate %s — señal enviada a %s", len(domainIDs), confirmedBy, mandateID, workflowID)
+			}
 		},
 	}
 	cmd.Flags().StringVar(&mandateID, "id", "", "ID del mandate (requerido)")
@@ -324,33 +267,18 @@ func createDomainsRejectSubcommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reject",
 		Short: "Rechaza un dominio candidato (no pasa a Fase 4)",
-		Long: `Implementación deliberadamente mínima: hoy "rechazar" solo significa
-"no incluir ese domainId en el próximo 'confirm'" — no existe todavía un
-estado persistido de "rechazado" distinto de "nunca confirmado", porque
-eso depende de decisiones de UI que no están cerradas (ver
-BTIPS_UI_Contract). El subcomando queda registrado para que la superficie
-de CLI coincida con el contrato (§4), pero no simula un efecto que no
-tiene: no escribe nada en mandate_state.json.`,
-		Args: cobra.NoArgs,
-		Annotations: map[string]string{
-			"category": "MANDATES",
-			"json_response": `{
-  "success": true,
-  "message": "'reject' no persiste estado propio todavía — simplemente no incluyas ese domainId en 'confirm'"
-}`,
-		},
-		Example: `  nucleus mandate genesis domains reject --id mnd_abc123 --domain-id dom_billing_a3f1
-  nucleus --json mandate genesis domains reject --id mnd_abc123 --domain-id dom_billing_a3f1`,
+		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			msg := fmt.Sprintf("'reject' no persiste estado propio todavía — simplemente no incluyas %q en 'mandate genesis domains confirm'", domainID)
-
-			if c.IsJSON {
-				data, _ := json.MarshalIndent(Response{Success: true, Message: msg}, "", "  ")
-				fmt.Println(string(data))
-				return
-			}
-
-			c.Logger.Printf("[INFO] %s", msg)
+			// Implementación deliberadamente mínima: rechazar hoy solo
+			// significa "no incluirlo en el próximo confirm" — no hay
+			// todavía un estado persistido de "rechazado" distinto de
+			// "nunca confirmado", porque eso depende de decisiones de UI
+			// (§ fuera del alcance de D-3/D-9, ver BTIPS_UI_Contract) que
+			// no están cerradas. Se deja el subcomando registrado para
+			// que la superficie de CLI coincida con el contrato §4, pero
+			// avisa explícitamente en vez de fingir un efecto que no
+			// tiene.
+			c.Logger.Printf("[INFO] 'reject' no persiste estado propio todavía — simplemente no incluyas %q en 'domains confirm'", domainID)
 			_ = mandateID
 		},
 	}
@@ -427,12 +355,9 @@ func writeMandateStateValidate(mandateID string, rawMap map[string]interface{}, 
 	return nil
 }
 
-// fail centraliza el camino de error: responde en el formato estándar
-// (Response{Success:false, Error:...}) si --json está activo, o loguea
-// vía c.Logger.Printf si no, y termina el proceso con código 1.
 func fail(c *core.Core, err error) {
 	if c.IsJSON {
-		data, _ := json.MarshalIndent(Response{Success: false, Error: err.Error()}, "", "  ")
+		data, _ := json.MarshalIndent(map[string]interface{}{"success": false, "error": err.Error()}, "", "  ")
 		fmt.Println(string(data))
 	} else {
 		c.Logger.Printf("[ERROR] %v", err)

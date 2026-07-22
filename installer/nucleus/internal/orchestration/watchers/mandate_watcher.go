@@ -59,9 +59,8 @@ type PhaseRecord struct {
 //
 // Vive solo en memoria: si Nucleus reinicia a mitad de un genesis, se
 // reconstruye desde el estado en disco en watchExistingMandateDirs() — el
-// peor caso es una señal repetida al reindexar, que el workflow debe poder
-// ignorar sin efecto (idempotencia del lado del handler de señal, no
-// resuelta acá — ver TODO en sendPhaseSignal).
+// peor caso es reprocesar el mismo fingerprint al reindexar, que
+// markIfChanged ya filtra.
 type mandateProgress struct {
 	mu   sync.Mutex
 	seen map[string]string // mandateId -> "currentPhase:ingestStatus:clusterStatus"
@@ -89,24 +88,15 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 	return true
 }
 
-// Nombres de señal para MandateGenesisBuildWorkflow. Debieran vivir como
-// constantes tipadas en nucleus/internal/orchestration/signals (mismo
-// paquete que ya define signals.SignalLaunch / signals.SignalShutdown,
-// confirmado en temporal_client.go) — no las movimos ahí todavía porque no
-// tenemos el contenido de ese archivo y no queremos arriesgar una colisión
-// de nombres a ciegas. Migrar cuando se confirme ese archivo.
-const (
-	signalIngestComplete  = "ingest_complete"
-	signalClusterComplete = "cluster_complete"
-)
-
-// genesisWorkflowID reconstruye el mismo Workflow ID que usa
-// StartMandateGenesisBuildWorkflow (temporal_client.go) — "mandate_genesis_{id}".
-// Debe permanecer igual a esa función; si alguna cambia, la otra rompe en
-// silencio (SignalWorkflow contra un ID que no corresponde a ningún run).
-func genesisWorkflowID(mandateID string) string {
-	return "mandate_genesis_" + mandateID
-}
+// CAMBIO esta sesión: se eliminaron signalIngestComplete/signalClusterComplete
+// y sendPhaseSignal (más abajo, ya no existe). Confirmado contra el cuerpo
+// real de MandateGenesisBuildWorkflow: Fase 1 y Fase 2 corren secuenciales
+// vía ExecuteActivity(...).Get(...), sin ningún GetSignalChannel/Receive
+// antes de Fase 3 — esas dos señales no tenían destinatario, eran no-ops.
+// Se sacan como dead code en vez de agregarles setHandler porque hoy no hay
+// necesidad de negocio real de pausar ahí (Fase 2 es dry_run instantáneo,
+// sin clustering real todavía). Si Fase 2 deja de ser instantánea en el
+// futuro, ahí sí valdría la pena reabrir esto.
 
 type MandateWatcher struct {
 	mandatesRoot string
@@ -223,9 +213,11 @@ func (w *MandateWatcher) handleEvent(ctx context.Context, event fsnotify.Event) 
 // contenido, si hay que:
 //   - arrancar MandateGenesisBuildWorkflow (primera vez que se ve el
 //     mandateId), o
-//   - señalizarlo para que avance de fase (ingest → cluster), o
 //   - no hacer nada (la escritura no cambió nada relevante — por ejemplo,
-//     un touch sin cambio de contenido, o un evento duplicado de fsnotify).
+//     un touch sin cambio de contenido, un evento duplicado de fsnotify, o
+//     una transición de fase que el propio workflow ya maneja internamente
+//     sin necesitar que este watcher la señalice — ver nota arriba sobre
+//     signalIngestComplete/signalClusterComplete, eliminadas esta sesión).
 //
 // Solo aplica a mandateType genesis/domain_expansion — mandate_state.json
 // de un standard firmado tiene otra forma y no debería llegar acá, pero
@@ -266,16 +258,15 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 	case ms.Status == "building" && ms.CurrentPhase == "ingest" && ms.Phases.Ingest.Status == "pending":
 		w.startGenesisWorkflow(ctx, ms)
 
-	case ms.CurrentPhase == "ingest" && ms.Phases.Ingest.Status == "completed":
-		w.sendPhaseSignal(ctx, ms.MandateID, signalIngestComplete)
-
-	case ms.CurrentPhase == "cluster" && ms.Phases.Cluster.Status == "completed":
-		w.sendPhaseSignal(ctx, ms.MandateID, signalClusterComplete)
-
 	default:
-		// Otras transiciones (validate, sign, etc.) — todavía no
-		// implementadas en este watcher. No es un error, es simplemente
-		// una fase que este código no maneja todavía.
+		// Cualquier otra transición (ingest completado, cluster, validate,
+		// sign, etc.) la maneja MandateGenesisBuildWorkflow internamente
+		// vía ExecuteActivity secuencial — este watcher solo necesita
+		// reaccionar al arranque inicial. La confirmación humana (Fase 3)
+		// tampoco pasa por acá: mandate_genesis_domains_cmd.go señaliza
+		// "mandate:genesis:validate" directo al workflow, sin pasar por
+		// este watcher ni por mandate_state.json como intermediario para
+		// ese paso puntual.
 	}
 }
 
@@ -294,6 +285,12 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 		BaseGenesisID: ms.BaseGenesisID,
 		Source:        ms.Source,
 		Project:       ms.Project,
+		// MandatesRoot — CAMPO NUEVO esta sesión (Tarea 1). Sin esto,
+		// ScaffoldDomainActivity/SignMandateActivity/PersistHumanSyncActivity
+		// fallan al arrancar ("MandatesRoot vacío para mandate ..."). El
+		// watcher ya lo tenía disponible como campo propio
+		// (w.mandatesRoot, ver NewMandateWatcher) — solo faltaba pasarlo.
+		MandatesRoot: w.mandatesRoot,
 	})
 	if err != nil {
 		if temporal.IsAlreadyStarted(err) {
@@ -304,32 +301,4 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 		return
 	}
 	log.Printf("[mandate_watcher] MandateGenesisBuildWorkflow arrancado para mandate %s", ms.MandateID)
-}
-
-// sendPhaseSignal señaliza al workflow en curso que una fase terminó, para
-// que avance a la siguiente Activity.
-//
-// Confirmado contra temporal_client.go: *temporal.Client no tiene
-// SignalMandateGenesisPhase (nombre que habíamos propuesto sin verificar) —
-// tiene SignalWorkflow(ctx, workflowID, runID, signalName, arg), el mismo
-// método genérico que ya usan ShutdownProfile y ExecuteLaunchWorkflow. El
-// runID vacío ("") apunta al run activo, mismo patrón que ShutdownProfile.
-//
-// El workflowID no es el mandateID pelado — StartMandateGenesisBuildWorkflow
-// lo registra como "mandate_genesis_{mandateID}" (ver temporal_client.go).
-// genesisWorkflowID() reconstruye ese mismo patrón acá.
-//
-// PENDIENTE, todavía no resuelto: esta llamada compila y le pega al
-// workflow correcto, pero no tenemos el cuerpo de MandateGenesisBuildWorkflow
-// — si ese workflow no define setHandler() para "ingest_complete" /
-// "cluster_complete", la señal se entrega y no tiene ningún efecto. Eso no
-// se puede confirmar sin ese archivo.
-func (w *MandateWatcher) sendPhaseSignal(ctx context.Context, mandateID, signalName string) {
-	workflowID := genesisWorkflowID(mandateID)
-	err := w.tc.SignalWorkflow(ctx, workflowID, "", signalName, nil)
-	if err != nil {
-		log.Printf("[mandate_watcher] error al señalizar %q para mandate %s (workflow %s): %v", signalName, mandateID, workflowID, err)
-		return
-	}
-	log.Printf("[mandate_watcher] señal %q enviada para mandate %s (workflow %s)", signalName, mandateID, workflowID)
 }

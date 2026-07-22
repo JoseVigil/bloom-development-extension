@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bloom Conductor — Mandate Genesis (v1.1, single-domain)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+
+/* ═══════════════════════════════════════════════════
+   TOKENS — heredados literal de BTIPS_UI_Contract_v1 §2/§3
+   No se reinterpretan. Ningún valor nuevo fuera de acá.
+═══════════════════════════════════════════════════ */
+
+:root {
+  --color-bg:              #080A0E;
+  --color-surface:         #0D1117;
+  --color-surface-hover:   #131820;
+
+  --color-text-primary:    #E8EAF0;
+  --color-text-secondary:  rgba(232,234,240,0.45);
+  --color-text-dim:        rgba(232,234,240,0.22);
+
+  --color-border:          rgba(255,255,255,0.06);
+  --color-border-active:   rgba(255,255,255,0.18);
+
+  --color-accent:          #C8F55A;
+  --color-accent-dim:      rgba(200,245,90,0.12);
+  --color-accent-glow:     rgba(200,245,90,0.06);
+
+  --color-error:           #FF4444;
+  --color-error-dim:       rgba(255,68,68,0.12);
+
+  --font-display: 'Syne', sans-serif;
+  --font-mono:    'DM Mono', monospace;
+
+  --space-xs:   8px;
+  --space-sm:   12px;
+  --space-md:   24px;
+  --space-lg:   40px;
+  --space-xl:   56px;
+
+  --radius-sm:  2px;
+  --radius-md:  4px;
+
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:   0 4px 16px rgba(0,0,0,0.6);
+  --shadow-glow: 0 0 12px rgba(200,245,90,0.25), 0 0 1px #C8F55A;
+
+  --duration-fast:  150ms;
+  --duration-base:  300ms;
+  --duration-slow:  600ms;
+  --ease-system:    cubic-bezier(0.4,0,0.2,1);
+
+  --sidebar-w:  56px;
+  --tab-h:      46px;
+  --ledger-w:   260px;
+  /* --alfred-h no se hereda — discontinuado (BTIPS_UI_Contract_v1 §3) */
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%; width: 100%;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,<svg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.028'/></svg>");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; }
+
+/* ═══════════════════════════════════════════════════
+   LAYOUT ROOT — geometría de BTIPS_UI_Contract_v1 §3/§4
+═══════════════════════════════════════════════════ */
+
+.workspace { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+
+/* ── Sidebar rail — mecánica intacta de v3.html, contenido de nav de app */
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex; flex-direction: column; align-items: center;
+  z-index: 100; position: relative;
+}
+.sidebar-logo {
+  width: var(--sidebar-w); height: var(--tab-h);
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid var(--color-border); flex-shrink: 0; cursor: pointer;
+}
+.logo-hex {
+  width: 22px; height: 22px; background: var(--color-accent);
+  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.logo-hex::after {
+  content: ''; position: absolute; width: 10px; height: 10px;
+  background: var(--color-bg);
+  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+}
+.sidebar-nav { flex: 1; display: flex; flex-direction: column; align-items: center; padding: var(--space-sm) 0; gap: 2px; }
+.nav-item {
+  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-md); cursor: pointer; position: relative;
+  transition: background var(--duration-fast) var(--ease-system); flex-shrink: 0;
+}
+.nav-item:hover { background: var(--color-surface-hover); }
+.nav-item.active { background: var(--color-accent-dim); }
+.nav-item.active .nav-icon { color: var(--color-accent); }
+.nav-icon { width: 18px; height: 18px; color: var(--color-text-dim); transition: color var(--duration-fast); flex-shrink: 0; }
+.nav-item:hover .nav-icon { color: var(--color-text-secondary); }
+.nav-tooltip {
+  position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+  background: var(--color-surface); border: 1px solid var(--color-border-active);
+  color: var(--color-text-primary); font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 10px; white-space: nowrap;
+  pointer-events: none; opacity: 0; transition: opacity var(--duration-fast); z-index: 200;
+}
+.nav-item:hover .nav-tooltip { opacity: 1; }
+.sidebar-bottom { padding: var(--space-sm) 0; border-top: 1px solid var(--color-border); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.user-avatar {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--color-accent-dim);
+  border: 1px solid rgba(200,245,90,0.2); display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 10px; color: var(--color-accent); cursor: pointer; flex-shrink: 0;
+}
+.system-status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent); box-shadow: var(--shadow-glow); animation: pulse-system 3s ease-in-out infinite; }
+@keyframes pulse-system { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ── Tab bar — GenesisTab. Una sola tab activa en este prototipo. */
+.tab-bar {
+  height: var(--tab-h); background: var(--color-surface); border-bottom: 1px solid var(--color-border);
+  display: flex; align-items: stretch; flex-shrink: 0; position: relative; z-index: 50;
+}
+.tabs-list { display: flex; align-items: stretch; flex: 1; }
+.tab {
+  display: flex; align-items: center; gap: 8px; padding: 0 18px; cursor: default;
+  position: relative; border-right: 1px solid var(--color-border);
+  min-width: 160px; flex-shrink: 0; user-select: none; background: var(--color-bg);
+}
+.tab::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1.5px; background: var(--color-accent); }
+.tab-indicator { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: var(--color-accent); transition: background var(--duration-base); }
+.tab-indicator.running { animation: pulse-indicator 2s ease-in-out infinite; }
+.tab-indicator.waiting { background: var(--color-accent); box-shadow: 0 0 6px rgba(200,245,90,0.4); }
+.tab-indicator.failed { background: var(--color-error); box-shadow: 0 0 6px rgba(255,68,68,0.4); }
+@keyframes pulse-indicator { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.tab-name { font-family: var(--font-display); font-size: 12px; font-weight: 500; color: var(--color-text-primary); letter-spacing: 0.01em; white-space: nowrap; }
+.tab-badge { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.10em; padding: 1px 5px; background: var(--color-accent-dim); color: var(--color-accent); border-radius: var(--radius-sm); flex-shrink: 0; text-transform: uppercase; margin-left: auto; }
+.tab-bar-right { display: flex; align-items: center; padding: 0 16px; gap: 12px; border-left: 1px solid var(--color-border); margin-left: auto; flex-shrink: 0; }
+.tab-system-info { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--color-text-dim); text-transform: uppercase; }
+
+.workspace-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+/* ── Zona 1+2 — Mandate Studio / Mandate Monitor comparten este contenedor central */
+.mandate-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; background: var(--color-bg); position: relative; }
+.mandate-scroll { flex: 1; overflow-y: auto; }
+.mandate-scroll::-webkit-scrollbar { width: 4px; }
+.mandate-scroll::-webkit-scrollbar-thumb { background: var(--color-border-active); border-radius: 2px; }
+
+/* Monitor: contenedor de card, con padding igual al mandate-content original */
+.monitor-wrap { padding: 40px 48px; display: flex; flex-direction: column; gap: 24px; max-width: 780px; }
+
+.monitor-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.20em; color: var(--color-accent); text-transform: uppercase; }
+
+/* ── Card genérica de Genesis en el Monitor (§2, §4, §5) */
+.g-card {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden; animation: fadeInUp 0.4s var(--ease-system) both;
+}
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.g-card-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--color-border); }
+.g-card-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.g-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--color-accent); }
+.g-status-dot.running { animation: pulse-indicator 2s ease-in-out infinite; }
+.g-status-dot.waiting { box-shadow: 0 0 8px rgba(200,245,90,0.4); }
+.g-status-dot.failed { background: var(--color-error); box-shadow: 0 0 8px rgba(255,68,68,0.4); }
+.g-status-dot.completed { box-shadow: 0 0 8px rgba(200,245,90,0.4); }
+.g-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-badge { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; padding: 3px 8px; border-radius: var(--radius-sm); text-transform: uppercase; flex-shrink: 0; }
+.g-badge.building { background: rgba(255,255,255,0.06); color: var(--color-text-secondary); }
+.g-badge.waiting  { background: var(--color-accent-dim); color: var(--color-accent); }
+.g-badge.running  { background: var(--color-accent-dim); color: var(--color-accent); }
+.g-badge.failed   { background: var(--color-error-dim); color: var(--color-error); }
+.g-badge.completed{ background: var(--color-accent-dim); color: var(--color-accent); }
+.g-card-body { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.g-phase-label { font-family: var(--font-display); font-size: 13px; color: var(--color-text-secondary); }
+
+/* ── Barra de progreso — componente único, especificado desde cero sobre tokens del contrato (§2.2) */
+.g-bar-track {
+  height: 8px; width: 100%; background: var(--color-surface-hover);
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; position: relative;
+}
+.g-bar-track.pending, .g-bar-track.idle { background: transparent; border-style: dashed; }
+.g-bar-track.error { border-color: rgba(255,68,68,0.35); }
+.g-bar-fill.error { background: var(--color-error); }
+.g-bar-fill { height: 100%; background: var(--color-accent); transition: width var(--duration-base) var(--ease-system); border-radius: var(--radius-sm); }
+.g-bar-fill.complete { width: 100%; }
+.g-bar-indeterminate-seg {
+  position: absolute; top: 0; bottom: 0; width: 15%;
+  background: var(--color-accent-dim); border-radius: var(--radius-sm);
+}
+.g-bar-indeterminate-seg::after {
+  content: ''; position: absolute; inset: 0; background: var(--color-accent); opacity: 0.55; border-radius: var(--radius-sm);
+}
+.g-bar-indeterminate-seg.anim { animation: bar-sweep var(--duration-slow) var(--ease-system) infinite alternate; animation-duration: 1.4s; }
+@keyframes bar-sweep { from { left: -15%; } to { left: 100%; } }
+.g-bar-indeterminate-seg.paused { animation-play-state: paused; }
+
+.g-progress-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--color-text-secondary); }
+.g-current-file { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-dim); white-space: nowrap; overflow: hidden; direction: rtl; text-align: left; }
+
+.g-card-actions { display: flex; justify-content: flex-end; padding: 0 20px 20px; }
+
+/* ── Botones */
+.btn-ghost {
+  padding: 8px 16px; background: transparent; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--color-text-secondary);
+  text-transform: uppercase; cursor: pointer; transition: all var(--duration-fast);
+}
+.btn-ghost:hover { border-color: var(--color-border-active); color: var(--color-text-primary); }
+.btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-ghost:disabled:hover { border-color: var(--color-border); color: var(--color-text-secondary); }
+.btn-primary {
+  padding: 10px 20px; background: var(--color-accent); border: none; border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--color-bg);
+  text-transform: uppercase; font-weight: 600; cursor: pointer; transition: opacity var(--duration-fast);
+}
+.btn-primary:hover { opacity: 0.88; }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-danger-ghost {
+  padding: 8px 16px; background: transparent; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--color-text-secondary);
+  text-transform: uppercase; cursor: pointer; transition: all var(--duration-fast);
+}
+.btn-danger-ghost:hover { border-color: var(--color-error); color: var(--color-error); }
+
+/* ── Fase 4 — fila única de dominio (N=1 en el alcance v1.1) */
+.g-domain-row { display: flex; flex-direction: column; gap: 6px; }
+.g-domain-row-head { display: flex; align-items: center; justify-content: space-between; }
+.g-domain-name { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); }
+.g-domain-state { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--color-text-dim); display: flex; align-items: center; gap: 5px; }
+.g-domain-state.completed { color: var(--color-accent); }
+.g-domain-state.unknown { color: var(--color-text-dim); }
+.g-domain-state.failed { color: var(--color-error); }
+
+/* v1.2 — grilla de dominios corriendo Fase 4 en paralelo. Cada fila es
+   independiente entre sí; el divisor solo separa visualmente, no implica
+   orden de ejecución. */
+.g-domains-grid { display: flex; flex-direction: column; gap: 18px; }
+.g-domains-grid .g-domain-row + .g-domain-row { padding-top: 18px; border-top: 1px solid var(--color-border); }
+
+/* ── Resumen final */
+.g-summary-line { font-family: var(--font-display); font-size: 13px; color: var(--color-text-secondary); }
+.g-summary-note { font-family: var(--font-display); font-size: 12px; color: var(--color-text-secondary); }
+
+/* ── Falla crítica (§5) */
+.g-error-block { display: flex; flex-direction: column; gap: 4px; }
+.g-error-reason { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--color-error); }
+.g-error-detail { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
+/* ═══════════════════════════════════════════════════
+   ZONA 1 — Studio, foco completo (validación + firmando)
+   Reemplaza Zona1+2 (mandate-area). Zona 3 sigue visible (§3.1).
+═══════════════════════════════════════════════════ */
+
+.studio-focus { position: absolute; inset: 0; background: var(--color-bg); display: flex; flex-direction: column; z-index: 20; animation: fadeInUp 0.35s var(--ease-system) both; }
+.studio-scroll { flex: 1; overflow-y: auto; display: flex; justify-content: center; }
+.studio-inner { width: 100%; max-width: 620px; padding: 56px 32px; display: flex; flex-direction: column; gap: 28px; }
+.studio-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.20em; color: var(--color-accent); text-transform: uppercase; }
+.studio-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--color-text-primary); letter-spacing: -0.01em; }
+.studio-subcopy { font-family: var(--font-display); font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; }
+
+/* Grid responsivo (roadmap §3.1). Con domains.length === 1, auto-fit
+   colapsa a una sola columna que ocupa el ancho completo del contenedor
+   — visualmente idéntico al flex-column anterior, sin cambios en
+   renderDomainCard() ni en el HTML que genera. */
+.domains-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.domain-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); display: flex; flex-direction: column; gap: 14px; }
+.domain-card-name { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+.domain-card-row { display: flex; align-items: center; gap: 10px; }
+.domain-card-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.10em; color: var(--color-text-dim); text-transform: uppercase; min-width: 68px; flex-shrink: 0; }
+.domain-cohesion-value { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); min-width: 30px; }
+.domain-cohesion-value.high { color: var(--color-accent); }
+.domain-file-count { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); }
+.domain-overlap-warning { font-family: var(--font-display); font-size: 12px; color: var(--color-error); display: flex; gap: 6px; align-items: flex-start; }
+.domain-files-toggle { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--color-text-dim); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; width: fit-content; }
+.domain-files-list { display: none; flex-direction: column; gap: 3px; max-height: 160px; overflow-y: auto; padding: 10px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.domain-files-list.open { display: flex; }
+.domain-files-list span { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-dim); }
+
+.studio-summary-line { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--color-text-secondary); }
+.studio-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.inline-confirm { background: var(--color-error-dim); border: 1px solid rgba(255,68,68,0.25); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.inline-confirm-text { font-family: var(--font-display); font-size: 12px; color: var(--color-text-primary); line-height: 1.6; }
+.inline-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Firmando (§3.5) — reutiliza literalmente el bloque indeterminado */
+.signing-block { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 64px 24px; text-align: center; }
+.signing-bar { width: 260px; }
+.signing-title { font-family: var(--font-display); font-size: 14px; color: var(--color-text-primary); }
+.signing-sub { font-family: var(--font-display); font-size: 12px; color: var(--color-text-secondary); max-width: 360px; line-height: 1.6; }
+
+/* ═══════════════════════════════════════════════════
+   ZONA 3 — Event Bus Feed (panel derecho, 260px, posición intacta)
+═══════════════════════════════════════════════════ */
+
+.ledger-panel { width: var(--ledger-w); flex-shrink: 0; background: var(--color-surface); border-left: 1px solid var(--color-border); display: flex; flex-direction: column; overflow: hidden; }
+.ledger-header { height: var(--tab-h); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+.ledger-title-text { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; color: var(--color-text-secondary); text-transform: uppercase; }
+.ledger-live { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+.ledger-live-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 5px rgba(200,245,90,0.4); animation: pulse-system 2s ease-in-out infinite; }
+.ledger-live.paused .ledger-live-dot { background: var(--color-text-dim); box-shadow: none; animation: none; }
+.ledger-live-text { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; color: var(--color-accent); text-transform: uppercase; }
+.ledger-live.paused .ledger-live-text { color: var(--color-text-dim); }
+
+.ledger-body { flex: 1; overflow-y: auto; padding: 10px 0; display: flex; flex-direction: column; }
+.ledger-body::-webkit-scrollbar { width: 3px; }
+.ledger-body::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+
+.feed-empty { padding: 20px 16px; font-family: var(--font-mono); font-size: 10px; color: var(--color-text-dim); letter-spacing: 0.06em; text-align: center; }
+
+.feed-row { padding: 8px 16px; border-bottom: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 3px; }
+.feed-row-top { display: flex; align-items: baseline; gap: 6px; }
+.feed-time { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-dim); flex-shrink: 0; }
+.feed-event { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-primary); word-break: break-word; }
+.feed-event.evt-genesis { color: var(--color-accent); }
+.feed-event.evt-action { color: var(--color-text-primary); }
+.feed-event.evt-error { color: var(--color-error); }
+.feed-payload { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-secondary); line-height: 1.5; word-break: break-word; }
+
+.ledger-footer { padding: 10px 16px; border-top: 1px solid var(--color-border); flex-shrink: 0; }
+.ledger-footer-note { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; color: var(--color-text-dim); line-height: 1.6; }
+
+/* ═══════════════════════════════════════════════════
+   DEMO HARNESS — no es parte del producto, simula al Daemon
+   emitiendo eventos WS para poder recorrer el ciclo sin backend.
+═══════════════════════════════════════════════════ */
+
+.demo-harness {
+  position: fixed; left: calc(var(--sidebar-w) + 16px); bottom: 16px; z-index: 300;
+  background: var(--color-surface); border: 1px dashed var(--color-border-active);
+  border-radius: var(--radius-md); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+  max-width: 480px; box-shadow: var(--shadow-md);
+}
+.demo-harness-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; color: var(--color-text-dim); text-transform: uppercase; }
+.demo-harness-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.demo-btn {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; padding: 5px 9px;
+  background: var(--color-surface-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  color: var(--color-text-secondary); cursor: pointer; transition: all var(--duration-fast);
+}
+.demo-btn:hover:not(:disabled) { border-color: var(--color-border-active); color: var(--color-text-primary); }
+.demo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.demo-toggle { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 9px; color: var(--color-text-dim); }
+
+</style>
+</head>
+<body>
+
+<div class="workspace">
+
+  <!-- ═══ SIDEBAR (mecánica intacta v3.html) ═══ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo" title="BTIPS"><div class="logo-hex"></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" title="Nucleus">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="10" cy="10" r="3"/><circle cx="10" cy="10" r="7" stroke-dasharray="2 2"/>
+          <circle cx="10" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="17" r="1" fill="currentColor" stroke="none"/>
+          <circle cx="3" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="17" cy="10" r="1" fill="currentColor" stroke="none"/>
+        </svg>
+        <span class="nav-tooltip">Nucleus</span>
+      </div>
+      <div class="nav-item" title="Accounts">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="10" cy="7" r="3"/><path d="M4 17c0-3.314 2.686-6 6-6s6 2.686 6 6"/>
+        </svg>
+        <span class="nav-tooltip">Accounts</span>
+      </div>
+      <div class="nav-item" title="Store">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="3" y="8" width="14" height="10" rx="1"/><path d="M7 8V6a3 3 0 0 1 6 0v2"/><path d="M10 12v2"/>
+        </svg>
+        <span class="nav-tooltip">Store</span>
+      </div>
+      <div class="nav-item" title="Continuity">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M4 4h4v4H4z"/><path d="M12 4h4v4h-4z"/><path d="M4 12h4v4H4z"/><path d="M6 8v4M14 8v4M8 14h4"/>
+        </svg>
+        <span class="nav-tooltip">Continuity</span>
+      </div>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="nav-item" title="Settings">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="10" cy="10" r="2.5"/>
+          <path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M5.05 5.05l1.06 1.06M13.89 13.89l1.06 1.06M5.05 14.95l1.06-1.06M13.89 6.11l1.06-1.06"/>
+        </svg>
+        <span class="nav-tooltip">Settings</span>
+      </div>
+      <div class="user-avatar">US</div>
+      <div class="system-status-dot"></div>
+    </div>
+  </aside>
+
+  <div class="main-area">
+
+    <!-- ═══ TAB BAR — GenesisTab única (F-05) ═══ -->
+    <div class="tab-bar">
+      <div class="tabs-list">
+        <div class="tab">
+          <div class="tab-indicator running" id="tabIndicator"></div>
+          <span class="tab-name" id="tabName">Genesis: my-project</span>
+          <span class="tab-badge">M–001</span>
+        </div>
+      </div>
+      <div class="tab-bar-right">
+        <span class="tab-system-info" id="tabSystemInfo">mandate:genesis · building</span>
+      </div>
+    </div>
+
+    <!-- ═══ WORKSPACE BODY ═══ -->
+    <div class="workspace-body">
+
+      <!-- Zona 1 (Studio) / Zona 2 (Monitor) — mismo contenedor, exclusivos entre sí -->
+      <div class="mandate-area" id="mandateArea">
+        <div class="mandate-scroll">
+          <div class="monitor-wrap" id="monitorWrap"><!-- Zona 2: renderizado por JS --></div>
+        </div>
+        <!-- Zona 1: overlay de foco completo, inyectado por JS cuando corresponde -->
+      </div>
+
+      <!-- ═══ ZONA 3 — Event Bus Feed (observabilidad, sin acciones) ═══ -->
+      <aside class="ledger-panel">
+        <div class="ledger-header">
+          <span class="ledger-title-text">Event Bus Feed</span>
+          <div class="ledger-live" id="feedToggle" onclick="toggleFeedPause()">
+            <div class="ledger-live-dot"></div>
+            <span class="ledger-live-text" id="feedToggleLabel">Live</span>
+          </div>
+        </div>
+        <div class="ledger-body" id="feedBody">
+          <div class="feed-empty">Sin eventos todavía</div>
+        </div>
+        <div class="ledger-footer">
+          <div class="ledger-footer-note">Solo observabilidad — sin acciones desde este panel.</div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DEMO HARNESS — simula al Daemon emitiendo eventos WS ═══ -->
+<div class="demo-harness" id="demoHarness">
+  <span class="demo-harness-label">Simulador de eventos WS (no es parte del producto)</span>
+  <div class="demo-harness-row" id="demoRow"><!-- botones contextuales por fase, renderizado por JS --></div>
+  <label class="demo-toggle">
+    <input type="checkbox" id="domainExpansionToggle" onchange="onMandateTypeToggle()">
+    mandateType: domain_expansion (en vez de genesis)
+  </label>
+  <label class="demo-toggle">
+    <input type="checkbox" id="multiDomainToggle" onchange="onMultiDomainToggle()">
+    Simular 3 dominios concurrentes (Fase 4 en paralelo) — reinicia el ciclo
+  </label>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   ESTADO — modela el ciclo de vida real confirmado en
+   BLOOM_Genesis_UI_Roadmap_v1.md (Anexo D, verificado contra los
+   emisores Go: mandate_genesis_activities.go, mandate_genesis_sign_activity.go,
+   mandate_genesis_build_workflow.go). Reemplaza al vocabulario de
+   ws-events.ts v1, que no correspondía a lo que el backend emite de verdad.
+
+   Eventos reales (6, no más):
+     mandate:phase:ingest           — Fase 1, una vez, sin progreso
+     mandate:action:started         — Fase 2 (actionId:'cluster', mode:'dry_run')
+                                       o Fase 4 (actionId:'gen-action-{name}', mode:'real')
+     mandate:action:completed       — ídem, domains[] solo si mode:'dry_run'
+     mandate:action:failed          — ídem
+     mandate:genesis:rejected       — tras signal {approved:false}
+     mandate:genesis:all_complete   — cierre del mandate; NO certifica scaffold
+                                       real (Fase 4 real sigue siendo placeholder)
+═══════════════════════════════════════════════════ */
+
+const MOCK_FILES = [
+  'src/auth/login.controller.ts','src/auth/session.service.ts','src/auth/oauth.adapter.ts',
+  'src/auth/guards/jwt.guard.ts','src/auth/dto/login.dto.ts','src/auth/dto/refresh.dto.ts',
+  'src/components/AuthModal.tsx','src/components/LoginForm.tsx','src/components/OAuthButton.tsx',
+  'src/hooks/useAuth.ts','src/hooks/useSession.ts','src/middleware/authenticate.ts',
+  'src/middleware/rateLimiter.ts','src/utils/token.ts','src/utils/crypto.ts',
+  'test/auth/login.spec.ts','test/auth/session.spec.ts','test/auth/oauth.spec.ts',
+  'config/auth.config.ts','config/oauth-providers.json'
+];
+
+// Escenario de 3 dominios reales (no 3 copias del mismo) para poder demostrar
+// Fase 4 corriendo en paralelo. Se activa con el toggle del harness; por
+// default el ciclo sigue siendo 1 dominio = nombre del proyecto.
+const MOCK_DOMAIN_DEFS = [
+  { name: 'auth',          slice: [0, 7],  cohesion: 0.91 },
+  { name: 'billing',       slice: [7, 13], cohesion: 0.84 },
+  { name: 'notifications', slice: [13, 20], cohesion: 0.78 },
+];
+
+const state = {
+  mandateId: 'genesis-my-project-a91f',
+  projectName: 'my-project',
+  mandateType: 'genesis',           // 'genesis' | 'domain_expansion'
+  phase: 'ingest',                  // ingest | cluster | awaiting_validation | validating | running | completed | failed
+                                     // (sin 'signing' — no hay evento que la respalde)
+  multiDomainDemo: false,           // false = 1 dominio, true = 3 dominios concurrentes
+  domains: [],                      // DomainProposal[] + campo de ejecución (actionState/actionId/errorMessage/resultRef) por elemento
+  clusterError: null,               // error de Fase 2 (mandate:action:failed, actionId:'cluster') — antes de que existan dominios
+  clusterTimedOut: false,           // fire-and-forget (D-12): Fase 2 puede completar y perdernos el evento
+  showRejectConfirm: false,
+  paused: false,
+  resumable: false,
+  domainsConfirmed: 0,
+  actionsCreated: 0,
+};
+
+let ingestTimer = null;
+let clusterTimer = null;
+let clusterTimeoutTimer = null;
+let feedPaused = false;
+let feedBuffer = [];
+
+function fmtTime(d) {
+  return d.toTimeString().slice(0,8);
+}
+
+function slugify(name) {
+  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+/**
+ * genRealisticDomainId — simula el formato real confirmado en el roadmap
+ * (Anexo §A): dom_{slug(domainName)}_{sufijo hex de 4 caracteres}. Se usa
+ * en el camino feliz del mock (lo que Backend generaría en Fase 2).
+ */
+function genRealisticDomainId(name) {
+  const hex = Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
+  return 'dom_' + slugify(name) + '_' + hex;
+}
+
+/**
+ * genDomainId — fallback DEFENSIVO exclusivamente. El id real llega en
+ * mandate:action:completed (actionId:'cluster', mode:'dry_run').domains[].id
+ * — confirmado por grep de los emisores Go. Esta función solo debería
+ * dispararse si ese payload llegara con un elemento sin id (transporte
+ * fire-and-forget, D-12). Nunca es la fuente primaria.
+ */
+function genDomainId(index) {
+  return 'dom-fallback-' + index + '-' + Math.random().toString(36).slice(2,7);
+}
+
+function logEvent(name, payload) {
+  const row = { time: fmtTime(new Date()), name, payload };
+  feedBuffer.push(row);
+  renderFeed();
+}
+
+/* ── Fase 1: mandate:phase:ingest — pulso único, SIN progreso incremental.
+   No hay evento de "ingest_complete": lo próximo que llega es el 'started'
+   de la acción cluster (Fase 2), que es lo que dispara el avance de fase. ── */
+function startIngest() {
+  logEvent('mandate:phase:ingest', { mandateId: state.mandateId });
+  ingestTimer = setTimeout(function tick() {
+    if (state.paused) { ingestTimer = setTimeout(tick, 400); return; }
+    startCluster();
+  }, 1800);
+}
+
+/* ── Fase 2: arranca como una action ('cluster', mode:'dry_run') — mismo
+   canal de eventos que Fase 4. El dispatcher de abajo es el que discrimina. ── */
+function startCluster() {
+  const startedPayload = { mandateId: state.mandateId, actionId: 'cluster', domainName: null, mode: 'dry_run', startedAt: new Date().toISOString() };
+  logEvent('mandate:action:started', startedPayload);
+  dispatchActionStarted(startedPayload);
+
+  clusterTimer = setTimeout(function tick() {
+    if (state.paused) { clusterTimer = setTimeout(tick, 400); return; }
+    const domains = currentMockDomainDefs().map(buildMockDomainProposal);
+    const completedPayload = {
+      mandateId: state.mandateId, actionId: 'cluster', domainName: null, mode: 'dry_run',
+      resultRef: 'domain_proposal.json', completedAt: new Date().toISOString(), domains
+    };
+    logEvent('mandate:action:completed', completedPayload);
+    dispatchActionCompleted(completedPayload);
+  }, 2600);
+}
+
+function currentMockDomainDefs() {
+  return state.multiDomainDemo ? MOCK_DOMAIN_DEFS : [{ name: state.projectName, slice: [0, MOCK_FILES.length], cohesion: 0.87 }];
+}
+
+function buildMockDomainProposal(def, i) {
+  // Forma de un elemento de domains[] tal como lo describe el Anexo §C
+  // (domain_proposal.json) / el evento mandate:action:completed dry_run.
+  return {
+    id: genRealisticDomainId(def.name),
+    domainName: def.name,
+    cohesionScore: def.cohesion,
+    suggestedActionCount: 1,
+    files: MOCK_FILES.slice(def.slice[0], def.slice[1]),
+    possibleOverlapWith: (i === 0 && state.mandateType === 'domain_expansion') ? 'auth-legacy' : undefined,
+  };
+}
+
+/**
+ * dispatchActionStarted/Completed/Failed — Fase 2 y Fase 4 comparten
+ * exactamente los mismos tres nombres de evento (mandate:action:*); lo
+ * único que los distingue es actionId==='cluster' + mode==='dry_run'.
+ * Punto único de bifurcación — todo lo demás abajo ya asume resuelto
+ * a qué fase pertenece el payload.
+ */
+function dispatchActionStarted(payload) {
+  if (payload.actionId === 'cluster' && payload.mode === 'dry_run') {
+    state.phase = 'cluster';
+    state.clusterTimedOut = false;
+    render();
+    // Timeout visible — plan B ante fire-and-forget sin retry (D-12).
+    // Si el 'completed' de cluster no llega en este margen, ofrecemos
+    // el fallback de leer domain_proposal.json directo (Anexo §C).
+    clusterTimeoutTimer = setTimeout(() => {
+      state.clusterTimedOut = true;
+      render();
+    }, 8000);
+    return;
+  }
+  handleActionStarted(payload); // Fase 4, per-domain
+}
+
+function dispatchActionCompleted(payload) {
+  if (payload.mode === 'dry_run') {
+    handleClusterCompleted(payload);
+    return;
+  }
+  handleActionCompleted(payload); // Fase 4, per-domain
+}
+
+function dispatchActionFailed(payload) {
+  if (payload.actionId === 'cluster') {
+    handleClusterFailed(payload);
+    return;
+  }
+  handleActionFailed(payload); // Fase 4, per-domain
+}
+
+/**
+ * applyProposedDomains — punto único donde domains[] (venga del evento
+ * normal o del fallback de filesystem) se convierte en state.domains,
+ * con el actionState de Fase 4 ya inicializado en 'idle'.
+ */
+function applyProposedDomains(rawDomains) {
+  state.domains = (rawDomains || []).map((dp, i) => ({
+    id: dp.id || genDomainId(i),   // fallback defensivo — ver comentario de genDomainId()
+    domainName: dp.domainName,
+    originalDomainName: undefined, // se puebla solo si el usuario renombra al confirmar
+    files: dp.files || [],
+    cohesionScore: dp.cohesionScore != null ? dp.cohesionScore : 0,
+    suggestedActionCount: dp.suggestedActionCount,
+    possibleOverlapWith: dp.possibleOverlapWith,
+    rename: '',                    // input de Zona 1 — ver renderDomainCard()
+    actionState: 'idle',           // idle | in_progress | completed | failed
+    actionId: null,
+    errorMessage: '',
+    resultRef: null,
+  }));
+  state.phase = 'awaiting_validation';
+  render();
+}
+
+function handleClusterCompleted(payload) {
+  clearTimeout(clusterTimeoutTimer);
+  state.clusterTimedOut = false;
+  applyProposedDomains(payload.domains);
+}
+
+function handleClusterFailed(payload) {
+  clearTimeout(clusterTimeoutTimer);
+  state.clusterError = payload.error;
+  state.phase = 'failed'; // state.domains sigue vacío — Fase 2 falló ANTES de proponer nada
+  render();
+}
+
+/**
+ * fallbackReadDomainProposal — mecanismo de reconciliación manual. En un
+ * cliente real esto sería un fetch/IPC leyendo
+ * {mandatesRoot}/{mandateId}/domain_proposal.json (layout PLANO, Anexo §C
+ * — no el árbol anidado de bloom_project_tree_gen.txt, discrepancia D-13
+ * todavía sin resolver). Acá se simula generando el mismo mock que
+ * hubiéramos recibido por WS. No es un evento — es una acción de UI.
+ */
+function fallbackReadDomainProposal() {
+  clearTimeout(clusterTimeoutTimer);
+  logEvent('local:ui:fallback_read_domain_proposal', { mandateId: state.mandateId, path: 'domain_proposal.json (mock, layout plano)' });
+  const domains = currentMockDomainDefs().map(buildMockDomainProposal);
+  applyProposedDomains(domains);
+}
+
+function forceClusterTimeout() {
+  if (state.phase !== 'cluster') return;
+  clearTimeout(clusterTimeoutTimer);
+  state.clusterTimedOut = true;
+  render();
+}
+
+function simulateClusterFailed() {
+  if (state.phase !== 'cluster') return;
+  clearTimeout(clusterTimeoutTimer);
+  const payload = { mandateId: state.mandateId, actionId: 'cluster', domainName: null, error: 'Brain: ChromaDB no respondió durante el clustering semántico.' };
+  logEvent('mandate:action:failed', payload);
+  dispatchActionFailed(payload);
+}
+
+/* ── CTA: usuario decide ir a la pantalla de validación ── */
+function goToValidation() {
+  state.phase = 'validating';
+  render();
+}
+
+function toggleFilesList(domainId) {
+  const el = document.getElementById('domainFilesList-' + domainId);
+  if (el) el.classList.toggle('open');
+}
+
+function updateDomainRename(domainId, value) {
+  const d = state.domains.find(x => x.id === domainId);
+  if (!d) return;
+  d.rename = value; // se lee recién al confirmar — no dispara render() para no perder el foco del input
+}
+
+function askRejectDomain() {
+  state.showRejectConfirm = true;
+  render();
+}
+function cancelRejectDomain() {
+  state.showRejectConfirm = false;
+  render();
+}
+function confirmRejectDomain() {
+  // GenesisValidateSignal con approved:false — Backend lo interpreta como
+  // rechazo TOTAL del mandate; no hay rechazo parcial de un dominio individual.
+  const payload = { approved: false };
+  console.log('GenesisValidateSignal (demo, rechazo):', payload);
+  clearTimers();
+  // Fire-and-forget también acá (D-12): simulamos la latencia real antes
+  // de que mandate:genesis:rejected confirme que Backend lo recibió.
+  setTimeout(() => {
+    logEvent('mandate:genesis:rejected', { mandateId: state.mandateId });
+    resetState();
+    render();
+  }, 500);
+}
+
+/* ── Confirmación → Fase 4: transición OPTIMISTA, no hay evento 'signed' ── */
+function confirmAndSign() {
+  // El rename se aplica LOCALMENTE antes de armar el signal: a partir de
+  // acá, d.domainName pasa a ser el nombre FINAL — es el que Fase 4 va a
+  // usar para correlacionar sus eventos (domainName post-rename).
+  state.domains.forEach(d => {
+    const newName = (d.rename || '').trim();
+    if (newName && newName !== d.domainName) {
+      d.originalDomainName = d.domainName;
+      d.domainName = newName;
+    }
+  });
+
+  // GenesisValidateSignal — ya NO es { domains: string[], renames }.
+  // domainName acá es el nombre ORIGINAL de la propuesta; rename es el
+  // nuevo nombre si cambió.
+  const payload = {
+    approved: true,
+    domains: state.domains.map(d => ({
+      id: d.id,
+      domainName: d.originalDomainName || d.domainName,
+      rename: d.originalDomainName ? d.domainName : undefined,
+      files: d.files,
+    }))
+  };
+  console.log('GenesisValidateSignal (demo):', payload);
+
+  // No hay evento 'signed' (confirmado — no está entre los 6 emisores
+  // reales). La transición a Fase 4 es OPTIMISTA: ocurre en el instante en
+  // que mandamos el signal, no cuando llega una confirmación de Backend.
+  // Si el signal se pierde en el canal fire-and-forget (D-12), la UI ya
+  // está mostrando Fase 4 igual — limitación conocida.
+  state.domainsConfirmed = state.domains.length;
+  state.actionsCreated = state.domains.length;
+  state.domains.forEach(d => { d.actionState = 'idle'; d.actionId = null; d.errorMessage = ''; d.resultRef = null; });
+  state.phase = 'running';
+  render();
+
+  // Arranque concurrente simulado — el MandateWorkflow real también las
+  // dispara de forma optimista/inmediata tras recibir el signal.
+  state.domains.forEach((d, i) => {
+    setTimeout(() => {
+      const actionId = 'gen-action-' + d.domainName;
+      const evtPayload = { mandateId: state.mandateId, actionId, domainName: d.domainName, mode: 'real', startedAt: new Date().toISOString() };
+      logEvent('mandate:action:started', evtPayload);
+      dispatchActionStarted(evtPayload);
+    }, i * 260);
+  });
+
+  // mandate:genesis:all_complete — NO certifica trabajo real terminado:
+  // MandateExecutionWorkflow (Fase 4 real) sigue siendo placeholder puro,
+  // llega "casi enseguida" sin importar el estado real de cada dominio.
+  // Se registra en el feed únicamente para ejercitar el evento — no
+  // dispara ningún cambio de fase.
+  setTimeout(() => {
+    logEvent('mandate:genesis:all_complete', { mandateId: state.mandateId, result: 'unknown' /* enum real no confirmado */ });
+  }, 900);
+}
+
+/**
+ * resolveDomain — correlaciona un payload de mandate:action:* (Fase 4) con
+ * su entrada en state.domains. Confirmado por grep de los emisores Go:
+ * Fase 4 (mode:'real') NUNCA trae domainId, solo domainName — y es el
+ * nombre FINAL (post-rename). Ya no hay fallback por id acá.
+ */
+function resolveDomain(payload) {
+  return state.domains.find(d => d.domainName === payload.domainName) || null;
+}
+
+/* ── Fase 4: estado concurrente por dominio — handlers de los eventos reales ── */
+function handleActionStarted(payload) {
+  const d = resolveDomain(payload);
+  if (!d) return;
+  d.actionId = payload.actionId;
+  d.actionState = 'in_progress';
+  render();
+}
+
+function handleActionCompleted(payload) {
+  const d = resolveDomain(payload);
+  if (!d) return;
+  d.actionState = 'completed';
+  d.resultRef = payload.resultRef;
+  checkAllComplete();
+  render();
+}
+
+function handleActionFailed(payload) {
+  const d = resolveDomain(payload);
+  if (!d) return;
+  d.actionState = 'failed';
+  d.errorMessage = payload.error;
+  state.resumable = false; // no confirmado si `resume` aplica post-firma — a nivel mandate
+  // El mandate pasa a failed apenas UN dominio falla — pero los demás
+  // siguen corriendo/completando de forma independiente. Por eso esto
+  // muta state.phase, no state.domains: no hay "rollback" de los que ya
+  // terminaron ni freeze de los que siguen in_progress.
+  state.phase = 'failed';
+  render();
+}
+
+function checkAllComplete() {
+  // Transición LOCAL/optimista basada en lo que observamos de cada
+  // dominio — no en mandate:genesis:all_complete (ver nota en confirmAndSign).
+  const allDone = state.domains.length > 0 && state.domains.every(d => d.actionState === 'completed');
+  if (allDone) {
+    state.phase = 'completed';
+  }
+}
+
+/* ── Fase 4: disparadores del demo — sin domainId inventado, con mode:'real' ── */
+function simulateDomainCompleted(domainId) {
+  const d = state.domains.find(x => x.id === domainId);
+  if (!d || d.actionState !== 'in_progress') return;
+  const payload = { mandateId: state.mandateId, actionId: d.actionId, domainName: d.domainName, mode: 'real', resultRef: '.intents/.gen/.../report.json', completedAt: new Date().toISOString() };
+  logEvent('mandate:action:completed', payload);
+  dispatchActionCompleted(payload);
+}
+
+function simulateDomainFailed(domainId) {
+  const d = state.domains.find(x => x.id === domainId);
+  if (!d || d.actionState !== 'in_progress') return;
+  const payload = { mandateId: state.mandateId, actionId: d.actionId, domainName: d.domainName, mode: 'real', error: 'Brain: timeout al generar el semantic_scaffold — el proceso excedió 120s sin respuesta del modelo.', failedAt: new Date().toISOString() };
+  logEvent('mandate:action:failed', payload);
+  dispatchActionFailed(payload);
+}
+
+/* ── Pausa a nivel mandate — un único control, nunca por dominio ── */
+function togglePause() {
+  state.paused = !state.paused;
+  render();
+}
+
+function onMandateTypeToggle() {
+  state.mandateType = document.getElementById('domainExpansionToggle').checked ? 'domain_expansion' : 'genesis';
+  render();
+}
+
+function onMultiDomainToggle() {
+  state.multiDomainDemo = document.getElementById('multiDomainToggle').checked;
+  // Cambiar la cantidad de dominios a mitad de ciclo no tiene un evento real
+  // que lo modele — se reinicia el ciclo completo para que la demo quede consistente.
+  resetState();
+}
+
+function clearTimers() {
+  clearInterval(ingestTimer); clearTimeout(clusterTimer); clearTimeout(clusterTimeoutTimer);
+}
+
+function resetState() {
+  clearTimers();
+  Object.assign(state, {
+    phase: 'ingest', domains: [], showRejectConfirm: false, clusterError: null, clusterTimedOut: false,
+    paused: false, resumable: false, domainsConfirmed: 0, actionsCreated: 0,
+  });
+  startIngest();
+}
+
+/* ═══════════════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════════════ */
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render() {
+  renderTab();
+  renderMandateArea();
+  renderDemoControls();
+}
+
+function renderTab() {
+  const ind = document.getElementById('tabIndicator');
+  const name = document.getElementById('tabName');
+  const sysInfo = document.getElementById('tabSystemInfo');
+  name.textContent = 'Genesis: ' + state.projectName;
+
+  ind.className = 'tab-indicator';
+  let sys = 'mandate:genesis · ';
+  if (state.phase === 'ingest' || state.phase === 'cluster') { ind.classList.add('running'); sys += 'building'; }
+  else if (state.phase === 'awaiting_validation' || state.phase === 'validating') { ind.classList.add('waiting'); sys += 'esperando confirmación'; }
+  else if (state.phase === 'running') { ind.classList.add('running'); sys += 'running'; }
+  else if (state.phase === 'failed') { ind.classList.add('failed'); sys += 'failed'; }
+  else if (state.phase === 'completed') { ind.classList.add('waiting'); sys += 'completado'; }
+  sysInfo.textContent = sys;
+}
+
+function barIndeterminate(extraClass) {
+  return `<div class="g-bar-track"><div class="g-bar-indeterminate-seg anim ${state.paused ? 'paused':''} ${extraClass||''}"></div></div>`;
+}
+
+function renderMandateArea() {
+  const wrap = document.getElementById('monitorWrap');
+  const area = document.getElementById('mandateArea');
+
+  // limpia cualquier overlay de Zona 1 previo
+  const prevFocus = area.querySelector('.studio-focus');
+  if (prevFocus) prevFocus.remove();
+
+  if (state.phase === 'validating') {
+    wrap.style.visibility = 'hidden';
+    area.insertAdjacentHTML('beforeend', renderValidationFocus());
+    return;
+  }
+  // No hay pantalla de "firmando" — la confirmación es optimista y salta
+  // directo a 'running' (ver confirmAndSign()), así que no hay overlay
+  // intermedio que renderizar acá.
+  wrap.style.visibility = 'visible';
+
+  if (state.phase === 'ingest') { wrap.innerHTML = renderIngestCard(); return; }
+  if (state.phase === 'cluster') { wrap.innerHTML = renderClusterCard(); return; }
+  if (state.phase === 'awaiting_validation') { wrap.innerHTML = renderAwaitingCard(); return; }
+  if (state.phase === 'running' || (state.phase === 'failed' && state.domains.length > 0)) { wrap.innerHTML = renderExecutionCard(); return; }
+  if (state.phase === 'failed' && state.domains.length === 0) { wrap.innerHTML = renderClusterFailedCard(); return; }
+  if (state.phase === 'completed') { wrap.innerHTML = renderCompletedCard(); return; }
+}
+
+function renderIngestCard() {
+  return `
+    <span class="monitor-eyebrow">Mandate Monitor</span>
+    <div class="g-card">
+      <div class="g-card-head">
+        <div class="g-card-head-left">
+          <div class="g-status-dot running"></div>
+          <span class="g-title">Genesis: ${esc(state.projectName)}</span>
+        </div>
+        <span class="g-badge building">building</span>
+      </div>
+      <div class="g-card-body">
+        <span class="g-phase-label">Fase 1 de 4 — Ingesta y vectorización</span>
+        ${barIndeterminate()}
+        <span class="g-progress-label">Sentinel está vectorizando el proyecto — mandate:phase:ingest es un pulso único, sin progreso incremental. La próxima señal es el arranque de Fase 2.</span>
+      </div>
+    </div>`;
+}
+
+function renderClusterCard() {
+  return `
+    <span class="monitor-eyebrow">Mandate Monitor</span>
+    <div class="g-card">
+      <div class="g-card-head">
+        <div class="g-card-head-left">
+          <div class="g-status-dot running"></div>
+          <span class="g-title">Genesis: ${esc(state.projectName)}</span>
+        </div>
+        <span class="g-badge building">building</span>
+      </div>
+      <div class="g-card-body">
+        <span class="g-phase-label">Fase 2 de 4 — Brain analizando clustering semántico</span>
+        ${barIndeterminate()}
+        ${state.clusterTimedOut ? `
+          <div class="cluster-timeout-warning">
+            <span class="cluster-timeout-text">Esto está tardando más de lo esperado. El canal de eventos es fire-and-forget (sin retry) — es posible que Fase 2 ya haya terminado y el evento se haya perdido.</span>
+            <button class="btn-ghost" onclick="fallbackReadDomainProposal()">Leer domain_proposal.json (fallback)</button>
+          </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderAwaitingCard() {
+  return `
+    <span class="monitor-eyebrow">Mandate Monitor</span>
+    <div class="g-card">
+      <div class="g-card-head">
+        <div class="g-card-head-left">
+          <div class="g-status-dot waiting"></div>
+          <span class="g-title">Genesis: ${esc(state.projectName)}</span>
+        </div>
+        <span class="g-badge waiting">esperando</span>
+      </div>
+      <div class="g-card-body">
+        <span class="g-phase-label">${state.domains.length} ${state.domains.length === 1 ? 'dominio propuesto' : 'dominios propuestos'} — requiere tu confirmación</span>
+      </div>
+      <div class="g-card-actions">
+        <button class="btn-primary" onclick="goToValidation()">Ver propuesta de dominios</button>
+      </div>
+    </div>`;
+}
+
+/**
+ * renderClusterFailedCard — Fase 2 falló ANTES de proponer ningún dominio
+ * (mandate:action:failed, actionId:'cluster'). Caso distinto de una falla
+ * de Fase 4: acá state.domains sigue vacío, no hay grilla que mostrar.
+ */
+function renderClusterFailedCard() {
+  return `
+    <span class="monitor-eyebrow">Mandate Monitor</span>
+    <div class="g-card">
+      <div class="g-card-head">
+        <div class="g-card-head-left">
+          <div class="g-status-dot failed"></div>
+          <span class="g-title">Genesis: ${esc(state.projectName)}</span>
+        </div>
+        <span class="g-badge failed">failed</span>
+      </div>
+      <div class="g-card-body">
+        <div class="g-error-block">
+          <span class="g-error-reason">Fase 2 falló — no se llegaron a proponer dominios</span>
+          <span class="g-error-detail">${esc(state.clusterError || '')}</span>
+        </div>
+      </div>
+      <div class="g-card-actions">
+        <button class="btn-ghost" disabled title="No confirmado si 'resume' aplica post-firma a un genesis en failed.">Reintentar mandate</button>
+      </div>
+    </div>`;
+}
+
+/**
+ * renderDomainCard — un solo dominio, aislado como función pura.
+ * Cuando state.domains tiene N>1, se llama una vez por elemento — el
+ * markup de la card no cambia, solo cuántas veces se invoca.
+ *
+ * Rename: real y soportado por Backend (GenesisValidateSignal.Domains[].rename)
+ * — por eso tiene un input de verdad, a diferencia de fusionar/mover.
+ *
+ * Fusionar/mover: bloqueadas a propósito. No hay contrato de datos definido
+ * para ninguna de las dos (roadmap Parte1 §3.3/Anexo §F) — los botones
+ * quedan visibles pero deshabilitados para que el diseño no tenga que
+ * rehacerse cuando el contrato exista.
+ */
+function renderDomainCard(d) {
+  const cohesionPct = Math.round(d.cohesionScore*100);
+  return `
+    <div class="domain-card" data-domain-id="${esc(d.id)}">
+      <div class="domain-card-row">
+        <span class="domain-card-name">${esc(d.domainName)}</span>
+      </div>
+      <div class="domain-card-row">
+        <span class="domain-card-label">Renombrar</span>
+        <input class="domain-rename-input" type="text" placeholder="${esc(d.domainName)}" value="${esc(d.rename || '')}" oninput="updateDomainRename('${esc(d.id)}', this.value)">
+      </div>
+      <div class="domain-card-row">
+        <span class="domain-card-label">Cohesión</span>
+        <span class="domain-cohesion-value ${d.cohesionScore>0.7?'high':''}">${d.cohesionScore.toFixed(2)}</span>
+        <div class="g-bar-track" style="flex:1;"><div class="g-bar-fill" style="width:${cohesionPct}%"></div></div>
+      </div>
+      <div class="domain-card-row">
+        <span class="domain-card-label">Archivos</span>
+        <span class="domain-file-count">${d.files.length} archivos</span>
+        <span class="domain-files-toggle" onclick="toggleFilesList('${esc(d.id)}')">ver lista</span>
+      </div>
+      <div class="domain-files-list" id="domainFilesList-${esc(d.id)}">
+        ${d.files.map(f => `<span>${esc(f)}</span>`).join('')}
+      </div>
+      ${d.possibleOverlapWith ? `<div class="domain-overlap-warning">⚠ posible superposición con "${esc(d.possibleOverlapWith)}"</div>` : ''}
+      <div class="domain-locked-actions">
+        <button class="btn-ghost" disabled title="Bloqueado — Backend todavía no define el shape de esta operación (roadmap §3.3/§F).">Fusionar con otro dominio</button>
+        <button class="btn-ghost" disabled title="Bloqueado — Backend todavía no define el shape de esta operación (roadmap §3.3/§F).">Mover archivos a otro dominio</button>
+      </div>
+    </div>`;
+}
+
+function renderValidationFocus() {
+  const headerCopy = state.mandateType === 'domain_expansion'
+    ? 'Validando dominios nuevos — no se está revalidando el proyecto completo'
+    : 'Confirmar la topología del genesis';
+
+  // .forEach() sobre state.domains — funciona igual con 1 o con N elementos.
+  let cardsHtml = '';
+  state.domains.forEach(d => { cardsHtml += renderDomainCard(d); });
+
+  const totalFiles = state.domains.reduce((sum, d) => sum + d.files.length, 0);
+  const domainWord = state.domains.length === 1 ? 'dominio' : 'dominios';
+  const subCopy = state.domains.length === 1
+    ? 'Un solo dominio propuesto. Podés renombrarlo antes de confirmar — fusionar y mover archivos todavía no están disponibles (bloqueado por contrato, ver los botones deshabilitados abajo).'
+    : `${state.domains.length} dominios propuestos. Podés renombrar cada uno antes de confirmar. Se aprueban o se rechazan como bloque — fusionar y mover archivos entre dominios todavía no están disponibles.`;
+
+  return `
+    <div class="studio-focus">
+      <div class="studio-scroll">
+        <div class="studio-inner">
+          <div>
+            <span class="studio-eyebrow">Mandate Genesis · Human Sync — Fase 3</span>
+            <h1 class="studio-title">${esc(headerCopy)}</h1>
+            <p class="studio-subcopy" style="margin-top:8px;">${esc(subCopy)}</p>
+          </div>
+
+          <div class="domains-list">
+            ${cardsHtml}
+          </div>
+
+          <span class="studio-summary-line">${state.domains.length} ${domainWord} · ${totalFiles} archivos totales</span>
+
+          ${state.showRejectConfirm ? `
+            <div class="inline-confirm">
+              <span class="inline-confirm-text">¿Rechazar la propuesta? Ningún dominio será creado y el genesis se cancela — esta sesión de edición no se puede recuperar.</span>
+              <div class="inline-confirm-actions">
+                <button class="btn-ghost" onclick="cancelRejectDomain()">Volver</button>
+                <button class="btn-danger-ghost" onclick="confirmRejectDomain()">Rechazar y cancelar genesis</button>
+              </div>
+            </div>` : `
+            <div class="studio-actions">
+              <button class="btn-ghost" onclick="askRejectDomain()">Rechazar propuesta</button>
+              <button class="btn-primary" onclick="confirmAndSign()">Confirmar topología y firmar</button>
+            </div>`}
+        </div>
+      </div>
+    </div>`;
+}
+
+// (No hay renderSigningFocus: sin evento 'signed' confirmado, la
+// transición a Fase 4 es optimista — ver confirmAndSign(). No existe un
+// estado intermedio de "firmando" que renderizar.)
+
+/**
+ * renderDomainExecutionRow — una fila de Fase 4, aislada como función pura
+ * igual que renderDomainCard() en Zona 1. state.domains.map() la usa tantas
+ * veces como dominios existan; cada fila lee únicamente el actionState de
+ * SU dominio, nunca uno global.
+ */
+function renderDomainExecutionRow(d) {
+  let barHtml, stateLabel, stateClass;
+  if (d.actionState === 'idle') {
+    barHtml = `<div class="g-bar-track idle"></div>`;
+    stateLabel = '· idle'; stateClass = 'unknown';
+  } else if (d.actionState === 'in_progress') {
+    barHtml = barIndeterminate();
+    stateLabel = '→ in_progress'; stateClass = '';
+  } else if (d.actionState === 'completed') {
+    barHtml = `<div class="g-bar-track"><div class="g-bar-fill complete"></div></div>`;
+    stateLabel = '✓ completado'; stateClass = 'completed';
+  } else { // failed
+    barHtml = `<div class="g-bar-track error"><div class="g-bar-fill error" style="width:100%"></div></div>`;
+    stateLabel = '⛔ fallido'; stateClass = 'failed';
+  }
+  return `
+    <div class="g-domain-row" data-domain-id="${esc(d.id)}">
+      <div class="g-domain-row-head">
+        <span class="g-domain-name">${esc(d.domainName)}</span>
+        <span class="g-domain-state ${stateClass}">${stateLabel}</span>
+      </div>
+      ${barHtml}
+      ${d.actionState === 'failed' ? `<span class="g-error-detail">${esc(d.errorMessage)}</span>` : ''}
+    </div>`;
+}
+
+/**
+ * renderExecutionCard — reemplaza a renderRunningCard()/renderFailedCard().
+ * Fase 4 en v1.2: un mandate en 'running' o en 'failed' comparten la misma
+ * grilla concurrente de dominios — lo único que cambia es el badge del
+ * mandate y si aparece el bloque de error + "Reintentar mandate".
+ * Esto es justamente la sección "estado de los demás dominios" que v1.1
+ * había omitido a propósito por no tener sentido con N=1 (ver nota original
+ * en renderFailedCard): con N>1, un dominio puede estar failed mientras
+ * otros siguen in_progress o ya completaron, y este único card los muestra
+ * a todos sin mutar "TODA la vista" como hacía la v1.1.
+ */
+function renderExecutionCard() {
+  const failed = state.phase === 'failed';
+  const failedDomains = state.domains.filter(d => d.actionState === 'failed');
+  const rowsHtml = state.domains.map(renderDomainExecutionRow).join('');
+
+  return `
+    <span class="monitor-eyebrow">Mandate Monitor</span>
+    <div class="g-card">
+      <div class="g-card-head">
+        <div class="g-card-head-left">
+          <div class="g-status-dot ${failed ? 'failed' : 'running'}"></div>
+          <span class="g-title">Genesis: ${esc(state.projectName)}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="g-badge ${failed ? 'failed' : 'running'}">${failed ? 'failed' : (state.paused ? 'paused' : 'running')}</span>
+          ${!failed ? `<button class="btn-ghost" onclick="togglePause()">${state.paused ? 'Reanudar' : 'Pausar mandate'}</button>` : ''}
+        </div>
+      </div>
+      <div class="g-card-body">
+        ${failed ? `
+          <div class="g-error-block">
+            <span class="g-error-reason">Action fallida — ${failedDomains.length} de ${state.domains.length} dominio(s)</span>
+            <span class="g-error-detail" style="color:var(--color-text-secondary);">Los dominios que no fallaron siguen su curso de forma independiente — ver estado de cada uno abajo.</span>
+          </div>` : ''}
+        <div class="g-domains-grid">
+          ${rowsHtml}
+        </div>
+      </div>
+      ${failed ? `
+        <div class="g-card-actions">
+          <button class="btn-ghost" disabled title="No confirmado si 'resume' aplica post-firma a un genesis en failed — ver §5.3 del spec.">Reintentar mandate</button>
+        </div>` : ''}
+    </div>`;
+}
+
+function renderCompletedCard() {
+  const n = state.domains.length;
+  const word = n === 1 ? 'dominio scaffoldeado' : 'dominios scaffoldeados';
+  return `
+    <span class="monitor-eyebrow">Mandate Monitor</span>
+    <div class="g-card">
+      <div class="g-card-head">
+        <div class="g-card-head-left">
+          <div class="g-status-dot completed"></div>
+          <span class="g-title">Genesis: ${esc(state.projectName)}</span>
+        </div>
+        <span class="g-badge completed">completado</span>
+      </div>
+      <div class="g-card-body">
+        <span class="g-summary-line">✓ Genesis completado</span>
+        <span class="g-summary-note">${esc(state.projectName)} — ${n} ${word}</span>
+      </div>
+    </div>`;
+}
+
+/* ── Zona 3: feed ── */
+function renderFeed() {
+  const body = document.getElementById('feedBody');
+  if (feedPaused) return; // buffer sigue creciendo, no se pinta hasta reanudar
+  if (feedBuffer.length === 0) { body.innerHTML = '<div class="feed-empty">Sin eventos todavía</div>'; return; }
+  body.innerHTML = feedBuffer.slice().reverse().map(row => {
+    const cls = row.name.startsWith('mandate:genesis') ? 'evt-genesis' : row.name.includes('failed') ? 'evt-error' : 'evt-action';
+    let payloadStr = '';
+    try { payloadStr = JSON.stringify(row.payload); } catch(e) { payloadStr = ''; }
+    if (payloadStr.length > 90) payloadStr = payloadStr.slice(0,90) + '…';
+    return `<div class="feed-row">
+      <div class="feed-row-top"><span class="feed-time">${row.time}</span><span class="feed-event ${cls}">${esc(row.name)}</span></div>
+      <span class="feed-payload">${esc(payloadStr)}</span>
+    </div>`;
+  }).join('');
+  body.scrollTop = 0;
+}
+
+function toggleFeedPause() {
+  feedPaused = !feedPaused;
+  document.getElementById('feedToggle').classList.toggle('paused', feedPaused);
+  document.getElementById('feedToggleLabel').textContent = feedPaused ? 'Pausado' : 'Live';
+  if (!feedPaused) renderFeed();
+}
+
+/* ── Demo controls contextuales por fase ── */
+function renderDemoControls() {
+  const row = document.getElementById('demoRow');
+  let html = '';
+  if (state.phase === 'ingest') {
+    html += `<span class="demo-btn" style="cursor:default;">Fase automática — mandate:phase:ingest ya se disparó, esperando a que Backend arranque Fase 2…</span>`;
+  } else if (state.phase === 'cluster') {
+    html += `<button class="demo-btn" onclick="forceClusterTimeout()">Forzar timeout de Fase 2 (fire-and-forget)</button>`;
+    html += `<button class="demo-btn" onclick="simulateClusterFailed()">Simular: Fase 2 falla</button>`;
+  } else if (state.phase === 'awaiting_validation') {
+    html += `<span class="demo-btn" style="cursor:default;">Esperando que el Master abra la validación</span>`;
+  } else if (state.phase === 'validating') {
+    html += `<span class="demo-btn" style="cursor:default;">Pantalla real de Zona 1 — renombrar/confirmar/rechazar arriba</span>`;
+  } else if (state.phase === 'running' || state.phase === 'failed') {
+    // Un par de botones por cada dominio TODAVÍA in_progress — incluye el
+    // caso mixto donde el mandate ya está 'failed' por otro dominio pero
+    // este sigue corriendo de forma independiente.
+    const active = state.domains.filter(d => d.actionState === 'in_progress');
+    if (active.length === 0 && state.phase === 'running') {
+      html += `<span class="demo-btn" style="cursor:default;">Arrancando actions concurrentes…</span>`;
+    }
+    active.forEach(d => {
+      html += `<button class="demo-btn" onclick="simulateDomainCompleted('${d.id}')">Completar: ${esc(d.domainName)}</button>`;
+      html += `<button class="demo-btn" onclick="simulateDomainFailed('${d.id}')">Fallar: ${esc(d.domainName)}</button>`;
+    });
+  }
+  if (state.phase === 'failed' || state.phase === 'completed') {
+    html += `<button class="demo-btn" onclick="resetState()">Reiniciar ciclo completo</button>`;
+  }
+  row.innerHTML = html;
+}
+
+/* ── Init ── */
+startIngest();
+render();
+</script>
+</body>
+</html>
