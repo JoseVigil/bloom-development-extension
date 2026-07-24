@@ -57,6 +57,7 @@ type GenesisMandateResult struct {
 
 func createStandardMandateSubcommand(c *core.Core) *cobra.Command {
 	var project string
+	var docs []string
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -72,10 +73,11 @@ func createStandardMandateSubcommand(c *core.Core) *cobra.Command {
 }`,
 		},
 		Example: `  nucleus mandate create --project my-app
+  nucleus mandate create --project my-app --docs ./README.md --docs ./docs/architecture.md
   nucleus --json mandate create --project my-app`,
 
 		Run: func(cmd *cobra.Command, args []string) {
-			result, err := createStandardMandate(project)
+			result, err := createStandardMandate(project, docs)
 			if err != nil {
 				result = &StandardMandateResult{Success: false, Error: err.Error()}
 			}
@@ -94,6 +96,7 @@ func createStandardMandateSubcommand(c *core.Core) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "Nombre del proyecto (requerido)")
+	cmd.Flags().StringSliceVar(&docs, "docs", nil, "Path a un archivo o carpeta de documentación (repetible) — Capa 0 del Bootstrap Strategy")
 	return cmd
 }
 
@@ -110,7 +113,19 @@ func createStandardMandateSubcommand(c *core.Core) *cobra.Command {
 // tocó acá porque no fue parte de la decisión que se cerró en este turno
 // (solo formato de ID + gen_state.json → mandate_state.json). Queda
 // pendiente de decisión explícita aparte.
-func createStandardMandate(project string) (*StandardMandateResult, error) {
+//
+// NOTA 3 — CAMBIO esta sesión (Tarea 3, Capa 0 del Bootstrap Strategy):
+// docs es la lista de paths que vino de --docs (repetible, aprobado). Cada
+// path puede ser un archivo o una carpeta — si es carpeta, se copian todos
+// los archivos regulares de primer nivel (no recursivo: no hay decisión
+// tomada sobre si subcarpetas de docs/ deberían aplanarse o preservarse, y
+// no la invento acá). Se persisten en {mandatesRoot}/{mandateID}/docs/, y
+// los nombres resultantes (no los paths originales del filesystem del
+// usuario, que pueden no tener sentido para Capa 1) quedan en
+// mandate.json como "docsProvided" — el campo nuevo que pediste, para que
+// Capa 1 lo pueda leer el día que exista, sin acoplarla a rutas absolutas
+// del cliente que la creó.
+func createStandardMandate(project string, docs []string) (*StandardMandateResult, error) {
 	if project == "" {
 		return nil, fmt.Errorf("--project es requerido")
 	}
@@ -129,12 +144,23 @@ func createStandardMandate(project string) (*StandardMandateResult, error) {
 		return nil, fmt.Errorf("no pude crear %s: %w", dir, err)
 	}
 
+	docsProvided, err := copyDocsInto(dir, docs)
+	if err != nil {
+		// Falla dura, no silenciosa: si el usuario pidió --docs y no se
+		// pudieron copiar, mejor que el mandate no se cree a que se cree
+		// silenciosamente sin la documentación que se supone que lo
+		// alimenta (mismo criterio que ya usamos contra degradar sin
+		// avisar en otras partes de esta sesión).
+		return nil, fmt.Errorf("no pude persistir la documentación de --docs: %w", err)
+	}
+
 	payload := map[string]interface{}{
-		"mandateId": mandateID,
-		"type":      "standard",
-		"project":   project,
-		"status":    "signed",
-		"signedAt":  time.Now().Format(time.RFC3339),
+		"mandateId":    mandateID,
+		"type":         "standard",
+		"project":      project,
+		"status":       "signed",
+		"signedAt":     time.Now().Format(time.RFC3339),
+		"docsProvided": docsProvided, // CAMPO NUEVO esta sesión — [] si no se pasó --docs
 	}
 	data, _ := json.MarshalIndent(payload, "", "  ")
 	if err := os.WriteFile(filepath.Join(dir, "mandate.json"), data, 0644); err != nil {
@@ -149,10 +175,89 @@ func createStandardMandate(project string) (*StandardMandateResult, error) {
 	}, nil
 }
 
+// copyDocsInto copia cada path de docs (archivo o carpeta, primer nivel
+// solamente) a {dir}/docs/, y devuelve los nombres de archivo resultantes
+// (relativos a docs/, no los paths originales). Ruta aprobada esta sesión:
+// {mandatesRoot}/{mandateID}/docs/ — layout plano, mismo criterio que
+// mandate.json/mandate_state.json/domain_proposal.json.
+func copyDocsInto(mandateDir string, docs []string) ([]string, error) {
+	if len(docs) == 0 {
+		return []string{}, nil
+	}
+
+	docsDir := filepath.Join(mandateDir, "docs")
+	if err := os.MkdirAll(docsDir, 0755); err != nil {
+		return nil, fmt.Errorf("no pude crear %s: %w", docsDir, err)
+	}
+
+	var copied []string
+	seen := make(map[string]bool) // detecta colisión de nombre de archivo
+
+	copyOne := func(srcPath string) error {
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			return fmt.Errorf("no pude leer %s: %w", srcPath, err)
+		}
+		name := filepath.Base(srcPath)
+		if seen[name] {
+			// Colisión explícita, no silenciosa — dos archivos de origen
+			// distinto con el mismo nombre base (p. ej. dos README.md de
+			// carpetas distintas pasados como --docs separados). No se
+			// inventa un esquema de renombrado automático acá.
+			return fmt.Errorf("colisión de nombre de archivo en --docs: %q ya fue copiado desde otro path", name)
+		}
+
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("no pude leer %s: %w", srcPath, err)
+		}
+		if err := os.WriteFile(filepath.Join(docsDir, name), data, 0644); err != nil {
+			return fmt.Errorf("no pude escribir %s en docs/: %w", name, err)
+		}
+		seen[name] = true
+		copied = append(copied, name)
+		_ = info
+		return nil
+	}
+
+	for _, path := range docs {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("--docs %q no existe o no es accesible: %w", path, err)
+		}
+		if !info.IsDir() {
+			if err := copyOne(path); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// Carpeta: solo primer nivel, solo archivos regulares — ver NOTA 3
+		// arriba sobre por qué no es recursivo.
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return nil, fmt.Errorf("no pude leer carpeta --docs %q: %w", path, err)
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if err := copyOne(filepath.Join(path, e.Name())); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if copied == nil {
+		copied = []string{}
+	}
+	return copied, nil
+}
+
 // ── mandate genesis create ───────────────────────────────────────────────
 
 func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 	var project, source, baseGenesisID string
+	var docs []string
 
 	cmd := &cobra.Command{
 		Use:   "genesis",
@@ -168,10 +273,11 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 }`,
 		},
 		Example: `  nucleus mandate genesis --project my-app --source cli
+  nucleus mandate genesis --project my-app --source cli --docs ./README.md --docs ./docs/architecture.md
   nucleus --json mandate genesis --project my-app --source cli`,
 
 		Run: func(cmd *cobra.Command, args []string) {
-			result, err := createGenesisMandate(project, source, baseGenesisID)
+			result, err := createGenesisMandate(project, source, baseGenesisID, docs)
 			if err != nil {
 				result = &GenesisMandateResult{Success: false, Error: err.Error()}
 			}
@@ -192,18 +298,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "Nombre del proyecto (requerido)")
 	cmd.Flags().StringVar(&source, "source", "cli", "Origen del mandate")
 	cmd.Flags().StringVar(&baseGenesisID, "base-genesis-id", "", "ID de genesis base (opcional)")
-
-	// CAMBIO esta sesión: wiring de `domains` (list/confirm/reject) como
-	// subcomando de `genesis` — ver mandate_genesis_domains_cmd.go.
-	// createDomainsSubcommand no se auto-registra (Sección 9 regla 6 de la
-	// Guía Maestra: los subcomandos anidados no llaman
-	// core.RegisterCommand por su cuenta, solo el padre de tope lo hace,
-	// que en este archivo ya es `mandate` vía init()). Sin esta línea, el
-	// código de domains compila igual (Go no marca error por función de
-	// paquete no invocada) pero queda inalcanzable desde el CLI — así
-	// pasó en el build anterior: compiló y no apareció en `nucleus help`.
-	cmd.AddCommand(createDomainsSubcommand(c))
-
+	cmd.Flags().StringSliceVar(&docs, "docs", nil, "Path a un archivo o carpeta de documentación (repetible) — Capa 0 del Bootstrap Strategy")
 	return cmd
 }
 
@@ -225,7 +320,14 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 // lado TS para que ambas entradas (CLI y API) produzcan un archivo
 // consistente — lo dejo señalado, y también lo aplico en el handler TS en
 // este mismo turno para no dejar la inconsistencia a mitad de camino.
-func createGenesisMandate(project, source, baseGenesisID string) (*GenesisMandateResult, error) {
+//
+// CAMBIO esta sesión (corrección de turno anterior): --docs vive ACÁ, no en
+// mandate create (standard). Confirmado por Preludio §2.2: onboarding pega
+// contra este comando — mandate genesis, no mandate create. Reusa
+// copyDocsInto, ya definida en este mismo archivo para mandate create; el
+// turno anterior la implementó ahí por una identificación incorrecta de
+// cuál comando invoca onboarding, corregida ahora.
+func createGenesisMandate(project, source, baseGenesisID string, docs []string) (*GenesisMandateResult, error) {
 	if project == "" {
 		return nil, fmt.Errorf("--project es requerido")
 	}
@@ -253,6 +355,15 @@ func createGenesisMandate(project, source, baseGenesisID string) (*GenesisMandat
 		return nil, fmt.Errorf("mandate_state.json ya existe en %s — colisión de mandateId", dir)
 	}
 
+	docsProvided, err := copyDocsInto(dir, docs)
+	if err != nil {
+		// Mismo criterio que en mandate create: falla dura, no silenciosa.
+		// Si --docs se pidió y no se pudo persistir, mejor no crear el
+		// genesis a que arranque Fase 1 sin la documentación que se
+		// supone que la alimenta el día que Capa 1 exista.
+		return nil, fmt.Errorf("no pude persistir la documentación de --docs: %w", err)
+	}
+
 	mandateType := "genesis"
 	if baseGenesisID != "" {
 		mandateType = "domain_expansion"
@@ -274,7 +385,8 @@ func createGenesisMandate(project, source, baseGenesisID string) (*GenesisMandat
 				"humanSync": map[string]interface{}{"candidateDomains": []string{}},
 			},
 		},
-		"createdAt": time.Now().Format(time.RFC3339),
+		"createdAt":    time.Now().Format(time.RFC3339),
+		"docsProvided": docsProvided, // CAMPO NUEVO esta sesión — [] si no se pasó --docs
 	}
 	data, _ := json.MarshalIndent(mandateState, "", "  ")
 
