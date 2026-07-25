@@ -69,7 +69,7 @@ func loadNucleusConfig(bloomBase string) (*NucleusConfig, error) {
 // RENOMBRADO desde LoadNucleusConfig — chocaba en el mismo paquete
 // (internal/supervisor) con la función de igual nombre en supervisor.go,
 // que implementa el mecanismo de auto-descubrimiento por workspace
-// (.bloom/.nucleus-{slug}/.core/nucleus-config.json) definido como decisión
+// (.bloom/.nucleus-{slug}/.core/.nucleus-config.json) definido como decisión
 // vigente. LoadNucleusConfig (sin sufijo) pasa a ser esa versión nueva —
 // ver supervisor.go.
 //

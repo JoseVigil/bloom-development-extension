@@ -38,9 +38,22 @@ const NUCLEUS_JSON = paths.configFile;
 let mainWindow = null;
 
 // ── NUCLEUS HELPER ─────────────────────────────────────────────────────────
-function execNucleus(args, timeoutMs = 15000) {
+// FIX (24/07/2026): execNucleus no aceptaba cwd — el binario nucleus
+// siempre heredaba el cwd del proceso de Electron (en dev, la carpeta del
+// propio repo de Conductor). La mayoría de los subcomandos no lo necesitan,
+// pero `mandate genesis` sí: busca la carpeta `.bloom` subiendo desde su
+// cwd para ubicar nucleus.json, y si el cwd no es el workspace real del
+// usuario, nunca la encuentra ("no pude leer nucleus.json: no encontré
+// carpeta .bloom subiendo desde <cwd equivocado>" — confirmado en
+// conductor_onboarding_20260724.log).
+// Se agrega un tercer parámetro opcional `spawnOpts` para que un caller
+// puntual (ver onboarding:create-mandate en onboarding-handlers.js) pueda
+// pinnear el cwd real. Los ~15 callers existentes de execNucleus(args,
+// timeoutMs) no cambian: spawnOpts default {} preserva el comportamiento
+// actual (cwd heredado del proceso).
+function execNucleus(args, timeoutMs = 15000, spawnOpts = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(NUCLEUS_EXE, args, { windowsHide: true });
+    const child = spawn(NUCLEUS_EXE, args, { windowsHide: true, ...spawnOpts });
     let stdout = '', stderr = '';
 
     child.stdout.on('data', d => { stdout += d.toString(); });

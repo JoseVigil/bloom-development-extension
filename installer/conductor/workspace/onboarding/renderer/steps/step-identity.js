@@ -323,10 +323,35 @@ function _clearPollFallback() {
 // RF-08: github → Vault (interrumpe el wizard); google → sigue a gemini;
 // gemini (último) → Project. Se mantiene igual, solo cambian los goTo(n)
 // por navigateTo(stepId).
-function advanceIdentityWizard() {
-  const current = IDENTITY_STEPS[identityWizard.stepIndex];
+//
+// FIX (bug reportado: al llegar API_KEY_REGISTERED —o cualquier milestone
+// de identity vía harness o tras el detour de Vault— solo se prendía el
+// ícono pero el botón/copy de pantalla quedaban pisados con el texto de
+// GitHub, y el wizard nunca llegaba a mostrar "fin de IDENTITY").
+//
+// Causa: esta función determinaba `current` leyendo
+// `IDENTITY_STEPS[identityWizard.stepIndex]` — un puntero que SOLO avanza
+// cuando el usuario clickea el botón (advanceToNextIdentityStep) o se
+// resetea a 0 en handleIdentityBtn(). Ese puntero nunca se sincronizaba
+// con el evento de milestone real que llegaba desde Cortex/harness. Como
+// resultado, si stepIndex se quedaba en 0 (típico: tras el detour a Vault,
+// o al simular eventos por harness sin pasar por el click de "Continue to
+// Google"), esta función SIEMPRE operaba como si el que se acababa de
+// confirmar fuera "github" — sin importar si en realidad era google o
+// gemini — y por eso `isLastStep` nunca daba true tras ai_provider_setup.
+//
+// Fix: recibe el subStepId real (viene de _completeIdentitySubstep, que sí
+// lo conoce con certeza porque es el dato del propio evento de milestone)
+// y lo usa como fuente de verdad para `current`. identityWizard.stepIndex
+// se sincroniza a partir de esto — no al revés — así _refreshAccountIconStates
+// (in-progress) y el resume siguen funcionando igual que antes.
+function advanceIdentityWizard(subStepId) {
+  const current = IDENTITY_STEPS.find(s => s.id === subStepId) || IDENTITY_STEPS[identityWizard.stepIndex];
   if (!current) return;
   if (!activeAccounts.has(current.id)) return;
+
+  const idx = IDENTITY_STEPS.indexOf(current);
+  if (idx !== -1) identityWizard.stepIndex = idx;
 
   log('info', `identity wizard — sub-step "${current.id}" listo`);
   showCortex(`${current.label} connected.`);
@@ -397,7 +422,7 @@ function _completeIdentitySubstep(subStepId, _data) {
   if (pollStatus) pollStatus.classList.add('confirmed');
 
   _clearPollFallback();
-  advanceIdentityWizard();
+  advanceIdentityWizard(subStepId);
 }
 
 // ── Milestone handlers (registrados en ipc-bridge.js) ──────────────────────

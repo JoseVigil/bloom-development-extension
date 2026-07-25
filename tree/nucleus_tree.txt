@@ -48,9 +48,11 @@ bloom-development-extension/
     │   │   ├── activities/
     │   │   │   ├── brain_poller.go
     │   │   │   ├── mandate_genesis_activities.go
+    │   │   │   ├── mandate_genesis_sign_activity.go
     │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
     │   │   │   ├── mandate.go
+    │   │   │   ├── mandate_genesis_domains_cmd.go
     │   │   │   ├── synapse.go
     │   │   │   ├── sysproc_other.go
     │   │   │   └── sysproc_windows.go

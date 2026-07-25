@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('onboarding', {
 
   // Project
   listRepos:     (params) => ipcRenderer.invoke('onboarding:list-repos', params),
+  // importProject — copia física de sourcePath al root de Nucleus, vía
+  // conductor/shared/project-copier.js. Corre ANTES de createMandate.
+  // Payload: { project: string, sourcePath: string }
+  // Ver PROJECT-COPIER-SPEC-AND-CONTEXT.md §2.3.
+  importProject: (params) => ipcRenderer.invoke('onboarding:import-project', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),
 
   // Finalizar

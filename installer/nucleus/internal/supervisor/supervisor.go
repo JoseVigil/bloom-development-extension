@@ -10,12 +10,27 @@ import (
 )
 
 const (
-	bloomDirName         = ".bloom"
-	nucleusPrefix        = ".nucleus-"
-	nucleusConfigRelPath = ".core/nucleus-config.json"
+	bloomDirName = ".bloom"
+	nucleusPrefix = ".nucleus-"
+
+	// nucleusConfigFilename es el nombre real del archivo tal como lo
+	// escribe `nucleus create` (delegado a `brain nucleus create`, ver
+	// internal/governance/create.go, campo "files_created" del
+	// json_response: ".core/.nucleus-config.json").
+	//
+	// ES UN DOTFILE — con punto adelante, igual que el resto de la
+	// estructura .bloom/.core/.governance/etc. Bug histórico: esta
+	// constante vivía como ".core/nucleus-config.json" (sin el punto
+	// inicial del nombre de archivo) directamente en
+	// nucleusConfigRelPath, lo que rompía todo `mandate genesis` corrido
+	// sobre un workspace creado con `nucleus create`. Mantener el nombre
+	// acá, en una sola constante, para que este typo no pueda reaparecer.
+	nucleusConfigFilename = ".nucleus-config.json"
+
+	nucleusConfigRelPath = ".core/" + nucleusConfigFilename
 )
 
-// NucleusConfigFile espeja el contenido de .core/nucleus-config.json.
+// NucleusConfigFile espeja el contenido de .core/.nucleus-config.json.
 // Mantener sincronizado con el lado TS que lea el mismo archivo (si existe
 // un equivalente a org-resolver.ts que lo parsee — no confirmado todavía,
 // ver nota en resolveOrg() más abajo).
@@ -59,7 +74,7 @@ type Config struct {
 //  1. Buscar carpeta .bloom subiendo desde CWD.
 //  2. Dentro de .bloom, listar subcarpetas que matcheen ".nucleus-*".
 //  3. Extraer el slug del nombre de carpeta (todo lo que sigue a ".nucleus-").
-//  4. Leer .core/nucleus-config.json bajo esa carpeta para validar que es
+//  4. Leer .core/.nucleus-config.json bajo esa carpeta para validar que es
 //     un Nucleus real (no solo una carpeta con el nombre correcto).
 func LoadNucleusConfig() (*Config, error) {
 	cwd, err := os.Getwd()
@@ -90,7 +105,7 @@ func loadNucleusConfigFrom(start string) (*Config, error) {
 
 	var parsed NucleusConfigFile
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, fmt.Errorf("nucleus-config.json inválido en %s: %w", configPath, err)
+		return nil, fmt.Errorf("%s inválido en %s: %w", nucleusConfigFilename, configPath, err)
 	}
 
 	// El slug de la carpeta manda para resolver paths — si el JSON trae un
@@ -101,8 +116,8 @@ func loadNucleusConfigFrom(start string) (*Config, error) {
 	// que debamos resolver acá arbitrariamente.
 	if parsed.Organization.Slug != "" && parsed.Organization.Slug != slug {
 		return nil, fmt.Errorf(
-			"inconsistencia de org: carpeta %q pero nucleus-config.json declara organization.slug=%q — revisar manualmente",
-			nucleusPrefix+slug, parsed.Organization.Slug,
+			"inconsistencia de org: carpeta %q pero %s declara organization.slug=%q — revisar manualmente",
+			nucleusPrefix+slug, nucleusConfigFilename, parsed.Organization.Slug,
 		)
 	}
 

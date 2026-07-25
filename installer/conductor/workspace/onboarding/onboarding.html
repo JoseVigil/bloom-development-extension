@@ -753,6 +753,23 @@ body::after {
   text-transform: uppercase;
 }
 .project-card.selected .project-card-type { color: var(--accent); }
+.project-import-status {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin: -24px 0 24px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.project-import-status.visible { display: flex; }
+.project-import-status.pending { color: var(--text-secondary); }
+.project-import-status.success { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-glow); }
+.project-import-status.error { color: var(--error); border-color: var(--error); }
 
 /* ── LAUNCH SCREEN ── */
 #screen-launch .launch-lines {
@@ -1648,7 +1665,9 @@ body::after {
         <!-- Poblado dinámicamente por loadRepos() en onboarding.js -->
       </div>
 
-      <button class="btn-primary" id="btn-create-mandate" disabled>Crear Mandate →</button>
+      <div class="project-import-status" id="project-import-status"></div>
+
+      <button class="btn-primary" id="btn-project-continue" disabled>Continuar →</button>
     </div>
   </div>
 

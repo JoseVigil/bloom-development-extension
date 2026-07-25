@@ -11,6 +11,7 @@ const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
+const { copyProject, resolveProjectDestPath } = require('../../../shared/project-copier');
 
 const log = getLogger('onboarding');
 
@@ -432,14 +433,75 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     }
   });
 
+  // ── HANDLER: Importar proyecto externo al root de Nucleus ───────────────
+  // Ver PROJECT-COPIER-SPEC-AND-CONTEXT.md §2.3. Corre ANTES de
+  // onboarding:create-mandate — recién con el proyecto ya posicionado en
+  // destino se llama `mandate genesis` (sin ninguna responsabilidad de
+  // copia de su parte). No se reusa onboarding:create-mandate para esto:
+  // ese handler no tiene lógica de copia, solo invoca al binario nucleus.
+  //
+  // destPath se calcula con resolveProjectDestPath() — convención PROPUESTA
+  // (project como subcarpeta directa de workspace_path), documentada como
+  // no confirmada contra el binario nucleus/brain. Ver project-copier.js
+  // y spec §3.3.
+  //
+  // Payload: { project: string, sourcePath: string }
+  // Respuesta: { success, destPath?, gitExcluded?: string[], error? }
+  ipcMain.handle('onboarding:import-project', async (event, { project, sourcePath }) => {
+    log.info('[IPC] onboarding:import-project — project:', project, '| sourcePath:', sourcePath);
+    if (!project || !sourcePath) {
+      return { success: false, error: 'project y sourcePath son requeridos' };
+    }
+    try {
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const workspacePath = nucleusData.onboarding?.workspace_path;
+      if (!workspacePath) {
+        // Debería estar seteado por onboarding:init-nucleus antes de llegar
+        // a screen-project — si no está, el flujo se saltó un paso previo.
+        throw new Error('onboarding.workspace_path no está seteado en nucleus.json — ¿se corrió init-nucleus?');
+      }
+
+      const destPath = resolveProjectDestPath(workspacePath, project);
+      const result = await copyProject({ sourcePath, destPath });
+
+      log.success(
+        '[IPC] onboarding:import-project — ok — destPath:', result.destPath,
+        '| .git excluidos:', result.gitExcluded.length
+      );
+      return {
+        success: true,
+        destPath: result.destPath,
+        gitExcluded: result.gitExcluded,
+      };
+    } catch (err) {
+      log.error('[IPC] onboarding:import-project — FAILED:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   // ── HANDLER: Crear Genesis Mandate ──────────────────────────────────────
+  // FIX (24/07/2026): faltaba pasarle a nucleus DÓNDE trabajar. A
+  // diferencia de import-project (arriba, que sí lee workspace_path antes
+  // de hacer nada), este handler llamaba a execNucleus sin cwd — el
+  // binario heredaba el cwd del proceso de Electron y, al buscar la
+  // carpeta .bloom subiendo desde ahí para ubicar nucleus.json, fallaba en
+  // dev (cwd = carpeta del repo de Conductor, no el workspace del
+  // usuario). Ver conductor_onboarding_20260724.log. Se replica la misma
+  // lectura de workspace_path que ya usa import-project, y se la pasa a
+  // execNucleus como cwd (ver tercer parámetro nuevo en main_conductor.js).
   ipcMain.handle('onboarding:create-mandate', async (event, { project, projectPath }) => {
     try {
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const workspacePath = nucleusData.onboarding?.workspace_path;
+      if (!workspacePath) {
+        throw new Error('onboarding.workspace_path no está seteado en nucleus.json — ¿se corrió init-nucleus?');
+      }
+
       const result = await execNucleus([
-        '--json', 'mandate', 'create',
+        '--json', 'mandate', 'genesis',
         '--project', project,
-        '--path', projectPath
-      ]);
+        '--source', projectPath
+      ], 15000, { cwd: workspacePath });
       if (result.success !== false) {
         try {
           const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
