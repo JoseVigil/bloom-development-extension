@@ -46,11 +46,12 @@ type StandardMandateResult struct {
 }
 
 type GenesisMandateResult struct {
-	Success   bool   `json:"success"`
-	MandateID string `json:"mandate_id"`
-	Status    string `json:"status"`
-	Project   string `json:"project"`
-	Error     string `json:"error,omitempty"`
+	Success    bool   `json:"success"`
+	MandateID  string `json:"mandate_id"`
+	MandateDir string `json:"mandate_dir"`
+	Status     string `json:"status"`
+	Project    string `json:"project"`
+	Error      string `json:"error,omitempty"`
 }
 
 // ── mandate create (standard) ────────────────────────────────────────────
@@ -268,6 +269,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 			"json_response": `{
   "success": true,
   "mandate_id": "3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
+  "mandate_dir": "{MandatesRoot}/3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
   "status": "building",
   "project": "example-project"
 }`,
@@ -408,10 +410,11 @@ func createGenesisMandate(project, source, baseGenesisID string, docs []string) 
 	// la API vía publishMandateEvent), es una decisión aparte.
 
 	return &GenesisMandateResult{
-		Success:   true,
-		MandateID: mandateID,
-		Status:    "building",
-		Project:   project,
+		Success:    true,
+		MandateID:  mandateID,
+		MandateDir: dir,
+		Status:     "building",
+		Project:    project,
 	}, nil
 }
 

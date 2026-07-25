@@ -164,6 +164,7 @@ export async function importSelectedProject() {
     // Repo de GitHub — nada que copiar, la selección ya es la confirmación.
     selection.importedProjectPath = '';
     showImportStatus(`✓ "${project.name}" seleccionado — listo para continuar`, 'success');
+    await window.onboarding.selectProject({ projectName: project.name, projectPath: '' });
     if (btn) {
       btn.disabled = false;
       btn.onclick = continueToMandate;
@@ -191,6 +192,7 @@ export async function importSelectedProject() {
   // en más (mandate genesis, project_path persistido, etc.).
   selection.importedProjectPath = importResult.destPath;
   showImportStatus(`✓ "${project.name}" importado — listo para continuar`, 'success');
+  await window.onboarding.selectProject({ projectName: project.name, projectPath: importResult.destPath });
 
   if (importResult.gitExcluded && importResult.gitExcluded.length > 0) {
     addNotification(

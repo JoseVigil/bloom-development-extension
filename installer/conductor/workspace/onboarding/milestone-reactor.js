@@ -98,7 +98,8 @@ class MilestoneReactor {
       vault_init:        (enriched) => this._onVaultInitComplete(enriched),
       google_auth:       (enriched) => this._onGoogleAuthComplete(enriched),
       ai_provider_setup: (enriched) => this._onAiProviderSetupComplete(enriched),
-      project_create:    (enriched) => this._onProjectCreateComplete(enriched),
+      project_select:    (enriched) => this._onProjectSelectComplete(enriched),
+      mandate_genesis:   (enriched) => this._onMandateGenesisComplete(enriched),
     };
   }
 
@@ -258,35 +259,40 @@ class MilestoneReactor {
     this._emitStepUiUpdate('ai_provider_setup', { phase: 'ESTABLISHED' });
   }
 
-  async _onProjectCreateComplete(enriched) {
-    this._log(`_onProjectCreateComplete (evento: ${enriched.event || 'n/a'})`);
+  async _onProjectSelectComplete(enriched) {
+    this._log(`_onProjectSelectComplete (evento: ${enriched.event || 'n/a'})`);
 
     // FIX (auditoría Synapse v3, §2 — bug medio "DISCOVERY_COMPLETE cierra
-    // project_create antes de tiempo"): discovery.js emite DISCOVERY_COMPLETE
+    // project_select antes de tiempo"): discovery.js emite DISCOVERY_COMPLETE
     // apenas el handshake inicial (ping/pong) tiene éxito, ANTES de que
-    // arranque cualquier step real del onboarding. Pero project_create lo
+    // arranque cualquier step real del onboarding. Pero project_select lo
     // tiene listado en cortex_events junto a PROJECT_CREATED (semántica OR
     // del registry), así que sin discriminar, este handler completaba
-    // project_create -- y podía disparar _onOnboardingSuccess() -- con solo
-    // el handshake, no con el proyecto real creado. Este bug estaba
-    // enmascarado por el bug crítico de allBlockingDone (Ticket 1): al
-    // arreglar ese, este se volvió visible (confirmado con simulación).
+    // project_select con solo el handshake, no con el proyecto real elegido.
     // Igual que _onGithubAuthComplete discrimina ACCOUNT_REGISTERED del
     // resto de eventos de github_auth, acá discriminamos PROJECT_CREATED
     // del resto: solo PROJECT_CREATED representa la finalización real de
     // este step. DISCOVERY_COMPLETE ya cumplió su propósito en otro punto
     // del flujo (confirmar el handshake) -- no le corresponde completar
-    // project_create, así que se ignora acá sin persistir ni emitir nada.
+    // project_select, así que se ignora acá sin persistir ni emitir nada.
     if (enriched.event && enriched.event !== 'PROJECT_CREATED') {
-      this._log(`_onProjectCreateComplete: evento "${enriched.event}" no completa project_create -- ignorando`);
+      this._log(`_onProjectSelectComplete: evento "${enriched.event}" no completa project_select -- ignorando`);
       return;
     }
 
-    await this._persistStepComplete('project_create', this._registry.getStep('project_create'));
-    this._emitMilestone('project_create', {
+    await this._persistStepComplete('project_select', this._registry.getStep('project_select'));
+    this._emitMilestone('project_select', {
       project: enriched.data?.project || null,
     });
-    this._emitStepUiUpdate('project_create', { phase: 'ESTABLISHED' });
+    this._emitStepUiUpdate('project_select', { phase: 'ESTABLISHED' });
+  }
+
+  async _onMandateGenesisComplete(enriched) {
+    await this._persistStepComplete('mandate_genesis', this._registry.getStep('mandate_genesis'));
+    this._emitMilestone('mandate_genesis', {
+      mandateId: enriched.data?.mandateId || null,
+    });
+    this._emitStepUiUpdate('mandate_genesis', { phase: 'ESTABLISHED' });
 
     // Verificar si todos los steps bloqueantes están completos.
     // FIX (auditoría Synapse v3, §2): antes comparaba contra _processed, cuyas

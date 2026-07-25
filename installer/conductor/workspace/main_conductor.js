@@ -175,7 +175,7 @@ function bootServices(onboardingDone) {
 
 // ── WINDOW FACTORIES ───────────────────────────────────────────────────────
 function createOnboardingWindow() {
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 760,
@@ -194,23 +194,24 @@ function createOnboardingWindow() {
     show: false,
     frame: true
   });
+  mainWindow = win;
 
-  mainWindow.loadFile(path.join(__dirname, 'onboarding', 'onboarding.html'));
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.maximize();
-    mainWindow.show();
+  win.loadFile(path.join(__dirname, 'onboarding', 'onboarding.html'));
+  win.once('ready-to-show', () => {
+    win.maximize();
+    win.show();
   });
-  mainWindow.on('closed', () => {
+  win.on('closed', () => {
     if (_onboardingBridge) {
       _onboardingBridge.destroy();
       _onboardingBridge = null;
     }
-    mainWindow = null;
+    if (mainWindow === win) mainWindow = null;
   });
 }
 
 function createWorkspaceWindow(url) {
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1280,
     height: 800,
     resizable: true,
@@ -225,13 +226,14 @@ function createWorkspaceWindow(url) {
     title: 'Bloom Workspace',
     show: false
   });
+  mainWindow = win;
 
-  mainWindow.loadURL(url);
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    mainWindow.maximize();
+  win.loadURL(url);
+  win.once('ready-to-show', () => {
+    win.show();
+    win.maximize();
   });
-  mainWindow.on('closed', () => { mainWindow = null; });
+  win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
 }
 
 // ── SYNAPSE BRIDGE — ONBOARDING ────────────────────────────────────────────
@@ -574,14 +576,14 @@ app.whenReady().then(async () => {
     // (ej. reintentar un step no-blocking) y dependen de () => _reactor / () => _registry.
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:3000';
     createWorkspaceWindow(url);
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
+    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
     initOnboardingBridge();
   } else {
     log.info('[BOOT] Loading onboarding window');
     createOnboardingWindow();
     // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
     // para que los handlers siempre resuelvan la ventana actual
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
+    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
     // Inicializar el bridge de synapse para el onboarding.
     // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
     // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
@@ -606,12 +608,12 @@ app.on('activate', () => {
         // comentario ahí. Sin esto, reactivar la app en macOS (dock icon) con
         // onboarding ya completo tampoco levantaba el bridge.
         createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:3000');
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
+        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
         initOnboardingBridge();
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry);
+        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
         initOnboardingBridge();
       }
     }

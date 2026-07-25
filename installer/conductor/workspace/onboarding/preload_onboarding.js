@@ -34,6 +34,11 @@ contextBridge.exposeInMainWorld('onboarding', {
   // Payload: { project: string, sourcePath: string }
   // Ver PROJECT-COPIER-SPEC-AND-CONTEXT.md §2.3.
   importProject: (params) => ipcRenderer.invoke('onboarding:import-project', params),
+  // selectProject — persiste project_name/project_path elegidos en PROJECT
+  // (repo de GitHub o carpeta local ya importada). Payload:
+  // { projectName: string, projectPath: string }. Ver onboarding-handlers.js
+  // → 'onboarding:select-project'.
+  selectProject: (params) => ipcRenderer.invoke('onboarding:select-project', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),
 
   // Finalizar

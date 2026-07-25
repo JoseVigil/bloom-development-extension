@@ -11,7 +11,6 @@ const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
-const { copyProject, resolveProjectDestPath } = require('../../../shared/project-copier');
 
 const log = getLogger('onboarding');
 
@@ -28,7 +27,7 @@ const ONBOARDING_STEP_IDS = [
   'project_create',
 ];
 
-function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, getRegistry) {
+function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, getRegistry, createWorkspaceWindow) {
   const { resolveEntryPoint } = require('../resolution-engine');
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
@@ -433,46 +432,72 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     }
   });
 
-  // ── HANDLER: Importar proyecto externo al root de Nucleus ───────────────
-  // Ver PROJECT-COPIER-SPEC-AND-CONTEXT.md §2.3. Corre ANTES de
-  // onboarding:create-mandate — recién con el proyecto ya posicionado en
-  // destino se llama `mandate genesis` (sin ninguna responsabilidad de
-  // copia de su parte). No se reusa onboarding:create-mandate para esto:
-  // ese handler no tiene lógica de copia, solo invoca al binario nucleus.
-  //
-  // destPath se calcula con resolveProjectDestPath() — convención PROPUESTA
-  // (project como subcarpeta directa de workspace_path), documentada como
-  // no confirmada contra el binario nucleus/brain. Ver project-copier.js
-  // y spec §3.3.
-  //
-  // Payload: { project: string, sourcePath: string }
-  // Respuesta: { success, destPath?, gitExcluded?: string[], error? }
+  // ── HANDLER: Persistir la selección de proyecto en PROJECT ──────────────
+  // Se llama para AMBAS ramas de importSelectedProject() (step-project.js):
+  // repo de GitHub (projectPath vacío) y carpeta local ya importada
+  // (projectPath = destPath devuelto por onboarding:import-project). Guarda
+  // de forma optimista antes de create-mandate, para que un resume
+  // interrumpido no pierda la selección. create-mandate puede sobrescribir
+  // project_path después con el valor definitivo — no hay conflicto.
+  ipcMain.handle('onboarding:select-project', async (event, { projectName, projectPath }) => {
+    log.info('[IPC] onboarding:select-project — projectName:', projectName, '| projectPath:', projectPath || '(none)');
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      data.onboarding.project_name = projectName;
+      data.onboarding.project_path = projectPath || '';
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      return { success: true };
+    } catch (err) {
+      log.error('[IPC] onboarding:select-project — FAILED:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // ── HANDLER: Importar (copiar) un proyecto de carpeta local al root de
+  // Nucleus, vía conductor/shared/project-copier.js ─────────────────────────
+  // Ver PROJECT-COPIER-SPEC-AND-CONTEXT.md §2.3: corre ANTES de
+  // create-mandate. destPath = path.join(workspace_path, project) —
+  // convención confirmada con el usuario. Si destPath ya existe, falla con
+  // error explícito (no sobrescribe, no genera sufijo automático).
   ipcMain.handle('onboarding:import-project', async (event, { project, sourcePath }) => {
     log.info('[IPC] onboarding:import-project — project:', project, '| sourcePath:', sourcePath);
-    if (!project || !sourcePath) {
-      return { success: false, error: 'project y sourcePath son requeridos' };
-    }
     try {
-      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const workspacePath = nucleusData.onboarding?.workspace_path;
+      const { copyProject, resolveProjectDestPath } = require('../../../shared/project-copier');
+
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const workspacePath = data.onboarding?.workspace_path;
       if (!workspacePath) {
-        // Debería estar seteado por onboarding:init-nucleus antes de llegar
-        // a screen-project — si no está, el flujo se saltó un paso previo.
-        throw new Error('onboarding.workspace_path no está seteado en nucleus.json — ¿se corrió init-nucleus?');
+        throw new Error('onboarding.workspace_path no está seteado — ¿se completó nucleus_create?');
       }
 
       const destPath = resolveProjectDestPath(workspacePath, project);
+
+      // Colisión: fallar con error claro, no sobrescribir ni generar sufijo
+      // (decisión de producto confirmada). project-copier.js no hace este
+      // chequeo — es responsabilidad del caller, según su propio doc.
+      const alreadyExists = await fs.promises.stat(destPath).then(() => true).catch(() => false);
+      if (alreadyExists) {
+        throw Object.assign(
+          new Error(`Ya existe un proyecto con el nombre "${project}"`),
+          { code: 'DEST_EXISTS' }
+        );
+      }
+
       const result = await copyProject({ sourcePath, destPath });
 
-      log.success(
-        '[IPC] onboarding:import-project — ok — destPath:', result.destPath,
-        '| .git excluidos:', result.gitExcluded.length
-      );
-      return {
-        success: true,
-        destPath: result.destPath,
-        gitExcluded: result.gitExcluded,
-      };
+      try {
+        data.onboarding.project_path = result.destPath;
+        data.onboarding.updated_at = new Date().toISOString();
+        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      } catch (e) {
+        log.warn('[IPC] onboarding:import-project — could not persist project_path:', e.message);
+      }
+
+      log.success('[IPC] onboarding:import-project — ok:', result.destPath,
+        '| gitExcluded:', result.gitExcluded.length);
+      return { success: true, destPath: result.destPath, gitExcluded: result.gitExcluded };
     } catch (err) {
       log.error('[IPC] onboarding:import-project — FAILED:', err.message);
       return { success: false, error: err.message };
@@ -480,21 +505,17 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   });
 
   // ── HANDLER: Crear Genesis Mandate ──────────────────────────────────────
-  // FIX (24/07/2026): faltaba pasarle a nucleus DÓNDE trabajar. A
-  // diferencia de import-project (arriba, que sí lee workspace_path antes
-  // de hacer nada), este handler llamaba a execNucleus sin cwd — el
-  // binario heredaba el cwd del proceso de Electron y, al buscar la
-  // carpeta .bloom subiendo desde ahí para ubicar nucleus.json, fallaba en
-  // dev (cwd = carpeta del repo de Conductor, no el workspace del
-  // usuario). Ver conductor_onboarding_20260724.log. Se replica la misma
-  // lectura de workspace_path que ya usa import-project, y se la pasa a
-  // execNucleus como cwd (ver tercer parámetro nuevo en main_conductor.js).
   ipcMain.handle('onboarding:create-mandate', async (event, { project, projectPath }) => {
     try {
-      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const workspacePath = nucleusData.onboarding?.workspace_path;
+      // FIX: sin cwd, nucleus arranca desde el directorio de la app y busca
+      // .bloom subiendo desde ahí — nunca lo encuentra, porque el .bloom
+      // real vive dentro de workspace_path (árbol creado por nucleus_create).
+      // Confirmado en producción: "no encontré carpeta .bloom subiendo
+      // desde .../installer/conductor/workspace".
+      const dataForCwd = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const workspacePath = dataForCwd.onboarding?.workspace_path;
       if (!workspacePath) {
-        throw new Error('onboarding.workspace_path no está seteado en nucleus.json — ¿se corrió init-nucleus?');
+        throw new Error('onboarding.workspace_path no está seteado — ¿se completó nucleus_create?');
       }
 
       const result = await execNucleus([
@@ -534,17 +555,22 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       };
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
 
-      const win = getWindow();
-      if (win) {
-        win.setResizable(true);
-        win.setSize(1280, 800, true);
-        win.center();
-        await new Promise(r => setTimeout(r, 400));
-        win.loadURL(nucleusData.onboarding.workspace_url);
-        setTimeout(() => getWindow()?.maximize(), 600);
+      // Opción C: ventana nueva con preload_conductor.js (createWorkspaceWindow,
+      // main_conductor.js) en vez de win.loadURL() sobre la ventana de onboarding.
+      // El preload de una BrowserWindow se fija en su creación y no cambia con
+      // loadURL() — reusar la ventana dejaba el preload de onboarding corriendo
+      // contra core.html, causa raíz confirmada de que window.nucleus nunca
+      // existiera del lado de Core (ver comentario de auditoría 19/07/2026 en
+      // main_conductor.js sobre este mismo síntoma).
+      const oldWindow = getWindow(); // guardar ANTES de crear la nueva — createWorkspaceWindow reasigna mainWindow
+
+      createWorkspaceWindow(nucleusData.onboarding.workspace_url);
+
+      if (oldWindow && !oldWindow.isDestroyed()) {
+        oldWindow.close();
       }
 
-      log.success('[IPC] onboarding:complete — ok');
+      log.success('[IPC] onboarding:complete — ok, handoff a Core vía createWorkspaceWindow');
       return { success: true };
     } catch (err) {
       log.error('[IPC] onboarding:complete — FAILED:', err.message);
