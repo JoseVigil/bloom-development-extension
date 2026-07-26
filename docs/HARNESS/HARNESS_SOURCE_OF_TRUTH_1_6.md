@@ -1305,7 +1305,14 @@ Harness (Cortex) — dispatches en orden:
 4. account_registered      → profile_id: auto, launch_id: auto
    ACK esperado: {received:true}
    background.js:
-     → sendToHost(ACCOUNT_REGISTERED) → MilestoneReactor → Landing
+     → sendToHost(ACCOUNT_REGISTERED) → bloom-host → server_manager.py (Brain)
+       → synapse-bridge.js → wiring bridge→reactor → MilestoneReactor → Landing
+   (⚠️ Corregido en v1.6, ver §26: versiones anteriores de este diagrama abreviaban
+   la cadena como "sendToHost(ACCOUNT_REGISTERED) → MilestoneReactor", saltando
+   bloom-host, Brain y synapse-bridge.js en la notación. Es una elipsis de diagrama,
+   no una descripción del código: sendToHost() no conoce a MilestoneReactor ni lo
+   invoca directa o indirectamente por ningún camino que no sea el pipeline completo.
+   No confirmado en esta ronda: el tramo bloom-host — ver §26.)
    (GITHUB_TOKEN_STORED NO se dispara automáticamente aquí — es un evento sintético
    separado del Harness; despacharlo requiere un paso 4b manual: `github_token_stored`.
    Corregido en v1.2, ver §22)

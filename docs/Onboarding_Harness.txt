@@ -1,0 +1,18 @@
+1. onboarding_navigate  → step: "vault_init"
+2. onboarding_navigate  → step: "github_app_auth"
+3. github_device_code
+4. github_app_authorized
+
+5. onboarding_navigate  → step: "google_auth"
+5.5. [MANUAL] Click "Open Google" en la pantalla real de Discovery
+6. google_login_detected  → detected_host: "myaccount.google.com"
+7. account_registered     → service: "google"
+
+8. onboarding_navigate  → step: "ai_provider_setup"
+5.8. [MANUAL] Click "Open Console" en la pantalla real de Discovery
+9. api_key_registered   → provider: "gemini"
+
+10. onboarding_navigate  → step: "success"   (opcional pero recomendado — dispara _markOnboardingComplete())
+11. discovery_complete
+
+

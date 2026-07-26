@@ -771,6 +771,9 @@ https://claude.ai/chat/dbbfa366-ebc6-462a-a785-0887785827c8
 nenes
 Plan de busqueda trabajo linkedin
 https://claude.ai/chat/cb2b09ff-8c51-41ea-a51b-03ad2e02a7d8
+uitool
+Nuevo CV
+https://claude.ai/chat/7cef628a-fefa-472b-bca9-9d54e1e18b0a
 
 Elias
 Workspace - Análisis de estructura HTML y pipeline de procesamiento
