@@ -96,6 +96,7 @@ bloom-development-extension/
     │   ├── global_paths.js
     │   ├── logger.js
     │   ├── preload-synapse.js
+    │   ├── project-copier.js
     │   └── synapse-bridge.js
     └── workspace/
         ├── assets/
@@ -137,6 +138,7 @@ bloom-development-extension/
         │   │   │   └── ui-stepper.js
         │   │   └── steps/
         │   │       ├── step-identity.js
+        │   │       ├── step-mandate.js
         │   │       ├── step-milestone.js
         │   │       ├── step-project.js
         │   │       ├── step-vault.js

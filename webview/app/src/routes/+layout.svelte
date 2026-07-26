@@ -1,141 +1,53 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
   import { theme } from '$lib/stores/theme';
-  import { onboardingStore, requiresOnboarding } from '$lib/stores/onboarding';
   import SystemStatus from '$lib/components/SystemStatus.svelte';
   import { Menu, X, Home, FileText, Zap, GitBranch, User, Settings } from 'lucide-svelte';
-  
+
+  // ============================================================================
+  // NOTA DE FIX (ver detalle en el PR/commit):
+  // Este layout antes dependía de `onboardingStore` / `requiresOnboarding` y
+  // forzaba un redirect a `/onboarding` en cada render. Ese store expone
+  // `current_step` + `details.*`, pero este layout (y OnboardingWizard.svelte,
+  // y routes/onboarding/+page.svelte) leían campos que ya no existen
+  // (`step`, `githubAuthenticated`, `geminiConfigured`, etc.) — código huérfano
+  // de una versión anterior del contrato.
+  //
+  // El onboarding real vive en Electron (fuera de este webview), así que esta
+  // capa web NO debe gatear ni redirigir en base a estado de onboarding.
+  // Se elimina toda esa lógica. El webview siempre asume "ya onboarded" y
+  // muestra el sidebar / contenido normal.
+  // ============================================================================
+
   let sidebarCollapsed = false;
   let rightPaneCollapsed = false;
   let isWebview = false;
-  let isChecking = true;
   let isElectron = false;
-  
-  $: showSidebar = $onboardingStore.step !== 'welcome' && $onboardingStore.completed;
-  
-  onMount(async () => {
+  let isChecking = true;
+
+  const showSidebar = true;
+
+  onMount(() => {
     console.log('🎨 [Layout] Mounting...');
-    
+
     isWebview = typeof window !== 'undefined' && !!(window as any).vscode;
     isElectron = typeof window !== 'undefined' && !!(window as any).api;
     document.documentElement.classList.add('dark');
-    
+
     console.log('🔍 [Layout] Environment:', { isWebview, isElectron });
-    
-    // ========================================================================
-    // FIX: onboardingStore.init() NO EXISTE
-    // El store se auto-inicializa en su constructor (ver onboarding.ts líneas 68-90)
-    // Solo necesitamos esperar a que termine el loading inicial
-    // ========================================================================
-    
-    // Opción 1: Esperar a que loading sea false
-    const unsubscribe = onboardingStore.subscribe(state => {
-      if (!state.loading && isChecking) {
-        console.log('✅ [Layout] Store initialized:', {
-          completed: state.completed,
-          step: state.step,
-          apiAvailable: state.apiAvailable
-        });
-        isChecking = false;
-      }
-    });
-    
-    // Opción 2: Si quieres forzar un refresh explícito
-    // await onboardingStore.refresh();
-    // isChecking = false;
-    
-    // Handle routing based on onboarding status
-    handleRouting();
-    
-    // Listen for Electron events
-    if (isElectron && (window as any).api?.on) {
-      console.log('🎧 [Layout] Setting up Electron event listeners...');
-      
-      // Handle app initialization
-      (window as any).api.on('app:initialized', (data: { needsOnboarding: boolean; mode: string }) => {
-        console.log('📨 [Layout] App initialized:', data);
-        
-        if (data.needsOnboarding) {
-          console.log('🔄 [Layout] Resetting onboarding state');
-          // Si necesitas reset, implementa onboardingStore.reset() en onboarding.ts
-          // onboardingStore.reset();
-          goto('/onboarding');
-        }
-      });
-      
-      // Handle show onboarding
-      (window as any).api.on('show-onboarding', () => {
-        console.log('📨 [Layout] Show onboarding event received');
-        goto('/onboarding');
-      });
-      
-      // Handle onboarding completion
-      (window as any).api.on('onboarding:completed', () => {
-        console.log('✅ [Layout] Onboarding completed event received');
-        goto('/home');
-      });
-      
-      console.log('✅ [Layout] Electron event listeners ready');
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      console.log('🧹 [Layout] Unmounting, cleaning up...');
-      unsubscribe();
-    };
+
+    // Ya no hay chequeo de onboarding acá: el webview no gatea navegación
+    // por ese estado. Solo un breve loading inicial para evitar flash.
+    isChecking = false;
+
+    console.log('✅ [Layout] Ready');
   });
-  
-  // React to changes in onboarding status
-  $: if (!isChecking) {
-    handleRouting();
-  }
-  
-  function handleRouting() {
-    const currentPath = $page.url.pathname;
-    
-    // Don't redirect during initial check
-    if (isChecking) {
-      console.log('⏳ [Routing] Still checking, skipping...');
-      return;
-    }
-    
-    console.log('🔀 [Routing] Evaluating:', { 
-      currentPath, 
-      requiresOnboarding: $requiresOnboarding,
-      completed: $onboardingStore.completed 
-    });
-    
-    // If onboarding is required and we're not on the onboarding page
-    if ($requiresOnboarding && currentPath !== '/onboarding') {
-      console.log('🔄 [Routing] Redirecting to onboarding...');
-      goto('/onboarding');
-      return;
-    }
-    
-    // If onboarding is complete and we're on the onboarding page
-    if (!$requiresOnboarding && currentPath === '/onboarding') {
-      console.log('✅ [Routing] Onboarding complete, redirecting to home...');
-      goto('/home');
-      return;
-    }
-    
-    // If onboarding is complete and we're on root, go to home
-    if (!$requiresOnboarding && currentPath === '/') {
-      console.log('🏠 [Routing] Redirecting to home...');
-      goto('/home');
-      return;
-    }
-    
-    console.log('✅ [Routing] Current route is valid');
-  }
-  
+
   function toggleSidebar() {
     sidebarCollapsed = !sidebarCollapsed;
     console.log('📐 [UI] Sidebar collapsed:', sidebarCollapsed);
   }
-  
+
   function toggleRightPane() {
     rightPaneCollapsed = !rightPaneCollapsed;
     console.log('📐 [UI] Right pane collapsed:', rightPaneCollapsed);
@@ -175,7 +87,7 @@
       <div class="main-container">
         <aside class="sidebar" class:collapsed={sidebarCollapsed} role="navigation" aria-label="Main navigation">
           <nav class="nav">
-            <a href="/" class="nav-item" aria-label="Home">
+            <a href="/home" class="nav-item" aria-label="Home">
               <Home size={18} aria-hidden="true" />
               {#if !sidebarCollapsed}<span>Home</span>{/if}
             </a>
@@ -233,7 +145,7 @@
     background: var(--vscode-editor-background, #1e1e1e);
     color: var(--vscode-editor-foreground, #d4d4d4);
   }
-  
+
   :global(*) {
     box-sizing: border-box;
   }
@@ -258,7 +170,7 @@
     background: var(--bg-primary, #0f0f0f);
     color: var(--text-primary, #ffffff);
   }
-  
+
   .spinner {
     width: 48px;
     height: 48px;
@@ -268,11 +180,11 @@
     animation: spin 1s linear infinite;
     margin-bottom: 20px;
   }
-  
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
-  
+
   .loading-screen p {
     font-size: 16px;
     color: var(--text-secondary, #a1a1aa);
