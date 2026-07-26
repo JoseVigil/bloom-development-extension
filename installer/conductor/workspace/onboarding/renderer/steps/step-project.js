@@ -1,7 +1,17 @@
 // workspace/onboarding/renderer/steps/step-project.js
 //
-// Step: project_create — screen-project. Funciones movidas 1:1: loadRepos,
-// selectProject, createMandateAndContinue, _onMilestoneProjectCreate.
+// Step: project_select — screen-project. Funciones movidas 1:1: loadRepos,
+// selectProject, _onMilestoneProjectSelect.
+//
+// FIX (25/07/2026 — split MANDATE de PROJECT, ver
+// MANDATE-STEP-IMPLEMENTATION-PROMPT.md): este step ya NO crea el Genesis
+// Mandate. project_select (SSOT v3.1.0) termina en cuanto el proyecto está
+// confirmado (produces: project_name) — la creación del mandate es un step
+// aparte, mandate_genesis, con su propia screen (screen-mandate) y su propio
+// módulo (steps/step-mandate.js). Lo que acá adentro se llamaba
+// createMandateAndContinue()/continueToMandate() pasa a ser
+// advanceToMandateStep(): su único trabajo es navegar a mandate_genesis,
+// nunca llamar a createMandate().
 //
 // FIX (24/07/2026): el step de PROJECT arrancaba y terminaba en PROJECT,
 // pero la UI no lo reflejaba así — al elegir "+ Local folder" la carpeta
@@ -20,10 +30,12 @@
 //      ahí se habilita el botón, ahora "Continuar →" en vez de
 //      "Crear Mandate →" — su único trabajo visual es avanzar, no crear
 //      nada por sorpresa.
-//   2. continueToMandate() — lo que faltaba (creación del Genesis Mandate
-//      + navigate) se dispara al click de "Continuar →", ya con el
-//      import confirmado de antemano. Esta fase es la que se va a seguir
-//      afinando cuando se rediseñe la UI del stepper de mandate.
+//   2. advanceToMandateStep() — se dispara al click de "Continuar →", ya
+//      con el import confirmado de antemano. Desde el split del 25/07/2026
+//      esto YA NO crea el Genesis Mandate acá — solo navega al step
+//      mandate_genesis (screen-mandate). La creación del mandate vive en
+//      steps/step-mandate.js, disparada por su propio botón, recién después
+//      de mostrar el copy explicativo de esa pantalla.
 //
 // De paso, showCortex() apuntaba a #cortex-bar/#cortex-text, que ya no
 // existen en onboarding.html (reemplazados por #notification-rail — ver
@@ -36,6 +48,7 @@ import { addNotification } from '../core/notifications.js';
 import { navigateTo, registerStepHandler } from '../core/navigation.js';
 import { registerMilestoneHandler } from '../core/ipc-bridge.js';
 import { selection, state } from '../core/shared-state.js';
+import { setStepperEstablished } from '../core/ui-stepper.js';
 
 function getStatusEl() {
   return document.getElementById('project-import-status');
@@ -167,7 +180,7 @@ export async function importSelectedProject() {
     await window.onboarding.selectProject({ projectName: project.name, projectPath: '' });
     if (btn) {
       btn.disabled = false;
-      btn.onclick = continueToMandate;
+      btn.onclick = advanceToMandateStep;
     }
     return;
   }
@@ -203,69 +216,52 @@ export async function importSelectedProject() {
 
   if (btn) {
     btn.disabled = false;
-    btn.onclick = continueToMandate;
+    btn.onclick = advanceToMandateStep;
   }
 }
 
 /**
- * Fase 2 del step: recién acá se crea el Genesis Mandate y se avanza fuera
- * de PROJECT. Se dispara solo desde "Continuar →", que solo está
- * habilitado una vez que importSelectedProject() confirmó el proyecto.
- *
- * (La UI de esta parte — lo que se ve mientras el mandate se crea, el
- * screen al que se navega — queda pendiente de revisar por separado, una
- * vez que el usuario efectivamente llega acá.)
+ * Fase 2 del step: ya NO crea el Genesis Mandate acá (ver split del
+ * 25/07/2026, MANDATE-STEP-IMPLEMENTATION-PROMPT.md §3.1). Su único trabajo
+ * es avanzar de screen-project a screen-mandate (step mandate_genesis),
+ * una vez que importSelectedProject() ya confirmó el proyecto. La creación
+ * real del mandate — con su propio copy explicativo y su propio botón —
+ * vive en steps/step-mandate.js.
  */
-export async function continueToMandate() {
-  log('info', 'click — btn-project-continue');
-  const btn = getContinueBtn();
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Creando mandate…';
-  }
+export function advanceToMandateStep() {
+  log('info', 'click — btn-project-continue — avanzando a mandate_genesis');
+  // FIX (26/07/2026 — bug reportado tras el split de MANDATE/PROJECT):
+  // antes de separar el step, esto lo hacía __onboarding_complete__.onEnter()
+  // en step-milestone.js — tenía sentido porque PROJECT era el último step
+  // real. Al mover ese hardcode a establecer 'mandate' (que ahora sí es el
+  // último), nadie quedó a cargo de marcar 'project' como establecido en su
+  // propio momento de completar — el nodo se quedaba gris para siempre en
+  // un arranque fresh (el camino de resume sí lo marcaba bien, por eso no
+  // se notaba reabriendo la app, solo en la sesión en curso).
+  setStepperEstablished('project');
+  navigateTo('mandate_genesis');
+}
 
-  log('info', `IPC → onboarding:create-mandate — project: ${selection.selectedProject.name}`);
-  const result = await window.onboarding.createMandate({
-    project: selection.selectedProject.name,
-    projectPath: selection.importedProjectPath || '',
-  });
-  log(result.success ? 'info' : 'error',
-    `IPC ← onboarding:create-mandate — success: ${result.success}`);
-
-  if (result.success) {
-    // El milestone push ('project_create') es quien realmente avanza la UI
-    // (ver onMilestoneProjectCreate). El navigate('success') de acá sigue
-    // funcionando como fallback si Brain no emite el evento.
-    log('info', 'IPC → onboarding:navigate — step: success');
-    const navResult = await window.onboarding.navigate({ step: 'success' });
-    log(navResult.success ? 'info' : 'error',
-      `IPC ← onboarding:navigate — success: ${navResult.success}`);
-    navigateTo('__onboarding_complete__');
-  } else {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Reintentar';
-      btn.onclick = continueToMandate;
-    }
-    const errMsg = result?.error || result?.result?.error || result?.message
-      || 'Unknown error — Main no devolvió detalle (ver logs de conductor_onboarding).';
-    log('error', `continueToMandate failed: ${JSON.stringify(result)}`);
-    showImportStatus(`Mandate failed: ${errMsg}`, 'error');
+/**
+ * Fallback: si Brain llega a emitir PROJECT_CREATED/DISCOVERY_COMPLETE
+ * (cortex_events de project_select) mientras el usuario sigue en
+ * screen-project, empujamos igual a mandate_genesis — nunca directo a
+ * __onboarding_complete__, que ahora depende de un step más (mandate_genesis,
+ * todavía sin completar en este punto).
+ */
+function onMilestoneProjectSelect(_data) {
+  log('info', 'milestone: project_select confirmado por Brain');
+  addNotification('Project selected — ready for Mandate', { icon: '✓', type: 'success' });
+  setStepperEstablished('project');
+  const mandateScreen = document.getElementById('screen-mandate');
+  if (mandateScreen && !mandateScreen.classList.contains('active')) {
+    log('info', 'milestone: project_select — avanzando a mandate_genesis por push');
+    navigateTo('mandate_genesis');
   }
 }
 
-function onMilestoneProjectCreate(_data) {
-  log('info', 'milestone: project_create confirmado por Brain');
-  addNotification('Project created — workspace ready', { icon: '✓', type: 'success' });
-  const milestoneScreen = document.getElementById('screen-milestone');
-  if (milestoneScreen && !milestoneScreen.classList.contains('active')) {
-    log('info', 'milestone: project_create — avanzando a milestone por push');
-    navigateTo('__onboarding_complete__');
-  }
-}
+registerMilestoneHandler('project_select', onMilestoneProjectSelect);
 
-registerMilestoneHandler('project_create', onMilestoneProjectCreate);
-
-registerStepHandler('project_create', {
+registerStepHandler('project_select', {
   onEnter: loadRepos,
 });

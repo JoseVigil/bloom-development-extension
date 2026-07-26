@@ -27,9 +27,14 @@
 // CAMBIO respecto al original (Requerimiento 3 — unificar el mecanismo de
 // avance): el destino tras "github" ya no es un goTo(4) a mano — es
 // navigateTo('vault_init'). El destino tras el último sub-step ya no es
-// goTo(5) — es navigateTo('project_create'). El AVANCE real sigue siendo
-// el mismo (github → vault → google → gemini → project), lo único que
-// cambia es que ahora se expresa como stepId, no como índice de screen.
+// goTo(5) — es navigateTo('project_select') (SYNC 26/07/2026 — split
+// MANDATE/PROJECT, ver MANDATE-STEP-IMPLEMENTATION-PROMPT.md: 'project_create'
+// no existe más en el SSOT desde v3.1.0, se partió en 'project_select' +
+// 'mandate_genesis'; esta línea había quedado con el stepId viejo y
+// navigateTo() no lo encontraba, cayendo a screen-entry — indistinguible de
+// un arranque fresh). El AVANCE real sigue siendo el mismo (github → vault →
+// google → gemini → project), lo único que cambia es que ahora se expresa
+// como stepId, no como índice de screen.
 
 import { log, registerMilestoneHandler } from '../core/ipc-bridge.js';
 import { addNotification } from '../core/notifications.js';
@@ -376,7 +381,16 @@ function advanceIdentityWizard(subStepId) {
       log('info', 'identity wizard completo — GitHub + Vault + Google + Gemini confirmados');
       setStepperEstablished('identity');
       showCortex('Identity complete. Setting up project…');
-      navigateTo('project_create');
+      // FIX (26/07/2026 — bug reportado, ver conductor_onboarding_20260726.log):
+      // este stepId quedó desactualizado tras el split de MANDATE/PROJECT
+      // (onboarding_steps.json v3.1.0). 'project_create' ya no existe en el
+      // SSOT — navigateTo() lo buscaba, no lo encontraba, logueaba
+      // "stepId desconocido" y caía a showScreen('entry'), que es
+      // indistinguible en pantalla de haber arrancado de cero (aunque el
+      // progreso real seguía persistido en nucleus.json). El reemplazo
+      // correcto es 'project_select', el primero de los dos steps en los
+      // que se partió 'project_create'.
+      navigateTo('project_select');
     };
   } else {
     btn.onclick = advanceToNextIdentityStep;

@@ -34,7 +34,7 @@ import { setStepperActive, setStepperEstablished, refreshStepperPendingStates } 
 // screens de transición/sistema, no steps del backend.
 const SCREEN_IDS = new Set([
   'entry', 'workspace', 'nucleus-init', 'identity', 'vault',
-  'project', 'milestone', 'launch',
+  'project', 'mandate', 'milestone', 'launch',
 ]);
 
 // stepId (SSOT) → screen física. Existe porque la granularidad de "screen"
@@ -54,7 +54,13 @@ const STEP_SCREEN = {
   vault_init: 'vault',
   google_auth: 'identity',
   ai_provider_setup: 'identity',
-  project_create: 'project',
+  // SYNC (25/07/2026 — split MANDATE de PROJECT): 'project_create' ya no
+  // existe en el SSOT (v3.1.0). project_select conserva la screen 'project'
+  // tal cual; mandate_genesis tiene su propia screen nueva ('mandate'),
+  // agregada a screen-mandate en onboarding.html — ver
+  // MANDATE-STEP-IMPLEMENTATION-PROMPT.md.
+  project_select: 'project',
+  mandate_genesis: 'mandate',
 };
 
 // stepId (SSOT) → nodo del sidebar (STEPPER_NODES en ui-stepper.js).
@@ -78,7 +84,12 @@ const STEP_NODE = {
   github_app_auth: 'identity',
   google_auth: 'providers',
   ai_provider_setup: 'providers',
-  project_create: 'project',
+  // SYNC (25/07/2026 — split MANDATE de PROJECT): project_select activa el
+  // nodo 'project' de siempre; mandate_genesis activa el nodo 'mandate'
+  // (sn-mandate en onboarding.html, ya existía en el sidebar sin nada que
+  // lo apuntara — STEPPER_NODES.mandate ya estaba en ui-stepper.js).
+  project_select: 'project',
+  mandate_genesis: 'mandate',
 };
 
 // stepId especial que no es un step real del JSON.
@@ -321,7 +332,12 @@ const FALLBACK_STEPS = [
   { id: 'github_app_auth', view: 'identity', requires: ['vault_initialized'], produces: 'github_app_token' },
   { id: 'google_auth', view: 'providers', requires: ['vault_initialized'], produces: 'google_account' },
   { id: 'ai_provider_setup', view: 'providers', requires: ['vault_initialized'], produces: 'ai_provider_key' },
-  { id: 'project_create', view: 'project', requires: ['vault_initialized', 'github_app_token'], produces: 'project_mandate' },
+  // SYNC (25/07/2026 — split MANDATE de PROJECT, ver
+  // MANDATE-STEP-IMPLEMENTATION-PROMPT.md): 'project_create' retirado del
+  // SSOT real (v3.1.0) — reemplazado acá por los mismos dos steps que ya
+  // tiene el JSON de disco, para que este fallback no vuelva a divergir.
+  { id: 'project_select', view: 'project', requires: ['vault_initialized', 'github_app_token'], produces: 'project_name' },
+  { id: 'mandate_genesis', view: 'mandate', requires: ['project_name'], produces: 'genesis_mandate_id' },
 ];
 
 export { refreshStepperPendingStates };

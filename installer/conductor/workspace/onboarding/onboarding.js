@@ -35,6 +35,7 @@ import './renderer/steps/step-workspace.js';
 import './renderer/steps/step-identity.js';
 import './renderer/steps/step-vault.js';
 import './renderer/steps/step-project.js';
+import './renderer/steps/step-mandate.js';
 import './renderer/steps/step-milestone.js';
 
 // Bindings puntuales que sí necesitan un import directo porque los llama

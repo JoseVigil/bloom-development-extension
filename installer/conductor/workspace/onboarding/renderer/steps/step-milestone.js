@@ -66,7 +66,12 @@ export async function completeOnboarding() {
 
 registerStepHandler('__onboarding_complete__', {
   onEnter() {
-    setStepperEstablished('project');
+    // SYNC (25/07/2026 — split MANDATE de PROJECT): __onboarding_complete__
+    // ahora se alcanza recién después de mandate_genesis, no de project_select
+    // — el nodo del sidebar que corresponde establecer acá es 'mandate', no
+    // 'project' (project ya quedó established por STEP_NODE al completar
+    // project_select, vía resumeFromEntryPoint()/navigateTo() normal).
+    setStepperEstablished('mandate');
     runMilestoneSequence();
     setTimeout(() => {
       const enterBtn = document.getElementById('enter-btn');

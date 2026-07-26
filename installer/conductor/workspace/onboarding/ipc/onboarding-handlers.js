@@ -18,13 +18,17 @@ const log = getLogger('onboarding');
 // No se hardcodean reglas aquí, solo los IDs para validación local.
 // v3.0.0 (2026-07-10): 'github_auth' (PAT clásico) retirado y reemplazado por
 // 'github_app_auth' (GitHub App / Device Flow). Ver onboarding_steps.json _changelog.
+// v3.1.0 (2026-07-25): 'project_create' retirado, partido en 'project_select'
+// (produces project_name) + 'mandate_genesis' (produces genesis_mandate_id) —
+// ver MANDATE-STEP-IMPLEMENTATION-PROMPT.md.
 const ONBOARDING_STEP_IDS = [
   'nucleus_create',
   'vault_init',
   'github_app_auth',
   'google_auth',
   'ai_provider_setup',
-  'project_create',
+  'project_select',
+  'mandate_genesis',
 ];
 
 function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, getRegistry, createWorkspaceWindow) {
@@ -446,6 +450,16 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       data.onboarding = data.onboarding || {};
       data.onboarding.project_name = projectName;
       data.onboarding.project_path = projectPath || '';
+      // Red de seguridad (mismo patrón que nucleus_create en init-nucleus, y
+      // que create-mandate más abajo): pushear el propio stepId a
+      // completed_steps[] acá, no solo depender de que MilestoneReactor lo
+      // haga vía un milestone de Brain. project_select puede completarse sin
+      // que Brain llegue a emitir PROJECT_CREATED (ej. selección de carpeta
+      // local, que no pasa por Discovery/Chrome en absoluto).
+      data.onboarding.completed_steps = data.onboarding.completed_steps || [];
+      if (!data.onboarding.completed_steps.includes('project_select')) {
+        data.onboarding.completed_steps.push('project_select');
+      }
       data.onboarding.updated_at = new Date().toISOString();
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
       return { success: true };
@@ -525,13 +539,38 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       ], 15000, { cwd: workspacePath });
       if (result.success !== false) {
         try {
+          // mandate_genesis tiene cortex_events: [] — Brain nunca confirma
+          // este step, así que la persistencia de su artefacto (produces:
+          // genesis_mandate_id) tiene que resolverse acá, síncronamente, no
+          // esperando un milestone que no va a llegar. Ver
+          // MANDATE-STEP-IMPLEMENTATION-PROMPT.md §3.2.
+          //
+          // OPEN ITEM sin confirmar contra el binario real: no sabemos con
+          // certeza qué trae `nucleus mandate genesis --json` por stdout, así
+          // que se prueban los nombres de campo más probables y, si ninguno
+          // aparece, se genera un ID local — a step-verifiers.js (verify:
+          // 'json_field') solo le importa que el campo sea truthy, no un
+          // formato específico. Si se confirma el nombre real del campo que
+          // devuelve el binario, ajustar este orden de preferencia.
+          const mandateId = result.mandateId || result.mandate_id || result.id
+            || result.genesis_mandate_id || `local-${Date.now()}`;
+
           const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
           data.onboarding = data.onboarding || {};
           data.onboarding.project_path = projectPath;
+          data.onboarding.genesis_mandate_id = mandateId;
+          // Red de seguridad — mismo patrón que project_select en
+          // onboarding:select-project: pushear el propio stepId acá, no solo
+          // confiar en un milestone push que en este step ni siquiera existe.
+          data.onboarding.completed_steps = data.onboarding.completed_steps || [];
+          if (!data.onboarding.completed_steps.includes('mandate_genesis')) {
+            data.onboarding.completed_steps.push('mandate_genesis');
+          }
           data.onboarding.updated_at = new Date().toISOString();
           fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+          log.success('[IPC] onboarding:create-mandate — genesis_mandate_id persisted:', mandateId);
         } catch (e) {
-          log.warn('[IPC] onboarding:create-mandate — could not persist project_path:', e.message);
+          log.warn('[IPC] onboarding:create-mandate — could not persist project_path/genesis_mandate_id:', e.message);
         }
       }
       return { success: result.success !== false, result };
@@ -592,10 +631,15 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // completed_steps[] Y produces juntos, y emite milestone:reached al
   // renderer. Cero lógica nueva de persistencia acá.
   //
-  // Steps con verify:'fs_marker' (nucleus_create, project_create) quedan
-  // bloqueados — ver FS_MARKER_STEPS más abajo — porque _persistStepComplete
-  // puede corromper su artefacto o, en el mejor caso, no sirve para nada.
-  const FS_MARKER_STEPS = ['nucleus_create', 'project_create'];
+  // Steps con verify:'fs_marker' quedan bloqueados — ver FS_MARKER_STEPS más
+  // abajo — porque _persistStepComplete puede corromper su artefacto o, en
+  // el mejor caso, no sirve para nada.
+  //
+  // SYNC (25/07/2026 — split MANDATE de PROJECT): 'project_create' (el único
+  // otro miembro histórico de esta lista) ya no existe. Sus dos reemplazos
+  // en el SSOT v3.1.0 — project_select y mandate_genesis — son ambos
+  // verify:'json_field', no fs_marker, así que no van acá.
+  const FS_MARKER_STEPS = ['nucleus_create'];
 
   ipcMain.handle('onboarding:mark-step-complete', async (event, { step }) => {
     log.info('[IPC] onboarding:mark-step-complete — step:', step);
@@ -603,19 +647,20 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       log.warn('[IPC] onboarding:mark-step-complete — unknown step:', step);
       return { success: false, error: `Unknown step: ${step}` };
     }
-    // FIX: nucleus_create y project_create se verifican por artefacto real
-    // en filesystem (fs_marker), no por un flag booleano. Para nucleus_create,
-    // produces ('workspace_path') es EL MISMO campo que step-verifiers.js usa
-    // como directorio en fs_marker (verifyArgs.jsonField: 'onboarding.workspace_path').
-    // Si _persistStepComplete() escribe `true` ahí porque el path real todavía
+    // FIX: nucleus_create se verifica por artefacto real en filesystem
+    // (fs_marker), no por un flag booleano. produces ('workspace_path') es
+    // EL MISMO campo que step-verifiers.js usa como directorio en fs_marker
+    // (verifyArgs.jsonField: 'onboarding.workspace_path'). Si
+    // _persistStepComplete() escribe `true` ahí porque el path real todavía
     // no existe, path.join() en el verifier tira TypeError (catch → false) y
     // resolveEntryPoint() queda trabado en nucleus_create para siempre, sin
     // poder recuperarse solo editando completed_steps[] — hay que limpiar
-    // nucleus.json a mano. project_create no corrompe nada (produces:
-    // 'project_mandate' ≠ verifyArgs.jsonField: 'onboarding.project_path'),
-    // pero tampoco destraba el resume: checkArtifact() para fs_marker nunca
-    // mira `produces`, solo jsonField/markerFile — completar este step acá
-    // sería un noop disfrazado de éxito.
+    // nucleus.json a mano.
+    //
+    // SYNC (25/07/2026 — split MANDATE de PROJECT): project_select y
+    // mandate_genesis (reemplazos de project_create) son verify:'json_field',
+    // no fs_marker — no tienen este riesgo, por eso no están en
+    // FS_MARKER_STEPS y sí pueden pasar por el camino normal de abajo.
     if (FS_MARKER_STEPS.includes(step)) {
       log.warn('[IPC] onboarding:mark-step-complete — rechazado, step fs_marker:', step);
       return {
@@ -629,12 +674,14 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         return { success: false, error: 'reactor no inicializado todavía' };
       }
       // No se manda `event` en el enriched a propósito: algunos handlers del
-      // reactor (ej. _onProjectCreateComplete) discriminan por
+      // reactor (ej. _onProjectSelectComplete, que discrimina PROJECT_CREATED
+      // del resto de eventos de project_select) discriminan por
       // enriched.event === 'ALGO_ESPECIFICO' y devuelven sin persistir si no
-      // matchea. project_create ya está bloqueado arriba, pero dejamos el
-      // enriched "limpio" (sin event inventado) para que ningún handler
-      // futuro con un discriminador similar se rompa silenciosamente por un
-      // valor sintético que nunca vimos verificado contra el código real.
+      // matchea. Un enriched.event undefined no matchea ningún discriminador
+      // != undefined, así que estos handlers proceden con normalidad —
+      // dejamos el enriched "limpio" (sin event inventado) para que ningún
+      // handler futuro con un discriminador similar se rompa silenciosamente
+      // por un valor sintético que nunca vimos verificado contra el código real.
       reactor.handleMilestone(step, {
         type: 'ONBOARDING_MILESTONE',
         data: {},

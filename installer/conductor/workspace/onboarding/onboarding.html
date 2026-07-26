@@ -1671,6 +1671,30 @@ body::after {
     </div>
   </div>
 
+  <!-- SCREEN 4.5: Mandate Genesis (mandate_genesis) -->
+  <!-- NUEVO (25/07/2026 — split MANDATE de PROJECT, ver
+       MANDATE-STEP-IMPLEMENTATION-PROMPT.md §2.1/§2.2). Antes, terminar
+       PROJECT navegaba directo a screen-milestone ("System Activated"),
+       insinuando que el sistema ya estaba listo cuando en realidad faltaba
+       crear el Genesis Mandate. Esta screen es la parada intermedia real. -->
+  <div class="screen" id="screen-mandate">
+    <div class="screen-inner">
+      <div class="stage-label">Stage 5 — Mandate</div>
+      <h2 class="stage-title">Create your<br>Genesis Mandate.</h2>
+      <p class="stage-body" style="margin-bottom:24px;">
+        We're about to create your first Mandate, Genesis:
+      </p>
+      <ul class="stage-body" style="margin-bottom:32px; padding-left:20px; list-style:disc;">
+        <li style="margin-bottom:8px;">We'll analyze your project and propose how to organize it — you review and confirm before anything gets built.</li>
+        <li>Once you confirm, we'll assemble the real foundation of your project in the background.</li>
+      </ul>
+
+      <div class="project-import-status" id="mandate-status"></div>
+
+      <button class="btn-primary" id="btn-mandate-continue">Create Mandate →</button>
+    </div>
+  </div>
+
   <!-- SCREEN 5: System Activated -->
   <div class="screen" id="screen-milestone">
     <div class="screen-inner">

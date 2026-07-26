@@ -177,17 +177,44 @@ const FALLBACK_STEPS = [
     cortex_events:      ['API_KEY_REGISTERED'],
     conductor_reaction: 'markStepComplete',
   },
+  // SYNC (25/07/2026 — split MANDATE de PROJECT, ver
+  // MANDATE-STEP-IMPLEMENTATION-PROMPT.md): el viejo 'project_create' single
+  // step (verify: fs_marker sobre genesis.mandate, que el binario Go nunca
+  // escribía — causa raíz confirmada con `find` real contra el filesystem)
+  // se retira. onboarding_steps.json v3.1.0 ya lo separó en dos steps reales
+  // — este fallback tiene que reflejar EXACTAMENTE eso, copia 1:1, o vuelve
+  // a divergir del SSOT en disco apenas loadSteps() caiga acá (ver el propio
+  // _comment/_changelog del JSON: "si diverge del fallback hardcoded de
+  // milestone-registry.js, el fallback pierde").
   {
-    id:                 'project_create',
-    label:              'Crear proyecto',
-    screen:             'project-create',
+    id:                 'project_select',
+    label:              'Elegir proyecto',
+    screen:             'project-select',
     vault_required:     true,
     requires:           ['vault_initialized', 'github_app_token'],
-    produces:           'project_mandate',
-    verify:             'fs_marker',
-    verifyArgs:         { jsonField: 'onboarding.project_path', markerFile: 'genesis.mandate' },
+    produces:           'project_name',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.project_name' },
     blocking:           true,
     cortex_events:      ['PROJECT_CREATED', 'DISCOVERY_COMPLETE'],
+    conductor_reaction: 'markStepComplete',
+  },
+  {
+    id:                 'mandate_genesis',
+    label:              'Crear Genesis Mandate',
+    screen:             'mandate-genesis',
+    vault_required:     true,
+    requires:           ['project_name'],
+    produces:           'genesis_mandate_id',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.genesis_mandate_id' },
+    blocking:           true,
+    // cortex_events vacío a propósito: Brain/Cortex nunca emite un evento
+    // para este step (no hay contraparte en Discovery/Chrome, es un IPC
+    // sincrónico de Electron) — ver milestone-reactor.js
+    // _onMandateGenesisComplete() y onboarding-handlers.js
+    // 'onboarding:create-mandate', que resuelven esto sin esperar a Brain.
+    cortex_events:      [],
     conductor_reaction: 'onOnboardingSuccess',
   },
 ];
