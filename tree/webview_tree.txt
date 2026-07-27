@@ -17,7 +17,6 @@ bloom-development-extension/
         │   │   │   ├── GithubAuthButton.svelte
         │   │   │   ├── IntentsLink.svelte
         │   │   │   ├── NucleusPanel.svelte
-        │   │   │   ├── OnboardingWizard.svelte
         │   │   │   ├── ProjectsPanel.svelte
         │   │   │   ├── SystemStatus.svelte
         │   │   │   ├── TokenEstimator.svelte
@@ -28,6 +27,7 @@ bloom-development-extension/
         │   │   │       └── DebugSimBar.svelte
         │   │   ├── stores/
         │   │   │   ├── auth.ts
+        │   │   │   ├── docsGate.ts
         │   │   │   ├── intents.ts
         │   │   │   ├── navigation.ts
         │   │   │   ├── onboarding.ts
@@ -56,8 +56,6 @@ bloom-development-extension/
         │       │   └── doc/
         │       │       └── [id]/
         │       │           └── +page.svelte
-        │       ├── onboarding/
-        │       │   └── +page.svelte
         │       └── welcome/
         │           └── +page.svelte
         ├── svelte.config.js

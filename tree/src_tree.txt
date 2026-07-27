@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── src/
-    ├── .DS_Store
     ├── ai/
     │   ├── AiAccountChecker.ts
     │   ├── adapters/
@@ -11,7 +10,6 @@ bloom-development-extension/
     │   │   └── OllamaNativeAdapter.ts
     │   └── index.ts
     ├── api/
-    │   ├── .DS_Store
     │   ├── adapters/
     │   │   ├── AIRuntimeAdapter.ts
     │   │   ├── BrainApiAdapter.ts
@@ -26,7 +24,6 @@ bloom-development-extension/
     │   │   ├── errorHandler.ts
     │   │   └── validation.ts
     │   ├── routes/
-    │   │   ├── .DS_Store
     │   │   ├── auth.routes.ts
     │   │   ├── explorer.routes.ts
     │   │   ├── health.routes.ts
@@ -151,13 +148,11 @@ bloom-development-extension/
     ├── temporal/
     │   └── client.ts
     ├── types/
-    │   ├── .DS_Store
     │   ├── api-contracts.ts
     │   ├── brain-schemas.ts
     │   ├── gen-state.types.ts
     │   └── ws-events.ts
     ├── ui/
-    │   ├── .DS_Store
     │   ├── ClaudeBridgePanel.ts
     │   ├── intent/
     │   │   ├── intentForm.css

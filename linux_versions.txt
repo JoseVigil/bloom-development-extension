@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — linux
-# Generated: 2026-07-25 22:53:27
+# Generated: 2026-07-27 11:38:56
 
 ---
 brain/__build__.py
@@ -48,7 +48,7 @@ installer/conductor/setup/version.json
 
 ---
 installer/bootstrap/VERSION
-14
+15
 
 ---
 installer/bootstrap/bootstrap.meta.json
@@ -56,8 +56,8 @@ installer/bootstrap/bootstrap.meta.json
   "name": "Bloom Bootstrap",
   "info": "Bootstrap runtime for the Bloom VS Code extension. Loads and initializes the extension's Node.js environment inside the Nucleus service, acting as the bridge between the VS Code plugin and the Bloom backend.",
   "version": "1.0.0",
-  "build_number": 14,
-  "build_date": "2026-07-26T01:50:58Z",
+  "build_number": 15,
+  "build_date": "2026-07-27T14:38:46Z",
   "files": [
     "bundle.js",
     "bundle.js.map",
@@ -127,11 +127,11 @@ const BuildTime = "19:35:00"
 
 ---
 installer/metamorph/scripts/build_number.effective.txt
-21
+23
 
 ---
 installer/metamorph/scripts/build_number.txt
-21
+23
 
 ---
 installer/nucleus/scripts/build_number.effective.txt

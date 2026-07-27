@@ -183,10 +183,19 @@ var allComponents = []component{
 		PostDeployFn: vsixPostDeploy,
 	},
 	{
+		// bootstrap runs the Control Plane bundle (bundle.js via Node/bootControlPlane).
+		// There is no OS-specific binary here — it's a plain JS/static tree copyDir,
+		// same as on windows/darwin. Previously restricted to windows/darwin only,
+		// which meant `metamorph rollout` (packaged installer path) silently skipped
+		// bootstrap on Linux. That's why the only thing populating
+		// NUCLEUS_HOME/bin/bootstrap on this Linux machine was build-all.py running
+		// locally (rollout_bootstrap(), which has no platform filter) — never
+		// Metamorph. Adding "linux" here so a packaged/production rollout on Linux
+		// also deploys bootstrap, matching build-all.py's behavior.
 		Key:      "bootstrap",
 		SourceFn: func(r string) string { return filepath.Join(r, "installer", "native", "bin", "bootstrap") },
 		DestFn:   func(b string) string { return filepath.Join(b, "bin", "bootstrap") },
-		Platforms: []string{"windows", "darwin"},
+		Platforms: []string{"windows", "darwin", "linux"},
 	},
 	{
 		Key:      "hooks",
