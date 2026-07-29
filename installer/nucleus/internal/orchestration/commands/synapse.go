@@ -853,7 +853,7 @@ func executeStartOllamaWorkflow(ctx context.Context, c *core.Core, simulation bo
 
 	we, err := tc.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("start_ollama_%d", time.Now().Unix()),
-		TaskQueue: "nucleus-task-queue",
+		TaskQueue: "profile-orchestration",
 	}, workflows.StartOllamaWorkflow, workflows.StartOllamaInput{SimulationMode: simulation})
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute workflow: %w", err)
@@ -871,7 +871,7 @@ func executeVaultStatusWorkflow(ctx context.Context, c *core.Core) (*workflows.V
 
 	we, err := tc.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("vault_status_%d", time.Now().Unix()),
-		TaskQueue: "nucleus-task-queue",
+		TaskQueue: "profile-orchestration",
 	}, workflows.VaultStatusWorkflow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute workflow: %w", err)
@@ -889,7 +889,7 @@ func executeShutdownAllWorkflow(ctx context.Context, c *core.Core) (*workflows.S
 
 	we, err := tc.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("shutdown_all_%d", time.Now().Unix()),
-		TaskQueue: "nucleus-task-queue",
+		TaskQueue: "profile-orchestration",
 	}, workflows.ShutdownAllWorkflow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute workflow: %w", err)

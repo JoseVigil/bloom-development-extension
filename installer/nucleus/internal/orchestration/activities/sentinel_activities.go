@@ -603,6 +603,84 @@ func (a *SentinelActivities) SendOnboardingNavigateActivity(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ACTIVITY: QueryVaultStatusActivity
+// ═══════════════════════════════════════════════════════════════════════════
+
+// VaultStatusActivityResult resultado de la query de vault status a Brain.
+// Subconjunto JSON-compatible de workflows.VaultStatusResult — Temporal
+// solo exige compatibilidad estructural del JSON, no identidad de tipo Go
+// entre la activity y el .Get(ctx, &result) del workflow.
+type VaultStatusActivityResult struct {
+	Success             bool   `json:"success"`
+	VaultState          string `json:"vault_state"`
+	MasterProfileActive bool   `json:"master_profile_active"`
+	Error               string `json:"error,omitempty"`
+}
+
+// QueryVaultStatusActivity consulta a Brain el estado del vault y si el
+// master profile está activo. Reusa sentinelClientActivity — mismo cliente
+// TCP que SendOnboardingNavigateActivity, no abre una conexión nueva desde cero.
+//
+// Flujo:
+//
+//	sentinelClientActivity.connect() → REGISTER_CLI → Brain
+//	sentinelClientActivity.queryVaultStatus() → QUERY_VAULT_STATUS → Brain :5678
+//	Brain lee ~/.bloom/.nucleus/vault.json directo (nunca lo escribe)
+func (a *SentinelActivities) QueryVaultStatusActivity(
+	ctx context.Context,
+) (VaultStatusActivityResult, error) {
+	logger := activity.GetLogger(ctx)
+	logger.Info("QueryVaultStatusActivity started")
+
+	activity.RecordHeartbeat(ctx, "connecting_to_brain")
+
+	// Logger simple para el cliente TCP interno
+	logDir := filepath.Join(a.logsDir, "sentinel", "vault")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return VaultStatusActivityResult{}, fmt.Errorf("failed to create log dir: %w", err)
+	}
+	dateStr := time.Now().Format("20060102")
+	logFile := filepath.Join(logDir, fmt.Sprintf("vault_status_%s.log", dateStr))
+	scLogger := newSimpleLogger(logFile)
+	defer scLogger.close()
+
+	// Crear cliente TCP y conectar al Brain
+	const brainAddr = "127.0.0.1:5678"
+	sc := newSentinelClientForActivity(brainAddr, scLogger)
+	if err := sc.connect(); err != nil {
+		return VaultStatusActivityResult{}, fmt.Errorf("failed to connect to Brain: %w", err)
+	}
+	defer sc.close()
+
+	// Esperar conexión activa (máx 5s)
+	if err := sc.waitForConnection(5 * time.Second); err != nil {
+		return VaultStatusActivityResult{}, fmt.Errorf("timeout waiting for Brain connection: %w", err)
+	}
+
+	activity.RecordHeartbeat(ctx, "querying_vault_status")
+
+	requestID := fmt.Sprintf("vault_status_%d", time.Now().UnixNano())
+	vaultState, masterActive, err := sc.queryVaultStatus(requestID, 10*time.Second)
+	if err != nil {
+		return VaultStatusActivityResult{
+			Success: false,
+			Error:   err.Error(),
+		}, fmt.Errorf("query vault status failed: %w", err)
+	}
+
+	logger.Info("QueryVaultStatusActivity completed",
+		"vault_state", vaultState,
+		"master_profile_active", masterActive,
+	)
+
+	return VaultStatusActivityResult{
+		Success:             true,
+		VaultState:          vaultState,
+		MasterProfileActive: masterActive,
+	}, nil
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CLIENTE TCP INTERNO PARA ACTIVITY
 // Implementa el protocolo 4-byte BigEndian idéntico al EventBus de Sentinel.
 // Vive aquí para evitar importar sentinel/internal/eventbus desde Nucleus
@@ -882,6 +960,59 @@ func (sc *sentinelClientActivity) routeToProfile(
 		return fmt.Errorf(
 			"timeout waiting for routing ACK (request_id=%s, profile=%s, timeout=%s)",
 			requestID, profileID, timeout,
+		)
+	}
+}
+
+// queryVaultStatus envía QUERY_VAULT_STATUS al Brain y espera VAULT_STATUS
+// correlacionado por requestID. Mismo patrón sync que routeToProfile.
+//
+// A diferencia de ROUTE_TO_PROFILE, la respuesta viaja anidada en Data
+// (event.Data["vault_state"], event.Data["master_profile_active"]) porque
+// activityEvent no tiene campos top-level para ese payload — ver server_manager.py
+// handler QUERY_VAULT_STATUS, que arma la respuesta con ese shape a propósito.
+func (sc *sentinelClientActivity) queryVaultStatus(
+	requestID string,
+	timeout time.Duration,
+) (vaultState string, masterActive bool, err error) {
+	type result struct {
+		vaultState   string
+		masterActive bool
+	}
+	resultCh := make(chan result, 1)
+	var once sync.Once
+
+	sc.on("VAULT_STATUS", func(event activityEvent) {
+		if event.RequestID != requestID {
+			return
+		}
+		once.Do(func() {
+			vs, _ := event.Data["vault_state"].(string)
+			ma, _ := event.Data["master_profile_active"].(bool)
+			resultCh <- result{vaultState: vs, masterActive: ma}
+		})
+	})
+
+	queryEvent := activityEvent{
+		Type:      "QUERY_VAULT_STATUS",
+		RequestID: requestID,
+		Timestamp: time.Now().UnixNano(),
+	}
+
+	if err := sc.send(queryEvent); err != nil {
+		return "", false, fmt.Errorf("failed to send QUERY_VAULT_STATUS: %w", err)
+	}
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	select {
+	case res := <-resultCh:
+		return res.vaultState, res.masterActive, nil
+	case <-deadline.C:
+		return "", false, fmt.Errorf(
+			"timeout waiting for VAULT_STATUS (request_id=%s, timeout=%s)",
+			requestID, timeout,
 		)
 	}
 }

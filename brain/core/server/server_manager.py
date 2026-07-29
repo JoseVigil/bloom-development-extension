@@ -27,6 +27,10 @@ from brain.core.profile.profile_state_manager import ProfileStateManager
 logger = get_logger("brain.server.manager")
 logger.setLevel(logging.DEBUG)
 
+# Mismo path que vault.go::GetVaultPath() — Brain SOLO LEE este archivo,
+# nunca lo escribe. El único escritor autorizado es el CLI Go (vault.go).
+VAULT_JSON_PATH = Path.home() / ".bloom" / ".nucleus" / "vault.json"
+
 
 class ServerManager:
     """
@@ -755,6 +759,40 @@ class ServerManager:
                     # Exit the read loop gracefully — host is closing intentionally
                     break
 
+                elif msg_type == 'QUERY_VAULT_STATUS':
+                    # Query síncrono de estado de vault, invocado por la activity
+                    # Go brain.QueryVaultStatus (VaultStatusWorkflow).
+                    #
+                    # Contrato de entrada:
+                    #   request_id : str — usado por el cliente Go para correlacionar
+                    #                       la respuesta (sc.on("VAULT_STATUS", ...))
+                    #
+                    # Contrato de salida (VAULT_STATUS):
+                    #   data.vault_state           : "LOCKED" | "UNLOCKED"
+                    #   data.master_profile_active : bool
+                    #
+                    # Brain NUNCA escribe vault.json — solo lee el mismo archivo
+                    # que gestiona el CLI Go (~/.bloom/.nucleus/vault.json).
+                    request_id = msg.get('request_id')
+
+                    vault_state = await self._get_vault_state()
+                    master_active = await self.profile_manager.get_master_profile_active()
+
+                    response = {
+                        "type": "VAULT_STATUS",
+                        "request_id": request_id,
+                        "data": {
+                            "vault_state": vault_state,
+                            "master_profile_active": master_active
+                        }
+                    }
+                    await self._send_to_writer(writer, response)
+
+                    logger.info(
+                        f"🔐 [{conn_id}] QUERY_VAULT_STATUS → {vault_state}, "
+                        f"master_active={master_active} (request_id={request_id})"
+                    )
+
                 else:
                     # === ROUTING LOGIC ===
                     target_profile = msg.get('target_profile')
@@ -916,6 +954,35 @@ class ServerManager:
         except:
             pass
     
+    async def _get_vault_state(self) -> str:
+        """
+        Lee vault.json directamente (mismo archivo que escribe el Go CLI en
+        ~/.bloom/.nucleus/vault.json). Brain nunca escribe este archivo.
+
+        Returns:
+            "LOCKED" o "UNLOCKED"
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._sync_read_vault_state)
+
+    def _sync_read_vault_state(self) -> str:
+        """
+        Fallback sync de lectura de vault.json.
+        Mismo fallback que Go (vault.go::GetVaultStatus): si el archivo no
+        existe, el vault se considera LOCKED.
+        """
+        try:
+            with open(VAULT_JSON_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            locked = data.get('locked', True)
+        except FileNotFoundError:
+            locked = True
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"⚠️ vault.json ilegible ({e}), asumiendo LOCKED")
+            locked = True
+
+        return "LOCKED" if locked else "UNLOCKED"
+
     async def _log_traffic(self, conn_id: str, direction: str, data: bytes):
         """
         Log network traffic to tcp_traffic.log asynchronously.

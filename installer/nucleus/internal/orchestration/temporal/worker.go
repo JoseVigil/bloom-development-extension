@@ -342,6 +342,12 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 				Name: "sentinel.SendOnboardingNavigate",
 			})
 
+			// Activity de vault status — usada por VaultStatusWorkflow (system_workflows.go).
+			// Reusa el mismo cliente TCP sentinelClientActivity que SendOnboardingNavigate.
+			w.RegisterActivityWithOptions(sentinelAct.QueryVaultStatusActivity, activity.RegisterOptions{
+				Name: "brain.QueryVaultStatus",
+			})
+
 			// Registrar mandate activities (hooks post-launch)
 			w.RegisterActivity(mandates.RunPostLaunchHooksActivity)
 
@@ -439,6 +445,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"sentinel.StartOllama",
 					"sentinel.SeedProfile",
 					"sentinel.SendOnboardingNavigate",
+					"brain.QueryVaultStatus",
 					"RunPostLaunchHooksActivity",
 					"RunSystemHealthActivity",
 					"RunProfileDisconnectedHooksActivity",

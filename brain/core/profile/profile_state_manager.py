@@ -188,6 +188,31 @@ class ProfileStateManager:
         
         return None
     
+    async def get_master_profile_active(self) -> bool:
+        """
+        Retorna True si existe un profile con master=True cuyo runtime_state.status
+        es 'open' (conectado activamente).
+
+        Usado por QUERY_VAULT_STATUS (server_manager.py) para responder
+        master_profile_active a la activity Go brain.QueryVaultStatus.
+
+        NOTA: asume campo top-level 'master' en el profile (no en runtime_state),
+        consistente con el payload de PROFILE_CREATE (msg.get('master', False)).
+        Ajustar si profile_create.py persiste ese flag con otro nombre.
+
+        Returns:
+            True si el master profile está online, False en cualquier otro caso
+            (no existe master, o existe pero está offline).
+        """
+        profiles = await self._read_profiles()
+
+        for profile in profiles.get('profiles', []):
+            if profile.get('master') is True:
+                runtime_state = profile.get('runtime_state') or {}
+                return runtime_state.get('status') == 'open'
+
+        return False
+
     async def _update_profile_state(self, profile_id: str, runtime_state: Dict[str, Any]):
         """
         Update runtime_state for specific profile with atomic write.

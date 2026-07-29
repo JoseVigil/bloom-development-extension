@@ -315,7 +315,16 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 			log("[INFO] ✓ Vault check skipped (onboarding mode — BLOOM_DIR not set)")
 			result.VaultState = "SKIPPED"
 		} else {
-			vaultResult, err := s.CheckVaultStatus(ctx)
+			// Timeout acotado como defensa en profundidad — el bug real era el
+			// mismatch de TaskQueue en synapse.go (ya arreglado: "nucleus-task-queue"
+			// → "profile-orchestration"). Esto es una red de seguridad adicional:
+			// si en el futuro esta llamada se cuelga por cualquier otro motivo
+			// (worker caído, workflow no registrado, etc.), preferimos un error
+			// claro en 15s a otro cuelgue silencioso de 120s matado por el
+			// watchdog externo de Conductor.
+			vaultCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			vaultResult, err := s.CheckVaultStatus(vaultCtx)
 			if err != nil {
 				result.Success = false
 				result.FailedStage = "vault_check"

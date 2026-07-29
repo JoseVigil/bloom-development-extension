@@ -787,7 +787,19 @@ func (s *Supervisor) updateBrainTelemetry(proc *ManagedProcess) {
 // EXISTING METHODS (unchanged)
 // ============================================================================
 
-// CheckVaultStatus queries the vault status via Synapse
+// CheckVaultStatus consulta el estado LOCAL del vault (vault.json en disco).
+//
+// NOTA (2026-07-29): originalmente esto llamaba a "synapse vault-status",
+// que ejecuta VaultStatusWorkflow vía Temporal → activity "brain.QueryVaultStatus".
+// Esa activity nunca fue implementada del lado de Brain — server_manager.py
+// no tiene ningún message handler que responda una query de vault (solo existe
+// VAULT_INITIALIZED, que es una notificación unidireccional de onboarding, sin
+// estado consultable). El workflow terminaba en ActivityNotRegisteredError o,
+// antes del fix de TaskQueue, colgado 120s sin respuesta posible.
+//
+// Mientras se diseña esa capacidad en Brain (ver seguimiento aparte), dev-start
+// usa el check local equivalente: "nucleus vault status" (vault.go), que lee
+// vault.json directamente — sin Temporal, sin Brain, sin red.
 func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, error) {
 	// Find nucleus binary (cross-platform: tries without .exe first)
 	nucleusBin, err := resolveNucleusBin(s.binDir)
@@ -795,27 +807,42 @@ func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, 
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "synapse", "vault-status")
+	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "vault", "status")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("vault status workflow failed: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("local vault status check failed: %w (output: %s)", err, string(output))
 	}
 
-	var result VaultStatusResult
-	if err := json.Unmarshal(output, &result); err != nil {
-		return nil, fmt.Errorf("invalid JSON response from vault-status: %w", err)
+	// "vault status" (vault.go) responde con su propio shape local
+	// (VaultStatus: locked/key_count/last_access/master_key_id), distinto
+	// del shape de VaultStatusResult que usaba el workflow — se traduce acá.
+	var localStatus struct {
+		Locked      bool   `json:"locked"`
+		KeyCount    int    `json:"key_count"`
+		LastAccess  string `json:"last_access"`
+		MasterKeyID string `json:"master_key_id"`
+	}
+	if err := json.Unmarshal(output, &localStatus); err != nil {
+		return nil, fmt.Errorf("invalid JSON response from vault status: %w (output: %s)", err, string(output))
 	}
 
-	// Validate state
-	if result.State == "FAILED" || result.State == "DEGRADED" {
-		return nil, fmt.Errorf("vault in bad state: %s - %s", result.State, result.Error)
+	result := &VaultStatusResult{
+		Success:   true,
+		State:     "HEALTHY",
+		Timestamp: time.Now().Unix(),
 	}
-
-	if !result.Success {
-		return nil, fmt.Errorf("vault status check failed: %s", result.Error)
+	if localStatus.Locked {
+		result.VaultState = "LOCKED"
+	} else {
+		result.VaultState = "UNLOCKED"
 	}
+	// MasterProfileActive requiere que Brain sepa qué perfil está corriendo —
+	// el check local no tiene esa información. Queda en false hasta que la
+	// query real a Brain se implemente; no bloquea el boot, Phase 5 solo
+	// aborta dev-start si CheckVaultStatus retorna error, no por este campo.
+	result.MasterProfileActive = false
 
-	return &result, nil
+	return result, nil
 }
 
 // StartOllama starts Ollama service via Synapse

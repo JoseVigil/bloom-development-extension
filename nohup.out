@@ -1,1 +1,23 @@
 [WARN]  Server stopped (no status data available)
+2026/07/29 14:10:25 ======================================== [SERVICE] Logging session started ========================================
+2026/07/29 14:10:25 [INFO] ⚙️  Harness: starting in GOVERNANCE mode (org=, path=/home/jose/repos/bloom-development-extension/.ownership.json)
+2026/07/29 14:10:25 [WARNING] Harness GOVERNANCE: .ownership.json not found at /home/jose/repos/bloom-development-extension/.ownership.json (migration pending?) — running in degraded mode
+[telemetry/INFO] registerStreamCLI [update]: id=harness label="🛠  HARNESS [DEGRADED]" categories=[nucleus harness debug] source="nucleus" path=/home/jose/.local/share/BloomNucleus/logs/nucleus/harness/harness.log
+[telemetry/SUCCESS] registerStreamCLI: telemetry.json updated — id=harness (34 streams total)
+2026/07/29 14:10:25 [INFO] ✓ Harness started (mode=GOVERNANCE)
+[INFO] ⚠️  governance: .ownership.json not found at /home/jose/repos/bloom-development-extension/.ownership.json
+2026/07/29 14:10:25 [INFO] ✓ Temporal server already running on port 7233 — skipping start
+[telemetry/INFO] registerStreamCLI [update]: id=temporal_server label="⏱️ TEMPORAL SERVER" categories=[nucleus] source="nucleus" path=
+[telemetry/SUCCESS] registerStreamCLI: telemetry.json updated — id=temporal_server (34 streams total)
+2026/07/29 14:10:25 [INFO] ✓ Worker already active in profile-orchestration — skipping start
+2026/07/29 14:10:25 [INFO] ✓ Brain Server already running on port 5678 — skipping start
+2026/07/29 14:10:25 [INFO] ✓ Svelte dev server already running on port 5173 — skipping start
+[telemetry/INFO] registerStreamCLI [update]: id=nucleus_control_plane label="🖥️ CONTROL PLANE" categories=[nucleus] source="nucleus" path=/home/jose/.local/share/BloomNucleus/logs/nucleus/control_plane/nucleus_control_plane_20260729.log
+[telemetry/SUCCESS] registerStreamCLI: telemetry.json updated — id=nucleus_control_plane (34 streams total)
+[nucleus] 2026/07/29 14:10:25 [SUCCESS] Nucleus service started — state: RUNNING
+[nucleus] 2026/07/29 14:10:25 [INFO] Nucleus service running — waiting for shutdown signal (SIGTERM)
+[telemetry/INFO] registerStreamCLI [update]: id=control_plane_api label="🔧 CONTROL PLANE API" categories=[nucleus] source="nucleus" path=/home/jose/.local/share/BloomNucleus/logs/nucleus/control_plane/nucleus_control_plane_20260729.log
+[telemetry/SUCCESS] registerStreamCLI: telemetry.json updated — id=control_plane_api (34 streams total)
+[nucleus] 2026/07/29 14:10:37 [INFO] Shutdown signal received — stopping all processes
+2026/07/29 14:10:37 ======================================== [SERVICE] Logging session ended ========================================
+[nucleus] 2026/07/29 14:10:37 [INFO] Nucleus service stopped
