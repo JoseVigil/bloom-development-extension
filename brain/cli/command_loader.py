@@ -20,18 +20,141 @@ def load_all_commands_explicit() -> CommandRegistry:
     registry = CommandRegistry()
     
     # =================================================================
+    # AI
+    # =================================================================
+    try:
+        from brain.commands.ai.claude.claude_keys_add import ClaudeKeysAddCommand
+        registry.register(ClaudeKeysAddCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load ClaudeKeysAddCommand: {e}")
+    
+    try:
+        from brain.commands.ai.claude.claude_keys_delete import ClaudeKeysDeleteCommand
+        registry.register(ClaudeKeysDeleteCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load ClaudeKeysDeleteCommand: {e}")
+    
+    try:
+        from brain.commands.ai.claude.claude_keys_list import ClaudeKeysListCommand
+        registry.register(ClaudeKeysListCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load ClaudeKeysListCommand: {e}")
+    
+    try:
+        from brain.commands.ai.claude.claude_keys_stats import ClaudeKeysStatsCommand
+        registry.register(ClaudeKeysStatsCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load ClaudeKeysStatsCommand: {e}")
+    
+    try:
+        from brain.commands.ai.claude.claude_keys_validate import ClaudeKeysValidateCommand
+        registry.register(ClaudeKeysValidateCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load ClaudeKeysValidateCommand: {e}")
+    
+    try:
+        from brain.commands.ai.gemini.gemini_keys_add import GeminiKeysAddCommand
+        registry.register(GeminiKeysAddCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load GeminiKeysAddCommand: {e}")
+    
+    try:
+        from brain.commands.ai.gemini.gemini_keys_delete import GeminiKeysDeleteCommand
+        registry.register(GeminiKeysDeleteCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load GeminiKeysDeleteCommand: {e}")
+    
+    try:
+        from brain.commands.ai.gemini.gemini_keys_list import GeminiKeysListCommand
+        registry.register(GeminiKeysListCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load GeminiKeysListCommand: {e}")
+    
+    try:
+        from brain.commands.ai.gemini.gemini_keys_stats import GeminiKeysStatsCommand
+        registry.register(GeminiKeysStatsCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load GeminiKeysStatsCommand: {e}")
+    
+    try:
+        from brain.commands.ai.gemini.gemini_keys_validate import GeminiKeysValidateCommand
+        registry.register(GeminiKeysValidateCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load GeminiKeysValidateCommand: {e}")
+    
+    try:
+        from brain.commands.ai.openai.openai_keys_add import OpenAIKeysAddCommand
+        registry.register(OpenAIKeysAddCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load OpenAIKeysAddCommand: {e}")
+    
+    try:
+        from brain.commands.ai.openai.openai_keys_delete import OpenAIKeysDeleteCommand
+        registry.register(OpenAIKeysDeleteCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load OpenAIKeysDeleteCommand: {e}")
+    
+    try:
+        from brain.commands.ai.openai.openai_keys_list import OpenAIKeysListCommand
+        registry.register(OpenAIKeysListCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load OpenAIKeysListCommand: {e}")
+    
+    try:
+        from brain.commands.ai.openai.openai_keys_stats import OpenAIKeysStatsCommand
+        registry.register(OpenAIKeysStatsCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load OpenAIKeysStatsCommand: {e}")
+    
+    try:
+        from brain.commands.ai.openai.openai_keys_validate import OpenAIKeysValidateCommand
+        registry.register(OpenAIKeysValidateCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load OpenAIKeysValidateCommand: {e}")
+    
+    try:
+        from brain.commands.ai.xai.xai_keys_add import XAIKeysAddCommand
+        registry.register(XAIKeysAddCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load XAIKeysAddCommand: {e}")
+    
+    try:
+        from brain.commands.ai.xai.xai_keys_delete import XAIKeysDeleteCommand
+        registry.register(XAIKeysDeleteCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load XAIKeysDeleteCommand: {e}")
+    
+    try:
+        from brain.commands.ai.xai.xai_keys_list import XAIKeysListCommand
+        registry.register(XAIKeysListCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load XAIKeysListCommand: {e}")
+    
+    try:
+        from brain.commands.ai.xai.xai_keys_stats import XAIKeysStatsCommand
+        registry.register(XAIKeysStatsCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load XAIKeysStatsCommand: {e}")
+    
+    try:
+        from brain.commands.ai.xai.xai_keys_validate import XAIKeysValidateCommand
+        registry.register(XAIKeysValidateCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load XAIKeysValidateCommand: {e}")
+    
+    # =================================================================
     # BISP
     # =================================================================
     try:
         from brain.commands.bisp.semantic_query import BISPSemanticQueryCommand
         registry.register(BISPSemanticQueryCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load BISPSemanticQueryCommand: {e}")
     
     try:
         from brain.commands.bisp.vectorize import BISPVectorizeCommand
         registry.register(BISPVectorizeCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load BISPVectorizeCommand: {e}")
     
     # =================================================================
@@ -40,7 +163,7 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.chrome.chrome import ChromeCommand
         registry.register(ChromeCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ChromeCommand: {e}")
     
     # =================================================================
@@ -49,7 +172,7 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.context.generate import ContextGenerateCommand
         registry.register(ContextGenerateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ContextGenerateCommand: {e}")
     
     # =================================================================
@@ -58,25 +181,25 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.extension.backups import BackupsCommand
         registry.register(BackupsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load BackupsCommand: {e}")
     
     try:
         from brain.commands.extension.install import InstallCommand
         registry.register(InstallCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load InstallCommand: {e}")
     
     try:
         from brain.commands.extension.update import UpdateCommand
         registry.register(UpdateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load UpdateCommand: {e}")
     
     try:
         from brain.commands.extension.verify import VerifyCommand
         registry.register(VerifyCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load VerifyCommand: {e}")
     
     # =================================================================
@@ -85,19 +208,19 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.filesystem.compress import CompressCommand
         registry.register(CompressCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load CompressCommand: {e}")
     
     try:
         from brain.commands.filesystem.compress import ExtractCommand
         registry.register(ExtractCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ExtractCommand: {e}")
     
     try:
         from brain.commands.filesystem.tree import TreeCommand
         registry.register(TreeCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load TreeCommand: {e}")
     
     # =================================================================
@@ -106,55 +229,55 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.github.auth import GithubAuthCommand
         registry.register(GithubAuthCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubAuthCommand: {e}")
     
     try:
         from brain.commands.github.auth_login import GithubAuthLoginCommand
         registry.register(GithubAuthLoginCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubAuthLoginCommand: {e}")
     
     try:
         from brain.commands.github.auth_logout import GithubAuthLogoutCommand
         registry.register(GithubAuthLogoutCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubAuthLogoutCommand: {e}")
     
     try:
         from brain.commands.github.auth_status import GithubAuthStatusCommand
         registry.register(GithubAuthStatusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubAuthStatusCommand: {e}")
     
     try:
         from brain.commands.github.clone import GithubCloneCommand
         registry.register(GithubCloneCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubCloneCommand: {e}")
     
     try:
         from brain.commands.github.orgs import GithubOrgsCommand
         registry.register(GithubOrgsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubOrgsCommand: {e}")
     
     try:
         from brain.commands.github.orgs_list import GithubOrgsListCommand
         registry.register(GithubOrgsListCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubOrgsListCommand: {e}")
     
     try:
         from brain.commands.github.repos import GithubReposCommand
         registry.register(GithubReposCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubReposCommand: {e}")
     
     try:
         from brain.commands.github.repos_list import GithubReposListCommand
         registry.register(GithubReposListCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GithubReposListCommand: {e}")
     
     # =================================================================
@@ -163,31 +286,31 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.health.dev_check import HealthDevCheckCommand
         registry.register(HealthDevCheckCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HealthDevCheckCommand: {e}")
     
     try:
         from brain.commands.health.full_stack import HealthFullStackCommand
         registry.register(HealthFullStackCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HealthFullStackCommand: {e}")
     
     try:
         from brain.commands.health.native_ping import HealthNativePingCommand
         registry.register(HealthNativePingCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HealthNativePingCommand: {e}")
     
     try:
         from brain.commands.health.onboarding_status import HealthOnboardingStatusCommand
         registry.register(HealthOnboardingStatusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HealthOnboardingStatusCommand: {e}")
     
     try:
         from brain.commands.health.websocket_status import HealthWebSocketStatusCommand
         registry.register(HealthWebSocketStatusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HealthWebSocketStatusCommand: {e}")
     
     # =================================================================
@@ -196,115 +319,115 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.intent.add_turn import AddTurnCommand
         registry.register(AddTurnCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load AddTurnCommand: {e}")
     
     try:
         from brain.commands.intent.build_payload import BuildPayloadCommand
         registry.register(BuildPayloadCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load BuildPayloadCommand: {e}")
     
     try:
         from brain.commands.intent.create import CreateCommand
         registry.register(CreateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load CreateCommand: {e}")
     
     try:
         from brain.commands.intent.delete import DeleteCommand
         registry.register(DeleteCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load DeleteCommand: {e}")
     
     try:
         from brain.commands.intent.download import DownloadCommand
         registry.register(DownloadCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load DownloadCommand: {e}")
     
     try:
         from brain.commands.intent.finalize import FinalizeCommand
         registry.register(FinalizeCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load FinalizeCommand: {e}")
     
     try:
         from brain.commands.intent.get import GetCommand
         registry.register(GetCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load GetCommand: {e}")
     
     try:
         from brain.commands.intent.hydrate import HydrateCommand
         registry.register(HydrateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HydrateCommand: {e}")
     
     try:
         from brain.commands.intent.list import ListCommand
         registry.register(ListCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ListCommand: {e}")
     
     try:
         from brain.commands.intent.lock import LockCommand
         registry.register(LockCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load LockCommand: {e}")
     
     try:
         from brain.commands.intent.merge import MergeCommand
         registry.register(MergeCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load MergeCommand: {e}")
     
     try:
         from brain.commands.intent.parse import IntentParseCommand
         registry.register(IntentParseCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load IntentParseCommand: {e}")
     
     try:
         from brain.commands.intent.plan import PlanCommand
         registry.register(PlanCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load PlanCommand: {e}")
     
     try:
         from brain.commands.intent.recover import RecoverCommand
         registry.register(RecoverCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load RecoverCommand: {e}")
     
     try:
         from brain.commands.intent.stage import StageCommand
         registry.register(StageCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load StageCommand: {e}")
     
     try:
         from brain.commands.intent.submit import SubmitCommand
         registry.register(SubmitCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SubmitCommand: {e}")
     
     try:
         from brain.commands.intent.unlock import UnlockCommand
         registry.register(UnlockCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load UnlockCommand: {e}")
     
     try:
         from brain.commands.intent.update import UpdateCommand
         registry.register(UpdateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load UpdateCommand: {e}")
     
     try:
         from brain.commands.intent.validate import ValidateCommand
         registry.register(ValidateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ValidateCommand: {e}")
     
     # =================================================================
@@ -313,31 +436,31 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.ionpump.ionpump import IonPumpCommand
         registry.register(IonPumpCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load IonPumpCommand: {e}")
     
     try:
         from brain.commands.ionpump.ionpump_inspect import IonPumpInspectCommand
         registry.register(IonPumpInspectCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load IonPumpInspectCommand: {e}")
     
     try:
         from brain.commands.ionpump.ionpump_reload import IonPumpReloadCommand
         registry.register(IonPumpReloadCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load IonPumpReloadCommand: {e}")
     
     try:
         from brain.commands.ionpump.ionpump_test import IonPumpTestCommand
         registry.register(IonPumpTestCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load IonPumpTestCommand: {e}")
     
     try:
         from brain.commands.ionpump.ionpump_validate import IonPumpValidateCommand
         registry.register(IonPumpValidateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load IonPumpValidateCommand: {e}")
     
     # =================================================================
@@ -346,7 +469,7 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.logs.logs import LogsCommand
         registry.register(LogsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load LogsCommand: {e}")
     
     # =================================================================
@@ -355,103 +478,103 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.nucleus.create import NucleusCreateCommand
         registry.register(NucleusCreateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusCreateCommand: {e}")
     
     try:
         from brain.commands.nucleus.create_exp_intent import NucleusCreateExpIntentCommand
         registry.register(NucleusCreateExpIntentCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusCreateExpIntentCommand: {e}")
     
     try:
         from brain.commands.nucleus.delete import NucleusDeleteCommand
         registry.register(NucleusDeleteCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusDeleteCommand: {e}")
     
     try:
         from brain.commands.nucleus.exp_discovery_turn import NucleusExpDiscoveryTurnCommand
         registry.register(NucleusExpDiscoveryTurnCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusExpDiscoveryTurnCommand: {e}")
     
     try:
         from brain.commands.nucleus.exp_export_findings import NucleusExpExportFindingsCommand
         registry.register(NucleusExpExportFindingsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusExpExportFindingsCommand: {e}")
     
     try:
         from brain.commands.nucleus.get import NucleusGetCommand
         registry.register(NucleusGetCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusGetCommand: {e}")
     
     try:
         from brain.commands.nucleus.info import SystemInfoCommand
         registry.register(SystemInfoCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemInfoCommand: {e}")
     
     try:
         from brain.commands.nucleus.info import SystemPathCommand
         registry.register(SystemPathCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemPathCommand: {e}")
     
     try:
         from brain.commands.nucleus.info import SystemVersionCommand
         registry.register(SystemVersionCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemVersionCommand: {e}")
     
     try:
         from brain.commands.nucleus.link import NucleusLinkCommand
         registry.register(NucleusLinkCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusLinkCommand: {e}")
     
     try:
         from brain.commands.nucleus.list import NucleusListCommand
         registry.register(NucleusListCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusListCommand: {e}")
     
     try:
         from brain.commands.nucleus.list_projects import NucleusListProjectsCommand
         registry.register(NucleusListProjectsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusListProjectsCommand: {e}")
     
     try:
         from brain.commands.nucleus.onboarding_complete import NucleusOnboardingCompleteCommand
         registry.register(NucleusOnboardingCompleteCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusOnboardingCompleteCommand: {e}")
     
     try:
         from brain.commands.nucleus.onboarding_status import NucleusOnboardingStatusCommand
         registry.register(NucleusOnboardingStatusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusOnboardingStatusCommand: {e}")
     
     try:
         from brain.commands.nucleus.project_info import NucleusProjectInfoCommand
         registry.register(NucleusProjectInfoCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusProjectInfoCommand: {e}")
     
     try:
         from brain.commands.nucleus.status import NucleusStatusCommand
         registry.register(NucleusStatusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusStatusCommand: {e}")
     
     try:
         from brain.commands.nucleus.sync import NucleusSyncCommand
         registry.register(NucleusSyncCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusSyncCommand: {e}")
     
     # =================================================================
@@ -460,73 +583,73 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.profile.accounts import AccountsLinkCommand
         registry.register(AccountsLinkCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load AccountsLinkCommand: {e}")
     
     try:
         from brain.commands.profile.accounts import AccountsUnlinkCommand
         registry.register(AccountsUnlinkCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load AccountsUnlinkCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesAccountsRegisterCommand
         registry.register(ProfilesAccountsRegisterCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesAccountsRegisterCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesAccountsRemoveCommand
         registry.register(ProfilesAccountsRemoveCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesAccountsRemoveCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesCreateCommand
         registry.register(ProfilesCreateCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesCreateCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesDestroyCommand
         registry.register(ProfilesDestroyCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesDestroyCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesLaunchCommand
         registry.register(ProfilesLaunchCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesLaunchCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesLinkCommand
         registry.register(ProfilesLinkCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesLinkCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesListCommand
         registry.register(ProfilesListCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesListCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesStatusCommand
         registry.register(ProfilesStatusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesStatusCommand: {e}")
     
     try:
         from brain.commands.profile.profiles import ProfilesUnlinkCommand
         registry.register(ProfilesUnlinkCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfilesUnlinkCommand: {e}")
     
     try:
         from brain.commands.profile.profiles_launches_command import ProfileLaunchesCommand
         registry.register(ProfileLaunchesCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProfileLaunchesCommand: {e}")
     
     # =================================================================
@@ -535,31 +658,31 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.project.add import ProjectAddCommand
         registry.register(ProjectAddCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProjectAddCommand: {e}")
     
     try:
         from brain.commands.project.clone_and_add import CloneAndAddCommand
         registry.register(CloneAndAddCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load CloneAndAddCommand: {e}")
     
     try:
         from brain.commands.project.detect import ProjectDetectCommand
         registry.register(ProjectDetectCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProjectDetectCommand: {e}")
     
     try:
         from brain.commands.project.load import ProjectLoadCommand
         registry.register(ProjectLoadCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ProjectLoadCommand: {e}")
     
     try:
         from brain.commands.project.nucleus import NucleusCommand
         registry.register(NucleusCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load NucleusCommand: {e}")
     
     # =================================================================
@@ -568,7 +691,7 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.runtime.run import RuntimeRunCommand
         registry.register(RuntimeRunCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load RuntimeRunCommand: {e}")
     
     # =================================================================
@@ -577,7 +700,7 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.server.server import ServerCommand
         registry.register(ServerCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ServerCommand: {e}")
     
     # =================================================================
@@ -586,13 +709,13 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.synapse.synapse_host_cli import SynapseHostCommand
         registry.register(SynapseHostCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SynapseHostCommand: {e}")
     
     try:
         from brain.commands.synapse.synapse_host_init_cli import SynapseHostInitCommand
         registry.register(SynapseHostInitCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SynapseHostInitCommand: {e}")
     
     # =================================================================
@@ -601,55 +724,55 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.system.help_docs import HelpDocsCommand
         registry.register(HelpDocsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load HelpDocsCommand: {e}")
     
     try:
         from brain.commands.system.info import SystemInfoCommand
         registry.register(SystemInfoCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemInfoCommand: {e}")
     
     try:
         from brain.commands.system.info import SystemPathCommand
         registry.register(SystemPathCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemPathCommand: {e}")
     
     try:
         from brain.commands.system.info import SystemVersionCommand
         registry.register(SystemVersionCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemVersionCommand: {e}")
     
     try:
         from brain.commands.system.info_flags import InfoFlagCommand
         registry.register(InfoFlagCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load InfoFlagCommand: {e}")
     
     try:
         from brain.commands.system.release_info import ReleaseInfoCommand
         registry.register(ReleaseInfoCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ReleaseInfoCommand: {e}")
     
     try:
         from brain.commands.system.system_specs import SystemSpecsCommand
         registry.register(SystemSpecsCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load SystemSpecsCommand: {e}")
     
     try:
         from brain.commands.system.version_flags import ReleaseFlagCommand
         registry.register(ReleaseFlagCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ReleaseFlagCommand: {e}")
     
     try:
         from brain.commands.system.version_flags import VersionFlagCommand
         registry.register(VersionFlagCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load VersionFlagCommand: {e}")
     
     # =================================================================
@@ -658,7 +781,7 @@ def load_all_commands_explicit() -> CommandRegistry:
     try:
         from brain.commands.twitter.auth import TwitterAuthCommand
         registry.register(TwitterAuthCommand())
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load TwitterAuthCommand: {e}")
     
     return registry
@@ -672,6 +795,26 @@ def get_hiddenimports_list():
         Lista de strings con los import paths
     """
     return [
+        'brain.commands.ai.claude.claude_keys_add',
+        'brain.commands.ai.claude.claude_keys_delete',
+        'brain.commands.ai.claude.claude_keys_list',
+        'brain.commands.ai.claude.claude_keys_stats',
+        'brain.commands.ai.claude.claude_keys_validate',
+        'brain.commands.ai.gemini.gemini_keys_add',
+        'brain.commands.ai.gemini.gemini_keys_delete',
+        'brain.commands.ai.gemini.gemini_keys_list',
+        'brain.commands.ai.gemini.gemini_keys_stats',
+        'brain.commands.ai.gemini.gemini_keys_validate',
+        'brain.commands.ai.openai.openai_keys_add',
+        'brain.commands.ai.openai.openai_keys_delete',
+        'brain.commands.ai.openai.openai_keys_list',
+        'brain.commands.ai.openai.openai_keys_stats',
+        'brain.commands.ai.openai.openai_keys_validate',
+        'brain.commands.ai.xai.xai_keys_add',
+        'brain.commands.ai.xai.xai_keys_delete',
+        'brain.commands.ai.xai.xai_keys_list',
+        'brain.commands.ai.xai.xai_keys_stats',
+        'brain.commands.ai.xai.xai_keys_validate',
         'brain.commands.bisp.semantic_query',
         'brain.commands.bisp.vectorize',
         'brain.commands.chrome.chrome',

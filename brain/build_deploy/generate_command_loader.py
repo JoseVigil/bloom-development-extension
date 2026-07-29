@@ -85,18 +85,34 @@ def scan_commands_directory() -> List[Tuple[str, str, str]]:
         
         print(f"  Categoría: {category_dir.name}")
         
-        # Escanear archivos Python en la categoría
-        for py_file in sorted(category_dir.glob("*.py")):
+        # Escanear archivos Python en la categoría, RECURSIVO — algunas
+        # categorías (ej. ai/) agrupan comandos en subcarpetas por proveedor:
+        # commands/ai/claude/claude_keys_add.py, commands/ai/gemini/..., etc.
+        # Un glob("*.py") de un solo nivel las deja completamente afuera sin
+        # ningún error ni warning (lista vacía, el bucle sigue de largo).
+        for py_file in sorted(category_dir.rglob("*.py")):
             if py_file.name.startswith('_'):
+                continue
+            
+            # Saltear archivos dentro de subcarpetas "privadas" (ej. un
+            # eventual commands/ai/_disabled/x.py) — mismo criterio que ya
+            # se aplicaba a nombres de archivo, extendido a subcarpetas.
+            rel_to_category = py_file.relative_to(category_dir)
+            if any(part.startswith('_') for part in rel_to_category.parts[:-1]):
                 continue
             
             # Encontrar clases Command en el archivo
             classes = find_command_classes(py_file)
             
             for class_name in classes:
-                module_path = f"brain.commands.{category_dir.name}.{py_file.stem}"
+                # Construir el module_path desde la ruta relativa completa
+                # (no solo category_dir.name + stem), para que funcione tanto
+                # con categorías planas (github/auth.py) como anidadas
+                # (ai/claude/claude_keys_add.py).
+                rel_module = py_file.relative_to(commands_dir).with_suffix("")
+                module_path = "brain.commands." + ".".join(rel_module.parts)
                 commands.append((category_dir.name, module_path, class_name))
-                print(f"    ✓ {class_name} ({py_file.name})")
+                print(f"    ✓ {class_name} ({py_file.relative_to(category_dir)})")
     
     return commands
 
@@ -147,7 +163,12 @@ def generate_registry_code(commands: List[Tuple[str, str, str]]) -> str:
                 '    try:',
                 f'        from {module} import {class_name}',
                 f'        registry.register({class_name}())',
-                '    except ImportError as e:',
+                # Antes solo se atrapaba ImportError. Un comando con un bug
+                # de runtime (ej. atributo inexistente en su metadata()) no
+                # es un ImportError -- se propagaba sin atrapar y tumbaba
+                # load_all_commands_explicit() entero, dejando el registry
+                # vacío para TODAS las categorías, no solo la rota.
+                '    except (ImportError, AttributeError) as e:',
                 f'        print(f"Warning: Could not load {class_name}: {{e}}")',
                 '    ',
             ])

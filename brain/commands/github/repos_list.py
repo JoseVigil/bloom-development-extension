@@ -41,10 +41,10 @@ class GithubReposListCommand(BaseCommand):
                 
                 if gc.json_mode:
                     import json
-                    typer.echo(json.dumps({"repos": [r["full_name"] for r in repos]}))
+                    typer.echo(json.dumps({"repos": [r.full_name for r in repos]}))
                 else:
                     for repo in repos:
-                        typer.echo(f"  {repo['full_name']}")
+                        typer.echo(f"  {repo.full_name}")
             except Exception as e:
                 if gc.json_mode:
                     import json

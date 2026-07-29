@@ -41,6 +41,26 @@ hiddenimports = [
     'rich.markdown',
 
     # Comandos (Auto-generado por update_spec_hiddenimports.py)
+    'brain.commands.ai.claude.claude_keys_add',
+    'brain.commands.ai.claude.claude_keys_delete',
+    'brain.commands.ai.claude.claude_keys_list',
+    'brain.commands.ai.claude.claude_keys_stats',
+    'brain.commands.ai.claude.claude_keys_validate',
+    'brain.commands.ai.gemini.gemini_keys_add',
+    'brain.commands.ai.gemini.gemini_keys_delete',
+    'brain.commands.ai.gemini.gemini_keys_list',
+    'brain.commands.ai.gemini.gemini_keys_stats',
+    'brain.commands.ai.gemini.gemini_keys_validate',
+    'brain.commands.ai.openai.openai_keys_add',
+    'brain.commands.ai.openai.openai_keys_delete',
+    'brain.commands.ai.openai.openai_keys_list',
+    'brain.commands.ai.openai.openai_keys_stats',
+    'brain.commands.ai.openai.openai_keys_validate',
+    'brain.commands.ai.xai.xai_keys_add',
+    'brain.commands.ai.xai.xai_keys_delete',
+    'brain.commands.ai.xai.xai_keys_list',
+    'brain.commands.ai.xai.xai_keys_stats',
+    'brain.commands.ai.xai.xai_keys_validate',
     'brain.commands.bisp.semantic_query',
     'brain.commands.bisp.vectorize',
     'brain.commands.chrome.chrome',
@@ -283,8 +303,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
 datas += collect_data_files('chromadb')

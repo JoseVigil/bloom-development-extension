@@ -18,6 +18,13 @@ class CommandCategory(Enum):
     CONTEXT = ("context", "AI context generation and management")
     FILESYSTEM = ("filesystem", "File operations and directory analysis")
     AI = ("ai", "AI providers key management and operations")
+    # Categorías por proveedor — usadas por brain/commands/ai/{provider}/*.py
+    # (ej. "brain claude keys-add"). Faltaban en el enum; los 20 comandos ya
+    # las referenciaban desde su creación (ver examples= en cada metadata()).
+    CLAUDE = ("claude", "Claude API key management and operations")
+    GEMINI = ("gemini", "Gemini API key management and operations")
+    OPENAI = ("openai", "OpenAI API key management and operations")
+    XAI = ("xai", "xAI API key management and operations")
     GITHUB = ("github", "GitHub integration and repository management")
     INTENT = ("intent", "Intent execution system and context planning")
     NUCLEUS = ("nucleus", "Nucleus project management and lifecycle")
@@ -72,6 +79,10 @@ CHROME = CommandCategory.CHROME
 CONTEXT = CommandCategory.CONTEXT
 FILESYSTEM = CommandCategory.FILESYSTEM
 AI = CommandCategory.AI
+CLAUDE = CommandCategory.CLAUDE
+GEMINI = CommandCategory.GEMINI
+OPENAI = CommandCategory.OPENAI
+XAI = CommandCategory.XAI
 GITHUB = CommandCategory.GITHUB
 INTENT = CommandCategory.INTENT
 NUCLEUS = CommandCategory.NUCLEUS
