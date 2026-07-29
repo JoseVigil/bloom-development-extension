@@ -582,14 +582,14 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
 
   // ── HANDLER: Completar onboarding + handoff al workspace ────────────────
   ipcMain.handle('onboarding:complete', async (event, { workspaceUrl }) => {
-    log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:3000');
+    log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:5173');
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       nucleusData.onboarding = {
         ...nucleusData.onboarding,
         completed:     true,
         completed_at:  new Date().toISOString(),
-        workspace_url: workspaceUrl || 'http://localhost:3000',
+        workspace_url: workspaceUrl || 'http://localhost:5173',
         current_step:  'success'
       };
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));

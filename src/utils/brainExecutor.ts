@@ -153,7 +153,13 @@ export class BrainExecutor {
      * Called once during extension activation
      */
     static async initialize(): Promise<void> {
-        if (vscode) {
+        // CRÍTICO: en el bundle de bootstrap standalone, `require('vscode')` puede
+        // resolver a un objeto truthy sin lanzar excepción (stub/shim vacío), en vez
+        // de fallar como pasa en un Node puro fuera de VS Code. Guardar solo con
+        // `if (vscode)` no alcanza — hay que confirmar que la API real que necesitamos
+        // (`vscode.workspace.getConfiguration`) esté presente antes de usarla. Si no
+        // está, tratamos el proceso como standalone (rama else), que es lo correcto.
+        if (vscode && vscode.workspace && typeof vscode.workspace.getConfiguration === 'function') {
             const config = vscode.workspace.getConfiguration('bloom');
             const brainPath = config.get<string>('brain.executable');
             const pythonPath = config.get<string>('pythonPath');
@@ -164,9 +170,36 @@ export class BrainExecutor {
             }
             this.executablePath = pythonPath || 'python';
         } else {
-            // Standalone (Control Plane): no VS Code config available
-            this.executablePath = process.env.BLOOM_BRAIN_PATH || 'python';
-            console.log(`[BrainExecutor] Standalone mode — using: ${this.executablePath}`);
+            // Standalone (Control Plane): no VS Code config available.
+            //
+            // BUG (confirmado 2026-07-28): el paquete `brain` nunca fue empaquetado
+            // como instalable en el runtime CPython embebido (engine/runtime/) — solo
+            // existe como bundle PyInstaller standalone (bin/brain/brain). Invocar ese
+            // runtime con `-m brain` (isBinaryMode=false, la rama de abajo) siempre
+            // falla con "No module named brain" porque el módulo no está en su
+            // site-packages y ese nunca fue el diseño soportado por el instalador.
+            //
+            // BLOOM_BRAIN_EXE (prioridad): apunta directo a bin/brain/brain, el
+            // ejecutable frozen que SÍ trae `brain` embebido en _internal/. Cuando
+            // está presente activamos isBinaryMode para que execute() arme baseArgs
+            // como ['--json', ...] en vez de ['-m', 'brain', '--json', ...] — spawnea
+            // el binario congelado directamente, sin pasar por ningún intérprete
+            // externo. Confirmado compatible: `bin/brain/brain --json system info`
+            // parsea los flags igual que `python -m brain --json ...`.
+            //
+            // BLOOM_BRAIN_PATH sigue existiendo como fallback: sirve para un
+            // intérprete Python con `brain` real instalado en su site-packages
+            // (ej. un venv de desarrollo), caso que resolveBrainInterpreter() en
+            // service.go también contempla vía override explícito.
+            const brainExe = process.env.BLOOM_BRAIN_EXE;
+            if (brainExe) {
+                this.executablePath = brainExe;
+                this.isBinaryMode = true;
+                console.log(`[BrainExecutor] Standalone mode (binary) — using: ${this.executablePath}`);
+            } else {
+                this.executablePath = process.env.BLOOM_BRAIN_PATH || 'python';
+                console.log(`[BrainExecutor] Standalone mode (python -m brain) — using: ${this.executablePath}`);
+            }
         }
     }
 

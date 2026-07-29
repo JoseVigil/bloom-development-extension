@@ -30,6 +30,7 @@ const net = require('net');
 const { WebSocketManager } = require('../../out/server/WebSocketManager');
 const { startAPIServer } = require('../../out/api/server');
 const { HeadlessUserManager } = require('../../out/managers/HeadlessUserManager');
+const { BrainExecutor } = require('../../out/src/utils/brainExecutor');
 
 // ── App data directory (cross-platform) ─────────────────────────────────────
 // LOCALAPPDATA solo existe en Windows. En macOS/Linux se resuelve via HOME.
@@ -325,6 +326,19 @@ async function bootstrap() {
     port: 4124,
     state: 'READY'
   });
+
+  // CRÍTICO (fix Incidente E): en el camino de la extensión VS Code,
+  // BrainExecutor.initialize() se llama en extension.ts (paso 0 de activate()).
+  // Ese camino nunca se ejecuta en el bootstrap headless, así que sin esta
+  // llamada BrainExecutor.executablePath queda en null indefinidamente y
+  // toda ruta que dependa de él (health.routes.ts, nucleus.routes.ts vía
+  // BrainApiAdapter, auth.routes.ts vía BrainApiAdapter) falla con
+  // "BrainExecutor no inicializado. Llama a initialize() primero." — no
+  // importa cuánto tiempo lleve corriendo el Control Plane, nunca se resuelve
+  // solo. Debe ir ANTES de startAPIServer, que es lo que registra esas rutas.
+  console.log('[Bootstrap] Initializing Brain CLI...');
+  await BrainExecutor.initialize();
+  console.log('[Bootstrap] ✅ Brain CLI initialized');
 
   console.log('[Bootstrap] Starting API server (port 48215)...');
   const apiServer = await startAPIServer({

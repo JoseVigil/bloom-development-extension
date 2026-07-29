@@ -220,7 +220,7 @@ function createWorkspaceWindow(url) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'core', 'preload_conductor.js')
+      preload: path.join(__dirname, 'core', 'preload_core.js')
     },
     icon: path.join(__dirname, 'assets', 'bloom.ico'),
     title: 'Bloom Workspace',
@@ -574,7 +574,7 @@ app.whenReady().then(async () => {
     // registerOnboardingHandlers también se registra acá: harness:inject-milestone
     // y onboarding:mark-step-complete deben seguir funcionando post-onboarding
     // (ej. reintentar un step no-blocking) y dependen de () => _reactor / () => _registry.
-    const url = nucleusData.onboarding.workspace_url || 'http://localhost:3000';
+    const url = nucleusData.onboarding.workspace_url || 'http://localhost:5173';
     createWorkspaceWindow(url);
     registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
     initOnboardingBridge();
@@ -607,7 +607,7 @@ app.on('activate', () => {
         // FIX (auditoría 19/07/2026): mismo gap que en app.whenReady() — ver
         // comentario ahí. Sin esto, reactivar la app en macOS (dock icon) con
         // onboarding ya completo tampoco levantaba el bridge.
-        createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:3000');
+        createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:5173');
         registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
         initOnboardingBridge();
       } else {

@@ -11,10 +11,24 @@
   verdad, hay que decidir si esta pantalla pasa a leer nucleus.json vía
   bridge en vez de vía API Fastify.
 
+  ACCESO — decisión de sesión posterior a plan-migracion-shell-v1-addendum.md:
+  esta pantalla se monta hoy sobre el shell fusionado (Sidebar.svelte +
+  +layout.svelte), alcanzable vía el ítem de nav provisorio "Genesis"
+  (marcado como parche temporal ahí mismo). NO vive dentro de un tab de
+  mandate — el tab-bar y el LedgerPanel (pasos 2-3 del addendum) todavía no
+  existen.
+
+  TODO: cuando se resuelva el paso 4 del addendum (frontera
+  GenesisTab/StandardMandateTab), evaluar si esta pantalla pasa a vivir
+  DENTRO de un GenesisTab en vez de ser una ruta de nav plana. No está
+  decidido en ningún sentido todavía — el nav item de Sidebar es
+  deliberadamente un parche de alcanzabilidad, no la arquitectura final.
+
   Contexto de alcance (no repetir el diseño de layout como si resolviera
   esto): el Genesis Mandate ya existe al montar esta pantalla. Este
   componente NO controla cuándo arranca Fase 1 — ver docsGate.ts,
-  markContinuePressed().
+  markContinuePressed(). Q-08 (redirect automático) sigue sin dueño de
+  backend, es un ticket aparte de esta decisión de acceso manual.
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';

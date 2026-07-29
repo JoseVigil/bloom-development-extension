@@ -2031,6 +2031,112 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     return true; // canal async — chrome.tabs.query es asíncrono
   }
 
+  // 🔧 FIX: mismo patrón de bug que onboarding_navigate (ver arriba), aplicado
+  // a los comandos DOM del harness (dom_click, dom_type, dom_wait, dom_focus,
+  // dom_scroll, dom_extract). harness_schema.json/harnessProtocol.js los
+  // declaran como direction:"harness_to_background", channel:"runtime",
+  // type:"command" — Harness los manda con chrome.runtime.sendMessage(payload,
+  // callback) esperando sendResp(). Pero el único lugar donde estos comandos
+  // se procesaban era dentro de handleHostMessage() (canal nativePort.onMessage,
+  // mensajes del HOST/Electron — un origen distinto). Cuando llegaban acá, por
+  // chrome.runtime.onMessage, ningún branch de handleRuntimeMessage los
+  // matcheaba, sendResp() nunca se llamaba, y Chrome cerraba el puerto solo →
+  // "A listener indicated an asynchronous response by returning true, but the
+  // message channel closed before a response was received."
+  // La versión de handleHostMessage (línea ~886, DOM_COMMANDS) queda intacta
+  // — sigue sirviendo cuando el comando DOM viene del host nativo.
+  const RUNTIME_DOM_COMMANDS = [
+    'DOM_CLICK', 'DOM_TYPE', 'DOM_WAIT',
+    'DOM_FOCUS', 'DOM_SCROLL', 'DOM_EXTRACT'
+  ];
+
+  if (RUNTIME_DOM_COMMANDS.includes(command)) {
+    const tabId = msg.tab_id;
+
+    if (!tabId) {
+      console.warn('[IonPump] ⚠️ DOM command (runtime) sin tab_id:', command);
+      sendResp({ received: false, error: 'missing_tab_id' });
+      return true;
+    }
+
+    console.log('[IonPump] DOM (runtime) →', command, 'tab:', tabId);
+
+    chrome.tabs.sendMessage(tabId, msg, (response) => {
+      // chrome.runtime.lastError se consume acá (sincrónicamente dentro del
+      // callback) para que no quede como "unchecked runtime.lastError" si la
+      // tab no tiene el content script inyectado o ya se cerró.
+      const err = chrome.runtime.lastError;
+      if (err) {
+        console.warn('[IonPump] ⚠️ DOM command (runtime) falló:', command, err.message);
+        sendResp({ received: false, error: err.message });
+        return;
+      }
+
+      sendToHost({
+        event:     'DOM_COMMAND_ACK',
+        command:   command,
+        tab_id:    tabId,
+        response:  response,
+        timestamp: Date.now()
+      });
+
+      sendResp({ received: true, response });
+    });
+
+    return true; // canal async — chrome.tabs.sendMessage es asíncrono
+  }
+
+  // 🔧 FIX: EVENT_EMIT (harness_schema.json / harnessProtocol.js, único
+  // mensaje con "type": "event") nunca tuvo handler acá. No es que se haya
+  // roto — el flujo real (GITHUB_APP_AUTHORIZED, etc.) nunca pasó por acá:
+  // se dispara por llamada directa a reactToGithubAppAuthorized() desde
+  // background-github-device-flow.js, no por chrome.runtime.sendMessage.
+  // EVENT_EMIT es una herramienta exclusiva del Harness para simular/replayear
+  // eventos sin correr el flujo real, y jamás se conectó del lado de background.
+  //
+  // Aunque Harness lo manda "fire-and-forget" (sin callback, chrome.runtime.
+  // sendMessage(payload).catch(...)), la Promise igual queda pendiente de
+  // sendResponse — Chrome no distingue "no me importa la respuesta" de
+  // "prometiste una respuesta (return true) y no la diste". Por eso el
+  // mismo bug de canal colgado se manifiesta acá como "sendMessage failed"
+  // en vez de como un simple timeout silencioso.
+  if (command === 'EVENT_EMIT') {
+    const eventName = msg.params?.event;
+    const tabId = msg.tab_id;
+
+    console.log('[Harness] EVENT_EMIT →', eventName, 'tab:', tabId);
+
+    if (tabId) {
+      // Reenviar el evento simulado a la tab indicada, como si lo hubiera
+      // disparado el flujo real (content script / página de la extensión
+      // escuchando ese event name).
+      chrome.tabs.sendMessage(tabId, {
+        event: eventName,
+        ...(msg.params?.payload || {})
+      }, (response) => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          console.warn('[Harness] EVENT_EMIT: no se pudo entregar a la tab', tabId, '—', err.message);
+          sendResp({ received: true, delivered: false, error: err.message });
+          return;
+        }
+        sendResp({ received: true, delivered: true, response });
+      });
+    } else {
+      // Sin tab_id: no hay a quién entregarle el evento en el DOM — lo
+      // reemitimos como broadcast interno de la extensión (popup, discovery,
+      // debug panel) para que quede visible igual, y respondemos siempre.
+      chrome.runtime.sendMessage({
+        event: eventName,
+        _internal: true,
+        ...(msg.params?.payload || {})
+      }).catch(() => {});
+      sendResp({ received: true, delivered: true, broadcast: true });
+    }
+
+    return true; // canal async — chrome.tabs.sendMessage es asíncrono
+  }
+
   return false;
 }
 

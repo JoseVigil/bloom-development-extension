@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { theme } from '$lib/stores/theme';
   import SystemStatus from '$lib/components/SystemStatus.svelte';
-  import { Menu, X, Home, FileText, Zap, GitBranch, User, Settings } from 'lucide-svelte';
+  import Sidebar from '$lib/components/Sidebar.svelte';
+  import { FileText, Zap } from 'lucide-svelte';
 
   // ============================================================================
   // NOTA DE FIX (ver detalle en el PR/commit):
@@ -19,7 +20,6 @@
   // muestra el sidebar / contenido normal.
   // ============================================================================
 
-  let sidebarCollapsed = false;
   let rightPaneCollapsed = false;
   let isWebview = false;
   let isElectron = false;
@@ -43,11 +43,6 @@
     console.log('✅ [Layout] Ready');
   });
 
-  function toggleSidebar() {
-    sidebarCollapsed = !sidebarCollapsed;
-    console.log('📐 [UI] Sidebar collapsed:', sidebarCollapsed);
-  }
-
   function toggleRightPane() {
     rightPaneCollapsed = !rightPaneCollapsed;
     console.log('📐 [UI] Right pane collapsed:', rightPaneCollapsed);
@@ -64,9 +59,6 @@
     {#if showSidebar}
       <header class="header">
         <div class="header-left">
-          <button on:click={toggleSidebar} class="icon-btn" aria-label="Toggle sidebar">
-            {#if sidebarCollapsed}<Menu size={20} />{:else}<X size={20} />{/if}
-          </button>
           <h1 class="title">BTIP Studio</h1>
         </div>
         <div class="header-center">
@@ -85,34 +77,7 @@
       </header>
 
       <div class="main-container">
-        <aside class="sidebar" class:collapsed={sidebarCollapsed} role="navigation" aria-label="Main navigation">
-          <nav class="nav">
-            <a href="/home" class="nav-item" aria-label="Home">
-              <Home size={18} aria-hidden="true" />
-              {#if !sidebarCollapsed}<span>Home</span>{/if}
-            </a>
-            <a href="/intents" class="nav-item" aria-label="Intents">
-              <FileText size={18} aria-hidden="true" />
-              {#if !sidebarCollapsed}<span>Intents</span>{/if}
-            </a>
-            <a href="/nucleus" class="nav-item" aria-label="Nucleus">
-              <Zap size={18} aria-hidden="true" />
-              {#if !sidebarCollapsed}<span>Nucleus</span>{/if}
-            </a>
-            <a href="/projects" class="nav-item" aria-label="Projects">
-              <GitBranch size={18} aria-hidden="true" />
-              {#if !sidebarCollapsed}<span>Projects</span>{/if}
-            </a>
-            <a href="/profiles" class="nav-item" aria-label="Profiles">
-              <User size={18} aria-hidden="true" />
-              {#if !sidebarCollapsed}<span>Profiles</span>{/if}
-            </a>
-            <a href="/account" class="nav-item" aria-label="Account">
-              <Settings size={18} aria-hidden="true" />
-              {#if !sidebarCollapsed}<span>Account</span>{/if}
-            </a>
-          </nav>
-        </aside>
+        <Sidebar />
 
         <main class="content" role="main">
           <slot />
@@ -225,27 +190,6 @@
     color: var(--accent);
   }
 
-  .icon-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    transition: background 0.2s;
-  }
-
-  .icon-btn:hover {
-    background: var(--bg-tertiary);
-  }
-
-  .icon-btn:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
   .action-btn {
     display: flex;
     align-items: center;
@@ -268,46 +212,6 @@
     display: flex;
     flex: 1;
     overflow: hidden;
-  }
-
-  .sidebar {
-    width: 16rem;
-    background: var(--bg-secondary);
-    border-right: 1px solid var(--border-color);
-    transition: width 0.3s;
-    overflow: hidden;
-  }
-
-  .sidebar.collapsed {
-    width: 4rem;
-  }
-
-  .nav {
-    display: flex;
-    flex-direction: column;
-    padding: 0.5rem;
-    gap: 0.25rem;
-  }
-
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.625rem 0.75rem;
-    color: var(--text-primary);
-    text-decoration: none;
-    border-radius: 4px;
-    transition: background 0.2s;
-    white-space: nowrap;
-  }
-
-  .nav-item:hover {
-    background: var(--bg-tertiary);
-  }
-
-  .nav-item:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
   }
 
   .content {

@@ -300,12 +300,14 @@ bloom-development-extension/
     │   │   ├── session1_launcher.py
     │   │   └── web/
     │   │       ├── __init__.py
+    │   │       ├── companion_generator.py
     │   │       ├── discovery_generator.py
     │   │       ├── harness_generator.py
     │   │       ├── landing_generator.py
     │   │       └── templates/
     │   │           ├── __init__.py
     │   │           ├── companion/
+    │   │           │   ├── __init__.py
     │   │           │   ├── companion.js
     │   │           │   ├── companionProtocol.js
     │   │           │   ├── index.html
@@ -315,7 +317,6 @@ bloom-development-extension/
     │   │           │   ├── discovery.js
     │   │           │   ├── discoveryProtocol.js
     │   │           │   ├── index.html
-    │   │           │   ├── onboarding.js
     │   │           │   ├── script.js
     │   │           │   └── styles.css
     │   │           ├── harness/

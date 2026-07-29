@@ -7,7 +7,19 @@ BloomNucleus/
 │   │   ├── bundle.js.map
 │   │   ├── server-bootstrap.js
 │   │   ├── static/
-│   │   │   └── logo.svg
+│   │   │   ├── csp.json
+│   │   │   ├── favicon-16x16.png
+│   │   │   ├── favicon-32x32.png
+│   │   │   ├── index.css
+│   │   │   ├── index.html
+│   │   │   ├── logo-swagger-default.svg
+│   │   │   ├── logo.svg
+│   │   │   ├── oauth2-redirect.html
+│   │   │   ├── oauth2-redirect.js
+│   │   │   ├── swagger-ui-bundle.js
+│   │   │   ├── swagger-ui-standalone-preset.js
+│   │   │   ├── swagger-ui.css
+│   │   │   └── swagger-ui.js
 │   │   └── version-bootstrap.py
 │   ├── brain/
 │   │   ├── _internal/ [... dependencies]
@@ -153,6 +165,7 @@ BloomNucleus/
 │   ├── temporal/
 │   │   └── temporal
 │   ├── vscode/
+│   │   └── bloom-extension.vsix
 │   └── workspace/
 │       ├── LICENSE.electron.txt
 │       ├── LICENSES.chromium.html
@@ -187,22 +200,22 @@ BloomNucleus/
 │   ├── onboarding/
 │   │   └── onboarding_steps.json
 │   ├── profile/
-│   │   └── 409dbabe-f915-45f8-b010-46c57a3daf85/
-│   │       ├── com.bloom.synapse.409dbabe.json
+│   │   └── b90aca02-bae4-44aa-a36d-1530c21da8cb/
+│   │       ├── com.bloom.synapse.b90aca02.json
 │   │       └── ignition_spec.json
 │   ├── profiles.json
 │   └── sentinel/
 │       └── sentinel-config.json
 ├── history/
 │   ├── profiles/
-│   │   └── 409dbabe-f915-45f8-b010-46c57a3daf85/
+│   │   └── b90aca02-bae4-44aa-a36d-1530c21da8cb/
 │   │       ├── launches/
-│   │       │   └── 20260726.ndjson
+│   │       │   └── 20260728.ndjson
 │   │       └── sessions/
-│   │           ├── 001_409dbabe_001509.ndjson
-│   │           └── 002_409dbabe_001711.ndjson
+│   │           ├── 001_b90aca02_223617.ndjson
+│   │           └── 002_b90aca02_223819.ndjson
 │   └── workers/
-│       ├── capabilities_1623072.json
+│       ├── capabilities_75938.json
 │       └── nucleus_worker.pid
 ├── hooks/
 │   ├── post_launch/
@@ -215,77 +228,78 @@ BloomNucleus/
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   ├── brain_core_20260726.log
-│   │   │   ├── brain_core_20260726.log.1
-│   │   │   ├── brain_core_20260726.log.2
-│   │   │   ├── brain_core_20260726.log.3
-│   │   │   ├── brain_core_20260726.log.4
-│   │   │   ├── brain_core_20260726.log.5
 │   │   │   ├── brain_core_20260727.log
-│   │   │   ├── brain_core_20260727.log.1
-│   │   │   └── brain_core_20260727.log.2
+│   │   │   └── brain_core_20260728.log
 │   │   ├── profile/
-│   │   │   ├── brain_profile_20260726.log
-│   │   │   └── brain_profile_20260727.log
+│   │   │   ├── brain_profile_20260727.log
+│   │   │   └── brain_profile_20260728.log
 │   │   ├── server/
-│   │   │   ├── brain_server_20260726.log
-│   │   │   ├── brain_server_20260726.log.1
-│   │   │   ├── brain_server_20260726.log.2
 │   │   │   ├── brain_server_20260727.log
-│   │   │   ├── brain_server_event_bus_20260726.log
+│   │   │   ├── brain_server_20260728.log
 │   │   │   ├── brain_server_event_bus_20260727.log
-│   │   │   ├── brain_server_manager_20260726.log
-│   │   │   └── brain_server_manager_20260727.log
+│   │   │   ├── brain_server_event_bus_20260728.log
+│   │   │   ├── brain_server_manager_20260727.log
+│   │   │   └── brain_server_manager_20260728.log
 │   │   └── service/
 │   │       ├── brain_service.log
-│   │       └── brain_service_20260726.log
+│   │       └── brain_service_20260727.log
+│   ├── build/ [... build output]
 │   ├── chromium/
 │   ├── conductor/
 │   │   ├── onboarding/
-│   │   │   └── conductor_onboarding_20260726.log
+│   │   │   └── conductor_onboarding_20260728.log
 │   │   └── setup/
-│   │       └── conductor_setup_20260726.log
+│   │       └── conductor_setup_20260728.log
 │   ├── host/
 │   │   ├── nm_init_diag.log
 │   │   └── profiles/
-│   │       └── 409dbabe-f915-45f8-b010-46c57a3daf85/
-│   │           ├── 001_409dbabe_001509/
-│   │           │   ├── cortex_extension_20260726.log
-│   │           │   ├── host_20260726.log
-│   │           │   ├── host_boot_001_409dbabe_001509.log
-│   │           │   └── nm_init_diag_001_409dbabe_001509.log
-│   │           └── 002_409dbabe_001711/
-│   │               ├── cortex_extension_20260726.log
-│   │               ├── host_20260726.log
-│   │               ├── host_boot_002_409dbabe_001711.log
-│   │               └── nm_init_diag_002_409dbabe_001711.log
+│   │       └── b90aca02-bae4-44aa-a36d-1530c21da8cb/
+│   │           ├── 001_b90aca02_223617/
+│   │           │   ├── cortex_extension_20260728.log
+│   │           │   ├── host_20260728.log
+│   │           │   ├── host_boot_001_b90aca02_223617.log
+│   │           │   └── nm_init_diag_001_b90aca02_223617.log
+│   │           └── 002_b90aca02_223819/
+│   │               ├── cortex_extension_20260728.log
+│   │               ├── host_20260728.log
+│   │               ├── host_boot_002_b90aca02_223819.log
+│   │               └── nm_init_diag_002_b90aca02_223819.log
 │   ├── install/
 │   ├── metamorph/
-│   │   └── metamorph_core_20260726.log
+│   │   ├── metamorph_core_20260727.log
+│   │   └── metamorph_operations_20260728.log
 │   ├── nucleus/
 │   │   ├── control_plane/
-│   │   │   └── nucleus_control_plane_20260726.log
+│   │   │   ├── nucleus_control_plane_20260727.log
+│   │   │   └── nucleus_control_plane_20260728.log
 │   │   ├── harness/
 │   │   │   └── harness.log
 │   │   ├── hooks/
 │   │   │   ├── post_launch/
-│   │   │   │   └── nucleus_post_launch_20260726.log
+│   │   │   │   └── nucleus_post_launch_20260727.log
 │   │   │   ├── profile_disconnected/
-│   │   │   │   └── nucleus_profile_disconnected_20260726.log
+│   │   │   │   └── nucleus_profile_disconnected_20260727.log
 │   │   │   └── system_health/
-│   │   │       ├── nucleus_system_health_20260726.log
-│   │   │       └── nucleus_system_health_20260727.log
-│   │   ├── nucleus_brain_poller_20260726.log
-│   │   ├── nucleus_orchestration_20260726.log
-│   │   ├── nucleus_synapse_20260726.log
-│   │   ├── nucleus_temporal_20260726.log
+│   │   │       ├── nucleus_system_health_20260727.log
+│   │   │       └── nucleus_system_health_20260728.log
+│   │   ├── nucleus_brain_poller_20260727.log
+│   │   ├── nucleus_brain_poller_20260728.log
+│   │   ├── nucleus_orchestration_20260727.log
+│   │   ├── nucleus_orchestration_20260728.log
+│   │   ├── nucleus_synapse_20260727.log
+│   │   ├── nucleus_synapse_20260728.log
+│   │   ├── nucleus_temporal_20260727.log
+│   │   ├── nucleus_temporal_20260728.log
 │   │   ├── service/
 │   │   │   ├── nucleus_service.log
-│   │   │   └── nucleus_service_20260726.log
+│   │   │   ├── nucleus_service_20260727.log
+│   │   │   └── nucleus_service_20260728.log
 │   │   ├── svelte_dev/
-│   │   │   └── nucleus_svelte_dev_20260726.log
+│   │   │   ├── nucleus_svelte_dev_20260727.log
+│   │   │   └── nucleus_svelte_dev_20260728.log
 │   │   └── worker/
-│   │       └── worker_manager_20260726.log
+│   │       ├── worker_manager_20260727.log
+│   │       └── worker_manager_20260728.log
 │   ├── ollama/
 │   │   └── service/
 │   │       └── ollama_service.log
@@ -293,111 +307,124 @@ BloomNucleus/
 │   │   ├── bloom-sensor.error.log
 │   │   └── bloom-sensor.log
 │   ├── sentinel/
+│   │   ├── onboarding/
+│   │   │   └── onboarding_b90aca02-bae4-44aa-a36d-1530c21da8cb_20260728.log
 │   │   ├── profiles/
-│   │   │   ├── 409dbabe-f915-45f8-b010-46c57a3daf85/
-│   │   │   │   ├── 001_409dbabe_001509_debug.log
-│   │   │   │   ├── 001_409dbabe_001509_engine_mining.log
-│   │   │   │   ├── 001_409dbabe_001509_engine_network.log
-│   │   │   │   ├── 001_409dbabe_001509_engine_read.log
-│   │   │   │   └── 001_409dbabe_001509_netlog.json
-│   │   │   └── sentinel_409dbabe-f915-45f8-b010-46c57a3daf85_20260726.log
-│   │   └── sentinel_core_20260726.log
+│   │   │   ├── b90aca02-bae4-44aa-a36d-1530c21da8cb/
+│   │   │   │   ├── 001_b90aca02_223617_debug.log
+│   │   │   │   ├── 001_b90aca02_223617_engine_mining.log
+│   │   │   │   ├── 001_b90aca02_223617_engine_network.log
+│   │   │   │   ├── 001_b90aca02_223617_engine_read.log
+│   │   │   │   └── 001_b90aca02_223617_netlog.json
+│   │   │   └── sentinel_b90aca02-bae4-44aa-a36d-1530c21da8cb_20260727.log
+│   │   └── sentinel_core_20260727.log
 │   ├── synapse_trace/
-│   │   ├── synapse_trace_001_409dbabe_001509.log
-│   │   └── synapse_trace_002_409dbabe_001711.log
+│   │   ├── synapse_trace_001_b90aca02_223617.log
+│   │   └── synapse_trace_002_b90aca02_223819.log
 │   ├── telemetry.json
 │   ├── temporal/
 │   │   └── server/
-│   │       └── temporal_server_20260726.log
+│   │       ├── temporal_server_20260727.log
+│   │       └── temporal_server_20260728.log
 │   └── workspace/
 │       └── setup/
+├── models/
+│   ├── blobs/
+│   └── manifests/
 ├── profiles/
-│   └── 409dbabe-f915-45f8-b010-46c57a3daf85/
-│       ├── ActorSafetyLists/
-│       ├── AmountExtractionHeuristicRegexes/
-│       ├── BrowserMetrics-spare.pma
-│       ├── CaptchaProviders/
-│       ├── CertificateRevocation/
-│       ├── Crowd Deny/
+│   ├── b90aca02-bae4-44aa-a36d-1530c21da8cb/
+│   │   ├── ActorSafetyLists/
+│   │   ├── AmountExtractionHeuristicRegexes/
+│   │   ├── BrowserMetrics-spare.pma
+│   │   ├── CaptchaProviders/
+│   │   ├── CertificateRevocation/
+│   │   ├── Crowd Deny/
+│   │   ├── Default/ [... chromium profile data]
+│   │   ├── DevToolsActivePort
+│   │   ├── FirstPartySetsPreloaded/
+│   │   ├── GrShaderCache/ [... chromium cache]
+│   │   ├── GraphiteDawnCache/ [... chromium cache]
+│   │   ├── Last Version
+│   │   ├── Local State
+│   │   ├── MEIPreload/
+│   │   ├── NativeMessagingHosts/
+│   │   │   └── com.bloom.synapse.b90aca02.json
+│   │   ├── OnDeviceHeadSuggestModel/
+│   │   ├── OptimizationHints/
+│   │   ├── OriginTrials/
+│   │   ├── PKIMetadata/
+│   │   ├── PrivacySandboxAttestationsPreloaded/
+│   │   ├── SSLErrorAssistant/
+│   │   ├── SafetyTips/
+│   │   ├── ShaderCache/ [... chromium cache]
+│   │   ├── SingletonCookie [NOT FOUND]
+│   │   ├── SingletonLock [NOT FOUND]
+│   │   ├── SingletonSocket [NOT FOUND]
+│   │   ├── Subresource Filter/
+│   │   │   └── Unindexed Rules/
+│   │   ├── TrustTokenKeyCommitments/
+│   │   ├── Variations
+│   │   ├── WasmTtsEngine/
+│   │   ├── WidevineCdm/
+│   │   ├── ZxcvbnData/
+│   │   ├── chrome_debug.log
+│   │   ├── component_crx_cache/
+│   │   │   └── metadata.json
+│   │   ├── extension/
+│   │   │   ├── assets/
+│   │   │   │   ├── 128x128.png
+│   │   │   │   ├── icon128.png
+│   │   │   │   └── icon16.png
+│   │   │   ├── background-companion.js
+│   │   │   ├── background-github-device-flow.js
+│   │   │   ├── background.js
+│   │   │   ├── companion/
+│   │   │   │   ├── companion.js
+│   │   │   │   ├── companionProtocol.js
+│   │   │   │   ├── index.html
+│   │   │   │   └── styles.css
+│   │   │   ├── content.js
+│   │   │   ├── discovery/
+│   │   │   │   ├── discovery.js
+│   │   │   │   ├── discoveryProtocol.js
+│   │   │   │   ├── index.html
+│   │   │   │   ├── script.js
+│   │   │   │   └── styles.css
+│   │   │   ├── discovery.synapse.config.js
+│   │   │   ├── harness/
+│   │   │   │   ├── harness.js
+│   │   │   │   ├── harnessProtocol.js
+│   │   │   │   └── index.html
+│   │   │   ├── harness.synapse.config.js
+│   │   │   ├── landing/
+│   │   │   │   ├── data-loader.js
+│   │   │   │   ├── index.html
+│   │   │   │   ├── landing.js
+│   │   │   │   ├── landingProtocol.js
+│   │   │   │   ├── script.js
+│   │   │   │   └── styles.css
+│   │   │   ├── manifest.json
+│   │   │   └── protocols/
+│   │   │       ├── companion.schema.json
+│   │   │       ├── discovery.schema.json
+│   │   │       ├── harness.schema.json
+│   │   │       └── landing.schema.json
+│   │   ├── extensions_crx_cache/
+│   │   │   └── metadata.json
+│   │   ├── first_party_sets.db
+│   │   ├── first_party_sets.db-journal
+│   │   ├── hyphen-data/
+│   │   └── segmentation_platform/
+│   │       ├── ukm_db
+│   │       └── ukm_db-wal
+│   └── d1c996d4-7566-4c5a-8f2e-07ec84e693d2/
 │       ├── Default/ [... chromium profile data]
-│       ├── DevToolsActivePort
-│       ├── FirstPartySetsPreloaded/
-│       ├── GrShaderCache/ [... chromium cache]
-│       ├── GraphiteDawnCache/ [... chromium cache]
-│       ├── Last Version
-│       ├── Local State
-│       ├── MEIPreload/
-│       ├── NativeMessagingHosts/
-│       │   └── com.bloom.synapse.409dbabe.json
-│       ├── OnDeviceHeadSuggestModel/
-│       ├── OptimizationHints/
-│       ├── OriginTrials/
-│       ├── PKIMetadata/
-│       ├── PrivacySandboxAttestationsPreloaded/
-│       ├── SSLErrorAssistant/
-│       ├── SafetyTips/
 │       ├── ShaderCache/ [... chromium cache]
-│       ├── SingletonCookie [NOT FOUND]
-│       ├── SingletonLock [NOT FOUND]
-│       ├── SingletonSocket
-│       ├── Subresource Filter/
-│       │   └── Unindexed Rules/
-│       ├── TrustTokenKeyCommitments/
-│       ├── Variations
-│       ├── WasmTtsEngine/
-│       ├── WidevineCdm/
-│       ├── ZxcvbnData/
-│       ├── chrome_debug.log
-│       ├── component_crx_cache/
-│       │   └── metadata.json
-│       ├── extension/
-│       │   ├── assets/
-│       │   │   ├── 128x128.png
-│       │   │   ├── icon128.png
-│       │   │   └── icon16.png
-│       │   ├── background-companion.js
-│       │   ├── background-github-device-flow.js
-│       │   ├── background.js
-│       │   ├── companion/
-│       │   │   ├── companion.js
-│       │   │   ├── companionProtocol.js
-│       │   │   ├── index.html
-│       │   │   └── styles.css
-│       │   ├── content.js
-│       │   ├── discovery/
-│       │   │   ├── discovery.js
-│       │   │   ├── discoveryProtocol.js
-│       │   │   ├── index.html
-│       │   │   ├── script.js
-│       │   │   └── styles.css
-│       │   ├── discovery.synapse.config.js
-│       │   ├── harness/
-│       │   │   ├── harness.js
-│       │   │   ├── harnessProtocol.js
-│       │   │   └── index.html
-│       │   ├── harness.synapse.config.js
-│       │   ├── landing/
-│       │   │   ├── data-loader.js
-│       │   │   ├── index.html
-│       │   │   ├── landing.js
-│       │   │   ├── landingProtocol.js
-│       │   │   ├── script.js
-│       │   │   └── styles.css
-│       │   ├── manifest.json
-│       │   └── protocols/
-│       │       ├── companion.schema.json
-│       │       ├── discovery.schema.json
-│       │       ├── harness.schema.json
-│       │       └── landing.schema.json
-│       ├── extensions_crx_cache/
-│       │   └── metadata.json
-│       ├── first_party_sets.db
-│       ├── first_party_sets.db-journal
-│       ├── hyphen-data/
-│       └── segmentation_platform/
-│           ├── ukm_db
-│           └── ukm_db-wal
+│       └── chrome_debug.log
 ├── run/
+│   ├── control_plane_api.pid
+│   ├── nucleus_worker.pid
+│   └── temporal_server.pid
 ├── users/
 └── workers/
     └── brain/

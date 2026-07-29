@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -70,6 +72,145 @@ func NewSupervisor(logsDir, binDir string) *Supervisor {
 		binDir:        binDir,
 		supervisorCtx: context.Background(), // overridden by service start before boot
 	}
+}
+
+// ============================================================================
+// PID FILE PERSISTENCE
+// ============================================================================
+//
+// BUG (confirmado 2026-07-28): "nucleus service stop/restart-bootstrap/status"
+// crean un Supervisor nuevo por invocación (processes: make(map[...]) vacío).
+// El único proceso con el mapa poblado es el de "nucleus service start", que
+// vive bloqueado en <-sigCh en SU PROPIO proceso OS — ese mapa nunca se
+// comparte. Resultado: stop nunca mata el proceso real, restart-bootstrap
+// spawnea un bundle.js nuevo que choca por puerto contra el viejo (que nunca
+// murió) y crashea, y status siempre reporta IDLE.
+//
+// Fix: pidfiles en disco bajo <install>/run/<name>.pid, escritos por quien
+// spawnea el proceso y leídos por cualquier invocación posterior del CLI.
+// Se eligió pidfile sobre socket de control IPC porque:
+//   (a) sobrevive a que el proceso "start" esté colgado o no responda —
+//       igual se puede matar por PID leído del archivo;
+//   (b) no requiere mantener un listener adicional corriendo;
+//   (c) es el mecanismo estándar para este tipo de supervisión y no choca
+//       con cómo NSSM ya gestiona el proceso "start" en Windows.
+// Trade-off: puede quedar stale si el proceso muere sin limpiar su pidfile —
+// por eso isProcessAlive() siempre valida el PID antes de confiar en él, y
+// killByPidFile() borra el pidfile aunque el proceso ya esté muerto.
+//
+// managedProcessNames enumera los procesos que pasan por este mecanismo.
+// svelte_dev queda fuera intencionalmente — ver el comentario en Shutdown().
+var managedProcessNames = []string{"temporal_server", "nucleus_worker", "brain_server", "control_plane_api"}
+
+func runDir(binDir string) string {
+	// binDir es <install>/bin — el run dir vive un nivel arriba, junto a logs/.
+	return filepath.Join(filepath.Dir(binDir), "run")
+}
+
+func pidFilePath(binDir, name string) string {
+	return filepath.Join(runDir(binDir), name+".pid")
+}
+
+// writePidFile persists the PID of a just-spawned process so a *different*
+// CLI invocation can find and kill it later. Must be called immediately
+// after cmd.Start() succeeds, while proc.PID is known-fresh.
+func writePidFile(binDir, name string, pid int) error {
+	dir := runDir(binDir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create run dir: %w", err)
+	}
+	return os.WriteFile(pidFilePath(binDir, name), []byte(strconv.Itoa(pid)), 0644)
+}
+
+func readPidFile(binDir, name string) (int, error) {
+	data, err := os.ReadFile(pidFilePath(binDir, name))
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0, fmt.Errorf("corrupt pidfile for %s: %w", name, err)
+	}
+	return pid, nil
+}
+
+func removePidFile(binDir, name string) {
+	_ = os.Remove(pidFilePath(binDir, name))
+}
+
+// isProcessAlive checks whether a PID is still running. On Unix, signaling 0
+// is a pure existence/permission check — the kernel does not actually
+// deliver a signal to the target process.
+//
+// NOTE (Windows): os.Process.Signal(syscall.Signal(0)) is not reliable under
+// the Windows/NSSM deployment target. This needs a build-tagged
+// implementation (e.g. OpenProcess via golang.org/x/sys/windows) before this
+// ships there. Out of scope here — the bug was reproduced and this fix is
+// verified on the Linux/macOS dev loop; flagging the Windows gap explicitly
+// rather than silently shipping a check that lies on that platform.
+func isProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+// killByPidFile reads the pidfile for name, confirms the process is still
+// alive, sends SIGTERM, waits up to timeout for a graceful exit, and
+// force-kills with SIGKILL if it doesn't die in time. It always removes the
+// pidfile before returning — a stale entry must never block the next
+// stop/restart. Returns the PID that was targeted (0 if no pidfile existed).
+//
+// Callers that need to relaunch the same service on the same port (e.g.
+// restart-bootstrap) MUST wait for this to return before spawning the
+// replacement: that ordering is what eliminates the EADDRINUSE race that let
+// the old process silently win the health check against a "successfully
+// restarted" new one.
+func killByPidFile(binDir, name string, timeout time.Duration) (int, error) {
+	pid, err := readPidFile(binDir, name)
+	if err != nil {
+		return 0, nil // no pidfile — nothing to kill, not an error
+	}
+	defer removePidFile(binDir, name)
+
+	if !isProcessAlive(pid) {
+		return pid, nil // stale pidfile — process already gone
+	}
+
+	proc, ferr := os.FindProcess(pid)
+	if ferr != nil {
+		return pid, ferr
+	}
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		// Process may have exited between the isProcessAlive check and here.
+		if !isProcessAlive(pid) {
+			return pid, nil
+		}
+		return pid, err
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !isProcessAlive(pid) {
+			return pid, nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// Didn't exit gracefully within timeout — force kill.
+	_ = proc.Kill()
+	killDeadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(killDeadline) {
+		if !isProcessAlive(pid) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return pid, nil
 }
 
 // initLogger initialises the structured service logger using InitServiceLogger.
@@ -263,6 +404,9 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 	}
 
 	s.processes["temporal_server"] = proc
+	if err := writePidFile(s.binDir, "temporal_server", proc.PID); err != nil {
+		s.slog("WARN", "failed to write temporal_server pidfile: %v", err)
+	}
 
 	// Monitor process in background
 	go s.monitorProcess(proc, logFile)
@@ -453,6 +597,9 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 	}
 
 	s.processes["nucleus_worker"] = proc
+	if err := writePidFile(s.binDir, "nucleus_worker", proc.PID); err != nil {
+		s.slog("WARN", "failed to write nucleus_worker pidfile: %v", err)
+	}
 
 	// Monitor process in background
 	go s.monitorProcess(proc, logFile)
@@ -594,6 +741,9 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 	}
 
 	s.processes["brain_server"] = proc
+	if err := writePidFile(s.binDir, "brain_server", proc.PID); err != nil {
+		s.slog("WARN", "failed to write brain_server pidfile: %v", err)
+	}
 
 	// Monitor en background — actualiza State cuando el proceso termina
 	go s.monitorProcess(proc, logFile)
@@ -1044,45 +1194,49 @@ func (s *Supervisor) updateTelemetry(proc *ManagedProcess) {
 // Vite es una herramienta de desarrollo — su ciclo de vida es independiente del
 // servicio Nucleus. El usuario lo detiene manualmente (Ctrl-C en la terminal de Vite,
 // o `pkill -f vite`) cuando termina de trabajar.
+// Shutdown kills every managed process via its pidfile (see killByPidFile),
+// not via s.processes. That map is only ever populated in the OS process
+// that actually spawned the children — for "nucleus service start" that's
+// itself (this path), but for "nucleus service stop" it's a brand-new,
+// empty Supervisor. Going through pidfiles makes both callers correct with
+// the same code, instead of stop silently operating on nothing.
+//
+// Runs per-process kills concurrently, each bounded by the shared ctx
+// deadline (30s from the caller) — a stuck process no longer blocks the
+// others from being signaled.
 func (s *Supervisor) Shutdown(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	var wg sync.WaitGroup
+	errCh := make(chan error, len(managedProcessNames))
 
-	for name, proc := range s.processes {
+	for _, name := range managedProcessNames {
 		// svelte_dev sobrevive al shutdown por diseño — ver startSvelteDev()
-		// y el comentario de setSvelteProcAttr. No mandar señal.
-		if name == "svelte_dev" {
-			continue
-		}
-
+		// y el comentario de setSvelteProcAttr. No mandar señal. (No está en
+		// managedProcessNames, así que este loop nunca la toca.)
 		wg.Add(1)
-		go func(n string, p *ManagedProcess) {
+		go func(n string) {
 			defer wg.Done()
-
-			if p.Cmd != nil && p.Cmd.Process != nil {
-				p.Cmd.Process.Signal(os.Interrupt)
-
-				// Wait with timeout
-				done := make(chan struct{})
-				go func() {
-					p.Cmd.Wait()
-					close(done)
-				}()
-
-				select {
-				case <-done:
-					// Graceful shutdown succeeded
-				case <-time.After(10 * time.Second):
-					// Force kill
-					p.Cmd.Process.Kill()
+			timeout := 10 * time.Second
+			if dl, ok := ctx.Deadline(); ok {
+				if remaining := time.Until(dl); remaining < timeout {
+					timeout = remaining
 				}
 			}
-		}(name, proc)
+			if _, err := killByPidFile(s.binDir, n, timeout); err != nil {
+				errCh <- fmt.Errorf("%s: %w", n, err)
+			}
+		}(name)
 	}
 
 	wg.Wait()
+	close(errCh)
+
+	var errs []string
+	for err := range errCh {
+		errs = append(errs, err.Error())
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("shutdown errors: %s", strings.Join(errs, "; "))
+	}
 	return nil
 }
 
@@ -1158,10 +1312,119 @@ func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error 
 	return nil
 }
 
+// resolveBrainInterpreter locates the Python interpreter that BrainExecutor's
+// standalone-mode fallback needs. See brainExecutor.ts initialize(), the
+// `else` branch used outside VS Code (this Control Plane's own execution
+// context): it sets `executablePath = BLOOM_BRAIN_PATH || 'python'` and later
+// spawns it as `[executablePath, '-m', 'brain', '--json', ...]` — that `-m`
+// requires an actual interpreter, not the standalone `brain` CLI binary
+// bundled at <binDir>/brain/brain (a PyInstaller onedir build with its own
+// _internal/ deps — it doesn't understand `-m` at all, it IS the module).
+//
+// core.ResolveBrainPath() (installer/nucleus/internal/core/paths.go) is
+// intentionally NOT reused here: it resolves that same `brain` CLI binary,
+// for a different caller/purpose. Using it here would hand BrainExecutor an
+// executable it invokes incorrectly — same ENOENT-class bug, just relocated.
+//
+// Confirmed against the real embedded runtime layout: the correct target is
+// <binDir>/engine/runtime/bin/python3, a full CPython distribution shipped
+// with the install (include/, lib/, share/ alongside the binary — not a
+// PyInstaller bundle).
+func resolveBrainInterpreter(binDir string) (string, error) {
+	// 1. Explicit override, respected verbatim — e.g. a systemd unit
+	//    Environment= override, or a developer pointing at their own venv.
+	if p := os.Getenv("BLOOM_BRAIN_PATH"); p != "" {
+		return p, nil
+	}
+
+	// 2. Embedded runtime shipped with the install.
+	//    NOTE (Windows): embeddable CPython distributions conventionally
+	//    place python.exe at the runtime root, not under bin/ — verify this
+	//    candidate against an actual Windows install before shipping there;
+	//    flagging rather than guessing silently.
+	candidate := filepath.Join(binDir, "engine", "runtime", "bin", "python3")
+	if runtime.GOOS == "windows" {
+		candidate = filepath.Join(binDir, "engine", "runtime", "python.exe")
+	}
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate, nil
+	}
+
+	// 3. System PATH, last resort — matches the pre-existing 'python'
+	//    fallback baked into brainExecutor.ts, but at least tries python3
+	//    first since that's what modern distros actually provide.
+	for _, name := range []string{"python3", "python"} {
+		if found, lookErr := exec.LookPath(name); lookErr == nil {
+			return found, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"no python interpreter found for BrainExecutor: checked BLOOM_BRAIN_PATH, %s, and system PATH",
+		candidate,
+	)
+}
+
+// resolveBrainExecutable locates the PyInstaller onedir bundle produced by
+// build-brain.sh / build.py (installer/native/bin/<arch>/brain/ → rollout a
+// <binDir>/brain/brain). A diferencia de resolveBrainInterpreter() — que
+// resuelve un intérprete Python genérico para invocarlo con `-m brain` — esto
+// resuelve el ejecutable frozen que YA tiene `brain` embebido en su propio
+// _internal/, sin depender de ningún site-packages externo.
+//
+// BUG (confirmado 2026-07-28): el pipeline de build (build-all.py,
+// build-brain.sh) nunca instala el paquete `brain` en el site-packages de
+// engine/runtime — solo lo empaqueta como este bundle standalone. Por eso
+// BrainExecutor invocando `<engine/runtime python3> -m brain` fallaba con
+// "No module named brain": ese runtime nunca tuvo el paquete y el diseño del
+// instalador nunca lo contempló. El fix correcto es apuntar a este binario en
+// vez de intentar volver instalable un paquete que solo existe como bundle.
+//
+// core.ResolveBrainPath() (installer/nucleus/internal/core/paths.go) ya
+// resuelve este mismo binario para otro caller/propósito — reutilizado acá
+// intencionalmente porque este SÍ es el uso correcto de ese path (a
+// diferencia de resolveBrainInterpreter(), que deliberadamente no lo reusa).
+func resolveBrainExecutable(binDir string) (string, error) {
+	candidate := filepath.Join(binDir, "brain", "brain")
+	if runtime.GOOS == "windows" {
+		candidate = filepath.Join(binDir, "brain", "brain.exe")
+	}
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate, nil
+	}
+	return "", fmt.Errorf("brain executable not found at %s", candidate)
+}
+
 func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*ManagedProcess, error) {
 	// Production: launch the self-contained bundle — no NODE_PATH required.
 	// Built by: npm run build:bundle → installer/native/bin/bootstrap/bundle.js
 	bundleScript := filepath.Join(s.binDir, "bootstrap", "bundle.js")
+
+	// BUG (confirmado 2026-07-28): antes esto era "BLOOM_BRAIN_PATH=" +
+	// os.Getenv("BLOOM_BRAIN_PATH") — reenvía la env var cruda, que bajo
+	// systemd/NSSM (sin override explícito) siempre llega vacía. El proceso
+	// Node recibía BLOOM_BRAIN_PATH="" (definida pero falsy), caía a su
+	// propio fallback ciego 'python', y como no hay ningún 'python' en el
+	// PATH del unit (solo node/ y el resto de bin/BloomNucleus), Node
+	// reventaba con "spawn python ENOENT" apenas BrainExecutor intentaba
+	// ejecutar algo.
+	brainPath, brainErr := resolveBrainInterpreter(s.binDir)
+	if brainErr != nil {
+		s.slog("WARN", "bootControlPlane: %v — Control Plane's BrainExecutor will fail on first use", brainErr)
+	}
+
+	// BUG (confirmado 2026-07-28): resolver el intérprete embebido (arriba) ya
+	// no alcanza — engine/runtime nunca tuvo `brain` instalado en su
+	// site-packages, así que `-m brain` con ese intérprete siempre falla con
+	// "No module named brain". BLOOM_BRAIN_EXE es la señal que brainExecutor.ts
+	// usa (rama standalone de initialize()) para preferir el bundle PyInstaller
+	// (isBinaryMode=true, baseArgs=['--json'] sin -m) en vez del intérprete.
+	// BLOOM_BRAIN_PATH se mantiene como estaba, para no romper el caso de un
+	// override explícito apuntando a un venv con `brain` real instalado.
+	brainExePath, brainExeErr := resolveBrainExecutable(s.binDir)
+	if brainExeErr != nil {
+		s.slog("WARN", "bootControlPlane: %v — falling back to BLOOM_BRAIN_PATH interpreter mode", brainExeErr)
+	}
 
 	env := []string{
 		"BLOOM_USER_ROLE=" + os.Getenv("BLOOM_USER_ROLE"),
@@ -1170,6 +1433,16 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		fmt.Sprintf("BLOOM_SIMULATION_MODE=%t", simulation),
 		"BLOOM_LOGS_DIR=" + s.logsDir,
 		"BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH"),
+		// BLOOM_BRAIN_PATH: requerido por BrainExecutor.initialize() en modo standalone
+		// (rama !vscode) — ver resolveBrainInterpreter() arriba para la cadena de
+		// precedencia completa y por qué no reenviamos el os.Getenv crudo.
+		"BLOOM_BRAIN_PATH=" + brainPath,
+		// BLOOM_BRAIN_EXE: prioridad sobre BLOOM_BRAIN_PATH en brainExecutor.ts —
+		// ver resolveBrainExecutable() arriba y el bug de "No module named brain".
+		// Si no se resolvió (brainExeErr != nil), se envía vacía a propósito: el
+		// `if (brainExe)` en brainExecutor.ts la trata como ausente y cae solo a
+		// BLOOM_BRAIN_PATH, sin necesitar lógica adicional acá.
+		"BLOOM_BRAIN_EXE=" + brainExePath,
 		// BLOOM_DIR: fuente canónica para que bundle.js resuelva webview/app.
 		// getBloomDir() lee installation.origin_path de nucleus.json (sube 4 niveles)
 		// o cae al env BLOOM_DIR. Si ambos fallan, bundle.js lo ignorará gracefully.
@@ -1236,6 +1509,9 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 	}
 
 	s.processes["control_plane_api"] = proc
+	if err := writePidFile(s.binDir, "control_plane_api", proc.PID); err != nil {
+		s.slog("WARN", "failed to write control_plane_api pidfile: %v", err)
+	}
 	go s.monitorProcess(proc, logFile)
 
 	// Wait for the API server to be ready on port 48215 (up to 8s).
@@ -1443,11 +1719,12 @@ type ProcessSnapshot struct {
 }
 
 type RestartBootstrapResult struct {
-	Success   bool   `json:"success"`
-	PID       int    `json:"pid,omitempty"`
-	State     string `json:"state"`
-	Error     string `json:"error,omitempty"`
-	Timestamp int64  `json:"timestamp"`
+	Success     bool   `json:"success"`
+	PID         int    `json:"pid,omitempty"`
+	PreviousPID int    `json:"previous_pid,omitempty"`
+	State       string `json:"state"`
+	Error       string `json:"error,omitempty"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 func createServiceCommand(c *core.Core) *cobra.Command {
@@ -1719,30 +1996,32 @@ func createServiceStatusCmd(c *core.Core) *cobra.Command {
 			if c.IsJSON {
 				outputJSON = true
 			}
-			logsDir := getLogsDir(c)
 			binDir := getBinDir(c)
-			sup := NewSupervisor(logsDir, binDir)
 			result := &ServiceStatusResult{
 				Success:   true,
 				State:     "RUNNING",
 				Processes: make(map[string]ProcessSnapshot),
 				Timestamp: time.Now().Unix(),
 			}
-			sup.mu.RLock()
-			for name, proc := range sup.processes {
-				proc.mu.RLock()
-				snap := ProcessSnapshot{
-					State:   string(proc.State),
-					PID:     proc.PID,
-					LogPath: proc.LogPath,
+			// status no crea un Supervisor con estado en memoria — ese estado
+			// vive únicamente en el proceso "service start" y nunca llega
+			// hasta acá. En su lugar leemos los pidfiles que ese proceso
+			// escribió al spawnear cada componente, y confirmamos con
+			// isProcessAlive que el PID sigue siendo real (no un pidfile
+			// stale de una corrida anterior que crasheó sin limpiar).
+			for _, name := range managedProcessNames {
+				pid, err := readPidFile(binDir, name)
+				if err != nil {
+					continue // sin pidfile => no lo consideramos "managed" ahora mismo
 				}
-				if !proc.StartedAt.IsZero() {
-					snap.StartedAt = proc.StartedAt.Format(time.RFC3339)
+				snap := ProcessSnapshot{PID: pid}
+				if isProcessAlive(pid) {
+					snap.State = string(StateReady)
+				} else {
+					snap.State = string(StateStopped)
 				}
-				proc.mu.RUnlock()
 				result.Processes[name] = snap
 			}
-			sup.mu.RUnlock()
 			if len(result.Processes) == 0 {
 				result.State = "IDLE"
 			}
@@ -1798,14 +2077,36 @@ from a crashed Control Plane without a full service restart.`,
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 			result := &RestartBootstrapResult{Timestamp: time.Now().Unix()}
-			sup.mu.Lock()
-			if proc, exists := sup.processes["control_plane_api"]; exists {
-				if proc.Cmd != nil && proc.Cmd.Process != nil {
-					_ = proc.Cmd.Process.Kill()
-				}
-				delete(sup.processes, "control_plane_api")
+
+			// Antes: buscaba el proceso viejo en sup.processes, que en esta
+			// invocación SIEMPRE está vacío (Supervisor recién creado) — nunca
+			// mataba nada real. El bundle.js viejo seguía LISTEN en :48215/:4124,
+			// el nuevo bundle.js chocaba por puerto (EADDRINUSE) y crasheaba, y
+			// el health-check de abajo — que solo hacía GET sin verificar PID —
+			// veía al proceso viejo (aún vivo) contestar y reportaba éxito falso.
+			//
+			// Fix: matar por pidfile y ESPERAR la muerte confirmada del proceso
+			// viejo antes de spawnear. Esto no solo encuentra el proceso real —
+			// elimina la race de EADDRINUSE de raíz, porque ya no hay dos
+			// procesos compitiendo por el puerto al mismo tiempo.
+			previousPID, killErr := killByPidFile(binDir, "control_plane_api", 10*time.Second)
+			if killErr != nil {
+				sup.slog("WARN", "restart-bootstrap: error killing previous control_plane_api (pid %d): %v", previousPID, killErr)
 			}
-			sup.mu.Unlock()
+			result.PreviousPID = previousPID
+
+			// Defensa adicional por si el kernel tarda en liberar el puerto
+			// (TIME_WAIT) incluso después de que el proceso ya murió.
+			portDeadline := time.Now().Add(5 * time.Second)
+			for time.Now().Before(portDeadline) {
+				conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:48215", 300*time.Millisecond)
+				if dialErr != nil {
+					break // puerto libre
+				}
+				conn.Close()
+				time.Sleep(200 * time.Millisecond)
+			}
+
 			proc, err := sup.bootControlPlane(ctx, false)
 			if err != nil {
 				result.Success = false
@@ -1825,9 +2126,20 @@ from a crashed Control Plane without a full service restart.`,
 					time.Sleep(500 * time.Millisecond)
 				}
 				result.PID = proc.PID
-				if ready {
+				// El GET de arriba por sí solo no prueba que sea proc.PID el que
+				// contesta — solo prueba que "algo" contesta en el puerto. Como
+				// ahora garantizamos por construcción que el viejo proceso ya
+				// está muerto antes de llegar acá, un responder en :48215 solo
+				// puede ser proc.PID — pero confirmamos igual que el proceso que
+				// spawneamos sigue vivo, para no reportar RUNNING sobre un PID
+				// que ya crasheó justo después de bindear el puerto.
+				if ready && isProcessAlive(proc.PID) {
 					result.Success = true
 					result.State = "RUNNING"
+				} else if ready {
+					result.Success = false
+					result.State = "FAILED"
+					result.Error = fmt.Sprintf("port 48215 responded but spawned process (pid %d) is no longer running", proc.PID)
 				} else {
 					result.Success = true
 					result.State = "STARTING"

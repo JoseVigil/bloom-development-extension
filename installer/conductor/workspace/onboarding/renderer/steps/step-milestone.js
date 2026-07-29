@@ -53,7 +53,7 @@ export async function completeOnboarding() {
   showCortex('Establishing workspace connection…');
   log('info', 'IPC → onboarding:complete');
 
-  const result = await window.onboarding.complete({ workspaceUrl: 'http://localhost:3000' });
+  const result = await window.onboarding.complete({ workspaceUrl: 'http://localhost:5173' });
 
   log(result.success ? 'info' : 'error',
     `IPC ← onboarding:complete — success: ${result.success}`);

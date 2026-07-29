@@ -40,3 +40,25 @@ contextBridge.exposeInMainWorld('onboarding', {
   // Logger bridge — renderer → main → archivo de log
   log: (level, message) => ipcRenderer.invoke('onboarding:log', { level, message })
 });
+
+// ── window.nucleus ───────────────────────────────────────────────────────
+// Expone los handlers 'nucleus:*' registrados en setupNucleusHandlers()
+// (main_conductor.js). Antes de este fix no existía ningún bridge para
+// estos canales del lado preload — los ipcMain.handle('nucleus:...')
+// estaban registrados pero inalcanzables desde el renderer de Core/Workspace.
+contextBridge.exposeInMainWorld('nucleus', {
+  // Estado de salud de todos los componentes (usado por el sidebar del debug panel)
+  health: () => ipcRenderer.invoke('nucleus:health'),
+
+  // Listar perfiles de Chrome disponibles
+  listProfiles: () => ipcRenderer.invoke('nucleus:list-profiles'),
+
+  // Lanzar un perfil en modo discovery
+  launchProfile: (profileId) => ipcRenderer.invoke('nucleus:launch-profile', profileId),
+
+  // Crear un nuevo perfil
+  createProfile: (profileName) => ipcRenderer.invoke('nucleus:create-profile', profileName),
+
+  // Leer installation/onboarding desde nucleus.json
+  getInstallation: () => ipcRenderer.invoke('nucleus:get-installation')
+});
