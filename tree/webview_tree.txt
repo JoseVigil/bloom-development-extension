@@ -18,13 +18,15 @@ bloom-development-extension/
         │   │   │   ├── IntentsLink.svelte
         │   │   │   ├── NucleusPanel.svelte
         │   │   │   ├── ProjectsPanel.svelte
+        │   │   │   ├── Sidebar.svelte
         │   │   │   ├── SystemStatus.svelte
         │   │   │   ├── TokenEstimator.svelte
-        │   │   │   └── debug/
-        │   │   │       ├── DebugDetail.svelte
-        │   │   │       ├── DebugFeed.svelte
-        │   │   │       ├── DebugSidebar.svelte
-        │   │   │       └── DebugSimBar.svelte
+        │   │   │   ├── debug/
+        │   │   │   │   ├── DebugDetail.svelte
+        │   │   │   │   ├── DebugFeed.svelte
+        │   │   │   │   ├── DebugSidebar.svelte
+        │   │   │   │   └── DebugSimBar.svelte
+        │   │   │   └── docsGate.ts
         │   │   ├── stores/
         │   │   │   ├── auth.ts
         │   │   │   ├── docsGate.ts

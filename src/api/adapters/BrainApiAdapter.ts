@@ -20,7 +20,10 @@ import { TwitterAuthStatus } from '../../../contracts/types';
  * CRITICAL FIX:
  * - All commands now use --json as GLOBAL flag (before category)
  * - Format: python -m brain --json <category> <command> [ARGS]
- * - Added comprehensive logging for debugging
+ *
+ * NOTA: el logging de cada invocación (comando, resultado, errores de parseo)
+ * vive en BrainExecutor.execute() — ver src/utils/brainExecutor.ts. Este adapter
+ * es delegación pura y no debería tener su propia lógica de logging duplicada.
  */
 export class AIRuntimeAdapter {
 

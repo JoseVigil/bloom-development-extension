@@ -13,6 +13,22 @@ let vscode: typeof import('vscode') | null = null;
 try { vscode = require('vscode'); } catch { /* standalone mode */ }
 import * as os from 'os';
 
+// getLogger() falla en modo standalone (sin vscode disponible) porque Logger usa
+// vscode.window.createOutputChannel — en ese caso caemos a console.* como antes,
+// que es exactamente el comportamiento previo para el Control Plane standalone.
+let getLogger: (() => { info(m: string): void; warn(m: string): void; error(m: string, e?: Error): void }) | null = null;
+try { getLogger = require('./logger').getLogger; } catch { /* standalone mode, sin logger de archivo */ }
+
+function log(level: 'info' | 'warn' | 'error', message: string): void {
+    if (vscode && getLogger) {
+        try {
+            getLogger()[level](message);
+            return;
+        } catch { /* si falla, cae a console.* abajo */ }
+    }
+    (level === 'info' ? console.log : level === 'warn' ? console.warn : console.error)(message);
+}
+
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
@@ -165,7 +181,7 @@ export class BrainExecutor {
             const pythonPath = config.get<string>('pythonPath');
             if (brainPath) {
                 this.executablePath = brainPath;
-                console.log(`[Sentinel-First] Usando Brain detectado por Sentinel: ${brainPath}`);
+                log('info', `[Sentinel-First] Usando Brain detectado por Sentinel: ${brainPath}`);
                 return;
             }
             this.executablePath = pythonPath || 'python';
@@ -195,10 +211,10 @@ export class BrainExecutor {
             if (brainExe) {
                 this.executablePath = brainExe;
                 this.isBinaryMode = true;
-                console.log(`[BrainExecutor] Standalone mode (binary) — using: ${this.executablePath}`);
+                log('info', `[BrainExecutor] Standalone mode (binary) — using: ${this.executablePath}`);
             } else {
                 this.executablePath = process.env.BLOOM_BRAIN_PATH || 'python';
-                console.log(`[BrainExecutor] Standalone mode (python -m brain) — using: ${this.executablePath}`);
+                log('info', `[BrainExecutor] Standalone mode (python -m brain) — using: ${this.executablePath}`);
             }
         }
     }
@@ -233,8 +249,8 @@ export class BrainExecutor {
                 }
             });
 
-            console.log(`[BrainExecutor] Ejecutando: ${this.executablePath} ${fullArgs.join(' ')}`);
-            if (options.cwd) console.log(`[BrainExecutor] CWD: ${options.cwd}`);
+            log('info', `[BrainExecutor] Ejecutando: ${this.executablePath} ${fullArgs.join(' ')}`);
+            if (options.cwd) log('info', `[BrainExecutor] CWD: ${options.cwd}`);
 
             const proc = spawn(this.executablePath, fullArgs, {
                 cwd: options.cwd,
@@ -268,13 +284,19 @@ export class BrainExecutor {
                     const result = JSON.parse(stdout.trim()) as BrainResult<T>;
 
                     if (result.status === 'success') {
-                        console.log(`[BrainExecutor] ✅ Éxito: ${result.operation || commands[0]}`);
+                        log('info', `[BrainExecutor] ✅ Éxito: ${result.operation || commands[0]}`);
                     } else {
-                        console.warn(`[BrainExecutor] ⚠️ Estado no success:`, result);
+                        log('warn', `[BrainExecutor] ⚠️ Estado no success: ${JSON.stringify(result)}`);
                     }
 
                     resolve(result);
                 } catch (parseErr) {
+                    // Antes esto solo viajaba truncado (400 chars) dentro del mensaje del Error
+                    // rechazado — si el caller no lo logueaba explícitamente, se perdía para
+                    // siempre. Ahora queda el stdout/stderr completos en el log persistente
+                    // antes de rechazar, para poder diagnosticar comandos de Brain que devuelven
+                    // salida no-JSON (ej. crash antes de imprimir, stacktrace de Python, etc.)
+                    log('error', `[BrainExecutor] No se pudo parsear salida JSON de Brain. Comando: ${fullArgs.join(' ')}\nStdout completo:\n${stdout}\nStderr completo:\n${stderr}`);
                     reject(new Error(
                         `No se pudo parsear salida JSON de Brain:\n${stdout.slice(0, 400)}...\n\nStderr:\n${stderr}`
                     ));
@@ -771,7 +793,7 @@ export class BrainExecutor {
 
                 if (validateResult.status !== 'success') {
                     validated = false;
-                    console.warn('[BrainExecutor] Validación falló, continuando...');
+                    log('warn', '[BrainExecutor] Validación falló, continuando...');
                 }
             }
 

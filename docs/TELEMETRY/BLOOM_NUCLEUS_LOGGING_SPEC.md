@@ -42,8 +42,10 @@ Las categorías válidas para `nucleus telemetry register --category` son:
 ```
 brain       sentinel    nucleus
 synapse     conductor   launcher
-build
+build       vscode
 ```
+
+`vscode` identifica streams que pertenecen a la extensión de VS Code — es una aplicación independiente del ecosistema brain/nucleus/sentinel, no un submódulo de `brain`, por lo que amerita su propia categoría en vez de forzarla dentro de `brain`.
 
 Un stream puede pertenecer a múltiples categorías. Usar `--category` una vez por cada una:
 ```bash
@@ -63,6 +65,7 @@ El campo `source` identifica **qué aplicación/binario escribe** el stream. Es 
 ```
 nucleus     sentinel    brain
 conductor   launcher    host
+vscode
 ```
 
 Se pasa como flag al registrar:
@@ -93,9 +96,11 @@ En el JSON resultante aparece solo si está presente (campo opcional):
 
 **stream_id** — identificador estable en `telemetry.json`:
 ```
-brain_<modulo>           # ✅ brain_chrome_analyzer
-brain_<modulo>_<sub>     # ✅ brain_context_generator
+brain_<modulo>           # ✅ brain_chrome_analyzer       (vive dentro de brain/)
+brain_<modulo>_<sub>     # ✅ brain_context_generator     (vive dentro de brain/)
+<modulo>                 # ✅ vscode_extension            (aplicación top-level, no submódulo de brain)
 ```
+El prefijo `brain_` indica pertenencia al módulo `brain` — solo se usa para streams que efectivamente viven ahí. Componentes top-level del ecosistema (mismo nivel que `brain`, `nucleus`, `sentinel`, `conductor`) no lo llevan; ya hay precedente de esto en `telemetry.json` con streams como `conductor_core` o `nucleus_build`, que tampoco llevan prefijo `brain_`.
 - Siempre lowercase
 - Siempre snake_case — nunca kebab-case (`brain-chrome` ❌)
 - Nunca renombrar una vez publicado
