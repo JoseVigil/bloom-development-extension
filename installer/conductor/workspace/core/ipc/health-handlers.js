@@ -46,9 +46,10 @@ const { ipcMain } = require('electron');
  *   }
  * }
  */
-function registerHealthHandlers(execNucleus) {
+function registerHealthHandlers(execNucleus, logger = console) {
 
   ipcMain.handle('nucleus:health', async () => {
+    logger.info('[HEALTH] Checking system health...');
     try {
       const raw = await execNucleus(['--json', 'health'], 15000);
 
@@ -79,6 +80,8 @@ function registerHealthHandlers(execNucleus) {
         }
       }
 
+      logger.info(`[HEALTH] status=${status} all_ok=${allOk}`);
+
       return {
         success: true,
         health: {
@@ -97,6 +100,7 @@ function registerHealthHandlers(execNucleus) {
       // execNucleus lanza si hay timeout o el proceso no arranca.
       // No lanzamos — devolvemos error estructurado para que la UI
       // muestre "Error" en lugar de crashear.
+      logger.error('[HEALTH] execNucleus failed:', err.message);
       return {
         success: false,
         error:   err.message,

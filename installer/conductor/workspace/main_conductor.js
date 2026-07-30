@@ -17,11 +17,17 @@ const _sharedDir = require('electron').app.isPackaged
 const { getLogger } = require(path.join(_sharedDir, 'logger'));
 const { paths } = require(path.join(_sharedDir, 'global_paths'));
 const { registerOnboardingHandlers } = require('./onboarding/ipc/onboarding-handlers');
+const { registerHealthHandlers }   = require('./core/ipc/health-handlers');
+const { registerProfilesHandlers } = require('./core/ipc/profiles-handlers');
 // synapse-bridge.js vive en conductor/shared/ — un nivel arriba de workspace/
 const { SynapseBridge, ONBOARDING_EVENTS } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
 const { MilestoneRegistry } = require('./onboarding/milestone-registry');
 const { MilestoneReactor }  = require('./onboarding/milestone-reactor');
-const log = getLogger('onboarding');
+const log     = getLogger('onboarding');
+// Logger dedicado para el tráfico de Core (nucleus:health, nucleus:*-profile, etc).
+// No reemplaza a `log` — onboarding sigue necesitando el suyo. Cada uno escribe
+// a su propio stream/archivo (conductor_onboarding vs conductor_core).
+const coreLog = getLogger('core');
 
 // Bridge de onboarding — instanciado una vez cuando se lanza Discovery.
 // Permite escuchar todos los mensajes de Brain durante el onboarding y
@@ -245,7 +251,15 @@ function createWorkspaceWindow(url) {
 //
 // Requiere que el profileId exista en nucleus.json (master_profile).
 // Idempotente: si el bridge ya existe, no lo recrea.
-function initOnboardingBridge() {
+// FIX (Problema 2.5, Escenario A — CORE_LOGGING_FIX_PLAN.md): antes, el
+// bridge y el MilestoneReactor SIEMPRE se instanciaban con `log`
+// (getLogger('onboarding')), sin importar si la app arrancaba con
+// onboarding.completed=true. Eso hacía que milestones no-bloqueantes
+// (ai_provider_setup, google_auth) que llegan días después de terminado el
+// onboarding se loguearan igual en conductor_onboarding_*.log. Ahora el
+// logger es un parámetro — cada call-site de abajo pasa `coreLog` o `log`
+// según el branch (onboardingDone / !onboardingDone) en el que se encuentra.
+function initOnboardingBridge(logger = log) {
   if (_onboardingBridge) return;
 
   // Leer el profileId para que connectToBrain pueda filtrar PROFILE_CONNECTED
@@ -255,7 +269,7 @@ function initOnboardingBridge() {
     const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
     profileId = data.master_profile || null;
   } catch (e) {
-    log.warn('[SYNAPSE] initOnboardingBridge: no se pudo leer nucleus.json —', e.message);
+    logger.warn('[SYNAPSE] initOnboardingBridge: no se pudo leer nucleus.json —', e.message);
   }
 
   _onboardingBridge = new SynapseBridge({
@@ -289,7 +303,17 @@ function initOnboardingBridge() {
     // acá porque el call site nunca pasó el logger inyectado. Sin este fix,
     // no hay forma de confirmar por log si handleMilestone() corrió o no
     // para ningún step (ver auditoría de conductor_onboarding_20260719.log).
-    logger:       log,
+    //
+    // FIX (Problema 2.5, Escenario A — CORE_LOGGING_FIX_PLAN.md): antes esto
+    // era siempre `log` (getLogger('onboarding')), fijo, sin importar en qué
+    // branch se llamó a initOnboardingBridge(). Ahora usa el logger que el
+    // caller decidió (coreLog si onboarding.completed ya era true al boot,
+    // log si no). NOTA — Escenario B (swap en caliente del logger cuando
+    // onOnboardingSuccess dispara a mitad de la misma sesión, sin reiniciar
+    // el proceso) queda deliberadamente sin resolver acá: es una decisión de
+    // producto pendiente de confirmación explícita (ver sección 2.5.3 del
+    // plan), no algo que este fix deba asumir.
+    logger:       logger,
   });
 
   // Rehidratar desde disco para no re-ejecutar steps ya completados en
@@ -308,7 +332,7 @@ function initOnboardingBridge() {
     // al primer step registrado para ese evento — ver milestone-registry.js.
     const stepId = _registry.resolveEvent(enriched.event, enriched.data ?? enriched);
     if (!stepId) {
-      log.warn('[SYNAPSE] ONBOARDING_MILESTONE sin mapeo en registry:', enriched.event);
+      logger.warn('[SYNAPSE] ONBOARDING_MILESTONE sin mapeo en registry:', enriched.event);
       return;
     }
     _reactor.handleMilestone(stepId, enriched);
@@ -331,7 +355,7 @@ function initOnboardingBridge() {
   _onboardingBridge.on('message', async (enriched) => {
     if (enriched.type !== 'STATUS' || !enriched.catch_up_needed) return;
 
-    log.info('[SYNAPSE] REGISTER_ACK con catch_up_needed=true — haciendo poll de seguridad');
+    logger.info('[SYNAPSE] REGISTER_ACK con catch_up_needed=true — haciendo poll de seguridad');
 
     try {
       const result = await execNucleus(
@@ -340,7 +364,7 @@ function initOnboardingBridge() {
       );
 
       if (result.state === 'ONLINE' || result.extension_loaded) {
-        log.info('[SYNAPSE] Catch-up: perfil ya está ONLINE — simulando HANDSHAKE');
+        logger.info('[SYNAPSE] Catch-up: perfil ya está ONLINE — simulando HANDSHAKE');
         _onboardingBridge.emit('message', {
           type:       'HANDSHAKE',
           _profileId: profileId,
@@ -349,10 +373,10 @@ function initOnboardingBridge() {
           _recovered: true,
         });
       } else {
-        log.info('[SYNAPSE] Catch-up: perfil no está ONLINE aún — esperando push de Brain');
+        logger.info('[SYNAPSE] Catch-up: perfil no está ONLINE aún — esperando push de Brain');
       }
     } catch (e) {
-      log.warn('[SYNAPSE] Catch-up poll falló — continuando esperando push:', e.message);
+      logger.warn('[SYNAPSE] Catch-up poll falló — continuando esperando push:', e.message);
       // No es fatal: si el perfil conecta después, el push llegará normalmente.
     }
   });
@@ -361,62 +385,22 @@ function initOnboardingBridge() {
   // nunca manda nada — los listeners 'message' nunca disparan.
   _onboardingBridge.connectToBrain(profileId);
 
-  log.info('[SYNAPSE] Onboarding bridge initialized — MilestoneRegistry + MilestoneReactor activos');
+  logger.info('[SYNAPSE] Onboarding bridge initialized — MilestoneRegistry + MilestoneReactor activos');
 }
 
 // ── NUCLEUS IPC HANDLERS ───────────────────────────────────────────────────
+// FIX (Problema 1 — CORE_LOGGING_FIX_PLAN.md): este bloque tenía una segunda
+// implementación duplicada de nucleus:health, nucleus:list-profiles,
+// nucleus:launch-profile, nucleus:create-profile y nucleus:get-installation.
+// Esa versión inline nunca tenía logging y coexistía con los módulos más
+// prolijos core/ipc/health-handlers.js y core/ipc/profiles-handlers.js, que
+// estaban escritos y exportados pero jamás importados/invocados en ningún
+// archivo del repo. Se retiran los 5 handlers inline de acá — la única
+// implementación viva ahora es la modular, registrada en app.whenReady()
+// vía registerHealthHandlers(execNucleus, coreLog) / registerProfilesHandlers
+// (execNucleus, NUCLEUS_JSON, coreLog). onboarding:health se queda: pertenece
+// al dominio de onboarding, no de Core, y no es parte de este fix.
 function setupNucleusHandlers() {
-
-  ipcMain.handle('nucleus:health', async () => {
-    try {
-      const raw    = await execNucleus(['--json', 'health'], 15000);
-      const allOk  = raw.success === true;
-      const state  = (raw.state || '').toUpperCase();
-      const status = allOk ? 'healthy' : state === 'DEGRADED' ? 'degraded' : 'unhealthy';
-
-      const services = {};
-      if (raw.components && typeof raw.components === 'object') {
-        for (const [name, info] of Object.entries(raw.components)) {
-          if (!info || typeof info !== 'object') continue;
-          const parts = [info.state || (info.healthy ? 'OK' : 'ERROR')];
-          if (info.port        !== undefined) parts.push(`port ${info.port}`);
-          if (info.latency_ms  !== undefined) parts.push(`${info.latency_ms}ms`);
-          if (info.pid         !== undefined) parts.push(`pid ${info.pid}`);
-          if (info.profiles_count !== undefined) parts.push(`profiles: ${info.profiles_count}`);
-          if (info.error)                     parts.push(`⚠ ${info.error}`);
-          services[name] = parts.join(' · ');
-        }
-      }
-
-      return {
-        success: true,
-        health: {
-          status,
-          all_services_ok:   allOk,
-          state:             raw.state             || null,
-          error:             raw.error             || null,
-          timestamp:         raw.timestamp         || null,
-          services,
-          components:        raw.components        || null,
-          brain_last_errors: raw.brain_last_errors || null
-        }
-      };
-    } catch (err) {
-      return {
-        success: false,
-        error:   err.message,
-        health: {
-          status:            'unhealthy',
-          all_services_ok:   false,
-          state:             'UNREACHABLE',
-          error:             err.message,
-          services:          { nucleus: `⚠ ${err.message}` },
-          components:        null,
-          brain_last_errors: null
-        }
-      };
-    }
-  });
 
   // ── ONBOARDING HEALTH (ipc_health_handler.js integrado) ─────────────────
   // Usa execNucleus (ruta absoluta via NUCLEUS_EXE) en lugar de execFileAsync('nucleus')
@@ -438,67 +422,6 @@ function setupNucleusHandlers() {
         components: {},
         error:      err.message,
       };
-    }
-  });
-
-  ipcMain.handle('nucleus:list-profiles', async () => {
-    try {
-      const result = await execNucleus(['--json', 'profile', 'list'], 10000);
-      return {
-        success:  result.success !== false,
-        profiles: result.profiles || []
-      };
-    } catch (err) {
-      return { success: false, profiles: [], error: err.message };
-    }
-  });
-
-  ipcMain.handle('nucleus:launch-profile', async (event, profileId) => {
-    if (!profileId || typeof profileId !== 'string') {
-      return { success: false, error: 'profileId is required' };
-    }
-    try {
-      const result = await execNucleus(
-        ['--json', 'synapse', 'launch', profileId, '--mode', 'discovery'], 30000
-      );
-      return { success: result.success !== false, profileId, result };
-    } catch (err) {
-      return { success: false, profileId, error: err.message };
-    }
-  });
-
-  ipcMain.handle('nucleus:create-profile', async (event, profileName) => {
-    if (!profileName || typeof profileName !== 'string' || !profileName.trim()) {
-      return { success: false, error: 'profileName is required' };
-    }
-    try {
-      const result = await execNucleus(
-        ['--json', 'profile', 'create', '--name', profileName.trim()], 15000
-      );
-      return {
-        success: result.success !== false,
-        profile: result.profile || null,
-        result
-      };
-    } catch (err) {
-      return { success: false, profile: null, error: err.message };
-    }
-  });
-
-  ipcMain.handle('nucleus:get-installation', async () => {
-    try {
-      if (!fs.existsSync(NUCLEUS_JSON)) {
-        return { success: false, error: 'nucleus.json not found' };
-      }
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      return {
-        success:      true,
-        installation: data.installation || null,
-        onboarding:   data.onboarding   || null,
-        raw:          data
-      };
-    } catch (err) {
-      return { success: false, error: err.message };
     }
   });
 
@@ -528,7 +451,12 @@ app.whenReady().then(async () => {
     app.quit(); return;
   }
 
+  // onboarding:health se queda acá (dominio de onboarding, fuera de alcance
+  // de este fix). El tráfico de Core (health/profiles) va por los módulos
+  // dedicados de abajo, con su propio logger inyectado.
   setupNucleusHandlers();
+  registerHealthHandlers(execNucleus, coreLog);
+  registerProfilesHandlers(execNucleus, NUCLEUS_JSON, coreLog);
 
   const onboardingDone = nucleusData?.onboarding?.completed === true;
 
@@ -577,7 +505,12 @@ app.whenReady().then(async () => {
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:5173';
     createWorkspaceWindow(url);
     registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
-    initOnboardingBridge();
+    // FIX (Problema 2.5, Escenario A): onboarding.completed ya es true al
+    // boot — cualquier milestone no-bloqueante que llegue de acá en adelante
+    // (ai_provider_setup, google_auth) es tráfico de Core, no de onboarding.
+    log.info('[HANDOFF] Onboarding completado — logging de esta sesión continúa en conductor_core');
+    coreLog.info('[HANDOFF] Sesión post-onboarding — asumiendo logging de milestones no bloqueantes');
+    initOnboardingBridge(coreLog);
   } else {
     log.info('[BOOT] Loading onboarding window');
     createOnboardingWindow();
@@ -589,7 +522,7 @@ app.whenReady().then(async () => {
     // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
     // Se inicializa aquí — después de crear la ventana — para que mainWindow
     // esté disponible cuando el bridge intente hacer webContents.send().
-    initOnboardingBridge();
+    initOnboardingBridge(log);
   }
 });
 
@@ -609,12 +542,14 @@ app.on('activate', () => {
         // onboarding ya completo tampoco levantaba el bridge.
         createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:5173');
         registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
-        initOnboardingBridge();
+        log.info('[HANDOFF] Onboarding completado — logging de esta sesión continúa en conductor_core');
+        coreLog.info('[HANDOFF] Sesión post-onboarding — asumiendo logging de milestones no bloqueantes');
+        initOnboardingBridge(coreLog);
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
         registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
-        initOnboardingBridge();
+        initOnboardingBridge(log);
       }
     }
   }

@@ -199,6 +199,15 @@ class Logger {
 
       if (!fs.existsSync(nucleusExe)) {
         console.log(`${COLORS.gray}[Logger]${COLORS.reset} Nucleus not available yet, skipping telemetry registration`);
+        // FIX (Problema 3 — CORE_LOGGING_FIX_PLAN.md): NO marcar
+        // this.telemetryRegistered acá. Antes ese flag se seteaba en
+        // writeLog() ANTES de llamar a este método, así que una salida
+        // temprana acá (nucleus.exe todavía no desplegado) dejaba el
+        // registro sin reintentar por el resto de la sesión — causa
+        // confirmada de que conductor_setup nunca apareció en
+        // telemetry.json pese a que su .log sí existe en disco. Al no
+        // tocar el flag acá, el próximo writeLog() vuelve a intentar
+        // _registerTelemetry() mientras telemetryRegistered siga en false.
         return;
       }
 
@@ -217,6 +226,11 @@ class Logger {
         '--source',      def.source,        // FIX: --source ahora se pasa correctamente
         '--description', def.description
       ];
+
+      // Recién acá se confirma que nucleus.exe existe, así que recién acá
+      // se marca como registrado — moverlo desde writeLog() (donde estaba
+      // antes) es el fix quirúrgico de este punto. Ver comentario arriba.
+      this.telemetryRegistered = true;
 
       const { spawn } = require('child_process');
       const child = spawn(nucleusExe, args, {
@@ -264,9 +278,14 @@ class Logger {
       try {
         await fs.appendFile(this.logFile, `[${timestamp}] [${level}] ${prefix} ${message}\n`);
 
-        // Registrar telemetría UNA SOLA VEZ por sesión, en el primer write
+        // Registrar telemetría UNA SOLA VEZ por sesión. FIX (Problema 3):
+        // ya no se marca this.telemetryRegistered = true acá — ese flag
+        // ahora se setea dentro de _registerTelemetry(), después de
+        // confirmar que nucleus.exe existe. Si nucleus.exe todavía no está
+        // desplegado en el primer write, este `if` sigue siendo true en el
+        // próximo writeLog() de la misma sesión y el registro se reintenta,
+        // en vez de quedar perdido para siempre (ver bug de conductor_setup).
         if (!this.telemetryRegistered && this.streamId && this.streamMeta) {
-          this.telemetryRegistered = true;
           await this._registerTelemetry();
         }
       } catch (error) {
