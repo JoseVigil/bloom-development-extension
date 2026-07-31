@@ -177,31 +177,44 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (_request, reply) => {
       try {
-        fastify.log.info('Health check: Starting GitHub auth status check');
-        
-        // Check Brain CLI availability via GitHub auth
-        const authResult = await BrainExecutor.githubAuthStatus();
-        
+        // CORRECCIÓN (2026-07-30): githubAuthStatus() y healthFullStack()
+        // son independientes entre sí, pero se ejecutaban con `await`
+        // uno detrás del otro — dos subprocesos de Brain (Python)
+        // secuenciales, cada uno con su propio overhead de arranque de
+        // intérprete, sumando sus tiempos totales. Se lanzan en paralelo
+        // con Promise.allSettled. La lógica de negocio queda IDÉNTICA a
+        // la original (brainAvailable/authenticated siguen viniendo
+        // exclusivamente de githubAuthStatus, is_nucleus/nucleus
+        // exclusivamente de healthFullStack) — no se fusiona ni se
+        // reinterpreta ningún campo, solo se paraleliza la espera.
+        fastify.log.info('Health check: Starting GitHub auth + full-stack checks (parallel)');
+
+        const [authSettled, healthSettled] = await Promise.allSettled([
+          BrainExecutor.githubAuthStatus(),
+          BrainExecutor.healthFullStack()
+        ]);
+
+        const authResult = authSettled.status === 'fulfilled'
+          ? authSettled.value
+          : { status: 'error' as const, error: String(authSettled.reason) };
+
         fastify.log.info({ authResult }, 'Health check: Auth result received');
-        
+
         const brainAvailable = authResult.status !== 'error';
-        const authenticated = authResult.status === 'success' && 
+        const authenticated = authResult.status === 'success' &&
           (authResult.data as Record<string, any>)?.authenticated === true;
 
-        // Check if we're in a nucleus
         let isNucleus = false;
         let nucleusData = undefined;
 
         if (brainAvailable) {
-          try {
-            fastify.log.info('Health check: Checking full stack status');
-            const healthResult = await BrainExecutor.healthFullStack();
-            
+          if (healthSettled.status === 'fulfilled') {
+            const healthResult = healthSettled.value;
             fastify.log.info({ healthResult }, 'Health check: Full stack result');
-            
-            isNucleus = healthResult.status === 'success' && 
+
+            isNucleus = healthResult.status === 'success' &&
               (healthResult.data as Record<string, any>)?.is_nucleus === true;
-            
+
             if (isNucleus && healthResult.data) {
               const data = healthResult.data as Record<string, any>;
               const nucleus = data.nucleus as Record<string, any>;
@@ -213,8 +226,10 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
                 };
               }
             }
-          } catch (error) {
-            fastify.log.warn({ err: error }, 'Health check: Not in nucleus (expected)');
+          } else {
+            // Mismo comportamiento que el catch original: fuera de un
+            // nucleus es un rechazo esperado del CLI, no un error real.
+            fastify.log.warn({ err: healthSettled.reason }, 'Health check: Not in nucleus (expected)');
             isNucleus = false;
           }
         }

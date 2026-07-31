@@ -20,10 +20,7 @@ import { TwitterAuthStatus } from '../../../contracts/types';
  * CRITICAL FIX:
  * - All commands now use --json as GLOBAL flag (before category)
  * - Format: python -m brain --json <category> <command> [ARGS]
- *
- * NOTA: el logging de cada invocación (comando, resultado, errores de parseo)
- * vive en BrainExecutor.execute() — ver src/utils/brainExecutor.ts. Este adapter
- * es delegación pura y no debería tener su propia lógica de logging duplicada.
+ * - Added comprehensive logging for debugging
  */
 export class AIRuntimeAdapter {
 
@@ -32,11 +29,24 @@ export class AIRuntimeAdapter {
   // ============================================================================
 
   static async nucleusList(parentDir?: string): Promise<BrainResult<{ nuclei: Nucleus[] }>> {
-    return BrainExecutor.execute(['--json', 'nucleus', 'list'], parentDir ? { '-d': parentDir } : {});
+    // CORRECCIÓN (2026-07-30): el CLI de Brain (list.py) devuelve
+    // { status, operation, parent_dir, count, nuclei } con `nuclei` en la
+    // RAÍZ del JSON, no anidado bajo `data`. BrainExecutor.execute() no
+    // transforma la respuesta — la resuelve tal cual sale del CLI. Como
+    // nucleus.routes.ts espera `result.data.nuclei`, `result.data` quedaba
+    // siempre undefined y la ruta devolvía 500 incluso con status:"success".
+    // Se envuelve acá la respuesta plana en el contrato { status, data }.
+    const result = await BrainExecutor.execute(['nucleus', 'list'], parentDir ? { '-d': parentDir } : {});
+
+    if (result.status === 'success') {
+      return { ...result, data: { nuclei: (result as any).nuclei ?? [] } };
+    }
+
+    return result;
   }
 
   static async nucleusGet(nucleusPath: string): Promise<BrainResult<Nucleus>> {
-    return BrainExecutor.execute(['--json', 'nucleus', 'get'], { '-p': nucleusPath });
+    return BrainExecutor.execute(['nucleus', 'get'], { '-p': nucleusPath });
   }
 
   static async nucleusCreate(params: {
@@ -51,36 +61,36 @@ export class AIRuntimeAdapter {
     if (params.url) args['--url'] = params.url;
     if (params.force) args['-f'] = true;
 
-    return BrainExecutor.execute(['--json', 'nucleus', 'create'], args, { onProgress: params.onProgress });
+    return BrainExecutor.execute(['nucleus', 'create'], args, { onProgress: params.onProgress });
   }
 
   static async nucleusDelete(nucleusPath: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (force) args['-f'] = true;
-    return BrainExecutor.execute(['--json', 'nucleus', 'delete'], args);
+    return BrainExecutor.execute(['nucleus', 'delete'], args);
   }
 
   static async nucleusSync(nucleusPath: string, skipGit?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (skipGit) args['--skip-git'] = true;
-    return BrainExecutor.execute(['--json', 'nucleus', 'sync'], args);
+    return BrainExecutor.execute(['nucleus', 'sync'], args);
   }
 
   static async nucleusListProjects(nucleusPath: string, strategy?: string): Promise<BrainResult<{ projects: LinkedProject[] }>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (strategy) args['-s'] = strategy;
-    return BrainExecutor.execute(['--json', 'nucleus', 'list-projects'], args);
+    return BrainExecutor.execute(['nucleus', 'list-projects'], args);
   }
 
   static async nucleusOnboardingStatus(path: string): Promise<BrainResult<OnboardingState>> {
-    return BrainExecutor.execute(['--json', 'nucleus', 'onboarding-status'], { '-p': path });
+    return BrainExecutor.execute(['nucleus', 'onboarding-status'], { '-p': path });
   }
 
   static async nucleusOnboardingComplete(
     path: string,
     step: keyof OnboardingState['steps']
   ): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'nucleus', 'onboarding-complete'], {
+    return BrainExecutor.execute(['nucleus', 'onboarding-complete'], {
       '-p': path,
       '--step': step
     });
@@ -93,11 +103,11 @@ export class AIRuntimeAdapter {
   static async intentList(nucleusPath: string, type?: 'dev' | 'doc'): Promise<BrainResult<{ intents: Intent[] }>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (type) args['-t'] = type;
-    return BrainExecutor.execute(['--json', 'intent', 'list'], args);
+    return BrainExecutor.execute(['intent', 'list'], args);
   }
 
   static async intentGet(intentId: string, nucleusPath: string): Promise<BrainResult<Intent>> {
-    return BrainExecutor.execute(['--json', 'intent', 'get'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'get'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentCreate(params: {
@@ -118,33 +128,33 @@ export class AIRuntimeAdapter {
     if (params.problem) args['--problem'] = params.problem;
     if (params.expectedOutput) args['--expected-output'] = params.expectedOutput;
 
-    return BrainExecutor.execute(['--json', 'intent', 'create'], args);
+    return BrainExecutor.execute(['intent', 'create'], args);
   }
 
   static async intentLock(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'lock'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'lock'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentUnlock(intentId: string, nucleusPath: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-i': intentId, '-p': nucleusPath };
     if (force) args['--force'] = true;
-    return BrainExecutor.execute(['--json', 'intent', 'unlock'], args);
+    return BrainExecutor.execute(['intent', 'unlock'], args);
   }
 
   static async intentState(intentId: string, nucleusPath: string): Promise<BrainResult<Intent>> {
-    return BrainExecutor.execute(['--json', 'intent', 'state'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'state'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentSubmit(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'submit'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'submit'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentApprove(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'merge'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'merge'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentCancel(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'unlock'], {
+    return BrainExecutor.execute(['intent', 'unlock'], {
       '-i': intentId,
       '-p': nucleusPath,
       '--cleanup': true
@@ -152,7 +162,7 @@ export class AIRuntimeAdapter {
   }
 
   static async intentRecover(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'recover'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'recover'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentAddTurn(params: {
@@ -169,17 +179,17 @@ export class AIRuntimeAdapter {
       '-p': params.nucleusPath
     };
     if (params.provider) args['--provider'] = params.provider;
-    return BrainExecutor.execute(['--json', 'intent', 'add-turn'], args);
+    return BrainExecutor.execute(['intent', 'add-turn'], args);
   }
 
   static async intentFinalize(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'finalize'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['intent', 'finalize'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentDelete(intentId: string, nucleusPath: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-i': intentId, '-p': nucleusPath };
     if (force) args['--force'] = true;
-    return BrainExecutor.execute(['--json', 'intent', 'delete'], args);
+    return BrainExecutor.execute(['intent', 'delete'], args);
   }
 
   static async intentUpdate(params: {
@@ -200,7 +210,7 @@ export class AIRuntimeAdapter {
     if (params.addFiles) args['--add-files'] = params.addFiles.join(',');
     if (params.removeFiles) args['--remove-files'] = params.removeFiles.join(',');
 
-    return BrainExecutor.execute(['--json', 'intent', 'update'], args);
+    return BrainExecutor.execute(['intent', 'update'], args);
   }
 
   // ============================================================================
@@ -217,7 +227,7 @@ export class AIRuntimeAdapter {
     if (params.recursive) args['--recursive'] = true;
     if (params.excludeDirs) args['--exclude-dirs'] = params.excludeDirs.join(',');
     if (params.maxDepth !== undefined) args['--max-depth'] = params.maxDepth;
-    return BrainExecutor.execute(['--json', 'project', 'detect'], args);
+    return BrainExecutor.execute(['project', 'detect'], args);
   }
 
   static async projectAdd(params: {
@@ -234,7 +244,7 @@ export class AIRuntimeAdapter {
     if (params.description) args['--description'] = params.description;
     if (params.repoUrl) args['--repo-url'] = params.repoUrl;
 
-    return BrainExecutor.execute(['--json', 'project', 'add', params.projectPath], args);
+    return BrainExecutor.execute(['project', 'add', params.projectPath], args);
   }
 
   static async projectCloneAndAdd(params: {
@@ -251,7 +261,7 @@ export class AIRuntimeAdapter {
     if (params.strategy) args['--strategy'] = params.strategy;
 
     return BrainExecutor.execute(
-      ['--json', 'project', 'clone-and-add', params.repoUrl],
+      ['project', 'clone-and-add', params.repoUrl],
       args,
       {
         cwd: params.nucleusPath,
@@ -266,21 +276,21 @@ export class AIRuntimeAdapter {
   // ============================================================================
 
   static async profileList(): Promise<BrainResult<{ profiles: ChromeProfile[] }>> {
-    return BrainExecutor.execute(['--json', 'profile', 'list'], {});
+    return BrainExecutor.execute(['profile', 'list'], {});
   }
 
   static async profileCreate(alias: string): Promise<BrainResult<ChromeProfile>> {
-    return BrainExecutor.execute(['--json', 'profile', 'create', alias], {});
+    return BrainExecutor.execute(['profile', 'create', alias], {});
   }
 
   static async profileDestroy(profileId: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = {};
     if (force) args['-f'] = true;
-    return BrainExecutor.execute(['--json', 'profile', 'destroy', profileId], args);
+    return BrainExecutor.execute(['profile', 'destroy', profileId], args);
   }
 
   static async profileRefreshAccounts(profileId: string): Promise<BrainResult<{ accounts: AIAccount[] }>> {
-    return BrainExecutor.execute(['--json', 'profile', 'accounts-refresh', profileId], {});
+    return BrainExecutor.execute(['profile', 'accounts-refresh', profileId], {});
   }
 
   static async profileAccountsRegister(
@@ -289,7 +299,7 @@ export class AIRuntimeAdapter {
     email: string
   ): Promise<BrainResult<void>> {
     return BrainExecutor.execute(
-      ['--json', 'profile', 'accounts-register', profileId, provider, email],
+      ['profile', 'accounts-register', profileId, provider, email],
       {}
     );
   }
@@ -299,25 +309,25 @@ export class AIRuntimeAdapter {
   // ============================================================================
 
   static async githubAuthStatus(): Promise<BrainResult<GitHubAuthStatus>> {
-    return BrainExecutor.execute(['--json', 'github', 'auth-status'], {});
+    return BrainExecutor.execute(['github', 'auth-status'], {});
   }
 
   static async githubAuthLogin(token: string): Promise<BrainResult<GitHubAuthStatus>> {
-    return BrainExecutor.execute(['--json', 'github', 'auth-login'], { '-t': token });
+    return BrainExecutor.execute(['github', 'auth-login'], { '-t': token });
   }
 
   static async githubAuthLogout(): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'github', 'auth-logout'], {});
+    return BrainExecutor.execute(['github', 'auth-logout'], {});
   }
 
   static async githubOrgsList(): Promise<BrainResult<{ organizations: GitHubOrganization[] }>> {
-    return BrainExecutor.execute(['--json', 'github', 'orgs-list'], {});
+    return BrainExecutor.execute(['github', 'orgs-list'], {});
   }
 
   static async githubReposList(org?: string): Promise<BrainResult<{ repositories: GitHubRepository[] }>> {
     const args: Record<string, any> = {};
     if (org) args['--org'] = org;
-    return BrainExecutor.execute(['--json', 'github', 'repos-list'], args);
+    return BrainExecutor.execute(['github', 'repos-list'], args);
   }
 
   static async githubReposCreate(options: {
@@ -326,7 +336,7 @@ export class AIRuntimeAdapter {
     description?: string;
     private?: boolean;
   }): Promise<BrainResult<{ repo: GitHubRepository }>> {
-    const args: string[] = ['--json', 'github', 'repos', 'create', options.name];
+    const args: string[] = ['github', 'repos', 'create', options.name];
     const params: Record<string, any> = {};
 
     if (options.org) params['--org'] = options.org;
@@ -341,11 +351,11 @@ export class AIRuntimeAdapter {
   // ============================================================================
 
   static async twitterAuthStatus(): Promise<BrainResult<TwitterAuthStatus>> {
-    return BrainExecutor.execute(['--json', 'twitter', 'auth-status'], {});
+    return BrainExecutor.execute(['twitter', 'auth-status'], {});
   }
 
   static async twitterAuthLogin(token: string, username: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'twitter', 'auth-login'], {
+    return BrainExecutor.execute(['twitter', 'auth-login'], {
       '--token': token,
       '--username': username
     });
@@ -362,15 +372,15 @@ export class AIRuntimeAdapter {
   ): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-p': profile, '-k': key };
     if (priority !== undefined) args['--priority'] = priority.toString();
-    return BrainExecutor.execute(['--json', 'gemini', 'keys-add'], args);
+    return BrainExecutor.execute(['gemini', 'keys-add'], args);
   }
 
   static async geminiKeysList(): Promise<BrainResult<{ keys: any[] }>> {
-    return BrainExecutor.execute(['--json', 'gemini', 'keys-list'], {});
+    return BrainExecutor.execute(['gemini', 'keys-list'], {});
   }
 
   static async geminiKeysValidate(profile: string): Promise<BrainResult<{ valid: boolean }>> {
-    return BrainExecutor.execute(['--json', 'gemini', 'keys-validate', profile], {});
+    return BrainExecutor.execute(['gemini', 'keys-validate', profile], {});
   }
 
   // ============================================================================
@@ -382,7 +392,7 @@ export class AIRuntimeAdapter {
    * Maps to: python -m brain --json health full-stack
    */
   static async healthFullStack(): Promise<BrainResult> {
-    return BrainExecutor.execute(['--json', 'health', 'full-stack'], {});
+    return BrainExecutor.execute(['health', 'full-stack'], {});
   }
 
   /**
@@ -390,7 +400,7 @@ export class AIRuntimeAdapter {
    * Maps to: python -m brain --json health onboarding-status
    */
   static async healthOnboardingStatus(): Promise<BrainResult> {
-    return BrainExecutor.execute(['--json', 'health', 'onboarding-status'], {});
+    return BrainExecutor.execute(['health', 'onboarding-status'], {});
   }
 
   /**
@@ -398,7 +408,7 @@ export class AIRuntimeAdapter {
    * Maps to: python -m brain --json health websocket-status
    */
   static async healthWebSocketStatus(): Promise<BrainResult> {
-    return BrainExecutor.execute(['--json', 'health', 'websocket-status'], {});
+    return BrainExecutor.execute(['health', 'websocket-status'], {});
   }
 
   // ============================================================================
@@ -406,11 +416,11 @@ export class AIRuntimeAdapter {
   // ============================================================================
 
   static async ollamaStatus(): Promise<BrainResult<{ running: boolean }>> {
-    return BrainExecutor.execute(['--json', 'ollama', 'status'], {});
+    return BrainExecutor.execute(['ollama', 'status'], {});
   }
 
   static async ollamaListModels(): Promise<BrainResult<{ models: string[] }>> {
-    return BrainExecutor.execute(['--json', 'ollama', 'list-models'], {});
+    return BrainExecutor.execute(['ollama', 'list-models'], {});
   }
 
   static async ollamaChat(params: {
@@ -423,7 +433,7 @@ export class AIRuntimeAdapter {
     if (params.context) args['--context'] = JSON.stringify(params.context);
     if (params.model) args['--model'] = params.model;
     if (params.stream) args['--stream'] = true;
-    return BrainExecutor.execute(['--json', 'ollama', 'chat'], args);
+    return BrainExecutor.execute(['ollama', 'chat'], args);
   }
 }
 

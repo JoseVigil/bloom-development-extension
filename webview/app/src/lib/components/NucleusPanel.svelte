@@ -162,6 +162,17 @@
           </div>
         {/each}
       </div>
+    {:else if error && nuclei.length === 0}
+      <div class="empty-state error-state" transition:fade>
+        <svg width="48" height="48" viewBox="0 0 16 16" fill="currentColor" opacity="0.4">
+          <path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zM7 3h2v6H7V3zm0 8h2v2H7v-2z"/>
+        </svg>
+        <p>No se pudo cargar la lista de Nuclei</p>
+        <span>{error}</span>
+        <button class="secondary-button" type="button" on:click={loadNuclei} disabled={loading}>
+          Reintentar
+        </button>
+      </div>
     {:else if nuclei.length === 0}
       <div class="empty-state" transition:fade>
         <svg width="48" height="48" viewBox="0 0 16 16" fill="currentColor" opacity="0.3">
@@ -484,6 +495,38 @@
   
   .empty-state span {
     font-size: 0.875rem;
+  }
+
+  .empty-state.error-state p {
+    color: #991b1b;
+    font-weight: 600;
+  }
+
+  .empty-state.error-state span {
+    color: #b91c1c;
+  }
+
+  .secondary-button {
+    margin-top: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    background: white;
+    color: #374151;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .secondary-button:hover:not(:disabled) {
+    background: #f9fafb;
+    border-color: #9ca3af;
+  }
+
+  .secondary-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   
   /* Nuclei Grid */

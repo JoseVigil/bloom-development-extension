@@ -1154,7 +1154,15 @@ function registerInstallHandlers() {
 // WINDOW CREATION
 // ============================================================================
 async function isDevServerRunning() {
-  return false; // ← implement real check if needed (fetch + timeout)
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1000);
+    const res = await fetch('http://localhost:5173/', { signal: controller.signal });
+    clearTimeout(timeout);
+    return res.ok;
+  } catch {
+    return false; // timeout, conexión rechazada, etc. → no hay dev server corriendo
+  }
 }
 
 async function checkOnboardingStatus() {

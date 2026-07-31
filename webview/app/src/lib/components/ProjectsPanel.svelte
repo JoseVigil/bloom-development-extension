@@ -146,7 +146,18 @@
 </script>
 
 <div class="projects-panel">
-  {#if nuclei.length === 0}
+  {#if error && nuclei.length === 0}
+    <div class="empty-state error-state" transition:fade>
+      <svg width="64" height="64" viewBox="0 0 16 16" fill="currentColor" opacity="0.4">
+        <path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zM7 3h2v6H7V3zm0 8h2v2H7v-2z"/>
+      </svg>
+      <h3>No se pudo cargar la lista de Nuclei</h3>
+      <p>{error}</p>
+      <button class="secondary-button" type="button" on:click={loadNuclei} disabled={loading}>
+        Reintentar
+      </button>
+    </div>
+  {:else if nuclei.length === 0}
     <div class="empty-state" transition:fade>
       <svg width="64" height="64" viewBox="0 0 16 16" fill="currentColor" opacity="0.3">
         <path d="M1 2.5A1.5 1.5 0 012.5 1h1.586a1.5 1.5 0 011.06.44l.415.414A.5.5 0 006.207 2H12.5A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 010 12.5v-10z"/>
@@ -601,6 +612,14 @@
   .empty-projects span {
     font-size: 0.875rem;
   }
+
+  .empty-state.error-state h3 {
+    color: #991b1b;
+  }
+
+  .empty-state.error-state p {
+    color: #b91c1c;
+  }
   
   .secondary-button {
     margin-top: 1rem;
@@ -615,9 +634,14 @@
     transition: all 0.2s ease;
   }
   
-  .secondary-button:hover {
+  .secondary-button:hover:not(:disabled) {
     background: #f9fafb;
     border-color: #9ca3af;
+  }
+
+  .secondary-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   
   /* Projects List */

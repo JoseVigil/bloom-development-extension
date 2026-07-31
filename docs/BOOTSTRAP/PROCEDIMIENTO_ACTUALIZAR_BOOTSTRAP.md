@@ -48,6 +48,49 @@ liviano en las tres plataformas sin depender de compiladores nativos.
 
 ---
 
+## 1.5. Verificar que no haya procesos zombie ANTES de buildear
+
+> Agregado tras un caso real: un `bundle.js` viejo quedó corriendo **varias horas**
+> después de haber sido reemplazado, escuchando `:48215` y `:4124`, sin que nada lo matara
+> solo. `build-all.py --only bootstrap` regenera y sincroniza el archivo en
+> `NUCLEUS_HOME/bin/bootstrap/`, pero **no mata el proceso que ya lo tiene abierto en
+> memoria** — Node no relee su propio archivo en disco mientras corre. El resultado es
+> que el build "funciona" (rollout OK, build_number coincide) pero el bug persiste,
+> porque quien responde a las requests sigue siendo el proceso viejo.
+
+Antes de correr el build, confirmá qué hay corriendo:
+
+```bash
+lsof -i :48215
+lsof -i :4124
+ps aux | grep -i bootstrap
+```
+
+Si aparece un PID con antigüedad de horas/días (columna `STARTED` de `ps`), es un
+candidato a zombie. Matalo antes de seguir:
+
+```bash
+# Linux / macOS
+pkill -f "bin/bootstrap/bundle.js"
+pkill -f bootstrap.js   # variante más amplia si el path exacto cambia entre builds
+
+# Windows (PowerShell)
+Get-Process node | Where-Object { $_.Path -like "*bootstrap*" } | Stop-Process -Force
+```
+
+Confirmá que los puertos quedaron libres antes de continuar:
+
+```bash
+lsof -i :48215 -i :4124   # no debería devolver nada
+```
+
+Si en cambio ves **múltiples** procesos de `bundle.js` compitiendo (crash-loop con
+`EADDRINUSE` en los logs), no alcanza con matar uno: matalos todos y confirmá que Electron
+no relance más de una instancia al mismo tiempo (ver nota al final sobre
+`requestSingleInstanceLock`).
+
+---
+
 ## 2. Prerrequisitos por plataforma
 
 | Requisito | Linux | macOS | Windows |
@@ -129,16 +172,46 @@ nucleus service status
 nucleus health --component control_plane
 ```
 
+### 4.1 Si `restart-bootstrap` no alcanza (fallback manual)
+
+En algunos casos `nucleus service restart-bootstrap` no logra matar el proceso viejo
+limpiamente (por ejemplo, si quedó en un estado raro tras un crash previo). Si después de
+correrlo `lsof -i :48215` sigue mostrando el mismo PID de antes del restart, forzá el
+reemplazo a mano:
+
+```bash
+pkill -f "bin/bootstrap/bundle.js"
+nucleus service restart-bootstrap
+lsof -i :48215   # confirmar que el PID cambió
+```
+
+Recién ahí recargar/reabrir Electron. Recargar el webview con un backend viejo todavía
+vivo no muestra el cambio nuevo aunque el rollout haya sido exitoso — el archivo en disco
+cambió, pero el proceso en memoria no.
+
+### 4.2 Nota: por qué esto puede repetirse (pendiente, no parte de este procedimiento)
+
+El código de Electron actual (`installer/conductor/main.js`) no implementa
+`app.requestSingleInstanceLock()`. Esto significa que si se abre una segunda instancia de
+Electron mientras la primera sigue viva, nada le impide lanzar un segundo `bundle.js` que
+compita por los mismos puertos (`EADDRINUSE` en crash-loop). No es parte de este
+procedimiento de build, pero es la causa estructural de por qué los zombies del punto 1.5
+aparecen en primer lugar. Ver ticket aparte para agregar el lock.
+
 ---
 
 ## 5. Checklist para probar el procedimiento de punta a punta
 
+- [ ] `lsof -i :48215 -i :4124` / `ps aux | grep bootstrap` → confirmar que no hay
+      procesos zombie de una corrida anterior (sección 1.5); matarlos si aparecen
 - [ ] Hacer un cambio trivial y verificable en `server-bootstrap.js` (ej: un `console.log`
       con un string único, o un comentario con timestamp)
 - [ ] `python3 build-all.py --only bootstrap`
 - [ ] Confirmar los 5 pasos OK + bloque de rollout en la salida
 - [ ] Comparar `build_number` origen vs. destino (sección 3.2)
 - [ ] `nucleus service restart-bootstrap`
+- [ ] `lsof -i :48215` → confirmar que el PID cambió respecto al de antes del restart
+      (sección 4.1); si no cambió, matar a mano y reintentar
 - [ ] `nucleus health --component control_plane` → `healthy: true`, `state: RUNNING`
 - [ ] Confirmar el cambio real: revisar
       `NUCLEUS_HOME/logs/nucleus/control_plane/nucleus_control_plane_YYYYMMDD.log`

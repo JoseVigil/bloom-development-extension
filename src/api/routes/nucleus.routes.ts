@@ -55,6 +55,12 @@ export async function nucleusRoutes(fastify: FastifyInstance) {
     
     const result = await BrainApiAdapter.nucleusList(parent);
     
+    // CORRECCIÓN (2026-07-30): not_authenticated es un estado válido en
+    // pre-onboarding, no una excepción del CLI — no debe devolver 500.
+    if (result.status === 'not_authenticated') {
+      return { nuclei: [] };
+    }
+
     if (result.status !== 'success' || !result.data) {
       return reply.code(500).send({ 
         error: result.error || 'Failed to list nuclei' 

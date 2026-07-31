@@ -3,6 +3,7 @@
   import { theme } from '$lib/stores/theme';
   import SystemStatus from '$lib/components/SystemStatus.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import TabBar from '$lib/components/TabBar.svelte';
   import { FileText, Zap } from 'lucide-svelte';
 
   // ============================================================================
@@ -47,6 +48,18 @@
     rightPaneCollapsed = !rightPaneCollapsed;
     console.log('📐 [UI] Right pane collapsed:', rightPaneCollapsed);
   }
+
+  // PLACEHOLDER — TabBar.svelte emite estos eventos pero el modal de "New
+  // Mandate" y el panel de Alfred todavía no existen como componentes
+  // Svelte (son trabajo de pasos posteriores, no de este paso 2). Por ahora
+  // solo logueamos para no dejar el evento sin handler.
+  function handleNewMandate() {
+    console.log('🆕 [TabBar] newmandate — modal aún no implementado');
+  }
+
+  function handleToggleAlfred() {
+    console.log('🤖 [TabBar] togglealfred — panel de Alfred aún no implementado');
+  }
 </script>
 
 {#if isChecking}
@@ -59,7 +72,7 @@
     {#if showSidebar}
       <header class="header">
         <div class="header-left">
-          <h1 class="title">BTIP Studio</h1>
+          <h1 class="title">CAMBIO TEST 123</h1>
         </div>
         <div class="header-center">
           <SystemStatus mode="badge" />
@@ -80,7 +93,10 @@
         <Sidebar />
 
         <main class="content" role="main">
-          <slot />
+          <TabBar on:newmandate={handleNewMandate} on:togglealfred={handleToggleAlfred} />
+          <div class="content-body">
+            <slot />
+          </div>
         </main>
 
         <aside class="right-pane" class:collapsed={rightPaneCollapsed} role="region" aria-label="Side panel">
@@ -216,8 +232,15 @@
 
   .content {
     flex: 1;
-    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background: var(--bg-primary);
+  }
+
+  .content-body {
+    flex: 1;
+    overflow: auto;
   }
 
   .right-pane {
