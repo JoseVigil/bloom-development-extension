@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import path from 'path';
+import fs from 'fs';
 import type { FastifyInstance } from 'fastify';
 import type * as vscode from 'vscode';
 import { WebSocketManager } from '../server/WebSocketManager';
@@ -146,12 +147,33 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   });
 
   // Swagger UI
-  // baseDir points to the bootstrap/ directory where static/ lives.
-  // Without this, fastify-swagger-ui resolves static/ relative to __dirname
-  // which in the bundle context resolves to bin/ instead of bin/bootstrap/.
+  //
+  // Este mismo server.ts corre en dos contextos con __dirname distinto:
+  //
+  //   1. Bootstrap standalone (bundle.js, bundleado por esbuild):
+  //      __dirname resuelve a bin/bootstrap/, donde build-all.py copia
+  //      explícitamente static/ (assets de swagger-ui-bundle.js, css, etc.)
+  //
+  //   2. Plugin de VS Code (out/src/api/server.js, compilado por tsc sin
+  //      bundlear): __dirname resuelve a out/src/api/, donde NO hay
+  //      garantía de que exista un static/ propio.
+  //
+  // Antes, baseDir apuntaba siempre a __dirname (sin '/static'), lo cual
+  // rompía el bootstrap standalone porque los assets viven un nivel más
+  // abajo (bin/bootstrap/static/, no bin/bootstrap/).
+  //
+  // Fix: si existe un static/ local junto al archivo compilado, lo usamos
+  // (caso bootstrap). Si no existe (caso plugin VS Code), no seteamos
+  // baseDir y dejamos que @fastify/swagger-ui use su propio directorio
+  // interno (node_modules/@fastify/swagger-ui/static/) — que es el
+  // comportamiento default del paquete y el que ya funcionaba dentro de
+  // VS Code antes de este override.
+  const localStaticDir = path.join(__dirname, 'static');
+  const swaggerBaseDir = fs.existsSync(localStaticDir) ? localStaticDir : undefined;
+
   await fastify.register(swaggerUI, {
     routePrefix: '/api/docs',
-    baseDir: path.join(__dirname),
+    ...(swaggerBaseDir ? { baseDir: swaggerBaseDir } : {}),
     uiConfig: {
       docExpansion: 'list',
       deepLinking: true,
@@ -164,7 +186,16 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
       showCommonExtensions: true
     },
     staticCSP: true,
-    transformStaticCSP: (header) => header
+    // transformStaticCSP: swagger-ui-bundle.js inyecta un <style> inline al
+    // renderizar la UI. El CSP default de @fastify/swagger-ui (staticCSP: true)
+    // no incluye 'unsafe-inline' en style-src, así que el navegador lo bloquea
+    // (silencioso — no rompe nada crítico, pero puede afectar estilos/temas).
+    // Esto solo corre en localhost como herramienta de desarrollo, así que
+    // relajamos style-src en vez de dejar el CSP estricto pensado para prod.
+    transformStaticCSP: (header) => header.replace(
+      "style-src 'self' https:",
+      "style-src 'self' https: 'unsafe-inline'",
+    ),
   });
 
   // Basic health check (keep this as fallback at root)

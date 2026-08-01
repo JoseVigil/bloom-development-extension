@@ -254,6 +254,7 @@ bloom-development-extension/
     │   │   └── repository.py
     │   ├── github/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── api_client.py
     │   │   └── models.py
     │   ├── health/
@@ -368,12 +369,15 @@ bloom-development-extension/
         ├── context.py
         ├── credentials/
         │   ├── __init__.py
+        │   ├── __pycache__/ [... cache]
         │   ├── base.py
         │   ├── claude_manager.py
+        │   ├── gemini_manager.py
+        │   ├── github_manager.py
         │   ├── openai_manager.py
         │   ├── unified_manager.py
+        │   ├── vault.py
         │   └── xai_manager.py
-        ├── credentials.py
         ├── environment.py
         ├── github_types.py
         ├── logger.py

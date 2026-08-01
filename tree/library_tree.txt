@@ -215,7 +215,7 @@ BloomNucleus/
 │   │           ├── 001_b90aca02_223617.ndjson
 │   │           └── 002_b90aca02_223819.ndjson
 │   └── workers/
-│       ├── capabilities_75938.json
+│       ├── capabilities_1467.json
 │       └── nucleus_worker.pid
 ├── hooks/
 │   ├── post_launch/
@@ -229,25 +229,51 @@ BloomNucleus/
 │   ├── brain/
 │   │   ├── core/
 │   │   │   ├── brain_core_20260727.log
-│   │   │   └── brain_core_20260728.log
+│   │   │   ├── brain_core_20260728.log
+│   │   │   ├── brain_core_20260729.log
+│   │   │   ├── brain_core_20260730.log
+│   │   │   ├── brain_core_20260731.log
+│   │   │   └── brain_core_20260801.log
 │   │   ├── profile/
 │   │   │   ├── brain_profile_20260727.log
-│   │   │   └── brain_profile_20260728.log
+│   │   │   ├── brain_profile_20260728.log
+│   │   │   ├── brain_profile_20260729.log
+│   │   │   ├── brain_profile_20260730.log
+│   │   │   ├── brain_profile_20260731.log
+│   │   │   └── brain_profile_20260801.log
 │   │   ├── server/
 │   │   │   ├── brain_server_20260727.log
 │   │   │   ├── brain_server_20260728.log
+│   │   │   ├── brain_server_20260729.log
+│   │   │   ├── brain_server_20260730.log
+│   │   │   ├── brain_server_20260731.log
+│   │   │   ├── brain_server_20260801.log
 │   │   │   ├── brain_server_event_bus_20260727.log
 │   │   │   ├── brain_server_event_bus_20260728.log
+│   │   │   ├── brain_server_event_bus_20260729.log
+│   │   │   ├── brain_server_event_bus_20260730.log
+│   │   │   ├── brain_server_event_bus_20260731.log
+│   │   │   ├── brain_server_event_bus_20260801.log
 │   │   │   ├── brain_server_manager_20260727.log
-│   │   │   └── brain_server_manager_20260728.log
+│   │   │   ├── brain_server_manager_20260728.log
+│   │   │   ├── brain_server_manager_20260729.log
+│   │   │   ├── brain_server_manager_20260730.log
+│   │   │   ├── brain_server_manager_20260731.log
+│   │   │   └── brain_server_manager_20260801.log
 │   │   └── service/
 │   │       ├── brain_service.log
 │   │       └── brain_service_20260727.log
 │   ├── build/ [... build output]
 │   ├── chromium/
 │   ├── conductor/
+│   │   ├── core/
+│   │   │   ├── conductor_core_20260730.log
+│   │   │   └── conductor_core_20260731.log
 │   │   ├── onboarding/
-│   │   │   └── conductor_onboarding_20260728.log
+│   │   │   ├── conductor_onboarding_20260728.log
+│   │   │   ├── conductor_onboarding_20260729.log
+│   │   │   ├── conductor_onboarding_20260730.log
+│   │   │   └── conductor_onboarding_20260731.log
 │   │   └── setup/
 │   │       └── conductor_setup_20260728.log
 │   ├── host/
@@ -267,11 +293,15 @@ BloomNucleus/
 │   ├── install/
 │   ├── metamorph/
 │   │   ├── metamorph_core_20260727.log
-│   │   └── metamorph_operations_20260728.log
+│   │   ├── metamorph_operations_20260728.log
+│   │   ├── metamorph_operations_20260729.log
+│   │   ├── metamorph_operations_20260730.log
+│   │   └── metamorph_operations_20260801.log
 │   ├── nucleus/
 │   │   ├── control_plane/
-│   │   │   ├── nucleus_control_plane_20260727.log
-│   │   │   └── nucleus_control_plane_20260728.log
+│   │   │   ├── nucleus_control_plane_20260729.log
+│   │   │   ├── nucleus_control_plane_20260730.log
+│   │   │   └── nucleus_control_plane_20260731.log
 │   │   ├── harness/
 │   │   │   └── harness.log
 │   │   ├── hooks/
@@ -281,25 +311,47 @@ BloomNucleus/
 │   │   │   │   └── nucleus_profile_disconnected_20260727.log
 │   │   │   └── system_health/
 │   │   │       ├── nucleus_system_health_20260727.log
-│   │   │       └── nucleus_system_health_20260728.log
+│   │   │       ├── nucleus_system_health_20260728.log
+│   │   │       ├── nucleus_system_health_20260729.log
+│   │   │       ├── nucleus_system_health_20260730.log
+│   │   │       ├── nucleus_system_health_20260731.log
+│   │   │       └── nucleus_system_health_20260801.log
 │   │   ├── nucleus_brain_poller_20260727.log
 │   │   ├── nucleus_brain_poller_20260728.log
+│   │   ├── nucleus_brain_poller_20260729.log
+│   │   ├── nucleus_brain_poller_20260731.log
 │   │   ├── nucleus_orchestration_20260727.log
 │   │   ├── nucleus_orchestration_20260728.log
+│   │   ├── nucleus_orchestration_20260729.log
+│   │   ├── nucleus_orchestration_20260730.log
+│   │   ├── nucleus_orchestration_20260731.log
+│   │   ├── nucleus_orchestration_20260801.log
 │   │   ├── nucleus_synapse_20260727.log
 │   │   ├── nucleus_synapse_20260728.log
+│   │   ├── nucleus_synapse_20260729.log
+│   │   ├── nucleus_synapse_20260730.log
 │   │   ├── nucleus_temporal_20260727.log
 │   │   ├── nucleus_temporal_20260728.log
+│   │   ├── nucleus_temporal_20260729.log
+│   │   ├── nucleus_temporal_20260730.log
+│   │   ├── nucleus_temporal_20260731.log
 │   │   ├── service/
 │   │   │   ├── nucleus_service.log
 │   │   │   ├── nucleus_service_20260727.log
-│   │   │   └── nucleus_service_20260728.log
+│   │   │   ├── nucleus_service_20260728.log
+│   │   │   ├── nucleus_service_20260729.log
+│   │   │   └── nucleus_service_20260731.log
 │   │   ├── svelte_dev/
 │   │   │   ├── nucleus_svelte_dev_20260727.log
-│   │   │   └── nucleus_svelte_dev_20260728.log
+│   │   │   ├── nucleus_svelte_dev_20260728.log
+│   │   │   └── nucleus_svelte_dev_20260731.log
 │   │   └── worker/
+│   │       ├── nucleus_workers_snapshot_20260729.log
+│   │       ├── nucleus_workers_snapshot_20260730.log
 │   │       ├── worker_manager_20260727.log
-│   │       └── worker_manager_20260728.log
+│   │       ├── worker_manager_20260728.log
+│   │       ├── worker_manager_20260729.log
+│   │       └── worker_manager_20260731.log
 │   ├── ollama/
 │   │   └── service/
 │   │       └── ollama_service.log
@@ -307,6 +359,8 @@ BloomNucleus/
 │   │   ├── bloom-sensor.error.log
 │   │   └── bloom-sensor.log
 │   ├── sentinel/
+│   │   ├── ollama_service_20260729.log
+│   │   ├── ollama_service_20260730.log
 │   │   ├── onboarding/
 │   │   │   └── onboarding_b90aca02-bae4-44aa-a36d-1530c21da8cb_20260728.log
 │   │   ├── profiles/
@@ -317,15 +371,25 @@ BloomNucleus/
 │   │   │   │   ├── 001_b90aca02_223617_engine_read.log
 │   │   │   │   └── 001_b90aca02_223617_netlog.json
 │   │   │   └── sentinel_b90aca02-bae4-44aa-a36d-1530c21da8cb_20260727.log
-│   │   └── sentinel_core_20260727.log
+│   │   ├── sentinel_core_20260727.log
+│   │   ├── sentinel_core_20260729.log
+│   │   ├── sentinel_core_20260730.log
+│   │   └── vault/
+│   │       ├── vault_status_20260729.log
+│   │       ├── vault_status_20260730.log
+│   │       ├── vault_status_20260731.log
+│   │       └── vault_status_20260801.log
 │   ├── synapse_trace/
 │   │   ├── synapse_trace_001_b90aca02_223617.log
 │   │   └── synapse_trace_002_b90aca02_223819.log
 │   ├── telemetry.json
 │   ├── temporal/
-│   │   └── server/
-│   │       ├── temporal_server_20260727.log
-│   │       └── temporal_server_20260728.log
+│   │   ├── server/
+│   │   │   ├── temporal_server_20260727.log
+│   │   │   ├── temporal_server_20260728.log
+│   │   │   └── temporal_server_20260731.log
+│   │   ├── temporal.db
+│   │   └── temporal.pid
 │   └── workspace/
 │       └── setup/
 ├── models/
@@ -425,6 +489,17 @@ BloomNucleus/
 │   ├── control_plane_api.pid
 │   ├── nucleus_worker.pid
 │   └── temporal_server.pid
+├── tree/
+│   ├── appdata_tree.txt
+│   ├── brain_tree.txt
+│   ├── conductor_tree.txt
+│   ├── cortex_tree.txt
+│   ├── installer_tree.txt
+│   ├── native_tree.txt
+│   ├── nucleus_tree.txt
+│   ├── sentinel_tree.txt
+│   ├── src_tree.txt
+│   └── webview_tree.txt
 ├── users/
 └── workers/
     └── brain/
