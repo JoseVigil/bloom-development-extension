@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const BLOOM_DIR_NAME = '.bloom';
 const NUCLEUS_PREFIX = '.nucleus-';
-const NUCLEUS_CONFIG_REL_PATH = path.join('.core', 'nucleus-config.json');
+const NUCLEUS_CONFIG_REL_PATH = path.join('.core', '.nucleus-config.json');
 
 /**
  * Espeja NucleusConfigFile (Go, internal/supervisor/service.go).

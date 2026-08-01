@@ -459,6 +459,52 @@ func getBloomDir() string {
 	return os.Getenv("BLOOM_DIR")
 }
 
+// getWorkspacePath returns the active project's workspace root by reading
+// nucleus.json. Hermana de getBloomDir() — mismo archivo fuente
+// (<BloomNucleusBase>/config/nucleus.json), mismo criterio de fallback,
+// pero lee onboarding.workspace_path en vez de installation.origin_path:
+// origin_path es la raíz del REPO de Bloom (para bundle.js/webview),
+// workspace_path es el workspace del PROYECTO del usuario (para el árbol
+// de mandates — ver MandateFsContext en src/api/server.ts).
+//
+// BUG (mismo patrón que BLOOM_BRAIN_PATH, ver comentario en
+// bootControlPlane): bootControlPlane() reenviaba
+// "BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH") crudo. Bajo
+// systemd/NSSM (sin override explícito en el entorno del propio proceso
+// Nucleus) esa env var siempre llega vacía, así que el hijo (bundle.js)
+// recibía BLOOM_NUCLEUS_PATH="" (definida pero falsy) y server.ts nunca
+// registraba las rutas de /api/v1/mandates.
+//
+// Fix: resolver desde nucleus.json (mismo archivo que ya escribe
+// nucleus_manager.js durante onboarding), con fallback al env var por si
+// alguien lo overridea a mano — mismo criterio de precedencia que
+// resolveBrainInterpreter().
+func getWorkspacePath() string {
+	// 1. Explicit override — respected verbatim (e.g. a systemd unit
+	//    Environment= override, or a developer running outside the service).
+	if p := os.Getenv("BLOOM_NUCLEUS_PATH"); p != "" {
+		return p
+	}
+
+	// 2. Read onboarding.workspace_path from nucleus.json.
+	nucleusJSON := filepath.Join(getBloomNucleusBase(), "config", "nucleus.json")
+	if data, err := os.ReadFile(nucleusJSON); err == nil {
+		var cfg struct {
+			Onboarding struct {
+				WorkspacePath string `json:"workspace_path"`
+			} `json:"onboarding"`
+		}
+		if json.Unmarshal(data, &cfg) == nil && cfg.Onboarding.WorkspacePath != "" {
+			return cfg.Onboarding.WorkspacePath
+		}
+	}
+
+	// 3. Nothing resolved — caller (bootControlPlane) is responsible for
+	//    logging the degraded state; server.ts already warns clearly when
+	//    it receives this empty and skips registering mandate routes.
+	return ""
+}
+
 // getNucleusExecutablePath finds the nucleus executable
 func getNucleusExecutablePath() (string, error) {
 	// 1. Check BLOOM_BIN_DIR environment variable

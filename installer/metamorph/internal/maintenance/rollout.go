@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"metamorph/internal/core"
 
@@ -25,6 +27,14 @@ type component struct {
 	Key      string
 	SourceFn func(repoRoot string) string
 	DestFn   func(basePath string) string
+	// PreDeployFn is called after the source is confirmed to exist but before
+	// any files are copied. It receives repoRoot, the resolved destination
+	// directory, and the dryRun flag. Returning an error aborts this
+	// component's deployment entirely — no files are touched. This is the
+	// place for steps that must happen before the copy, such as stopping a
+	// service that has the destination files open/loaded (e.g. bootstrap
+	// stopping Nucleus before bundle.js is overwritten).
+	PreDeployFn func(c *core.Core, repoRoot, dst string, dryRun bool) error
 	// PostDeployFn is called after a successful file copy. It receives the
 	// resolved source directory, the destination directory, and the dryRun flag.
 	// Returning an error marks the component deployment as failed but does NOT
@@ -192,10 +202,23 @@ var allComponents = []component{
 		// locally (rollout_bootstrap(), which has no platform filter) — never
 		// Metamorph. Adding "linux" here so a packaged/production rollout on Linux
 		// also deploys bootstrap, matching build-all.py's behavior.
-		Key:      "bootstrap",
-		SourceFn: func(r string) string { return filepath.Join(r, "installer", "native", "bin", "bootstrap") },
-		DestFn:   func(b string) string { return filepath.Join(b, "bin", "bootstrap") },
-		Platforms: []string{"windows", "darwin", "linux"},
+		//
+		// bundle.js is loaded into memory by a Node child process that Nucleus
+		// spawns (bootControlPlane() in service.go). Overwriting the file on disk
+		// does NOT affect that already-running process — there is no hot-reload.
+		// PreDeployFn/PostDeployFn below bracket the copy with a full stop/start
+		// of the Nucleus OS service, exactly like the previous manual sequence:
+		//   systemctl --user stop com.bloom.nucleus.service
+		//   <rebuild + copy bundle.js>
+		//   systemctl --user start com.bloom.nucleus.service
+		// so `rollout --only bootstrap` alone is enough to ship an updated
+		// bundle.js and have it actually served by a fresh process.
+		Key:          "bootstrap",
+		SourceFn:     func(r string) string { return filepath.Join(r, "installer", "native", "bin", "bootstrap") },
+		DestFn:       func(b string) string { return filepath.Join(b, "bin", "bootstrap") },
+		Platforms:    []string{"windows", "darwin", "linux"},
+		PreDeployFn:  bootstrapPreDeploy,
+		PostDeployFn: bootstrapPostDeploy,
 	},
 	{
 		Key:      "hooks",
@@ -423,6 +446,118 @@ func chromePostExtract(dst string) error {
 		}
 	}
 	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// bootstrap pre/post-deploy hooks — full Nucleus service restart
+// ─────────────────────────────────────────────────────────────────────────────
+
+// nucleusServiceName resolves the platform-specific identifier for the
+// Nucleus OS service:
+//   - Windows: the NSSM-installed Service Control Manager service name.
+//   - macOS:   the launchd job label.
+//   - Linux:   the systemd --user unit name (confirmed against the existing
+//     manual workflow: `systemctl --user stop/start com.bloom.nucleus.service`).
+//
+// The Windows and macOS values are assumptions based on the same naming
+// convention as the confirmed Linux unit; override with
+// BLOOM_NUCLEUS_SERVICE_NAME if the real installer uses something else.
+func nucleusServiceName() string {
+	if v := strings.TrimSpace(os.Getenv("BLOOM_NUCLEUS_SERVICE_NAME")); v != "" {
+		return v
+	}
+	switch runtime.GOOS {
+	case "windows":
+		return "BloomNucleus"
+	case "darwin":
+		return "com.bloom.nucleus"
+	default: // linux
+		return "com.bloom.nucleus.service"
+	}
+}
+
+// bootstrapPreDeploy stops the Nucleus service before bundle.js is
+// overwritten. It also ensures the process is elevated first — on Windows,
+// ensureElevated() re-launches under UAC and exits the current process if
+// needed (a no-op on macOS/Linux, which control their service as the current
+// user). Returning an error here aborts the bootstrap component before any
+// files are touched.
+func bootstrapPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	name := nucleusServiceName()
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] bootstrap: would ensure elevation and stop %q before copying bundle.js", name)
+		return nil
+	}
+
+	if err := ensureElevated(); err != nil {
+		return fmt.Errorf("bootstrap: elevation required to control %q: %w", name, err)
+	}
+
+	c.Logger.Info("🛑 Stopping %s before updating the bootstrap bundle...", name)
+	if err := controlService(name, false); err != nil {
+		return fmt.Errorf("bootstrap: could not stop %s: %w", name, err)
+	}
+	c.Logger.Success("✓ %s stopped", name)
+	return nil
+}
+
+// bootstrapPostDeploy starts the Nucleus service again once the new
+// bundle.js is in place, then polls the Control Plane's health endpoint the
+// same way `nucleus service restart-bootstrap` does (up to 10s), so the
+// operator gets immediate confirmation the new build is actually serving
+// traffic rather than just "the copy succeeded".
+//
+// A failed health check is logged as a warning, not a fatal error: the
+// service was restarted successfully as far as the OS is concerned, and a
+// slow-starting Control Plane (or a genuine startup bug in the new bundle)
+// is something the operator needs to see, not something rollout should mask
+// by reporting failure on an otherwise-successful restart.
+func bootstrapPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	name := nucleusServiceName()
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] bootstrap: would start %q and verify Control Plane health on :48215", name)
+		return nil
+	}
+
+	c.Logger.Info("🚀 Starting %s with the updated bundle.js...", name)
+	if err := controlService(name, true); err != nil {
+		return fmt.Errorf("bootstrap: could not start %s: %w", name, err)
+	}
+	c.Logger.Success("✓ %s started", name)
+
+	c.Logger.Info("🔎 Waiting for Control Plane to come up on :48215 ...")
+	if err := waitForControlPlane(10 * time.Second); err != nil {
+		c.Logger.Warning("⚠️  bootstrap: %v — check logs/nucleus/control_plane/ for details", err)
+		return nil
+	}
+	c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")
+	return nil
+}
+
+// waitForControlPlane polls the Control Plane's /api/docs endpoint until it
+// responds with a non-5xx status or the timeout elapses. Mirrors the health
+// check documented for `nucleus service restart-bootstrap` in
+// BOOTSTRAP_ARCHITECTURE.md.
+func waitForControlPlane(timeout time.Duration) error {
+	client := http.Client{Timeout: 1500 * time.Millisecond}
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		resp, err := client.Get("http://127.0.0.1:48215/api/docs")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode < 500 {
+				return nil
+			}
+			lastErr = fmt.Errorf("control plane returned status %d", resp.StatusCode)
+		} else {
+			lastErr = err
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return fmt.Errorf("control plane did not respond within %s: %w", timeout, lastErr)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -794,7 +929,16 @@ The 'ionpump' component is special: after copying the bundled ZIPs and manifest,
 it automatically runs the full deploy pipeline:
   1. build-bootstrap-ions.py  (if installer/ions/ source tree is present)
   2. ion-pump reconcile        (atomic swap into ionsites/)
-  3. ion-pump verify           (SHA-256 integrity check)`,
+  3. ion-pump verify           (SHA-256 integrity check)
+
+The 'bootstrap' component is also special: bundle.js is loaded into memory by
+a Node process that Nucleus supervises, so overwriting the file on disk alone
+does not update the running Control Plane. --only bootstrap therefore:
+  1. Stops the Nucleus service (systemctl --user / launchctl / SCM)
+  2. Copies the new bundle.js
+  3. Starts the Nucleus service again
+  4. Polls http://127.0.0.1:48215/api/docs for up to 10s to confirm the new
+     Control Plane build is actually serving traffic`,
 
 		Annotations: map[string]string{
 			"category": "MAINTENANCE",
@@ -932,6 +1076,19 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 			c.Logger.Warning("⚠️  %s", msg)
 			result.Skipped = append(result.Skipped, msg)
 			continue
+		}
+
+		// Run optional pre-deploy hook (e.g. stopping the Nucleus service
+		// before bootstrap's bundle.js is overwritten). An error here aborts
+		// this component before any files are copied.
+		if comp.PreDeployFn != nil {
+			if err := comp.PreDeployFn(c, repoRoot, dst, dryRun); err != nil {
+				msg := fmt.Sprintf("%s: pre-deploy failed: %v", comp.Key, err)
+				c.Logger.Error("❌ %s", msg)
+				result.Errors = append(result.Errors, msg)
+				result.Status = "partial"
+				continue
+			}
 		}
 
 		if dryRun {

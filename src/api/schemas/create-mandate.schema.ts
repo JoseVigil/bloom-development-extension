@@ -18,7 +18,7 @@ export const StandardCreateBody = Type.Object(
     name: Type.String({ minLength: 1 }),
     objective: Type.String({ minLength: 1 }),
   },
-  { additionalProperties: false },
+  { $id: 'StandardCreateBody', additionalProperties: false },
 );
 
 export const GenesisCreateBody = Type.Object(
@@ -28,7 +28,7 @@ export const GenesisCreateBody = Type.Object(
     name: Type.String({ minLength: 1 }),
     source: Type.String({ minLength: 1 }),
   },
-  { additionalProperties: false },
+  { $id: 'GenesisCreateBody', additionalProperties: false },
 );
 
 export const DomainExpansionCreateBody = Type.Object(
@@ -39,16 +39,28 @@ export const DomainExpansionCreateBody = Type.Object(
     source: Type.String({ minLength: 1 }),
     baseGenesis: Type.String({ minLength: 1 }),
   },
-  { additionalProperties: false },
+  { $id: 'DomainExpansionCreateBody', additionalProperties: false },
 );
 
 // oneOf + discriminator: le da a Ajv un error específico por rama en vez de
 // "no matching schema in anyOf" — el mensaje de error es parte del
 // contrato del comando CLI (§5.1, nota final).
+//
+// IMPORTANTE (fix Swagger UI): OpenAPI 3.0 exige que, cuando se usa
+// `discriminator`, cada rama del `oneOf` sea un `$ref` a un schema con
+// nombre — no un objeto inline. Antes acá se insertaban StandardCreateBody
+// etc. por valor; Ajv los validaba igual (por eso el endpoint funcionaba
+// en runtime), pero Swagger UI no puede resolver un discriminator con
+// ramas inline y omite la operación de la lista sin avisar en consola.
+// Type.Ref() genera el `$ref` correcto porque cada schema ahora tiene $id.
 export const CreateMandateBody = Type.Unsafe<
   Static<typeof StandardCreateBody> | Static<typeof GenesisCreateBody> | Static<typeof DomainExpansionCreateBody>
 >({
-  oneOf: [StandardCreateBody, GenesisCreateBody, DomainExpansionCreateBody],
+  oneOf: [
+    Type.Ref(StandardCreateBody),
+    Type.Ref(GenesisCreateBody),
+    Type.Ref(DomainExpansionCreateBody),
+  ],
   discriminator: { propertyName: 'mandateType' },
 });
 

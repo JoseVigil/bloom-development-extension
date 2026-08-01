@@ -305,13 +305,42 @@ export function createNucleusLink(
     };
 }
 
-export function detectProjectType(bloomPath: string): ProjectType | null {
+/**
+ * Resuelve el path real de nucleus-config.json dentro de un .bloom/.
+ *
+ * La estructura real en disco es .bloom/.nucleus-{slug}/.core/nucleus-config.json
+ * (no .bloom/core/nucleus-config.json). Si se conoce el slug (org), se arma
+ * el path directo. Si no, se busca la única subcarpeta .nucleus-* presente
+ * (multi-org en el mismo .bloom no está soportado, mismo criterio que
+ * org-resolver.ts). Devuelve null si no hay ninguna o hay más de una.
+ */
+function resolveNucleusConfigPath(bloomPath: string, org?: string): string | null {
+    const fs = require('fs');
+    const path = require('path');
+
+    if (org) {
+        return path.join(bloomPath, `.nucleus-${org}`, '.core', 'nucleus-config.json');
+    }
+
+    if (!fs.existsSync(bloomPath)) {
+        return null;
+    }
+
+    const nucleusDirs = fs.readdirSync(bloomPath).filter((d: string) => d.startsWith('.nucleus-'));
+    if (nucleusDirs.length !== 1) {
+        return null;
+    }
+
+    return path.join(bloomPath, nucleusDirs[0], '.core', 'nucleus-config.json');
+}
+
+export function detectProjectType(bloomPath: string, org?: string): ProjectType | null {
     const fs = require('fs');
     const path = require('path');
     
     // Check for nucleus-config.json
-    const nucleusConfigPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-    if (fs.existsSync(nucleusConfigPath)) {
+    const nucleusConfigPath = resolveNucleusConfigPath(bloomPath, org);
+    if (nucleusConfigPath && fs.existsSync(nucleusConfigPath)) {
         return 'nucleus';
     }
     
@@ -330,12 +359,12 @@ export function detectProjectType(bloomPath: string): ProjectType | null {
     return null;
 }
 
-export function isNucleusProject(bloomPath: string): boolean {
-    return detectProjectType(bloomPath) === 'nucleus';
+export function isNucleusProject(bloomPath: string, org?: string): boolean {
+    return detectProjectType(bloomPath, org) === 'nucleus';
 }
 
-export function isBTIPProject(bloomPath: string): boolean {
-    return detectProjectType(bloomPath) === 'btip';
+export function isBTIPProject(bloomPath: string, org?: string): boolean {
+    return detectProjectType(bloomPath, org) === 'btip';
 }
 
 export function hasNucleusLink(bloomPath: string): boolean {
@@ -345,13 +374,12 @@ export function hasNucleusLink(bloomPath: string): boolean {
     return fs.existsSync(nucleusLinkPath);
 }
 
-export function loadNucleusConfig(bloomPath: string): NucleusConfig | null {
+export function loadNucleusConfig(bloomPath: string, org?: string): NucleusConfig | null {
     const fs = require('fs');
-    const path = require('path');
     
     try {
-        const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-        if (!fs.existsSync(configPath)) {
+        const configPath = resolveNucleusConfigPath(bloomPath, org);
+        if (!configPath || !fs.existsSync(configPath)) {
             return null;
         }
         
@@ -381,12 +409,21 @@ export function loadNucleusLink(bloomPath: string): NucleusLink | null {
     }
 }
 
-export function saveNucleusConfig(bloomPath: string, config: NucleusConfig): boolean {
+export function saveNucleusConfig(bloomPath: string, config: NucleusConfig, org?: string): boolean {
     const fs = require('fs');
     const path = require('path');
-    
+
     try {
-        const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
+        // Al guardar, si no hay .nucleus-{org}/.core todavía, hace falta el
+        // slug para poder crearlo (no hay nada que descubrir en disco aún).
+        const slug = org || config.organization?.name;
+        if (!slug) {
+            console.error('Error saving nucleus config: no se pudo determinar el slug de organización');
+            return false;
+        }
+        const nucleusDir = path.join(bloomPath, `.nucleus-${slug}`, '.core');
+        fs.mkdirSync(nucleusDir, { recursive: true });
+        const configPath = path.join(nucleusDir, 'nucleus-config.json');
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
         return true;
     } catch (error) {

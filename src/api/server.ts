@@ -63,7 +63,19 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   const resolvedConfig = { ...config, outputChannel };
 
   const fastify = Fastify({
-    logger: true
+    logger: true,
+    ajv: {
+      plugins: [
+        // `discriminator` es una keyword de OpenAPI 3.x, no de JSON Schema —
+        // se usa para que Swagger UI resuelva el oneOf de CreateMandateBody
+        // (ver create-mandate.schema.ts). Ajv en modo estricto no la conoce
+        // y rompe la compilación del validador al arrancar. La declaramos
+        // como keyword de anotación pura (sin validate/compile) para que
+        // Ajv la ignore en runtime sin desactivar el modo estricto para todo
+        // lo demás.
+        (ajv) => ajv.addKeyword({ keyword: 'discriminator' }),
+      ],
+    },
   });
 
   // ✅ Get UserManager from config (passed as dependency)
@@ -132,7 +144,8 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
         { name: 'project', description: 'Project detection and linking' },
         { name: 'profile', description: 'Chrome profiles & AI accounts' },
         { name: 'auth', description: 'GitHub and Gemini authentication' },
-        { name: 'explorer', description: 'File system explorer' }
+        { name: 'explorer', description: 'File system explorer' },
+        { name: 'mandates', description: 'Mandate creation and lifecycle (genesis, domain_expansion, standard)' }
       ],
       components: {
         securitySchemes: {
@@ -249,7 +262,13 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
 
   if (!workspacePath) {
     console.warn(
-      '[Server] ⚠️  BLOOM_NUCLEUS_PATH no está definida — /mandates y /internal/mandate-event no se registran',
+      '[Server] ⚠️  ⚠️  ⚠️  BLOOM_NUCLEUS_PATH no está definida en el entorno de ESTE proceso.',
+    );
+    console.warn(
+      '[Server] ⚠️  Las rutas /api/v1/mandates y /api/internal/mandate-event NO se van a registrar.',
+    );
+    console.warn(
+      '[Server] ⚠️  No van a aparecer en /api/docs ni van a responder (404). Seteá BLOOM_NUCLEUS_PATH y reiniciá el server.',
     );
   } else {
     // Mismo fix que en create-mandate.handler.ts: resolveOrg hace

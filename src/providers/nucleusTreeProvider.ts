@@ -49,10 +49,10 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
 
         // Caso 1: Workspace actual ES un Nucleus
         const bloomPath = path.join(this.workspaceRoot, '.bloom');
-        const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
+        const configPath = path.join(bloomPath, `.nucleus-${org}`, '.core', 'nucleus-config.json');
 
         if (fs.existsSync(configPath)) {
-            const config = loadNucleusConfig(bloomPath);
+            const config = loadNucleusConfig(bloomPath, org);
             if (config?.organization?.name === org) {
                 return config;
             }
@@ -66,7 +66,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                 if (link.organizationName === org && link.nucleusPath) {
                     const fullPath = path.resolve(this.workspaceRoot, link.nucleusPath);
                     if (fs.existsSync(fullPath)) {
-                        return loadNucleusConfig(path.join(fullPath, '.bloom'));
+                        return loadNucleusConfig(path.join(fullPath, '.bloom'), org);
                     }
                 }
             } catch {}
@@ -80,7 +80,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         if (fs.existsSync(nucleusPath)) {
             const nucleusBloomPath = path.join(nucleusPath, '.bloom');
             if (fs.existsSync(nucleusBloomPath)) {
-                return loadNucleusConfig(nucleusBloomPath);
+                return loadNucleusConfig(nucleusBloomPath, org);
             }
         }
 
@@ -209,7 +209,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         if (!this.workspaceRoot) return undefined;
 
         // Intentar workspace actual
-        const localBloom = path.join(this.workspaceRoot, '.bloom', 'core', 'nucleus-config.json');
+        const localBloom = path.join(this.workspaceRoot, '.bloom', `.nucleus-${org}`, '.core', 'nucleus-config.json');
         if (fs.existsSync(localBloom)) {
             return this.workspaceRoot;
         }

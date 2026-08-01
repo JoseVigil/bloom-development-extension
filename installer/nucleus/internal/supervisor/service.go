@@ -1459,7 +1459,23 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		"BLOOM_WORKER_RUNNING=true",
 		fmt.Sprintf("BLOOM_SIMULATION_MODE=%t", simulation),
 		"BLOOM_LOGS_DIR=" + s.logsDir,
-		"BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH"),
+		// BLOOM_NUCLEUS_PATH: workspace del proyecto activo, requerido por
+		// server.ts para registrar /api/v1/mandates (ver MandateFsContext).
+		//
+		// BUG (mismo patrón que BLOOM_BRAIN_PATH, ver comentario arriba):
+		// antes esto era "BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH")
+		// — reenvía la env var cruda del propio proceso Nucleus, que bajo
+		// systemd/NSSM (sin override explícito) siempre llega vacía. bundle.js
+		// recibía BLOOM_NUCLEUS_PATH="" (definida pero falsy en JS), y
+		// server.ts nunca registraba las rutas de mandates — el tag "mandates"
+		// aparecía en Swagger (está hardcodeado en la config) pero sin ningún
+		// path real detrás.
+		//
+		// Fix: getWorkspacePath() (dev_start.go) resuelve desde
+		// nucleus.json → onboarding.workspace_path, con fallback al env var
+		// crudo por si alguien lo overridea a mano. Mismo criterio que
+		// getBloomDir() usa para BLOOM_DIR / installation.origin_path.
+		"BLOOM_NUCLEUS_PATH=" + getWorkspacePath(),
 		// BLOOM_BRAIN_PATH: requerido por BrainExecutor.initialize() en modo standalone
 		// (rama !vscode) — ver resolveBrainInterpreter() arriba para la cadena de
 		// precedencia completa y por qué no reenviamos el os.Getenv crudo.
