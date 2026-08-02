@@ -102,6 +102,14 @@ func NewSupervisor(logsDir, binDir string) *Supervisor {
 // svelte_dev queda fuera intencionalmente — ver el comentario en Shutdown().
 var managedProcessNames = []string{"temporal_server", "nucleus_worker", "brain_server", "control_plane_api"}
 
+// masterProcessName identifica el pidfile del proceso MAESTRO de "nucleus
+// service start" (el que queda bloqueado en <-sigCh bajo NSSM/foreground).
+// Vive fuera de managedProcessNames a propósito: ese slice lo recorre
+// Shutdown() para matar únicamente a los hijos gestionados; el maestro se
+// direcciona por separado porque su ciclo de vida (bloquea hasta señal) es
+// distinto al de un ManagedProcess normal y no pasa por bootXxx().
+const masterProcessName = "service_master"
+
 func runDir(binDir string) string {
 	// binDir es <install>/bin — el run dir vive un nivel arriba, junto a logs/.
 	return filepath.Join(filepath.Dir(binDir), "run")
@@ -148,9 +156,29 @@ func removePidFile(binDir, name string) {
 // ships there. Out of scope here — the bug was reproduced and this fix is
 // verified on the Linux/macOS dev loop; flagging the Windows gap explicitly
 // rather than silently shipping a check that lies on that platform.
+// isProcessAlive checks whether a PID is still running.
+//
+// On Unix, signaling 0 is a pure existence/permission check — the kernel
+// does not actually deliver a signal to the target process.
+//
+// On Windows, os.Process.Signal only implements os.Kill (TerminateProcess);
+// any other value — including syscall.Signal(0) — returns an unconditional
+// "not supported by windows" error regardless of whether the process is
+// actually alive. That made this function unreliable on Windows (this was
+// already flagged as a known gap before this fix, and killByPidFile's whole
+// wait/force-kill loop depends on this function telling the truth). Fixed
+// by shelling out to tasklist, which is a real existence check and needs no
+// extra dependency.
 func isProcessAlive(pid int) bool {
 	if pid <= 0 {
 		return false
+	}
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH").Output()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(out), strconv.Itoa(pid))
 	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
@@ -159,11 +187,38 @@ func isProcessAlive(pid int) bool {
 	return proc.Signal(syscall.Signal(0)) == nil
 }
 
+// sendGracefulTerm asks a process to exit cleanly.
+//
+// On Unix this is a real SIGTERM via proc.Signal. On Windows,
+// os.Process.Signal(syscall.SIGTERM) is NOT implemented — same root cause
+// as isProcessAlive above — and returns an unconditional error without
+// touching the target process at all. Before this fix, killByPidFile
+// treated that error as fatal and returned immediately, meaning it never
+// reached its own force-kill fallback: on Windows it killed nothing and
+// silently reported as if it had. `taskkill /PID <pid> /T` (no /F) is used
+// instead, requesting a graceful close of the process and its child tree.
+func sendGracefulTerm(pid int) error {
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("taskkill: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return proc.Signal(syscall.SIGTERM)
+}
+
 // killByPidFile reads the pidfile for name, confirms the process is still
-// alive, sends SIGTERM, waits up to timeout for a graceful exit, and
-// force-kills with SIGKILL if it doesn't die in time. It always removes the
-// pidfile before returning — a stale entry must never block the next
-// stop/restart. Returns the PID that was targeted (0 if no pidfile existed).
+// alive, requests a graceful exit (SIGTERM on Unix, taskkill without /F on
+// Windows — see sendGracefulTerm), waits up to timeout, and force-kills
+// (SIGKILL / TerminateProcess, both natively supported via proc.Kill()) if
+// it doesn't die in time. It always removes the pidfile before returning —
+// a stale entry must never block the next stop/restart. Returns the PID
+// that was targeted (0 if no pidfile existed).
 //
 // Callers that need to relaunch the same service on the same port (e.g.
 // restart-bootstrap) MUST wait for this to return before spawning the
@@ -185,12 +240,20 @@ func killByPidFile(binDir, name string, timeout time.Duration) (int, error) {
 	if ferr != nil {
 		return pid, ferr
 	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
+	if err := sendGracefulTerm(pid); err != nil {
 		// Process may have exited between the isProcessAlive check and here.
 		if !isProcessAlive(pid) {
 			return pid, nil
 		}
-		return pid, err
+		// A failed graceful-term request is NOT treated as fatal anymore.
+		// This used to `return pid, err` here, which on Windows was the
+		// unconditional outcome (see sendGracefulTerm) — meaning this
+		// function bailed out on every single Windows call before ever
+		// reaching the wait loop or the force-kill fallback below, leaving
+		// the target process untouched while reporting an error upward.
+		// Falling through lets the timeout+force-kill path (which DOES
+		// work on Windows, since os.Kill/TerminateProcess is implemented)
+		// actually do its job.
 	}
 
 	deadline := time.Now().Add(timeout)
@@ -1761,6 +1824,15 @@ type ProcessSnapshot struct {
 	StartedAt string `json:"started_at,omitempty"`
 }
 
+type ServiceRestartResult struct {
+	Success     bool   `json:"success"`
+	PID         int    `json:"pid,omitempty"`          // PID del nuevo proceso maestro
+	PreviousPID int    `json:"previous_pid,omitempty"` // PID del proceso maestro anterior (0 si no había ninguno corriendo)
+	State       string `json:"state"`
+	Error       string `json:"error,omitempty"`
+	Timestamp   int64  `json:"timestamp"`
+}
+
 type RestartBootstrapResult struct {
 	Success     bool   `json:"success"`
 	PID         int    `json:"pid,omitempty"`
@@ -1773,13 +1845,14 @@ type RestartBootstrapResult struct {
 func createServiceCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "service",
-		Short: "Manage Nucleus service lifecycle (start / stop / status / restart-bootstrap)",
+		Short: "Manage Nucleus service lifecycle (start / stop / status / restart / restart-bootstrap)",
 		Long: `Control the Nucleus background service and its managed subprocesses.
 
 Subcommands:
   start               Boot all Nucleus components in order
   stop                Gracefully shut down all managed processes
   status              Show current state of each managed process
+  restart             Full stop + start of the master service process
   restart-bootstrap   Restart only the Control Plane (bootstrap/bundle.js)`,
 
 		Annotations: map[string]string{
@@ -1790,6 +1863,7 @@ Subcommands:
 	cmd.AddCommand(createServiceStartCmd(c))
 	cmd.AddCommand(createServiceStopCmd(c))
 	cmd.AddCommand(createServiceStatusCmd(c))
+	cmd.AddCommand(createServiceRestartCmd(c))
 	cmd.AddCommand(createRestartBootstrapCmd(c))
 
 	return cmd
@@ -1825,6 +1899,15 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			// watchWorker uses it to know when to stop restarting the worker.
 			// This is intentionally context.Background() — no timeout.
 			sup.supervisorCtx = context.Background()
+
+			// Pidfile propio del maestro — sin esto, "nucleus service restart"
+			// no tiene forma de encontrar y señalizar a ESTE proceso en
+			// particular desde otra invocación del CLI (a diferencia de los
+			// hijos en managedProcessNames, que sí lo tienen). Se escribe con
+			// el mismo mecanismo ya usado para los hijos, no uno nuevo.
+			if err := writePidFile(binDir, masterProcessName, os.Getpid()); err != nil {
+				fmt.Fprintf(os.Stderr, "[WARN] supervisor: could not write master pidfile: %v\n", err)
+			}
 			// Init structured logger — writes to nucleus_service_YYYYMMDD.log with
 			// timestamps (log.Ldate|log.Ltime) and registers the stream in telemetry.
 			sup.initLogger(c)
@@ -1949,6 +2032,10 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			if err := sup.Shutdown(shutdownCtx); err != nil {
 				c.Logger.Printf("[WARN] Shutdown error: %v", err)
 			}
+			// Borrar el pidfile propio SIEMPRE al final, incluso si Shutdown()
+			// tuvo errores parciales — un pidfile de maestro stale bloquearía
+			// el próximo "service restart" (vería un PID que ya no es él).
+			removePidFile(binDir, masterProcessName)
 			if sup.log != nil {
 				sup.log.Close()
 			}
@@ -2088,6 +2175,186 @@ func createServiceStatusCmd(c *core.Core) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")
 	return cmd
+}
+
+func createServiceRestartCmd(c *core.Core) *cobra.Command {
+	var outputJSON bool
+	var timeoutSecs int
+
+	cmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Full stop + start of the Nucleus service (master process and all managed children)",
+		Long: `Gracefully terminates the running "nucleus service start" master process
+(the one blocked waiting for SIGTERM under NSSM/systemd/foreground) along
+with every managed child (temporal_server, nucleus_worker, brain_server,
+control_plane_api), then spawns a brand-new detached "nucleus service start".
+
+This is NOT the same as "restart-bootstrap": that one only replaces the
+Control Plane sub-process. "restart" replaces the entire service, including
+the boot sequence itself (governance → temporal → worker → brain → svelte →
+control plane).
+
+Cross-platform note: the master process is located via a pidfile
+(run/service_master.pid) rather than an OS service manager, because only
+Windows in this deployment is guaranteed to run under NSSM — Linux/macOS
+targets have no equivalent unit installed. Graceful termination and the
+liveness check both work natively on all three platforms: SIGTERM+SIGKILL
+on Unix, and taskkill/tasklist on Windows (os.Process.Signal only
+implements os.Kill there — see sendGracefulTerm / isProcessAlive for why
+shelling out was required instead of relying on it directly).`,
+		Example: `  nucleus service restart
+  nucleus --json service restart
+  nucleus service restart --timeout 45`,
+		Annotations: map[string]string{
+			"category": "SERVICE",
+			"json_response": `{
+  "success": true,
+  "pid": 14213,
+  "previous_pid": 9821,
+  "state": "RUNNING",
+  "timestamp": 1740000000
+}`,
+		},
+		Args: cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			if c.IsJSON {
+				outputJSON = true
+			}
+			logsDir := getLogsDir(c)
+			binDir := getBinDir(c)
+			sup := NewSupervisor(logsDir, binDir)
+			result := &ServiceRestartResult{Timestamp: time.Now().Unix()}
+			timeout := time.Duration(timeoutSecs) * time.Second
+
+			// 1) Matar al maestro anterior (si hay uno vivo) por pidfile —
+			// mismo mecanismo probado que ya usan los hijos y
+			// restart-bootstrap: SIGTERM, esperar salida confirmada, y
+			// SIGKILL si no murió a tiempo. killByPidFile SIEMPRE borra el
+			// pidfile al retornar, así que no queda stale para el próximo
+			// start.
+			previousPID, killErr := killByPidFile(binDir, masterProcessName, timeout)
+			if killErr != nil {
+				sup.slog("WARN", "restart: error killing previous master (pid %d): %v", previousPID, killErr)
+			}
+			result.PreviousPID = previousPID
+
+			// 2) Defensa adicional: si el maestro anterior murió a la fuerza
+			// (SIGKILL) en vez de correr su propio Shutdown(), sus hijos
+			// (temporal_server, nucleus_worker, brain_server,
+			// control_plane_api) pueden seguir vivos. Limpiarlos acá evita
+			// la misma race de EADDRINUSE que restart-bootstrap ya tuvo que
+			// resolver, ahora aplicada a los cuatro puertos en vez de uno.
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
+			if err := sup.Shutdown(shutdownCtx); err != nil {
+				sup.slog("WARN", "restart: error during defensive child shutdown: %v", err)
+			}
+			shutdownCancel()
+
+			// 3) Relanzar. "restart" no puede quedarse bloqueado como "start"
+			// (que corre <-sigCh para siempre) — así que el nuevo maestro se
+			// lanza DETACHED y este comando retorna apenas confirma que
+			// arrancó. Se reusa setSvelteProcAttr (health_windows.go /
+			// health_unix.go) en vez de escribir un tercer SysProcAttr a
+			// mano: es el mismo problema (sobrevivir a la muerte del padre)
+			// que ya se resolvió cross-platform para svelte_dev.
+			exePath, err := os.Executable()
+			if err != nil {
+				result.Success = false
+				result.State = "FAILED"
+				result.Error = fmt.Sprintf("cannot resolve own executable path: %v", err)
+				outputServiceRestartResult(c, outputJSON, result)
+				os.Exit(1)
+			}
+
+			newCmd := exec.Command(exePath, "service", "start")
+			newCmd.Dir = filepath.Dir(exePath)
+			// stdout/stderr del nuevo maestro NO deben heredar los del
+			// comando "restart" (que va a terminar) — el maestro ya escribe
+			// su propio log estructurado vía initLogger()/InitServiceLogger.
+			newCmd.Stdout = nil
+			newCmd.Stderr = nil
+			setSvelteProcAttr(newCmd)
+
+			if err := newCmd.Start(); err != nil {
+				result.Success = false
+				result.State = "FAILED"
+				result.Error = fmt.Sprintf("failed to spawn new service start: %v", err)
+				outputServiceRestartResult(c, outputJSON, result)
+				os.Exit(1)
+			}
+			// Capturar el PID ANTES de Release(). En Linux, Go moderno
+			// implementa os.Process sobre pidfd, y Release() pone
+			// Process.Pid en -1 una vez liberado el handle — leerlo
+			// DESPUÉS de Release() (como hacía antes) devuelve -1 en vez
+			// del PID real, y todo lo que sigue (comparar contra el
+			// pidfile, chequear isProcessAlive) queda comparando/mirando
+			// el PID equivocado. Guardarlo en una variable propia evita
+			// depender del estado interno de *os.Process después de
+			// liberarlo.
+			newPID := newCmd.Process.Pid
+			// Liberar el proceso: no queremos que Go lo espere (Wait) ni lo
+			// mate al salir — debe sobrevivir de forma independiente.
+			_ = newCmd.Process.Release()
+			result.PID = newPID
+
+			// 4) Confirmar boot: esperar a que el pidfile del NUEVO maestro
+			// aparezca y corresponda a un PID vivo. No es un health-check
+			// completo del servicio (eso ya lo hace "nucleus health") — solo
+			// confirma que el proceso maestro efectivamente arrancó y no
+			// murió apenas nació (p.ej. por EADDRINUSE si el paso 2 dejó
+			// algo colgado).
+			ready := false
+			deadline := time.Now().Add(timeout)
+			for time.Now().Before(deadline) {
+				pid, err := readPidFile(binDir, masterProcessName)
+				if err == nil && pid == newPID && isProcessAlive(pid) {
+					ready = true
+					break
+				}
+				if !isProcessAlive(newPID) {
+					break // murió antes de terminar de bootear
+				}
+				time.Sleep(300 * time.Millisecond)
+			}
+
+			if ready {
+				result.Success = true
+				result.State = "RUNNING"
+			} else if isProcessAlive(newPID) {
+				result.Success = true
+				result.State = "STARTING"
+				result.Error = "new master process started but has not confirmed readiness yet — check 'nucleus service status'"
+			} else {
+				result.Success = false
+				result.State = "FAILED"
+				result.Error = "new master process exited during boot — check the service log"
+			}
+
+			outputServiceRestartResult(c, outputJSON, result)
+			if !result.Success {
+				os.Exit(1)
+			}
+		},
+	}
+	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")
+	cmd.Flags().IntVar(&timeoutSecs, "timeout", 30, "Seconds to wait for graceful shutdown and for the new master to confirm readiness")
+	return cmd
+}
+
+func outputServiceRestartResult(c *core.Core, outputJSON bool, result *ServiceRestartResult) {
+	if outputJSON {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		if result.Success {
+			c.Logger.Printf("[SUCCESS] Service restarted (PID %d, previous PID %d) — state: %s", result.PID, result.PreviousPID, result.State)
+			if result.Error != "" {
+				c.Logger.Printf("[WARN] %s", result.Error)
+			}
+		} else {
+			c.Logger.Printf("[ERROR] Service restart failed: %s", result.Error)
+		}
+	}
 }
 
 func createRestartBootstrapCmd(c *core.Core) *cobra.Command {

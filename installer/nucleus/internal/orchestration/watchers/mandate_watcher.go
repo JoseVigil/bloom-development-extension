@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
+	"nucleus/internal/core"
 	"nucleus/internal/orchestration/temporal"
 	"nucleus/internal/orchestration/temporal/workflows"
 )
@@ -103,14 +103,26 @@ type MandateWatcher struct {
 	tc           *temporal.Client
 	watcher      *fsnotify.Watcher
 	progress     *mandateProgress
+	logger       *core.Logger
 }
 
-func NewMandateWatcher(mandatesRoot string, tc *temporal.Client) *MandateWatcher {
+// NewMandateWatcher construye el watcher e inicializa su logger propio
+// (categoría MANDATE, ver core.InitLogger / mandate_logger.go). Esto hace
+// que todo lo que antes iba solo a stdout/stderr via log.Printf ahora
+// también persista en logs/nucleus/mandate/nucleus_mandate_YYYYMMDD.log
+// y quede registrado en telemetry.json — InitLogger hace ambas cosas en
+// una sola llamada, no hace falta invocar telemetry register aparte.
+func NewMandateWatcher(mandatesRoot string, tc *temporal.Client, paths *core.Paths, jsonMode bool) (*MandateWatcher, error) {
+	logger, err := core.InitLogger(paths, "MANDATE", jsonMode)
+	if err != nil {
+		return nil, fmt.Errorf("no pude inicializar logger de mandate: %w", err)
+	}
 	return &MandateWatcher{
 		mandatesRoot: mandatesRoot,
 		tc:           tc,
 		progress:     newMandateProgress(),
-	}
+		logger:       logger,
+	}, nil
 }
 
 // Start arranca el vigilante de cambios en el filesystem y bloquea hasta que ctx se cancele.
@@ -129,19 +141,20 @@ func (w *MandateWatcher) Start(ctx context.Context) error {
 	w.watcher = fsw
 
 	if err := w.watchExistingMandateDirs(); err != nil {
-		log.Printf("[mandate_watcher] warning al indexar dirs existentes: %v", err)
+		w.logger.Warning("[mandate_watcher] warning al indexar dirs existentes: %v", err)
 	}
 	if err := fsw.Add(w.mandatesRoot); err != nil {
 		fsw.Close()
 		return fmt.Errorf("no pude observar %s: %w", w.mandatesRoot, err)
 	}
 
-	log.Printf("[mandate_watcher] vigilando %s", w.mandatesRoot)
+	w.logger.Info("[mandate_watcher] vigilando %s", w.mandatesRoot)
 
 	for {
 		select {
 		case <-ctx.Done():
 			fsw.Close()
+			w.logger.Close()
 			return ctx.Err()
 		case event, ok := <-fsw.Events:
 			if !ok {
@@ -152,7 +165,7 @@ func (w *MandateWatcher) Start(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			log.Printf("[mandate_watcher] error fsnotify: %v", err)
+			w.logger.Error("[mandate_watcher] error fsnotify: %v", err)
 		}
 	}
 }
@@ -173,7 +186,7 @@ func (w *MandateWatcher) watchExistingMandateDirs() error {
 		}
 		dir := filepath.Join(w.mandatesRoot, e.Name())
 		if err := w.watcher.Add(dir); err != nil {
-			log.Printf("[mandate_watcher] no pude observar %s: %v", dir, err)
+			w.logger.Warning("[mandate_watcher] no pude observar %s: %v", dir, err)
 			continue
 		}
 		statePath := filepath.Join(dir, "mandate_state.json")
@@ -189,7 +202,7 @@ func (w *MandateWatcher) handleEvent(ctx context.Context, event fsnotify.Event) 
 	if event.Op&fsnotify.Create == fsnotify.Create {
 		if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 			if err := w.watcher.Add(event.Name); err != nil {
-				log.Printf("[mandate_watcher] no pude observar nueva carpeta %s: %v", event.Name, err)
+				w.logger.Warning("[mandate_watcher] no pude observar nueva carpeta %s: %v", event.Name, err)
 			}
 			return
 		}
@@ -225,13 +238,13 @@ func (w *MandateWatcher) handleEvent(ctx context.Context, event fsnotify.Event) 
 func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		log.Printf("[mandate_watcher] no pude leer %s: %v", path, err)
+		w.logger.Error("[mandate_watcher] no pude leer %s: %v", path, err)
 		return
 	}
 
 	var ms MandateState
 	if err := json.Unmarshal(raw, &ms); err != nil {
-		log.Printf("[mandate_watcher] mandate_state.json inválido en %s: %v", path, err)
+		w.logger.Error("[mandate_watcher] mandate_state.json inválido en %s: %v", path, err)
 		return
 	}
 
@@ -240,7 +253,7 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 	// fallback lo derivamos del nombre de carpeta, que siempre es el UUID.
 	if ms.MandateID == "" {
 		ms.MandateID = filepath.Base(filepath.Dir(path))
-		log.Printf("[mandate_watcher] mandate_state.json sin mandateId embebido en %s — usando nombre de carpeta (%s) como fallback", path, ms.MandateID)
+		w.logger.Warning("[mandate_watcher] mandate_state.json sin mandateId embebido en %s — usando nombre de carpeta (%s) como fallback", path, ms.MandateID)
 	}
 
 	if ms.MandateType != "genesis" && ms.MandateType != "domain_expansion" {
@@ -294,11 +307,11 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 	})
 	if err != nil {
 		if temporal.IsAlreadyStarted(err) {
-			log.Printf("[mandate_watcher] workflow ya corría para %s, ignorando", ms.MandateID)
+			w.logger.Info("[mandate_watcher] workflow ya corría para %s, ignorando", ms.MandateID)
 			return
 		}
-		log.Printf("[mandate_watcher] error al arrancar MandateGenesisBuildWorkflow para %s: %v", ms.MandateID, err)
+		w.logger.Error("[mandate_watcher] error al arrancar MandateGenesisBuildWorkflow para %s: %v", ms.MandateID, err)
 		return
 	}
-	log.Printf("[mandate_watcher] MandateGenesisBuildWorkflow arrancado para mandate %s", ms.MandateID)
+	w.logger.Success("[mandate_watcher] MandateGenesisBuildWorkflow arrancado para mandate %s", ms.MandateID)
 }
