@@ -776,9 +776,10 @@ Nuevo CV
 https://claude.ai/chat/7cef628a-fefa-472b-bca9-9d54e1e18b0a
 
 Elias
-Workspace - Análisis de estructura HTML y pipeline de procesamiento
+Migracion - Estructura HTML y pipeline de procesamiento
 https://claude.ai/chat/3e4c906a-6fe1-4352-898a-fae94eaf00d3
 
 notimation
 Preguntas de desarrollo Pytorch
 https://claude.ai/chat/d487bfbc-9d0a-4e6a-a33b-3ee723c0dac9
+
