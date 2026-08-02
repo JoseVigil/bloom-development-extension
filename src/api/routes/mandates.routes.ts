@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 
-import { CreateMandateBody, StandardCreateBody, GenesisCreateBody, DomainExpansionCreateBody } from '../schemas/create-mandate.schema';
+import { CreateMandateBody } from '../schemas/create-mandate.schema';
 import { makeAssertBaseGenesisCompletedIfApplicable } from '../hooks/assert-base-genesis-completed.hook';
 import { createMandateHandler } from '../handlers/create-mandate.handler';
 import type { MandateFsContext } from '../../utils/mandate-paths';
@@ -17,17 +17,16 @@ export interface RegisterMandateRoutesDeps {
  * NOTA: ya no recibe temporalClient/createStandardMandate/publishMandateEvent
  * como deps — el handler reescrito (create-mandate.handler.ts) los resuelve
  * todos internamente (imports directos + env vars). Ver JSDoc del handler.
+ *
+ * NOTA (fix Swagger def-0/def-1/def-2): StandardCreateBody, GenesisCreateBody
+ * y DomainExpansionCreateBody ya NO se registran acá vía fastify.addSchema().
+ * Se registran una sola vez en server.ts, sobre el fastify raíz (mismo scope
+ * donde vive el plugin de swagger) — ver el comentario ahí para el detalle
+ * de por qué registrarlos en esta instancia hija rompía la resolución de
+ * $ref en el spec de OpenAPI aunque Ajv validara bien en runtime.
  */
 export function registerMandateRoutes(fastify: FastifyInstance, deps: RegisterMandateRoutesDeps): void {
   const assertBaseGenesisCompletedIfApplicable = makeAssertBaseGenesisCompletedIfApplicable(deps.fsCtx);
-
-  // Necesario para que los $ref dentro de CreateMandateBody (oneOf +
-  // discriminator) resuelvan tanto para Ajv como para el spec de OpenAPI
-  // que arma @fastify/swagger. Sin esto, Type.Ref() genera un $ref que
-  // apunta a nada y la validación/documentación fallan en silencio.
-  fastify.addSchema(StandardCreateBody);
-  fastify.addSchema(GenesisCreateBody);
-  fastify.addSchema(DomainExpansionCreateBody);
 
   fastify.post(
     '/mandates',

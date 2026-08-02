@@ -20,6 +20,7 @@ import { registerMandateRoutes } from './routes/mandates.routes';
 import internalMandateEventRoutes from './routes/internal-mandate-event.routes';
 import { resolveOrg } from '../utils/org-resolver';
 import type { MandateFsContext } from '../utils/mandate-paths';
+import { StandardCreateBody, GenesisCreateBody, DomainExpansionCreateBody } from './schemas/create-mandate.schema';
 
 // ✅ FIX: Import GitHubOAuthServer class (not singleton instance)
 import { GitHubOAuthServer } from '../auth/GitHubOAuthServer';
@@ -125,6 +126,15 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
 
   // Swagger OpenAPI Documentation
   await fastify.register(swagger, {
+    // FIX (Swagger def-0/def-1/def-2): aun con los schemas registrados vía
+    // addSchema en el scope raíz (con $id), el resolver interno de
+    // @fastify/swagger puede seguir asignando nombres posicionales a los
+    // schemas referenciados solo dentro de un oneOf. buildLocalReference
+    // fuerza a usar el $id real cuando existe, en vez de esa lógica default.
+    refResolver: {
+      buildLocalReference: (json, _baseUri, _fragment, i) =>
+        (json.$id as string) ?? `def-${i}`,
+    },
     openapi: {
       info: {
         title: 'Bloom Plugin API',
@@ -271,6 +281,21 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
       '[Server] ⚠️  No van a aparecer en /api/docs ni van a responder (404). Seteá BLOOM_NUCLEUS_PATH y reiniciá el server.',
     );
   } else {
+    // FIX (Swagger def-0/def-1/def-2): addSchema tiene que llamarse acá, en
+    // el fastify raíz —donde también se registra el plugin de swagger—, y
+    // no dentro de registerMandateRoutes (instancia hija creada por el
+    // fastify.register de más abajo). Fastify respeta encapsulamiento: un
+    // schema agregado en una instancia hija es visible para Ajv en esa
+    // rama (por eso el endpoint validaba bien en runtime), pero el plugin
+    // de swagger arma el spec recorriendo el árbol desde la raíz y no
+    // resuelve el $ref contra el $id real si el schema se registró más
+    // abajo — cae a un nombre posicional (def-0, def-1, def-2) en
+    // components.schemas, y Swagger UI no puede resolver el discriminator
+    // sin nombres reales.
+    fastify.addSchema(StandardCreateBody);
+    fastify.addSchema(GenesisCreateBody);
+    fastify.addSchema(DomainExpansionCreateBody);
+
     // Mismo fix que en create-mandate.handler.ts: resolveOrg hace
     // workspace-scan (paridad con supervisor.LoadNucleusConfig(), Go) y
     // necesita la raíz del workspace, no el dir de datos de máquina.

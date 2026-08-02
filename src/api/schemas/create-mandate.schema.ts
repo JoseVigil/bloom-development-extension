@@ -13,6 +13,10 @@ import { Type, type Static } from '@sinclair/typebox';
 
 export const StandardCreateBody = Type.Object(
   {
+    // Opcional: si el caller (CLI o API) lo manda, el handler lo respeta
+    // en vez de generar uno con randomUUID(). Sin esto, additionalProperties:
+    // false lo poda silenciosamente antes de llegar al handler.
+    mandateId: Type.Optional(Type.String({ minLength: 1 })),
     mandateType: Type.Literal('standard'),
     project: Type.String(),
     name: Type.String({ minLength: 1 }),
@@ -23,6 +27,7 @@ export const StandardCreateBody = Type.Object(
 
 export const GenesisCreateBody = Type.Object(
   {
+    mandateId: Type.Optional(Type.String({ minLength: 1 })),
     mandateType: Type.Literal('genesis'),
     project: Type.String(),
     name: Type.String({ minLength: 1 }),
@@ -33,6 +38,7 @@ export const GenesisCreateBody = Type.Object(
 
 export const DomainExpansionCreateBody = Type.Object(
   {
+    mandateId: Type.Optional(Type.String({ minLength: 1 })),
     mandateType: Type.Literal('domain_expansion'),
     project: Type.String(),
     name: Type.String({ minLength: 1 }),
