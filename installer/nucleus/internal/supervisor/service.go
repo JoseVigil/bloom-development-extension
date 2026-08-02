@@ -276,6 +276,72 @@ func killByPidFile(binDir, name string, timeout time.Duration) (int, error) {
 	return pid, nil
 }
 
+// killByPathIfAlive es una variante de killByPidFile que acepta un path de
+// pidfile explícito en vez de derivarlo de binDir+name via la convención
+// runDir(binDir)/name.pid.
+//
+// Por qué hace falta: nucleus_worker tiene DOS mecanismos de pidfile
+// independientes que nunca se reconciliaron entre sí:
+//
+//   1. El pidfile de bookkeeping del supervisor: runDir(binDir)/nucleus_worker.pid
+//      (escrito por writePidFile en startWorkerManager, leído/matado por
+//      killByPidFile). Este SOLO conoce workers que ESTE supervisor arrancó.
+//
+//   2. El pidfile de self-guard que el propio proceso worker escribe sobre
+//      sí mismo en worker.go: <logsDir>/../history/workers/nucleus_worker.pid.
+//      Este es el que el worker usa para decidir "ya hay uno corriendo,
+//      no arranco" — y es el que causa el warning "Worker already running
+//      (PID X) — exiting to avoid duplicate".
+//
+// Un worker arrancado por una generación anterior del supervisor (que ya
+// no existe) puede seguir vivo y polleando Temporal indefinidamente. El
+// supervisor actual no tiene forma de saberlo por (1) — nunca lo arrancó
+// él. Entonces spawnea un proceso nuevo igual, ese proceso nuevo se
+// autochequea contra (2), encuentra al viejo vivo, y se autoaborta.
+// Resultado: el supervisor cree que arrancó un worker sano (PID escrito en
+// runDir/), pero ese proceso ya murió por autoaborto; el zombie real de
+// horas/días atrás sigue siendo el único "worker" activo — sano o no.
+//
+// killByPathIfAlive cierra ese gap: el supervisor limpia proactivamente el
+// pidfile (2) antes de spawnear, en vez de depender de que el proceso
+// nuevo se rinda solo al toparse con él.
+func killByPathIfAlive(pidFilePath string, timeout time.Duration) (int, error) {
+	data, err := os.ReadFile(pidFilePath)
+	if err != nil {
+		return 0, nil // no pidfile — nada que matar, no es error
+	}
+
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		os.Remove(pidFilePath) // pidfile corrupto — no sirve, limpiarlo igual
+		return 0, fmt.Errorf("corrupt pidfile at %s: %w", pidFilePath, err)
+	}
+	defer os.Remove(pidFilePath)
+
+	if !isProcessAlive(pid) {
+		return pid, nil // pidfile stale — el proceso ya no existe
+	}
+
+	// Mismo patrón que killByPidFile: graceful term primero, force-kill si
+	// no muere a tiempo. No tratamos el error de sendGracefulTerm como
+	// fatal — igual esperamos el timeout y forzamos si hace falta, mismo
+	// criterio que ya se documentó arriba para el caso Windows.
+	_ = sendGracefulTerm(pid)
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !isProcessAlive(pid) {
+			return pid, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if proc, ferr := os.FindProcess(pid); ferr == nil {
+		_ = proc.Kill()
+	}
+	return pid, nil
+}
+
 // initLogger initialises the structured service logger using InitServiceLogger.
 // Must be called once before boot, after Paths are resolved.
 // Falls back to stderr silently if the logger cannot be created — boot must not
@@ -598,6 +664,21 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 		s.processes["nucleus_worker"] = proc
 		s.slog("INFO", "✓ Worker already active in profile-orchestration — skipping start")
 		return proc, nil
+	}
+
+	// Limpiar cualquier worker zombie de una generación anterior del
+	// supervisor ANTES de spawnear uno nuevo. Ver killByPathIfAlive arriba
+	// para el porqué: el pidfile que este supervisor gestiona (runDir/) y
+	// el pidfile de self-guard que usa el propio proceso worker
+	// (history/workers/, ver worker.go) son mecanismos separados que nunca
+	// se sincronizaron — sin este paso, un worker viejo puede quedar vivo
+	// indefinidamente mientras cada restart spawnea (y pierde) uno nuevo
+	// en silencio.
+	workerSelfGuardPidFile := filepath.Join(filepath.Dir(s.logsDir), "history", "workers", "nucleus_worker.pid")
+	if killedPID, killErr := killByPathIfAlive(workerSelfGuardPidFile, 5*time.Second); killErr != nil {
+		s.slog("WARN", "failed to clean up stale worker self-guard pidfile: %v", killErr)
+	} else if killedPID > 0 {
+		s.slog("INFO", "🧹 Killed zombie nucleus_worker from a previous supervisor generation (PID %d)", killedPID)
 	}
 
 	// Find nucleus binary (cross-platform: tries without .exe first)
@@ -2267,7 +2348,14 @@ shelling out was required instead of relying on it directly).`,
 			}
 
 			newCmd := exec.Command(exePath, "service", "start")
-			newCmd.Dir = filepath.Dir(exePath)
+			// NO seteamos newCmd.Dir. Dejarlo vacío hace que exec.Cmd herede
+			// el cwd del proceso "restart" (el mismo desde el que el usuario
+			// corre el comando a mano, ej. ~/repos/bloom-development-extension).
+			// ANTES esto forzaba newCmd.Dir = filepath.Dir(exePath) — el
+			// directorio del binario, no el del repo — y cualquier resolución
+			// de rutas relativas al cwd durante el boot (fuera de
+			// getBloomDir()/BLOOM_DIR) se rompía en silencio, porque además
+			// Stdout/Stderr del proceso nuevo están descartados.
 			// stdout/stderr del nuevo maestro NO deben heredar los del
 			// comando "restart" (que va a terminar) — el maestro ya escribe
 			// su propio log estructurado vía initLogger()/InitServiceLogger.

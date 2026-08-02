@@ -84,11 +84,21 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "brain") },
 	},
 	{
+		// The nucleus binary itself is the process that the Nucleus OS service
+		// executes. Just like bundle.js in the bootstrap component, overwriting
+		// it on disk does NOT affect an already-running process — there is no
+		// hot-reload. PreDeployFn/PostDeployFn bracket the copy with a full
+		// stop/start of the Nucleus OS service (Windows SCM, launchd on macOS,
+		// systemd --user on Linux — see nucleusServiceName()/controlService()),
+		// so `rollout --only nucleus` alone is enough to ship an updated binary
+		// and have it actually running afterwards, on all three platforms.
 		Key: "nucleus",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "nucleus")
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "nucleus") },
+		DestFn:       func(b string) string { return filepath.Join(b, "bin", "nucleus") },
+		PreDeployFn:  nucleusPreDeploy,
+		PostDeployFn: nucleusPostDeploy,
 	},
 	{
 		Key: "sentinel",
@@ -530,6 +540,63 @@ func bootstrapPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error 
 	c.Logger.Info("🔎 Waiting for Control Plane to come up on :48215 ...")
 	if err := waitForControlPlane(10 * time.Second); err != nil {
 		c.Logger.Warning("⚠️  bootstrap: %v — check logs/nucleus/control_plane/ for details", err)
+		return nil
+	}
+	c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")
+	return nil
+}
+
+// nucleusPreDeploy stops the Nucleus service before its own binary is
+// overwritten. Mirrors bootstrapPreDeploy: ensureElevated() is a no-op on
+// macOS/Linux and re-launches under UAC on Windows if needed. Returning an
+// error here aborts the nucleus component before any files are touched.
+func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	name := nucleusServiceName()
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] nucleus: would ensure elevation and stop %q before copying the binary", name)
+		return nil
+	}
+
+	if err := ensureElevated(); err != nil {
+		return fmt.Errorf("nucleus: elevation required to control %q: %w", name, err)
+	}
+
+	c.Logger.Info("🛑 Stopping %s before updating the nucleus binary...", name)
+	if err := controlService(name, false); err != nil {
+		return fmt.Errorf("nucleus: could not stop %s: %w", name, err)
+	}
+	c.Logger.Success("✓ %s stopped", name)
+	return nil
+}
+
+// nucleusPostDeploy starts the Nucleus service again once the new binary is
+// in place, then polls the Control Plane's health endpoint the same way
+// bootstrapPostDeploy does, so the operator gets immediate confirmation the
+// new binary is actually up rather than just "the copy succeeded".
+//
+// A failed health check is logged as a warning, not a fatal error: the
+// service was restarted successfully as far as the OS is concerned, and a
+// slow-starting Control Plane (or a genuine startup bug in the new binary)
+// is something the operator needs to see, not something rollout should mask
+// by reporting failure on an otherwise-successful restart.
+func nucleusPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	name := nucleusServiceName()
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] nucleus: would start %q and verify Control Plane health on :48215", name)
+		return nil
+	}
+
+	c.Logger.Info("🚀 Starting %s with the updated binary...", name)
+	if err := controlService(name, true); err != nil {
+		return fmt.Errorf("nucleus: could not start %s: %w", name, err)
+	}
+	c.Logger.Success("✓ %s started", name)
+
+	c.Logger.Info("🔎 Waiting for Control Plane to come up on :48215 ...")
+	if err := waitForControlPlane(10 * time.Second); err != nil {
+		c.Logger.Warning("⚠️  nucleus: %v — check logs/nucleus/control_plane/ for details", err)
 		return nil
 	}
 	c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")

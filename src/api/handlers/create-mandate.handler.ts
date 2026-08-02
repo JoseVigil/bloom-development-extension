@@ -45,10 +45,31 @@ export async function createMandateHandler(
   // esa carpeta vive en el workspace, no en el directorio de datos de la
   // app. Ver org-resolver.ts para el mecanismo completo.
   const org = await resolveOrg(workspacePath);
+  // FIX: fsCtx tiene que usar el workspacePath RESUELTO (org.workspacePath),
+  // no la variable local `workspacePath` (el env var crudo tal cual llega
+  // en BLOOM_NUCLEUS_PATH). resolveOrg() sube directorios desde
+  // `workspacePath` hasta encontrar el `.bloom` real (ver findBloomDir en
+  // org-resolver.ts) — si el caller pasa un subdirectorio del workspace
+  // (ej: la carpeta de un proyecto individual dentro del nucleus, como
+  // "sample_project"), `org.workspacePath` puede terminar apuntando más
+  // arriba que el `workspacePath` crudo.
+  //
+  // Antes de este fix, fsCtx se armaba con el `workspacePath` crudo, así
+  // que mandateDir()/mandatesRoot() (mandate-paths.ts) escribían el
+  // mandate bajo `<workspacePath crudo>/.bloom/.nucleus-{org}/.mandates/`
+  // — un `.bloom` que puede no existir todavía (mkdir recursive lo crea
+  // igual, sin pasar por buildOrgContext ni por .core/.nucleus-config.json).
+  // Eso deja un `.bloom` huérfano con `.mandates/<id>/mandate_state.json`
+  // pero SIN `.core/.nucleus-config.json`. En el próximo arranque del
+  // Control Plane, findBloomDir() encuentra ese `.bloom` huérfano primero
+  // (para de subir ahí) y buildOrgContext() explota al intentar leer un
+  // `.core/.nucleus-config.json` que nunca se escribió — "¿nucleus mal
+  // inicializado?".
+  //
   // MandateFsContext.org es el slug (string), no el OrganizationContext
   // completo — paridad con Config.Slug en supervisor.go, que es lo que
   // arma el path .bloom/.nucleus-{slug}/.mandates en MandatesRoot().
-  const fsCtx: MandateFsContext = { workspacePath, org: org.name };
+  const fsCtx: MandateFsContext = { workspacePath: org.workspacePath, org: org.name };
   const dir = mandateDir(fsCtx, mandateId);
 
   await mkdir(dir, { recursive: true });

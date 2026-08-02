@@ -59,16 +59,35 @@ export interface OrganizationContext {
  * .core/nucleus-config.json). Eso es lo que se corrige acá:
  *
  *   1. Subir desde `startDir` (default: CWD) hasta encontrar una carpeta
- *      .bloom — igual que findBloomDir() en Go, que sí sube directorios;
- *      la versión anterior de este archivo NO subía, solo miraba CWD.
+ *      .bloom que contenga un nucleus COMPLETO — no alcanza con que
+ *      exista la carpeta .bloom; ver findValidNucleus() más abajo.
  *   2. Dentro de .bloom, buscar subcarpetas ".nucleus-*". Debe haber
  *      exactamente una — multi-org en el mismo workspace no está
- *      soportado ni acá ni en Go (mismo error explícito en ambos lados).
+ *      soportado ni acá ni en Go (mismo error explícito en ambos lados,
+ *      y este caso SÍ es un hard-stop, no sigue subiendo — es ambigüedad,
+ *      no ausencia).
  *   3. Extraer el slug del nombre de carpeta.
  *   4. Leer .core/nucleus-config.json bajo esa carpeta. Si
  *      organization.slug está presente y no coincide con el slug de la
  *      carpeta, error explícito — no se pisa en silencio (mismo criterio
  *      que el chequeo de inconsistencia en loadNucleusConfigFrom, Go).
+ *
+ * FIX (nucleus incompleto/huérfano): si un .bloom existe pero le falta la
+ * carpeta .nucleus-{slug} o el .core/.nucleus-config.json adentro, ya NO
+ * se trata como el nucleus real ni se lanza error ahí mismo — se sigue
+ * subiendo, como si esa carpeta .bloom no existiera. Motivo: callers que
+ * arman mal un workspacePath (ej: pasan la ruta de un proyecto individual
+ * en vez de la raíz del workspace) pueden terminar con mkdir({recursive:
+ * true}) creando un .bloom "cáscara" en un lugar que no es el nucleus real
+ * — sin .core/.nucleus-config.json, porque nunca pasó por
+ * buildOrgContext(). Antes de este fix, ese .bloom huérfano quedaba
+ * "tapando" permanentemente al .bloom válido de un ancestro: cualquier
+ * resolución futura encontraba el huérfano primero, paraba de subir, y
+ * explotaba con "¿nucleus mal inicializado?" — un estado que no se
+ * autoreparaba nunca, ni siquiera después de arreglar el bug que lo causó,
+ * porque el archivo huérfano seguía en disco. Con este fix, un .bloom
+ * incompleto ya no bloquea la búsqueda: se sigue subiendo hasta encontrar
+ * un nucleus completo, o hasta llegar a la raíz del filesystem.
  *
  * Decisión que dejo marcada, no tomada en silencio: BLOOM_ORGANIZATION no
  * existe del lado Go. Acá lo dejo como una aserción de consistencia
@@ -81,8 +100,7 @@ export interface OrganizationContext {
 export async function resolveOrganization(
   startDir: string = process.cwd()
 ): Promise<OrganizationContext> {
-  const { workspacePath, bloomDir } = findBloomDir(startDir);
-  const { slug, nucleusDir } = await findNucleusDir(bloomDir);
+  const { workspacePath, slug, nucleusDir } = await findValidNucleus(startDir);
 
   const orgFromEnv = process.env.BLOOM_ORGANIZATION;
   if (orgFromEnv && orgFromEnv !== slug) {
@@ -108,48 +126,85 @@ export async function resolveOrganization(
  */
 export const resolveOrg = resolveOrganization;
 
-function findBloomDir(start: string): { workspacePath: string; bloomDir: string } {
-  let dir = path.resolve(start);
+/**
+ * Sube desde `startDir` buscando el primer nucleus COMPLETO: una carpeta
+ * .bloom que contenga exactamente una subcarpeta .nucleus-{slug}, que a su
+ * vez contenga .core/.nucleus-config.json.
+ *
+ * Un .bloom que existe pero no cumple esto (nucleus incompleto/huérfano)
+ * NO se devuelve ni se trata como error inmediato — se registra en
+ * `skipped` y se sigue subiendo. Solo se lanza error cuando se llega a la
+ * raíz del filesystem sin encontrar ningún nucleus completo; en ese caso
+ * el mensaje distingue si no se encontró NINGÚN .bloom, o si se
+ * encontraron .bloom pero todos incompletos (más útil para debuggear).
+ *
+ * Excepción: múltiples carpetas .nucleus-* dentro de un mismo .bloom es
+ * ambigüedad, no ausencia — eso sigue siendo un hard-stop inmediato, igual
+ * que antes.
+ */
+async function findValidNucleus(
+  startDir: string
+): Promise<{ workspacePath: string; slug: string; nucleusDir: string }> {
+  let dir = path.resolve(startDir);
+  const skipped: string[] = [];
 
   while (true) {
-    const candidate = path.join(dir, BLOOM_DIR_NAME);
-    if (existsSync(candidate)) {
-      return { workspacePath: dir, bloomDir: candidate };
+    const bloomCandidate = path.join(dir, BLOOM_DIR_NAME);
+
+    if (existsSync(bloomCandidate)) {
+      const entries = await readdir(bloomCandidate, { withFileTypes: true });
+      const matches = entries.filter(
+        (e) => e.isDirectory() && e.name.startsWith(NUCLEUS_PREFIX)
+      );
+
+      if (matches.length > 1) {
+        // Ambigüedad real dentro de este .bloom — no tiene sentido seguir
+        // subiendo a buscar otro nucleus, el problema está acá.
+        throw new Error(
+          `Encontré ${matches.length} carpetas ${NUCLEUS_PREFIX}* en ${bloomCandidate} ` +
+            `(${matches.map((m) => m.name).join(', ')}) — multi-org en el mismo ` +
+            `workspace no está soportado, indefinido cuál usar.`
+        );
+      }
+
+      if (matches.length === 1) {
+        const dirName = matches[0].name;
+        const slug = dirName.slice(NUCLEUS_PREFIX.length);
+        if (!slug) {
+          throw new Error(
+            `Carpeta "${dirName}" en ${bloomCandidate} no tiene slug después del prefijo`
+          );
+        }
+        const nucleusDir = path.join(bloomCandidate, dirName);
+        const configPath = path.join(nucleusDir, NUCLEUS_CONFIG_REL_PATH);
+
+        if (existsSync(configPath)) {
+          return { workspacePath: dir, slug, nucleusDir };
+        }
+
+        // .nucleus-{slug} existe pero sin .core/.nucleus-config.json —
+        // nucleus incompleto. No lo tratamos como válido; seguimos
+        // subiendo por si hay un ancestro con un nucleus completo.
+        skipped.push(nucleusDir);
+      } else {
+        // .bloom existe pero no tiene ninguna carpeta .nucleus-* adentro.
+        skipped.push(bloomCandidate);
+      }
     }
+
     const parent = path.dirname(dir);
     if (parent === dir) {
-      throw new Error(`No encontré carpeta ${BLOOM_DIR_NAME} subiendo desde ${start}`);
+      if (skipped.length > 0) {
+        throw new Error(
+          `Encontré ${skipped.length} carpeta(s) de nucleus incompletas subiendo desde ` +
+            `${startDir} (${skipped.join(', ')}) pero ninguna tiene ` +
+            `.core/.nucleus-config.json — nucleus mal inicializado.`
+        );
+      }
+      throw new Error(`No encontré carpeta ${BLOOM_DIR_NAME} subiendo desde ${startDir}`);
     }
     dir = parent;
   }
-}
-
-async function findNucleusDir(
-  bloomDir: string
-): Promise<{ slug: string; nucleusDir: string }> {
-  const entries = await readdir(bloomDir, { withFileTypes: true });
-  const matches = entries.filter(
-    (e) => e.isDirectory() && e.name.startsWith(NUCLEUS_PREFIX)
-  );
-
-  if (matches.length === 0) {
-    throw new Error(`No encontré ninguna carpeta ${NUCLEUS_PREFIX}* dentro de ${bloomDir}`);
-  }
-  if (matches.length > 1) {
-    throw new Error(
-      `Encontré ${matches.length} carpetas ${NUCLEUS_PREFIX}* en ${bloomDir} ` +
-        `(${matches.map((m) => m.name).join(', ')}) — multi-org en el mismo ` +
-        `workspace no está soportado, indefinido cuál usar.`
-    );
-  }
-
-  const dirName = matches[0].name;
-  const slug = dirName.slice(NUCLEUS_PREFIX.length);
-  if (!slug) {
-    throw new Error(`Carpeta "${dirName}" en ${bloomDir} no tiene slug después del prefijo`);
-  }
-
-  return { slug, nucleusDir: path.join(bloomDir, dirName) };
 }
 
 async function buildOrgContext(
@@ -163,6 +218,11 @@ async function buildOrgContext(
   try {
     rawContent = await readFile(configPath, 'utf-8');
   } catch (err) {
+    // findValidNucleus() ya confirmó existsSync(configPath) === true antes
+    // de devolver este nucleusDir, así que llegar acá significa una falla
+    // real (permisos, TOCTOU, etc.) — no un nucleus simplemente ausente.
+    // No tiene sentido reintentar subiendo: el archivo existía hace un
+    // instante y algo más concreto está fallando.
     throw new Error(
       `No pude leer ${configPath} (¿nucleus mal inicializado?): ${(err as Error).message}`
     );
