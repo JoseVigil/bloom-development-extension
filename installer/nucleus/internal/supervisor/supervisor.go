@@ -77,6 +77,19 @@ type Config struct {
 //  4. Leer .core/.nucleus-config.json bajo esa carpeta para validar que es
 //     un Nucleus real (no solo una carpeta con el nombre correcto).
 func LoadNucleusConfig() (*Config, error) {
+	// Override explícito para procesos de background (nucleus service start
+	// bajo NSSM/systemd) que no tienen un CWD significativo del usuario —
+	// os.Getwd() ahí resuelve al directorio del binario instalado
+	// (~/.local/share/BloomNucleus/bin/nucleus), no al workspace real, y el
+	// scan hacia arriba nunca encuentra .bloom.
+	//
+	// Mismo criterio que ya usa create-mandate.handler.ts del lado Node
+	// (BLOOM_NUCLEUS_PATH), para que ambos lados resuelvan el mismo
+	// workspace sin depender de CWD implícito.
+	if envPath := os.Getenv("BLOOM_NUCLEUS_PATH"); envPath != "" {
+		return loadNucleusConfigFrom(envPath)
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("no pude obtener el directorio de trabajo: %w", err)

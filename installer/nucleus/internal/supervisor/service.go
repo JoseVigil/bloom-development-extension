@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"nucleus/internal/core"
+	"nucleus/internal/orchestration/temporal"
+	"nucleus/internal/orchestration/watchers"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -72,6 +74,45 @@ func NewSupervisor(logsDir, binDir string) *Supervisor {
 		binDir:        binDir,
 		supervisorCtx: context.Background(), // overridden by service start before boot
 	}
+}
+
+// mandatesRootProvider — Config (supervisor.go, workspace-scan) y
+// NucleusConfig (mandate_config.go, legacy machine-level) implementan ambos
+// MandatesRoot() string con la misma fórmula de path. Interfaz local para
+// tratarlos de forma intercambiable en mandatesRootForService() sin tocar
+// ninguno de los dos tipos.
+type mandatesRootProvider interface {
+	MandatesRoot() string
+}
+
+// mandatesRootForService resuelve el .mandates root para un servicio de
+// background, que no tiene un CWD significativo del usuario (a diferencia
+// del CLI corrido a mano dentro de un repo).
+//
+// Prioriza la config persistida durante el onboarding (config/nucleus.json)
+// por sobre el workspace-scan por CWD — así el servicio encuentra su
+// workspace en cada reinicio sin depender de ninguna variable exportada a
+// mano ni de desde dónde se lo haya lanzado.
+func mandatesRootForService() (string, error) {
+	var providers []mandatesRootProvider
+	var errs []error
+
+	if machineCfg, err := LoadMachineNucleusConfig(); err == nil {
+		providers = append(providers, machineCfg)
+	} else {
+		errs = append(errs, fmt.Errorf("config de onboarding: %w", err))
+	}
+
+	if scanCfg, err := LoadNucleusConfig(); err == nil {
+		providers = append(providers, scanCfg)
+	} else {
+		errs = append(errs, fmt.Errorf("workspace-scan: %w", err))
+	}
+
+	if len(providers) == 0 {
+		return "", fmt.Errorf("ningún mecanismo de resolución funcionó (%v)", errs)
+	}
+	return providers[0].MandatesRoot(), nil
 }
 
 // ============================================================================
@@ -2037,6 +2078,58 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 				outputServiceStartResult(c, outputJSON, result)
 				os.Exit(1)
 			}
+
+			// ── Mandate Watcher ──────────────────────────────────────────────
+			// mandatesRootForService resuelve el path sin depender de CWD ni de
+			// una env var manual: un servicio de background (nucleus service
+			// start bajo NSSM/systemd) no tiene un CWD significativo — el
+			// proceso suele arrancar parado en el directorio del binario
+			// instalado, no en el workspace del usuario. LoadNucleusConfig()
+			// (workspace-scan desde CWD) tiene sentido para el CLI corrido a
+			// mano dentro de un repo, pero no para este contexto.
+			//
+			// Orden de resolución:
+			//   1. LoadMachineNucleusConfig() — config persistida en disco
+			//      durante el onboarding (config/nucleus.json,
+			//      onboarding.workspace_path/workspace_org). Es la fuente de
+			//      verdad correcta para un servicio: no requiere CWD ni
+			//      ninguna variable exportada a mano, sobrevive reinicios.
+			//   2. LoadNucleusConfig() (workspace-scan) — fallback para el
+			//      caso en que el servicio se lance manualmente parado dentro
+			//      de un workspace (poco común, pero no rompe si pasa).
+			// Si ambos fallan (por ejemplo, pre-onboarding), no-fatal: se
+			// loguea WARN y el resto del boot sigue.
+			mandatesRoot, mandatesRootErr := mandatesRootForService()
+			if mandatesRootErr != nil {
+				sup.slog("WARN", "Mandate watcher no arrancó — no encontré un workspace Nucleus configurado: %v", mandatesRootErr)
+			} else {
+				// Client propio y liviano — no comparte proceso con nucleus_worker
+				// (ver temporal_client.go: NewClient solo abre un client.Dial()
+				// a localhost:7233, no requiere ser el mismo proceso que ejecuta
+				// las activities).
+				tc, err := temporal.NewClient(bootCtx, &c.Paths, c.IsJSON)
+				if err != nil {
+					sup.slog("WARN", "Mandate watcher no arrancó — no pude crear el cliente de Temporal: %v", err)
+				} else {
+					mandateWatcher, err := watchers.NewMandateWatcher(mandatesRoot, tc, &c.Paths, c.IsJSON)
+					if err != nil {
+						sup.slog("WARN", "Mandate watcher no arrancó — no pude inicializar su logger: %v", err)
+						tc.Close()
+					} else {
+						// Mismo idiom que watchTemporal/watchWorker: corre en su
+						// propia goroutine con sup.supervisorCtx (context.Background(),
+						// sin timeout) — muere junto con el proceso al recibir
+						// SIGTERM, no por cancelación explícita de contexto.
+						go func() {
+							if err := mandateWatcher.Start(sup.supervisorCtx); err != nil {
+								sup.slog("WARN", "Mandate watcher terminó con error: %v", err)
+							}
+						}()
+						sup.slog("INFO", "✓ Mandate watcher arrancado — vigilando %s", mandatesRoot)
+					}
+				}
+			}
+
 			// Brain Server — crítico, debe estar up antes del Control Plane.
 			// Si ya está corriendo (puerto 5678), startBrainServer lo detecta y no lo toca.
 			brainProc, err := sup.startBrainServer(bootCtx)
