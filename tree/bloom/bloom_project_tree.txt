@@ -1,3 +1,17 @@
+# bloom_project_tree.txt
+# Reemplaza a bloom_project_tree_gen.txt — renombrado porque el tipo de intent
+# `.gen/` fue reemplazado por `.ing/` (ver ING_Intent_Spec_v1_0.md, "Rationale
+# del cambio de estrategia: gen/ → ing/"). Única rama modificada respecto al
+# original: `.intents/.gen/` → `.intents/.ing/`, más el renombre del archivo
+# de instrucciones del bot en `.project/`. `.dev/` y `.doc/` quedan idénticos,
+# sin cambios.
+#
+# NOTA — fuera de alcance de este árbol: `gen.json`, `.history/.delta_N/`, y
+# `.cache/.semantic-index.json` (ver ING_Intent_Spec_v1_0.md §7) viven a nivel
+# Nucleus, no a nivel de este proyecto — su árbol real está en
+# `bloom_nucleus_tree.txt`, que no forma parte de esta sesión. No se inventa
+# su ubicación acá.
+
 .project-{name}/
 │
 └── .bloom/
@@ -66,6 +80,62 @@
     │   │                       ├── .raw_output.txt
     │   │                       ├── .report.json
     │   │                       └── .staging/
+    │   │
+    │   ├── .ing/                            ← reemplaza a .gen/ (ver ING_Intent_Spec_v1_0.md)
+    │   │   └── .{intent-name-uuid}/
+    │   │       │
+    │   │       ├── .ing_state.json          ← phase_active: reception|classification|consolidation|done
+    │   │       │
+    │   │       ├── .reception/              ← sin turnos, igual que .briefing/ (dev) y .context/ (doc)
+    │   │       │   ├── .reception.json
+    │   │       │   ├── .context_ing_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .rawbase.json
+    │   │       │       ├── .rawbase_index.json
+    │   │       │       └── [optional files]
+    │   │       │
+    │   │       ├── .classification/         ← con turnos, resolución en 2 pasadas Dominio→Gene
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_ing_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .domain_resolution.json   ← propuesta, no confirmación
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       ├── .consolidation/          ← con turnos, igual que .curation/ (doc)
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .consolidation.json           ← committed: false|true
+    │   │       │       ├── .context_ing_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .docbase.json
+    │   │       │           ├── .docbase_index.json
+    │   │       │           └── [optional: .codebase.json, .codebase_index.json]
+    │   │       │
+    │   │       └── .pipeline/               ← contrato BISP idéntico, por fase
+    │   │           ├── .reception/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .classification/
+    │   │           │   └── .turn_X/
+    │   │           │       ├── .payload.json
+    │   │           │       ├── .index.json
+    │   │           │       └── .response/
+    │   │           │           ├── .raw_output.txt
+    │   │           │           ├── .report.json
+    │   │           │           └── .staging/
+    │   │           └── .consolidation/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   │
     │   └── .doc/
     │       └── .{intent-name-uuid3}/
     │           ├── .doc_state.json
@@ -110,4 +180,5 @@
         ├── .doc.app.implementation.bl
         ├── .ai_bot.dev.intent.bl
         ├── .ai_bot.doc.intent.bl
+        ├── .ai_bot.ing.intent.bl           ← renombrado de .ai_bot.gen.intent.bl
         └── .project.meta.json
