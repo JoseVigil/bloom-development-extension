@@ -1,15 +1,18 @@
-# BLOOM — BISP Session Decisions v1.1
+# BLOOM — BISP Session Decisions v1.2
+**Migrado a `ing/` — v1.2, con nota de integración cruzada contra GAP V3 (código real Go/TS)**
 
 **Bloom Intent Semantic Package — Documento de Sesión**
 Fuente de Verdad · Integración Vectorial ChromaDB + Ollama
-Sesión base: 23 de mayo de 2026 · Actualización: 29 de junio de 2026
+Sesión base: 23 de mayo de 2026 · Actualización: 29 de junio de 2026 · Migración `ing/`: agosto 2026
 Base: BTIPS v5.0 / BISP v1.1
 
 ---
 
-> **Regla de este documento:** Cualquier decisión de implementación que contradiga lo documentado aquí requiere revisión explícita de arquitectura. Este documento no se diluye con el avance de ejecución.
+> **Regla de este documento (heredada, sigue vigente sin cambios):** Cualquier decisión de implementación que contradiga lo documentado aquí requiere revisión explícita de arquitectura. Este documento no se diluye con el avance de ejecución.
 
-> **Nota de alcance (v1.1):** Este documento es **agnóstico de Companion**. Describe el BISP como protocolo — schema, persistencia, flujo Brain–Ollama–ChromaDB y contratos de Synapse en su forma genérica — y es válido y completo en cualquier etapa del proyecto, exista o no una integración de Companion activa. La integración específica del Companion Cognitivo con el BISP vive en un documento separado: `BLOOM_BISP_Companion_Integration_v2_0.md`, que **depende de** este documento pero no lo modifica ni lo condiciona. Si estás trabajando en Brain, ChromaDB, Ollama, el schema de `index.json` o Mandates, este es el único documento que necesitás.
+> **Nota de alcance (v1.1, sigue vigente):** Este documento es **agnóstico de Companion**. Describe el BISP como protocolo — schema, persistencia, flujo Brain–Ollama–ChromaDB y contratos de Synapse en su forma genérica — y es válido y completo en cualquier etapa del proyecto, exista o no una integración de Companion activa. La integración específica del Companion Cognitivo con el BISP vive en un documento separado: `BLOOM_BISP_Companion_Integration_v2_0.md`, que **depende de** este documento pero no lo modifica ni lo condiciona. Si estás trabajando en Brain, ChromaDB, Ollama, el schema de `index.json` o Mandates, este es el único documento que necesitás.
+
+> **Nota de alcance nueva (v1.2, migración a `ing/`):** por la misma razón que este documento no prescribe integraciones de Companion, tampoco prescribe el detalle interno del workflow Go/Temporal de Mandate Genesis (Fases 1-4, `GenesisBuildInput`, eventos WS, `domain_proposal.json`). Ese nivel es orquestación **externa** de un consumidor específico del pipeline vectorial que este documento sí define. La relación entre ambos — y el estado real de esa integración, verificado contra código — se documenta explícitamente y solo en la **§9 (nueva)**, sin tocar el resto del protocolo.
 
 ---
 
@@ -19,6 +22,7 @@ Base: BTIPS v5.0 / BISP v1.1
 |---|---|---|
 | v1.0 | 2026-05-23 | Decisiones fundacionales: ChromaDB, Ollama, schema BISP, flujo Brain |
 | v1.1 | 2026-06-29 | Cierre del pendiente 2.5 (Contrato de Synapse): tres contratos genéricos — Continuar / Evaluar / Decidir compatibilidad. Se retira toda referencia a Companion de este documento; la integración de Companion se documenta aparte (ver Nota de alcance). |
+| v1.2 | 2026-08 | Migración a `ing/`. **Sin cambios al protocolo BISP en sí** (§1-8 idénticas a v1.1). Se agrega §9, nota de integración cruzada contra GAP V3 (evidencia de código real Go/TS de Mandate Genesis) — documenta que la orquestación Go actual (Fases 1-2 del workflow `MandateGenesisBuildWorkflow`) **todavía no invoca** este pipeline de Brain/Ollama/ChromaDB, y qué implica eso para la Invariante 2. |
 
 ---
 
@@ -87,6 +91,8 @@ Se definen tres contratos de Synapse según audiencia y modo de uso. Estos contr
 
 Cualquier consumidor adicional del BISP (por ejemplo, un panel lateral o un agente de monitoreo) debe declarar explícitamente a cuál de estos tres contratos se acoge y documentar sus propias restricciones en un documento de integración separado. Este documento no prescribe restricciones de ningún consumidor específico.
 
+**Nota de integración (v1.2):** el picker de Capa 1 en Core (`/genesis`, webview Svelte) y el futuro consumo de `findings_summary`/`domain_tags` por parte de Fase 2 (Mandate Genesis, ver §9) son, en estos términos, consumidores que eventualmente deberán declararse bajo uno de estos tres contratos — probablemente **B (Evaluar)**, dado que Fase 2 evalúa coherencia semántica de dominios propuestos. Esto es una observación de esta migración, no una decisión tomada; queda como pendiente nuevo (ver §2.6).
+
 ### 2.6 Pendientes sin resolver
 
 | Decisión | Contexto | Estado |
@@ -94,6 +100,7 @@ Cualquier consumidor adicional del BISP (por ejemplo, un panel lateral o un agen
 | Formato de parsing de la URI `chroma://nucleus-org/intent-uuid/phase` | La URI es una convención interna. Brain necesita una función que la parsee a `(collection_name, document_id)`. Sin estándar externo a adoptar. | PENDIENTE |
 | Threshold de similitud configurable por intent (default sugerido: 0.40) | Intents de dominio muy específico pueden necesitar thresholds más altos. La configuración debe estar en `dev_state.json` o en `nucleus-config.json`. | PENDIENTE |
 | Formato de exportación de embeddings en el package: binario vs JSON base64 | El binario es más compacto pero menos debuggeable. El JSON base64 es self-describing y compatible con gzip del package completo. | PENDIENTE |
+| **(Nuevo, v1.2)** Contrato de Synapse aplicable a Fase 2 de Mandate Genesis | Ver nota en §2.5 — probablemente Contrato B (Evaluar), sin decisión formal todavía. | PENDIENTE |
 
 ---
 
@@ -262,7 +269,7 @@ Brain inicia un nuevo Mandate con objetivo X
 | `semantic_query.py` (NUEVO) | Implementar | Expone `query_similar(text, collection, n, threshold)`. Brain llama esto para armar el ranking del `context_plan`. |
 | Archivos Python viejos (packages gzip) | Auditar | Evaluar compatibilidad con el nuevo pipeline vectorial. Los que crean intents necesitan agregar vectorización al persistir. Los que arman payloads necesitan ordenar por ranking semántico. |
 
-> Los archivos específicos de consumidores del BISP (por ejemplo `background.js` / `panel.js` del Companion Cognitivo) **no** figuran en esta tabla — su impacto se documenta en el documento de integración correspondiente de cada consumidor.
+> Los archivos específicos de consumidores del BISP (por ejemplo `background.js` / `panel.js` del Companion Cognitivo) **no** figuran en esta tabla — su impacto se documenta en el documento de integración correspondiente de cada consumidor. Por la misma regla, **los archivos Go del workflow Mandate Genesis (`mandate_genesis_activities.go`, `mandate_genesis_build_workflow.go`, `mandate_watcher.go`) tampoco figuran acá** — su estado real se cruza en §9, sin mezclarse con esta tabla.
 
 ---
 
@@ -285,6 +292,8 @@ El campo `marketplace` en `index.json` es `null` en intents individuales. Ningú
 **Invariante 5 — Separación de audiencias en el package**
 La capa `operational` es para AI web (texto). La capa `autarchic` es para runtime Bloom (texto + vector). La capa `marketplace` es para buyers del marketplace (metadata estructurada). Nunca se mezclan ni se usan fuera de su audiencia.
 
+> **Nota de esta migración (v1.2) sobre la Invariante 2:** ver §9 — hoy el workflow Go de Mandate Genesis no llama a Brain en absoluto en Fase 1/2, así que la invariante no está siendo *violada* (nadie más llama a Ollama/ChromaDB tampoco), pero tampoco está siendo *ejercida* todavía por ese consumidor. Es una brecha de implementación, no una violación de diseño.
+
 ---
 
 ## 8. Estructura de directorios de referencia
@@ -306,7 +315,36 @@ La capa `operational` es para AI web (texto). La capa `autarchic` es para runtim
         └── dev_state.json
 ```
 
+> **Nota de esta migración (v1.2):** esta estructura (BISP, nivel intent/Mandate) **no es el mismo layout** que `{mandatesRoot}/{mandateID}/domain_proposal.json` del workflow Go de Mandate Genesis (confirmado plano por código, ver §9). Son dos árboles de archivos distintos, de dos subsistemas distintos, que hoy no colisionan porque literalmente todavía no se tocan — Fase 1/2 en Go no escribe ni lee nada bajo `.bloom/.nucleus-{org}/` ni `.bloom/.project-{name}/{intent-uuid}/`. Si al implementar el "Objetivo `ing/`" de Fase 1/2 (ver Roadmap Maestro, §2) se conecta el workflow Go a este pipeline, ahí sí hay que decidir explícitamente cómo se relacionan ambos árboles — queda como pendiente nuevo, ver §9.
+
 ---
 
-*BLOOM — BISP Session Document · v1.1 · Junio 2026*
-*Este documento es la fuente de verdad del BISP como protocolo. No modificar sin revisión arquitectónica. No contiene decisiones de integración de consumidores específicos (ver documentos de integración aparte).*
+## 9. Nota de integración con Mandate Genesis (Go/Temporal) — GAP V3 (nueva en v1.2)
+
+**Por qué existe esta sección y por qué es la única que se agrega:** este documento (BISP) define el protocolo de vectorización — es agnóstico de qué workflow externo lo consume, igual que es agnóstico de Companion (§ Nota de alcance). El workflow Go de Mandate Genesis es, en potencia, uno de esos consumidores. Esta sección documenta el estado real de esa relación, verificado contra código (`mandate_genesis_activities.go`, `mandate_genesis_build_workflow.go`, `mandate_watcher.go`, `ws-events.ts` — el mismo GAP V3 usado para migrar el Roadmap Maestro), sin modificar ni una palabra del protocolo en §1-8.
+
+### 9.1 Estado real: el workflow Go **no invoca** este pipeline todavía
+
+Confirmado por código:
+
+- **Fase 1 (ingest) del `MandateGenesisBuildWorkflow`:** hoy es una sola `PublishMandateEventActivity` que emite el evento `mandate:phase:ingest`. **No llama a Brain, no llama a Ollama, no toca ChromaDB.** No ejecuta nada de lo descrito en §5.1 de este documento.
+- **Fase 2 (cluster):** hoy es `ScaffoldDomainActivity` con `Mode: dry_run` — devuelve siempre un único dominio (`input.Project`), sin clustering real y sin consultar ChromaDB. No existe canal a Brain (el cliente TCP:5678 mencionado en documentación previa **no existe en el código**).
+- **`GenesisBuildInput` (Temporal):** los campos reales son `MandateID`, `MandateType`, `BaseGenesisID`, `Source`, `Project`, `MandatesRoot`. **No incluye `RawDocs`** ni ningún campo de payload de documentación adjunta. Esto importa para este documento porque significa que, si Fase 1 llega a implementar §5.1, **no puede asumir que los archivos a vectorizar le llegan empaquetados en el input de Temporal** — tiene que leerlos del filesystem, en `{MandatesRoot}/{MandateID}`, igual que cualquier otro llamador de Brain.
+- **`runGenIntentActivity`:** no existe en el código. Ninguna oración de este documento ni del Roadmap Maestro debe asumir que el workflow Go ya invoca algo con ese nombre.
+
+### 9.2 Lo que esto significa para la Invariante 2
+
+Ver nota al pie de §7. La Invariante 2 ("Brain es el único orquestador") sigue siendo el diseño correcto y no cambia. Lo que cambia es la honestidad sobre el estado actual: **Mandate Genesis Fase 1/2 todavía no ejerce esa invariante porque todavía no llama a nadie** — ni a Brain ni a ningún otro componente que rompa la invariante. No hay violación de arquitectura; hay una feature no implementada.
+
+### 9.3 Lo que falta decidir antes de conectar ambos sistemas (pendientes nuevos)
+
+Estos son pendientes de esta migración, no decisiones tomadas — se listan acá y quedan reflejados también en la tabla de deuda del Roadmap Maestro (§6 de ese documento):
+
+1. **Cómo Fase 1 (Go) invoca a Brain.** Este documento asume que "Brain" es el orquestador Python que llama a Ollama/ChromaDB directamente (§2.1, Invariante 2). El workflow Mandate Genesis está en Go. Falta decidir el mecanismo de invocación cross-proceso (¿HTTP interno, como ya usa `publishMandateEvent()` contra `localhost:48215`? ¿otro canal?) — no asumir que existe todavía.
+2. **Relación entre `{MandatesRoot}/{MandateID}/domain_proposal.json`** (layout plano, Go) **y `.bloom/.project-{name}/{intent-uuid}/index.json`** (layout de este documento, §8) — son namespaces distintos hoy. Si Fase 2 pasa a apoyarse en `findings_summary`/`domain_tags` de intents ya vectorizados para evaluar coherencia semántica de dominios (la redefinición de Fase 2 en el Roadmap Maestro), hay que decidir explícitamente el puente entre ambos árboles.
+3. **Contrato de Synapse aplicable a Fase 2** — ver nota en §2.5. Cuando Fase 2 se convierta en un Intent BISP procesado por IA generativa vía Synapse, tiene que declararse bajo Contrato A, B o C como cualquier otro consumidor. Hoy no está declarado.
+
+---
+
+*BLOOM — BISP Session Document · v1.2 · Migrado a `ing/`, agosto 2026*
+*Este documento es la fuente de verdad del BISP como protocolo. No modificar §1-8 sin revisión arquitectónica. §9 es la única sección nueva de esta migración y documenta integración, no cambia el protocolo. No contiene decisiones de integración de consumidores específicos más allá de lo explícitamente marcado en §9 (ver documentos de integración aparte para el resto).*

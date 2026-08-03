@@ -66,7 +66,7 @@ class IntentManager:
             FileNotFoundError: If Bloom project not found or initial files don't exist
         """
         # Validate inputs
-        if intent_type not in ["dev", "doc"]:
+        if intent_type not in ["dev", "doc", "ing"]:
             raise ValueError(f"Invalid intent type: {intent_type}")
         
         if not name or not name.strip():
@@ -104,9 +104,14 @@ class IntentManager:
             validated_files
         )
         
-        state_file = intent_path / (
-            ".dev_state.json" if intent_type == "dev" else ".doc_state.json"
-        )
+        if intent_type == "dev":
+            state_filename = ".dev_state.json"
+        elif intent_type == "doc":
+            state_filename = ".doc_state.json"
+        else:  # "ing"
+            state_filename = ".ing_state.json"
+
+        state_file = intent_path / state_filename
         
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump(state_data, f, indent=2, ensure_ascii=False)
@@ -143,7 +148,16 @@ class IntentManager:
         )
        
         intent_type = state_data["type"]
-       
+
+        if intent_type == "ing":
+            # .reception/ tiene un contrato completamente distinto al de
+            # .briefing/.context (inventario + texto extraído, no briefing/instruction)
+            # — ver ING_Intent_Spec_v1_0.md §3. Se resuelve en su propio helper
+            # en vez de forzarlo dentro de la rama if/else genérica de abajo.
+            return self._hydrate_ing_reception(
+                project_root, intent_path, state_data, state_file, files, verbose
+            )
+
         if intent_type == "dev":
             content_dir = intent_path / ".briefing"
             content_file = content_dir / ".briefing.json"
@@ -237,6 +251,100 @@ class IntentManager:
             }
         }
     
+    def _hydrate_ing_reception(
+        self,
+        project_root: Path,
+        intent_path: Path,
+        state_data: Dict[str, Any],
+        state_file: Path,
+        files: Optional[List[str]],
+        verbose: bool
+    ) -> Dict[str, Any]:
+        """
+        Fase .reception/ para intents 'ing' (ING_Intent_Spec_v1_0.md §3).
+
+        Acto único, sin turnos: recibe archivos raw ya inventariados y escribe
+        - .rawbase.json: inventario (path/type/hash/size/status) por archivo.
+        - .rawbase_index.json: texto extraído + embedding_source_text obligatorio
+          por archivo (aplicación directa de la Invariante 1 de BISP).
+
+        Si algo llega mal formado no se abre un turno parcial — se reintenta
+        la fase entera (no hay concepto de turno en .reception/, a diferencia
+        de .classification/ y .consolidation/).
+        """
+        reception_dir = intent_path / ".reception"
+        files_dir = reception_dir / ".files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+
+        files_to_process = set(files) if files else set()
+        files_to_process.update(state_data.get("initial_files", []))
+
+        rawbase_entries = []
+        rawbase_index_entries = []
+        stats = {"total_files": 0, "total_size_kb": 0.0}
+
+        for file_path_str in files_to_process:
+            full_path = project_root / file_path_str
+            if not full_path.exists():
+                if verbose:
+                    print(f"⚠️ Warning: File skipped (not found): {file_path_str}")
+                continue
+
+            ext = full_path.suffix.lower().replace('.', '')
+            lang_map = {'py': 'python', 'js': 'javascript', 'ts': 'typescript', 'md': 'markdown'}
+            file_type = lang_map.get(ext, 'text')
+            content = full_path.read_text(encoding='utf-8', errors='ignore')
+            file_hash = hashlib.md5(content.encode()).hexdigest()
+            file_size = len(content)
+
+            # Inventario (.rawbase.json)
+            rawbase_entries.append({
+                "path": file_path_str,
+                "type": file_type,
+                "hash": file_hash,
+                "size": file_size,
+                "status": "received"
+            })
+
+            # Texto extraído + embedding_source_text obligatorio por archivo
+            # (Invariante 1 de BISP: texto fuente siempre presente)
+            rawbase_index_entries.append({
+                "path": file_path_str,
+                "extracted_text": content,
+                "embedding_source_text": content
+            })
+
+            stats["total_files"] += 1
+            stats["total_size_kb"] += file_size / 1024
+
+        with open(reception_dir / ".rawbase.json", 'w', encoding="utf-8") as f:
+            json.dump({"files": rawbase_entries}, f, indent=2, ensure_ascii=False)
+
+        with open(reception_dir / ".rawbase_index.json", 'w', encoding="utf-8") as f:
+            json.dump({"index": rawbase_index_entries}, f, indent=2, ensure_ascii=False)
+
+        # .reception/ es acto único: al completarla, la fase activa avanza
+        # a .classification/ (ver ING_Intent_Spec_v1_0.md §1).
+        state_data["status"] = "hydrated"
+        state_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        state_data["phase_active"] = "classification"
+        if "steps" in state_data:
+            state_data["steps"]["reception"] = True
+
+        with open(state_file, 'w', encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+
+        return {
+            "intent_id": state_data.get("uuid"),
+            "status": state_data["status"],
+            "phase_active": state_data["phase_active"],
+            "briefing_updated": False,
+            "stats": {
+                "total_files": stats["total_files"],
+                "total_size_kb": round(stats["total_size_kb"], 2)
+            }
+        }
+
     def _slugify(self, text: str) -> str:
         """
         Convert text to slug format for folder names.
@@ -393,7 +501,7 @@ class IntentManager:
                 ".pipeline/.execution/.response/.staging",
                 ".pipeline/.refinement"
             ]
-        else:
+        elif intent_type == "doc":
             # Documentation intent structure
             subdirs = [
                 ".context",
@@ -404,6 +512,27 @@ class IntentManager:
                 ".pipeline/.context/.response",
                 ".pipeline/.context/.response/.staging",
                 ".pipeline/.curation"
+            ]
+        else:
+            # Ingestion intent structure ("ing")
+            # Tres fases: .reception/ (acto único), .classification/ (con turnos),
+            # .consolidation/ (con turnos) — .pipeline/ espejo de las tres,
+            # confirmado contra bloom_project_tree.txt y ING_Intent_Spec_v1_0.md §3/§4/§5.
+            subdirs = [
+                ".reception",
+                ".reception/.files",
+                ".classification",
+                ".consolidation",
+                ".pipeline",
+                ".pipeline/.reception",
+                ".pipeline/.reception/.response",
+                ".pipeline/.reception/.response/.staging",
+                ".pipeline/.classification",
+                ".pipeline/.classification/.response",
+                ".pipeline/.classification/.response/.staging",
+                ".pipeline/.consolidation",
+                ".pipeline/.consolidation/.response",
+                ".pipeline/.consolidation/.response/.staging",
             ]
         
         for subdir in subdirs:
@@ -449,7 +578,7 @@ class IntentManager:
                     "merge": False
                 }
             }
-        else:
+        elif intent_type == "doc":
             return {
                 "status": "created",
                 "name": name,
@@ -462,6 +591,38 @@ class IntentManager:
                     "hydrate": False,
                     "curate": False,
                     "publish": False
+                }
+            }
+        else:  # "ing"
+            # Shape según ING_Intent_Spec_v1_0.md §1: phase_active recorre
+            # reception -> classification -> consolidation. domain_baseline
+            # queda vacío/None en Génesis (poblado luego por .classification/).
+            # thresholds y classification_summary son placeholders operativos
+            # hasta que .classification/ corra el algoritmo real de clustering.
+            return {
+                "status": "created",
+                "name": name,
+                "type": "ing",
+                "uuid": intent_id,
+                "created_at": timestamp,
+                "initial_files": initial_files,
+                "phase_active": "reception",
+                "domain_baseline": None,
+                "thresholds": {
+                    "similarity_threshold": 0.85,
+                    "confidence_threshold": 0.7
+                },
+                "classification_summary": {
+                    "total_clusters": 0,
+                    "resolved_clusters": 0,
+                    "pending_clusters": 0
+                },
+                "consolidation_committed": False,
+                "steps": {
+                    "create": True,
+                    "reception": False,
+                    "classification": False,
+                    "consolidate": False
                 }
             }
 
@@ -670,8 +831,8 @@ class IntentManager:
         if not intents_base.exists():
             raise ValueError("No intents directory found in project")
         
-        # Search in both .dev and .doc
-        search_dirs = [intents_base / ".dev", intents_base / ".doc"]
+        # Search in .dev, .doc and .ing
+        search_dirs = [intents_base / ".dev", intents_base / ".doc", intents_base / ".ing"]
         matches = []
         
         for search_dir in search_dirs:
@@ -689,8 +850,8 @@ class IntentManager:
                 
                 # Check by intent_id
                 if intent_id:
-                    # Try both state files
-                    for state_name in [".dev_state.json", ".doc_state.json"]:
+                    # Try all three state files
+                    for state_name in [".dev_state.json", ".doc_state.json", ".ing_state.json"]:
                         state_file = intent_dir / state_name
                         if state_file.exists():
                             try:
@@ -715,7 +876,7 @@ class IntentManager:
         state_file = None
         state_data = None
         
-        for state_name in [".dev_state.json", ".doc_state.json"]:
+        for state_name in [".dev_state.json", ".doc_state.json", ".ing_state.json"]:
             candidate = intent_path / state_name
             if candidate.exists():
                 state_file = candidate
@@ -764,6 +925,8 @@ class IntentManager:
             scan_dirs.append((".dev", "dev"))
         if intent_type is None or intent_type == "doc":
             scan_dirs.append((".doc", "doc"))
+        if intent_type is None or intent_type == "ing":
+            scan_dirs.append((".ing", "ing"))
        
         for dir_name, type_name in scan_dirs:
             type_dir = intents_base / dir_name
@@ -834,6 +997,8 @@ class IntentManager:
        
         # Contar turns si es dev
         turns_count = 0
+        classification_turns_count = 0
+        consolidation_turns_count = 0
         if intent_type == "dev":
             refinement_dir = intent_path / ".refinement"
             if refinement_dir.exists():
@@ -842,6 +1007,18 @@ class IntentManager:
             curation_dir = intent_path / ".curation"
             if curation_dir.exists():
                 turns_count = len([d for d in curation_dir.iterdir() if d.is_dir()])
+        else:  # "ing" — turns viven repartidos entre .classification/ y .consolidation/
+            classification_dir = intent_path / ".classification"
+            if classification_dir.exists():
+                classification_turns_count = len(
+                    [d for d in classification_dir.iterdir() if d.is_dir()]
+                )
+            consolidation_dir = intent_path / ".consolidation"
+            if consolidation_dir.exists():
+                consolidation_turns_count = len(
+                    [d for d in consolidation_dir.iterdir() if d.is_dir()]
+                )
+            turns_count = classification_turns_count + consolidation_turns_count
        
         return {
             "id": state_data.get("uuid", ""),
@@ -858,6 +1035,9 @@ class IntentManager:
             "initial_files": state_data.get("initial_files", []),
             "steps": state_data.get("steps", {}),
             "turns_count": turns_count,
+            "classification_turns_count": classification_turns_count,
+            "consolidation_turns_count": consolidation_turns_count,
+            "phase_active": state_data.get("phase_active") if intent_type == "ing" else None,
             "project_path": str(project_root),
             "full_state": state_data
         }
@@ -965,7 +1145,9 @@ class IntentManager:
         folder_name: Optional[str] = None,
         actor: str = "user",
         content: str = "",
-        nucleus_path: Optional[Path] = None
+        nucleus_path: Optional[Path] = None,
+        committed: bool = False,
+        reviewed_resolution: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Add a conversation turn to an intent's chat.
@@ -976,6 +1158,14 @@ class IntentManager:
             actor: Who is speaking ("user" or "ai")
             content: Content of the message
             nucleus_path: Optional path to Bloom project
+            committed: Solo aplica a intents 'ing' en fase .consolidation/. Si es
+                True, cierra el turno y dispara el "Efecto de committed: true"
+                del spec §5 (materialización de genes/delta/semantic-index/docbase).
+                Ignorado para dev/doc y para .classification/.
+            reviewed_resolution: Solo aplica junto con committed=True en
+                .consolidation/. Lista de clusters revisados, cada uno con shape
+                {"cluster_id": str, "gene": {"status": "extend"|"new", "gene_id"?: str},
+                "human_decision": "approved"|"overridden"|"rejected", "content": {...}}.
            
         Returns:
             Turn information
@@ -993,6 +1183,16 @@ class IntentManager:
         )
        
         intent_type = state_data.get("type", "dev")
+
+        if intent_type == "ing":
+            # .classification/ y .consolidation/ tienen una gramática de turno
+            # distinta a .refinement/.curation/ (fase activa variable + concepto
+            # de `committed` en consolidation) — no existía ni parcialmente antes
+            # de este cambio (ING_Intent_Spec_v1_0.md §4/§5).
+            return self._add_turn_ing(
+                project_root, intent_path, state_data, state_file,
+                actor, content, committed, reviewed_resolution
+            )
        
         # Determinar el número del siguiente turn
         if intent_type == "dev":
@@ -1068,13 +1268,25 @@ class IntentManager:
         state_data["status"] = "completed"
         state_data["finalized_at"] = timestamp
         state_data["locked"] = False
-       
+
+        intent_type = state_data.get("type", "dev")
+
         # Actualizar steps
         if "steps" in state_data:
-            if state_data["type"] == "dev":
+            if intent_type == "dev":
                 state_data["steps"]["merge"] = True
-            else:
+            elif intent_type == "doc":
                 state_data["steps"]["publish"] = True
+            elif intent_type == "ing":
+                # --- PUNTO #11: rama nueva para intents 'ing' ---
+                # finalize_intent es un evento de bookkeeping POSTERIOR e
+                # INDEPENDIENTE al commit de .consolidation/ (Punto #10,
+                # `_add_turn_ing` con committed=True). Ese commit ya
+                # materializó genes/.delta_N/.semantic-index.json/.docbase.json;
+                # acá NO se re-ejecuta ninguna escritura de dominio, solo se
+                # cierra el ciclo de vida del intent a nivel de estado
+                # (ING_Intent_Spec_v1_0.md §5).
+                self._finalize_ing_intent(state_data)
        
         # Guardar
         with open(state_file, "w", encoding="utf-8") as f:
@@ -1082,8 +1294,8 @@ class IntentManager:
        
         # Contar archivos modificados (simulado)
         files_modified = len(state_data.get("initial_files", []))
-       
-        return {
+
+        result = {
             "status": "completed",
             "intent_id": state_data.get("uuid", ""),
             "name": state_data.get("name", ""),
@@ -1091,6 +1303,41 @@ class IntentManager:
             "files_modified": files_modified,
             "message": f"Intent '{state_data.get('name', 'unknown')}' finalized successfully"
         }
+
+        # Para 'ing' se expone además el estado de consolidación que ya
+        # quedó fijado por el commit de turno (Punto #10) — solo lectura,
+        # no se recalcula ni se vuelve a escribir nada acá.
+        if intent_type == "ing":
+            result["consolidation_committed"] = state_data.get("consolidation_committed", False)
+            result["phase_active"] = state_data.get("phase_active")
+
+        return result
+
+    def _finalize_ing_intent(self, state_data: Dict[str, Any]) -> None:
+        """
+        Punto #11 — Bookkeeping de finalización para intents 'ing'.
+
+        Este helper NO escribe genes, deltas ni el índice semántico: esa
+        responsabilidad es exclusiva del commit de turno en `.consolidation/`
+        (`committed: true` dentro de `_add_turn_ing`, Punto #10). Acá solo se
+        cierra el ciclo de vida del intent a nivel de `.ing_state.json`:
+
+          - `steps["consolidate"] = True`, equivalente para 'ing' a
+            `steps["merge"]` (dev) / `steps["publish"]` (doc).
+
+        No valida ni bloquea el cierre si `consolidation_committed` es
+        `False`: `finalize_intent` es, por diseño, un evento de bookkeeping
+        distinto y posterior al commit de consolidación (ING_Intent_Spec_v1_0.md
+        §5; punto #11 del inventario de refactor), así que no le corresponde
+        forzar esa precondición de negocio acá.
+
+        Args:
+            state_data: Diccionario de estado (`.ing_state.json`) ya cargado
+                por `_locate_intent`. Se muta in-place; el caller
+                (`finalize_intent`) es responsable de persistirlo a disco.
+        """
+        state_data["steps"]["consolidate"] = True
+
     def delete_intent(
         self,
         intent_id: Optional[str] = None,

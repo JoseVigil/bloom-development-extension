@@ -43,7 +43,7 @@ class CreateCommand(BaseCommand):
                 ...,
                 "--type",
                 "-t",
-                help="Intent type: 'dev' for development or 'doc' for documentation"
+                help="Intent type: 'dev' for development, 'doc' for documentation, or 'ing' for ingestion of external docs/code"
             ),
             name: str = typer.Option(
                 ...,
@@ -83,10 +83,10 @@ class CreateCommand(BaseCommand):
             try:
                 # 2. Validar tipo de intent
                 intent_type = intent_type.lower()
-                if intent_type not in ["dev", "doc"]:
+                if intent_type not in ["dev", "doc", "ing"]:
                     self._handle_error(
                         gc,
-                        f"Invalid intent type '{intent_type}'. Must be 'dev' or 'doc'."
+                        f"Invalid intent type '{intent_type}'. Must be 'dev', 'doc' or 'ing'."
                     )
                 
                 # 3. Procesar lista de archivos si se proporciona
