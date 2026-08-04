@@ -1,16 +1,35 @@
 # bloom_project_tree.txt
 # Reemplaza a bloom_project_tree_gen.txt — renombrado porque el tipo de intent
-# `.gen/` fue reemplazado por `.ing/` (ver ING_Intent_Spec_v1_0.md, "Rationale
-# del cambio de estrategia: gen/ → ing/"). Única rama modificada respecto al
-# original: `.intents/.gen/` → `.intents/.ing/`, más el renombre del archivo
-# de instrucciones del bot en `.project/`. `.dev/` y `.doc/` quedan idénticos,
-# sin cambios.
+# `.gen/` fue reemplazado por `.ing/` (ver docs/intents/ING_Intent_Spec_v1_1.md,
+# "Rationale del cambio de estrategia: gen/ → ing/").
+#
+# v3 (esta revisión): incorpora la rama `.intents/.dis/` — séptimo tipo de intent,
+# `dis/` (Discovery), que corre después de una o más corridas de `ing/` para la
+# reestructuración retrospectiva y global de la topología de Dominios (fusión,
+# split, rename, altas de arista cross-domain). No es una fase del workflow de
+# Mandate Génesis (Fases 1-4): es un servicio aparte, invocado bajo demanda o
+# tras acumulación de cambios incrementales. Ver:
+#   - docs/intents/ING_Intent_Spec_v1_1.md (reemplaza a ING_Intent_Spec_v1_0.md
+#     referenciada en versiones previas de este árbol — v1.1 saca el campo
+#     `domain` de `gen.json`, ver su Changelog v1.0 → v1.1)
+#   - docs/intents/DIS_Intent_Spec_v1_0.md (nueva, spec del intent `dis/`)
+#   - BLOOM_Mandate_Genesis_Roadmap_Maestro_v3.md §8 (pedido de esta actualización)
+#
+# Único otro cambio de esta revisión: se agrega `.ai_bot.dis.intent.bl` en
+# `.project/`, por simetría con `.ai_bot.{dev,doc,ing}.intent.bl` — inferencia
+# editorial, ningún spec de intent toca `.project/` explícitamente; revisar si
+# no corresponde. `.dev/`, `.ing/` y `.doc/` quedan idénticos a la revisión
+# anterior, sin cambios de forma.
 #
 # NOTA — fuera de alcance de este árbol: `gen.json`, `.history/.delta_N/`, y
-# `.cache/.semantic-index.json` (ver ING_Intent_Spec_v1_0.md §7) viven a nivel
-# Nucleus, no a nivel de este proyecto — su árbol real está en
-# `bloom_nucleus_tree.txt`, que no forma parte de esta sesión. No se inventa
-# su ubicación acá.
+# `.cache/.semantic-index.json` (ver docs/intents/ING_Intent_Spec_v1_1.md §7,
+# docs/intents/DIS_Intent_Spec_v1_0.md §7.2) viven a nivel Nucleus, no a nivel
+# de este proyecto — su árbol real está en `bloom_nucleus_tree.txt`, que no
+# forma parte de esta sesión. No se inventa su ubicación acá. Esto incluye a
+# `dis/`: aunque `.ratification/` es quien en última instancia aplica cambios
+# sobre `.cache/.semantic-index.json`, ese archivo en sí sigue siendo Nucleus-
+# level — lo que este árbol sí documenta son sus copias/deltas *locales* al
+# intent (`.domain_graph_snapshot.json`, `.domain_graph_delta.json`).
 
 .project-{name}/
 │
@@ -81,7 +100,7 @@
     │   │                       ├── .report.json
     │   │                       └── .staging/
     │   │
-    │   ├── .ing/                            ← reemplaza a .gen/ (ver ING_Intent_Spec_v1_0.md)
+    │   ├── .ing/                            ← reemplaza a .gen/ (ver docs/intents/ING_Intent_Spec_v1_1.md)
     │   │   └── .{intent-name-uuid}/
     │   │       │
     │   │       ├── .ing_state.json          ← phase_active: reception|classification|consolidation|done
@@ -136,6 +155,64 @@
     │   │                       ├── .report.json
     │   │                       └── .staging/
     │   │
+    │   ├── .dis/                            ← nuevo (ver docs/intents/DIS_Intent_Spec_v1_0.md) — séptimo
+    │   │   │                                   intent type; corre bajo demanda o tras acumulación de
+    │   │   │                                   corridas de .ing/, no es parte del ciclo de un Mandate único
+    │   │   └── .{intent-name-uuid}/
+    │   │       │
+    │   │       ├── .dis_state.json          ← phase_active: discovery|mapping|ratification|done
+    │   │       │
+    │   │       ├── .discovery/              ← sin turnos, igual que .reception/ (ing) y .context/ (doc)
+    │   │       │   ├── .discovery.json
+    │   │       │   ├── .context_dis_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .genebase.json             ← snapshot de linaje de Genes del scope, sin domain
+    │   │       │       ├── .genebase_index.json
+    │   │       │       ├── .domain_graph_snapshot.json ← copia local de .semantic-index.json (Nucleus) al
+    │   │       │       │                                  arrancar la corrida — NO es la fuente de verdad
+    │   │       │       └── [optional files]
+    │   │       │
+    │   │       ├── .mapping/                ← con turnos, igual que .classification/ (ing)
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_dis_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .mapping_proposal.json  ← altas/bajas de arista, fusión, split, rename
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       ├── .ratification/           ← con turnos, igual que .consolidation/ (ing)
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .ratification.json          ← committed: false|true
+    │   │       │       ├── .context_dis_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .domain_graph_delta.json ← qué cambió vs .domain_graph_snapshot.json
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       └── .pipeline/               ← contrato BISP idéntico, por fase
+    │   │           ├── .discovery/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .mapping/
+    │   │           │   └── .turn_X/
+    │   │           │       ├── .payload.json
+    │   │           │       ├── .index.json
+    │   │           │       └── .response/
+    │   │           │           ├── .raw_output.txt
+    │   │           │           ├── .report.json
+    │   │           │           └── .staging/
+    │   │           └── .ratification/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   │
     │   └── .doc/
     │       └── .{intent-name-uuid3}/
     │           ├── .doc_state.json
@@ -181,4 +258,6 @@
         ├── .ai_bot.dev.intent.bl
         ├── .ai_bot.doc.intent.bl
         ├── .ai_bot.ing.intent.bl           ← renombrado de .ai_bot.gen.intent.bl
+        ├── .ai_bot.dis.intent.bl           ← nuevo, por simetría — sin mandato explícito en los specs,
+        │                                      ver nota de cabecera; revisar si no corresponde
         └── .project.meta.json

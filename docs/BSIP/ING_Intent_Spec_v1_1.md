@@ -1,9 +1,40 @@
 # ING — Especificación Técnica del Intent de Ingesta
 
-**Versión:** 1.0
+**Versión:** 1.1
 **Estado:** Confirmado — listo para implementación
-**Reemplaza a:** propuesta `gen/` (descartada, ver rationale en sesión de diseño previa)
-**Depende de:** BTIP_resumen_ecosistema (jerarquía Nucleus→Mandate→Action→Intent), BLOOM_BISP_Session_Decisions v1.1 (Invariantes 1, 2, 3, 4 y 5; mecanismo de `context_plan`/`index.json` de las secciones 5.1 y 5.2; threshold de similitud 0.40 de la sección 2.6, PENDIENTE de calibración empírica)
+**Reemplaza a:** `ING_Intent_Spec_v1_0.md`
+**Depende de:** BTIP_resumen_ecosistema (jerarquía Nucleus→Mandate→Action→Intent), `BLOOM_BISP_Session_Decisions_v1_1`
+(Invariantes 1, 2, 3, 4 y 5; mecanismo de `context_plan`/`index.json` de las secciones 5.1 y 5.2; threshold
+de similitud 0.40 de la sección 2.6, PENDIENTE de calibración empírica), `DIS_Intent_Spec_v1_0.md`
+(intent que asume la propiedad de la topología de Dominios a partir de esta versión)
+
+---
+
+## Changelog v1.0 → v1.1
+
+Esta revisión corrige un resabio del modelo jerárquico anterior que sobrevivió por error a la migración
+`gen/` → `ing/`: el spec v1.0 trataba `domain` como una propiedad física del Gene (`gen.json.domain`,
+string único). Al formalizar el intent `dis/` y el modelo de topología N:M Domain↔Gene, quedó claro que
+esa decisión no era sostenible — un campo de dominio singular en `gen.json` no puede representar un Gene
+que pertenece a más de un Dominio, y duplicaba una fuente de verdad que ya existía en
+`.cache/.semantic-index.json`.
+
+**No se toca nada del contrato BSIP de fases** (`.reception/`, `.classification/`, `.consolidation/`,
+`.pipeline/` espejo) — esta revisión es exclusivamente de alcance y de schema de metadata. Cambios
+concretos:
+
+1. `gen.json` (§7.1) pierde el campo `domain`. El Gene vuelve a ser linaje puro.
+2. `.cache/.semantic-index.json` (§7.3) pasa a estar keyeado por un `domain_id` estable
+   (`dom_{slug}_{hex4}`) en vez de por el nombre del dominio — el nombre es mutable, la clave no puede
+   serlo.
+3. Se deja explícito (§4 y §5) que `.classification/` de `ing/` solo **siembra la primera arista** de un
+   Gene nuevo en `.semantic-index.json`, o extiende la arista existente de un Gene que ya tenía Dominio.
+   `ing/` nunca agrega una segunda arista, nunca fusiona, nunca divide, nunca renombra un Dominio — esas
+   operaciones son propiedad exclusiva de `dis/` (`DIS_Intent_Spec_v1_0.md §5`).
+4. La invariante de la matriz de casos (§8) — "dominio nuevo implica genes nuevos" — se mantiene válida,
+   pero se aclara que describe únicamente lo que `ing/` puede producir, no el universo completo de
+   combinaciones posibles del grafo (la combinación "gene existente + dominio adicional" existe, y es
+   responsabilidad de `dis/`).
 
 ---
 
@@ -24,21 +55,30 @@ pipeline que ya usan `dev` y `doc` sin copiar un número de fases fijo entre ell
 vectorización (Ollama/ChromaDB) como una capa aditiva y aislada del contrato BSIP —tal como ya lo es en
 los demás intents—, y resolviendo la relación Raw→Dominio→Gene mediante un embudo de dos pasadas
 vectoriales (dominio primero, gene después) que no requiere ningún nivel jerárquico nuevo ni carpetas
-adicionales: el dominio pasa a ser una etiqueta semántica sobre el gene, no un contenedor estructural.
+adicionales.
+
 Además, `ing/` deja de ser exclusivo del Mandate Génesis: al incorporar un campo `domain_baseline`
 (`empty` para génesis, `existing` para cualquier incorporación posterior) se convierte en el mecanismo
 genérico y reutilizable para anexar cualquier subsistema, repo o módulo nuevo al sistema en cualquier
 momento de su vida, con trazabilidad completa vía `parent_mandates` y `.history/.delta_N` sin romper la
 inmutabilidad de los Mandates ya firmados.
 
+**Nota agregada en v1.1:** la frase original de esta sección decía que "el dominio pasa a ser una
+etiqueta semántica sobre el gene, no un contenedor estructural" y proponía representarlo como
+`gen.json.domain`. Esa representación concreta fue el error que corrige esta versión — el *principio*
+(dominio no es contenedor estructural) seguía siendo correcto; lo que estaba mal era dónde vivía el dato.
+Ver Changelog y §7.1/§7.3.
+
 ---
 
 ## 0. Resumen ejecutivo
 
 `ing/` es el sexto tipo de intent del sistema, sumado a los cinco existentes (`dev`, `doc`, `exp`, `inf`,
-`cor`). Su función es incorporar archivos raw o de código nuevos al ecosistema — tanto en el arranque de
-un proyecto (Mandate Génesis) como en cualquier incorporación posterior (nuevo subsistema, nuevo repo,
-nuevo módulo).
+`cor`) — y precede en el flujo típico al séptimo, `dis/`. Su función es incorporar archivos raw o de código
+nuevos al ecosistema — tanto en el arranque de un proyecto (Mandate Génesis) como en cualquier
+incorporación posterior (nuevo subsistema, nuevo repo, nuevo módulo) — y sembrar el linaje de los Genes
+resultantes. La curación de la topología de Dominios a la que esos Genes pertenecen es responsabilidad de
+`dis/`, no de `ing/` (ver §4 y `DIS_Intent_Spec_v1_0.md`).
 
 Reglas de diseño que este documento fija como contrato:
 
@@ -46,16 +86,20 @@ Reglas de diseño que este documento fija como contrato:
    espejo por fase (el número de fases es propio de cada tipo — `dev` tiene tres, `doc` tiene dos, `ing`
    define las suyas en la sección 2). No introduce una fase estructural nueva como `.scaffold/`.
 2. `ing/` **siempre** corre bajo un Mandate, nunca "suelto". No existe un modo standalone.
-3. **Dominio no es un nivel jerárquico ni una carpeta persistida.** Es una etiqueta semántica sobre el
-   Gene (`gen.json.domain`), resuelta por clustering vectorial y cacheada en
-   `.cache/.semantic-index.json` a nivel Nucleus.
+3. **Dominio no es un nivel jerárquico, ni una carpeta persistida, ni un campo del Gene.** Es una relación
+   N:M entre Dominio y Gene, resuelta por clustering vectorial y persistida exclusivamente en
+   `.cache/.semantic-index.json` a nivel Nucleus. `gen.json` no tiene ni necesita ningún campo de dominio.
 4. La resolución Raw → Dominio → Gene ocurre en dos pasadas dentro de `.classification/`: primero
-   Dominio (coarse, Nucleus-wide), después Gene (fine, acotado al dominio ya resuelto).
+   Dominio (coarse, Nucleus-wide), después Gene (fine, acotado al dominio ya resuelto). El resultado de
+   esa resolución es la **primera arista** del Gene en `.semantic-index.json` — no un campo del Gene.
 5. La vectorización (Ollama/ChromaDB) es aditiva y aislada del contrato BSIP — se invoca desde Brain
    dentro de cada fase, siguiendo el mismo mecanismo `context_plan → payload` / `index.json` post-fase
    ya documentado en BISP §5.1 y §5.2. No es una fase ni un payload que dialoga con la AI web.
 6. La capa vectorial es aditiva y nunca bloqueante (Invariante 3 BISP): si Ollama no está disponible,
    `ing/` degrada a resolución manual en `.consolidation/` en vez de abortar el intent (ver sección 6).
+7. **`ing/` nunca reestructura Dominios ya existentes.** No fusiona, no divide, no renombra, no agrega una
+   segunda arista a un Gene que ya tenía Dominio asignado. Toda reestructuración de la topología es
+   competencia exclusiva de `dis/`.
 
 ---
 
@@ -156,9 +200,13 @@ Reglas de diseño que este documento fija como contrato:
                 └── .turn_X/{.payload.json, .index.json, .response/}
 ```
 
+*(sin cambios respecto a v1.0)*
+
 ---
 
 ## 3. Fase `.reception/`
+
+*(sin cambios respecto a v1.0)*
 
 ### Propósito
 
@@ -237,6 +285,16 @@ embudo de dos pasadas descrito en el diseño de esta sesión: primero Dominio (N
 naming de un dominio propuesto, se abre `.turn_{X+1}/` con la propuesta ajustada, igual que en
 `.refinement/` de `dev`.
 
+**Acotación de alcance (v1.1):** esta fase resuelve una asignación **local** de Dominio para el material
+que acaba de entrar — compara contra los centroides de Dominio ya existentes al momento de la corrida,
+nunca reconsidera Dominios ya consolidados por corridas anteriores entre sí. Si el resultado es
+`domain.status: "existing"`, el efecto en `.consolidation/` es agregar la arista Gene→Dominio
+correspondiente; si el Gene en cuestión ya fuera, por una corrida previa de `dis/`, cross-domain, esta
+fase no lo sabe ni le importa — solo agrega o extiende **una** arista, la que le corresponde a este lote.
+Cualquier reestructuración de Dominios ya existentes (fusión, split, rename, o dar de alta una *segunda*
+arista sobre un Gene que ya tenía Dominio) es responsabilidad exclusiva de `dis/`
+(`DIS_Intent_Spec_v1_0.md §5`).
+
 ### Algoritmo
 
 Pseudocódigo del runner (ejecutado por Brain, invocado en cada `.turn_X/` de la fase):
@@ -266,6 +324,7 @@ function classification_phase(ing_state, raw_files):
             )
             if candidates.best_score >= domain_threshold:
                 domain_result = { status: "existing",
+                                   domain_id: candidates.best.domain_id,
                                    name: candidates.best.name,
                                    score: candidates.best_score }
             else:
@@ -274,7 +333,7 @@ function classification_phase(ing_state, raw_files):
         # ---------- PASADA 2: Gene (solo si el dominio ya existía) ----------
         if domain_result.status == "existing":
             gene_candidates = query_genes_in_domain(
-                domain    = domain_result.name,
+                domain_id = domain_result.domain_id,
                 vector    = centroid,
                 threshold = gene_threshold
             )
@@ -298,6 +357,11 @@ function classification_phase(ing_state, raw_files):
     update(ing_state.classification_summary, resolution)
     return resolution
 ```
+
+**Cambio v1.1 respecto a v1.0:** la Pasada 1 ahora resuelve y transporta `domain_id` (la clave estable en
+`.semantic-index.json`, ver §7.3), no solo `name`. El `name` sigue viajando en la propuesta para que el
+turno de `.consolidation/` sea legible por un humano sin tener que resolver el ID, pero la escritura
+efectiva en §5 usa `domain_id`.
 
 **Nota de implementación (abierta, no bloqueante):** el pseudocódigo vectoriza y clusteriza a nivel
 `cluster.centroid` para ambas pasadas. Es razonable evaluar si la Pasada 2 debería recalcular a
@@ -329,7 +393,7 @@ aislado con forma propia de fase.
   "reviewed_resolution": [
     {
       "cluster_id": "...",
-      "domain": { "status": "existing | new", "name": "auth", "score": 0.52 },
+      "domain": { "status": "existing | new", "domain_id": "dom_auth_a1b2", "name": "auth", "score": 0.52 },
       "gene":   { "status": "extend | new", "gene_id": "..." },
       "human_decision": "approved | overridden | rejected",
       "override_reason": null
@@ -340,6 +404,8 @@ aislado con forma propia de fase.
 }
 ```
 
+*(único cambio respecto a v1.0: `domain` transporta `domain_id` junto con `name`, ver §7.3)*
+
 ### Efecto de `committed: true`
 
 Cuando el turno cierra con `committed: true`, Brain ejecuta, por cada entrada con
@@ -347,9 +413,19 @@ Cuando el turno cierra con `committed: true`, Brain ejecuta, por cada entrada co
 
 - si `gene.status == "extend"` → escribe `.genes/{gene_id}/.history/.delta_N/` (ver sección 7.2)
 - si `gene.status == "new"` → crea `.genes/{new_gene_id}/gen.json` (ver sección 7.1)
-- en ambos casos → actualiza `.cache/.semantic-index.json` (ver sección 7.3)
+- en ambos casos → **siembra o extiende exactamente una arista** en `.cache/.semantic-index.json` (ver
+  sección 7.3):
+  - si `domain.status == "new"` → crea la entrada de Dominio (`domain_id` nuevo, formato `dom_{slug}_{hex4}`)
+    con `genes: [gene_id]`
+  - si `domain.status == "existing"` → agrega `gene_id` al `genes[]` del `domain_id` ya resuelto en la
+    Pasada 1, **solo si `gene_id` no está ya presente en ese `genes[]`** (idempotencia ante reintentos)
 - escribe `.files/.docbase.json` (y `.codebase.json` si el raw incluía código) con el resultado final,
   listo para que un `dev`/`doc` futuro lo consuma.
+
+**Límite explícito (v1.1):** este efecto nunca agrega una segunda arista a un `gene_id` que ya tuviera
+alguna, nunca quita una arista existente, nunca toca el `genes[]` de un `domain_id` distinto al resuelto
+en la Pasada 1 de este mismo turno, y nunca modifica `name` de un Dominio ya existente. Cualquier
+necesidad de alguna de esas operaciones se resuelve con una corrida de `dis/`, no ajustando este efecto.
 
 Entradas con `human_decision: "rejected"` no producen ningún efecto — el archivo correspondiente queda
 fuera del sistema, disponible para una futura ingesta si se reconsidera.
@@ -361,6 +437,8 @@ vuelta.
 ---
 
 ## 6. Contrato `.pipeline/` y degradación graceful
+
+*(sin cambios respecto a v1.0)*
 
 ### Mismo contrato BISP en las tres fases
 
@@ -394,7 +472,6 @@ Mandate al cerrarse (Invariante 4 BISP).
 {
   "gene_id": "uuid",
   "mandate_id": "uuid",
-  "domain": "auth",
   "name": "session-management",
   "semantic_function": "gestiona creación y validación de sesiones",
   "embedding_ref": "chroma://nucleus/genes/{gene_id}",
@@ -404,9 +481,10 @@ Mandate al cerrarse (Invariante 4 BISP).
 }
 ```
 
-Cambio respecto al estado previo: se agrega `"domain"` como campo plano de metadata. No hay ninguna
-referencia inversa (dominio → genes) dentro de `gen.json` — esa dirección de lookup vive en
-`.semantic-index.json` (sección 7.3), evitando datos duplicados desincronizables.
+**Cambio v1.1:** se **elimina** el campo `"domain"` que traía v1.0. El Gene es linaje puro — identidad,
+función semántica, archivos que lo componen, Mandate de origen. La pertenencia a uno o más Dominios no es
+una propiedad del Gene: vive exclusivamente en `.cache/.semantic-index.json` (§7.3), como relación N:M
+gestionada por `ing/` (siembra inicial) y `dis/` (reestructuración).
 
 ### 7.2 `.history/.delta_N/delta.json`
 
@@ -428,7 +506,7 @@ referencia inversa (dominio → genes) dentro de `gen.json` — esa dirección d
 
 `snapshot.json` (mismo `.delta_N/`) conserva el rol ya definido en `bloom_nucleus_tree.txt`: estado
 completo del scope del gene en ese punto, con hashes — sin cambios de esquema, solo se confirma que todo
-delta producido por `ing/` se escribe con este formato.
+delta producido por `ing/` se escribe con este formato. *(sin cambios respecto a v1.0)*
 
 ### 7.3 `.cache/.semantic-index.json`
 
@@ -436,15 +514,17 @@ delta producido por `ing/` se escribe con este formato.
 {
   "updated_at": "ISO-8601",
   "domains": {
-    "auth": {
-      "domain_centroid_ref": "chroma://nucleus/domains/auth",
+    "dom_auth_a1b2": {
+      "name": "auth",
+      "domain_centroid_ref": "chroma://nucleus/domains/dom_auth_a1b2",
       "genes": ["gene-uuid-1", "gene-uuid-2"],
       "mandates": ["mandate-genesis-uuid"],
       "first_created_by": "ing-intent-uuid-0",
       "last_updated": "ISO-8601"
     },
-    "billing": {
-      "domain_centroid_ref": "chroma://nucleus/domains/billing",
+    "dom_billing_x1y2": {
+      "name": "billing",
+      "domain_centroid_ref": "chroma://nucleus/domains/dom_billing_x1y2",
       "genes": ["gene-uuid-5"],
       "mandates": ["mandate-billing-uuid"],
       "first_created_by": "ing-intent-uuid-7",
@@ -454,10 +534,25 @@ delta producido por `ing/` se escribe con este formato.
 }
 ```
 
-`mandates[]` es acumulativo: si un Mandate de incorporación posterior extiende un gene de un dominio ya
-existente, su `mandate_id` se agrega a la lista sin reemplazar al Mandate original que creó el dominio.
-Esto preserva trazabilidad completa de qué Mandates tocaron cada dominio a lo largo del tiempo, sin
-necesidad de recorrer todos los Mandates del Nucleus para reconstruirlo.
+**Cambio v1.1 — reemplaza por completo al schema de v1.0:**
+
+- La clave del mapa de `domains` deja de ser el nombre del Dominio y pasa a ser un `domain_id` estable,
+  formato `dom_{slug}_{hex4}`, generado una vez y **nunca reutilizado** — ni siquiera si ese Dominio deja
+  de existir por una fusión o un split ejecutados por `dis/` (`DIS_Intent_Spec_v1_0.md §7.3`). Este es el
+  mismo formato ya resuelto una vez en el diseño previo del Mandate Genesis, recuperado acá porque la
+  razón que lo motivó (un ID derivado de un campo mutable rompe trazabilidad ante un rename) sigue siendo
+  válida — de hecho más válida ahora, porque `dis/` convierte el rename en una operación de rutina.
+- `name` es el único campo mutable — un rename (operación exclusiva de `dis/`) solo toca este campo, la
+  clave del mapa no se mueve nunca.
+- `genes[]` es la única fuente de verdad de la relación N:M Domain↔Gene. Un `gene_id` puede aparecer en el
+  `genes[]` de más de un `domain_id` simultáneamente (Gene cross-domain) — situación que `ing/` nunca
+  produce por sí mismo (siempre siembra una única arista), pero que `dis/` sí puede producir, y que
+  `ing/.classification` debe tolerar sin error si la encuentra en una corrida posterior (simplemente
+  ignora las aristas adicionales que no le correspondan resolver).
+- `mandates[]` es acumulativo: si un Mandate de incorporación posterior extiende un gene de un dominio ya
+  existente, su `mandate_id` se agrega a la lista sin reemplazar al Mandate original que creó el dominio.
+  Esto preserva trazabilidad completa de qué Mandates tocaron cada dominio a lo largo del tiempo, sin
+  necesidad de recorrer todos los Mandates del Nucleus para reconstruirlo.
 
 ---
 
@@ -465,16 +560,21 @@ necesidad de recorrer todos los Mandates del Nucleus para reconstruirlo.
 
 | Caso | `domain_baseline` | Resultado Pasada 1 | ¿Corre Pasada 2? | Resultado Pasada 2 | Efecto en `.genes/` | Efecto en `.semantic-index.json` |
 |---|---|---|---|---|---|---|
-| **Génesis** | `empty` | siempre `new` (no hay centroides contra qué comparar) | No | N/A | Crea gene(s) nuevo(s) bajo el Mandate Génesis, sin `parent_mandates` | Crea entrada de dominio nueva, `mandates: [genesis_id]` |
-| **Incorporación — Dominio existente + Gene existente** | `existing` | `existing` (score ≥ `domain_threshold`) | Sí | `extend` (score ≥ `gene_threshold`) | Escribe `.delta_N` sobre el gene existente; el gene sigue perteneciendo a su Mandate original | Actualiza `last_updated`; agrega el Mandate de incorporación a `mandates[]` si no estaba |
-| **Incorporación — Dominio existente + Gene nuevo** | `existing` | `existing` | Sí | `new` (score < `gene_threshold` en todos los candidatos) | Crea gene nuevo bajo el Mandate de incorporación, `domain` heredado del dominio resuelto | Agrega el nuevo `gene_id` a `domains[domain].genes` |
-| **Incorporación — Dominio nuevo + Genes nuevos** | `existing` | `new` (score < `domain_threshold` en todos los dominios existentes) | No | N/A (todo el cluster resulta en genes nuevos) | Crea dominio + N genes nuevos, todos bajo el Mandate de incorporación | Crea entrada de dominio nueva, `mandates: [mandate_de_incorporacion_id]` |
+| **Génesis** | `empty` | siempre `new` (no hay centroides contra qué comparar) | No | N/A | Crea gene(s) nuevo(s) bajo el Mandate Génesis, sin `parent_mandates` | Crea entrada de dominio nueva (`domain_id` nuevo), `mandates: [genesis_id]`, `genes: [gene_id(s)]` |
+| **Incorporación — Dominio existente + Gene existente** | `existing` | `existing` (score ≥ `domain_threshold`) | Sí | `extend` (score ≥ `gene_threshold`) | Escribe `.delta_N` sobre el gene existente; el gene sigue perteneciendo a su Mandate original | Actualiza `last_updated`; agrega el Mandate de incorporación a `mandates[]` si no estaba. `genes[]` no cambia — el gene ya estaba |
+| **Incorporación — Dominio existente + Gene nuevo** | `existing` | `existing` | Sí | `new` (score < `gene_threshold` en todos los candidatos) | Crea gene nuevo bajo el Mandate de incorporación | Agrega el nuevo `gene_id` al `genes[]` del `domain_id` resuelto en Pasada 1 |
+| **Incorporación — Dominio nuevo + Genes nuevos** | `existing` | `new` (score < `domain_threshold` en todos los dominios existentes) | No | N/A (todo el cluster resulta en genes nuevos) | Crea dominio + N genes nuevos, todos bajo el Mandate de incorporación | Crea entrada de dominio nueva (`domain_id` nuevo), `mandates: [mandate_de_incorporacion_id]`, `genes: [...]` |
 | **Sin vectorización disponible** (cualquier `domain_baseline`) | `empty` o `existing` | No se ejecuta (Ollama caído) | No | N/A | Sin efecto hasta `.consolidation/` | Sin efecto hasta `.consolidation/` — cluster marcado `unresolved_no_vectorization`, resuelto a mano por el humano en el turno de consolidación |
 
 **Invariante que valida la matriz:** dominio nuevo implica, por definición, genes nuevos — no existe una
 combinación "dominio nuevo + gene existente", porque no puede haber genes previos en un dominio que no
 existía. El caso de degradación graceful no agrega una quinta rama de negocio: es el mismo árbol de casos
 resuelto manualmente en vez de por vector, sin cambiar el contrato de `.consolidation/`.
+
+**Nota de alcance (v1.1):** esta matriz describe únicamente las combinaciones que `ing/` puede producir.
+La combinación "gene ya existente + dominio adicional" (Gene cross-domain) existe en el sistema, pero
+nunca la produce `ing/` — es competencia exclusiva de `dis/` (`DIS_Intent_Spec_v1_0.md §8`). No es una
+quinta fila faltante en esta tabla: está deliberadamente fuera del alcance de este intent.
 
 ---
 
@@ -483,13 +583,16 @@ resuelto manualmente en vez de por vector, sin cambiar el contrato de `.consolid
 - Calibración empírica de `domain_threshold` (0.45) y `gene_threshold` (0.40, heredado del default
   sugerido en BISP §2.6, también PENDIENTE ahí) contra corpus real.
 - Definición de `propose_domain_name(cluster)` — heurística o prompt a AI para nombrar un dominio nuevo.
+  Mismo pendiente compartido con `dis/` para `create_domain` (`DIS_Intent_Spec_v1_0.md §9`) — no
+  duplicar el diseño, resolver una sola vez.
 - Decisión sobre granularidad de vectorización en Pasada 2 (centroide de cluster vs. archivo individual)
   para clusters heterogéneos grandes.
-- **Verificar contra el schema real de `exp_state.json` y `dev_state.json`** (código, no diseño) que
-  ninguno de los dos contempla campos de dominio, gene, threshold de similitud ni historial de deltas.
-  Esto sostiene la decisión de no repartir la Fase 2 (clustering) y la Fase 4 (scaffold) del Mandate
-  Génesis entre intents `exp` y `dev` existentes en lugar de crear `ing` como sexto `IntentType` — hoy es
-  un argumento de diseño razonado, no un hecho confirmado contra código.
 - Formato de parsing de la URI `chroma://...` para los `domain_centroid_ref` de esta especificación —
   depende de que se resuelva el pendiente equivalente ya abierto en BISP §2.6 para el resto del sistema;
   `ing/` no debería definir un formato propio y paralelo.
+- **Retirado en v1.1** (ya no aplica): el pendiente de v1.0 sobre "verificar que `.dev_state.json` no
+  contemple campos de dominio, gene, threshold, historial de deltas, para sostener la decisión de crear
+  `ing` como sexto IntentType" — con `mandateType: genesis` fuera del modelo y el patrón genérico
+  `ing/`→`dis/`→`doc/` confirmado, esa verificación ya no es un argumento necesario para la existencia de
+  `ing/`; el intent se sostiene por sí mismo como mecanismo genérico de incorporación, no como sustituto
+  de una fase de un workflow especial que ya no existe.
