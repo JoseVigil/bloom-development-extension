@@ -70,8 +70,8 @@ Cualquier mención previa (v1 de este documento, y otros docs relacionados) a qu
 
 | Fase | Estado real hoy (✅ código — GAP V3) | Objetivo `ing/` (🎯 Redefinido, no implementado) |
 |---|---|---|
-| 1 — ingest | Una sola `PublishMandateEventActivity` que emite el evento `mandate:phase:ingest` con `mandateId`. **No lee archivos, no llama a Brain, no toca ChromaDB.** Es, literalmente, un evento hueco. | Leer los archivos de contexto desde `{MandatesRoot}/{MandateID}`, empaquetar el payload BISP de ingesta, extraer texto y coordinar la vectorización en ChromaDB — reemplazando el evento hueco actual. |
-| 2 — cluster | `ScaffoldDomainActivity` con `Mode: dry_run`. **No clusteriza nada**: devuelve siempre un único dominio igual a `input.Project`. No existe canal a Brain — el cliente TCP:5678 mencionado en specs previas **no existe en Go**. | Pasar de mock `dry_run` a un Intent BISP procesado vía Synapse / IA generativa, que valide la coherencia semántica de los dominios propuestos antes de llegar a Fase 3. |
+| 1 — ingest | Una sola `PublishMandateEventActivity` que emite el evento `mandate:phase:ingest` con `mandateId`. **No lee archivos, no llama a Brain, no toca ChromaDB.** Es, literalmente, un evento hueco. | Invocar `brain` como subproceso CLI desde las Activities de Go (no TCP/EXECUTE_INTENT, ver §6 D-15): `brain intent create --type ing --json` para crear el intent, seguido de `brain intent hydrate --id <id> --files <paths de {MandatesRoot}/{MandateID}>` para leer los archivos de contexto, empaquetar el payload BISP de ingesta y coordinar la vectorización en ChromaDB — reemplazando el evento hueco actual. |
+| 2 — cluster | `ScaffoldDomainActivity` con `Mode: dry_run`. **No clusteriza nada**: devuelve siempre un único dominio igual a `input.Project`. No existe canal a Brain — el cliente TCP:5678 mencionado en specs previas **no existe en Go**. | Pasar de mock `dry_run` a invocar `brain intent add-turn` (subproceso CLI, no TCP) para los turnos de `.classification/`, y `brain intent submit` cuando el paso de validación semántica requiera invocar a un provider de IA generativa vía Synapse — validando la coherencia semántica de los dominios propuestos antes de llegar a Fase 3. |
 | 3 — validate | Espera Signal `mandate:genesis:validate`; CLI (`domains confirm`) y Signal ya señalizan correctamente. | Sin cambios de esta migración — se mantiene igual. |
 | 4 — scaffold | `SignMandateActivity` arma `mandate.json` firmado; `MandateExecutionWorkflow` (P4 real) sigue placeholder puro. | Sin cambios de esta migración — se mantiene igual. |
 
@@ -150,6 +150,8 @@ Este documento (v1) tenía la deuda D-11 abierta: "contenido real de `ws-events.
 | D-05 (heredado) | `registerSynapseHandlers` no se llama en el path de Core | Frontend | Sin resolver, deuda conocida desde el Preludio original |
 | Sync `ing/` | `mandate_state.json.currentPhase` vs. `.ing_state.json.phase_active` — orden de escritura y comportamiento ante falla parcial | Backend | No bloquea hoy — sin decisión de diseño todavía (ver §8) |
 | **D-14 (nuevo)** | **`runGenIntentActivity` no existe en el código.** Cualquier referencia previa (en esta familia de documentos o en discusión) a que el workflow invoca esa función queda cerrada como incorrecta — el workflow real solo dispara `PublishMandateEventActivity` (Fase 1) y `ScaffoldDomainActivity` (Fase 2). | Backend | **✅ Cerrado por código — GAP V3** |
+| **D-15** | ¿El puente Go↔`ing/` para Fase 1 y Fase 2 ya existe en algún lado no cubierto por el GAP V3, o es enteramente trabajo pendiente? (planteada en §9) | Backend | **✅ Resuelto** — el puente es invocación CLI subprocess de `brain intent {create,hydrate,add-turn,submit,finalize}`, mismo patrón que ya usa el plugin de VS Code. No requiere Sentinel ni cliente TCP nuevo. |
+| **D-18 (nuevo)** | Discrepancia de protocolo/puerto: `server_manager.py` usa Big Endian en el header de 4 bytes sobre :5678 (servidor real de Brain); `submit_intent()` en `intent_manager.py` abre su propio socket también por defecto a :5678 pero con header Little Endian, apuntando conceptualmente al "native host bridge" (`bloom-host.exe`, según su docstring). | Backend | **⬜ Abierto** — confirmar el puerto real de `bloom-host.exe` antes de asumir que son el mismo socket: riesgo de colisión de puerto o de doc desactualizada. |
 
 ---
 
@@ -159,7 +161,7 @@ Este documento (v1) tenía la deuda D-11 abierta: "contenido real de `ws-events.
 2. **Confirmar `main_conductor.js`/`preload_core.js`** reales para cerrar el bridge de `window.nucleus` (reportado, no verificado todavía por esta sesión).
 3. **Seguir la secuencia 3 → 4 → 5** de la migración de UI, sin saltos — es la que ya decidimos y la que evita repetir errores de diseñar en abstracto.
 4. **Q-02 y Q-08** (los dos endpoints de Backend) pueden ir en paralelo a la migración de UI — no compiten por la misma sesión de Frontend.
-5. **Implementar la redefinición de Fase 1 y Fase 2** (§2, columna "Objetivo `ing/`") es ahora la ruta crítica real para que Capas 1-2 del Bootstrap Strategy dejen de estar bloqueadas por "técnica sin decidir" — priorizar sobre Capa 3, que sigue sin ruta crítica.
+5. **Implementar la redefinición de Fase 1 y Fase 2** (§2, columna "Objetivo `ing/`") invocando `brain` como subproceso CLI directamente desde las Activities de Go (`mandate_genesis_activities.go`) — **no** abrir un cliente TCP nuevo ni pasar por Sentinel (ver §6 D-15) — es ahora la ruta crítica real para que Capas 1-2 del Bootstrap Strategy dejen de estar bloqueadas por "técnica sin decidir" — priorizar sobre Capa 3, que sigue sin ruta crítica.
 6. **Capa 3 del Bootstrap Strategy** (biblioteca de patrones) queda para después del lanzamiento — no es parte de la ruta crítica.
 7. **Actualizar `ws-events.ts`** con los 3 eventos faltantes y el payload de `mandate:action:completed` (§5.2) — es deuda chica, cross-cutting, y ya está identificada con precisión de línea de código.
 
@@ -195,6 +197,8 @@ Este documento es el índice — cuando haga falta el detalle de algo, se busca 
 **Tensión a resolver explícitamente (nueva, surge de esta migración):** el mapeo de arriba asume que Fase 1 "recibe el raw material" y Fase 2 "resuelve Dominio→Gene" como si ya estuvieran conectadas a `ing/`. Pero §2 de este mismo documento confirma, por código, que **hoy Fase 1 y Fase 2 en Go no llaman a nada de esto** — son un evento hueco y un `dry_run` mock, respectivamente. El mapeo de esta tabla sigue siendo el diseño objetivo válido, pero no describe una conexión que exista hoy en el código. Se agrega como ítem de deuda:
 
 **D-15 (nuevo):** ¿El puente Go↔`ing/` para Fase 1 y Fase 2 ya existe en algún lado no cubierto por el GAP V3, o es enteramente trabajo pendiente? Sin evidencia de código todavía — no asumir que existe solo porque la spec de `ing/` lo describe.
+
+**Aclaración (post-cierre de D-15, ver §6):** la tabla de mapeo Fase→`ing/` de arriba sigue siendo correcta tal cual está — Fase 1 sigue disparando `.reception/`, Fase 2 sigue disparando `.classification/`, y así. Lo único que cambia con la resolución de D-15 es el mecanismo de invocación: no es un cliente TCP nuevo hablándole a Brain por el socket del Event Bus, es `brain` invocado como subproceso CLI directamente desde las Activities de Go — mismo patrón que ya usa el plugin de VS Code, sin pasar por Sentinel.
 
 Degradación graceful si Ollama no está disponible (Invariante 3 BISP) ya contemplada en el spec: `.classification/` no aborta, difiere resolución a decisión manual en `.consolidation/`.
 
