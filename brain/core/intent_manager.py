@@ -7,7 +7,7 @@ import uuid
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from datetime import datetime, timezone
 import socket
 import shutil
@@ -1744,6 +1744,7 @@ class IntentManager:
         folder_name: Optional[str] = None,
         nucleus_path: Optional[Path] = None,
         force: bool = False,
+        output_path: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
         """
         Capa de Cristalización (Freeze-to-Mandate). Toma un intent 'ing'/
@@ -1803,6 +1804,12 @@ class IntentManager:
                 infiere del cwd.
             force: permite re-cristalizar un intent ya `frozen` (sobrescribe
                 el `mandate.json` anterior con un `content_hash` nuevo).
+            output_path: override opcional de dónde escribir `mandate.json`.
+                Si se omite (default), se usa la ruta candidata del Core
+                (`.bloom/.mandates/<mandate_id>/mandate.json`). Si se
+                proporciona, puede ser un directorio (se le agrega
+                `mandate.json`) o una ruta de archivo completa; los
+                directorios intermedios se crean si no existen.
 
         Returns:
             status, intent_id, mandate_id, mandate_path, content_hash,
@@ -1896,14 +1903,28 @@ class IntentManager:
         ).hexdigest()
         mandate_content["content_hash"] = content_hash
 
-        # Ruta asumida (no confirmada por bloom_project_tree.txt, que
-        # explícitamente deja Nucleus-level fuera de esta sesión) — mismo
-        # criterio de "candidata razonable, no inventada como definitiva"
-        # que _write_dis_discovery_content(). Ajustar si bloom_nucleus_tree.txt
-        # define otra convención.
-        mandate_dir = project_root / ".bloom" / ".mandates" / mandate_id
+        if output_path is not None:
+            # Override explícito del caller. Si apunta a un directorio
+            # (existente, o sin sufijo .json — heurística de "es una
+            # carpeta"), se le agrega el nombre de archivo estándar;
+            # si no, se toma como ruta de archivo completa.
+            candidate = Path(output_path)
+            if candidate.is_dir() or candidate.suffix != ".json":
+                mandate_dir = candidate
+                mandate_path = mandate_dir / "mandate.json"
+            else:
+                mandate_path = candidate
+                mandate_dir = mandate_path.parent
+        else:
+            # Ruta asumida (no confirmada por bloom_project_tree.txt, que
+            # explícitamente deja Nucleus-level fuera de esta sesión) — mismo
+            # criterio de "candidata razonable, no inventada como definitiva"
+            # que _write_dis_discovery_content(). Ajustar si bloom_nucleus_tree.txt
+            # define otra convención.
+            mandate_dir = project_root / ".bloom" / ".mandates" / mandate_id
+            mandate_path = mandate_dir / "mandate.json"
+
         mandate_dir.mkdir(parents=True, exist_ok=True)
-        mandate_path = mandate_dir / "mandate.json"
         with open(mandate_path, "w", encoding="utf-8") as f:
             json.dump(mandate_content, f, indent=2, ensure_ascii=False)
 

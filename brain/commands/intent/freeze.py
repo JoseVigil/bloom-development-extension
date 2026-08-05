@@ -1,14 +1,4 @@
-"""
-Módulo de comando CLI para la cristalización de intents (Freeze-to-Mandate).
-
-Consume IntentManager.freeze_to_mandate() (brain/core/intent_manager.py,
-ya implementado y probado). Ver ahí el docstring completo de la Capa de
-Cristalización: qué SÍ y qué NO hace (p. ej. `actions: []` +
-`scaffold_pending: true` es intencional, no un bug — el scaffold real de
-Actions sigue siendo trabajo pendiente, Roadmap Maestro v3 §2 Fase 4).
-"""
-
-import shutil
+"""Intent freeze command - Crystallize a converged ing/dis intent into mandate.json."""
 import typer
 from pathlib import Path
 from typing import Optional
@@ -18,16 +8,8 @@ from brain.cli.categories import CommandCategory
 
 class IntentFreezeCommand(BaseCommand):
     """
-    Comando para cristalizar un unbound intent (ing/dis) en un mandate.json.
-
-    Nota de arquitectura: freeze_to_mandate() NO acepta una ruta de salida
-    custom — el mandate.json siempre se sintetiza en su ubicación canónica
-    `{project_root}/.bloom/.mandates/{mandate_id}/mandate.json` (es el path
-    que queda registrado en el propio estado del intent como
-    `mandate_artifact_path`, para trazabilidad). Por eso `--output` en este
-    comando no se pasa al core: se resuelve como una copia posterior del
-    artefacto ya generado, para no fabricar una capacidad que el core no
-    tiene.
+    Command to crystallize a converged 'ing'/'dis' intent into an
+    immutable mandate.json (Freeze-to-Mandate layer).
     """
 
     def metadata(self) -> CommandMetadata:
@@ -35,133 +17,116 @@ class IntentFreezeCommand(BaseCommand):
             name="freeze",
             category=CommandCategory.INTENT,
             version="1.0.0",
-            description=(
-                "Cristaliza un intent 'ing'/'dis' consolidado/ratificado "
-                "(fase terminal ya cerrada) en un mandate.json inmutable"
-            ),
+            description="Crystallize a converged intent into mandate.json",
             examples=[
-                "brain intent freeze my-intent-uuid",
-                "brain intent freeze --folder-name .my-intent-a1b2c3d4",
-                "brain intent freeze my-intent-uuid --output ./custom_mandate.json",
-                "brain intent freeze my-intent-uuid --force",
-                "brain intent freeze my-intent-uuid --json",
-            ],
+                "brain intent freeze abc123",
+                "brain intent freeze abc123 --output /path/to/custom/mandate.json",
+                "brain intent freeze abc123 --force",
+                "brain intent freeze abc123 --json",
+            ]
         )
 
     def register(self, app: typer.Typer) -> None:
+        """Register the intent freeze command."""
         @app.command(name=self.metadata().name)
         def execute(
             ctx: typer.Context,
-            intent_id: Optional[str] = typer.Argument(
-                None,
-                help="UUID del intent a cristalizar (o usar --folder-name).",
-            ),
-            folder_name: Optional[str] = typer.Option(
-                None,
-                "--folder-name",
-                "-f",
-                help="Nombre de carpeta del intent, como alternativa a intent_id.",
+            intent_id: str = typer.Argument(
+                ...,
+                help="Intent UUID to crystallize"
             ),
             output: Optional[Path] = typer.Option(
                 None,
                 "--output",
                 "-o",
                 help=(
-                    "Copia el mandate.json generado a esta ruta adicional. "
-                    "No reemplaza la ruta canónica dentro de .bloom/.mandates/."
-                ),
-            ),
-            nucleus_path: Optional[Path] = typer.Option(
-                None,
-                "--nucleus-path",
-                help="Ruta explícita al proyecto Bloom (si no se infiere del cwd).",
+                    "Optional override for where mandate.json is written. "
+                    "Accepts a directory (mandate.json is appended) or a "
+                    "full file path. Defaults to the Core's standard "
+                    "location under .bloom/.mandates/<mandate_id>/."
+                )
             ),
             force: bool = typer.Option(
                 False,
                 "--force",
-                help="Re-cristaliza un intent que ya fue frozen, sobrescribiendo el mandate.json anterior.",
+                help="Re-crystallize an intent that was already frozen, overwriting its mandate.json"
             ),
+            nucleus_path: Optional[Path] = typer.Option(
+                None,
+                "--nucleus-path",
+                "-p",
+                help="Path to Bloom project"
+            )
         ):
-            """Cristaliza el estado convergido de un intent y sintetiza el mandate.json."""
+            """
+            Crystallize a converged 'ing'/'dis' intent into mandate.json.
+
+            The intent must have reached its terminal phase (commit closed
+            in .consolidation/ or .ratification/) before it can be frozen.
+            """
+            # 1. Recuperar GlobalContext
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
 
-            if not intent_id and not folder_name:
-                self._handle_error(
-                    gc, "Debe indicar intent_id (argumento) o --folder-name."
-                )
-
             try:
-                # Lazy import del Core Manager
+                # 2. Verbose logging
+                if gc.verbose:
+                    typer.echo(f"🧊 Freezing intent {intent_id} to mandate...", err=True)
+                    if output:
+                        typer.echo(f"   Output override: {output}", err=True)
+                    if force:
+                        typer.echo(f"   Force: True", err=True)
+
+                # 3. Lazy Import del Core
                 from brain.core.intent_manager import IntentManager
 
-                if gc.verbose:
-                    target = intent_id or folder_name
-                    typer.echo(
-                        f"🔍 Iniciando cristalización para intent '{target}'...",
-                        err=True,
-                    )
-
+                # 4. Freeze
                 manager = IntentManager()
                 data = manager.freeze_to_mandate(
                     intent_id=intent_id,
-                    folder_name=folder_name,
                     nucleus_path=nucleus_path,
                     force=force,
+                    output_path=output,
                 )
 
-                # --output es una copia post-freeze: el core siempre escribe
-                # primero en su ruta canónica (.bloom/.mandates/<mandate_id>/
-                # mandate.json); acá solo espejamos ese archivo ya firmado.
-                if output is not None:
-                    canonical_path = Path(data["mandate_path"])
-                    output.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(canonical_path, output)
-                    data["copied_to"] = str(output)
-                    if gc.verbose:
-                        typer.echo(
-                            f"📎 Copia adicional en: {output}", err=True
-                        )
-
+                # 5. Empaquetar resultado
                 result = {
                     "status": "success",
                     "operation": "intent_freeze",
-                    "data": data,
+                    "data": data
                 }
 
+                # 6. Output dual
                 gc.output(result, self._render_success)
 
-            except FileNotFoundError as e:
-                self._handle_error(gc, f"Proyecto Bloom no encontrado: {e}")
             except ValueError as e:
-                self._handle_error(gc, f"No se pudo cristalizar el intent: {e}")
+                self._handle_error(gc, f"Validation error: {e}")
             except Exception as e:
-                self._handle_error(gc, f"Error durante la cristalización: {e}")
+                self._handle_error(gc, f"Error freezing intent: {e}")
 
     def _render_success(self, data: dict):
-        """Output humano estructurado para el comando freeze."""
-        d = data.get("data", {})
-        typer.echo(f"✨ Intent cristalizado con éxito ('{data['operation']}')")
-        if "intent_id" in d:
-            typer.echo(f"🆔 Intent: {d['intent_id']}")
-        if "mandate_id" in d:
-            typer.echo(f"🔑 Mandate ID: {d['mandate_id']}")
-        if "mandate_path" in d:
-            typer.echo(f"📄 Mandate generado en: {d['mandate_path']}")
-        if "content_hash" in d:
-            typer.echo(f"🔒 Content hash (sha256): {d['content_hash']}")
-        if "copied_to" in d:
-            typer.echo(f"📎 Copia adicional en: {d['copied_to']}")
-        if d.get("scaffold_pending"):
+        """Render human-readable output."""
+        freeze_data = data.get("data", {})
+
+        typer.echo(f"\n🧊 Intent crystallized successfully!")
+        typer.echo(f"🆔 Intent: {freeze_data.get('intent_id', 'N/A')}")
+        typer.echo(f"📜 Mandate ID: {freeze_data.get('mandate_id', 'N/A')}")
+        typer.echo(f"📂 Mandate path: {freeze_data.get('mandate_path', 'N/A')}")
+        typer.echo(f"🔒 Content hash: {freeze_data.get('content_hash', 'N/A')}")
+        typer.echo(f"🕐 Frozen at: {freeze_data.get('frozen_at', 'N/A')}")
+
+        if freeze_data.get("scaffold_pending"):
             typer.echo(
-                "⏳ scaffold_pending=true: la síntesis de Actions reales "
+                "\n⚠️  scaffold_pending=true: la síntesis real de Actions "
                 "sigue siendo trabajo pendiente."
             )
 
+        typer.echo(f"\n💡 {freeze_data.get('message', '')}")
+
     def _handle_error(self, gc, message: str):
-        """Manejo unificado de errores."""
+        """Unified error handling."""
         if gc.json_mode:
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
