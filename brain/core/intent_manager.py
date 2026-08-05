@@ -13,18 +13,41 @@ import socket
 import shutil
 import hashlib
 from brain.core.filesystem.code_compressor import CodeCompressor
-from brain.core.intent_types import get_intent_type_spec
 from brain.core.intent_state_manager import (
     IntentStateManager,
     IntentStateError,
     InvalidTransitionError,
+    PhaseNotActiveError,
+    IntentAlreadyTerminatedError,
 )
+from brain.core.intent_types import get_intent_type_spec
 
-# Tipos de intent gobernados por la gramática BSIP genérica (intent_types.py
-# / intent_state_manager.py) — comparten un único motor de fases/turnos.
-# 'dev' y 'doc' son anteriores a ese motor y mantienen su propia lógica
-# ad-hoc en este archivo (briefing/execution/refinement, context/curation).
-_BSIP_INTENT_TYPES = ("ing", "dis")
+
+# Tipos que corren sobre el motor genérico BSIP (IntentStateManager +
+# intent_types.py) en vez del schema hand-rolled legacy de dev/doc.
+# Agregar un octavo tipo acá es, en principio, solo esto + una entrada
+# en intent_types.INTENT_TYPE_REGISTRY — ver intent_types.py.
+_BSIP_ENGINE_TYPES = ("ing", "dis")
+
+
+def _uid(state_data: Dict[str, Any]) -> str:
+    """ID de un intent, sin importar qué convención de schema usa.
+
+    dev/doc (legacy, hand-rolled) guardan el identificador bajo la key
+    'uuid'. ing/dis (delegados a IntentStateManager, spec-compliant)
+    lo guardan bajo 'intent_id' — ver ING_Intent_Spec_v1_1.md §1 /
+    DIS_Intent_Spec_v1_0.md §1, que definen 'intent_id', no 'uuid'.
+    Este helper es el único punto que conoce esa divergencia; todo el
+    resto del archivo debería llamar a esto en vez de acceder a
+    cualquiera de las dos keys directamente."""
+    return state_data.get("uuid") or state_data.get("intent_id", "")
+
+
+def _itype(state_data: Dict[str, Any]) -> str:
+    """Tipo de intent, sin importar la convención de schema — mismo
+    motivo que _uid(): legacy usa 'type', IntentStateManager (spec)
+    usa 'intent_type' (ING §1 / DIS §1)."""
+    return state_data.get("type") or state_data.get("intent_type", "dev")
 
 
 class IntentManager:
@@ -37,15 +60,6 @@ class IntentManager:
     
     # Namespace UUID for generating deterministic intent IDs
     INTENT_NAMESPACE = uuid.UUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
-
-    # Nombres de archivo de estado conocidos por este runtime, dev/doc
-    # hardcodeados (anteriores al motor BSIP) + ing/dis resueltos desde el
-    # registro (intent_types.py) para no duplicar el nombre en dos lugares.
-    _KNOWN_STATE_FILENAMES = (
-        ".dev_state.json",
-        ".doc_state.json",
-        *(get_intent_type_spec(t).state_filename for t in _BSIP_INTENT_TYPES),
-    )
     
     def __init__(self):
         """Initialize the IntentManager."""
@@ -58,7 +72,8 @@ class IntentManager:
         initial_files: Optional[List[str]] = None,
         nucleus_path: Optional[Path] = None,
         mandate_id: Optional[str] = None,
-        domain_baseline: Optional[str] = None
+        domain_baseline: Optional[str] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Create a new intent with complete directory structure.
@@ -71,34 +86,27 @@ class IntentManager:
             name: Human-readable name for the intent
             initial_files: Optional list of file paths to include in initial context
             nucleus_path: Optional explicit path to Bloom project root
-            mandate_id: Solo aplica a intents BSIP ('ing'/'dis'). Mandato que
-                origina el intent — se guarda en el envelope BSIP
-                (`mandate_id` a nivel raíz, ver intent_state_manager.py) y,
-                para 'dis', además se agrega a `scope.mandate_ids`. Opcional:
-                si se omite, queda como cadena vacía (un intent BSIP puede
-                nacer sin mandato explícito, p.ej. un scan ad-hoc).
-            domain_baseline: Solo aplica (y es OBLIGATORIO) para intent_type
-                'ing'. Debe ser "empty" o "existing" — ING_Intent_Spec_v1_1.md
-                §1 no le da default razonable, ya que determina cómo
-                .classification/ interpreta los clusters resueltos. Ignorado
-                para el resto de los tipos.
+            mandate_id: Obligatorio para intent_type 'ing'/'dis' (ING_Intent_Spec_v1_1.md
+                §0 regla 2, DIS_Intent_Spec_v1_0.md regla 2: "siempre corre bajo un
+                Mandate, nunca 'suelto'"). No requiere que exista todavía un
+                mandate.json *firmado* — ese es precisamente el punto de la capa
+                Freeze-to-Mandate (ver freeze_to_mandate()): mandate_id referencia
+                el contexto de Mandate en curso, la firma es un paso posterior y
+                explícito, no una precondición de arranque. Ignorado para dev/doc.
+            domain_baseline: Solo 'ing'. "empty" | "existing" (ING §1). Si se omite,
+                queda None hasta que .classification/ lo determine.
+            scope: Solo 'dis'. Override de scope.mode/scope.mandate_ids (DIS §1).
+                Si se omite, usa el default del registro ("nucleus_wide", []).
             
         Returns:
             Dictionary containing:
-                - intent_id: Generated UUID3 for the intent
-                - intent_path: Absolute path to intent directory
-                - folder_name: Folder name (.{slugified-name}-{uuid3})
-                - name: Intent name
-                - type: Intent type
-                - initial_files: List of initial files (empty if none)
-                - project_path: Bloom project root path
-                - created_at: ISO timestamp
-                - message: Success message
+                - intent_id, intent_path, folder_name, name, type,
+                  initial_files, project_path, created_at, mandate_id,
+                  phase_active (None para dev/doc), message
                 
         Raises:
-            ValueError: If intent_type is invalid, name is empty, or a
-                BSIP-specific required field (domain_baseline for 'ing')
-                is missing
+            ValueError: If intent_type is invalid, name is empty, or
+                mandate_id falta para 'ing'/'dis'
             FileNotFoundError: If Bloom project not found or initial files don't exist
         """
         # Validate inputs
@@ -107,21 +115,6 @@ class IntentManager:
         
         if not name or not name.strip():
             raise ValueError("Intent name cannot be empty")
-
-        if intent_type == "ing" and not domain_baseline:
-            # ING_Intent_Spec_v1_1.md §1: domain_baseline no tiene default
-            # razonable — debe fijarse explícitamente en Génesis, a
-            # diferencia de thresholds/classification_summary que sí lo
-            # tienen (ver intent_types.py::_ING_SPEC.extra_state_fields).
-            raise ValueError(
-                "domain_baseline is required for 'ing' intents. "
-                "Must be 'empty' or 'existing'."
-            )
-        if intent_type == "ing" and domain_baseline not in ("empty", "existing"):
-            raise ValueError(
-                f"Invalid domain_baseline '{domain_baseline}'. "
-                "Must be 'empty' or 'existing'."
-            )
         
         # Find or validate Bloom project
         project_root = self._find_bloom_project(nucleus_path)
@@ -137,39 +130,83 @@ class IntentManager:
         # Generate slugified name for folder
         slug = self._slugify(name)
         folder_name = f".{slug}-{intent_id[:8]}"
-        
-        # Create directory structure
-        intent_path = self._create_directory_structure(
-            project_root,
-            intent_type,
-            folder_name
-        )
-        
-        # Create initial state file
-        timestamp = datetime.now(timezone.utc).isoformat()
-        state_data = self._create_initial_state(
-            intent_id,
-            intent_type,
-            name,
-            timestamp,
-            validated_files,
-            mandate_id=mandate_id,
-            domain_baseline=domain_baseline
-        )
-        
-        if intent_type == "dev":
-            state_filename = ".dev_state.json"
-        elif intent_type == "doc":
-            state_filename = ".doc_state.json"
-        else:  # "ing" / "dis" — nombre declarado en el registro BSIP, no
-            # se hardcodea acá (ver intent_types.py::IntentTypeSpec.state_filename)
-            state_filename = get_intent_type_spec(intent_type).state_filename
 
-        state_file = intent_path / state_filename
-        
-        with open(state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=2, ensure_ascii=False)
-        
+        timestamp = datetime.now(timezone.utc).isoformat()
+        clean_mandate_id = mandate_id.strip() if mandate_id else None
+
+        if intent_type in _BSIP_ENGINE_TYPES:
+            if not clean_mandate_id:
+                raise ValueError(
+                    f"mandate_id es obligatorio para intents '{intent_type}' "
+                    "(ING_Intent_Spec_v1_1.md §0 regla 2 / DIS_Intent_Spec_v1_0.md "
+                    "regla 2: 'siempre corre bajo un Mandate, nunca suelto'). No "
+                    "hace falta que el Mandate ya esté firmado — ver "
+                    "freeze_to_mandate() para cristalizarlo cuando corresponda."
+                )
+
+            extra_overrides: Dict[str, Any] = {}
+            if intent_type == "ing" and domain_baseline is not None:
+                if domain_baseline not in ("empty", "existing"):
+                    raise ValueError(
+                        "domain_baseline debe ser 'empty' o 'existing' (ING §1)"
+                    )
+                extra_overrides["domain_baseline"] = domain_baseline
+            if intent_type == "dis" and scope is not None:
+                extra_overrides["scope"] = scope
+
+            # Resolver el path del intent SIN crearlo todavía —
+            # IntentStateManager.create() exige que `intent_root` esté
+            # vacío (o no exista), y es quien lo crea (junto con el
+            # directorio de la primera fase y el `_state.json`). Si acá
+            # ya hubiéramos corrido `_create_directory_structure()`, el
+            # directorio habría quedado no-vacío y create() rechazaba
+            # SIEMPRE con IntentStateError, sin excepción — bug que
+            # bloqueaba por completo la creación de cualquier intent
+            # 'ing'/'dis'. `_create_directory_structure()` corre DESPUÉS,
+            # y es idempotente (mkdir(..., exist_ok=True) en todos los
+            # subdirs) frente al directorio de la primera fase que
+            # create() ya dejó armado.
+            intents_base = project_root / ".bloom" / ".intents"
+            intent_path = intents_base / f".{intent_type}" / folder_name
+
+            state_mgr = IntentStateManager.create(
+                intent_root=intent_path,
+                intent_type=intent_type,
+                mandate_id=clean_mandate_id,
+                extra_overrides=extra_overrides or None,
+                intent_id=intent_id,
+            )
+            # 'name' e 'initial_files' no son parte del envelope oficial de
+            # ing/dis (ING §1 / DIS §1 no los declaran) — son metadata
+            # operativa que hydrate() necesita para saber qué procesar en
+            # .reception/ o .discovery/. set_metadata() los adjunta sin
+            # tocar el schema validado por spec.
+            state_mgr.set_metadata(name=name.strip(), initial_files=validated_files)
+            state_data = state_mgr.snapshot()
+            phase_active = state_data.get("phase_active")
+
+            # Completa el resto del skeleton (fases restantes + espejo
+            # .pipeline/) — la primera fase y el _state.json ya existen,
+            # esta llamada solo agrega lo que falta.
+            self._create_directory_structure(project_root, intent_type, folder_name)
+        else:
+            # Create directory structure (skeleton completo, incluido
+            # .pipeline/ espejo) — dev/doc no pasan por IntentStateManager,
+            # así que no hay conflicto de "directorio no vacío" acá.
+            intent_path = self._create_directory_structure(
+                project_root,
+                intent_type,
+                folder_name
+            )
+            state_data = self._create_initial_state(
+                intent_id, intent_type, name, timestamp, validated_files
+            )
+            state_filename = ".dev_state.json" if intent_type == "dev" else ".doc_state.json"
+            state_file = intent_path / state_filename
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(state_data, f, indent=2, ensure_ascii=False)
+            phase_active = None
+
         # Return structured result
         return {
             "intent_id": intent_id,
@@ -180,6 +217,8 @@ class IntentManager:
             "initial_files": validated_files,
             "project_path": str(project_root),
             "created_at": timestamp,
+            "mandate_id": clean_mandate_id,
+            "phase_active": phase_active,
             "message": f"Intent '{name}' ({intent_type}) created successfully"
         }
     
@@ -201,18 +240,17 @@ class IntentManager:
             project_root, intent_id, folder_name
         )
        
-        intent_type = state_data["type"]
+        intent_type = _itype(state_data)
 
-        if intent_type in _BSIP_INTENT_TYPES:
+        if intent_type in _BSIP_ENGINE_TYPES:
             # .reception/ (ing) y .discovery/ (dis) tienen un contrato
             # completamente distinto al de .briefing/.context (inventario +
-            # texto extraído, no briefing/instruction) — ver
-            # ING_Intent_Spec_v1_1.md §3 / DIS_Intent_Spec_v1_0.md §3. Ambas
-            # son la primera fase (acto único, sin turnos) de la gramática
-            # BSIP, así que comparten un único helper en vez de duplicar la
-            # lógica por tipo.
+            # texto extraído / snapshot de linaje, no briefing/instruction) —
+            # ver ING_Intent_Spec_v1_1.md §3 y DIS_Intent_Spec_v1_0.md §3.
+            # Ambas son fases sin turnos (acto único), por eso comparten un
+            # solo helper genérico en vez de uno por tipo.
             return self._hydrate_bsip_phaseless_act(
-                project_root, intent_path, state_data, state_file, files, verbose, intent_type
+                project_root, intent_path, state_data, state_file, files, verbose
             )
 
         if intent_type == "dev":
@@ -315,40 +353,69 @@ class IntentManager:
         state_data: Dict[str, Any],
         state_file: Path,
         files: Optional[List[str]],
-        verbose: bool,
-        intent_type: str
+        verbose: bool
     ) -> Dict[str, Any]:
         """
-        Primera fase (acto único, sin turnos) de la gramática BSIP:
-        .reception/ para 'ing', .discovery/ para 'dis'
-        (ING_Intent_Spec_v1_1.md §3, DIS_Intent_Spec_v1_0.md §3).
+        Fase sin turnos de 'ing'/'dis': .reception/ (ING §3) o .discovery/
+        (DIS §3) — acto único, si algo sale mal se reintenta la fase entera,
+        no hay concepto de turno acá.
 
-        Generalización de la antigua `_hydrate_ing_reception`, que solo
-        cubría 'ing'. La forma del contrato es idéntica entre ambos tipos
-        (inventario + texto extraído por archivo), así que el nombre de
-        fase y de archivo de salida se resuelven desde el registro
-        (`intent_types.py`) en vez de hardcodearse.
-
-        Escribe:
-        - .{base_name}.json: inventario (path/type/hash/size/status) por archivo.
-        - .{base_name}_index.json: texto extraído + embedding_source_text
-          obligatorio por archivo (aplicación directa de la Invariante 1 de BSIP).
-
-        Si algo llega mal formado no se abre un turno parcial — se reintenta
-        la fase entera (no hay concepto de turno en esta fase, a diferencia
-        de las que siguen: .classification/.mapping y .consolidation/.ratification).
+        Delega el avance de fase en IntentStateManager.close_phaseless_act()
+        en vez de escribir 'phase_active' a mano en el dict (como hacía la
+        versión anterior, _hydrate_ing_reception) — el avance queda sujeto
+        a las mismas validaciones deterministas que el resto del motor.
         """
-        spec = get_intent_type_spec(intent_type)
-        phase_name = spec.phases[0].name  # "reception" | "discovery"
-        phase_dir = intent_path / f".{phase_name}"
-        files_dir = phase_dir / ".files"
+        intent_type = _itype(state_data)
+        mgr = IntentStateManager.load(intent_path)
+
+        if intent_type == "ing":
+            content_payload = self._write_ing_reception_content(
+                project_root, intent_path, state_data, files, verbose
+            )
+        else:  # "dis"
+            content_payload = self._write_dis_discovery_content(
+                project_root, intent_path, state_data, verbose
+            )
+
+        try:
+            mgr.close_phaseless_act()
+        except InvalidTransitionError as exc:
+            raise ValueError(str(exc)) from exc
+
+        mgr.set_metadata(status="hydrated")
+
+        return {
+            "intent_id": mgr.intent_id,
+            "status": "hydrated",
+            "phase_active": mgr.phase_active,
+            "briefing_updated": False,
+            **content_payload,
+        }
+
+    def _write_ing_reception_content(
+        self,
+        project_root: Path,
+        intent_path: Path,
+        state_data: Dict[str, Any],
+        files: Optional[List[str]],
+        verbose: bool,
+    ) -> Dict[str, Any]:
+        """
+        Escribe el contenido de .reception/ (ING §3):
+        - .rawbase.json: inventario (path/type/hash/size/status) por archivo.
+        - .rawbase_index.json: texto extraído + embedding_source_text
+          obligatorio por archivo (Invariante 1 de BISP).
+        No toca phase_active — eso lo resuelve el caller vía IntentStateManager.
+        """
+        reception_dir = intent_path / ".reception"
+        files_dir = reception_dir / ".files"
         files_dir.mkdir(parents=True, exist_ok=True)
 
         files_to_process = set(files) if files else set()
         files_to_process.update(state_data.get("initial_files", []))
 
-        inventory_entries = []
-        index_entries = []
+        rawbase_entries = []
+        rawbase_index_entries = []
         stats = {"total_files": 0, "total_size_kb": 0.0}
 
         for file_path_str in files_to_process:
@@ -365,18 +432,14 @@ class IntentManager:
             file_hash = hashlib.md5(content.encode()).hexdigest()
             file_size = len(content)
 
-            # Inventario (.{base_name}.json)
-            inventory_entries.append({
+            rawbase_entries.append({
                 "path": file_path_str,
                 "type": file_type,
                 "hash": file_hash,
                 "size": file_size,
                 "status": "received"
             })
-
-            # Texto extraído + embedding_source_text obligatorio por archivo
-            # (Invariante 1 de BSIP: texto fuente siempre presente)
-            index_entries.append({
+            rawbase_index_entries.append({
                 "path": file_path_str,
                 "extracted_text": content,
                 "embedding_source_text": content
@@ -385,40 +448,116 @@ class IntentManager:
             stats["total_files"] += 1
             stats["total_size_kb"] += file_size / 1024
 
-        # "rawbase" para ing (ING §3), "discoverybase" para dis (DIS §3) —
-        # mismo shape de contenido, distinto nombre semántico por spec.
-        base_name = "rawbase" if intent_type == "ing" else "discoverybase"
+        with open(reception_dir / ".rawbase.json", 'w', encoding="utf-8") as f:
+            json.dump({"files": rawbase_entries}, f, indent=2, ensure_ascii=False)
 
-        with open(phase_dir / f".{base_name}.json", 'w', encoding="utf-8") as f:
-            json.dump({"files": inventory_entries}, f, indent=2, ensure_ascii=False)
-
-        with open(phase_dir / f".{base_name}_index.json", 'w', encoding="utf-8") as f:
-            json.dump({"index": index_entries}, f, indent=2, ensure_ascii=False)
-
-        # Fase de acto único: al completarla, la fase activa avanza a la
-        # siguiente declarada en el registro (classification/mapping) —
-        # ver ING_Intent_Spec_v1_1.md §1 / DIS_Intent_Spec_v1_0.md §1.
-        next_phase = spec.next_phase_name(phase_name)
-        state_data["status"] = "hydrated"
-        state_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-        state_data["phase_active"] = next_phase
-        if "steps" in state_data and phase_name in state_data["steps"]:
-            state_data["steps"][phase_name] = True
-        if next_phase != spec.terminal_phase_name:
-            (intent_path / f".{next_phase}").mkdir(parents=True, exist_ok=True)
-
-        with open(state_file, 'w', encoding="utf-8") as f:
-            json.dump(state_data, f, indent=2, ensure_ascii=False)
+        with open(reception_dir / ".rawbase_index.json", 'w', encoding="utf-8") as f:
+            json.dump({"index": rawbase_index_entries}, f, indent=2, ensure_ascii=False)
 
         return {
-            "intent_id": state_data.get("uuid"),
-            "status": state_data["status"],
-            "phase_active": state_data["phase_active"],
-            "briefing_updated": False,
             "stats": {
                 "total_files": stats["total_files"],
                 "total_size_kb": round(stats["total_size_kb"], 2)
             }
+        }
+
+    def _write_dis_discovery_content(
+        self,
+        project_root: Path,
+        intent_path: Path,
+        state_data: Dict[str, Any],
+        verbose: bool,
+    ) -> Dict[str, Any]:
+        """
+        Escribe el contenido de .discovery/ (DIS §3):
+        - .genebase.json: snapshot de linaje de todos los Genes del scope.
+        - .domain_graph_snapshot.json: copia de .cache/.semantic-index.json
+          al momento de arrancar.
+
+        LÍMITE EXPLÍCITO DE ESTA IMPLEMENTACIÓN: `.mandates/{id}/.genes/` y
+        `.cache/.semantic-index.json` viven a nivel Nucleus, no a nivel de
+        este proyecto — bloom_project_tree.txt es explícito en que ese árbol
+        no forma parte de esta sesión y que su ubicación real no se inventa
+        acá. Este método intenta rutas candidatas razonables bajo
+        `{project_root}/.bloom/`; si no las encuentra, degrada a un snapshot
+        vacío y lo señala en `warnings` en vez de fabricar datos. Reemplazar
+        `_candidate_mandates_root()` / `_candidate_semantic_index_path()`
+        por las rutas reales de Nucleus es trabajo pendiente explícito, no
+        un bug de esta función.
+        """
+        discovery_dir = intent_path / ".discovery"
+        files_dir = discovery_dir / ".files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+
+        warnings: List[str] = []
+        scope = state_data.get("scope", {"mode": "nucleus_wide", "mandate_ids": []})
+
+        # --- .genebase.json --------------------------------------------
+        genes: List[Dict[str, Any]] = []
+        mandates_root = project_root / ".bloom" / ".mandates"
+        if mandates_root.exists():
+            mandate_dirs = (
+                [mandates_root / mid for mid in scope.get("mandate_ids", [])]
+                if scope.get("mode") == "mandate_scoped" and scope.get("mandate_ids")
+                else [d for d in mandates_root.iterdir() if d.is_dir()]
+            )
+            for mandate_dir in mandate_dirs:
+                genes_dir = mandate_dir / ".genes"
+                if not genes_dir.exists():
+                    continue
+                for gene_dir in genes_dir.iterdir():
+                    gen_json = gene_dir / "gen.json"
+                    if not gen_json.exists():
+                        continue
+                    try:
+                        gene_data = json.loads(gen_json.read_text(encoding="utf-8"))
+                        genes.append({
+                            "gene_id": gene_data.get("gene_id"),
+                            "mandate_id": gene_data.get("mandate_id"),
+                            "semantic_function": gene_data.get("semantic_function"),
+                            "scope_files": gene_data.get("scope_files", []),
+                            "created_by_intent": gene_data.get("created_by_intent"),
+                            "created_at": gene_data.get("created_at"),
+                        })
+                    except (json.JSONDecodeError, IOError) as e:
+                        if verbose:
+                            print(f"⚠️ Warning: gen.json inválido en {gene_dir}: {e}")
+        else:
+            warnings.append(
+                f"'{mandates_root}' no existe — genebase queda vacío. Ruta "
+                "Nucleus-level no confirmada en esta sesión (ver "
+                "bloom_project_tree.txt, nota de cabecera)."
+            )
+
+        with open(discovery_dir / ".genebase.json", 'w', encoding="utf-8") as f:
+            json.dump({"genes": genes}, f, indent=2, ensure_ascii=False)
+        # .genebase_index.json queda como índice vacío hasta que exista capa
+        # de vectorización real (Ollama/ChromaDB) — degradación graceful
+        # documentada en DIS §6, no un placeholder silencioso.
+        with open(discovery_dir / ".genebase_index.json", 'w', encoding="utf-8") as f:
+            json.dump({"entries": [], "vectorized": False}, f, indent=2, ensure_ascii=False)
+
+        # --- .domain_graph_snapshot.json --------------------------------
+        semantic_index_path = project_root / ".bloom" / ".cache" / ".semantic-index.json"
+        if semantic_index_path.exists():
+            try:
+                snapshot = json.loads(semantic_index_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, IOError) as e:
+                warnings.append(f"'{semantic_index_path}' no parseable: {e}")
+                snapshot = {"updated_at": None, "domains": {}}
+        else:
+            warnings.append(
+                f"'{semantic_index_path}' no existe — snapshot arranca vacío "
+                "(ruta Nucleus-level no confirmada en esta sesión)."
+            )
+            snapshot = {"updated_at": None, "domains": {}}
+
+        with open(discovery_dir / ".domain_graph_snapshot.json", 'w', encoding="utf-8") as f:
+            json.dump(snapshot, f, indent=2, ensure_ascii=False)
+
+        return {
+            "stats": {"genes_found": len(genes), "domains_in_snapshot": len(snapshot.get("domains", {}))},
+            "warnings": warnings,
         }
 
     def _slugify(self, text: str) -> str:
@@ -589,30 +728,48 @@ class IntentManager:
                 ".pipeline/.context/.response/.staging",
                 ".pipeline/.curation"
             ]
-        elif intent_type in _BSIP_INTENT_TYPES:
-            # Intents BSIP genéricos ("ing" / "dis"). Las fases y su orden
-            # vienen del registro declarativo (intent_types.py) en vez de
-            # hardcodearse acá — este método no debe conocer los nombres
-            # concretos de fase de un intent type particular (ver docstring
-            # de intent_types.py, motivo por el cual ese archivo existe).
-            # .pipeline/ es el espejo de cada fase, confirmado contra
-            # bloom_project_tree.txt y ING_Intent_Spec_v1_1.md §3/§4/§5 /
-            # DIS_Intent_Spec_v1_0.md §3/§4/§5.
-            spec = get_intent_type_spec(intent_type)
-            subdirs = [".pipeline"]
-            for phase in spec.phases:
-                subdirs.append(f".{phase.name}")
-                if not phase.has_turns:
-                    # Fase de acto único (reception/discovery): archivos
-                    # directos bajo .files/, sin subcarpeta de turno.
-                    subdirs.append(f".{phase.name}/.files")
-                subdirs.append(f".pipeline/.{phase.name}")
-                subdirs.append(f".pipeline/.{phase.name}/.response")
-                subdirs.append(f".pipeline/.{phase.name}/.response/.staging")
-        else:
-            raise ValueError(
-                f"Unsupported intent type for directory structure: {intent_type}"
-            )
+        elif intent_type == "ing":
+            # Ingestion intent structure ("ing")
+            # Tres fases: .reception/ (acto único), .classification/ (con turnos),
+            # .consolidation/ (con turnos) — .pipeline/ espejo de las tres,
+            # confirmado contra bloom_project_tree.txt y ING_Intent_Spec_v1_1.md §2.
+            subdirs = [
+                ".reception",
+                ".reception/.files",
+                ".classification",
+                ".consolidation",
+                ".pipeline",
+                ".pipeline/.reception",
+                ".pipeline/.reception/.response",
+                ".pipeline/.reception/.response/.staging",
+                ".pipeline/.classification",
+                ".pipeline/.classification/.response",
+                ".pipeline/.classification/.response/.staging",
+                ".pipeline/.consolidation",
+                ".pipeline/.consolidation/.response",
+                ".pipeline/.consolidation/.response/.staging",
+            ]
+        else:  # "dis"
+            # Discovery intent structure ("dis") — mismo principio de fases +
+            # .pipeline/ espejo que 'ing', tres fases propias: .discovery/
+            # (acto único), .mapping/ (con turnos), .ratification/ (con turnos).
+            # Ver DIS_Intent_Spec_v1_0.md §2 y bloom_project_tree.txt rama .dis/.
+            subdirs = [
+                ".discovery",
+                ".discovery/.files",
+                ".mapping",
+                ".ratification",
+                ".pipeline",
+                ".pipeline/.discovery",
+                ".pipeline/.discovery/.response",
+                ".pipeline/.discovery/.response/.staging",
+                ".pipeline/.mapping",
+                ".pipeline/.mapping/.response",
+                ".pipeline/.mapping/.response/.staging",
+                ".pipeline/.ratification",
+                ".pipeline/.ratification/.response",
+                ".pipeline/.ratification/.response/.staging",
+            ]
         
         for subdir in subdirs:
             (intent_dir / subdir).mkdir(parents=True, exist_ok=True)
@@ -625,36 +782,20 @@ class IntentManager:
         intent_type: str,
         name: str,
         timestamp: str,
-        initial_files: List[str],
-        mandate_id: Optional[str] = None,
-        domain_baseline: Optional[str] = None
+        initial_files: List[str]
     ) -> Dict[str, Any]:
         """
         Create the initial state data structure.
         
         Args:
             intent_id: UUID3 of the intent
-            intent_type: "dev", "doc", "ing" or "dis"
+            intent_type: "dev" or "doc"
             name: Human-readable name
             timestamp: ISO timestamp
             initial_files: List of validated file paths
-            mandate_id: Solo aplica a 'ing'/'dis' (ver create_intent()).
-            domain_baseline: Solo aplica a 'ing', ya validado como
-                no-None/no-inválido por create_intent() antes de llegar acá.
             
         Returns:
-            Dictionary with initial state structure. Para 'ing'/'dis' el
-            dict es un envelope DOBLE a propósito: conserva las claves
-            legadas que el resto de IntentManager lee directamente
-            (uuid/name/type/status/steps/initial_files/phase_active) Y las
-            claves que espera IntentStateManager/intent_types.py
-            (intent_id/intent_type/resumable + extra_state_fields), porque
-            ambos leen/escriben el MISMO archivo de estado
-            (.ing_state.json / .dis_state.json — ver
-            IntentTypeSpec.state_filename). `_add_turn_bsip` es quien
-            recarga este archivo vía `IntentStateManager.load()` para las
-            transiciones de fase/turno; este método solo arma el estado de
-            Génesis compatible con ambos lectores.
+            Dictionary with initial state structure
         """
         if intent_type == "dev":
             return {
@@ -688,56 +829,37 @@ class IntentManager:
                     "publish": False
                 }
             }
-        else:  # "ing" / "dis" — gramática BSIP genérica (intent_types.py)
-            spec = get_intent_type_spec(intent_type)
-
-            # Campos propios del tipo, con sus defaults declarados en el
-            # registro (thresholds, classification_summary/mapping_summary,
-            # baseline_scope/scope, etc.)
-            extra_fields = {
-                field_name: factory()
-                for field_name, factory in spec.extra_state_fields.items()
-            }
-
-            if intent_type == "ing":
-                # ING_Intent_Spec_v1_1.md §1: domain_baseline no tiene
-                # default razonable — create_intent() ya validó que venga
-                # seteado ("empty"/"existing") antes de llegar acá.
-                extra_fields["domain_baseline"] = domain_baseline
-            elif intent_type == "dis" and mandate_id:
-                # DIS_Intent_Spec_v1_0.md §1: scope.mandate_ids acumula los
-                # mandatos que este intent de discovery está escaneando.
-                extra_fields["scope"]["mandate_ids"] = [mandate_id]
-
-            # steps se deriva de las fases declaradas en el registro (más
-            # "create", que es común a todos los tipos) — agregar un
-            # octavo tipo de intent BSIP no debería requerir tocar este
-            # método (ver docstring de intent_types.py).
-            steps = {phase.name: False for phase in spec.phases}
-            steps["create"] = True
-
+        else:  # "ing"
+            # Shape según ING_Intent_Spec_v1_0.md §1: phase_active recorre
+            # reception -> classification -> consolidation. domain_baseline
+            # queda vacío/None en Génesis (poblado luego por .classification/).
+            # thresholds y classification_summary son placeholders operativos
+            # hasta que .classification/ corra el algoritmo real de clustering.
             return {
-                # --- Claves legadas: las lee el resto de IntentManager
-                # (list_intents/get_intent/lock/unlock/hydrate/finalize/
-                # submit/delete) directamente, sin pasar por
-                # IntentStateManager. ---
                 "status": "created",
                 "name": name,
-                "type": intent_type,
+                "type": "ing",
                 "uuid": intent_id,
                 "created_at": timestamp,
-                "updated_at": timestamp,
                 "initial_files": initial_files,
-                "phase_active": spec.phases[0].name,
-                "steps": steps,
-                # --- Envelope BSIP: las lee/escribe IntentStateManager
-                # (intent_state_manager.py) cuando `_add_turn_bsip` hace
-                # `IntentStateManager.load()` sobre este mismo archivo. ---
-                "intent_id": intent_id,
-                "intent_type": intent_type,
-                "mandate_id": mandate_id or "",
-                "resumable": True,
-                **extra_fields,
+                "phase_active": "reception",
+                "domain_baseline": None,
+                "thresholds": {
+                    "similarity_threshold": 0.85,
+                    "confidence_threshold": 0.7
+                },
+                "classification_summary": {
+                    "total_clusters": 0,
+                    "resolved_clusters": 0,
+                    "pending_clusters": 0
+                },
+                "consolidation_committed": False,
+                "steps": {
+                    "create": True,
+                    "reception": False,
+                    "classification": False,
+                    "consolidate": False
+                }
             }
 
     def update_intent(
@@ -802,7 +924,20 @@ class IntentManager:
             intent_id,
             folder_name
         )
-        
+
+        if _itype(state_data) in _BSIP_ENGINE_TYPES:
+            # update_intent() (rename + reemplazo de archivos) asume el
+            # schema legacy de dev/doc (key 'uuid'/'name' obligatorias,
+            # rename de carpeta atado a un uuid3 recalculado). ing/dis usan
+            # un envelope distinto (IntentStateManager, key 'intent_id', sin
+            # campo 'name' oficial en la spec) y ningún spec define qué
+            # significa "renombrar" un intent BSIP en curso — no se
+            # generaliza acá para no inventar semántica no especificada.
+            raise ValueError(
+                f"update_intent() todavía no soporta intents '{_itype(state_data)}' "
+                "— usar add_turn()/hydrate_intent() para mutar su estado."
+            )
+
         # Track changes for reporting
         changes = {}
         old_intent_id = state_data["uuid"]
@@ -952,6 +1087,7 @@ class IntentManager:
             intents_base / ".ing",
             intents_base / ".dis",
         ]
+        state_filenames = [".dev_state.json", ".doc_state.json", ".ing_state.json", ".dis_state.json"]
         matches = []
         
         for search_dir in search_dirs:
@@ -969,14 +1105,13 @@ class IntentManager:
                 
                 # Check by intent_id
                 if intent_id:
-                    # Try all known state files
-                    for state_name in self._KNOWN_STATE_FILENAMES:
+                    for state_name in state_filenames:
                         state_file = intent_dir / state_name
                         if state_file.exists():
                             try:
                                 with open(state_file, "r", encoding="utf-8") as f:
                                     state = json.load(f)
-                                if state.get("uuid") == intent_id:
+                                if _uid(state) == intent_id:
                                     matches.append(intent_dir)
                                     break
                             except (json.JSONDecodeError, IOError):
@@ -995,7 +1130,7 @@ class IntentManager:
         state_file = None
         state_data = None
         
-        for state_name in self._KNOWN_STATE_FILENAMES:
+        for state_name in state_filenames:
             candidate = intent_path / state_name
             if candidate.exists():
                 state_file = candidate
@@ -1070,14 +1205,18 @@ class IntentManager:
                         state = json.load(f)
                    
                     intents.append({
-                        "id": state.get("uuid", ""),
+                        "id": _uid(state),
                         "name": state.get("name", ""),
-                        "type": state.get("type", type_name),
-                        "status": state.get("status", "unknown"),
+                        "type": _itype(state) or type_name,
+                        # ing/dis (spec) no tienen 'status' — phase_active es
+                        # la señal equivalente (ING §1 / DIS §1).
+                        "status": state.get("status") or state.get("phase_active", "unknown"),
                         "folder": intent_dir.name,
                         "created_at": state.get("created_at", ""),
                         "updated_at": state.get("updated_at", ""),
                         "locked": state.get("locked", False),
+                        "mandate_id": state.get("mandate_id"),
+                        "frozen": state.get("frozen", False),
                         "initial_files_count": len(state.get("initial_files", []))
                     })
                 except (json.JSONDecodeError, IOError):
@@ -1114,12 +1253,16 @@ class IntentManager:
         )
        
         # Cargar información adicional
-        intent_type = state_data.get("type", "dev")
+        intent_type = _itype(state_data)
        
-        # Contar turns si es dev
+        # Contar turns — nombres de fase-con-turnos según el tipo. dev/doc
+        # conservan su propio nombre de carpeta (.refinement/.curation);
+        # ing/dis comparten la forma "primer_fase_con_turnos + segunda" vía
+        # intent_types.get_intent_type_spec(), en vez de hardcodear otro
+        # par de ifs paralelo al de intent_state_manager.py.
         turns_count = 0
-        classification_turns_count = 0
-        consolidation_turns_count = 0
+        classification_turns_count = 0  # nombre heredado del campo legacy;
+        consolidation_turns_count = 0    # para 'dis' representa mapping/ratification
         if intent_type == "dev":
             refinement_dir = intent_path / ".refinement"
             if refinement_dir.exists():
@@ -1128,33 +1271,26 @@ class IntentManager:
             curation_dir = intent_path / ".curation"
             if curation_dir.exists():
                 turns_count = len([d for d in curation_dir.iterdir() if d.is_dir()])
-        elif intent_type in _BSIP_INTENT_TYPES:
-            # "ing" / "dis" — turns viven repartidos entre la fase
-            # propositiva (classification/mapping) y la fase de cierre
-            # (consolidation/ratification). Los nombres de fase se resuelven
-            # desde el registro en vez de hardcodear "classification"/
-            # "consolidation" (que solo aplican a 'ing').
+        elif intent_type in _BSIP_ENGINE_TYPES:
             spec = get_intent_type_spec(intent_type)
-            proposal_phase = spec.phases[1].name   # classification | mapping
-            closing_phase = spec.phases[2].name    # consolidation | ratification
-
-            proposal_dir = intent_path / f".{proposal_phase}"
+            turn_phases = [p.name for p in spec.phases if p.has_turns]  # 2 fases
+            proposal_dir = intent_path / f".{turn_phases[0]}"
             if proposal_dir.exists():
                 classification_turns_count = len(
                     [d for d in proposal_dir.iterdir() if d.is_dir()]
                 )
-            closing_dir = intent_path / f".{closing_phase}"
-            if closing_dir.exists():
+            commit_dir = intent_path / f".{turn_phases[1]}"
+            if commit_dir.exists():
                 consolidation_turns_count = len(
-                    [d for d in closing_dir.iterdir() if d.is_dir()]
+                    [d for d in commit_dir.iterdir() if d.is_dir()]
                 )
             turns_count = classification_turns_count + consolidation_turns_count
        
         return {
-            "id": state_data.get("uuid", ""),
+            "id": _uid(state_data),
             "name": state_data.get("name", ""),
             "type": intent_type,
-            "status": state_data.get("status", "unknown"),
+            "status": state_data.get("status") or state_data.get("phase_active", "unknown"),
             "folder": intent_path.name,
             "path": str(intent_path),
             "created_at": state_data.get("created_at", ""),
@@ -1163,11 +1299,13 @@ class IntentManager:
             "locked_by": state_data.get("locked_by", ""),
             "locked_at": state_data.get("locked_at", ""),
             "initial_files": state_data.get("initial_files", []),
+            "mandate_id": state_data.get("mandate_id"),
+            "frozen": state_data.get("frozen", False),
             "steps": state_data.get("steps", {}),
             "turns_count": turns_count,
             "classification_turns_count": classification_turns_count,
             "consolidation_turns_count": consolidation_turns_count,
-            "phase_active": state_data.get("phase_active") if intent_type in _BSIP_INTENT_TYPES else None,
+            "phase_active": state_data.get("phase_active") if intent_type in _BSIP_ENGINE_TYPES else None,
             "project_path": str(project_root),
             "full_state": state_data
         }
@@ -1222,7 +1360,7 @@ class IntentManager:
             "locked": True,
             "locked_by": hostname,
             "locked_at": timestamp,
-            "intent_id": state_data.get("uuid", ""),
+            "intent_id": _uid(state_data),
             "name": state_data.get("name", "")
         }
     def unlock_intent(
@@ -1265,7 +1403,7 @@ class IntentManager:
        
         return {
             "locked": False,
-            "intent_id": state_data.get("uuid", ""),
+            "intent_id": _uid(state_data),
             "name": state_data.get("name", ""),
             "unlocked_at": state_data["unlocked_at"]
         }
@@ -1276,9 +1414,8 @@ class IntentManager:
         actor: str = "user",
         content: str = "",
         nucleus_path: Optional[Path] = None,
-        committed: bool = False,
-        reviewed_resolution: Optional[List[Dict[str, Any]]] = None,
-        close_phase: bool = False
+        close_phase: bool = False,
+        proposal: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Add a conversation turn to an intent's chat.
@@ -1289,31 +1426,36 @@ class IntentManager:
             actor: Who is speaking ("user" or "ai")
             content: Content of the message
             nucleus_path: Optional path to Bloom project
-            committed: Solo aplica a intents BSIP ('ing'/'dis') cuando la fase
-                activa es de cierre (.consolidation/ o .ratification/). Si es
-                True, cierra el turno y dispara el "Efecto de committed: true"
-                del spec §5 (materialización de genes/delta/semantic-index/docbase
-                para 'ing'; de domains/edges para 'dis'). Ignorado para dev/doc
-                y para fases propositivas (.classification/, .mapping/), que no
-                tienen noción de commit.
-            reviewed_resolution: Solo aplica junto con committed=True en una
-                fase de cierre. Lista de ítems revisados (clusters para 'ing',
-                cambios de dominio para 'dis'), cada uno con shape
-                {"cluster_id"|"change_id": str, ..., "human_decision":
-                "approved"|"overridden"|"rejected", "content": {...}}.
-            close_phase: Solo tiene efecto en fases propositivas (.classification/
-                de 'ing', .mapping/ de 'dis' — commit_field=None). Si True,
-                además de escribir el turno, fuerza el avance explícito a la
-                fase de cierre correspondiente
-                (IntentStateManager.advance_after_proposal()) — la propuesta
-                se da por terminada y pasa a revisión humana. Ignorado en fases
-                de cierre, donde el avance ya lo decide `committed`, y en dev/doc.
+            close_phase: Solo aplica a 'ing'/'dis'. Su efecto depende de la
+                fase activa:
+                  - En fase de commit (.consolidation/ o .ratification/):
+                    cierra el turno con el campo de commit de la spec en
+                    `true` y dispara el "Efecto de committed: true" (ING §5
+                    / DIS §5) — avanza `phase_active` vía IntentStateManager.
+                  - En fase propositiva (.classification/ o .mapping/, que
+                    no tienen concepto de commit): fuerza el avance
+                    explícito a la fase de cierre correspondiente
+                    (`IntentStateManager.advance_after_proposal()`) después
+                    de escribir el turno — es el único mecanismo para salir
+                    de estas fases, ya que nunca avanzan solas.
+                Reemplaza al parámetro `committed` de la versión anterior
+                (mismo significado en la fase de commit; extendido acá para
+                cubrir también el cierre de la fase propositiva).
+            proposal: Contenido de negocio del turno — para las fases
+                propositivas (.classification/.mapping) es la lista de
+                clusters/operaciones revisadas; para las fases de commit
+                (.consolidation/.ratification) es la lista con
+                human_decision final. Este método NO valida su shape de
+                negocio (eso es fs_contracts.py, todavía no implementado) —
+                solo lo empaqueta junto con actor/content/timestamp y decide
+                la transición de fase según `close_phase`.
            
         Returns:
             Turn information
            
         Raises:
-            ValueError: If intent not found or invalid actor
+            ValueError: If intent not found, invalid actor, or la fase
+                activa no acepta turnos
         """
        
         if actor not in ["user", "ai"]:
@@ -1324,18 +1466,16 @@ class IntentManager:
             project_root, intent_id, folder_name
         )
        
-        intent_type = state_data.get("type", "dev")
+        intent_type = _itype(state_data)
 
-        if intent_type in _BSIP_INTENT_TYPES:
-            # Las fases con turnos de 'ing'/'dis' (.classification/.mapping,
-            # .consolidation/.ratification) tienen una gramática de turno
-            # distinta a .refinement/.curation/ (fase activa variable + concepto
-            # de `committed` solo en la fase de cierre) — delegada por completo
-            # al motor de estado (IntentStateManager) en vez de escribirse a
-            # mano acá (ING_Intent_Spec_v1_1.md §4/§5, DIS_Intent_Spec_v1_0.md §4/§5).
+        if intent_type in _BSIP_ENGINE_TYPES:
+            # .classification/.mapping (proponen) y .consolidation/.ratification
+            # (comitean) comparten la misma gramática de turno en ambos
+            # intents — un solo helper genérico delegando en
+            # IntentStateManager, en vez de un _add_turn_ing/_add_turn_dis
+            # paralelos y duplicados (ver ING §4/§5, DIS §4/§5).
             return self._add_turn_bsip(
-                project_root, intent_path, state_data, state_file,
-                actor, content, committed, reviewed_resolution, close_phase
+                intent_path, state_data, actor, content, close_phase, proposal
             )
        
         # Determinar el número del siguiente turn
@@ -1371,148 +1511,97 @@ class IntentManager:
             "actor": actor,
             "timestamp": timestamp,
             "turn_path": str(turn_dir),
-            "intent_id": state_data.get("uuid", ""),
+            "intent_id": _uid(state_data),
             "intent_name": state_data.get("name", "")
         }
 
     def _add_turn_bsip(
         self,
-        project_root: Path,
         intent_path: Path,
         state_data: Dict[str, Any],
-        state_file: Path,
         actor: str,
         content: str,
-        committed: bool,
-        reviewed_resolution: Optional[List[Dict[str, Any]]],
-        close_phase: bool = False
+        close_phase: bool,
+        proposal: Optional[List[Dict[str, Any]]],
     ) -> Dict[str, Any]:
         """
-        Agrega un turno de negociación humano-IA para intents BSIP
-        ('ing'/'dis'), en la fase que esté actualmente activa
-        (.classification/.mapping o .consolidation/.ratification —
-        ING_Intent_Spec_v1_1.md §4/§5, DIS_Intent_Spec_v1_0.md §4/§5).
+        Turno genérico para 'ing' y 'dis' — delega el ciclo de vida
+        (numeración de turno, validación de fase activa, escritura
+        atómica, transición) en IntentStateManager en vez de reimplementar
+        la lógica de directorios a mano, como hacía la versión anterior
+        (rota: llamaba a `_add_turn_ing`, que nunca estuvo definida).
 
-        Reemplaza a `_add_turn_ing`, que `add_turn()` invocaba pero que
-        nunca llegó a definirse (bug histórico — todo intent 'ing' que
-        pasara de .reception/ rompía acá con AttributeError). A diferencia
-        de la rama dev/doc de `add_turn()`, este helper NO escribe
-        `.turn.json` a mano: delega la apertura/cierre de turno y el
-        avance de fase a `IntentStateManager`, que es la única fuente de
-        verdad de transiciones (ver intent_state_manager.py, docstring de
-        módulo, punto 1 — "motor único para ing/ y dis/"). Este método solo
-        arma el `control_payload` de negocio (actor/content/timestamp/
-        committed/reviewed_resolution) y sincroniza los espejos de
-        bookkeeping legado que el resto de IntentManager sigue leyendo
-        directamente del mismo archivo de estado (`steps`, `status`,
-        `initial_files`, etc. — ver `_create_initial_state` para el porqué
-        de ese envelope doble).
-
-        Args:
-            project_root: Bloom project root (sin uso directo acá, se
-                mantiene por simetría de firma con el resto de helpers
-                privados que reciben el mismo set de argumentos posicionales).
-            intent_path: Path al directorio del intent ya localizado.
-            state_data: Estado ya cargado por `_locate_intent` (puede
-                quedar stale tras `IntentStateManager.close_turn` — no se
-                usa para escribir, solo para el mensaje de error de
-                intent terminado).
-            state_file: Path al `.ing_state.json` / `.dis_state.json`.
-            actor: "user" | "ai" (ya validado por `add_turn`).
-            content: Contenido del mensaje.
-            committed: Ver docstring de `add_turn`.
-            reviewed_resolution: Ver docstring de `add_turn`.
-            close_phase: Ver docstring de `add_turn`. Solo tiene efecto
-                cuando la fase activa es propositiva (commit_field=None) —
-                en ese caso, fuerza `IntentStateManager.advance_after_proposal()`
-                tras escribir el turno.
-
-        Returns:
-            Dict con turn_id/actor/timestamp/turn_path/intent_id/
-            intent_name/phase/phase_advanced/phase_advanced_by_proposal/
-            new_phase_active.
-
-        Raises:
-            ValueError: Si el intent ya está en fase terminal, o si el
-                motor de estado rechaza la transición solicitada
-                (se traduce cualquier IntentStateError a ValueError para
-                mantener el mismo contrato de excepciones que el resto de
-                IntentManager, que CreateCommand/otros comandos ya saben
-                manejar).
+        Cubre las cuatro fases-con-turnos de ambos intents:
+        classification/mapping (proponen, `commit_field=None` — nunca
+        avanzan por sí solas vía `close_turn()`; `close_phase=True` fuerza
+        el avance vía `advance_after_proposal()`) y consolidation/
+        ratification (comitean, `close_phase=True` setea el commit_field
+        de la spec y `close_turn()` avanza — ING §5 / DIS §5).
         """
+        mgr = IntentStateManager.load(intent_path)
+
         try:
-            mgr = IntentStateManager.load(intent_path)
-
-            if mgr.is_terminated:
-                raise ValueError(
-                    f"Intent '{state_data.get('name', '?')}' ya está en fase "
-                    f"terminal ('{mgr.spec.terminal_phase_name}') — no se "
-                    "pueden agregar turnos."
-                )
-
-            phase_name = mgr.phase_active
-            phase_spec = mgr.spec.phase_spec(phase_name)
-
-            turn = mgr.open_turn(phase_name)
-
-            timestamp = datetime.now(timezone.utc).isoformat()
-            control_payload: Dict[str, Any] = {
-                "turn_id": turn.turn_number,
-                "actor": actor,
-                "content": content,
-                "timestamp": timestamp,
-            }
-
-            if phase_spec.commit_field is not None:
-                # Fase de cierre (consolidation/ratification): acá SÍ
-                # existe la noción de commit (ING §5, DIS §5).
-                control_payload[phase_spec.commit_field] = bool(committed)
-                if reviewed_resolution is not None:
-                    control_payload["reviewed_resolution"] = reviewed_resolution
-
-            advanced = mgr.close_turn(turn, control_payload)
-
-            phase_advanced_by_proposal = False
-            if not advanced and close_phase and phase_spec.commit_field is None:
-                # Fase propositiva (classification/mapping): close_turn()
-                # nunca avanza por sí sola (siempre devuelve False para
-                # estas fases). `close_phase=True` es la señal explícita
-                # del caller de que la propuesta está lista para pasar a
-                # revisión humana en la fase de cierre.
-                mgr.advance_after_proposal()
-                phase_advanced_by_proposal = True
-                advanced = True
-
-        except IntentStateError as exc:
+            phase_spec = mgr.current_phase_spec()
+        except IntentAlreadyTerminatedError as exc:
             raise ValueError(str(exc)) from exc
 
-        # --- Sincronizar el espejo legado. IntentStateManager ya persistió
-        # el archivo (vía open_turn/close_turn/_advance -> _persist()), así
-        # que releemos en vez de reusar `state_data`, que quedó stale desde
-        # antes de abrir el turno. ---
-        fresh_state = json.loads(state_file.read_text(encoding="utf-8"))
-        if "steps" in fresh_state and phase_name in fresh_state["steps"] and advanced:
-            # Se marca "hecho" el paso de la fase que se acaba de cerrar
-            # (la que estaba activa al abrir el turno), no la que quedó
-            # activa después del avance.
-            fresh_state["steps"][phase_name] = True
-        fresh_state["status"] = "in_progress"
-        fresh_state["updated_at"] = datetime.now(timezone.utc).isoformat()
+        if not phase_spec.has_turns:
+            raise ValueError(
+                f"La fase activa ('{mgr.phase_active}') no acepta turnos — "
+                "es un acto único, usar hydrate_intent()."
+            )
 
-        with open(state_file, "w", encoding="utf-8") as f:
-            json.dump(fresh_state, f, indent=2, ensure_ascii=False)
+        try:
+            turn = mgr.open_turn(mgr.phase_active)
+        except PhaseNotActiveError as exc:
+            raise ValueError(str(exc)) from exc
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        control_payload: Dict[str, Any] = {
+            "turn": str(turn.turn_number),
+            "actor": actor,
+            "content": content,
+            "proposal": proposal if proposal is not None else [],
+            "timestamp": timestamp,
+        }
+        # El campo de commit (p.ej. 'committed' en .consolidation.json /
+        # .ratification.json) solo existe en fases que lo declaran (ING §5,
+        # DIS §5) — classification/mapping no tienen concepto de commit,
+        # así que no se agrega el campo (mgr.close_turn lo interpreta como
+        # "fase propositiva", nunca avanza — ver docstring de close_turn).
+        if phase_spec.commit_field is not None:
+            control_payload[phase_spec.commit_field] = bool(close_phase)
+
+        advanced = mgr.close_turn(turn, control_payload)
+
+        advanced_by_proposal_close = False
+        if not advanced and close_phase and phase_spec.commit_field is None:
+            # Fase propositiva (classification/mapping): close_turn() jamás
+            # avanza por sí sola en estas fases (ver su docstring — siempre
+            # devuelve False cuando commit_field is None). `close_phase=True`
+            # es acá la señal explícita de que la propuesta está lista para
+            # pasar a revisión humana en la fase de cierre — sin este
+            # bloque, no existe NINGÚN camino para salir de classification/
+            # mapping, quedan trabadas para siempre (ver
+            # advance_after_proposal() en intent_state_manager.py).
+            try:
+                mgr.advance_after_proposal()
+            except InvalidTransitionError as exc:
+                raise ValueError(str(exc)) from exc
+            advanced = True
+            advanced_by_proposal_close = True
 
         return {
-            "turn_id": turn.turn_number,
-            "actor": actor,
-            "timestamp": timestamp,
+            "intent_id": mgr.intent_id,
+            "intent_name": state_data.get("name", ""),
+            "phase": turn.phase_name,
+            "turn_number": turn.turn_number,
             "turn_path": str(turn.turn_dir),
-            "intent_id": fresh_state.get("uuid", fresh_state.get("intent_id", "")),
-            "intent_name": fresh_state.get("name", ""),
-            "phase": phase_name,
-            "phase_advanced": advanced,
-            "phase_advanced_by_proposal": phase_advanced_by_proposal,
-            "new_phase_active": fresh_state.get("phase_active"),
+            "control_file": str(turn.control_file),
+            "advanced_phase": advanced,
+            "advanced_by_proposal_close": advanced_by_proposal_close,
+            "phase_active": mgr.phase_active,
+            "is_terminated": mgr.is_terminated,
         }
 
     def finalize_intent(
@@ -1548,13 +1637,30 @@ class IntentManager:
                 f"Cannot finalize: Intent is locked by {state_data.get('locked_by', 'unknown')}"
             )
        
-        # Marcar como completado
+        intent_type = _itype(state_data)
         timestamp = datetime.now(timezone.utc).isoformat()
+
+        if intent_type in _BSIP_ENGINE_TYPES:
+            # finalize_intent() para ing/dis se apoya en IntentStateManager
+            # en vez de mutar el dict a mano: la precondición real de cierre
+            # es phase_active == terminal ("done"), no un flag de bookkeeping
+            # separado como el 'consolidation_committed' que usaba la versión
+            # anterior (que, además, nunca era escrito por nadie). Esto es
+            # estrictamente más correcto: no se puede finalizar un intent
+            # cuyo último turno de consolidation/ratification sigue con
+            # committed: false (ING §5 / DIS §5).
+            return self._finalize_bsip_intent(intent_path, state_data, timestamp)
+
+        # Verificar que no esté locked por otro
+        if state_data.get("locked", False):
+            raise ValueError(
+                f"Cannot finalize: Intent is locked by {state_data.get('locked_by', 'unknown')}"
+            )
+       
+        # Marcar como completado
         state_data["status"] = "completed"
         state_data["finalized_at"] = timestamp
         state_data["locked"] = False
-
-        intent_type = state_data.get("type", "dev")
 
         # Actualizar steps
         if "steps" in state_data:
@@ -1562,17 +1668,6 @@ class IntentManager:
                 state_data["steps"]["merge"] = True
             elif intent_type == "doc":
                 state_data["steps"]["publish"] = True
-            elif intent_type in _BSIP_INTENT_TYPES:
-                # finalize_intent es un evento de bookkeeping POSTERIOR e
-                # INDEPENDIENTE al commit de la fase de cierre
-                # (.consolidation/ para 'ing', .ratification/ para 'dis' —
-                # `_add_turn_bsip` con committed=True). Ese commit ya
-                # materializó genes/.delta_N/.semantic-index.json/.docbase.json
-                # (o domains/edges para 'dis'); acá NO se re-ejecuta ninguna
-                # escritura de dominio, solo se cierra el ciclo de vida del
-                # intent a nivel de estado (ING_Intent_Spec_v1_1.md §5,
-                # DIS_Intent_Spec_v1_0.md §5).
-                self._finalize_bsip_intent(state_data, intent_type)
        
         # Guardar
         with open(state_file, "w", encoding="utf-8") as f:
@@ -1581,61 +1676,257 @@ class IntentManager:
         # Contar archivos modificados (simulado)
         files_modified = len(state_data.get("initial_files", []))
 
-        result = {
+        return {
             "status": "completed",
-            "intent_id": state_data.get("uuid", ""),
+            "intent_id": _uid(state_data),
             "name": state_data.get("name", ""),
             "finalized_at": timestamp,
             "files_modified": files_modified,
             "message": f"Intent '{state_data.get('name', 'unknown')}' finalized successfully"
         }
 
-        # Para 'ing'/'dis' se expone además el estado de la fase de cierre
-        # que ya quedó fijado por el commit de turno (`_add_turn_bsip`) —
-        # solo lectura, no se recalcula ni se vuelve a escribir nada acá.
-        if intent_type in _BSIP_INTENT_TYPES:
-            spec = get_intent_type_spec(intent_type)
-            last_phase = spec.phases[-1].name  # "consolidation" | "ratification"
-            result["closing_phase_committed"] = state_data.get("steps", {}).get(last_phase, False)
-            result["phase_active"] = state_data.get("phase_active")
-
-        return result
-
-    def _finalize_bsip_intent(self, state_data: Dict[str, Any], intent_type: str) -> None:
+    def _finalize_bsip_intent(
+        self, intent_path: Path, state_data: Dict[str, Any], timestamp: str
+    ) -> Dict[str, Any]:
         """
-        Bookkeeping de finalización para intents BSIP ('ing'/'dis') —
-        generalización de la antigua `_finalize_ing_intent`, que solo
-        cubría 'ing', para compartir la misma lógica con 'dis'.
+        Bookkeeping de finalización genérico para 'ing'/'dis'.
 
-        Este helper NO escribe genes, deltas ni el índice semántico (ni,
-        para 'dis', domains/edges): esa responsabilidad es exclusiva del
-        commit de turno en la fase de cierre (`committed: true` dentro de
-        `_add_turn_bsip`). Acá solo se cierra el ciclo de vida del intent a
-        nivel de `.ing_state.json` / `.dis_state.json`:
+        No escribe genes, deltas, ni `.cache/.semantic-index.json` — esa
+        responsabilidad ya se ejecutó (o no) en el commit de turno de la
+        fase de cierre (`.consolidation/` / `.ratification/`, vía
+        `_add_turn_bsip(close_phase=True)`). Este método exige que ese
+        commit ya haya avanzado el intent a su fase terminal antes de
+        permitir el cierre — a diferencia de la versión anterior, que no
+        validaba nada y dejaba `finalize_intent()` cerrar intents cuyo
+        último turno seguía abierto.
+        """
+        mgr = IntentStateManager.load(intent_path)
+        if not mgr.is_terminated:
+            raise ValueError(
+                f"No se puede finalizar: el intent sigue en fase "
+                f"'{mgr.phase_active}', no llegó a su fase terminal "
+                f"('{mgr.spec.terminal_phase_name}'). El último turno de "
+                f"'{mgr.spec.phases[-1].name}' debe cerrar con "
+                f"'{mgr.spec.phases[-1].commit_field}: true' primero."
+            )
 
-          - `steps[<última fase>] = True` — "consolidate" para 'ing',
-            "ratification" para 'dis', equivalente a `steps["merge"]`
-            (dev) / `steps["publish"]` (doc). El nombre de la última fase
-            se resuelve desde el registro, no se hardcodea.
+        mgr.set_metadata(status="completed", finalized_at=timestamp)
 
-        No valida ni bloquea el cierre si esa fase todavía no comiteó:
-        `finalize_intent` es, por diseño, un evento de bookkeeping distinto
-        y posterior al commit de la fase de cierre (ING_Intent_Spec_v1_1.md
-        §5, DIS_Intent_Spec_v1_0.md §5), así que no le corresponde forzar
-        esa precondición de negocio acá.
+        return {
+            "status": "completed",
+            "intent_id": mgr.intent_id,
+            "name": state_data.get("name", ""),
+            "finalized_at": timestamp,
+            "phase_active": mgr.phase_active,
+            "is_terminated": True,
+            "message": f"Intent '{state_data.get('name', 'unknown')}' finalized successfully",
+        }
+
+    @staticmethod
+    def _last_turn_dir(phase_dir: Path) -> Optional[Path]:
+        """Directorio `.turn_N/` de mayor N dentro de `phase_dir`, o None
+        si la fase nunca abrió un turno. Determinista por número, no por
+        mtime — mismo criterio que IntentStateManager.open_turn()."""
+        if not phase_dir.exists():
+            return None
+        turn_dirs = [
+            d for d in phase_dir.iterdir()
+            if d.is_dir() and d.name.startswith(".turn_")
+            and d.name.split("_", 1)[1].isdigit()
+        ]
+        if not turn_dirs:
+            return None
+        return max(turn_dirs, key=lambda d: int(d.name.split("_", 1)[1]))
+
+    def freeze_to_mandate(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        nucleus_path: Optional[Path] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Capa de Cristalización (Freeze-to-Mandate). Toma un intent 'ing'/
+        'dis' ya convergido (phase_active == fase terminal, commit cerrado
+        en .consolidation/ o .ratification/) y sintetiza `mandate.json`: el
+        artefacto inmutable de salida del ciclo de trabajo.
+
+        Regla de arquitectura (decisión de implementación, NO una enmienda
+        a ING_Intent_Spec_v1_1.md / DIS_Intent_Spec_v1_0.md): mandate_id
+        sigue siendo obligatorio como precondición de ARRANQUE de ing/dis
+        (ING §0 regla 2 / DIS regla 2, sin cambios) — lo que se desacopla
+        es CUÁNDO se exige un mandate.json *firmado*. Antes de este
+        método, mandate_id es solo un identificador de contexto de trabajo
+        (capa "Unbound"). Este método es el único punto del sistema que
+        produce el mandate.json firmado — la firma pasa de precondición de
+        entrada a operación de salida/exportación.
+
+        Qué SÍ hace:
+          - Exige que el intent haya llegado a su fase terminal — no se
+            puede cristalizar con un commit de cierre todavía abierto.
+          - Recolecta el resumen convergido (classification_summary /
+            mapping_summary, domain_baseline / scope, y el contenido del
+            último turno comiteado de la fase de cierre) como evidencia
+            de trazabilidad.
+          - Sintetiza `mandate.json` con un `content_hash` sha256
+            determinista sobre el contenido — es una firma de integridad,
+            no una firma criptográfica con clave privada (ese mecanismo no
+            está definido en ningún documento fuente disponible; queda
+            como pendiente explícito, mismo criterio que otros pendientes
+            ya declarados en ambas specs, no se fabrica acá).
+          - Marca el intent de origen como `frozen` (idempotente por
+            default: una segunda llamada sin `force=True` falla en vez de
+            re-cristalizar en silencio).
+
+        Qué NO hace (fuera de alcance, marcado explícitamente en vez de
+        inventado):
+          - NO sintetiza las Actions de scaffold reales. El Roadmap
+            Maestro v3 §2 (fila Fase 4) confirma que el scaffold real
+            (`MandateExecutionWorkflow`) "sigue placeholder puro" — no
+            existe ninguna spec de la que derivar hoy el algoritmo
+            convergencia→Actions. `mandate.json` se escribe con
+            `actions: []` y `scaffold_pending: true`, honesto sobre lo que
+            falta en vez de simular un scaffold que no está especificado.
+          - NO vuelve a escribir `.cache/.semantic-index.json` ni
+            `.genes/` — eso ya ocurrió (o no) en el commit de
+            `.consolidation/`/`.ratification/`. Esta capa exporta, no
+            muta el grafo de Dominios.
+          - NO resuelve D-20 (Roadmap §6): la carrera de escritura entre
+            una corrida de `ing/` y una de `dis/` sobre el mismo
+            `domain_id` sigue sin lock — freeze_to_mandate() lee el
+            estado que encuentra al momento de llamarse, nada más.
 
         Args:
-            state_data: Diccionario de estado (`.ing_state.json` /
-                `.dis_state.json`) ya cargado por `_locate_intent`. Se muta
-                in-place; el caller (`finalize_intent`) es responsable de
-                persistirlo a disco.
-            intent_type: "ing" | "dis" — determina, vía el registro, cuál
-                es la última fase a marcar.
+            intent_id / folder_name: localización del intent (ver
+                _locate_intent).
+            nucleus_path: path explícito al proyecto Bloom, si no se
+                infiere del cwd.
+            force: permite re-cristalizar un intent ya `frozen` (sobrescribe
+                el `mandate.json` anterior con un `content_hash` nuevo).
+
+        Returns:
+            status, intent_id, mandate_id, mandate_path, content_hash,
+            frozen_at, scaffold_pending, message.
+
+        Raises:
+            ValueError: intent no encontrado, tipo no soportado (dev/doc no
+                cristalizan — no convergen contra ningún grafo de Dominios),
+                fase activa no terminal, o ya frozen sin force=True.
         """
-        spec = get_intent_type_spec(intent_type)
-        last_phase = spec.phases[-1].name
-        if last_phase in state_data.get("steps", {}):
-            state_data["steps"][last_phase] = True
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+        intent_type = _itype(state_data)
+
+        if intent_type not in _BSIP_ENGINE_TYPES:
+            raise ValueError(
+                f"freeze_to_mandate() solo aplica a intents 'ing'/'dis' "
+                f"(convergen contra el grafo de Dominios) — recibido "
+                f"'{intent_type}'. dev/doc no tienen capa de cristalización."
+            )
+
+        if state_data.get("frozen") and not force:
+            raise ValueError(
+                f"Intent '{_uid(state_data)}' ya fue cristalizado en "
+                f"'{state_data.get('mandate_artifact_path')}' "
+                f"(frozen_at={state_data.get('frozen_at')}). "
+                "Usar force=True para re-cristalizar."
+            )
+
+        mgr = IntentStateManager.load(intent_path)
+        if not mgr.is_terminated:
+            commit_phase = mgr.spec.phases[-1]
+            raise ValueError(
+                f"No se puede cristalizar: el intent sigue en fase "
+                f"'{mgr.phase_active}' (necesita llegar a "
+                f"'{mgr.spec.terminal_phase_name}'). El último turno de "
+                f"'{commit_phase.name}' debe cerrar con "
+                f"'{commit_phase.commit_field}: true' primero."
+            )
+
+        snapshot = mgr.snapshot()
+        mandate_id = snapshot["mandate_id"]
+
+        # Evidencia de convergencia: contenido del último turno comiteado
+        # de la fase de cierre (.consolidation/ o .ratification/).
+        commit_phase_name = mgr.spec.phases[-1].name
+        commit_control_filename = (
+            ".consolidation.json" if commit_phase_name == "consolidation"
+            else ".ratification.json" if commit_phase_name == "ratification"
+            else ".turn.json"
+        )
+        last_turn_dir = self._last_turn_dir(intent_path / f".{commit_phase_name}")
+        committed_content = None
+        if last_turn_dir is not None:
+            control_file = last_turn_dir / commit_control_filename
+            if control_file.exists():
+                try:
+                    committed_content = json.loads(control_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, IOError):
+                    committed_content = None
+
+        convergence_summary = {
+            "classification_summary": snapshot.get("classification_summary"),
+            "mapping_summary": snapshot.get("mapping_summary"),
+            "domain_baseline": snapshot.get("domain_baseline"),
+            "scope": snapshot.get("scope"),
+            "last_committed_turn": committed_content,
+        }
+        # Descartar None: campos que no aplican al tipo de intent (p.ej.
+        # 'mapping_summary' en un 'ing') no deben ensuciar el mandate.json.
+        convergence_summary = {k: v for k, v in convergence_summary.items() if v is not None}
+
+        frozen_at = datetime.now(timezone.utc).isoformat()
+        mandate_content = {
+            "mandate_id": mandate_id,
+            "source_intent": {
+                "intent_id": mgr.intent_id,
+                "intent_type": intent_type,
+                "intent_path": str(intent_path),
+                "name": snapshot.get("name"),
+            },
+            "convergence": convergence_summary,
+            "actions": [],  # síntesis real de scaffold: pendiente, ver docstring
+            "scaffold_pending": True,
+            "frozen_at": frozen_at,
+        }
+        content_hash = hashlib.sha256(
+            json.dumps(mandate_content, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        mandate_content["content_hash"] = content_hash
+
+        # Ruta asumida (no confirmada por bloom_project_tree.txt, que
+        # explícitamente deja Nucleus-level fuera de esta sesión) — mismo
+        # criterio de "candidata razonable, no inventada como definitiva"
+        # que _write_dis_discovery_content(). Ajustar si bloom_nucleus_tree.txt
+        # define otra convención.
+        mandate_dir = project_root / ".bloom" / ".mandates" / mandate_id
+        mandate_dir.mkdir(parents=True, exist_ok=True)
+        mandate_path = mandate_dir / "mandate.json"
+        with open(mandate_path, "w", encoding="utf-8") as f:
+            json.dump(mandate_content, f, indent=2, ensure_ascii=False)
+
+        mgr.set_metadata(
+            frozen=True,
+            frozen_at=frozen_at,
+            mandate_artifact_path=str(mandate_path),
+        )
+
+        return {
+            "status": "frozen",
+            "intent_id": mgr.intent_id,
+            "mandate_id": mandate_id,
+            "mandate_path": str(mandate_path),
+            "content_hash": content_hash,
+            "frozen_at": frozen_at,
+            "scaffold_pending": True,
+            "message": (
+                f"Intent '{mgr.intent_id}' cristalizado en {mandate_path}. "
+                "scaffold_pending=true: la síntesis de Actions reales sigue "
+                "siendo trabajo pendiente (Roadmap Maestro v3 §2, Fase 4)."
+            ),
+        }
 
     def delete_intent(
         self,
@@ -1673,7 +1964,7 @@ class IntentManager:
        
         # Guardar info antes de borrar
         intent_name = state_data.get("name", "unknown")
-        intent_uuid = state_data.get("uuid", "")
+        intent_uuid = _uid(state_data)
        
         # Eliminar directorio completo
         shutil.rmtree(intent_path)
@@ -1738,7 +2029,7 @@ class IntentManager:
         )
         
         intent_type = state_data.get("type", "dev")
-        intent_uuid = state_data.get("uuid", "")
+        intent_uuid = _uid(state_data)
         intent_name = state_data.get("name", "unknown")
         
         # 2. Locate payload and index files in .pipeline/.briefing/

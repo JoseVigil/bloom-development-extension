@@ -353,6 +353,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load FinalizeCommand: {e}")
     
     try:
+        from brain.commands.intent.freeze import IntentFreezeCommand
+        registry.register(IntentFreezeCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load IntentFreezeCommand: {e}")
+    
+    try:
         from brain.commands.intent.get import GetCommand
         registry.register(GetCommand())
     except (ImportError, AttributeError) as e:
@@ -846,6 +852,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.delete',
         'brain.commands.intent.download',
         'brain.commands.intent.finalize',
+        'brain.commands.intent.freeze',
         'brain.commands.intent.get',
         'brain.commands.intent.hydrate',
         'brain.commands.intent.list',

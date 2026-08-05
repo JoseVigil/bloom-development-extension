@@ -8,7 +8,7 @@ from brain.cli.categories import CommandCategory
 
 class ListCommand(BaseCommand):
     """
-    Command to list all intents (dev and/or doc) in a Bloom project.
+    Command to list all intents (dev, doc, ing and/or dis) in a Bloom project.
     """
     
     def metadata(self) -> CommandMetadata:
@@ -21,6 +21,8 @@ class ListCommand(BaseCommand):
                 "brain intent list",
                 "brain intent list --type dev",
                 "brain intent list --type doc --json",
+                "brain intent list --type ing",
+                "brain intent list --type dis",
                 "brain intent list --nucleus-path ~/my-project"
             ]
         )
@@ -40,14 +42,14 @@ class ListCommand(BaseCommand):
                 None,
                 "--type",
                 "-t",
-                help="Filter by intent type: 'dev' or 'doc'"
+                help="Filter by intent type: 'dev', 'doc', 'ing' or 'dis'"
             )
         ):
             """
             List all intents in the project.
             
             Shows intent ID, name, type, status, and basic metadata.
-            Use --type to filter by dev or doc intents only.
+            Use --type to filter by dev, doc, ing or dis intents only.
             """
             # 1. Recuperar GlobalContext
             gc = ctx.obj
@@ -57,8 +59,11 @@ class ListCommand(BaseCommand):
             
             try:
                 # 2. Validar tipo si se proporciona
-                if intent_type and intent_type not in ["dev", "doc"]:
-                    self._handle_error(gc, f"Invalid type '{intent_type}'. Must be 'dev' or 'doc'")
+                if intent_type and intent_type not in ["dev", "doc", "ing", "dis"]:
+                    self._handle_error(
+                        gc,
+                        f"Invalid type '{intent_type}'. Must be 'dev', 'doc', 'ing' or 'dis'"
+                    )
                 
                 # 3. Verbose logging
                 if gc.verbose:
@@ -109,17 +114,25 @@ class ListCommand(BaseCommand):
         # Agrupar por tipo
         dev_intents = [i for i in intents if i.get("type") == "dev"]
         doc_intents = [i for i in intents if i.get("type") == "doc"]
-        
-        if dev_intents:
-            typer.echo(f"🔧 Development Intents ({len(dev_intents)}):")
-            for intent in dev_intents:
-                self._render_intent_line(intent)
-        
-        if doc_intents:
-            if dev_intents:
+        ing_intents = [i for i in intents if i.get("type") == "ing"]
+        dis_intents = [i for i in intents if i.get("type") == "dis"]
+
+        groups = [
+            ("🔧 Development Intents", dev_intents),
+            ("📚 Documentation Intents", doc_intents),
+            ("📥 Ingestion Intents", ing_intents),
+            ("🧭 Discovery Intents", dis_intents),
+        ]
+
+        first = True
+        for label, group in groups:
+            if not group:
+                continue
+            if not first:
                 typer.echo()
-            typer.echo(f"📚 Documentation Intents ({len(doc_intents)}):")
-            for intent in doc_intents:
+            first = False
+            typer.echo(f"{label} ({len(group)}):")
+            for intent in group:
                 self._render_intent_line(intent)
     
     def _render_intent_line(self, intent: dict):

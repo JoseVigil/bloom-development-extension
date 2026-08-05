@@ -20,7 +20,10 @@ class AddTurnCommand(BaseCommand):
             examples=[
                 "brain intent add-turn --id abc123 --actor user --content 'Add null check'",
                 "brain intent add-turn --folder .fix-login-a1b2 --actor ai --content 'Done'",
-                "brain intent add-turn --id abc123 --actor user --content 'Fix bug' --json"
+                "brain intent add-turn --id abc123 --actor user --content 'Fix bug' --json",
+                "brain intent add-turn --id abc123 --actor user --content 'Proposal ready' --close-phase",
+                "brain intent add-turn --id abc123 --actor user --content 'Ratify' --committed "
+                "--reviewed-resolution '[{\"change_id\": \"c1\", \"human_decision\": \"approved\", \"content\": {}}]'"
             ]
         )
     
@@ -58,6 +61,39 @@ class AddTurnCommand(BaseCommand):
                 "--nucleus-path",
                 "-p",
                 help="Path to Bloom project"
+            ),
+            committed: bool = typer.Option(
+                False,
+                "--committed",
+                "-C",
+                help=(
+                    "Only meaningful for 'ing'/'dis' intents when the active phase "
+                    "is a closing phase (.consolidation/ or .ratification/). Closes "
+                    "the turn and triggers materialization of the reviewed "
+                    "resolution. Ignored for dev/doc and for proposal phases "
+                    "(.classification/, .mapping/)."
+                )
+            ),
+            reviewed_resolution: Optional[str] = typer.Option(
+                None,
+                "--reviewed-resolution",
+                help=(
+                    "Only used together with --committed on a closing phase. JSON "
+                    "array of reviewed items, e.g. "
+                    "'[{\"change_id\": \"c1\", \"human_decision\": \"approved\", \"content\": {}}]'"
+                )
+            ),
+            close_phase: bool = typer.Option(
+                False,
+                "--close-phase",
+                help=(
+                    "Only meaningful for 'ing'/'dis' intents on a proposal phase "
+                    "(.classification/, .mapping/ — no commit concept). Forces an "
+                    "explicit advance to the closing phase (.consolidation/, "
+                    ".ratification/) after writing this turn. Ignored on closing "
+                    "phases, where advancing is already decided by --committed, "
+                    "and for dev/doc."
+                )
             )
         ):
             """
@@ -80,12 +116,31 @@ class AddTurnCommand(BaseCommand):
                 # 3. Validar actor
                 if actor not in ["user", "ai"]:
                     self._handle_error(gc, f"Invalid actor '{actor}'. Must be 'user' or 'ai'")
+
+                # 3b. Parsear --reviewed-resolution (JSON array), si vino
+                parsed_reviewed_resolution = None
+                if reviewed_resolution:
+                    import json as _json
+                    try:
+                        parsed_reviewed_resolution = _json.loads(reviewed_resolution)
+                    except _json.JSONDecodeError as e:
+                        self._handle_error(
+                            gc, f"Invalid --reviewed-resolution JSON: {e}"
+                        )
+                    if not isinstance(parsed_reviewed_resolution, list):
+                        self._handle_error(
+                            gc, "--reviewed-resolution must be a JSON array of objects"
+                        )
                 
                 # 4. Verbose logging
                 if gc.verbose:
                     typer.echo(f"💬 Adding turn to intent...", err=True)
                     typer.echo(f"   Actor: {actor}", err=True)
                     typer.echo(f"   Content length: {len(content)} chars", err=True)
+                    if committed:
+                        typer.echo(f"   Committed: True", err=True)
+                    if close_phase:
+                        typer.echo(f"   Close phase: True", err=True)
                 
                 # 5. Lazy Import del Core
                 from brain.core.intent_manager import IntentManager
@@ -97,7 +152,10 @@ class AddTurnCommand(BaseCommand):
                     folder_name=folder_name,
                     actor=actor,
                     content=content,
-                    nucleus_path=nucleus_path
+                    nucleus_path=nucleus_path,
+                    committed=committed,
+                    reviewed_resolution=parsed_reviewed_resolution,
+                    close_phase=close_phase
                 )
                 
                 # 7. Empaquetar resultado
@@ -127,6 +185,22 @@ class AddTurnCommand(BaseCommand):
         typer.echo(f"{actor_icon} Actor: {turn_data.get('actor', 'N/A')}")
         typer.echo(f"📂 Path: {turn_data.get('turn_path', 'N/A')}")
         typer.echo(f"🕐 Timestamp: {turn_data.get('timestamp', 'N/A')}")
+
+        # Solo presente para intents BSIP ('ing'/'dis') — dev/doc no
+        # devuelven estas claves (ver IntentManager._add_turn_bsip).
+        if "phase" in turn_data:
+            typer.echo(f"📍 Phase: {turn_data.get('phase', 'N/A')}")
+            if turn_data.get("phase_advanced"):
+                reason = (
+                    "proposal closed"
+                    if turn_data.get("phase_advanced_by_proposal")
+                    else "committed"
+                )
+                typer.echo(
+                    f"➡️  Advanced to: {turn_data.get('new_phase_active', 'N/A')} "
+                    f"({reason})"
+                )
+
         typer.echo(f"\n💡 Turn saved and ready for processing")
     
     def _handle_error(self, gc, message: str):
