@@ -1,0 +1,97 @@
+{
+  "type": "nucleus",
+  "version": "2.0",
+  "id": "00000000-mock-0000-0000-000000000000",
+  "organization": {
+    "name": "northwind-labs",
+    "url": "",
+    "slug": "northwind-labs",
+    "mode": "org_new",
+    "github_verified": false,
+    "is_temporary": true
+  },
+  "nucleus": {
+    "name": "nucleus-northwind-labs",
+    "createdAt": "2026-01-01T00:00:00.000000",
+    "lastUpdatedAt": "2026-01-01T00:00:00.000000",
+    "path": "{RESOLVED_AT_RUNTIME_BY_ORGANIZATION_CONTEXT}",
+    "rootPath": "{RESOLVED_AT_RUNTIME_BY_ORGANIZATION_CONTEXT}",
+    "structureVersion": "2.0",
+    "directorySchema": {
+      "core": ".core",
+      "governance": ".governance",
+      "intents": ".intents/.exp",
+      "cache": ".cache",
+      "relations": ".relations",
+      "findings": "findings",
+      "reports": "reports"
+    },
+    "status": {
+      "initialized": true,
+      "syncStatus": "synced",
+      "lastSync": "2026-01-01T00:00:00.000000",
+      "healthStatus": "healthy"
+    },
+    "statistics": {
+      "totalProjects": 3,
+      "activeProjects": 3,
+      "totalIntents": 0,
+      "totalFindings": 0,
+      "strategiesDistribution": {
+        "typescript": 2,
+        "python": 1
+      }
+    }
+  },
+  "onboarding": {
+    "completed": true,
+    "completed_at": "2026-01-01T00:00:00.000000",
+    "steps": {
+      "github_auth": false,
+      "gemini_setup": false,
+      "nucleus_created": true,
+      "projects_linked": true
+    }
+  },
+  "projects": [
+    {
+      "id": "mock-project-analytics",
+      "name": "northwind-analytics-panel",
+      "strategy": "typescript",
+      "localPath": "../northwind-analytics-panel",
+      "status": "active",
+      "metadata": { "hasBloomConfig": false, "isGitRepo": true }
+    },
+    {
+      "id": "mock-project-billing",
+      "name": "northwind-billing-api",
+      "strategy": "python",
+      "localPath": "../northwind-billing-api",
+      "status": "active",
+      "metadata": { "hasBloomConfig": false, "isGitRepo": true }
+    },
+    {
+      "id": "mock-project-docs",
+      "name": "northwind-docs-site",
+      "strategy": "typescript",
+      "localPath": "../northwind-docs-site",
+      "status": "active",
+      "metadata": { "hasBloomConfig": false, "isGitRepo": true }
+    }
+  ],
+  "relations": [],
+  "features": {
+    "explorationIntents": true,
+    "crossProjectAnalysis": false,
+    "semanticIndexing": false,
+    "governanceEnforcement": true,
+    "githubIntegration": false
+  },
+  "metadata": {
+    "configVersion": "2.0.0-mock",
+    "generatedBy": "agentic-harness-bootstrap",
+    "compatibleCliVersion": ">=2.0.0",
+    "lastModifiedBy": "mock_setup",
+    "tags": ["mock", "portfolio-demo", "no-real-data"]
+  }
+}

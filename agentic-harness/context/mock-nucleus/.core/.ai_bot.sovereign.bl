@@ -1,0 +1,73 @@
+# SOVEREIGN CONTRACT — northwind-labs (MOCK — datos ficticios)
+# .nucleus-northwind-labs/.core/.ai_bot.sovereign.bl
+#
+# Este archivo es un MOCK. "Northwind Labs" no existe — es el nombre clásico
+# de organización de ejemplo (Northwind Traders). Ningún dato acá referencia
+# una organización, cliente o contrato real. Se construyó siguiendo la forma
+# real observada en .nucleus-elias-repos/.core/.rules.bl (mismo estilo
+# markdown plano) y la especificación de context/HARNESS_CONTEXT_BRIEF.md §1.
+#
+# INVARIANT-ALF-004: este archivo nunca se carga desde fuera del Nucleus de
+# la organización. En el harness real, se resuelve vía OrganizationContext,
+# nunca por path hardcodeado.
+
+## MODELO DE NEGOCIO (lenguaje natural)
+
+Northwind Labs es una organización ficticia de desarrollo de software que
+mantiene tres productos internos: un panel de analytics, una API de
+facturación, y un sitio de documentación pública. El agente soberano de esta
+organización (rol: Alfred-equivalente en este mock) puede interpretar
+solicitudes en lenguaje natural sobre estos tres proyectos y traducirlas en
+intents, pero nunca ejecuta ni firma directamente.
+
+## GOBERNANZA — qué puede hacer sin aprobación humana
+
+- Puede: leer código, generar propuestas de intent, correr análisis
+  read-only, clasificar solicitudes por tipo de intent.
+- No puede sin aprobación explícita: escribir a disco fuera de `.staging/`,
+  hacer commit, publicar, rotar credenciales, tocar `main`.
+- Toda acción que modifique estado pasa por un gate separado (equivalente
+  conceptual a BlindJudge). El agente propone, nunca decide.
+
+## MAPA DE PROYECTOS ACTIVOS (ficticio)
+
+| Proyecto | Estrategia | Estado |
+|---|---|---|
+| northwind-analytics-panel | typescript | activo |
+| northwind-billing-api | python | activo |
+| northwind-docs-site | typescript | activo |
+
+## CAPACIDADES HABILITADAS PARA ESTA INSTANCIA
+
+- exploration_intents: true
+- dev_intents: true
+- doc_intents: true
+- cross_project_analysis: false
+- remote_execution: false (este mock no ejecuta nada, solo demuestra el loop)
+
+## USUARIOS AUTORIZADOS Y NIVELES (ficticio)
+
+| Usuario | Nivel |
+|---|---|
+| demo-master@northwind-labs.example | Master |
+| demo-architect@northwind-labs.example | Architect |
+| demo-specialist@northwind-labs.example | Specialist |
+
+## PROVEEDORES DE AI HABILITADOS
+
+Sigue el contrato real en `../../../contracts/types.ts` — `AIProvider.id`
+es `'ollama' | 'gemini'`. Este mock declara ambos habilitados, con Ollama
+como default local:
+
+- ollama: local, default, modelo `llama3.2` (o el que el harness resuelva
+  en runtime desde el binario bundleado)
+- gemini: proveedor externo, requiere auth, usado cuando el router decide
+  que la tarea excede la capacidad razonable del modelo local
+
+## NOTA DE DISEÑO
+
+Cualquier dato que reemplace este mock por uno real de producción debe
+seguir exactamente esta misma forma (mismos encabezados, misma tabla de
+capacidades, mismo formato de usuarios) — el harness que lee este archivo
+no debería necesitar ningún cambio de código para pasar de mock a real,
+solo apuntar `OrganizationContext` a otro path.
