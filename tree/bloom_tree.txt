@@ -1,0 +1,77 @@
+.bloom/
+├── .intents/
+│   └── .ing/
+│       └── .test-smoke-d1fca289/
+│           ├── .classification/
+│           │   └── .turn_1/
+│           │       ├── .files/
+│           │       └── .turn.json
+│           ├── .consolidation/
+│           │   └── .turn_1/
+│           │       ├── .consolidation.json
+│           │       └── .files/
+│           ├── .ing_state.json
+│           ├── .pipeline/
+│           │   ├── .classification/
+│           │   │   └── .response/
+│           │   │       └── .staging/
+│           │   ├── .consolidation/
+│           │   │   └── .response/
+│           │   │       └── .staging/
+│           │   └── .reception/
+│           │       └── .response/
+│           │           └── .staging/
+│           └── .reception/
+│               ├── .files/
+│               ├── .rawbase.json
+│               └── .rawbase_index.json
+├── .mandates/
+│   └── MND-TEST-001/
+│       └── mandate.json
+└── .nucleus-elias-repos/
+    ├── .cache/
+    │   ├── .last-sync.json
+    │   ├── .projects-snapshot.json
+    │   └── .semantic-index.json
+    ├── .core/
+    │   ├── .meta.json
+    │   ├── .nucleus-config.json
+    │   ├── .policies.bl
+    │   ├── .rules.bl
+    │   └── .standards.bl
+    ├── .governance/
+    │   ├── architecture/
+    │   │   ├── .decisions/
+    │   │   ├── .patterns.bl
+    │   │   └── .principles.bl
+    │   ├── quality/
+    │   │   ├── .code-standards.bl
+    │   │   └── .testing-requirements.bl
+    │   └── security/
+    │       ├── .compliance-requirements.bl
+    │       └── .security-standards.bl
+    ├── .intents/
+    │   └── .exp/
+    ├── .mandates/
+    │   ├── 450cd7b0-e641-4ed3-a62e-a4e9ff93e97d/
+    │   │   ├── domain_proposal.json
+    │   │   └── mandate_state.json
+    │   ├── 7404d02b-389c-4376-928a-3f746ba2e502/
+    │   │   ├── domain_proposal.json
+    │   │   └── mandate_state.json
+    │   ├── 9b1069a2-7dd6-4cbf-9058-0a81b44eb811/
+    │   │   ├── domain_proposal.json
+    │   │   └── mandate_state.json
+    │   ├── dc05e55c-5f2c-4969-89e1-4ab12c8f18f7/
+    │   │   ├── domain_proposal.json
+    │   │   └── mandate_state.json
+    │   └── ebcde8c1-730e-4235-b57a-a1c0e66eccde/
+    │       ├── domain_proposal.json
+    │       └── mandate_state.json
+    ├── .relations/
+    │   └── .project-links.json
+    ├── findings/
+    │   └── README.md
+    └── reports/
+        ├── exports/
+        └── health-dashboard.json

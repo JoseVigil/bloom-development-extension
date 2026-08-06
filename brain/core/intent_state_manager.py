@@ -278,6 +278,22 @@ class IntentStateManager:
         riesgo de que el caller mute el dict interno por error."""
         return json.loads(json.dumps(self._state))
 
+    def set_metadata(self, **fields: Any) -> None:
+        """Adjunta o actualiza campos de metadata de alto nivel en el
+        estado del intent, fuera del ciclo fase/turno, y persiste el
+        cambio inmediatamente (mismo patrón mutate-then-persist que
+        `_advance()`).
+
+        No valida el contenido de negocio de cada campo — es el punto
+        de entrada genérico que usa IntentManager para escribir cosas
+        como `name`/`initial_files` en create_intent(), `status` en
+        hydrate_intent()/finalize_intent(), o `frozen`/`frozen_at`/
+        `mandate_artifact_path` en freeze_to_mandate(). El caller es
+        responsable de pasar claves y valores coherentes con el schema
+        de `_state` (ver IntentStateManager.create())."""
+        self._state.update(fields)
+        self._persist()
+
     # ------------------------------------------------------------------
     # Fases sin turnos (reception/discovery)
     # ------------------------------------------------------------------
