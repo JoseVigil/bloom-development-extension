@@ -165,7 +165,13 @@ export async function continueWorkspace() {
     state.selectedOrg = resolvedOrg;
     state.selectedFolder = path;
 
-    await window.onboarding.markStepComplete({ step: 'nucleus_create' });
+    // FIX (auditoría multi-org): se quitó la llamada a
+    // markStepComplete({ step: 'nucleus_create' }) que estaba acá — es
+    // rechazada siempre (nucleus_create ∈ FS_MARKER_STEPS, ver
+    // onboarding-handlers.js) y además redundante: onboarding:init-nucleus
+    // ya persiste completed_steps + organizations[] en su propia rama de
+    // éxito (ver el bloque post-close en el handler IPC). Ver el mismo caso
+    // resuelto explícitamente para useExistingWorkspace() más abajo.
     addNotification('Workspace configured', { icon: '✓', type: 'success' });
 
     // Antes: goTo(3) hardcodeado. Ahora: dejamos que el SSOT diga cuál es
@@ -214,11 +220,41 @@ export async function continueWorkspace() {
 export async function useExistingWorkspace() {
   const orgSlug = workspaceState.org;
   const path = workspaceState.path;
-  selection.selectedOrg = orgSlug || null;
+
+  // FIX (auditoría multi-org): markStepComplete({ step: 'nucleus_create' })
+  // SIEMPRE fallaba acá — nucleus_create está en FS_MARKER_STEPS
+  // (onboarding-handlers.js) y ese handler lo rechaza a propósito para
+  // cualquier caller genérico, para no arriesgar corromper el artefacto
+  // fs_marker con un valor falso. El resultado real: "Usar la existente"
+  // navegaba al step siguiente pero nunca persistía org/path en disco, y el
+  // próximo resume volvía a preguntar por el workspace.
+  //
+  // Usamos el IPC dedicado, que persiste vía getOrCreateOrg (mismo camino
+  // que la rama de éxito de continueWorkspace/init-nucleus) en vez de pasar
+  // por el reactor genérico.
+  let result;
+  try {
+    result = await window.onboarding.useExistingWorkspace({ org: orgSlug || null, path });
+  } catch (e) {
+    result = { success: false, error: e.message };
+  }
+
+  if (!result.success) {
+    log('error', `useExistingWorkspace — no se pudo persistir: ${result.error}`);
+    const errEl = document.getElementById('ws-error');
+    if (errEl) {
+      errEl.style.display = 'block';
+      errEl.innerHTML = `No se pudo usar el workspace existente. ${result.error || ''}`;
+    }
+    return;
+  }
+
+  const resolvedOrg = result.org || orgSlug || null;
+  selection.selectedOrg = resolvedOrg;
   selection.selectedFolderPath = path;
-  state.selectedOrg = orgSlug || null;
+  state.selectedOrg = resolvedOrg;
   state.selectedFolder = path;
-  await window.onboarding.markStepComplete({ step: 'nucleus_create' });
+
   // FIX (auditoría 16/07/2026, Bug #4): ver comentario idéntico en
   // continueWorkspace() más arriba.
   navigateTo('github_app_auth');

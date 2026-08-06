@@ -11,6 +11,7 @@ const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
+const { migrateToNestedSchema, getActiveOrg, getOrCreateOrg, getOrCreateProject } = require('../../../shared/onboarding-schema');
 
 const log = getLogger('onboarding');
 
@@ -378,18 +379,24 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
           // para no confundir un futuro resume con datos de un intento ya resuelto.
           try {
             const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-            data.onboarding                  = data.onboarding || {};
-            data.onboarding.completed_steps  = data.onboarding.completed_steps || [];
+            data.onboarding = data.onboarding || {};
 
+            data.onboarding.completed_steps = data.onboarding.completed_steps || [];
             if (!data.onboarding.completed_steps.includes('nucleus_create')) {
               data.onboarding.completed_steps.push('nucleus_create');
             }
 
-            // Siempre actualizar path y org — puede que hayan cambiado si el usuario
-            // retomó un workspace existente con useExistingWorkspace().
-            data.onboarding.workspace_path = nucleusPath;
-            data.onboarding.workspace_org  = resolvedOrg || null;
-            data.onboarding.updated_at     = new Date().toISOString();
+            // getOrCreateOrg migra el esquema in-place y deja active_org_slug
+            // apuntando acá — mismo comportamiento que antes (workspace_org
+            // se pisaba siempre, para el caso de useExistingWorkspace()).
+            // resolvedOrg puede venir null en modo --temporary; org_slug no
+            // puede ser vacío (es la key de organizations[]), así que cae al
+            // mismo 'bloom-local' que ya usa selection.selectedOrg en
+            // step-workspace.js para el caso temporal.
+            const orgSlug = resolvedOrg || 'bloom-local';
+            getOrCreateOrg(data.onboarding, orgSlug, { workspacePath: nucleusPath });
+
+            data.onboarding.updated_at = new Date().toISOString();
 
             // Limpiar el estado pendiente — ya tenemos el resultado definitivo.
             delete data.onboarding.workspace_path_pending;
@@ -398,7 +405,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
             fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
             log.success(
               '[IPC] onboarding:init-nucleus — nucleus_create persisted ' +
-              '(path: ' + nucleusPath + ', org: ' + (resolvedOrg || '(temporary/unresolved)') + ')'
+              '(path: ' + nucleusPath + ', org: ' + orgSlug + ')'
             );
           } catch (e) {
             // CRÍTICO: si esto falla, el usuario pierde el org/path aunque
@@ -421,6 +428,57 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         resolve({ success: false, error: err.message });
       });
     });
+  });
+
+  // ── HANDLER: Usar workspace existente (rama "ya existe" de nucleus_create) ──
+  // FIX (diagnóstico sesión: "useExistingWorkspace() no persiste nada en
+  // disco"): useExistingWorkspace() en step-workspace.js llamaba a
+  // onboarding:mark-step-complete({ step: 'nucleus_create' }), pero
+  // 'nucleus_create' está en FS_MARKER_STEPS (ver más abajo) y ese handler
+  // lo RECHAZA siempre, a propósito — el guard existe para que nadie fuerce
+  // el step vía el camino genérico del reactor sin persistir el artefacto
+  // fs_marker real (workspace_path). Resultado: cuando la carpeta elegida
+  // ya tenía una config de Bloom, el usuario apretaba "Usar la existente" y
+  // el click no persistía org/path en ningún lado — el siguiente resume
+  // volvía a preguntar por el workspace.
+  //
+  // Esta ruta es el equivalente de la rama de éxito de onboarding:init-nucleus
+  // (mismo getOrCreateOrg, mismo completed_steps.push) pero sin spawnear
+  // `nucleus create` — la carpeta ya existe, no hay nada que crear.
+  ipcMain.handle('onboarding:use-existing-workspace', async (event, { org, path: workspacePath }) => {
+    log.info('[IPC] onboarding:use-existing-workspace — org:', org || '(none)', '| path:', workspacePath);
+    if (!workspacePath) {
+      return { success: false, error: 'path is required' };
+    }
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      migrateToNestedSchema(data.onboarding);
+
+      data.onboarding.completed_steps = data.onboarding.completed_steps || [];
+      if (!data.onboarding.completed_steps.includes('nucleus_create')) {
+        data.onboarding.completed_steps.push('nucleus_create');
+      }
+
+      // Mismo fallback que init-nucleus: org_slug no puede ser vacío (es la
+      // key de organizations[]), así que un workspace temporal/sin org
+      // detectada cae a 'bloom-local'.
+      const orgSlug = org || 'bloom-local';
+      getOrCreateOrg(data.onboarding, orgSlug, { workspacePath });
+
+      // Limpiar cualquier resto de un intento pendiente anterior (mismo
+      // patrón que la rama de éxito de init-nucleus).
+      delete data.onboarding.workspace_path_pending;
+      delete data.onboarding.workspace_org_pending;
+      data.onboarding.updated_at = new Date().toISOString();
+
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      log.success('[IPC] onboarding:use-existing-workspace — ok (org:', orgSlug, ')');
+      return { success: true, org: orgSlug, path: workspacePath };
+    } catch (err) {
+      log.error('[IPC] onboarding:use-existing-workspace — FAILED:', err.message);
+      return { success: false, error: err.message };
+    }
   });
 
   // ── HANDLER: Listar repos de una org ────────────────────────────────────
@@ -448,8 +506,28 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     try {
       const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       data.onboarding = data.onboarding || {};
-      data.onboarding.project_name = projectName;
-      data.onboarding.project_path = projectPath || '';
+
+      // FIX (auditoría multi-org): antes esto escribía project_name/project_path
+      // como campos planos en la raíz de onboarding — exactamente lo que el
+      // esquema anidado (shared/onboarding-schema.js) reemplaza. Un proyecto no
+      // puede existir fuera de una organización, así que primero migramos
+      // cualquier resto de esquema plano viejo y resolvemos la org activa.
+      migrateToNestedSchema(data.onboarding);
+      const org = getActiveOrg(data.onboarding);
+      if (!org) {
+        throw new Error(
+          'No hay organización activa en nucleus.json — ¿se completó nucleus_create antes de seleccionar el proyecto?'
+        );
+      }
+
+      // getOrCreateProject busca por project_name (todavía no tenemos
+      // project_id en este punto del flujo) y deja active_project_id
+      // apuntando al proyecto resuelto.
+      getOrCreateProject(data.onboarding, org, {
+        projectName,
+        projectPath: projectPath || null,
+      });
+
       // Red de seguridad (mismo patrón que nucleus_create en init-nucleus, y
       // que create-mandate más abajo): pushear el propio stepId a
       // completed_steps[] acá, no solo depender de que MilestoneReactor lo
@@ -481,9 +559,17 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       const { copyProject, resolveProjectDestPath } = require('../../../shared/project-copier');
 
       const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const workspacePath = data.onboarding?.workspace_path;
+      data.onboarding = data.onboarding || {};
+
+      // FIX (auditoría multi-org): onboarding.workspace_path plano ya no existe
+      // una vez migrado el esquema — vive en organizations[].workspace_path.
+      // migrateToNestedSchema es idempotente, así que es seguro llamarla acá
+      // aunque ya se haya corrido antes (ej. en nucleus_create o select-project).
+      migrateToNestedSchema(data.onboarding);
+      const org = getActiveOrg(data.onboarding);
+      const workspacePath = org?.workspace_path;
       if (!workspacePath) {
-        throw new Error('onboarding.workspace_path no está seteado — ¿se completó nucleus_create?');
+        throw new Error('No hay organización activa con workspace_path — ¿se completó nucleus_create?');
       }
 
       const destPath = resolveProjectDestPath(workspacePath, project);
@@ -502,7 +588,12 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       const result = await copyProject({ sourcePath, destPath });
 
       try {
-        data.onboarding.project_path = result.destPath;
+        // Igual que select-project: el proyecto cuelga de la org activa, no
+        // de un campo plano en la raíz de onboarding.
+        getOrCreateProject(data.onboarding, org, {
+          projectName: project,
+          projectPath: result.destPath,
+        });
         data.onboarding.updated_at = new Date().toISOString();
         fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
       } catch (e) {
@@ -527,9 +618,14 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       // Confirmado en producción: "no encontré carpeta .bloom subiendo
       // desde .../installer/conductor/workspace".
       const dataForCwd = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const workspacePath = dataForCwd.onboarding?.workspace_path;
+      dataForCwd.onboarding = dataForCwd.onboarding || {};
+      // FIX (auditoría multi-org): mismo caso que import-project — leer la
+      // org activa en vez del campo plano onboarding.workspace_path.
+      migrateToNestedSchema(dataForCwd.onboarding);
+      const activeOrgForCwd = getActiveOrg(dataForCwd.onboarding);
+      const workspacePath = activeOrgForCwd?.workspace_path;
       if (!workspacePath) {
-        throw new Error('onboarding.workspace_path no está seteado — ¿se completó nucleus_create?');
+        throw new Error('No hay organización activa con workspace_path — ¿se completó nucleus_create?');
       }
 
       const result = await execNucleus([
@@ -557,8 +653,24 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
 
           const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
           data.onboarding = data.onboarding || {};
-          data.onboarding.project_path = projectPath;
-          data.onboarding.genesis_mandate_id = mandateId;
+          migrateToNestedSchema(data.onboarding);
+
+          // FIX (auditoría multi-org): project_path/genesis_mandate_id ya no
+          // son campos planos — cuelgan del proyecto dentro de la org activa.
+          // Reusamos getOrCreateProject con `project` (el nombre pasado por
+          // el caller) para encontrar el mismo proyecto que ya creó
+          // select-project/import-project más arriba en el flujo, en vez de
+          // crear uno nuevo duplicado.
+          const org = getActiveOrg(data.onboarding);
+          if (!org) {
+            throw new Error('No hay organización activa — no se puede asociar el mandate a ningún proyecto');
+          }
+          const proj = getOrCreateProject(data.onboarding, org, {
+            projectName: project,
+            projectPath,
+          });
+          proj.genesis_mandate_id = mandateId;
+
           // Red de seguridad — mismo patrón que project_select en
           // onboarding:select-project: pushear el propio stepId acá, no solo
           // confiar en un milestone push que en este step ni siquiera existe.

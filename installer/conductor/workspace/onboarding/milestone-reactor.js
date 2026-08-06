@@ -412,6 +412,37 @@ class MilestoneReactor {
 
   // ── Persistencia ─────────────────────────────────────────────────────────────
 
+  // FIX (auditoría multi-org, sesión de migración a organizations[]/projects[]):
+  // estos son los `produces` de steps cuyo valor real YA NO vive en un campo
+  // plano de la raíz de onboarding — viven anidados dentro de
+  // organizations[]/projects[] (ver shared/onboarding-schema.js). El código
+  // de más abajo persistía `data.onboarding[step.produces] = true` como
+  // fallback cuando "el campo todavía no tiene un valor real", pero con el
+  // esquema anidado ESE CAMPO PLANO NUNCA EXISTE — el chequeo `existing ===
+  // undefined` siempre da true y el fallback pisaba (o creaba) un booleano
+  // suelto en la raíz (ej. onboarding.project_name = true) que conviven con
+  // el dato real dentro de organizations[]. Eso no rompe organizations[]
+  // directamente, pero sí corrompe el resume: si el proyecto real todavía no
+  // existe cuando esto corre, step-verifiers.js (vía
+  // buildFlatOnboardingView) puede leer ese `true` residual como si el step
+  // ya hubiera producido su artefacto, sin que exista ningún proyecto real.
+  // Mismo tipo de riesgo que ya está documentado y mitigado para
+  // 'nucleus_create' en FS_MARKER_STEPS (ipc/onboarding-handlers.js) — acá
+  // aplicamos el mismo principio: para estos produces, NUNCA escribir el
+  // fallback `true`. El valor real ya lo persiste el handler IPC específico
+  // (onboarding:init-nucleus, onboarding:use-existing-workspace,
+  // onboarding:select-project, onboarding:import-project,
+  // onboarding:create-mandate) ANTES de que el milestone llegue acá — si por
+  // algún motivo no lo hizo, es preferible que el step quede "no producido"
+  // (resume se queda ahí, recuperable) a que quede falsamente "producido"
+  // (resume avanza sobre un dato que no existe, silencioso y difícil de
+  // diagnosticar).
+  static NESTED_PRODUCES_FIELDS = new Set([
+    'workspace_path', 'workspace_org',
+    'project_path', 'project_name',
+    'genesis_mandate_id',
+  ]);
+
   /**
    * Persiste un step en onboarding.completed_steps[] de nucleus.json.
    * Idempotente en disco — no duplica si ya existe.
@@ -443,11 +474,21 @@ class MilestoneReactor {
         // valor real (steps sin persistencia propia, ej: vault_initialized,
         // github_app_token, google_account, ai_provider_key).
         if (step?.produces) {
-          const existing = data.onboarding[step.produces];
-          if (existing === undefined || existing === null || existing === false) {
-            data.onboarding[step.produces] = true;
+          if (MilestoneReactor.NESTED_PRODUCES_FIELDS.has(step.produces)) {
+            // Ver comentario grande sobre NESTED_PRODUCES_FIELDS más arriba:
+            // este produces vive en organizations[]/projects[], no en un
+            // campo plano. El handler IPC específico ya lo persistió (o el
+            // step no debería estar marcándose completo). No escribir nada
+            // acá — ni el valor real (no sabríamos a qué org/proyecto
+            // pertenece desde este método genérico) ni un `true` de relleno.
+            this._log(`_persistStepComplete: "${step.produces}" es nested (organizations[]/projects[]) — no se toca desde acá`);
           } else {
-            this._log(`_persistStepComplete: "${step.produces}" ya tiene valor real (${JSON.stringify(existing)}) — no se pisa`);
+            const existing = data.onboarding[step.produces];
+            if (existing === undefined || existing === null || existing === false) {
+              data.onboarding[step.produces] = true;
+            } else {
+              this._log(`_persistStepComplete: "${step.produces}" ya tiene valor real (${JSON.stringify(existing)}) — no se pisa`);
+            }
           }
         }
         data.onboarding.updated_at = new Date().toISOString();

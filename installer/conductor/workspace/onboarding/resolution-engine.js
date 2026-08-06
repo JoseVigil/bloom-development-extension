@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const { checkArtifact } = require('./step-verifiers');
+const { migrateToNestedSchema, buildFlatOnboardingView } = require('../../shared/onboarding-schema');
 
 const ONBOARDING_COMPLETE = '__onboarding_complete__';
 
@@ -36,6 +37,18 @@ function resolveEntryPoint(steps, nucleusJsonPath) {
     // nucleus.json no existe todavía (primera corrida) — todo se trata como
     // no producido, el resultado natural es el primer step del SSOT.
     console.warn('[resolution-engine] no se pudo leer nucleus.json:', e.message);
+  }
+
+  // step-verifiers.js (fs_marker/json_field/json_field_any) sigue esperando
+  // los campos planos onboarding.workspace_path / workspace_org / project_path
+  // / project_name / genesis_mandate_id. Con el esquema anidado esos campos
+  // viven en organizations[]/projects[], así que acá proyectamos una vista
+  // plana EN MEMORIA desde la org/proyecto activos antes de verificar —
+  // nunca se escribe a disco. migrateToNestedSchema() cubre además el caso
+  // de un nucleus.json viejo que todavía no pasó por la migración.
+  if (nucleusData.onboarding) {
+    migrateToNestedSchema(nucleusData.onboarding);
+    nucleusData = { ...nucleusData, onboarding: buildFlatOnboardingView(nucleusData.onboarding) };
   }
 
   const produced = new Set();
