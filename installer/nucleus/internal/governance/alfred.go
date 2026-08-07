@@ -44,11 +44,17 @@ type GovernanceConfig struct {
 
 // NewAlfred inicializa Alfred
 func NewAlfred() (*Alfred, error) {
-	// 1. Verificar BLOOM_NUCLEUS_ROOT
-	nucleusRoot := os.Getenv("BLOOM_NUCLEUS_ROOT")
-	if nucleusRoot == "" {
-		// Fallback a simulation_env si no está configurado
-		nucleusRoot = "scripts/simulation_env/.bloom/.nucleus-bloom-labs"
+	// 1. Resolver la raíz de la org activa.
+	// FIX (auditoría multi-org): antes leía BLOOM_NUCLEUS_ROOT de forma
+	// aislada (sin pasar por el resto de los módulos) y, si no estaba
+	// seteada, caía a un fallback hardcodeado a la org "bloom-labs" de
+	// simulation_env — funcionaba por accidente solo si la org real
+	// resultaba ser esa. core.ResolveNucleusRoot centraliza esta lógica
+	// (incluye el mismo respeto por BLOOM_NUCLEUS_ROOT) para que Alfred
+	// mire exactamente la misma carpeta que vault/blueprint/ownership.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
+	if err != nil {
+		return nil, fmt.Errorf("CRITICAL: cannot resolve nucleus root: %w", err)
 	}
 
 	// 2. Verificar que exista el directorio
@@ -77,7 +83,11 @@ func NewAlfred() (*Alfred, error) {
 	}
 
 	// 5. Inicializar Audit Logger
-	alfred.auditLog = NewAuditLogger("workers/nucleus/audit.log")
+	// FIX (auditoría multi-org): "workers/nucleus/audit.log" era relativo al
+	// CWD y no vivía dentro de la carpeta de ninguna org — dos orgs
+	// corriendo desde el mismo directorio de trabajo terminarían
+	// escribiendo en el mismo audit.log, mezclando sus eventos.
+	alfred.auditLog = NewAuditLogger(filepath.Join(nucleusRoot, "audit.log"))
 
 	// 6. Calcular hash inicial de rules
 	alfred.rulesHash, _ = alfred.calculateRulesHash()
@@ -293,8 +303,23 @@ func (a *Alfred) SendAdministrativeHello() {
 
 // loadGovernanceConfig carga nucleus-governance.json
 func loadGovernanceConfig() (*GovernanceConfig, error) {
-	configPath := "nucleus-governance.json"
-	
+	// FIX (auditoría multi-org): usaba "nucleus-governance.json" relativo al
+	// directorio de trabajo actual — ni siquiera bajo $HOME, y totalmente
+	// desacoplado del path que GetBlueprintPath() (mismo paquete, blueprint.go)
+	// ya resuelve correctamente vía core.ResolveNucleusRoot(). Dos funciones
+	// del mismo paquete leyendo el "mismo" archivo desde dos lugares
+	// distintos es la definición de esta inconsistencia — se unifica acá.
+	//
+	// Nota aparte (fuera del alcance de este fix): GovernanceConfig acá y
+	// Blueprint en blueprint.go tienen esquemas JSON distintos para lo que
+	// se supone es el mismo archivo (nucleus-governance.json). Eso es un
+	// problema real, pero de modelado de datos, no de multi-org — lo dejo
+	// señalado, no lo toco en este cambio.
+	configPath, err := GetBlueprintPath()
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err

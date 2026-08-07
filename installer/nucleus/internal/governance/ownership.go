@@ -36,12 +36,12 @@ type Member struct {
 
 // GetOwnershipPath retorna la ruta del archivo de propiedad
 func GetOwnershipPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	// FIX (auditoría multi-org): antes hardcodeaba ~/.bloom/.nucleus/ sin
+	// sufijo de org. Ver core/org_context.go.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return "", err
 	}
-
-	nucleusRoot := filepath.Join(homeDir, ".bloom", ".nucleus")
 	return filepath.Join(nucleusRoot, "ownership.json"), nil
 }
 
@@ -135,12 +135,13 @@ func generateOrgID() string {
 
 // GetEffectiveRole determina el rol efectivo cruzando marcador local con blueprint
 func GetEffectiveRole() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	// FIX (auditoría multi-org): mismo hardcodeo que GetOwnershipPath() —
+	// los marcadores .master/.specialist vivían buscados en una carpeta sin
+	// org, distinta de la que create.go realmente genera.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return "", err
 	}
-
-	nucleusRoot := filepath.Join(homeDir, ".bloom", ".nucleus")
 
 	// Verificar marcador .master
 	masterFile := filepath.Join(nucleusRoot, ".master")

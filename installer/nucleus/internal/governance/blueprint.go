@@ -47,11 +47,12 @@ type Manifest struct {
 
 // GetBlueprintPath retorna la ruta del nucleus-governance.json
 func GetBlueprintPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	// FIX (auditoría multi-org): antes hardcodeaba ~/.bloom/.nucleus/ sin
+	// sufijo de org. Ver core/org_context.go.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return "", err
 	}
-	nucleusRoot := filepath.Join(homeDir, ".bloom", ".nucleus")
 	return filepath.Join(nucleusRoot, "nucleus-governance.json"), nil
 }
 

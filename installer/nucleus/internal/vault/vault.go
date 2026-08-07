@@ -99,11 +99,13 @@ func (osKeyringT) Delete(service, key string) error {
 // ============================================
 
 func GetVaultPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	// FIX (auditoría multi-org): antes hardcodeaba ~/.bloom/.nucleus/ sin
+	// sufijo de org — un path que `nucleus create --org <slug>` nunca
+	// escribe. Ver core/org_context.go para el detalle completo.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return "", err
 	}
-	nucleusRoot := filepath.Join(homeDir, ".bloom", ".nucleus")
 	return filepath.Join(nucleusRoot, "vault.json"), nil
 }
 
@@ -231,12 +233,13 @@ func InitializeVault(masterKeyID string) error {
 }
 
 func GetVaultKeys() ([]VaultKey, error) {
-	homeDir, err := os.UserHomeDir()
+	// FIX (auditoría multi-org): mismo caso que GetVaultPath() — ver ahí.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return nil, err
 	}
 
-	keysPath := filepath.Join(homeDir, ".bloom", ".nucleus", "vault_keys.json")
+	keysPath := filepath.Join(nucleusRoot, "vault_keys.json")
 	data, err := os.ReadFile(keysPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -270,12 +273,13 @@ func AddVaultKey(id, label string) error {
 
 	keys = append(keys, key)
 
-	homeDir, err := os.UserHomeDir()
+	// FIX (auditoría multi-org): mismo caso que GetVaultPath() — ver ahí.
+	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return err
 	}
 
-	keysPath := filepath.Join(homeDir, ".bloom", ".nucleus", "vault_keys.json")
+	keysPath := filepath.Join(nucleusRoot, "vault_keys.json")
 	data, err := json.MarshalIndent(keys, "", " ")
 	if err != nil {
 		return err

@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── brain/
-    ├── .DS_Store
     ├── .venv/ [... virtual env]
     ├── ADDING_DEPENDENCIES.md
     ├── VERSION
@@ -9,7 +8,6 @@ bloom-development-extension/
     ├── __main__.py
     ├── __pycache__/ [... cache]
     ├── build_deploy/
-    │   ├── .DS_Store
     │   ├── __init__.py
     │   ├── brain.spec
     │   ├── build_main.py
@@ -25,7 +23,6 @@ bloom-development-extension/
     │   ├── update_version.py
     │   └── versions.json
     ├── build_multiplatform/
-    │   ├── .DS_Store
     │   ├── __init__.py
     │   ├── build.py
     │   └── shared/
@@ -46,7 +43,6 @@ bloom-development-extension/
     │   ├── help_renderer.py
     │   └── registry.py
     ├── commands/
-    │   ├── .DS_Store
     │   ├── __init__.py
     │   ├── ai/
     │   │   ├── __init__.py
@@ -122,6 +118,7 @@ bloom-development-extension/
     │   │   ├── delete.py
     │   │   ├── download.py
     │   │   ├── finalize.py
+    │   │   ├── freeze.py
     │   │   ├── get.py
     │   │   ├── hydrate.py
     │   │   ├── list.py
@@ -130,7 +127,6 @@ bloom-development-extension/
     │   │   ├── parse.py
     │   │   ├── plan.py
     │   │   ├── recover.py
-    │   │   ├── router_prompt.md
     │   │   ├── stage.py
     │   │   ├── submit.py
     │   │   ├── unlock.py
@@ -200,7 +196,6 @@ bloom-development-extension/
     │       ├── __init__.py
     │       └── auth.py
     ├── core/
-    │   ├── .DS_Store
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
     │   ├── bisp/
@@ -259,6 +254,7 @@ bloom-development-extension/
     │   │   └── repository.py
     │   ├── github/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── api_client.py
     │   │   └── models.py
     │   ├── health/
@@ -275,8 +271,9 @@ bloom-development-extension/
     │   │   ├── staging_manager.py
     │   │   └── validation_manager.py
     │   ├── intent_manager.py
+    │   ├── intent_state_manager.py
+    │   ├── intent_types.py
     │   ├── ionpump/
-    │   │   ├── .DS_Store
     │   │   ├── __init__.py
     │   │   ├── ionpump_executor.py
     │   │   ├── ionpump_ipc.py
@@ -291,7 +288,6 @@ bloom-development-extension/
     │   ├── nucleus_inspector.py
     │   ├── nucleus_manager.py
     │   ├── profile/
-    │   │   ├── .DS_Store
     │   │   ├── __init__.py
     │   │   ├── launch_history_reader.py
     │   │   ├── logic/
@@ -306,14 +302,12 @@ bloom-development-extension/
     │   │   ├── profile_state_manager.py
     │   │   ├── session1_launcher.py
     │   │   └── web/
-    │   │       ├── .DS_Store
     │   │       ├── __init__.py
     │   │       ├── companion_generator.py
     │   │       ├── discovery_generator.py
     │   │       ├── harness_generator.py
     │   │       ├── landing_generator.py
     │   │       └── templates/
-    │   │           ├── .DS_Store
     │   │           ├── __init__.py
     │   │           ├── companion/
     │   │           │   ├── __init__.py
@@ -329,7 +323,6 @@ bloom-development-extension/
     │   │           │   ├── script.js
     │   │           │   └── styles.css
     │   │           ├── harness/
-    │   │           │   ├── .DS_Store
     │   │           │   ├── __init__.py
     │   │           │   ├── harness.js
     │   │           │   ├── harnessProtocol.js
@@ -378,6 +371,7 @@ bloom-development-extension/
         ├── context.py
         ├── credentials/
         │   ├── __init__.py
+        │   ├── __pycache__/ [... cache]
         │   ├── base.py
         │   ├── claude_manager.py
         │   ├── gemini_manager.py

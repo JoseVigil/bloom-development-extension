@@ -246,6 +246,36 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
             log.warn('[IPC] onboarding:poll-identity — could not backfill completed_steps:', we.message);
           }
         }
+
+        // FIX (gap "nucleus init --master nunca se invoca"): este backfill
+        // escribe completed_steps directamente y NUNCA pasaba por
+        // MilestoneReactor — por lo tanto _onGithubAuthComplete() (donde vive
+        // el hook nuevo a _initOwnership()) no corría para este camino.
+        // En vez de duplicar la llamada a "nucleus init --master" acá (mismo
+        // tipo de lógica-en-dos-lugares-sin-sincronizar ya marcado como
+        // deuda técnica en HANDOFF §4, sección 3.4 del duplicado
+        // main_conductor.js/workspace-synapse-handlers.js), se reusa
+        // reactor.handleMilestone() con el evento real del step
+        // (GITHUB_APP_AUTHORIZED, ver cortex_events en milestone-registry.js)
+        // para que termine en el mismo _onGithubAuthComplete(). El dedupe por
+        // "stepId:event" de handleMilestone() ya garantiza que esto sea un
+        // no-op si el evento real de Brain ya pasó por acá en esta sesión.
+        try {
+          const reactor = getReactor?.();
+          if (reactor) {
+            reactor.handleMilestone('github_app_auth', {
+              type: 'ONBOARDING_MILESTONE',
+              event: 'GITHUB_APP_AUTHORIZED',
+              data: { username: nucleusData.onboarding?.github_username || null },
+              _ts: Date.now(),
+              _backfill: true,
+            });
+          } else {
+            log.warn('[IPC] onboarding:poll-identity — reactor no disponible todavía, no se pudo reenganchar github_app_auth');
+          }
+        } catch (re) {
+          log.warn('[IPC] onboarding:poll-identity — backfill reactor.handleMilestone falló:', re.message);
+        }
       }
 
       log.success('[IPC] onboarding:poll-identity — ok:', JSON.stringify(steps));

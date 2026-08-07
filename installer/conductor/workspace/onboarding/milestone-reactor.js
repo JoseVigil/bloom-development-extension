@@ -212,6 +212,134 @@ class MilestoneReactor {
     if (enriched.event === 'ACCOUNT_REGISTERED') {
       await this._openLandingTab();
     }
+
+    // FIX (gap confirmado leyendo create.go/ownership.go/onboarding-handlers.js
+    // completos): nada en el pipeline invocaba nunca "nucleus init --github-id
+    // <handle> --master", pese a que create.go documenta ese paso como parte
+    // de la secuencia post-create y ownership.go lo implementa. Resultado
+    // verificado contra un nucleus.json real con onboarding.completed:true:
+    // .ownership.json nunca se genera.
+    //
+    // Se engancha acá (no en poll-identity) porque este es el único lugar
+    // donde ya llega enriched.data con contexto real del evento de Brain
+    // (username), en vez de tener que re-leerlo de un campo de nucleus.json
+    // que hoy no se escribe de forma confiable (ver _resolveGithubHandle).
+    const handle = this._resolveGithubHandle(enriched);
+    await this._initOwnership(handle);
+  }
+
+  // ── nucleus init --master ───────────────────────────────────────────────────
+
+  /**
+   * Resuelve el github handle a pasarle a --github-id.
+   *
+   * NO CONFIRMADO (ver HANDOFF-github-app-batcave-synapse.md / prompt de esta
+   * sesión, punto 1): no hay evidencia en el código auditado de que Brain
+   * escriba el username en algún campo de nucleus.json al procesar
+   * GITHUB_APP_AUTHORIZED, ni de que enriched.data.username venga poblado en
+   * ese evento real (solo se confirmó el shape para ACCOUNT_REGISTERED en
+   * comentarios existentes, no se confirmó contra Brain). Se intenta, en
+   * orden:
+   *   1. enriched.data.username — si Brain lo manda en el payload del evento.
+   *   2. onboarding.github_username en nucleus.json — si el renderer ya llamó
+   *      a onboarding:persist-github-data para este perfil.
+   * Si ninguno existe, devuelve null a propósito. _initOwnership() NO debe
+   * inventar un fallback (ej. 'unknown', el nombre de la org) — un
+   * --github-id incorrecto queda escrito en .ownership.json de forma
+   * permanente (init rechaza correr dos veces, ver ownership.go), así que
+   * un handle falso es peor que no correr el comando.
+   */
+  _resolveGithubHandle(enriched) {
+    if (enriched?.data?.username) return enriched.data.username;
+    try {
+      const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
+      return data.onboarding?.github_username || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Invoca "nucleus init --github-id <handle> --master", mismo patrón de
+   * subprocess que ya usa onboarding:init-nucleus para "nucleus create"
+   * (spawn vía execNucleus inyectado, no acceso directo al binario acá).
+   *
+   * Guardas:
+   *   - No corre si no hay handle real (ver _resolveGithubHandle).
+   *   - Guard cross-path contra doble-spawn: poll-identity (onboarding-
+   *     handlers.js) puede completar github_app_auth por la vía de backfill,
+   *     que reusa handleMilestone() y por lo tanto termina llamando acá
+   *     también — onboarding.ownership_init_status en nucleus.json es la
+   *     fuente de verdad compartida entre ambos call sites (in-memory por sí
+   *     solo no alcanza: son procesos/paths de código distintos que pueden
+   *     ejecutarse en el mismo tick de Electron main).
+   *   - No hay rollback de completed_steps si esto falla: github_app_auth ya
+   *     representa un hecho real y verdadero (el Device Flow completó, el
+   *     token es válido) — revertirlo sería incorrecto. Solo se deja
+   *     ownership_init_status:'failed', visible en logs y en nucleus.json,
+   *     para que sea reintentable en el futuro en vez de silenciarse.
+   */
+  async _initOwnership(githubHandle) {
+    if (!githubHandle) {
+      this._logger.warn(
+        '[MilestoneReactor] _initOwnership: sin github handle disponible ' +
+        '(ni enriched.data.username ni onboarding.github_username) — no se ' +
+        'invoca "nucleus init --master" para evitar escribir un --github-id ' +
+        'inventado en .ownership.json. Pendiente: confirmar si Brain escribe ' +
+        'el username al procesar GITHUB_APP_AUTHORIZED.'
+      );
+      return;
+    }
+
+    try {
+      const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      const status = data.onboarding.ownership_init_status;
+      if (status === 'done' || status === 'in_progress') {
+        this._log(`_initOwnership: status ya es "${status}" — no se reinvoca`);
+        return;
+      }
+      data.onboarding.ownership_init_status = 'in_progress';
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(this._NUCLEUS_JSON, JSON.stringify(data, null, 2));
+    } catch (e) {
+      this._logger.warn('[MilestoneReactor] _initOwnership: no se pudo leer/escribir el guard de estado —', e.message);
+      return;
+    }
+
+    this._log(`_initOwnership: nucleus init --github-id ${githubHandle} --master`);
+    try {
+      await this._execNucleus(
+        ['--json', 'init', '--github-id', githubHandle, '--master'],
+        15_000
+      );
+      this._log('_initOwnership: ok — .ownership.json creado');
+      this._setOwnershipStatus('done');
+    } catch (err) {
+      // ownership.go: init sobre un registro ya existente imprime "Organization
+      // already initialized" y sale con exit 1 — no es una falla real, es la
+      // idempotencia esperada si esto ya corrió (ej. en una sesión anterior,
+      // o vía el otro call site en poll-identity).
+      if (/already initialized/i.test(err.message || '')) {
+        this._log('_initOwnership: ya estaba inicializado (idempotente) — ok');
+        this._setOwnershipStatus('done');
+        return;
+      }
+      this._logger.error('[MilestoneReactor] _initOwnership FALLÓ:', err.message);
+      this._setOwnershipStatus('failed');
+    }
+  }
+
+  _setOwnershipStatus(status) {
+    try {
+      const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      data.onboarding.ownership_init_status = status;
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(this._NUCLEUS_JSON, JSON.stringify(data, null, 2));
+    } catch (e) {
+      this._logger.warn('[MilestoneReactor] _setOwnershipStatus: no se pudo persistir —', e.message);
+    }
   }
 
   async _onNucleusCreateComplete(enriched) {
