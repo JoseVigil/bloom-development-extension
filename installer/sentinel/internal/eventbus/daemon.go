@@ -105,6 +105,13 @@ Comandos disponibles vía stdin (JSON):
 type StdinCommand struct {
 	Command   string                 `json:"command"`
 	ProfileID string                 `json:"profile_id,omitempty"`
+	// OrgID identifica la organización activa en el momento del comando.
+	// FIX (auditoría multi-org): el protocolo Sentinel↔Brain↔Electron no
+	// tenía ningún campo de organización — todo se correlacionaba solo por
+	// profile_id. Se agrega acá como el punto de entrada; de momento es
+	// opcional (no bloqueante) para no romper clientes de Electron que
+	// todavía no lo envían durante el rollout.
+	OrgID     string                 `json:"org_id,omitempty"`
 	ID        string                 `json:"id"`
 	Data      map[string]interface{} `json:"data,omitempty"`
 }
@@ -115,6 +122,10 @@ type StdoutResponse struct {
 	ID        string                 `json:"id,omitempty"`
 	Status    string                 `json:"status,omitempty"`
 	ProfileID string                 `json:"profile_id,omitempty"`
+	// OrgID — ver comentario en StdinCommand. Se hace eco acá para que
+	// Electron pueda correlacionar la respuesta con la org que la originó
+	// sin tener que mantener su propio mapeo profile_id → org.
+	OrgID     string                 `json:"org_id,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
 	Error     string                 `json:"error,omitempty"`
 	Timestamp int64                  `json:"timestamp"`
@@ -397,17 +408,27 @@ func (dm *DaemonMode) handleLaunch(cmd StdinCommand) {
 		dm.emitError(cmd.ID, "MISSING_PROFILE_ID", "profile_id es requerido")
 		return
 	}
-	
-	if err := dm.client.LaunchProfile(cmd.ProfileID); err != nil {
+
+	// FIX (auditoría multi-org): antes no existía ningún dato de org en el
+	// launch — se avisa (no se bloquea todavía) si viene vacío, para poder
+	// detectar durante el rollout qué clientes de Electron faltan
+	// actualizar sin cortarles el lanzamiento mientras se completa el lado
+	// de Brain en la próxima ronda de auditoría.
+	if cmd.OrgID == "" {
+		dm.logger.Warning("handleLaunch: comando sin org_id (profile_id=%s) — el lanzamiento quedará sin atribución de organización", cmd.ProfileID)
+	}
+
+	if err := dm.client.LaunchProfile(cmd.ProfileID, cmd.OrgID); err != nil {
 		dm.emitError(cmd.ID, "LAUNCH_FAILED", err.Error())
 		return
 	}
-	
+
 	dm.emitToElectron(StdoutResponse{
 		Type:      "COMMAND_RESULT",
 		ID:        cmd.ID,
 		Status:    "success",
 		ProfileID: cmd.ProfileID,
+		OrgID:     cmd.OrgID,
 		Timestamp: time.Now().UnixNano(),
 		Data: map[string]interface{}{
 			"message": "Perfil lanzado correctamente",
@@ -545,10 +566,20 @@ func (dm *DaemonMode) registerEventHandlers() {
 		// Guardar timestamp del último evento
 		dm.saveLastEventTimestamp(event.Timestamp)
 		
+		// FIX (auditoría multi-org): org_id viaja dentro de event.Data (no
+		// hay campo top-level en Event — ver nota en sentinel_client.go).
+		// Se promueve acá a OrgID top-level en la respuesta a Electron para
+		// que no tenga que buscarlo dentro de Data en cada evento.
+		orgID := ""
+		if event.Data != nil {
+			orgID, _ = event.Data["org_id"].(string)
+		}
+
 		// Convertir el evento del Brain a formato de salida para Electron
 		dm.emitToElectron(StdoutResponse{
 			Type:      event.Type,
 			ProfileID: event.ProfileID,
+			OrgID:     orgID,
 			Status:    event.Status,
 			Data:      event.Data,
 			Error:     event.Error,

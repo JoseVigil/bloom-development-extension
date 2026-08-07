@@ -51,6 +51,61 @@ func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
 	return fmt.Sprintf("%03d_%s_%s", counter, shortUUID, timestamp)
 }
 
+// StampProfileOrg persiste org_id en la entrada del perfil dentro de
+// profiles.json. Mismo patrón de lectura/escritura que commitLaunchCount().
+//
+// FIX (auditoría multi-org): profiles.json es un único archivo global,
+// compartido por toda la máquina, sin ningún campo de organización en
+// ninguna entrada — confirmado al auditar este archivo completo. Esta
+// función es el mecanismo de escritura; no está conectada a ningún caller
+// todavía porque ignition.go (quien orquesta Launch() y decide cuándo
+// llamar a esto) no se auditó en esta ronda. Próximo paso: llamar a esto
+// desde el mismo punto donde Launch() ya llama a commitLaunchCount() tras
+// un lanzamiento exitoso, pasándole el org_id que llega desde
+// StdinCommand.OrgID → SentinelClient.LaunchProfile(profileID, orgID).
+//
+// No sobrescribe org_id con "" — si orgID viene vacío (cliente de Electron
+// viejo, todavía no migrado), la entrada existente no se toca, para no
+// perder una atribución de org ya guardada en un launch anterior.
+func (ig *Ignition) StampProfileOrg(profileID string, orgID string) error {
+	if orgID == "" {
+		return nil
+	}
+
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		return fmt.Errorf("no se pudo leer profiles.json: %v", err)
+	}
+
+	var root struct {
+		Profiles []map[string]interface{} `json:"profiles"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("JSON inválido en profiles.json: %v", err)
+	}
+
+	found := false
+	for i, p := range root.Profiles {
+		if p["id"] == profileID {
+			root.Profiles[i]["org_id"] = orgID
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("perfil %s no encontrado en profiles.json", profileID)
+	}
+
+	updatedData, _ := json.MarshalIndent(root, "", "  ")
+	if err := os.WriteFile(profilesPath, updatedData, 0644); err != nil {
+		return fmt.Errorf("error escribiendo profiles.json: %v", err)
+	}
+
+	return nil
+}
+
 // commitLaunchCount persiste el incremento de launch_count y el last_launch_id
 // SOLO tras un launch exitoso. Llamado desde Launch() después de execute() OK.
 // Garantiza que los retries de Temporal no incrementan el contador múltiples veces.

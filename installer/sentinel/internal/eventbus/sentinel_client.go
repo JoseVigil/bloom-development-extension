@@ -22,6 +22,7 @@ func init() {
 		var brainAddr string
 		var eventType string
 		var profileID string
+		var orgID string
 		var dataJSON string
 
 		cmd := &cobra.Command{
@@ -34,6 +35,9 @@ func init() {
 Ejemplos:
   # Lanzar un perfil
   sentinel send --type LAUNCH_PROFILE --profile-id profile_001
+
+  # Lanzar un perfil con organización explícita
+  sentinel send --type LAUNCH_PROFILE --profile-id profile_001 --org-id acme
 
   # Detener un perfil
   sentinel send --type STOP_PROFILE --profile-id profile_001
@@ -98,6 +102,15 @@ Ejemplos:
 					}
 				}
 
+				// FIX (auditoría multi-org): inyectar org_id en Data si se pasó
+				// --org-id, mismo mecanismo que LaunchProfile()/launchProfileSyncInternal.
+				if orgID != "" {
+					if data == nil {
+						data = map[string]interface{}{}
+					}
+					data["org_id"] = orgID
+				}
+
 				// Construir evento
 				event := Event{
 					Type:      eventType,
@@ -126,6 +139,8 @@ Ejemplos:
 			"Tipo de evento (LAUNCH_PROFILE, STOP_PROFILE, etc.) [REQUERIDO]")
 		cmd.Flags().StringVarP(&profileID, "profile-id", "p", "",
 			"ID del perfil (opcional)")
+		cmd.Flags().StringVar(&orgID, "org-id", "",
+			"ID de la organización activa (opcional)")
 		cmd.Flags().StringVarP(&dataJSON, "data", "d", "",
 			"Datos adicionales en formato JSON (opcional)")
 
@@ -504,11 +519,23 @@ func (sc *SentinelClient) Send(event Event) error {
 }
 
 // LaunchProfile envía comando de lanzamiento al Brain
-func (sc *SentinelClient) LaunchProfile(profileID string) error {
+//
+// FIX (auditoría multi-org): se agrega orgID. Viaja dentro de Event.Data
+// ("org_id") en vez de como campo top-level de Event porque no se auditó
+// todavía la definición de Event en eventbus.go — agregar un campo ahí a
+// ciegas podía romper su (de)serialización sin haberla visto. Data ya es
+// el mecanismo establecido para todo dato fuera del núcleo del protocolo
+// (mismo patrón que launch_id/spec_path/mode más abajo en este archivo).
+func (sc *SentinelClient) LaunchProfile(profileID, orgID string) error {
+	data := map[string]interface{}{}
+	if orgID != "" {
+		data["org_id"] = orgID
+	}
 	event := Event{
 		Type:      "LAUNCH_PROFILE",
 		ProfileID: profileID,
 		Timestamp: time.Now().UnixNano(),
+		Data:      data,
 	}
 	return sc.Send(event)
 }
@@ -698,6 +725,40 @@ func (sc *SentinelClient) LaunchProfileSyncWithHeartbeat(
 	timeout time.Duration,
 	heartbeatFn func(),
 ) (int, error) {
+	return sc.launchProfileSyncInternal(profileID, launchID, specPath, mode, timeout, heartbeatFn, "")
+}
+
+// LaunchProfileSyncWithHeartbeatAndOrg es idéntico a LaunchProfileSyncWithHeartbeat
+// pero además adjunta org_id al evento LAUNCH_PROFILE enviado a Brain.
+//
+// FIX (auditoría multi-org): se agrega como variante nueva, no como cambio
+// de firma sobre LaunchProfileSyncWithHeartbeat/LaunchProfileSync — esas dos
+// se documentan como llamadas "desde Temporal activities", que viven en el
+// repo de Nucleus (todavía no auditado en esta ronda). Cambiarles la firma
+// a ciegas hubiera roto compilación del lado de Nucleus sin poder
+// verificarlo. Cuando se audite Nucleus, evaluar si conviene migrar esos
+// call-sites a esta variante y eventualmente deprecar la que no lleva org.
+func (sc *SentinelClient) LaunchProfileSyncWithHeartbeatAndOrg(
+	profileID string,
+	launchID string,
+	specPath string,
+	mode string,
+	timeout time.Duration,
+	heartbeatFn func(),
+	orgID string,
+) (int, error) {
+	return sc.launchProfileSyncInternal(profileID, launchID, specPath, mode, timeout, heartbeatFn, orgID)
+}
+
+func (sc *SentinelClient) launchProfileSyncInternal(
+	profileID string,
+	launchID string,
+	specPath string,
+	mode string,
+	timeout time.Duration,
+	heartbeatFn func(),
+	orgID string,
+) (int, error) {
 
 	type result struct {
 		pid int
@@ -743,16 +804,21 @@ func (sc *SentinelClient) LaunchProfileSyncWithHeartbeat(
 		})
 	})
 
+	eventData := map[string]interface{}{
+		"launch_id": launchID,
+		"spec_path": specPath,
+		"mode":      mode,
+	}
+	if orgID != "" {
+		eventData["org_id"] = orgID
+	}
+
 	event := Event{
 		Type:      "LAUNCH_PROFILE",
 		ProfileID: profileID,
 		LaunchID:  launchID,
 		Timestamp: time.Now().UnixNano(),
-		Data: map[string]interface{}{
-			"launch_id": launchID,
-			"spec_path": specPath,
-			"mode":      mode,
-		},
+		Data:      eventData,
 	}
 
 	if err := sc.Send(event); err != nil {

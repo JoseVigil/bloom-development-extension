@@ -27,9 +27,34 @@ from brain.core.profile.profile_state_manager import ProfileStateManager
 logger = get_logger("brain.server.manager")
 logger.setLevel(logging.DEBUG)
 
-# Mismo path que vault.go::GetVaultPath() — Brain SOLO LEE este archivo,
-# nunca lo escribe. El único escritor autorizado es el CLI Go (vault.go).
-VAULT_JSON_PATH = Path.home() / ".bloom" / ".nucleus" / "vault.json"
+# FIX (auditoría multi-org): antes esto era una constante fija
+# ~/.bloom/.nucleus/vault.json, calculada una sola vez al importar el
+# módulo — con el comentario "mismo path que vault.go::GetVaultPath()".
+# Ese comentario dejó de ser cierto en cuanto arreglamos vault.go para que
+# resuelva vía core.ResolveNucleusRoot() (~/.bloom/.nucleus-{org}/vault.json).
+# Esta constante Python quedó apuntando al path viejo sin sufijo de org —
+# nadie la actualizó porque nadie sabía que este archivo espejaba esa
+# lógica. Con cualquier org real, QUERY_VAULT_STATUS terminaba leyendo un
+# archivo que nunca existe y reportando "LOCKED" siempre, sin importar el
+# estado real que sí escribe el CLI Go.
+#
+# Se convierte en función (no constante) para que se reevalúe en cada
+# lectura, replicando la misma precedencia que ResolveNucleusRoot() en Go:
+# 1. BLOOM_NUCLEUS_ROOT (override explícito)
+# 2. BLOOM_ORG (org activa seteada en el entorno del proceso Brain)
+# Si ninguna está seteada, cae al path viejo sin sufijo como último
+# recurso — mismo comportamiento de "vault ausente → LOCKED" que ya tenía,
+# no un nuevo modo de falla.
+def _resolve_vault_json_path() -> Path:
+    override = os.environ.get("BLOOM_NUCLEUS_ROOT")
+    if override:
+        return Path(override) / "vault.json"
+
+    org_slug = os.environ.get("BLOOM_ORG")
+    if org_slug:
+        return Path.home() / ".bloom" / f".nucleus-{org_slug}" / "vault.json"
+
+    return Path.home() / ".bloom" / ".nucleus" / "vault.json"
 
 
 class ServerManager:
@@ -366,6 +391,9 @@ class ServerManager:
                     #   data.spec_path : str — ruta absoluta al ignition_spec.json
                     #                         ya preparado por Sentinel::prepareSessionFiles()
                     #   data.mode      : str — 'landing' | 'discovery'
+                    #   data.org_id    : str — org activa al momento del lanzamiento
+                    #                         (opcional durante el rollout — ver
+                    #                         auditoría multi-org en Sentinel/daemon.go)
                     #
                     # Contrato de salida (LAUNCH_PROFILE_ACK):
                     #   status 'ok'    → pid: int
@@ -375,6 +403,13 @@ class ServerManager:
                     data_field = msg.get('data', {})
                     spec_path  = data_field.get('spec_path')
                     mode       = data_field.get('mode', 'landing')
+                    # FIX (auditoría multi-org): antes se descartaba en silencio.
+                    # Sentinel ya lo manda (ver daemon.go::handleLaunch) — acá era
+                    # donde se perdía. No se rechaza el launch si falta (mismo
+                    # criterio no-bloqueante que del lado de Sentinel, para no
+                    # cortar lanzamientos de clientes de Electron todavía no
+                    # migrados), pero se loguea para poder detectarlo.
+                    org_id     = data_field.get('org_id')
 
                     if not profile_id or not spec_path:
                         logger.error(f"❌ [{conn_id}] LAUNCH_PROFILE: faltan profile_id o spec_path")
@@ -386,6 +421,12 @@ class ServerManager:
                         }
                         await self._send_to_writer(writer, response)
                         continue  # no break — mantener conexión viva
+
+                    if not org_id:
+                        logger.warning(
+                            f"⚠️ [{conn_id}] LAUNCH_PROFILE sin org_id (profile_id={profile_id[:8]}) "
+                            f"— el lanzamiento quedará sin atribución de organización"
+                        )
 
                     logger.info(f"🚀 [{conn_id}] LAUNCH_PROFILE: {profile_id[:8]} (mode={mode})")
 
@@ -439,6 +480,7 @@ class ServerManager:
                                 'launch_id': launch_id,
                                 'chrome_pid': chrome_pid,
                                 'mode': mode,
+                                'org_id': org_id,
                             }
                         )
                         await self._broadcast_event(event)
@@ -447,7 +489,8 @@ class ServerManager:
                             "type": "LAUNCH_PROFILE_ACK",
                             "launch_id": launch_id,
                             "status": "ok",
-                            "pid": chrome_pid
+                            "pid": chrome_pid,
+                            "org_id": org_id,
                         }
                         logger.info(
                             f"✅ [{conn_id}] LAUNCH_PROFILE OK: {profile_id[:8]} PID={chrome_pid}"
@@ -461,7 +504,8 @@ class ServerManager:
                             "type": "LAUNCH_PROFILE_ACK",
                             "launch_id": launch_id,
                             "status": "error",
-                            "message": str(e)
+                            "message": str(e),
+                            "org_id": org_id,
                         }
 
                     await self._send_to_writer(writer, response)
@@ -970,9 +1014,13 @@ class ServerManager:
         Fallback sync de lectura de vault.json.
         Mismo fallback que Go (vault.go::GetVaultStatus): si el archivo no
         existe, el vault se considera LOCKED.
+
+        FIX (auditoría multi-org): el path ya no es fijo — ver
+        _resolve_vault_json_path() más arriba.
         """
+        vault_json_path = _resolve_vault_json_path()
         try:
-            with open(VAULT_JSON_PATH, 'r', encoding='utf-8') as f:
+            with open(vault_json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             locked = data.get('locked', True)
         except FileNotFoundError:

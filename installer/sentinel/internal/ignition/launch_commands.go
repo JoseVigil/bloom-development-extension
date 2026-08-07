@@ -12,6 +12,7 @@ func init() {
 	core.RegisterCommand("IGNITION", func(c *core.Core) *cobra.Command {
 		var timeout int
 		var wait bool
+		var orgID string
 
 		cmd := &cobra.Command{
 			Use:   "launch-profile <profile_id>",
@@ -46,8 +47,19 @@ que requieren correlación de eventos y espera de respuestas.`,
 					c.Logger.Info("Modo --wait desactivado temporalmente (funcionalidad no disponible)")
 				}
 
+				// FIX (auditoría multi-org): LaunchProfile ahora requiere orgID.
+				// Este comando es una herramienta de testing manual (no forma
+				// parte del pipeline real de Electron→daemon), así que no hay
+				// ningún org_id implícito en el contexto — se expone como flag
+				// explícito, vacío por default (mismo comportamiento que antes:
+				// el warning de "sin atribución de org" lo emite el lado del
+				// daemon/handleLaunch, no este comando).
+				if orgID == "" {
+					c.Logger.Warning("Lanzando sin --org-id — el perfil quedará sin atribución de organización")
+				}
+
 				// Lanzamiento básico (el único método que sí existe)
-				if err := client.LaunchProfile(profileID); err != nil {
+				if err := client.LaunchProfile(profileID, orgID); err != nil {
 					c.Logger.Error("Error enviando comando de lanzamiento: %v", err)
 					return
 				}
@@ -58,6 +70,7 @@ que requieren correlación de eventos y espera de respuestas.`,
 
 		cmd.Flags().IntVarP(&timeout, "timeout", "t", 60, "Timeout en segundos para esperar onboarding (no implementado aún)")
 		cmd.Flags().BoolVarP(&wait, "wait", "w", false, "Esperar a que complete el onboarding (no implementado aún)")
+		cmd.Flags().StringVar(&orgID, "org-id", "", "ID de la organización activa (opcional)")
 
 		return cmd
 	})

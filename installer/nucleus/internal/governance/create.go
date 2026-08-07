@@ -70,6 +70,7 @@ Post-create sequence (handled by separate commands, NOT here):
     ".core/.rules.bl",
     ".core/.standards.bl",
     ".core/.policies.bl",
+    ".core/.ai_bot.sovereign.bl",
     ".core/.meta.json",
     ".governance/architecture/.principles.bl",
     ".governance/architecture/.patterns.bl",
