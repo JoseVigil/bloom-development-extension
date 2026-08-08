@@ -39,9 +39,13 @@ The inspection includes:
   • File size and modification time
   • Health status verification
 
-Results are always written to:
-  Default : %LOCALAPPDATA%\BloomNucleus\config\metamorph.json
-  Native  : %LOCALAPPDATA%\BloomNucleus\config\native\native_metamorph.json
+Results are always written to <BloomNucleus config dir>/metamorph.json
+(or .../native/native_metamorph.json with --native), where the BloomNucleus
+config dir is platform-specific:
+  Windows : %LOCALAPPDATA%\BloomNucleus\config
+  macOS   : ~/Library/BloomNucleus/config
+  Linux   : ~/.local/share/BloomNucleus/config
+Override with the BLOOM_NUCLEUS_HOME environment variable.
 
 Example:
   metamorph inspect                    # Managed binaries only (AppData)
@@ -73,8 +77,9 @@ Example:
   "timestamp": "2026-03-15T14:16:43Z"
 }
 
-  Written to (default):  %LOCALAPPDATA%\\BloomNucleus\\config\\metamorph.json
-  Written to (--native): %LOCALAPPDATA%\\BloomNucleus\\config\\native\\native_metamorph.json`,
+  Written to (default):  <BloomNucleus config dir>/metamorph.json
+  Written to (--native): <BloomNucleus config dir>/native/native_metamorph.json
+  (BloomNucleus config dir is platform-specific — see core.GetConfigPath)`,
 		},
 		Example: `  metamorph inspect
   metamorph inspect --all
@@ -169,6 +174,11 @@ func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeI
 		Summary:          calculateSummary(managed, external),
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 	}
+	// The top-level TotalSizeBytes field mirrors Summary.TotalSizeBytes for
+	// consumers that read it directly (e.g. Nucleus). Without this it stays
+	// at its Go zero-value (0), which is misleading — see summary field below
+	// for the authoritative, correctly-computed total.
+	result.TotalSizeBytes = result.Summary.TotalSizeBytes
 
 	// Persist to the appropriate config file
 	if nativeMode {
@@ -324,7 +334,7 @@ func inspectBootstrap(bootstrapBinBase string) (ManagedBinary, error) {
 			Name:    "Bootstrap",
 			Path:    scriptPath,
 			Version: "unknown",
-			Status:  "unhealthy",
+			Status:  "corrupted",
 		}, fmt.Errorf("script not found: %w", err)
 	}
 
@@ -343,7 +353,7 @@ func inspectBootstrap(bootstrapBinBase string) (ManagedBinary, error) {
 			Name:    "Bootstrap",
 			Path:    scriptPath,
 			Version: "unknown",
-			Status:  "unhealthy",
+			Status:  "corrupted",
 		}, fmt.Errorf("script execution failed: %v — stderr: %s", err, stderr.String())
 	}
 
@@ -353,7 +363,7 @@ func inspectBootstrap(bootstrapBinBase string) (ManagedBinary, error) {
 			Name:    "Bootstrap",
 			Path:    scriptPath,
 			Version: "unknown",
-			Status:  "unhealthy",
+			Status:  "corrupted",
 		}, fmt.Errorf("could not parse script output: %w", err)
 	}
 
@@ -362,7 +372,7 @@ func inspectBootstrap(bootstrapBinBase string) (ManagedBinary, error) {
 			Name:    "Bootstrap",
 			Path:    scriptPath,
 			Version: "unknown",
-			Status:  "unhealthy",
+			Status:  "corrupted",
 		}, fmt.Errorf("script reported success=false")
 	}
 
@@ -416,7 +426,7 @@ func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
 			Name:                 "VSCodeExtension",
 			Path:                 vsixPath,
 			Version:              "unknown",
-			Status:               "unhealthy",
+			Status:               "corrupted",
 		}, fmt.Errorf("file not found: %w", err)
 	}
 
@@ -426,7 +436,7 @@ func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
 			Name:                 "VSCodeExtension",
 			Path:                 vsixPath,
 			Version:              "unknown",
-			Status:               "unhealthy",
+			Status:               "corrupted",
 		}, fmt.Errorf("could not read package.json from vsix: %w", err)
 	}
 
@@ -498,7 +508,9 @@ func sha256File(path string) (string, error) {
 
 // writeMetamorphConfig persists the inspection result to:
 //
-//	%LOCALAPPDATA%\BloomNucleus\config\metamorph.json
+//	<BloomNucleus config dir>/metamorph.json
+//
+// (see core.GetConfigPath for the platform-specific resolution of that dir)
 //
 // The file contains the full versioned state of all components and is
 // overwritten on every inspect run. It is the authoritative source of
@@ -513,7 +525,9 @@ func writeMetamorphConfig(result InspectionResult) error {
 
 // writeNativeMetamorphConfig persists the inspection result to:
 //
-//	%LOCALAPPDATA%\BloomNucleus\config\native\native_metamorph.json
+//	<BloomNucleus config dir>/native/native_metamorph.json
+//
+// (see core.GetConfigPath for the platform-specific resolution of that dir)
 //
 // Written only when running with --native. Reflects the state of build
 // output in native/bin/<platform>/ rather than the deployed AppData binaries.
@@ -550,41 +564,27 @@ func writeJSONAtomic(configPath string, result InspectionResult) error {
 }
 
 // resolveMetamorphConfigPath returns the absolute path to metamorph.json.
-// Respects BLOOM_NUCLEUS_HOME if set, otherwise uses the platform default.
+// Respects BLOOM_NUCLEUS_HOME if set, otherwise delegates to
+// core.GetConfigPath(), which already resolves the correct platform default
+// (Windows: %LOCALAPPDATA%\BloomNucleus\config, macOS: ~/Library/BloomNucleus/config,
+// Linux: ~/.local/share/BloomNucleus/config).
 func resolveMetamorphConfigPath() (string, error) {
 	if home := os.Getenv("BLOOM_NUCLEUS_HOME"); home != "" {
 		return filepath.Join(home, "config", "metamorph.json"), nil
 	}
 
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("could not determine home directory: %w", err)
-		}
-		localAppData = filepath.Join(homeDir, "AppData", "Local")
-	}
-
-	return filepath.Join(localAppData, "BloomNucleus", "config", "metamorph.json"), nil
+	return filepath.Join(core.GetConfigPath(), "metamorph.json"), nil
 }
 
 // resolveNativeMetamorphConfigPath returns the absolute path to native_metamorph.json.
-// Respects BLOOM_NUCLEUS_HOME if set, otherwise uses the platform default.
+// Respects BLOOM_NUCLEUS_HOME if set, otherwise delegates to
+// core.GetConfigPath(), which already resolves the correct platform default.
 func resolveNativeMetamorphConfigPath() (string, error) {
 	if home := os.Getenv("BLOOM_NUCLEUS_HOME"); home != "" {
 		return filepath.Join(home, "config", "native", "native_metamorph.json"), nil
 	}
 
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("could not determine home directory: %w", err)
-		}
-		localAppData = filepath.Join(homeDir, "AppData", "Local")
-	}
-
-	return filepath.Join(localAppData, "BloomNucleus", "config", "native", "native_metamorph.json"), nil
+	return filepath.Join(core.GetConfigPath(), "native", "native_metamorph.json"), nil
 }
 
 // ─── Ion Recipes helpers ──────────────────────────────────────────────────────

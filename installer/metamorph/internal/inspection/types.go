@@ -4,6 +4,15 @@ package inspection
 // Binary inspection types
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ElectronMeta holds metadata read from build_info.json bundled inside
+// resources/app.asar.unpacked/ of an Electron app (Setup, Workspace/Conductor).
+type ElectronMeta struct {
+	Channel     string `json:"channel,omitempty"`
+	FullVersion string `json:"full_version,omitempty"`
+	GitCommit   string `json:"git_commit,omitempty"`
+	BuiltAt     string `json:"built_at,omitempty"`
+}
+
 // ManagedBinary represents a BTIPS component managed (updatable) by Metamorph.
 type ManagedBinary struct {
 	Name                 string         `json:"name"`
@@ -20,6 +29,7 @@ type ManagedBinary struct {
 	BootstrapMeta        *BootstrapMeta `json:"bootstrap_meta,omitempty"`
 	VSIXMeta             *VSIXMeta      `json:"vsix_meta,omitempty"`
 	SensorInfo           *SensorInfo    `json:"sensor_info,omitempty"`
+	ElectronMeta         *ElectronMeta  `json:"electron_meta,omitempty"`
 }
 
 // SensorInfo holds extended metadata returned by bloom-sensor --json info.
@@ -54,6 +64,7 @@ type InspectionSummary struct {
 	ExternalCount     int   `json:"external_count"`
 	ExternalSizeBytes int64 `json:"external_size_bytes"`
 	HealthyCount      int   `json:"healthy_count"`
+	UnknownCount      int   `json:"unknown_count"`
 	UpdatesAvailable  int   `json:"updates_available"`
 	MissingCount      int   `json:"missing_count"`
 	CorruptedCount    int   `json:"corrupted_count"`

@@ -101,10 +101,10 @@ type managedBinaryDefinition struct {
 //	Nucleus:   nucleus --json version      → version / build_number
 //	Sentinel:  sentinel --json version     → version / build
 //	Host:      bloom-host --version --json → version / build
-//	Conductor: platform-specific (macOS .app / Windows .ps1)
+//	Conductor: bin/workspace/ — reads build_info.json directly (no script)
 //	Metamorph: metamorph --json version    → version / build_number
 //	Cortex:    reads cortex.meta.json from inside .blx ZIP (not executable)
-//	Setup:     bloom-setup-version.ps1 --json → version / build  (Windows only)
+//	Setup:     bin/setup/ — reads build_info.json directly (no script)
 //
 // NOTE ON PATHS:
 //
@@ -123,7 +123,14 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 	//   others — exe inside bin/conductor/
 	// On macOS we set the path to the .app bundle; the inspector stats the bundle
 	// root (it's a directory) rather than the inner Mach-O.
-	conductorPath := filepath.Join("bin", "conductor", core.ExeName("bloom-conductor"))
+	// Conductor's deployed component is named "workspace" everywhere else in
+	// the system (see `metamorph rollout --only workspace`, and the macOS
+	// path below, which already reads "Workspace.app"). There is no
+	// bin/conductor/ directory on Linux/Windows — the binary lives at
+	// bin/workspace/bloom-workspace. We keep the managed-binary Name as
+	// "Conductor" for JSON/API backwards compatibility, but resolve the
+	// actual path to where the binary is really deployed.
+	conductorPath := filepath.Join("bin", "workspace", core.ExeName("bloom-workspace"))
 	if runtime.GOOS == "darwin" {
 		conductorPath = "/Applications/Bloom Nucleus Workspace.app"
 	}
@@ -138,12 +145,16 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			buildField:   "data.build_counter",
 		},
 		{
+			// Nucleus has no "version" subcommand (confirmed: "Error: unknown
+			// command \"version\" for \"nucleus\""). Only "info" is available,
+			// and its JSON is flat (no "data." wrapper like Brain):
+			//   nucleus --json info → {"app_release": "1.0.0", "build_counter": 83, ...}
 			name:         "Nucleus",
 			path:         filepath.Join("bin", "nucleus", core.ExeName("nucleus")),
-			versionArgs:  []string{"--json", "version"},
+			versionArgs:  []string{}, // no "version" subcommand — go straight to infoArgs
 			infoArgs:     []string{"--json", "info"},
-			versionField: "version",
-			buildField:   "build_number",
+			versionField: "app_release",
+			buildField:   "build_counter",
 		},
 		{
 			name:         "Sentinel",
@@ -203,7 +214,7 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		{
 			name:         "Setup",
 			path:         filepath.Join("bin", "setup", core.ExeName("bloom-setup")),
-			versionArgs:  []string{}, // Electron — interrogated via .ps1, see inspectElectronBinary()
+			versionArgs:  []string{}, // Electron — interrogated via build_info.json, see inspectElectronApp()
 			infoArgs:     []string{},
 			versionField: "version",
 			buildField:   "build",
@@ -303,7 +314,7 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 		return inspectCortexBinary(binary, path)
 	}
 
-	// Conductor and Setup: Electron binaries interrogated via companion .ps1 scripts
+	// Conductor and Setup: Electron apps interrogated via bundled build_info.json
 	if name == "Conductor" {
 		return inspectConductor(binary, path)
 	}
@@ -359,44 +370,92 @@ func inspectCortexBinary(binary *ManagedBinary, path string) (*ManagedBinary, er
 	return binary, nil
 }
 
-// inspectElectronBinary interrogates an Electron binary via its companion .ps1 script.
-// ps1Name is the filename of the script (e.g. "bloom-conductor-version.ps1").
-func inspectElectronBinary(binary *ManagedBinary, exePath, ps1Name string) (*ManagedBinary, error) {
-	ps1Path := filepath.Join(filepath.Dir(exePath), "win-unpacked", ps1Name)
+// electronBuildInfo mirrors build_info.json, bundled at build time inside
+// resources/app.asar.unpacked/ of Electron apps (Setup, Workspace/Conductor).
+// Verified against real deploy output on 2026-08-08:
+//
+//	{"name":"bloom-setup","product_name":"Bloom Conductor Setup","version":"1.0.0",
+//	 "build":104,"full_version":"1.0.0+build.104","channel":"stable",
+//	 "built_at":"2026-06-28T14:57:28.141Z","git_commit":"b35fdc5",
+//	 "platform":"linux","arch":"win64","node_version":"v20.20.2","electron_version":"^28.0.0"}
+type electronBuildInfo struct {
+	Name        string `json:"name"`
+	ProductName string `json:"product_name"`
+	Version     string `json:"version"`
+	Build       int    `json:"build"`
+	FullVersion string `json:"full_version"`
+	Channel     string `json:"channel"`
+	BuiltAt     string `json:"built_at"`
+	GitCommit   string `json:"git_commit"`
+}
 
-	if !FileExists(ps1Path) {
+// readElectronBuildInfo reads build_info.json for an Electron app.
+// exeDir is the directory containing the app's main executable
+// (on macOS, the .app bundle path itself).
+//
+// Layout differs by platform:
+//
+//	Linux/Windows : <exeDir>/resources/app.asar.unpacked/build_info.json
+//	macOS (.app)  : <exeDir>/Contents/Resources/app.asar.unpacked/build_info.json
+func readElectronBuildInfo(exeDir string) (*electronBuildInfo, error) {
+	var buildInfoPath string
+	if runtime.GOOS == "darwin" {
+		buildInfoPath = filepath.Join(exeDir, "Contents", "Resources", "app.asar.unpacked", "build_info.json")
+	} else {
+		buildInfoPath = filepath.Join(exeDir, "resources", "app.asar.unpacked", "build_info.json")
+	}
+
+	data, err := os.ReadFile(buildInfoPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read build_info.json at %s: %w", buildInfoPath, err)
+	}
+
+	var info electronBuildInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return nil, fmt.Errorf("could not parse build_info.json: %w", err)
+	}
+	return &info, nil
+}
+
+// inspectElectronApp interrogates an Electron app (Setup, Workspace/Conductor)
+// by reading its bundled build_info.json directly. No OS-specific script
+// (.ps1 on Windows, .sh on macOS) is needed or invoked — build_info.json is
+// generated at build time and ships identically on every platform.
+func inspectElectronApp(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
+	exeDir := filepath.Dir(exePath)
+	if runtime.GOOS == "darwin" {
+		// exePath already points at the .app bundle root on macOS.
+		exeDir = exePath
+	}
+
+	info, err := readElectronBuildInfo(exeDir)
+	if err != nil {
 		binary.Status = "unknown"
-		return binary, nil
+		return binary, err
 	}
 
-	out, err := ExecuteCommandWithTimeout(
-		"powershell",
-		"-ExecutionPolicy", "Bypass",
-		"-File", ps1Path,
-		"--json",
-	)
-	if err == nil && out != "" {
-		version, build := extractVersionAndBuild(out, "version", "build")
-		if version != "" {
-			binary.Version = version
-			binary.BuildNumber = build
-			binary.Status = "healthy"
-			return binary, nil
-		}
+	binary.Version = info.Version
+	binary.BuildNumber = info.Build
+	binary.Status = "healthy"
+	binary.ElectronMeta = &ElectronMeta{
+		Channel:     info.Channel,
+		FullVersion: info.FullVersion,
+		GitCommit:   info.GitCommit,
+		BuiltAt:     info.BuiltAt,
 	}
-
-	binary.Status = "unknown"
 	return binary, nil
 }
 
-// inspectConductor interrogates Conductor via its companion PowerShell script.
+// inspectConductor interrogates the Workspace/Conductor Electron app via its
+// bundled build_info.json.
 func inspectConductor(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
-	return inspectElectronBinary(binary, exePath, "bloom-conductor-version.ps1")
+	return inspectElectronApp(binary, exePath)
 }
 
-// inspectSetup interrogates the Bloom Nucleus Installer via its companion PowerShell script.
+// inspectSetup interrogates the Bloom Nucleus Installer (Setup) Electron app
+// via its bundled build_info.json.
 func inspectSetup(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
-	return inspectElectronBinary(binary, exePath, "bloom-setup-version.ps1")
+	return inspectElectronApp(binary, exePath)
 }
 
 // inspectSensor interrogates bloom-sensor using its native CLI flags.

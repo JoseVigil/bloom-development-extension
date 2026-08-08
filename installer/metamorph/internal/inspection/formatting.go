@@ -105,6 +105,9 @@ func printSummary(summary InspectionSummary, includeExternal bool) {
 	if summary.CorruptedCount > 0 {
 		fmt.Printf("⚠️  Corrupted: %d binaries\n", summary.CorruptedCount)
 	}
+	if summary.UnknownCount > 0 {
+		fmt.Printf("❓ Unknown status: %d binaries\n", summary.UnknownCount)
+	}
 }
 
 // formatVersion formats version with optional build number
@@ -165,6 +168,8 @@ func calculateSummary(managed []ManagedBinary, external []ExternalBinary) Inspec
 			summary.MissingCount++
 		case "corrupted":
 			summary.CorruptedCount++
+		case "unknown":
+			summary.UnknownCount++
 		}
 	}
 
@@ -179,6 +184,8 @@ func calculateSummary(managed []ManagedBinary, external []ExternalBinary) Inspec
 			summary.MissingCount++
 		case "corrupted":
 			summary.CorruptedCount++
+		case "unknown":
+			summary.UnknownCount++
 		}
 		if bin.UpdateAvailable {
 			summary.UpdatesAvailable++
