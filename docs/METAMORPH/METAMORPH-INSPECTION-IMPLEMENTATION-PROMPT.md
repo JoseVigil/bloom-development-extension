@@ -1065,3 +1065,109 @@ Implement in this strict order. Do not skip ahead — each phase depends on the 
 ---
 
 *This is Metamorph's highest-risk update path. Every shortcut taken here has a proportionally higher chance of leaving a user's automation silently broken. Build it to be boring and correct, not fast and clever.*
+
+---
+
+---
+
+# Procedimiento: Agregar una Nueva App Gestionada al Pipeline de Inspección
+
+> **Nota de vigencia:** esta sección refleja el contrato tal como quedó implementado en el código real (`internal/inspection/managed.go`, `managed_defs.go`) después de las correcciones sobre Brain/Nucleus/Sentinel/Sensor/Conductor/Setup. Difiere en varios puntos de la Fase 1 descrita más arriba en este mismo documento (firma de `InspectManagedBinary`, ausencia de `managed_defs.go`, campos `versionField`/`buildField` como dotpaths) — ante cualquier discrepancia, el código y esta sección son la referencia vigente, no la Fase 1 original.
+
+Cada app nueva se integra en el mismo pipeline que ya usan Brain, Nucleus, Conductor, etc. — no hay que tocar nada del motor genérico, solo declarar el contrato de cada app nueva.
+
+## Paso 0 — Antes de tocar código: entender cómo la app reporta su versión
+
+Esto es lo más importante y lo que definió cada bug encontrado hasta ahora. Para cada app nueva hay que correrla a mano y confirmar:
+
+1. ¿Tiene un flag de versión por CLI? (`--version`, `version`, `info`, etc.) Probar todas las variantes candidatas — como pasó con Nucleus, a veces `version` ni existe y solo hay `info`.
+2. ¿La salida es JSON? Si sí, anotar los nombres exactos de los campos (`version`/`build_number` en unos, `app_release`/`build_counter` en otros — no asumir nombres, verificarlos a mano).
+3. ¿Está envuelta en algún wrapper? (como Brain, que anida todo bajo `"data": {...}`).
+4. ¿Es un binario ejecutable normal, o es un paquete que hay que abrir? (Cortex es un `.blx` que en realidad es un ZIP con un `cortex.meta.json` adentro; el VSIX es un ZIP con `package.json`; Setup/Conductor son apps Electron que traen `build_info.json` embebido — ninguno de estos tres se ejecuta para preguntarle la versión).
+
+Con cada app nueva, correr algo como `nueva-app --json version` y `nueva-app --json info` a mano, y guardar el JSON real que devuelve. Eso es lo único que se necesita para escribir el contrato correctamente — todo bug encontrado hasta ahora fue por asumir un contrato en vez de verificarlo.
+
+## Paso 1 — Declarar la app en `getManagedBinaries()` (`managed.go`)
+
+Ahí vive la lista de todos los componentes gestionados, como un `[]managedBinaryDefinition`. Para el caso estándar (ejecutable que responde `--json version` o `--json info` con campos planos), se agrega una entrada así:
+
+```go
+{
+    name:         "NuevaApp",
+    path:         filepath.Join("bin", "nuevaapp", core.ExeName("nuevaapp-binario")),
+    versionArgs:  []string{"--json", "version"},   // o []string{} si no existe ese subcomando
+    infoArgs:     []string{"--json", "info"},
+    versionField: "version",       // el nombre real del campo en el JSON de la app
+    buildField:   "build_number",  // idem
+},
+```
+
+El motor genérico (`InspectManagedBinary`, dentro de `managed.go`) va a:
+
+1. Verificar que el archivo exista (si no, `status: "missing"` automático — no hace falta hacer nada para eso).
+2. Calcularle el hash SHA-256 y tamaño (automático también).
+3. Probar `versionArgs` primero; si no devuelve versión válida, cae a `infoArgs` como fallback.
+4. Si ninguno de los dos devuelve un campo de versión no vacío, queda en `status: "unknown"` — que es justo lo que le pasaba a Nucleus antes del fix, por eso es tan importante confirmar los nombres de campo con la app real corriendo.
+
+Con eso solo, si la app nueva sigue el contrato estándar, ya está — no hace falta tocar nada más.
+
+## Paso 2 — Si la app NO sigue el contrato estándar, escribirle un inspector dedicado
+
+Casos donde esto aplica (mirar los ejemplos que ya existen en el código como plantilla):
+
+- La app no es ejecutable por sí sola (un ZIP, un script, un bundle Electron) → como Cortex, Bootstrap, VSIX, Conductor/Setup.
+- Tiene un flujo de interrogación en dos pasadas → como Sensor (`version` primero, `info` después para enriquecer).
+
+Si la app nueva cae en este caso, el patrón es:
+
+1. Escribir una función `inspectNuevaApp(binary *ManagedBinary, path string) (*ManagedBinary, error)` que setee `binary.Version`, `binary.BuildNumber`, `binary.Status` a mano, con la lógica que corresponda (leer un JSON embebido, correr un script, parsear un ZIP, lo que sea).
+2. Engancharla en `InspectManagedBinary` con una rama por nombre, igual que están Cortex/Conductor/Setup/Sensor:
+
+```go
+if name == "NuevaApp" {
+    return inspectNuevaApp(binary, path)
+}
+```
+
+3. En la definición de `getManagedBinaries()`, dejar `versionArgs`/`infoArgs` vacíos (`[]string{}`) ya que no se usan — la rama por nombre intercepta antes de llegar a esa lógica.
+
+**Consejo:** si la app nueva es Electron, no escribirle un inspector que ejecute un script — ir directo a leer `resources/app.asar.unpacked/build_info.json` (o el equivalente en `Contents/Resources/...` para build de macOS), como ya se hizo con Conductor y Setup (ver `inspectElectronApp` / `readElectronBuildInfo` en `managed.go`). Es más simple, no depende del SO, y no requiere PowerShell ni bash.
+
+## Paso 3 (opcional) — Guardar metadata extra de la app
+
+Si la app nueva tiene datos propios que valga la pena conservar (como `channel`, `capabilities`, lo que sea), se agrega un struct nuevo en `types.go`:
+
+```go
+type NuevaAppMeta struct {
+    Channel string `json:"channel,omitempty"`
+    // lo que se necesite
+}
+```
+
+Y un campo opcional en `ManagedBinary`:
+
+```go
+NuevaAppMeta *NuevaAppMeta `json:"nueva_app_meta,omitempty"`
+```
+
+Esto es opcional — si la app solo necesita versión y build, no hace falta tocar `types.go` para nada.
+
+## Paso 4 — No olvidar `rollout.go`
+
+`inspect` y `rollout` son sistemas separados. Agregar la app a `getManagedBinaries()` la hace visible para `inspect`, pero para que también se pueda deployar con `metamorph rollout --only nuevaapp`, hay que sumarla a `allComponents` en `internal/maintenance/rollout.go` (la lista de componentes válidos para el flag `--only` — ahí están registrados `brain`, `nucleus`, `workspace`, `setup`, `sensor`, `cortex`, `ionpump`, etc.).
+
+## Paso 5 — Validar
+
+Una vez agregada la definición:
+
+```bash
+go build ./...
+metamorph inspect
+cat ~/.local/share/BloomNucleus/config/metamorph.json
+```
+
+Verificar que la app nueva aparezca con `status: "healthy"`, versión y build correctos, que `summary.total_binaries` haya subido en la cantidad de apps agregadas, y que `healthy_count` siga sumando bien contra el total.
+
+## Resumen en una frase
+
+Toda app estándar (ejecutable con `--json version`/`--json info`) solo necesita una entrada en `getManagedBinaries()`. Toda app "rara" (ZIP, script, Electron) necesita además una función `inspectX()` propia enganchada por nombre en `InspectManagedBinary`. Nada del resto del sistema (`calculateSummary`, `printSummary`, la escritura del JSON) necesita cambios — está escrito de forma genérica y va a recoger las apps nuevas automáticamente en cuanto aparezcan en la lista de `managed_binaries`.
