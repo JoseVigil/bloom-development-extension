@@ -372,6 +372,16 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			mandateWorker.RegisterWorkflow(temporalworkflows.MandateExecutionWorkflow)
 			mandateWorker.RegisterActivity(activities.ScaffoldDomainActivity)
 			mandateWorker.RegisterActivity(activities.PublishMandateEventActivity)
+			// IngestReceptionActivity — CAMPO NUEVO esta sesión (Fase 1 real,
+			// ver mandate_genesis_activities.go). Sin este registro, Fase 1
+			// fallaría en runtime con "unable to find activity type" apenas
+			// MandateGenesisBuildWorkflow la invocara — mismo síntoma que ya
+			// tienen SignMandateActivity/PersistHumanSyncActivity, que el
+			// workflow también invoca (fases sign/validate) pero que NO están
+			// registradas acá — gap preexistente, no introducido en este
+			// cambio, señalado y no tocado porque queda fuera del alcance de
+			// Fase 1.
+			mandateWorker.RegisterActivity(activities.IngestReceptionActivity)
 
 			if err := mandateWorker.Start(); err != nil {
 				logger.Error("Fallo al iniciar mandate worker: %v", err)

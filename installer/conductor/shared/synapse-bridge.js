@@ -299,6 +299,25 @@ class SynapseBridge extends EventEmitter {
   }
 
   /**
+   * Envía un mensaje a Brain dirigido a un profile específico (routing por
+   * `target_profile` — el mismo mecanismo que server_manager.py ya expone
+   * en su "ROUTING LOGIC" genérica para respuestas dirigidas a un profile
+   * puntual, en vez de un broadcast a todos los hosts).
+   *
+   * Punto público para código fuera de esta clase (ej.
+   * main_conductor.js#handleSwitchOrganization, Etapa 5) que necesita
+   * mandar un evento hacia la organización/profile activo sin tocar el
+   * framing TCP directamente — a diferencia de _sendMsg (interno, usado
+   * para REGISTER_CLI/handshake).
+   *
+   * @param {string} profileId
+   * @param {object} payload  Debe incluir `event` (o `type`/`command`).
+   */
+  sendToProfile(profileId, payload) {
+    this._sendMsg({ ...payload, target_profile: profileId });
+  }
+
+  /**
    * Limpia todos los recursos. Llamar en el evento 'closed' de la BrowserWindow.
    */
   destroy() {

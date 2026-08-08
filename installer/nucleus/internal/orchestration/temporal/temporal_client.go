@@ -425,3 +425,107 @@ func IsAlreadyStarted(err error) bool {
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	return errors.As(err, &alreadyStarted)
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Etapa 3 (PROMPT-EJECUCION-synapse-switch-organization.md) — condición
+// previa de G1/G3: "¿hay algo no-terminal para esta organización?".
+//
+// DECISIÓN DE DISEÑO (reemplaza el plan original de la Etapa 3): el pedido
+// original era agregar un campo de estado por DomainAction dentro de
+// MandateExecutionWorkflow. Se descartó después de leer
+// BLOOM_Mandate_Genesis_Roadmap_Maestro_v3.md (§2, §9.1): ese documento deja
+// MandateExecutionWorkflow explícitamente "sin cambios de esta migración", y
+// su diseño real de Fase 4 (cuando P4 se implemente) probablemente termine
+// impulsado por el commit de `.consolidation/` del intent `ing/` (escritura
+// de gen.json/semantic-index.json en Brain), no por un loop Go sobre
+// DomainAction/Files. Acoplar el tracking de in-flight a esos campos hoy
+// habría significado rehacerlo en cuanto la Fase 4 real aterrice.
+//
+// Confirmado por código (mandate_watcher.go, mandate_genesis_build_workflow.go,
+// mandate_genesis_sign_activity.go) que SÍ existe ya un índice local por
+// organización — no hay que inventarlo: cada Mandate Genesis en curso tiene
+// una carpeta {MandatesRoot}/{mandateID}/ con mandate_state.json, y
+// MandatesRoot() (internal/supervisor.Config.MandatesRoot / core.ScanForNucleus)
+// ya está scopeado por org desde Etapa 2. Este código combina ese índice
+// local (para saber QUÉ workflow IDs existen) con el estado real de Temporal
+// (para saber si siguen RUNNING) — responde la pregunta abierta G1 ("¿el
+// estado se consulta desde Temporal en tiempo real, o Nucleus mantiene su
+// propio índice local?") con "ambos, cada uno para lo que sabe": el índice
+// local para enumerar, Temporal para el estado de verdad.
+//
+// No toca DomainAction, MandateExecutionWorkflow ni mandate_genesis_build_workflow.go
+// — cero superficie compartida con lo que el roadmap de Mandate Genesis va a
+// rediseñar.
+// ─────────────────────────────────────────────────────────────────────────
+
+// HasNonTerminalMandateWork recorre mandatesRoot (ya resuelto por el caller
+// — MandatesRoot() de la organización que se quiere chequear, ver
+// internal/core.ResolveNucleusRoot / internal/supervisor.LoadNucleusConfig)
+// y consulta a Temporal si alguno de los workflows asociados a esas carpetas
+// sigue en estado RUNNING. Devuelve (hayAlgoEnCurso, workflowIDs no
+// terminales, error).
+//
+// Cada carpeta bajo mandatesRoot es un mandateID (ver mandate_watcher.go /
+// SignMandateActivity). Un Mandate Genesis puede tener hasta dos workflows
+// asociados a lo largo de su ciclo de vida — "mandate_genesis_{id}"
+// (Fases 1-3, arrancado por mandate_watcher.go) y, tras la firma,
+// "mandate_execution_{id}" como child workflow (Fase 4, ver
+// mandate_genesis_build_workflow.go línea ~236). Se chequean los dos IDs
+// por carpeta porque cualquiera de los dos en RUNNING cuenta como
+// "in-flight" para efectos de G3.
+//
+// Un mandateID sin ningún workflow encontrado en Temporal (NotFound en
+// ambos IDs) no se trata como error — puede ser un Mandate viejo fuera de
+// la retención de Temporal, o cuyo proceso nunca llegó a arrancar el
+// workflow. Se lo trata como terminal/ausente, no como bloqueante.
+func (c *Client) HasNonTerminalMandateWork(ctx context.Context, mandatesRoot string) (bool, []string, error) {
+	entries, err := os.ReadDir(mandatesRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Sin carpeta .mandates todavía — no puede haber nada in-flight.
+			return false, nil, nil
+		}
+		return false, nil, fmt.Errorf("no pude leer %s: %w", mandatesRoot, err)
+	}
+
+	var nonTerminal []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		mandateID := e.Name()
+
+		for _, workflowID := range []string{
+			fmt.Sprintf("mandate_genesis_%s", mandateID),
+			fmt.Sprintf("mandate_execution_%s", mandateID),
+		} {
+			running, err := c.isWorkflowRunning(ctx, workflowID)
+			if err != nil {
+				return false, nil, fmt.Errorf("no pude consultar estado de %s: %w", workflowID, err)
+			}
+			if running {
+				nonTerminal = append(nonTerminal, workflowID)
+			}
+		}
+	}
+
+	return len(nonTerminal) > 0, nonTerminal, nil
+}
+
+// isWorkflowRunning consulta DescribeWorkflowExecution y devuelve true solo
+// si el estado es RUNNING. serviceerror.NotFound (workflow nunca existió, o
+// ya salió de la ventana de retención de Temporal) se trata como "no está
+// corriendo", no como error — es el mismo criterio que IsAlreadyStarted usa
+// para distinguir condiciones esperadas de errores reales.
+func (c *Client) isWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
+	resp, err := c.client.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	status := resp.GetWorkflowExecutionInfo().GetStatus()
+	return status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING, nil
+}

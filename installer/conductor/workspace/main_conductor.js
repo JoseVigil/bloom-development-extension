@@ -23,6 +23,9 @@ const { registerProfilesHandlers } = require('./core/ipc/profiles-handlers');
 const { SynapseBridge, ONBOARDING_EVENTS } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
 const { MilestoneRegistry } = require('./onboarding/milestone-registry');
 const { MilestoneReactor }  = require('./onboarding/milestone-reactor');
+// Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md) — switchActiveOrg
+// es el único punto de escritura de active_org_slug para un switch (G7).
+const { switchActiveOrg } = require(path.join(_sharedDir, 'onboarding-schema'));
 const log     = getLogger('onboarding');
 // Logger dedicado para el tráfico de Core (nucleus:health, nucleus:*-profile, etc).
 // No reemplaza a `log` — onboarding sigue necesitando el suyo. Cada uno escribe
@@ -338,6 +341,21 @@ function initOnboardingBridge(logger = log) {
     _reactor.handleMilestone(stepId, enriched);
   });
 
+  // ── SWITCH_ORGANIZATION (Etapa 5) ─────────────────────────────────────────
+  // No es un milestone de onboarding — es una acción runtime que puede
+  // llegar en cualquier momento post-onboarding. Se conecta acá (no en
+  // workspace-synapse-handlers.js) porque _onboardingBridge es el único
+  // bridge que queda vivo de forma ambiental durante toda la sesión (ver
+  // initOnboardingBridge, se instancia tanto si onboarding.completed es
+  // true como false) — los bridges de workspace-synapse-handlers.js son
+  // por-ventana y efímeros (solo durante seedAndLaunch/launch).
+  _onboardingBridge.on('message', (enriched) => {
+    if (enriched.type !== 'SWITCH_ORGANIZATION') return;
+    handleSwitchOrganization(enriched, logger).catch(err => {
+      logger.error('[SWITCH_ORG] Error no capturado en handleSwitchOrganization:', err.message);
+    });
+  });
+
   // Raw event forwarding para el panel de debug (synapse:raw-event).
   // Se registra después del reactor para no interferir con el flujo principal.
   if (!app.isPackaged) {
@@ -386,6 +404,123 @@ function initOnboardingBridge(logger = log) {
   _onboardingBridge.connectToBrain(profileId);
 
   logger.info('[SYNAPSE] Onboarding bridge initialized — MilestoneRegistry + MilestoneReactor activos');
+}
+
+// ── SWITCH_ORGANIZATION (Etapa 5) ───────────────────────────────────────────
+// Orquesta el switch real: G2 (¿se puede?) → validar que la org destino
+// existe localmente → G4 begin-drain → escribir active_org_slug
+// (switchActiveOrg, único punto de escritura, G7) → G4 end-drain → emitir
+// ORGANIZATION_SWITCHED de vuelta. Nucleus (G2/G4) se consulta vía CLI
+// (`nucleus governance ...`, ver internal/governance/org_switch_guard.go) —
+// mismo patrón que el resto de este archivo (execNucleus). No se toca
+// DomainAction/MandateExecutionWorkflow ni se reimplementa G2/G4 acá: esta
+// función es un orquestador fino sobre piezas que ya existen en Nucleus y
+// en onboarding-schema.js.
+//
+// EndpointGenerator real: confirmado como pseudocódigo únicamente
+// (BATCAVE_ARCHITECTURE.md §7, sin implementación en código), explícitamente
+// fuera de alcance de la Etapa 5 ("Fuera de scope" del prompt de ejecución).
+// Se usa acá el mismo patrón que ya declaran los defaults del schema
+// (discoveryProtocol.js, mensaje organization_switched) como placeholder
+// hasta que EndpointGenerator exista de verdad — no se inventa un esquema
+// de URL distinto.
+async function handleSwitchOrganization(enriched, logger) {
+  const data     = enriched.data ?? enriched;
+  const orgId    = data.org_id   || null;
+  const orgSlug  = data.org_slug || null;
+
+  logger.info('[SWITCH_ORG] SWITCH_ORGANIZATION recibido — org_slug:', orgSlug);
+
+  if (!orgSlug) {
+    logger.warn('[SWITCH_ORG] SWITCH_ORGANIZATION sin org_slug — ignorado');
+    return;
+  }
+
+  // G2 — nunca inferir el resultado acá, consultar siempre.
+  let gate;
+  try {
+    gate = await execNucleus(['--json', 'governance', 'can-switch-org'], 15_000);
+  } catch (err) {
+    logger.error('[SWITCH_ORG] No pude consultar G2 (can-switch-org):', err.message);
+    return;
+  }
+
+  if (gate.blocked) {
+    // G8 — el intento bloqueado queda auditado igual que uno exitoso, no
+    // silenciado. Se emite como evento local del bridge (no viaja por Brain:
+    // es información interna de Conductor, no un mensaje del protocolo).
+    logger.warn('[SWITCH_ORG] Bloqueado por G2/G4 — org_slug:', orgSlug, '| reasons:', gate.reasons);
+    _onboardingBridge?.emit('message', {
+      type:     'SWITCH_ORGANIZATION_BLOCKED',
+      org_id:   orgId,
+      org_slug: orgSlug,
+      reasons:  gate.reasons || [],
+    });
+    return;
+  }
+  if (gate.degraded) {
+    logger.warn('[SWITCH_ORG] G2 corrió en modo degradado (Temporal inalcanzable) — solo G4 fue evaluado para org_slug:', orgSlug);
+  }
+
+  // 1. Validar que la org destino existe localmente ANTES de drenar nada —
+  //    switchActiveOrg() tira si no existe (nunca la crea, a diferencia de
+  //    getOrCreateOrg — ver comentario en onboarding-schema.js).
+  let nucleusData;
+  try {
+    nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+  } catch (err) {
+    logger.error('[SWITCH_ORG] No pude leer nucleus.json:', err.message);
+    return;
+  }
+
+  try {
+    switchActiveOrg(nucleusData.onboarding, orgSlug);
+  } catch (err) {
+    logger.error('[SWITCH_ORG] Organización destino inválida:', err.message);
+    return;
+  }
+
+  // G4 — bracketar la ventana de drenado alrededor de la escritura real.
+  try {
+    await execNucleus(['--json', 'governance', 'begin-drain', '--reason', `switch a ${orgSlug}`], 15_000);
+  } catch (err) {
+    logger.error('[SWITCH_ORG] No pude iniciar el drenado (G4 begin-drain):', err.message);
+    return;
+  }
+
+  try {
+    fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
+  } catch (err) {
+    logger.error('[SWITCH_ORG] Falló la escritura de nucleus.json — abortando switch:', err.message);
+    // Best-effort: liberar el lock de drenado igual, para no dejarlo
+    // colgado tras un fallo de escritura.
+    execNucleus(['--json', 'governance', 'end-drain'], 15_000).catch(() => {});
+    return;
+  }
+
+  try {
+    await execNucleus(['--json', 'governance', 'end-drain'], 15_000);
+  } catch (err) {
+    logger.error('[SWITCH_ORG] La escritura fue exitosa pero end-drain falló — el flag de drenado puede haber quedado activo:', err.message);
+    // No aborta: el switch en sí ya se concretó. Queda como advertencia.
+  }
+
+  const batcaveEndpointRest = `https://batcave.${orgSlug}.bloom.dev/api`;
+  const batcaveEndpointWss  = `wss://batcave.${orgSlug}.bloom.dev/ws`;
+
+  logger.info('[SWITCH_ORG] ✓ Switch completo — org_slug:', orgSlug);
+
+  if (nucleusData.master_profile) {
+    _onboardingBridge?.sendToProfile(nucleusData.master_profile, {
+      event:                 'ORGANIZATION_SWITCHED',
+      org_id:                orgId,
+      org_slug:              orgSlug,
+      batcave_endpoint_rest: batcaveEndpointRest,
+      batcave_endpoint_wss:  batcaveEndpointWss,
+    });
+  } else {
+    logger.warn('[SWITCH_ORG] nucleus.json sin master_profile — no pude enviar ORGANIZATION_SWITCHED de vuelta');
+  }
 }
 
 // ── NUCLEUS IPC HANDLERS ───────────────────────────────────────────────────

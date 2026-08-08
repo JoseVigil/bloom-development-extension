@@ -783,6 +783,49 @@ class ServerManager:
                         'status': 'ok',
                     })
 
+                elif msg_type == 'SWITCH_ORGANIZATION':
+                    # Etapa 5 (docs/GOVERNANCE/PROMPT-EJECUCION-synapse-switch-organization.md):
+                    # Cortex/Discovery pide activar una organización distinta
+                    # a la actual. Brain NO ejecuta el switch acá — mismo
+                    # motivo estructural que API_KEY_REGISTERED/
+                    # GITHUB_APP_AUTHORIZED arriba (sin handler explícito,
+                    # esto caía al `else` de ruteo genérico y nunca le
+                    # llegaba a Conductor, registrado como 'cli'): sin este
+                    # branch, el mensaje se pierde en silencio.
+                    #
+                    # A diferencia de QUERY_VAULT_STATUS (que Brain SÍ
+                    # resuelve en el momento, leyendo vault.json
+                    # directamente), acá Brain no tiene autoridad para
+                    # escribir el resultado: `active_org_slug` en
+                    # nucleus.json solo lo escribe getOrCreateOrg() en
+                    # shared/onboarding-schema.js (Node/Conductor), y
+                    # G1-G8_multi-org-switch-design.md (G7) exige que ese
+                    # siga siendo el único punto de escritura — reimplementar
+                    # esa lógica acá en Python sería la segunda fuente de
+                    # verdad que el propio roadmap de Mandate Genesis prohíbe
+                    # explícitamente (§9). Brain solo reenvía el pedido a los
+                    # Sentinels — mismo mecanismo que ONBOARDING_STEP_COMPLETE
+                    # arriba — y Conductor (handleSwitchOrganization en
+                    # main_conductor.js) es quien consulta G2/G4 (`nucleus
+                    # governance can-switch-org`/`begin-drain`/`end-drain`) y
+                    # hace la escritura real.
+                    org_id   = msg.get('org_id')
+                    org_slug = msg.get('org_slug')
+                    logger.info(f"🔀 [{conn_id}] SWITCH_ORGANIZATION: org_slug={org_slug}")
+
+                    event = await self.event_bus.add_event(
+                        'SWITCH_ORGANIZATION',
+                        {
+                            'org_id':   org_id,
+                            'org_slug': org_slug,
+                        }
+                    )
+                    await self._broadcast_event(event)
+                    await self._send_to_writer(writer, {
+                        'type':   'SWITCH_ORGANIZATION_ACK',
+                        'status': 'relayed_to_sentinels',
+                    })
+
                 elif msg_type == 'UNREGISTER_HOST':
                     # bloom-host.exe signals intentional shutdown before closing socket.
                     # Payload: { type, profile_id, launch_id, reason, timestamp }

@@ -9,10 +9,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"nucleus/internal/core"
 )
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -292,4 +295,189 @@ func publishMandateEvent(event string, data map[string]interface{}) {
 		}
 		defer resp.Body.Close()
 	}()
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// IngestReceptionActivity — Fase 1 real (.reception/ de ing/, ver
+// ING_Intent_Spec_v1_1.md §3). Reemplaza el hueco que existía antes en
+// mandate_genesis_build_workflow.go, donde Fase 1 era una sola
+// PublishMandateEventActivity sin ningún trabajo real detrás (confirmado en
+// BLOOM_BISP_Session_Decisions_v1_1.md:330 — "no llama a Brain, no llama a
+// Ollama, no toca ChromaDB"). El pulso "mandate:phase:ingest" sigue
+// existiendo (la UI de /genesis lo espera como marcador de fase única, sin
+// progreso incremental — ver bloom-conductor-genesis-v1_1.html), pero ahora
+// se dispara DESPUÉS de que esta activity corrió de verdad, no en su lugar
+// — ver el caller en mandate_genesis_build_workflow.go.
+//
+// Invoca `brain intent create --type ing` + `brain intent hydrate` como
+// subprocess: mismo patrón D-15 que runBrainCreate (governance/create.go)
+// — "mismo patrón que ya usa el plugin de VS Code, sin pasar por Sentinel",
+// no un cliente TCP nuevo. A diferencia de runBrainCreate (que deja
+// stdout/stderr fluir directo porque nadie necesita el resultado de
+// vuelta), acá sí hace falta capturar y parsear stdout: hydrate necesita el
+// intent_id que create devolvió.
+//
+// domain_baseline mapea 1:1 desde MandateType — único origen confirmado
+// contra createGenesisMandate (commands/mandate.go): "genesis" -> "empty"
+// (Genesis puro), "domain_expansion" -> "existing" (incorpora sobre un
+// baseGenesisId ya existente). No hay un tercer caso documentado en
+// ninguna parte del código leído — cualquier otro valor es error duro, no
+// un default silencioso.
+//
+// Archivos: --docs en `mandate genesis` los copia a
+// {MandatesRoot}/{MandateID}/docs/ (ver copyDocsInto, commands/mandate.go).
+// --docs es opcional ahí — si no se pasó, ese directorio directamente no
+// existe. Se trata como 0 archivos, no como fallo: confirmado contra
+// _write_ing_reception_content en intent_manager.py, que no falla con
+// files_to_process vacío (.rawbase.json/.rawbase_index.json quedan con
+// arrays vacíos y la fase igual cierra vía close_phaseless_act()).
+//
+// --nucleus-path se pasa SIEMPRE explícito. Sin esto, brain
+// (_find_bloom_project) busca un ".bloom/" subiendo desde el cwd del
+// proceso de nucleus, que no tiene por qué coincidir con el proyecto del
+// mandate. Se deriva subiendo 3 niveles desde MandatesRoot
+// (.mandates -> .nucleus-{org} -> .bloom -> workspace) — es la resolución
+// inversa de supervisor.Config.MandatesRoot() / resolveMandatesRootForActiveOrg()
+// (governance/org_switch_guard.go, Etapa 4), no una tercera fuente de verdad.
+// ─────────────────────────────────────────────────────────────────────────
+
+type IngestReceptionInput struct {
+	MandateID    string
+	MandateType  string // "genesis" | "domain_expansion" — ver createGenesisMandate
+	Project      string
+	MandatesRoot string
+}
+
+type IngestReceptionResult struct {
+	IntentID   string
+	FolderName string
+	FilesCount int
+}
+
+// brainCLIResult — shape mínimo compartido por la salida --json de brain
+// (confirmado contra create.py/hydrate.py: {"status":"success"|"error",
+// "operation":"...", "data":{...}} en éxito, {"status":"error","message":
+// "..."} en fallo). Solo modela los campos que esta activity necesita, no
+// el contrato completo de brain.
+type brainCLIResult struct {
+	Status  string                 `json:"status"`
+	Message string                 `json:"message"`
+	Data    map[string]interface{} `json:"data"`
+}
+
+// IngestReceptionActivity hidrata .reception/ de un intent 'ing' recién
+// creado a partir de los docs que copyDocsInto dejó en el mandate.
+func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult, error) {
+	if input.MandatesRoot == "" {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: MandatesRoot vacío para mandate %s", input.MandateID)
+	}
+
+	var domainBaseline string
+	switch input.MandateType {
+	case "genesis":
+		domainBaseline = "empty"
+	case "domain_expansion":
+		domainBaseline = "existing"
+	default:
+		return IngestReceptionResult{}, fmt.Errorf(
+			"IngestReceptionActivity: MandateType %q desconocido para mandate %s — esperaba 'genesis' o 'domain_expansion'",
+			input.MandateType, input.MandateID,
+		)
+	}
+
+	// workspaceRoot: deshace los 3 segmentos fijos que agrega
+	// supervisor.Config.MandatesRoot() / resolveMandatesRootForActiveOrg()
+	// (".bloom/.nucleus-{org}/.mandates") sobre WorkspacePath.
+	workspaceRoot := filepath.Dir(filepath.Dir(filepath.Dir(input.MandatesRoot)))
+
+	docsDir := filepath.Join(input.MandatesRoot, input.MandateID, "docs")
+	var docFiles []string
+	if entries, err := os.ReadDir(docsDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				docFiles = append(docFiles, filepath.Join(docsDir, e.Name()))
+			}
+		}
+	}
+	// err != nil acá (típicamente "no existe") no es un fallo — --docs es
+	// opcional en `mandate genesis`, ver nota arriba.
+
+	brainPath, err := core.ResolveBrainPath()
+	if err != nil {
+		// Mismo fallback que runBrainCreate (governance/create.go): intentar
+		// "brain" en PATH del sistema en vez de fallar duro acá.
+		brainPath = "brain"
+	}
+
+	createArgs := []string{
+		"--json", "intent", "create",
+		"--type", "ing",
+		"--name", input.Project,
+		"--mandate-id", input.MandateID,
+		"--domain-baseline", domainBaseline,
+		"--nucleus-path", workspaceRoot,
+	}
+	createOut, err := runBrainIntentJSON(brainPath, createArgs)
+	if err != nil {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: brain intent create falló (mandate %s): %w", input.MandateID, err)
+	}
+	intentID, _ := createOut.Data["intent_id"].(string)
+	folderName, _ := createOut.Data["folder_name"].(string)
+	if intentID == "" {
+		return IngestReceptionResult{}, fmt.Errorf(
+			"IngestReceptionActivity: brain intent create no devolvió intent_id (mandate %s)", input.MandateID,
+		)
+	}
+
+	hydrateArgs := []string{
+		"--json", "intent", "hydrate",
+		"--id", intentID,
+		"--nucleus-path", workspaceRoot,
+	}
+	if len(docFiles) > 0 {
+		hydrateArgs = append(hydrateArgs, "--files", strings.Join(docFiles, ","))
+	}
+	if _, err := runBrainIntentJSON(brainPath, hydrateArgs); err != nil {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: brain intent hydrate falló (intent %s, mandate %s): %w", intentID, input.MandateID, err)
+	}
+
+	return IngestReceptionResult{
+		IntentID:   intentID,
+		FolderName: folderName,
+		FilesCount: len(docFiles),
+	}, nil
+}
+
+// runBrainIntentJSON ejecuta brain con --json y parsea stdout como
+// brainCLIResult. stdout y stderr se capturan por separado (a diferencia de
+// runBrainCreate, que los deja fluir directo) porque el caller necesita
+// leer "data" de la respuesta, no solo reenviarla.
+func runBrainIntentJSON(brainPath string, args []string) (*brainCLIResult, error) {
+	cmd := exec.Command(brainPath, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	runErr := cmd.Run()
+
+	var parsed brainCLIResult
+	if jsonErr := json.Unmarshal(stdout.Bytes(), &parsed); jsonErr != nil {
+		// No hay JSON parseable en stdout — el error útil es lo que haya en
+		// stderr (típicamente un fallo de Python antes de llegar al output
+		// dual de brain), no el error de parseo en sí.
+		if runErr != nil {
+			return nil, fmt.Errorf("%v — stderr: %s", runErr, strings.TrimSpace(stderr.String()))
+		}
+		return nil, fmt.Errorf("no pude parsear stdout de brain como JSON: %w — stdout: %s", jsonErr, strings.TrimSpace(stdout.String()))
+	}
+
+	if parsed.Status != "success" {
+		msg := parsed.Message
+		if msg == "" {
+			msg = strings.TrimSpace(stderr.String())
+		}
+		return &parsed, fmt.Errorf("brain devolvió status=%q: %s", parsed.Status, msg)
+	}
+
+	return &parsed, nil
 }

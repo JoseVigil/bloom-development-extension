@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"nucleus/internal/core"
 )
 
 const (
-	bloomDirName = ".bloom"
-	nucleusPrefix = ".nucleus-"
-
 	// nucleusConfigFilename es el nombre real del archivo tal como lo
 	// escribe `nucleus create` (delegado a `brain nucleus create`, ver
 	// internal/governance/create.go, campo "files_created" del
@@ -77,39 +75,36 @@ type Config struct {
 //  4. Leer .core/.nucleus-config.json bajo esa carpeta para validar que es
 //     un Nucleus real (no solo una carpeta con el nombre correcto).
 func LoadNucleusConfig() (*Config, error) {
-	// Override explícito para procesos de background (nucleus service start
-	// bajo NSSM/systemd) que no tienen un CWD significativo del usuario —
-	// os.Getwd() ahí resuelve al directorio del binario instalado
-	// (~/.local/share/BloomNucleus/bin/nucleus), no al workspace real, y el
-	// scan hacia arriba nunca encuentra .bloom.
-	//
-	// Mismo criterio que ya usa create-mandate.handler.ts del lado Node
-	// (BLOOM_NUCLEUS_PATH), para que ambos lados resuelvan el mismo
-	// workspace sin depender de CWD implícito.
-	if envPath := os.Getenv("BLOOM_NUCLEUS_PATH"); envPath != "" {
-		return loadNucleusConfigFrom(envPath)
-	}
-
-	cwd, err := os.Getwd()
+	// Etapa 2 (PROMPT-EJECUCION-synapse-switch-organization.md): el escaneo
+	// en sí (antes duplicado acá como findBloomDir+findNucleusDir, con el
+	// override BLOOM_NUCLEUS_PATH manejado en esta misma función) ahora vive
+	// en internal/core.ScanForNucleus() — el mismo código que
+	// core.ResolveNucleusRoot() usa para Vault/Ownership/Blueprint/Alfred.
+	// Antes de este cambio existían dos copias independientes de esta
+	// lógica que podían divergir en silencio; ahora Mandates y Vault
+	// resuelven la organización activa exactamente con el mismo código.
+	workspaceRoot, slug, nucleusDir, err := core.ScanForNucleus()
 	if err != nil {
-		return nil, fmt.Errorf("no pude obtener el directorio de trabajo: %w", err)
+		return nil, err
 	}
-	return loadNucleusConfigFrom(cwd)
+	return loadNucleusConfigAt(workspaceRoot, slug, nucleusDir)
 }
 
 // loadNucleusConfigFrom es la versión testeable de LoadNucleusConfig,
-// parametrizada por punto de partida en vez de os.Getwd().
+// parametrizada por punto de partida en vez de os.Getwd()/BLOOM_NUCLEUS_PATH.
 func loadNucleusConfigFrom(start string) (*Config, error) {
-	workspaceRoot, bloomDir, err := findBloomDir(start)
+	workspaceRoot, slug, nucleusDir, err := core.ScanForNucleusFrom(start)
 	if err != nil {
 		return nil, err
 	}
+	return loadNucleusConfigAt(workspaceRoot, slug, nucleusDir)
+}
 
-	slug, nucleusDir, err := findNucleusDir(bloomDir)
-	if err != nil {
-		return nil, err
-	}
-
+// loadNucleusConfigAt lee y valida .core/.nucleus-config.json dentro de un
+// nucleusDir ya resuelto por internal/core.ScanForNucleus(From). Separado de
+// la resolución del path en sí para que ambas variantes (LoadNucleusConfig /
+// loadNucleusConfigFrom) compartan la misma lógica de lectura/validación.
+func loadNucleusConfigAt(workspaceRoot, slug, nucleusDir string) (*Config, error) {
 	configPath := filepath.Join(nucleusDir, filepath.FromSlash(nucleusConfigRelPath))
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
@@ -130,7 +125,7 @@ func loadNucleusConfigFrom(start string) (*Config, error) {
 	if parsed.Organization.Slug != "" && parsed.Organization.Slug != slug {
 		return nil, fmt.Errorf(
 			"inconsistencia de org: carpeta %q pero %s declara organization.slug=%q — revisar manualmente",
-			nucleusPrefix+slug, nucleusConfigFilename, parsed.Organization.Slug,
+			core.NucleusPrefix+slug, nucleusConfigFilename, parsed.Organization.Slug,
 		)
 	}
 
@@ -141,64 +136,15 @@ func loadNucleusConfigFrom(start string) (*Config, error) {
 	}, nil
 }
 
-// findBloomDir sube desde `start` hasta encontrar una carpeta `.bloom`.
-// Devuelve (workspaceRoot, pathA.bloom, error).
-func findBloomDir(start string) (string, string, error) {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		return "", "", fmt.Errorf("no pude resolver path absoluto de %s: %w", start, err)
-	}
-
-	for {
-		candidate := filepath.Join(dir, bloomDirName)
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return dir, candidate, nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", "", fmt.Errorf("no encontré carpeta %s subiendo desde %s", bloomDirName, start)
-		}
-		dir = parent
-	}
-}
-
-// findNucleusDir busca la primera subcarpeta de bloomDir con prefijo
-// ".nucleus-" y devuelve (slug, pathCompleto).
-//
-// Asume un único Nucleus activo por workspace. Si en algún momento se
-// soporta más de uno (multi-org en el mismo workspace), esta función
-// necesita un criterio de desambiguación explícito — no hay documento que
-// lo cubra hoy, así que no lo invento acá.
-func findNucleusDir(bloomDir string) (string, string, error) {
-	entries, err := os.ReadDir(bloomDir)
-	if err != nil {
-		return "", "", fmt.Errorf("no pude leer %s: %w", bloomDir, err)
-	}
-
-	var matches []string
-	for _, e := range entries {
-		if e.IsDir() && strings.HasPrefix(e.Name(), nucleusPrefix) {
-			matches = append(matches, e.Name())
-		}
-	}
-
-	switch len(matches) {
-	case 0:
-		return "", "", fmt.Errorf("no encontré ninguna carpeta %s* dentro de %s", nucleusPrefix, bloomDir)
-	case 1:
-		slug := strings.TrimPrefix(matches[0], nucleusPrefix)
-		if slug == "" {
-			return "", "", fmt.Errorf("carpeta %q en %s no tiene slug después del prefijo", matches[0], bloomDir)
-		}
-		return slug, filepath.Join(bloomDir, matches[0]), nil
-	default:
-		return "", "", fmt.Errorf(
-			"encontré %d carpetas %s* en %s (%v) — multi-org en el mismo workspace no está soportado, indefinido cuál usar",
-			len(matches), nucleusPrefix, bloomDir, matches,
-		)
-	}
-}
+// findBloomDir/findNucleusDir vivían acá — se movieron a
+// internal/core.ScanForNucleusFrom() en Etapa 2
+// (PROMPT-EJECUCION-synapse-switch-organization.md) para que
+// core.ResolveNucleusRoot() (Vault/Ownership/Blueprint/Alfred) y este
+// LoadNucleusConfig (Mandates) compartan un único escaneo en vez de dos
+// copias independientes que podían divergir. Ver nucleus_scan.go para el
+// código real y las notas sobre la diferencia de comportamiento que sigue
+// existiendo frente a findValidNucleus() en org-resolver.ts (TS) respecto a
+// carpetas .bloom huérfanas.
 
 // MandatesRoot devuelve el path absoluto a .mandates/ para este Nucleus.
 // Debe coincidir exactamente con mandatesRoot() en mandate-paths.ts (TS):
@@ -208,5 +154,5 @@ func findNucleusDir(bloomDir string) (string, string, error) {
 // No renombrar/mover sin actualizar el lado TS — mismo comentario que ya
 // existe en mandate-paths.ts sobre no romper ese contrato implícito.
 func (c *Config) MandatesRoot() string {
-	return filepath.Join(c.WorkspacePath, bloomDirName, nucleusPrefix+c.Slug, ".mandates")
+	return filepath.Join(c.WorkspacePath, core.BloomDirName, core.NucleusPrefix+c.Slug, ".mandates")
 }

@@ -284,14 +284,86 @@ func TestLockedVault_FailsBeforeAuthorize(t *testing.T) {
 // instead of silently reading/writing the real filesystem.
 // ============================================
 
+// withOrgOverride sets BLOOM_NUCLEUS_ROOT to <tmp>/.bloom/.nucleus-<slug>
+// for the duration of the test and restores the previous value afterwards.
+//
+// FIX (Etapa 2, PROMPT-EJECUCION-synapse-switch-organization.md): this test
+// used to assert GetVaultPath() resolved to the unsuffixed legacy path
+// (".bloom/.nucleus/vault.json", no "-{org}"), which stopped being true the
+// moment ResolveNucleusRoot() started requiring an explicit org (see the
+// "FIX (auditoría multi-org)" comment in org_context.go) — the test was
+// never updated to match and, before this fix, GetVaultPath() would have
+// returned an error here (no BLOOM_ORG, no BLOOM_NUCLEUS_ROOT, and
+// withTempHome() doesn't create a .bloom/.nucleus-* to scan), not the path
+// this test expected. BLOOM_NUCLEUS_ROOT is the explicit-override tier of
+// ResolveNucleusRoot() precisely so tests don't have to depend on the
+// filesystem-scan fallback (see nucleus_scan.go) for a deterministic path.
+func withOrgOverride(t *testing.T, tmp, orgSlug string) string {
+	t.Helper()
+	root := filepath.Join(tmp, ".bloom", ".nucleus-"+orgSlug)
+	original, hadOriginal := os.LookupEnv("BLOOM_NUCLEUS_ROOT")
+	if err := os.Setenv("BLOOM_NUCLEUS_ROOT", root); err != nil {
+		t.Fatalf("failed to set BLOOM_NUCLEUS_ROOT: %v", err)
+	}
+	t.Cleanup(func() {
+		if hadOriginal {
+			os.Setenv("BLOOM_NUCLEUS_ROOT", original)
+		} else {
+			os.Unsetenv("BLOOM_NUCLEUS_ROOT")
+		}
+	})
+	return root
+}
+
 func TestGetVaultPath_UsesTempHome(t *testing.T) {
 	tmp := withTempHome(t)
+	root := withOrgOverride(t, tmp, "acme-corp")
+
 	path, err := GetVaultPath()
 	if err != nil {
 		t.Fatalf("GetVaultPath() error: %v", err)
 	}
-	want := filepath.Join(tmp, ".bloom", ".nucleus", "vault.json")
+	want := filepath.Join(root, "vault.json")
 	if path != want {
 		t.Fatalf("GetVaultPath() = %q, want %q", path, want)
+	}
+}
+
+// TestGetVaultPath_NoActiveOrg_FailsExplicitly documents the behavior this
+// whole Etapa 2 fix depends on: with no BLOOM_NUCLEUS_ROOT, no BLOOM_ORG,
+// and no .bloom/.nucleus-* to scan from CWD, GetVaultPath() must fail
+// loudly — not silently fall back to an unsuffixed, orgless path (that was
+// the pre-multi-org bug: vault/blueprint/ownership/alfred reading and
+// writing ~/.bloom/.nucleus/ regardless of which org was actually active).
+func TestGetVaultPath_NoActiveOrg_FailsExplicitly(t *testing.T) {
+	tmp := withTempHome(t)
+	for _, envVar := range []string{"BLOOM_NUCLEUS_ROOT", "BLOOM_ORG", "BLOOM_NUCLEUS_PATH"} {
+		original, had := os.LookupEnv(envVar)
+		os.Unsetenv(envVar)
+		if had {
+			t.Cleanup(func() { os.Setenv(envVar, original) })
+		}
+	}
+
+	// Con BLOOM_NUCLEUS_PATH desseteada, ScanForNucleus() cae a os.Getwd()
+	// real del proceso de test — que puede estar en cualquier punto del
+	// checkout del repo. chdir a un directorio temporal vacío para que el
+	// scan hacia arriba no pueda encontrar por accidente un .bloom/.nucleus-*
+	// real de la máquina donde corre el test (ej. si el repo está clonado
+	// dentro del $HOME real de un desarrollador que ya usa Bloom) — sin
+	// esto, este test podría pasar o fallar según la máquina, no según el
+	// comportamiento que se está probando.
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current working directory: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("failed to chdir into temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(originalWd) })
+
+	_, err = GetVaultPath()
+	if err == nil {
+		t.Fatal("GetVaultPath() with no active org resolvable: want an explicit error, got nil (silent fallback to an orgless path is exactly the bug this fix removes)")
 	}
 }

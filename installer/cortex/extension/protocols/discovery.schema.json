@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "discovery",
   "description": "Onboarding flow — extension handshake, GitHub App authorization (Device Flow), manual API key registration, account registration",
   "messages": [
@@ -486,6 +486,72 @@
         "event": "HARNESS_OPEN_LANDING"
       },
       "parameters": []
+    },
+    {
+      "id": "switch_organization",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Etapa 1 de PROMPT-EJECUCION-synapse-switch-organization.md — SOLO declaración de contrato, sin lógica de negocio (eso es Etapa 5). Simula la solicitud de cambio de organización activa que originaría Discovery/Cortex camino a Conductor. Payload tomado literal de PROMPT-synapse-switch-organization.md §2 (org_id, org_slug) — NO se agregaron profile_id/launch_id/timestamp de correlación como en otros eventos de este schema porque esos campos no están en el payload confirmado; agregarlos requiere confirmación explícita, no una inferencia por simetría con los demás mensajes. Declarar este mensaje acá NO implica que background.js lo despache — no hay registerHandler()/forwardToHost() todavía (ver background.js, confirmado en la investigación de Etapa 1: forwardToHost() solo arma el payload si algún caller lo invoca explícitamente con este eventName).",
+      "payload_template": {
+        "event": "SWITCH_ORGANIZATION",
+        "org_id": "$ORG_ID",
+        "org_slug": "$ORG_SLUG"
+      },
+      "parameters": [
+        {
+          "name": "org_id",
+          "type": "string",
+          "variable": "$ORG_ID",
+          "default": "org-sample-uuid"
+        },
+        {
+          "name": "org_slug",
+          "type": "string",
+          "variable": "$ORG_SLUG",
+          "default": "acme-corp"
+        }
+      ]
+    },
+    {
+      "id": "organization_switched",
+      "type": "event",
+      "direction": "harness_to_background",
+      "channel": "runtime",
+      "description": "Etapa 1 de PROMPT-EJECUCION-synapse-switch-organization.md — SOLO declaración de contrato, sin lógica de negocio (eso es Etapa 5). Simula la confirmación que Conductor devolvería tras un switch exitoso, con los endpoints reales de Batcave de la organización recién activada. Payload tomado literal de PROMPT-synapse-switch-organization.md §2 (org_id, org_slug, batcave_endpoint_rest, batcave_endpoint_wss). NOTA: el PROMPT-EJECUCION-synapse-switch-organization.md nombra un tercer mensaje, ORGANIZATION_SWITCH_STATUS, cuyo payload no está definido en ningún archivo del repo (grep confirmado) — queda deliberadamente sin declarar en este pase hasta que se confirme su shape; no inventarlo acá.",
+      "payload_template": {
+        "event": "ORGANIZATION_SWITCHED",
+        "org_id": "$ORG_ID",
+        "org_slug": "$ORG_SLUG",
+        "batcave_endpoint_rest": "$BATCAVE_ENDPOINT_REST",
+        "batcave_endpoint_wss": "$BATCAVE_ENDPOINT_WSS"
+      },
+      "parameters": [
+        {
+          "name": "org_id",
+          "type": "string",
+          "variable": "$ORG_ID",
+          "default": "org-sample-uuid"
+        },
+        {
+          "name": "org_slug",
+          "type": "string",
+          "variable": "$ORG_SLUG",
+          "default": "acme-corp"
+        },
+        {
+          "name": "batcave_endpoint_rest",
+          "type": "string",
+          "variable": "$BATCAVE_ENDPOINT_REST",
+          "default": "https://batcave.acme-corp.bloom.dev/api"
+        },
+        {
+          "name": "batcave_endpoint_wss",
+          "type": "string",
+          "variable": "$BATCAVE_ENDPOINT_WSS",
+          "default": "wss://batcave.acme-corp.bloom.dev/ws"
+        }
+      ]
     }
   ],
   "observable_events": [
@@ -500,6 +566,8 @@
     "GOOGLE_LOGIN_DETECTED",
     "DISCOVERY_COMPLETE",
     "HARNESS_SIMULATE_HANDSHAKE",
-    "HARNESS_OPEN_LANDING"
+    "HARNESS_OPEN_LANDING",
+    "SWITCH_ORGANIZATION",
+    "ORGANIZATION_SWITCHED"
   ]
 }

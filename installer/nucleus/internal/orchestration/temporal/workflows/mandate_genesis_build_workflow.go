@@ -68,12 +68,13 @@ type GenesisValidateSignal struct {
 // redeclararlo, para evitar el bug de "dos tipos con el mismo nombre en
 // paquetes distintos" que rompía la serialización de Temporal.
 //
-// MandatesRoot: requerido por ScaffoldDomainActivity, SignMandateActivity
-// y PersistHumanSyncActivity. SIGUE SIN LLEGAR POBLADO — temporal_client.go
-// y mandate_watcher.go (quienes arman este struct al arrancar el workflow)
-// no fueron actualizados en esta sesión porque no los tengo. Con esta
-// corrección se vuelve más urgente que antes: ahora tres activities lo
-// necesitan, no una.
+// MandatesRoot: requerido por ScaffoldDomainActivity, SignMandateActivity,
+// PersistHumanSyncActivity e IngestReceptionActivity. CORRECCIÓN sobre el
+// comentario anterior ("sigue sin llegar poblado"): mandate_watcher.go
+// (quien arma este struct al arrancar el workflow) ya lo puebla vía
+// w.mandatesRoot — ver startGenesisWorkflow, comentario "MandatesRoot —
+// CAMPO NUEVO esta sesión (Tarea 1)". El gap quedó cerrado en un turno
+// anterior; este comentario había quedado desactualizado.
 type GenesisBuildInput struct {
 	MandateID     string
 	MandateType   string
@@ -97,11 +98,35 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
-	// ── Fase 1: ingest ──────────────────────────────────────────────────
-	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-		"mandate:phase:ingest", map[string]interface{}{"mandateId": input.MandateID},
-	).Get(ctx, nil); err != nil {
+	// ── Fase 1: ingest (.reception/ de un intent 'ing' real — ver
+	// IngestReceptionActivity, mandate_genesis_activities.go) ─────────────
+	// CAMBIO esta sesión: antes acá solo se publicaba el pulso
+	// "mandate:phase:ingest" sin ningún trabajo real detrás (confirmado en
+	// BLOOM_BISP_Session_Decisions_v1_1.md:330). El pulso se preserva
+	// exactamente igual (mismo evento, mismo mandateId, misma posición en
+	// la secuencia) — la UI de /genesis lo espera como marcador de fase
+	// única sin progreso incremental — pero ahora se dispara DESPUÉS del
+	// trabajo real, no en su lugar.
+	var receptionResult activities.IngestReceptionResult
+	if err := workflow.ExecuteActivity(ctx, activities.IngestReceptionActivity, activities.IngestReceptionInput{
+		MandateID:    input.MandateID,
+		MandateType:  input.MandateType,
+		Project:      input.Project,
+		MandatesRoot: input.MandatesRoot,
+	}).Get(ctx, &receptionResult); err != nil {
 		return fmt.Errorf("fase ingest: %w", err)
+	}
+
+	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
+		"mandate:phase:ingest", map[string]interface{}{
+			"mandateId": input.MandateID,
+			// intentId/filesReceived — campos nuevos, aditivos: consumidores
+			// existentes que solo leen mandateId no se rompen.
+			"intentId":      receptionResult.IntentID,
+			"filesReceived": receptionResult.FilesCount,
+		},
+	).Get(ctx, nil); err != nil {
+		return fmt.Errorf("fase ingest, publicar evento: %w", err)
 	}
 
 	// ── Fase 2: cluster (dry_run — solo domain_proposal.json, NO .scaffold/) ──

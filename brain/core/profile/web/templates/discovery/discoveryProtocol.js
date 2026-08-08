@@ -273,7 +273,7 @@ if (typeof module !== 'undefined' && module.exports) {
 
 if (typeof self !== 'undefined') {
   self.DISCOVERY_PROTOCOL_MANIFEST = {
-    version: "1.0.0",
+    version: "1.1.0",
     protocol: "discovery",
     description: "Onboarding flow — extension handshake, GitHub App authorization (Device Flow), API key detection, account registration",
 
@@ -630,6 +630,59 @@ if (typeof self !== 'undefined') {
           event: "HARNESS_OPEN_LANDING"
         },
         parameters: []
+      },
+      {
+        id: "switch_organization",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        // Paridad con discovery.schema.json v1.2.0 (Etapa 1 de
+        // PROMPT-EJECUCION-synapse-switch-organization.md) — declarado acá TAMBIÉN
+        // porque loadScriptOptional() en harness.js carga este manifest legacy ANTES
+        // de que ProtocolReader.discoverFromJSON() lea el JSON, y discover() prioriza
+        // el global legacy si ya existe (mismo mecanismo confirmado en el HALLAZGO
+        // 2026-07-17 de google_login_detected, arriba). Sin este espejo, el mensaje
+        // del schema JSON nunca llega a la UI del Harness.
+        // SOLO contrato — sin lógica de negocio (Etapa 5 del prompt de ejecución).
+        // Payload literal de PROMPT-synapse-switch-organization.md §2 (org_id,
+        // org_slug) — sin profile_id/launch_id/timestamp de correlación como el
+        // resto de los eventos de este manifest, porque esos campos no están en el
+        // payload confirmado; no se infirieron por simetría.
+        description: "Simulate Discovery/Cortex solicitando un cambio de organización activa camino a Conductor. No dispara ninguna lógica real todavía — background.js no tiene registerHandler()/forwardToHost() para este evento en este pase.",
+        payload_template: {
+          event: "SWITCH_ORGANIZATION",
+          org_id: "$ORG_ID",
+          org_slug: "$ORG_SLUG"
+        },
+        parameters: [
+          { name: "org_id", type: "string", variable: "$ORG_ID", default: "org-sample-uuid" },
+          { name: "org_slug", type: "string", variable: "$ORG_SLUG", default: "acme-corp" }
+        ]
+      },
+      {
+        id: "organization_switched",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        // Mismo mecanismo de paridad que switch_organization (ver comentario arriba).
+        // NOTA: PROMPT-EJECUCION-synapse-switch-organization.md nombra un tercer
+        // mensaje, ORGANIZATION_SWITCH_STATUS, cuyo payload no está definido en
+        // ningún archivo del repo (confirmado por grep) — queda deliberadamente
+        // sin declarar hasta que se confirme su shape real.
+        description: "Simulate la confirmación que Conductor devolvería tras un switch de organización exitoso, con los endpoints reales de Batcave de la organización activada. Payload literal de PROMPT-synapse-switch-organization.md §2.",
+        payload_template: {
+          event: "ORGANIZATION_SWITCHED",
+          org_id: "$ORG_ID",
+          org_slug: "$ORG_SLUG",
+          batcave_endpoint_rest: "$BATCAVE_ENDPOINT_REST",
+          batcave_endpoint_wss: "$BATCAVE_ENDPOINT_WSS"
+        },
+        parameters: [
+          { name: "org_id", type: "string", variable: "$ORG_ID", default: "org-sample-uuid" },
+          { name: "org_slug", type: "string", variable: "$ORG_SLUG", default: "acme-corp" },
+          { name: "batcave_endpoint_rest", type: "string", variable: "$BATCAVE_ENDPOINT_REST", default: "https://batcave.acme-corp.bloom.dev/api" },
+          { name: "batcave_endpoint_wss", type: "string", variable: "$BATCAVE_ENDPOINT_WSS", default: "wss://batcave.acme-corp.bloom.dev/ws" }
+        ]
       }
     ],
 
@@ -651,7 +704,9 @@ if (typeof self !== 'undefined') {
       "VAULT_INITIALIZED",
       "DISCOVERY_COMPLETE",
       "HARNESS_SIMULATE_HANDSHAKE",
-      "HARNESS_OPEN_LANDING"
+      "HARNESS_OPEN_LANDING",
+      "SWITCH_ORGANIZATION",
+      "ORGANIZATION_SWITCHED"
     ]
   };
 }

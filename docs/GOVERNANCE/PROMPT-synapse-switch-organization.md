@@ -16,6 +16,18 @@ Hasta ahora, el sistema asumía una sola organización activa por sesión de Cor
 
 Ese cambio de contexto es lo que este handler resuelve. No es un feature de autenticación (eso ya está cubierto por GitHub App + Device Flow, ver `HANDOFF-github-app-batcave-synapse.md`) — es un feature de **enrutamiento de contexto organizacional** dentro de una sesión ya autenticada.
 
+### 1.1 Modelo de concurrencia asumido (no negociable en esta sesión)
+
+El sistema **no soporta multi-tenant concurrente en memoria**. Nucleus corre **una sola organización activa por instancia**. "Cambiar de organización" no es enrutar a una instancia distinta que ya está corriendo en paralelo — es: (a) drenar todo lo in-flight de la organización actual, (b) dejarlo persistido de forma inmutable en `.bloom/.nucleus-{org}/`, y recién entonces (c) autorizar el switch y activar la organización destino.
+
+Esta decisión ya está tomada y documentada en `G1-G8_multi-org-switch-design.md` (guardas G1–G8). Ese documento es la fuente de verdad para todo lo que tiene que ver con *cuándo* un switch puede proceder y *qué* lo bloquea — léelo completo antes de escribir el handler de Synapse, porque el handler que este prompt describe es el **caller** del lado de Cortex/Discovery/Conductor de ese contrato, no una implementación alternativa de él. Concretamente, el handler de `SWITCH_ORGANIZATION` tiene que:
+
+- Consultar primero el endpoint `can-switch-org` de Nucleus (G2) — nunca inferir por su cuenta si es seguro cambiar de org sumando estados propios.
+- Si `blocked: true`, no tocar `nucleus.json` ni ningún estado de organización — comunicar el motivo real al usuario (G6), no un genérico "no se puede ahora".
+- Asumir que, mientras la organización actual esté drenando (`draining: true`, G4), cualquier intento nuevo de switch debe rechazarse o encolarse — no hay una ventana donde dos switches puedan resolverse en paralelo.
+
+Si en algún punto de la implementación aparece una razón concreta para que este handler necesite un modelo distinto (por ejemplo, instancias de Batcave ya activas en paralelo por organización), **no lo asumas ni lo implementes acá** — es un cambio de diseño que excede el scope de este prompt y tiene que decidirse explícitamente contra `G1-G8_multi-org-switch-design.md`, no dentro de esta sesión.
+
 ---
 
 ## 2. Los dos mensajes a implementar
@@ -65,12 +77,12 @@ Cuando llega `SWITCH_ORGANIZATION { org_id, org_slug }`:
 
 2. **Resolver el `OrganizationContext` de la organización destino** usando el mismo mecanismo que ya existe en Batcave (`resolveOrganization()` / `buildOrgContext()`, `BATCAVE_ARCHITECTURE.md` §4.1) — no reimplementar la resolución de paths ni la lectura de `.ownership.json` de otra forma. Esto incluye leer `github_app_installation_id` de esa organización (§4.3 del documento de arquitectura) para que las operaciones subsiguientes usen las credenciales correctas.
 
-3. **Manejar el estado de la organización que estaba activa antes del switch.** Esto es lo más delicado del feature y es la parte que la arquitectura actual no especifica en detalle a propósito (queda para este módulo). Como mínimo hay que decidir explícitamente, y documentar la decisión, qué pasa con:
-   - Sesiones de Alfred activas de la organización anterior (¿se cierran? ¿quedan en background? �ever `batcave.config.json` → `alfred.max_concurrent_sessions` es por instancia de Batcave, es decir, por organización — dos organizaciones no comparten el límite, pero eso no dice qué hacer con una sesión que queda "huérfana" al cambiar el foco).
+3. **Drenar el estado de la organización que estaba activa antes de autorizar el switch.** Esto es lo más delicado del feature, y el modelo ya está decidido (ver §1.1 y `G1-G8_multi-org-switch-design.md`): no hay dos organizaciones activas al mismo tiempo, así que no hay "estado huérfano que limpiar en paralelo" — hay estado in-flight que tiene que terminar y persistirse **antes** de que el switch se autorice. Concretamente, antes de emitir `ORGANIZATION_SWITCHED` el handler tiene que confirmar (vía G2, no adivinando) que ya no queda:
+   - Sesiones de Alfred activas de la organización anterior sin terminar ni persistir (`batcave.config.json` → `alfred.max_concurrent_sessions` es por instancia/organización; una sesión sin cerrar es exactamente el tipo de "in-flight" que G3 define y que bloquea el switch).
    - Túneles soberanos abiertos (`RelayEngine.waitForTunnel()`, `tunnel/manager.ts`) de la organización anterior.
-   - Comandos pendientes en cola (`security.max_pending_commands` en `batcave.config.json`).
+   - Comandos pendientes en cola (`security.max_pending_commands` en `batcave.config.json`) sin resolver.
 
-   No asumas una respuesta "obvia" acá (por ejemplo, "cerrar todo siempre") sin confirmarla — depende de si Batcave corre como una instancia por organización (en cuyo caso "cambiar de organización" en Cortex/Discovery es más un cambio de qué instancia mirar, no un apagado) o como una instancia que sirve múltiples organizaciones (en cuyo caso sí hay estado que limpiar). Confirmá cuál es el modelo real antes de escribir la lógica de teardown — es una pregunta de una sola vez con impacto grande en el diseño.
+   Si `can-switch-org` (G2) devuelve `blocked: true` por cualquiera de estos motivos, el handler **no** procede con el switch — devuelve el motivo al usuario y espera (o dispara el drenado si ese trigger le corresponde a esta pieza; confirmalo con el equipo, no lo asumas). No hay una rama de "cerrar todo a la fuerza" en este handler: forzar el cierre de sesiones/túneles/comandos in-flight es responsabilidad de Nucleus (G3/G4), no de Synapse.
 
 4. **No filtrar datos entre organizaciones.** Los invariantes `INVARIANT-ORG-004` (logs segregados), `INVARIANT-ORG-006` (runtime data aislado) y el principio general de §1 de la arquitectura ("sin data leakage entre organizaciones", checklist §12) aplican directamente acá: ningún estado en memoria del lado de Cortex/Discovery o Conductor puede quedar mezclando datos de la organización anterior con la nueva después del switch. Esto es fácil de romper con cachés, closures, o variables de módulo que no se resetean — prestale atención especial si el código existente usa alguno de esos patrones.
 
@@ -79,9 +91,10 @@ Cuando llega `SWITCH_ORGANIZATION { org_id, org_slug }`:
 ### Casos borde a cubrir explícitamente (no opcionales)
 
 - Switch a la misma organización que ya está activa (¿no-op, o re-valida igual?).
-- Switch mientras hay un Mandate o intent en curso en la organización actual.
+- Switch mientras hay un Mandate o intent en curso en la organización actual: `can-switch-org` (G2) tiene que devolver `blocked: true` con el motivo, y el handler tiene que superficializar ese motivo al usuario tal cual lo describe G6 — no traducirlo a un mensaje genérico ni reintentar en silencio.
 - Switch a una organización cuya instancia de Batcave no está corriendo todavía (Codespace apagado, por ejemplo) — ¿el switch la levanta, o falla pidiendo que se levante primero?
-- Doble switch rápido (el usuario pide cambiar a "globex" y antes de que termine pide cambiar a "acme" de nuevo) — evitar condición de carrera donde `ORGANIZATION_SWITCHED` llega en el orden equivocado.
+- Doble switch rápido (el usuario pide cambiar a "globex" y antes de que termine pide cambiar a "acme" de nuevo): con el modelo de drenado (G4), el segundo switch tiene que toparse con `draining: true` y rechazarse o encolarse explícitamente — no hay condición de carrera posible si el lock de drenado está bien implementado del lado de Nucleus, pero el handler de Synapse tiene que manejar esa respuesta de rechazo sin asumir que el segundo pedido "simplemente no pasó nada".
+- Intento de switch bloqueado por G2: tiene que quedar auditado igual que uno exitoso (G8) — si el handler de Synapse expone algún log o evento propio del lado de Conductor, confirmá que también registra los intentos rechazados, no solo los que terminan en `ORGANIZATION_SWITCHED`.
 
 ---
 
@@ -89,6 +102,7 @@ Cuando llega `SWITCH_ORGANIZATION { org_id, org_slug }`:
 
 Igual que en la sesión anterior de Synapse (`HANDOFF-github-app-batcave-synapse.md` §6), **no adivines el código existente**. Pedí, y leé, estos archivos reales antes de tocar nada:
 
+- `G1-G8_multi-org-switch-design.md` — el diseño ya aceptado del lado de Nucleus para el switch con single-org-activa y drenado (§1.1 de este documento). El handler de Synapse es un consumidor de ese contrato (`can-switch-org`, G2), no una implementación paralela — si algo de lo que describís en el handler contradice ese documento, el documento gana y hay que ajustar el handler, no al revés.
 - `discovery.js` — implementación real del `OnboardingFlow` y de cualquier lógica de contexto organizacional que ya exista del lado de Cortex.
 - `discovery.schema.json` (o el manifest que lo haya reemplazado) — para confirmar dónde declarar `SWITCH_ORGANIZATION` / `ORGANIZATION_SWITCHED` sin repetir el patrón de eventos zombie.
 - `background.js` — service worker de la Chrome Extension; confirmar si el manejo de organización activa vive ahí o en otro lado.
@@ -124,4 +138,4 @@ Igual que se hizo con los fixes anteriores (`node --check` + script de simulaci�
 
 ## 8. Resumen de una línea para arrancar
 
-Implementá el handler Synapse de `SWITCH_ORGANIZATION` → `ORGANIZATION_SWITCHED`, leyendo primero el código real listado en §5, validando la organización destino contra `.ownership.json`, resolviendo su contexto con el mismo mecanismo que ya usa Batcave, definiendo explícitamente (no asumiendo) qué pasa con el estado de la organización anterior, y verificando con tests simulados que no hay data leakage entre organizaciones ni eventos zombie en el manifest.
+Implementá el handler Synapse de `SWITCH_ORGANIZATION` → `ORGANIZATION_SWITCHED`, leyendo primero `G1-G8_multi-org-switch-design.md` y el código real listado en §5, consultando siempre `can-switch-org` (G2) antes de tocar cualquier estado de organización, validando la organización destino contra `.ownership.json`, resolviendo su contexto con el mismo mecanismo que ya usa Batcave, respetando el modelo de single-org-activa con drenado (no asumiendo instancias concurrentes), y verificando con tests simulados que no hay data leakage entre organizaciones ni eventos zombie en el manifest.

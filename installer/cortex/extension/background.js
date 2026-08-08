@@ -842,6 +842,27 @@ function handleHostMessage(msg) {
     return;
   }
 
+  // ── ORGANIZATION_SWITCHED ─────────────────────────────────────────────
+  // Etapa 5 — confirmación de switch. Llega desde Brain (relay de
+  // Conductor, ver main_conductor.js#handleSwitchOrganization +
+  // SynapseBridge#sendToProfile) con los endpoints reales de Batcave de la
+  // organización recién activada. Se reenvía tal cual a la página —
+  // discovery.js/landing.js deciden qué hacer con esto, este archivo no
+  // tiene lógica de UI. Sin este branch caía al "Broadcast to all tabs"
+  // genérico del final de esta función, que igual funciona (msg.event
+  // truthy) — se agrega explícito para que quede loggeado y visible en el
+  // debug panel, como el resto de las confirmaciones de este dispatcher.
+  if (msg.event === 'ORGANIZATION_SWITCHED') {
+    console.log('[Synapse] ← ORGANIZATION_SWITCHED — org_slug:', msg.org_slug);
+    forwardToDebugPanel('synapse', 'ORGANIZATION_SWITCHED', {
+      _dir:     'in',
+      org_id:   msg.org_id   || null,
+      org_slug: msg.org_slug || null,
+    });
+    chrome.runtime.sendMessage(msg).catch(() => {});
+    return;
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // IonPump events — forward al Harness y al debug panel
   // ─────────────────────────────────────────────────────────────────────
@@ -1364,6 +1385,45 @@ function registerOnboardingHandlers() {
   // colgado en el step vault_init.
   registerHandler('GITHUB_APP_AUTHORIZED', null, (msg, sender, sendResp) => {
     reactToGithubAppAuthorized(msg);
+    sendResp({ received: true });
+    return true;
+  });
+
+  // ── SWITCH_ORGANIZATION ──────────────────────────────────────────────────
+  // Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md). La página
+  // (Discovery, o el panel de simulación del Harness) manda este evento vía
+  // chrome.runtime.sendMessage cuando quiere activar una organización
+  // distinta a la actual. Este handler NO decide nada — solo reenvía el
+  // pedido al host tal cual, leyendo la forma del payload de
+  // discovery.schema.json (mensaje "switch_organization"), mismo patrón que
+  // ACCOUNT_REGISTERED arriba. La decisión real (G2/G4) y la escritura de
+  // active_org_slug viven del otro lado del native host — ver
+  // server_manager.py (Brain, solo reenvía a Sentinels) y
+  // main_conductor.js#handleSwitchOrganization (Conductor, ejecuta el
+  // switch de verdad). La confirmación vuelve como ORGANIZATION_SWITCHED —
+  // ver el branch nuevo en handleHostMessage() más abajo.
+  const switchOrganizationSchema = discoverySchema?.messages?.find(
+    m => m.id === 'switch_organization'
+  );
+
+  registerHandler('SWITCH_ORGANIZATION', switchOrganizationSchema, (msg, sender, sendResp) => {
+    if (!msg.org_slug) {
+      console.warn('[Synapse] ⚠️ SWITCH_ORGANIZATION enviado sin org_slug');
+    }
+
+    console.log('[Synapse] → SWITCH_ORGANIZATION — org_slug:', msg.org_slug);
+
+    forwardToDebugPanel('synapse', 'SWITCH_ORGANIZATION', {
+      _dir:     'out',
+      org_id:   msg.org_id   || null,
+      org_slug: msg.org_slug || null,
+    });
+
+    // 🔧 Migrado a forwardToHost(): shape leído de discovery.schema.json
+    // (mensaje "switch_organization"), mismo patrón que el resto de este
+    // dispatcher — no se arma el payload a mano acá.
+    forwardToHost('SWITCH_ORGANIZATION', msg);
+
     sendResp({ received: true });
     return true;
   });

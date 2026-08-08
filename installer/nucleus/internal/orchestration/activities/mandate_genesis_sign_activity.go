@@ -47,11 +47,11 @@ import (
 // ingest/cluster, no validate/humanSync (ver comentario de PhaseRecord ahí).
 // Este es el primer código Go que necesita leer Fase 3 completa.
 type DomainCandidateState struct {
-	DomainID             string   `json:"domainId"`
-	Name                 string   `json:"name"`
-	CohesionScore        float64  `json:"cohesionScore"`
-	SuggestedActionCount int      `json:"suggestedActionCount"`
-	OverlapsWithExisting string   `json:"overlapsWithExisting,omitempty"`
+	DomainID             string  `json:"domainId"`
+	Name                 string  `json:"name"`
+	CohesionScore        float64 `json:"cohesionScore"`
+	SuggestedActionCount int     `json:"suggestedActionCount"`
+	OverlapsWithExisting string  `json:"overlapsWithExisting,omitempty"`
 	// D-3
 	DependsOn []string `json:"dependsOn,omitempty"`
 }
@@ -75,7 +75,13 @@ type validatePhaseState struct {
 // campos que este código toca, mismo criterio de mínima superficie que ya
 // usa MandateState en mandate_watcher.go.
 type mandateGenesisState struct {
-	MandateID    string `json:"mandateId"`
+	MandateID string `json:"mandateId"`
+	// MandateType — CAMPO NUEVO esta sesión. mandate_state.json SÍ lo trae
+	// (createGenesisMandate lo escribe, commands/mandate.go:376:
+	// "mandateType": mandateType, "genesis" | "domain_expansion") pero este
+	// struct no lo leía — fix del hardcode MandateType: "genesis" más abajo,
+	// que firmaba mandate.json como genesis sin importar el tipo real.
+	MandateType  string `json:"mandateType"`
 	Project      string `json:"project"`
 	CurrentPhase string `json:"currentPhase"`
 	Phases       struct {
@@ -141,10 +147,10 @@ type MandateJSON struct {
 }
 
 type SignMandateResult struct {
-	MandateID      string   `json:"mandateId"`
-	ActionsCreated int      `json:"actionsCreated"`
-	WorkflowType   string   `json:"workflowType"`
-	SignedAt       string   `json:"signedAt"`
+	MandateID      string `json:"mandateId"`
+	ActionsCreated int    `json:"actionsCreated"`
+	WorkflowType   string `json:"workflowType"`
+	SignedAt       string `json:"signedAt"`
 	// Actions — CAMPO NUEVO esta sesión: se devuelve la lista completa (no
 	// solo el conteo) para que el workflow pueda construir []DomainAction
 	// sin releer mandate.json. Antes de este cambio SignMandateActivity
@@ -245,6 +251,21 @@ func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, err
 		})
 	}
 
+	// FIX esta sesión: antes esto escribía "genesis" literal sin importar
+	// state.MandateType — cualquier mandate domain_expansion que llegara acá
+	// quedaba firmado con metadata incorrecta, y mandate.json es inmutable
+	// tras firma (R-1, BLOOM_Mandate_Universal_Schema_v1_0_0.md:493) — no
+	// hay forma de corregirlo después sobre un archivo ya firmado. Falla
+	// duro en vez de asumir "genesis" por default: mismo criterio fail-closed
+	// que IngestReceptionActivity (mandate_genesis_activities.go) para el
+	// mismo campo.
+	if state.MandateType != "genesis" && state.MandateType != "domain_expansion" {
+		return SignMandateResult{}, fmt.Errorf(
+			"mandate %s: mandateType %q desconocido en mandate_state.json — esperaba 'genesis' o 'domain_expansion'",
+			mandateID, state.MandateType,
+		)
+	}
+
 	workflowType := "parallel"
 	if anyDependency {
 		workflowType = "dependent" // ver nota en OperationalBlock.Workflow.Type
@@ -254,7 +275,7 @@ func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, err
 
 	mandateJSON := MandateJSON{
 		MandateID:   state.MandateID,
-		MandateType: "genesis",
+		MandateType: state.MandateType,
 		Project:     state.Project,
 		Status:      "signed",
 		SignedAt:    signedAt,

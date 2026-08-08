@@ -144,6 +144,41 @@ function getOrCreateOrg(onboarding, orgSlug, { workspacePath } = {}) {
   return org;
 }
 
+/**
+ * switchActiveOrg(onboarding, orgSlug)
+ *
+ * Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md). A diferencia
+ * de getOrCreateOrg(), NUNCA crea la organización si no existe — un switch
+ * a una org inexistente tiene que fallar de forma explícita (§4.1 de
+ * PROMPT-synapse-switch-organization.md: "si no hay .nucleus-{org_slug} con
+ * .ownership.json válido, el switch tiene que fallar... no en silencio"),
+ * no crearla como sí hace el flujo de onboarding (donde "no existe todavía"
+ * es el caso normal, no un error).
+ *
+ * G7 (docs/GOVERNANCE/G1-G8_multi-org-switch-design.md): esta función sigue
+ * siendo, a propósito, un primitivo "tonto" de persistencia — igual que
+ * getOrCreateOrg(). NO consulta G2 acá adentro. El caller
+ * (main_conductor.js#handleSwitchOrganization) es quien tiene que haber
+ * consultado `nucleus governance can-switch-org` ANTES de llamar a esta
+ * función, y bracketarla con `begin-drain`/`end-drain`. Meter esa guarda
+ * acá adentro mezclaría la decisión ("¿se puede?") con la persistencia
+ * ("escribir el puntero"), que es exactamente la separación que G7 pide
+ * mantener.
+ *
+ * @throws {Error} si orgSlug no existe en onboarding.organizations — el
+ *   caller debe capturarlo y comunicar el fallo explícito (no reintentar
+ *   en silencio, no crear la org).
+ */
+function switchActiveOrg(onboarding, orgSlug) {
+  migrateToNestedSchema(onboarding);
+  const org = getOrgBySlug(onboarding, orgSlug);
+  if (!org) {
+    throw new Error(`switchActiveOrg: la organización "${orgSlug}" no existe localmente`);
+  }
+  onboarding.active_org_slug = orgSlug;
+  return org;
+}
+
 function getActiveProject(onboarding) {
   const org = getActiveOrg(onboarding);
   if (!org || !onboarding.active_project_id) return null;
@@ -225,6 +260,7 @@ module.exports = {
   getOrgBySlug,
   getActiveOrg,
   getOrCreateOrg,
+  switchActiveOrg,
   getActiveProject,
   getOrCreateProject,
   buildFlatOnboardingView,
