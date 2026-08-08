@@ -1,6 +1,7 @@
 # Carpetas que NO van en el VSIX
 brain/**
 build/**
+builds/**
 codebase/**
 commits/**
 config/**
@@ -17,12 +18,18 @@ webview/**
 .cache/**
 .vscode/**
 .vscode-test/**
+agentic-harness/**
+.claude/**
+BloomNucleus/**
+accounts/**
+tests/**
 
 # Archivos sueltos que no van
 *.py
 *.ps1
 *.sh
 *.log
+*.out
 *.txt
 *.mjs
 .DS_Store
@@ -54,7 +61,26 @@ node_modules/**
 !node_modules/module-alias/**
 !node_modules/tsconfig-paths/**
 !node_modules/fastify/**
-!node_modules/@fastify/**
+# @fastify/**: NO se puede usar una negación amplia acá — vsce no permite
+# re-excluir subrutas dentro de un árbol ya negado con "!x/**" (ver más abajo
+# el intento fallido con node_modules/@fastify/static/test/**). Por eso cada
+# subpaquete se negocia por separado, y @fastify/static queda acotado a
+# exactamente los archivos que necesita en runtime (nunca incluye test/).
+!node_modules/@fastify/accept-negotiator/**
+!node_modules/@fastify/ajv-compiler/**
+!node_modules/@fastify/cors/**
+!node_modules/@fastify/error/**
+!node_modules/@fastify/fast-json-stringify-compiler/**
+!node_modules/@fastify/forwarded/**
+!node_modules/@fastify/merge-json-schemas/**
+!node_modules/@fastify/proxy-addr/**
+!node_modules/@fastify/send/**
+!node_modules/@fastify/swagger/**
+!node_modules/@fastify/swagger-ui/**
+!node_modules/@fastify/static/package.json
+!node_modules/@fastify/static/index.js
+!node_modules/@fastify/static/lib/**
+!node_modules/@fastify/static/node_modules/**
 !node_modules/find-my-way/**
 !node_modules/light-my-request/**
 !node_modules/pino/**
@@ -98,5 +124,23 @@ node_modules/**
 !node_modules/picomatch/**
 !node_modules/to-regex-range/**
 !node_modules/binary-extensions/**
-EOF
-native/**
+
+# Dentro de los paquetes permitidos arriba: excluir test/docs/fixtures.
+# Esto es lo que saca node_modules/@fastify/static/test/static-symbolic-link
+# (el symlink que rompe el escaneo de secretos de vsce con EISDIR) y de paso
+# reduce bastante el tamaño del VSIX.
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/*.test.js
+node_modules/**/.github/**
+node_modules/**/benchmark/**
+node_modules/**/benchmarks/**
+node_modules/**/example/**
+node_modules/**/examples/**
+node_modules/**/*.map
+node_modules/**/*.ts
+
+# Fix quirúrgico: excluir puntualmente el fixture con symlink que
+# rompe el escáner de secretos de vsce con EISDIR, sin depender de
+# que el bloque de arriba se haya aplicado correctamente.
+node_modules/@fastify/static/test/**

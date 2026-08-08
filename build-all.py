@@ -253,6 +253,7 @@ def _exe(stem: str) -> str:
 
 NUCLEUS_HOME = _resolve_nucleus_home()
 NUCLEUS_EXE  = NUCLEUS_HOME / "bin" / "nucleus" / _exe("nucleus")
+METAMORPH_EXE = NUCLEUS_HOME / "bin" / "metamorph" / _exe("metamorph")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1164,7 +1165,16 @@ def _print_result(result: StepResult) -> None:
                 log(f"   {line}")
 
 
-def _print_summary(results: list[StepResult]) -> None:
+def _print_summary(results: list[StepResult]) -> int:
+    """
+    Imprime el resumen del build y retorna la cantidad de pasos fallidos.
+
+    IMPORTANTE: no llama sys.exit() acá. La decisión de terminar el proceso
+    con exit code != 0 se toma en main(), DESPUÉS de capture_versions() y
+    sync_metamorph_manifest() — para que esos dos pasos de post-procesamiento
+    corran siempre, incluso si algún componente del build (ej: VSIX) falló.
+    Terminar el proceso acá adentro los salteaba por completo.
+    """
     log("")
     log(_sep("═"))
     log("RESUMEN DEL BUILD")
@@ -1194,13 +1204,7 @@ def _print_summary(results: list[StepResult]) -> None:
     if _log_file_path:
         log(f"📄 Log guardado en: {_log_file_path}")
 
-    if failed_count > 0:
-        log("")
-        log("⚠️  El build terminó con errores.")
-        sys.exit(1)
-    else:
-        log("")
-        log("🎉 Build completo.")
+    return failed_count
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1457,6 +1461,51 @@ def _register_build_telemetry() -> None:
             log(f"  ⚠  No se pudo ejecutar nucleus para {s['stream']}: {exc}")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# METAMORPH INSPECT — sincroniza metamorph.json al final de cada build-all
+# ─────────────────────────────────────────────────────────────────────────────
+
+def sync_metamorph_manifest() -> None:
+    """
+    Corre `metamorph inspect` contra el metamorph recién deployado en
+    NUCLEUS_HOME, para que metamorph.json quede actualizado con las
+    versiones y build numbers de este build.
+
+    Se ejecuta SIEMPRE al final del build-all, sin importar qué --only/--skip
+    se haya usado — inspect escanea TODOS los managed_binaries de una sola
+    pasada, así que no tiene sentido dispararlo por componente individual.
+
+    No aborta build-all.py si falla: se loguea como warning. Si esto no sale
+    OK, revisar el log antes de deployar a productivo con este build.
+    """
+    if not METAMORPH_EXE.exists():
+        log(f"  ⚠  metamorph no encontrado en {METAMORPH_EXE}, se salta sync de manifest")
+        return
+
+    try:
+        result = subprocess.run(
+            [str(METAMORPH_EXE), "inspect"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log(f"  ⚠  No se pudo ejecutar metamorph inspect: {exc}")
+        return
+
+    if result.returncode == 0:
+        log("  ✅ metamorph.json actualizado")
+        if result.stdout:
+            for line in result.stdout.strip().splitlines():
+                log(f"     {line}")
+    else:
+        log(f"  ⚠  metamorph inspect RC={result.returncode}")
+        if result.stdout:
+            log(f"     {result.stdout.strip()[:300]}")
+
+
 def main() -> None:
     args = _parse_args()
     _setup_logger()
@@ -1589,13 +1638,27 @@ def main() -> None:
     # build_all se registra también acá como stream del orquestador.
     _register_build_telemetry()
 
-    _print_summary(results)
+    failed_count = _print_summary(results)
 
     log("")
     log(_sep())
     log(f"Capturando versiones → {_PLATFORM_SUFFIX}_versions.txt ...")
     log(_sep())
     capture_versions()
+
+    log("")
+    log(_sep())
+    log("Sincronizando metamorph.json (metamorph inspect) ...")
+    log(_sep())
+    sync_metamorph_manifest()
+
+    if failed_count > 0:
+        log("")
+        log("⚠️  El build terminó con errores.")
+        sys.exit(1)
+    else:
+        log("")
+        log("🎉 Build completo.")
 
 
 if __name__ == "__main__":
