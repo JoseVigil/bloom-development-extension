@@ -142,18 +142,26 @@ type blueprintMinimal struct {
 	OrgIdentity orgIdentity `json:"org_identity"`
 }
 
-// GetOrgID lee nucleus-governance.json directamente y retorna el OrgID.
+// GetOrgID lee .nucleus-governance.json directamente y retorna el OrgID.
 // Vive aquí (y no en core ni governance) para no formar ciclos.
 // La ruta es la misma que usa governance.GetBlueprintPath():
 //
-//	~/.bloom/.nucleus/nucleus-governance.json
+//	~/.bloom/.nucleus/.nucleus-governance.json
+//
+// FIX (auditoría dot-naming): faltaba el punto inicial en el nombre del
+// archivo. NOTA aparte, no tocada en este fix: este path sigue hardcodeado
+// a ~/.bloom/.nucleus/ (sin sufijo de org), el mismo hardcodeo pre-multi-org
+// ya corregido en SetMasterRole/countActiveCollaborators/computeStateHash
+// (ver core/metadata.go) y en GetBlueprintPath (ver governance/blueprint.go).
+// GetOrgID() no pasa por core.ResolveNucleusRoot() y por lo tanto sigue
+// apuntando a una ruta que no existe en instalaciones multi-org.
 func GetOrgID() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	path := filepath.Join(homeDir, ".bloom", ".nucleus", "nucleus-governance.json")
+	path := filepath.Join(homeDir, ".bloom", ".nucleus", ".nucleus-governance.json")
 
 	data, err := os.ReadFile(path)
 	if err != nil {

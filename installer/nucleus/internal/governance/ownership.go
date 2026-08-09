@@ -42,7 +42,7 @@ func GetOwnershipPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(nucleusRoot, "ownership.json"), nil
+	return filepath.Join(nucleusRoot, ".ownership.json"), nil
 }
 
 // LoadOwnership carga el registro de propiedad
@@ -202,7 +202,7 @@ func init() {
 					os.Exit(1)
 				}
 
-				// Crear nucleus-governance.json
+				// Crear .nucleus-governance.json
 				_, err = CreateInitialBlueprint(githubID, name)
 				if err != nil {
 					fmt.Printf("Error creating blueprint: %v\n", err)

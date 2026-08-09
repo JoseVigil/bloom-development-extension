@@ -45,18 +45,24 @@ type Manifest struct {
 	SystemVersion         string   `json:"system_version"`
 }
 
-// GetBlueprintPath retorna la ruta del nucleus-governance.json
+// GetBlueprintPath retorna la ruta del .nucleus-governance.json
 func GetBlueprintPath() (string, error) {
 	// FIX (auditoría multi-org): antes hardcodeaba ~/.bloom/.nucleus/ sin
 	// sufijo de org. Ver core/org_context.go.
+	//
+	// FIX (auditoría dot-naming): el nombre real carecía del punto inicial
+	// ("nucleus-governance.json") pese a que toda la carpeta .bloom/.nucleus-{org}/
+	// sigue la convención de archivo oculto (.master, .specialist, .ownership.json,
+	// .core/.meta.json, etc. — ver create.go, files_created del comando `create`).
+	// Se alinea acá, en la única función que decide el nombre real.
 	nucleusRoot, err := core.ResolveNucleusRoot("")
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(nucleusRoot, "nucleus-governance.json"), nil
+	return filepath.Join(nucleusRoot, ".nucleus-governance.json"), nil
 }
 
-// LoadBlueprint carga el nucleus-governance.json
+// LoadBlueprint carga el .nucleus-governance.json
 func LoadBlueprint() (*Blueprint, error) {
 	path, err := GetBlueprintPath()
 	if err != nil {
@@ -79,7 +85,7 @@ func LoadBlueprint() (*Blueprint, error) {
 	return &bp, nil
 }
 
-// SaveBlueprint guarda el nucleus-governance.json con escritura atómica
+// SaveBlueprint guarda el .nucleus-governance.json con escritura atómica
 func SaveBlueprint(bp *Blueprint) error {
 	path, err := GetBlueprintPath()
 	if err != nil {

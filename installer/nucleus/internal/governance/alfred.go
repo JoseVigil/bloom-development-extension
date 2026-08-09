@@ -33,7 +33,7 @@ type Alfred struct {
 	mu sync.RWMutex
 }
 
-// GovernanceConfig estructura del nucleus-governance.json
+// GovernanceConfig estructura del .nucleus-governance.json
 type GovernanceConfig struct {
 	Version      string `json:"version"`
 	Provisioning struct {
@@ -62,7 +62,7 @@ func NewAlfred() (*Alfred, error) {
 		return nil, fmt.Errorf("CRITICAL: Constitution files missing. Run simulation script first")
 	}
 
-	// 3. Cargar nucleus-governance.json
+	// 3. Cargar .nucleus-governance.json
 	govConfig, err := loadGovernanceConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load governance config: %w", err)
@@ -301,7 +301,7 @@ func (a *Alfred) SendAdministrativeHello() {
 	fmt.Printf("==============================================\n\n")
 }
 
-// loadGovernanceConfig carga nucleus-governance.json
+// loadGovernanceConfig carga .nucleus-governance.json
 func loadGovernanceConfig() (*GovernanceConfig, error) {
 	// FIX (auditoría multi-org): usaba "nucleus-governance.json" relativo al
 	// directorio de trabajo actual — ni siquiera bajo $HOME, y totalmente
@@ -312,7 +312,7 @@ func loadGovernanceConfig() (*GovernanceConfig, error) {
 	//
 	// Nota aparte (fuera del alcance de este fix): GovernanceConfig acá y
 	// Blueprint en blueprint.go tienen esquemas JSON distintos para lo que
-	// se supone es el mismo archivo (nucleus-governance.json). Eso es un
+	// se supone es el mismo archivo (.nucleus-governance.json). Eso es un
 	// problema real, pero de modelado de datos, no de multi-org — lo dejo
 	// señalado, no lo toco en este cambio.
 	configPath, err := GetBlueprintPath()

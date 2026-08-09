@@ -48,7 +48,7 @@ Post-create sequence (handled by separate commands, NOT here):
 
   1. GitHub auth  →  brain github auth-login
   2. Nucleus init →  nucleus init --github-id <handle> --master
-                     (generates .ownership.json and nucleus-governance.json)
+                     (generates .ownership.json and .nucleus-governance.json)
   3. Link projects → brain project add <path> -n <nucleus_path>`,
 
 		Args: cobra.NoArgs,

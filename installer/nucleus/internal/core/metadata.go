@@ -154,12 +154,15 @@ func SetSpecialistRole() error {
 // del workspace real. Sin esta corrección, GetSystemInfo() siempre reporta
 // 0 colaboradores fuera del path viejo, aunque team_members[] tenga datos
 // reales en el ownership.json del workspace activo.
+//
+// FIX (auditoría dot-naming): faltaba el punto inicial — ver
+// governance.GetOwnershipPath(), la fuente de verdad real del nombre.
 func countActiveCollaborators() int {
 	nucleusRoot, err := ResolveNucleusRoot("")
 	if err != nil {
 		return 0
 	}
-	ownershipPath := filepath.Join(nucleusRoot, "ownership.json")
+	ownershipPath := filepath.Join(nucleusRoot, ".ownership.json")
 
 	data, err := os.ReadFile(ownershipPath)
 	if err != nil {
@@ -192,6 +195,9 @@ func countActiveCollaborators() int {
 // ~/.bloom/.nucleus/, que en instalaciones multi-org no existe. Sin esta
 // corrección, GetSystemInfo() siempre reporta StateHash "no-state" fuera
 // del path viejo, sin reflejar el estado real del workspace activo.
+//
+// FIX (auditoría dot-naming): a ambos nombres les faltaba el punto inicial —
+// ver governance.GetOwnershipPath() y governance.GetBlueprintPath().
 func computeStateHash() string {
 	nucleusRoot, err := ResolveNucleusRoot("")
 	if err != nil {
@@ -199,8 +205,8 @@ func computeStateHash() string {
 	}
 
 	// Hash combinado de ownership + blueprint
-	ownershipData, _ := os.ReadFile(filepath.Join(nucleusRoot, "ownership.json"))
-	blueprintData, _ := os.ReadFile(filepath.Join(nucleusRoot, "nucleus-governance.json"))
+	ownershipData, _ := os.ReadFile(filepath.Join(nucleusRoot, ".ownership.json"))
+	blueprintData, _ := os.ReadFile(filepath.Join(nucleusRoot, ".nucleus-governance.json"))
 
 	combined := string(ownershipData) + string(blueprintData)
 	if combined == "" {
