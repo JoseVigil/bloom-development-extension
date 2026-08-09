@@ -6,6 +6,7 @@ elias-repos/
         │   ├── .projects-snapshot.json
         │   └── .semantic-index.json
         ├── .core/
+        │   ├── .ai_bot.sovereign.bl
         │   ├── .meta.json
         │   ├── .nucleus-config.json
         │   ├── .policies.bl
@@ -24,10 +25,13 @@ elias-repos/
         │       └── .security-standards.bl
         ├── .intents/
         │   └── .exp/
+        ├── .master
         ├── .relations/
         │   └── .project-links.json
         ├── findings/
         │   └── README.md
+        ├── nucleus-governance.json
+        ├── ownership.json
         └── reports/
             ├── exports/
             └── health-dashboard.json

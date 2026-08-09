@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 )
@@ -61,20 +62,32 @@ func GetSystemInfo() SystemInfo {
 
 // detectUserRole determina el rol del usuario actual
 // En esta implementación base, detecta si es el propietario del directorio .bloom
+//
+// FIX (auditoría multi-org, continuación — 2026-08-09): este archivo quedó
+// fuera de la migración documentada en org_context.go (que sí cubrió
+// vault.go, blueprint.go, ownership.go y alfred.go, todos en el paquete
+// governance). metadata.go tiene su propia copia paralela de la misma
+// lógica de detección de rol, en el paquete core, y seguía hardcodeando
+// homeDir + "/.bloom/.nucleus/" sin sufijo de org — la misma clase de bug
+// que ResolveNucleusRoot() ya resuelve. Confirmado en producción: en un
+// workspace real (.bloom/.nucleus-{org}/ dentro del proyecto, no en
+// ~/.bloom/.nucleus/), SetMasterRole() fallaba con "no such file or
+// directory" porque esa carpeta vieja nunca se crea para instalaciones
+// multi-org.
 func detectUserRole() Role {
-	homeDir, err := os.UserHomeDir()
+	nucleusRoot, err := ResolveNucleusRoot("")
 	if err != nil {
 		return RoleUnknown
 	}
 
 	// Verificar si existe el marcador de Master
-	masterFile := homeDir + "/.bloom/.nucleus/.master"
+	masterFile := filepath.Join(nucleusRoot, ".master")
 	if _, err := os.Stat(masterFile); err == nil {
 		return RoleMaster
 	}
 
 	// Verificar si existe el marcador de Specialist
-	specialistFile := homeDir + "/.bloom/.nucleus/.specialist"
+	specialistFile := filepath.Join(nucleusRoot, ".specialist")
 	if _, err := os.Stat(specialistFile); err == nil {
 		return RoleSpecialist
 	}
@@ -101,32 +114,53 @@ func GetUserRole() Role {
 }
 
 // SetMasterRole marca al usuario como Master (Owner)
+//
+// FIX (mismo bug que detectUserRole — ver comentario arriba): antes escribía
+// siempre en ~/.bloom/.nucleus/.master, path que no existe en instalaciones
+// multi-org (el árbol real vive en <workspace>/.bloom/.nucleus-{org}/).
+// Causaba exit 1 en "nucleus init --master" con
+// "Error setting role: open .../.bloom/.nucleus/.master: no such file or directory"
+// — el registro de ownership ya se había creado correctamente antes de este
+// paso, así que el comando fallaba tarde, dejando ownership_init_status en
+// "failed" pese a que .../ownership.json sí existía.
 func SetMasterRole() error {
-	homeDir, err := os.UserHomeDir()
+	nucleusRoot, err := ResolveNucleusRoot("")
 	if err != nil {
 		return err
 	}
 
-	masterFile := homeDir + "/.bloom/.nucleus/.master"
+	masterFile := filepath.Join(nucleusRoot, ".master")
 	return os.WriteFile(masterFile, []byte("master"), 0644)
 }
 
 // SetSpecialistRole marca al usuario como Specialist
+//
+// FIX: mismo hardcodeo que SetMasterRole — no confirmado como causa de
+// ningún incidente todavía (no se auditó ningún log donde se dispare), pero
+// es el mismo bug y hubiera fallado igual apenas se usara.
 func SetSpecialistRole() error {
-	homeDir, err := os.UserHomeDir()
+	nucleusRoot, err := ResolveNucleusRoot("")
 	if err != nil {
 		return err
 	}
 
-	specialistFile := homeDir + "/.bloom/.nucleus/.specialist"
+	specialistFile := filepath.Join(nucleusRoot, ".specialist")
 	return os.WriteFile(specialistFile, []byte("specialist"), 0644)
 }
 
 // countActiveCollaborators cuenta los colaboradores activos en el ownership
+//
+// FIX: mismo hardcodeo — leía ownership.json de ~/.bloom/.nucleus/, nunca
+// del workspace real. Sin esta corrección, GetSystemInfo() siempre reporta
+// 0 colaboradores fuera del path viejo, aunque team_members[] tenga datos
+// reales en el ownership.json del workspace activo.
 func countActiveCollaborators() int {
-	homeDir, _ := os.UserHomeDir()
-	ownershipPath := homeDir + "/.bloom/.nucleus/ownership.json"
-	
+	nucleusRoot, err := ResolveNucleusRoot("")
+	if err != nil {
+		return 0
+	}
+	ownershipPath := filepath.Join(nucleusRoot, "ownership.json")
+
 	data, err := os.ReadFile(ownershipPath)
 	if err != nil {
 		return 0
@@ -153,19 +187,26 @@ func countActiveCollaborators() int {
 }
 
 // computeStateHash genera un hash semántico del estado actual
+//
+// FIX: mismo hardcodeo — hasheaba ownership.json/nucleus-governance.json de
+// ~/.bloom/.nucleus/, que en instalaciones multi-org no existe. Sin esta
+// corrección, GetSystemInfo() siempre reporta StateHash "no-state" fuera
+// del path viejo, sin reflejar el estado real del workspace activo.
 func computeStateHash() string {
-	homeDir, _ := os.UserHomeDir()
-	nucleusRoot := homeDir + "/.bloom/.nucleus"
-	
+	nucleusRoot, err := ResolveNucleusRoot("")
+	if err != nil {
+		return "no-state"
+	}
+
 	// Hash combinado de ownership + blueprint
-	ownershipData, _ := os.ReadFile(nucleusRoot + "/ownership.json")
-	blueprintData, _ := os.ReadFile(nucleusRoot + "/nucleus-governance.json")
-	
+	ownershipData, _ := os.ReadFile(filepath.Join(nucleusRoot, "ownership.json"))
+	blueprintData, _ := os.ReadFile(filepath.Join(nucleusRoot, "nucleus-governance.json"))
+
 	combined := string(ownershipData) + string(blueprintData)
 	if combined == "" {
 		return "no-state"
 	}
-	
+
 	hash := sha256.Sum256([]byte(combined))
 	return hex.EncodeToString(hash[:8])
 }

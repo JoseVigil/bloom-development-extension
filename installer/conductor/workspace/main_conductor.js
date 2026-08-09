@@ -70,7 +70,15 @@ function execNucleus(args, timeoutMs = 15000, spawnOpts = {}) {
 
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error(`nucleus timeout after ${timeoutMs}ms: ${args.join(' ')}`));
+      // Mismo criterio que el fix de abajo (exit != 0): adjuntar cualquier
+      // stdout ya emitido antes del kill, en vez de descartarlo.
+      const err = new Error(
+        `nucleus timeout after ${timeoutMs}ms: ${args.join(' ')}` +
+        (stdout.trim() ? ` | stdout: ${stdout.trim()}` : '')
+      );
+      err.stdout = stdout;
+      err.stderr = stderr;
+      reject(err);
     }, timeoutMs);
 
     child.on('close', code => {
@@ -78,7 +86,29 @@ function execNucleus(args, timeoutMs = 15000, spawnOpts = {}) {
       try {
         const match = stdout.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
         if (!match) {
-          if (code !== 0) reject(new Error(`exit ${code}: ${stderr}`));
+          if (code !== 0) {
+            // FIX (segundo bug del incidente ".ownership.json no se crea",
+            // auditoría 2026-08-09): stdout SÍ se capturaba línea a línea
+            // arriba, pero nunca salía de esta función — el Error solo
+            // llevaba stderr. ownership.go (y varios otros subcomandos de
+            // nucleus) imprimen su mensaje de error a stdout, no a stderr
+            // (ver "Error: %v\n" en ownership.go, siempre antes de
+            // os.Exit(1)), así que un exit != 0 con stdout no-JSON perdía
+            // silenciosamente el único mensaje útil que el binario había
+            // impreso — visible en logs como "_initOwnership FALLÓ: exit 1: "
+            // (stderr vacío, nada más). Se adjunta stdout/stderr/code como
+            // propiedades del Error (aditivo — no cambia el formato de
+            // err.message para los ~15 callers existentes que solo loguean
+            // err.message) y además se lo incluye en el propio mensaje para
+            // que aparezca aunque un caller solo lea err.message.
+            const err = new Error(
+              `exit ${code}: ${stderr}` + (stdout.trim() ? ` | stdout: ${stdout.trim()}` : '')
+            );
+            err.stdout = stdout;
+            err.stderr = stderr;
+            err.code = code;
+            reject(err);
+          }
           else resolve({ success: true, raw: stdout });
           return;
         }

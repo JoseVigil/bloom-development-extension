@@ -260,6 +260,58 @@ class MilestoneReactor {
   }
 
   /**
+   * Resuelve el workspace path a usar como `cwd` del subprocess "nucleus".
+   *
+   * FIX (causa raíz del incidente ".ownership.json no se crea" — auditoría
+   * 2026-08-09): este método no existía. _initOwnership() spawneaba
+   * "nucleus init" sin tercer argumento de opciones — a diferencia de
+   * onboarding:init-nucleus (onboarding-handlers.js), que sí pasa
+   * { cwd: workspacePath } por el mismo bug ya documentado y corregido ahí
+   * ("sin cwd, nucleus arranca desde el directorio de la app y busca
+   * .bloom subiendo desde ahí"). Confirmado además del lado Go: sin cwd
+   * explícito, el proceso hijo hereda el cwd del Conductor, y
+   * core.ResolveNucleusRoot() (org_context.go) escanea hacia arriba desde
+   * el cwd del proceso — nunca sube desde el workspace real, así que el
+   * scan de ".bloom/.nucleus-{org}/" siempre falla ahí, GetOwnershipPath()
+   * devuelve error, y "nucleus init" sale con exit 1 imprimiendo
+   * "Error: no active organization: ..." — mensaje real, pero a stdout,
+   * que _execNucleus no capturaba en el log de error (ver fix de logging
+   * más abajo en _initOwnership).
+   *
+   * SCHEMA CONFIRMADO (contra nucleus.json real, corrida 2026-08-09 —
+   * corrige un intento anterior de este mismo fix que adivinó mal el
+   * shape): onboarding-handlers.js persiste el workspace vía
+   * getOrCreateOrg(data.onboarding, orgSlug, { workspacePath }) en
+   * shared/onboarding-schema.js, que escribe:
+   *
+   *   data.onboarding.organizations = [
+   *     { org_slug: "elias-repos", workspace_path: "/path/to/ws", ... }
+   *   ]
+   *   data.onboarding.active_org_slug = "elias-repos"
+   *
+   * NO es data.organizations (raíz) ni projects[].path (ese array es para
+   * proyectos vinculados dentro de la org, no el workspace en sí) ni se
+   * matchea por master_profile (ese es el profile de Chrome/Synapse, no
+   * tiene relación con el org slug). Se matchea por org_slug ===
+   * active_org_slug.
+   */
+  _resolveWorkspacePath() {
+    try {
+      const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
+
+      const orgs = data.onboarding?.organizations;
+      if (Array.isArray(orgs) && orgs.length > 0) {
+        const activeSlug = data.onboarding?.active_org_slug;
+        const org = orgs.find(o => o?.org_slug === activeSlug) || orgs[orgs.length - 1];
+        if (org?.workspace_path) return org.workspace_path;
+      }
+    } catch (e) {
+      this._log(`_resolveWorkspacePath: no se pudo leer nucleus.json — ${e.message}`);
+    }
+    return null;
+  }
+
+  /**
    * Invoca "nucleus init --github-id <handle> --master", mismo patrón de
    * subprocess que ya usa onboarding:init-nucleus para "nucleus create"
    * (spawn vía execNucleus inyectado, no acceso directo al binario acá).
@@ -307,11 +359,27 @@ class MilestoneReactor {
       return;
     }
 
-    this._log(`_initOwnership: nucleus init --github-id ${githubHandle} --master`);
+    // FIX (causa raíz confirmada — ver _resolveWorkspacePath arriba): sin
+    // cwd, este spawn heredaba el directorio del proceso Conductor, no el
+    // del workspace real, y "nucleus init" fallaba siempre con "no active
+    // organization" al no encontrar ".bloom/.nucleus-{org}/" subiendo desde
+    // ahí. Si no logramos resolver el workspace path, preferimos todavía
+    // intentar sin cwd (mismo comportamiento previo) antes que no correr
+    // el comando — el guard de _resolveGithubHandle ya cubre el caso "no
+    // corras con datos inventados"; acá el handle sí es real, solo puede
+    // faltar el cwd.
+    const workspacePath = this._resolveWorkspacePath();
+    if (!workspacePath) {
+      this._log('_initOwnership: no se pudo resolver workspace_path — se invoca sin cwd explícito (puede fallar por resolución de org, ver ResolveNucleusRoot en org_context.go)');
+    }
+
+    this._log(`_initOwnership: nucleus init --github-id ${githubHandle} --master` +
+      (workspacePath ? ` (cwd: ${workspacePath})` : ''));
     try {
       await this._execNucleus(
         ['--json', 'init', '--github-id', githubHandle, '--master'],
-        15_000
+        15_000,
+        workspacePath ? { cwd: workspacePath } : undefined
       );
       this._log('_initOwnership: ok — .ownership.json creado');
       this._setOwnershipStatus('done');
@@ -320,12 +388,22 @@ class MilestoneReactor {
       // already initialized" y sale con exit 1 — no es una falla real, es la
       // idempotencia esperada si esto ya corrió (ej. en una sesión anterior,
       // o vía el otro call site en poll-identity).
+      //
+      // FIX (logging — mismo incidente, parte 2): el bug real no estaba acá,
+      // estaba en execNucleus (main_conductor.js): stdout se capturaba pero
+      // nunca se adjuntaba al Error rechazado cuando exit != 0 y stdout no
+      // era JSON — exactamente el caso de ownership.go, que imprime su
+      // mensaje de error a stdout, no a stderr, antes de os.Exit(1). Con
+      // execNucleus corregido, err.message ya incluye el stdout capturado
+      // (ver "| stdout: ..." en el mensaje) — no hace falta reconstruirlo
+      // acá. err.stdout/err.stderr quedan disponibles como propiedades
+      // estructuradas por si algún caller las necesita por separado.
       if (/already initialized/i.test(err.message || '')) {
         this._log('_initOwnership: ya estaba inicializado (idempotente) — ok');
         this._setOwnershipStatus('done');
         return;
       }
-      this._logger.error('[MilestoneReactor] _initOwnership FALLÓ:', err.message);
+      this._logger.error('[MilestoneReactor] _initOwnership FALLÓ:', err.message || '(sin mensaje)');
       this._setOwnershipStatus('failed');
     }
   }
