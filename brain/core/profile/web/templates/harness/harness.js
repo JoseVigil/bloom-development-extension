@@ -183,6 +183,14 @@ const Simulator = {
     this._renderParams(msg);
     this._updatePreview();
 
+    // Start each newly selected message with header description and payload
+    // preview collapsed, so the actual params form (the important part) is
+    // what's visible without scrolling.
+    document.getElementById('simulate-header').classList.remove('expanded');
+    document.getElementById('header-desc-toggle').textContent = 'Show details';
+    document.getElementById('payload-preview').classList.remove('expanded');
+    document.getElementById('payload-preview-toggle').textContent = 'Show';
+
     document.getElementById('simulate-empty').classList.add('hidden');
     document.getElementById('simulate-form').classList.add('active');
     document.getElementById('send-status').textContent = '';
@@ -824,6 +832,12 @@ const Harness = {
     const btnRawToggle = document.getElementById('config-raw-toggle');
     if (btnRawToggle) btnRawToggle.addEventListener('click', () => this.toggleRawConfig());
 
+    const headerDescToggle = document.getElementById('header-desc-toggle');
+    if (headerDescToggle) headerDescToggle.addEventListener('click', () => this.toggleHeaderDescription());
+
+    const payloadPreviewToggle = document.getElementById('payload-preview-toggle');
+    if (payloadPreviewToggle) payloadPreviewToggle.addEventListener('click', () => this.togglePayloadPreview());
+
     const logFilter = document.getElementById('log-filter');
     if (logFilter) logFilter.addEventListener('input', () => this.filterLog(logFilter.value));
 
@@ -877,6 +891,22 @@ const Harness = {
     const toggle = document.getElementById('config-raw-toggle');
     if (el) el.style.display = this._rawConfigVisible ? 'block' : 'none';
     if (toggle) toggle.textContent = this._rawConfigVisible ? 'Hide raw config' : 'Show raw config';
+  },
+
+  toggleHeaderDescription() {
+    const header = document.getElementById('simulate-header');
+    const toggle = document.getElementById('header-desc-toggle');
+    if (!header || !toggle) return;
+    const expanded = header.classList.toggle('expanded');
+    toggle.textContent = expanded ? 'Hide details' : 'Show details';
+  },
+
+  togglePayloadPreview() {
+    const preview = document.getElementById('payload-preview');
+    const toggle = document.getElementById('payload-preview-toggle');
+    if (!preview || !toggle) return;
+    const expanded = preview.classList.toggle('expanded');
+    toggle.textContent = expanded ? 'Hide' : 'Show';
   },
 
   notify(message, type = 'info') {
