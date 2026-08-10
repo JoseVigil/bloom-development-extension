@@ -23,6 +23,8 @@ agentic-harness/**
 BloomNucleus/**
 accounts/**
 tests/**
+installer/native/**
+native/**
 
 # Archivos sueltos que no van
 *.py
