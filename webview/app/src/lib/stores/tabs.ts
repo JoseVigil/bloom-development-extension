@@ -14,6 +14,13 @@ export interface Tab {
   path?: string;
   /** Si es false, el tab no muestra botón de cerrar (ej. un "Home" fijo) */
   closable?: boolean;
+  /**
+   * Si está seteado, este tab aloja un MandateTab.svelte para el mandate con
+   * este id (en vez de una ruta de SvelteKit vía <slot />). Ver +layout.svelte
+   * — es el mecanismo que conecta TabBar/tabsStore con MandateTab genérico
+   * (consolidación Genesis-como-Mandate, no un tab-bar nuevo).
+   */
+  mandateId?: string;
 }
 
 interface TabsState {

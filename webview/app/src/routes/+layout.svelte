@@ -4,6 +4,10 @@
   import SystemStatus from '$lib/components/SystemStatus.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
+  import MandateTab from '$lib/components/MandateTab.svelte';
+  import LedgerPanel from '$lib/components/LedgerPanel.svelte';
+  import { tabsStore, activeTab } from '$lib/stores/tabs';
+  import { mandateStore } from '$lib/stores/mandateStore';
   import { FileText, Zap } from 'lucide-svelte';
 
   // ============================================================================
@@ -49,12 +53,23 @@
     console.log('📐 [UI] Right pane collapsed:', rightPaneCollapsed);
   }
 
-  // PLACEHOLDER — TabBar.svelte emite estos eventos pero el modal de "New
-  // Mandate" y el panel de Alfred todavía no existen como componentes
-  // Svelte (son trabajo de pasos posteriores, no de este paso 2). Por ahora
-  // solo logueamos para no dejar el evento sin handler.
+  // Consolidación Genesis-como-Mandate (ver MandateTab.svelte): "Nuevo
+  // Mandate" abre un tab genérico respaldado por un mandate placeholder de
+  // mandateStore.ts (no hay creación real de mandate desde esta UI todavía
+  // — ver nota de cabecera de ese store). El tab se marca no-cerrable
+  // mientras el mandate esté en status 'building', reusando el mecanismo
+  // `closable` que tabsStore ya provee (no se agrega uno nuevo).
   function handleNewMandate() {
-    console.log('🆕 [TabBar] newmandate — modal aún no implementado');
+    const mandate = mandateStore.createMandate({
+      mandateType: 'genesis',
+      domainBaseline: 'empty'
+    });
+    tabsStore.openTab({
+      id: mandate.mandateId,
+      title: mandate.title,
+      mandateId: mandate.mandateId,
+      closable: mandate.status !== 'building'
+    });
   }
 
   function handleToggleAlfred() {
@@ -95,7 +110,11 @@
         <main class="content" role="main">
           <TabBar on:newmandate={handleNewMandate} on:togglealfred={handleToggleAlfred} />
           <div class="content-body">
-            <slot />
+            {#if $activeTab?.mandateId}
+              <MandateTab mandateId={$activeTab.mandateId} />
+            {:else}
+              <slot />
+            {/if}
           </div>
         </main>
 
@@ -105,7 +124,11 @@
           </button>
           {#if !rightPaneCollapsed}
             <div class="right-content">
-              <slot name="right-pane" />
+              {#if $activeTab?.mandateId}
+                <LedgerPanel mandateId={$activeTab.mandateId} />
+              {:else}
+                <slot name="right-pane" />
+              {/if}
             </div>
           {/if}
         </aside>

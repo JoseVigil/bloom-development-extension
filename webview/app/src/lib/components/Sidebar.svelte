@@ -43,15 +43,13 @@
     { href: '/intents', label: 'Intents' },
     { href: '/nucleus', label: 'Nucleus' },
     { href: '/projects', label: 'Projects' },
-    { href: '/profiles', label: 'Profiles' },
-    // PROVISORIO — ver plan-migracion-shell-v1-addendum.md, decisión de
-    // sesión posterior al addendum: /genesis no tiene todavía redirect
-    // automático (Q-08, sin dueño de backend) ni un tab-bar/GenesisTab que
-    // lo aloje (pasos 2-4 del addendum, sin construir). Este ítem es el
-    // único acceso manual que existe hoy. Sacarlo de acá cuando exista
-    // cualquiera de los dos caminos reales — no es la ubicación definitiva
-    // de este link, es un parche de alcanzabilidad.
-    { href: '/genesis', label: 'Genesis' }
+    { href: '/profiles', label: 'Profiles' }
+    // El parche temporal "/genesis" (nav item provisorio, sin redirect ni
+    // tab que lo alojara) se retira acá: la consolidación Genesis-como-
+    // Mandate ya provee el camino real — botón "Nuevo Mandate" en TabBar
+    // → tab respaldado por MandateTab.svelte (ver +layout.svelte,
+    // handleNewMandate). routes/genesis/+page.svelte fue eliminado; su
+    // contenido vive ahora dentro de MandateTab.svelte.
   ];
 
   // Account vive separado, en sidebar-bottom, igual que "Settings" en el mock.
@@ -103,11 +101,6 @@
           {:else if item.href === '/profiles'}
             <circle cx="10" cy="7" r="3" />
             <path d="M4 17c0-3.314 2.686-6 6-6s6 2.686 6 6" />
-          {:else if item.href === '/genesis'}
-            <!-- icono provisorio, misma familia visual (viewBox 20x20,
-                 stroke-width 1.4, sin relleno) — no hay ícono de mock para
-                 esto porque el mock no contempla /genesis -->
-            <path d="M10 3l2.2 4.6L17 9l-3.6 3.1L14.2 17 10 14.4 5.8 17l0.8-4.9L3 9l4.8-1.4z" />
           {/if}
         </svg>
         <span class="nav-tooltip">{item.label}</span>
