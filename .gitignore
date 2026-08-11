@@ -111,10 +111,6 @@ webview/.svelte-kit/
 webview/package-lock.json
 **/.svelte-kit/
 
-# Excepción: debug panel
-webview/app/src/lib/
-!webview/app/src/lib/components/debug/
-
 # ============================================================================
 # Misc
 # ============================================================================

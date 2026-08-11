@@ -20,6 +20,7 @@ bloom-development-extension/
         │   │   │   ├── ProjectsPanel.svelte
         │   │   │   ├── Sidebar.svelte
         │   │   │   ├── SystemStatus.svelte
+        │   │   │   ├── TabBar.svelte
         │   │   │   ├── TokenEstimator.svelte
         │   │   │   ├── debug/
         │   │   │   │   ├── DebugDetail.svelte
@@ -34,6 +35,7 @@ bloom-development-extension/
         │   │   │   ├── navigation.ts
         │   │   │   ├── onboarding.ts
         │   │   │   ├── system.ts
+        │   │   │   ├── tabs.ts
         │   │   │   ├── theme.ts
         │   │   │   └── websocket.ts
         │   │   ├── types.ts
