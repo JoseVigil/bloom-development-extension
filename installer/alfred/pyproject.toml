@@ -1,0 +1,11 @@
+[project]
+name = "bloom-alfred"
+version = "0.1.0"
+description = "Alfred — núcleo conversacional real de Bloom. Capa de voz sobre el custodio de gobernanza (nucleus alfred start)."
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
