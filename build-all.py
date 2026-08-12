@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -457,10 +458,108 @@ def run_streaming(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CORRECCIÓN 4 — build_brain(): seleccionar PowerShell vs bash
+# STOP BRAIN — detiene cualquier instancia corriendo antes de reconstruir/rollear
+#
+# Motivo: build_brain() compila y rollout_component() copia el binario nuevo,
+# pero si el Brain viejo sigue corriendo (gestionado por systemd --user en
+# Linux, launchd en macOS, o nssm en Windows), el proceso viejo sigue vivo
+# sirviendo el binario anterior desde memoria — rollout_component() ya
+# documenta esto (línea "Text file busy" / unlink de inodo), pero solo evita
+# el crash del copy, no hace que el proceso viejo se entere de que hay un
+# binario nuevo, ni libera el puerto 5678 si algo necesita relanzarlo limpio.
+#
+# Sin este paso, cada `build-all.py` (completo o --only brain) deja corriendo
+# una versión vieja de Brain en memoria, y cualquier intento posterior de
+# levantar el servicio (reinstalación, restart manual) puede chocar contra
+# el puerto que el proceso viejo nunca soltó — mismo síntoma que
+# `Address already in use` documentado en brain-troubleshooting.md §0.
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _stop_running_brain_service() -> None:
+    """
+    Detiene cualquier instancia de Brain corriendo antes de reconstruir,
+    para que build_brain() + rollout_component() partan de un estado limpio.
+
+    Best-effort: si no hay nada corriendo (primer build en una máquina nueva,
+    por ejemplo) no hay error — solo se loguea que no había nada que parar.
+    No aborta el build si el stop falla; el build puede seguir igual, pero
+    se deja constancia en el log para que quede visible en vez de silencioso.
+    """
+    log("  🛑 Deteniendo instancia de Brain en ejecución (si hay alguna) ...")
+
+    stopped_via_service = False
+
+    if IS_LINUX:
+        # systemd --user es el mecanismo real confirmado en producción
+        # (ver com.bloom.brain.service, Restart=on-failure, RestartSec=10).
+        # --quiet evita que systemctl devuelva error visible si el servicio
+        # no existe o ya está detenido — eso es un estado válido, no un fallo.
+        result = subprocess.run(
+            ["systemctl", "--user", "stop", "com.bloom.brain"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            log("     systemd: com.bloom.brain detenido")
+            stopped_via_service = True
+        else:
+            log("     systemd: com.bloom.brain no estaba activo o no existe como unit (ok)")
+
+    elif IS_MACOS:
+        # Label de launchd asumido por convención reverse-DNS (com.bloom.brain),
+        # igual al nombre usado en Linux/systemd. Si el label real difiere,
+        # este paso queda como no-op silencioso — no bloquea el build, pero
+        # revisar el label exacto la primera vez que se confirme en macOS.
+        result = subprocess.run(
+            ["launchctl", "stop", "com.bloom.brain"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            log("     launchd: com.bloom.brain detenido")
+            stopped_via_service = True
+        else:
+            log("     launchd: com.bloom.brain no estaba activo o no existe como label (ok)")
+
+    elif IS_WINDOWS:
+        # nssm es el gestor de servicios confirmado para Windows en el resto
+        # del proyecto (ver nssm_service_check en nucleus_manager.js).
+        result = subprocess.run(
+            ["nssm", "stop", "com.bloom.brain"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            log("     nssm: com.bloom.brain detenido")
+            stopped_via_service = True
+        else:
+            log("     nssm: com.bloom.brain no estaba activo o no existe como servicio (ok)")
+
+    # Red de seguridad adicional para Linux/macOS: si además del servicio
+    # gestionado quedó algún proceso suelto (levantado a mano con nohup,
+    # por ejemplo — ver brain-troubleshooting.md Sección 4), lo liberamos
+    # también. No se hace en Windows por no asumir fuser/lsof ahí.
+    if IS_LINUX or IS_MACOS:
+        subprocess.run(
+            ["bash", "-c", "fuser -k 5678/tcp 2>/dev/null || true"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+    # Race condition confirmada (ver brain-troubleshooting.md Sección 0):
+    # SIGKILL no libera el socket instantáneamente — el kernel puede tardar
+    # en soltar el puerto 5678 aunque el proceso ya no aparezca listado.
+    # Sin esta espera, un build/rollout inmediatamente posterior que intente
+    # relanzar Brain puede fallar con "Address already in use" aunque el
+    # proceso viejo ya esté muerto.
+    if stopped_via_service or (IS_LINUX or IS_MACOS):
+        time.sleep(2)
+
+    log("  ✅ Brain listo para reconstruirse desde estado limpio")
+
+
 def build_brain() -> StepResult:
+    _stop_running_brain_service()
+
     brain_script = BUILDS["brain"]
     if not brain_script or not brain_script.exists():
         return StepResult("Brain", False, error=f"Script no encontrado: {brain_script}")
@@ -520,6 +619,97 @@ def build_brain() -> StepResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# STOP NUCLEUS — mismo problema que Brain (build_brain / rollout_component
+# pueden dejar corriendo una versión vieja del binario), pero con un
+# mecanismo de apagado distinto: Nucleus expone su propio comando nativo de
+# shutdown gestionado ('nucleus service stop'), que apaga sus procesos hijos
+# (temporal_server, nucleus_worker, brain_server si fue adoptado por el
+# supervisor, control_plane_api) de forma prolija en vez de un kill directo.
+#
+# NOTA — hallazgo pendiente de resolver aparte (no bloquea este fix):
+# el supervisor de Nucleus puede levantar su propio 'brain_server' como hijo
+# (ver startBrainServer en service.go), independiente del unit systemd
+# standalone 'com.bloom.brain' que ya cubre _stop_running_brain_service().
+# Pueden coexistir dos caminos por los que Brain termina corriendo. Este fix
+# no intenta resolver esa duplicidad — solo garantiza que Nucleus mismo (el
+# proceso maestro y lo que él gestiona) se apague antes de reconstruirse.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _stop_running_nucleus_service() -> None:
+    """
+    Detiene la instancia de Nucleus Service corriendo (si hay alguna) antes
+    de reconstruir o rollear el binario — mismo motivo que
+    _stop_running_brain_service(): sin esto, el proceso viejo sigue vivo en
+    memoria sirviendo el binario/código anterior aunque el nuevo ya esté en
+    disco (ver comentario "Text file busy" en rollout_component()).
+
+    Best-effort: no aborta el build si el stop falla o si no había nada
+    corriendo — eso es un estado válido (primer build en una máquina nueva).
+    """
+    log("  🛑 Deteniendo instancia de Nucleus Service en ejecución (si hay alguna) ...")
+
+    stopped_gracefully = False
+
+    # Mecanismo primario: el comando nativo de shutdown gestionado. Preferido
+    # sobre systemctl/kill porque apaga a los hijos gestionados de forma
+    # prolija (Shutdown() en service.go) en vez de un corte abrupto.
+    nucleus_bin = shutil.which("nucleus")
+    if nucleus_bin:
+        result = subprocess.run(
+            [nucleus_bin, "--json", "service", "stop"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            log("     nucleus service stop: OK — procesos gestionados detenidos (temporal, worker, control_plane)")
+            stopped_gracefully = True
+        else:
+            log("     nucleus service stop: no había servicio corriendo, o falló (ver detalle abajo si hace falta)")
+    else:
+        log("     'nucleus' no está en PATH todavía — probablemente primera instalación, nada que detener")
+
+    # Red de seguridad: el proceso maestro (systemd --user en Linux).
+    # NOTA: nombre de unit asumido por convención con com.bloom.brain
+    # (com.bloom.nucleus) — no confirmado contra un .service real de Nucleus
+    # como sí lo está el de Brain. Ajustar si el nombre real difiere.
+    if IS_LINUX:
+        result = subprocess.run(
+            ["systemctl", "--user", "stop", "com.bloom.nucleus"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            log("     systemd: com.bloom.nucleus detenido")
+            stopped_gracefully = True
+        else:
+            log("     systemd: com.bloom.nucleus no estaba activo o no existe como unit (ok)")
+    elif IS_MACOS:
+        result = subprocess.run(
+            ["launchctl", "stop", "com.bloom.nucleus"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            stopped_gracefully = True
+    elif IS_WINDOWS:
+        result = subprocess.run(
+            ["nssm", "stop", "com.bloom.nucleus"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0:
+            stopped_gracefully = True
+
+    # Misma race condition que con Brain (ver Sección 0 de
+    # brain-troubleshooting.md): el kernel puede tardar en liberar sockets
+    # tras el shutdown, aunque el proceso ya no aparezca listado.
+    if stopped_gracefully:
+        time.sleep(2)
+
+    log("  ✅ Nucleus listo para reconstruirse desde estado limpio")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CORRECCIÓN 5 — build_go_component(): pasa el nombre del componente como arg
 #                El script de build redirige stderr al log file propio,
 #                por eso usamos stderr=STDOUT en run() para capturar todo.
@@ -534,6 +724,12 @@ def build_go_component(component: str) -> StepResult:
     build-component.bat/.sh y lo appendea al log central de build-all.py,
     de modo que todos los logs queden en el directorio de logs centralizado.
     """
+    if component == "nucleus":
+        # Control 1 (build): sin esto, el Nucleus Service viejo sigue vivo
+        # en memoria mientras el binario nuevo ya está en disco — mismo
+        # problema que build_brain() tenía antes del fix anterior.
+        _stop_running_nucleus_service()
+
     script_path = BUILDS[component]
     if not script_path or not script_path.exists():
         return StepResult(
@@ -718,6 +914,18 @@ def rollout_component(component: str) -> StepResult:
     Copia _DEV_BIN_BASE/<component>/ → NUCLEUS_HOME/bin/<component>/.
     Reemplaza archivos existentes (dirs_exist_ok=True).
     """
+    # Control 2 (rollout): red de seguridad independiente del Control 1 en
+    # build_brain()/build_go_component('nucleus'). Idempotente — si el
+    # servicio ya fue detenido en el paso de build, esto no hace nada nuevo
+    # (los helpers ya toleran "no había nada corriendo" como caso normal).
+    # Cubre el caso en que rollout_component() se invoque sin pasar por el
+    # build de este mismo script (por ejemplo, un flujo futuro de Metamorph
+    # que rollee binarios ya compilados).
+    if component == "brain":
+        _stop_running_brain_service()
+    elif component == "nucleus":
+        _stop_running_nucleus_service()
+
     src = _DEV_BIN_BASE / component
     dst = NUCLEUS_HOME / "bin" / component
 
