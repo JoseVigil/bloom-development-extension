@@ -486,16 +486,34 @@ func getWorkspacePath() string {
 		return p
 	}
 
-	// 2. Read onboarding.workspace_path from nucleus.json.
+	// 2. Read the active org's workspace_path from nucleus.json.
+	//
+	// FIX (confirmado 2026-08-12, bloqueaba "nucleus dev-start" con "vault
+	// check failed: no active organization"): este código buscaba
+	// onboarding.workspace_path como campo plano, pero el schema real
+	// (multi-org, escrito por el flujo de onboarding) lo guarda anidado en
+	// onboarding.organizations[].workspace_path, indexado por
+	// onboarding.active_org_slug — el campo plano nunca existió, así que
+	// esto devolvía "" siempre y el fallback (CWD) terminaba escaneando
+	// desde donde sea que el proceso padre (Conductor/Core) haya lanzado a
+	// nucleus, no desde el workspace real del usuario.
 	nucleusJSON := filepath.Join(getBloomNucleusBase(), "config", "nucleus.json")
 	if data, err := os.ReadFile(nucleusJSON); err == nil {
 		var cfg struct {
 			Onboarding struct {
-				WorkspacePath string `json:"workspace_path"`
+				ActiveOrgSlug string `json:"active_org_slug"`
+				Organizations []struct {
+					OrgSlug       string `json:"org_slug"`
+					WorkspacePath string `json:"workspace_path"`
+				} `json:"organizations"`
 			} `json:"onboarding"`
 		}
-		if json.Unmarshal(data, &cfg) == nil && cfg.Onboarding.WorkspacePath != "" {
-			return cfg.Onboarding.WorkspacePath
+		if json.Unmarshal(data, &cfg) == nil {
+			for _, org := range cfg.Onboarding.Organizations {
+				if org.OrgSlug == cfg.Onboarding.ActiveOrgSlug && org.WorkspacePath != "" {
+					return org.WorkspacePath
+				}
+			}
 		}
 	}
 

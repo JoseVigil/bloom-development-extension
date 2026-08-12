@@ -993,6 +993,15 @@ func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, 
 	}
 
 	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "vault", "status")
+	// FIX (confirmado 2026-08-12): sin esto, el subproceso hereda el CWD del
+	// proceso padre (Conductor/Core) en vez del workspace real del usuario,
+	// y ResolveNucleusRoot() cae a su scan-por-CWD, que sube desde ahí sin
+	// encontrar .bloom → "no active organization". Mismo patrón que
+	// bootControlPlane() ya resuelve para bundle.js — getWorkspacePath() es
+	// la misma fuente de verdad (nucleus.json), reusada acá.
+	if workspacePath := getWorkspacePath(); workspacePath != "" {
+		cmd.Env = append(os.Environ(), "BLOOM_NUCLEUS_PATH="+workspacePath)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("local vault status check failed: %w (output: %s)", err, string(output))

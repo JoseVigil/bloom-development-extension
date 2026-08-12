@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Chequeo de salud de los dos arms de Alfred, para uso manual.
+"""Chequeo de salud de los arms de Alfred, para uso manual.
 
 No es un test automatizado — es el chequeo rápido antes de probar
-alfred.chat de punta a punta: ¿Ollama está corriendo y tiene el modelo?,
-¿hay una GEMINI_API_KEY exportada y válida?
+alfred.chat de punta a punta. Ollama (embeddings + texto) es el motor
+default; Gemini es opt-in, se chequea igual acá para no descubrir recién
+en medio de una conversación que la key no está configurada.
 
 Migrado desde agentic-harness/scripts/check_providers.py (2026-08-09).
+Chequeo de OllamaTextProvider agregado el mismo día, junto con el arm.
 
 Uso:
     cd installer/alfred
@@ -21,37 +23,55 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from alfred.providers.gemini_provider import GeminiTextProvider
 from alfred.providers.ollama_provider import OllamaEmbeddingProvider
+from alfred.providers.ollama_text_provider import OllamaTextProvider
 
 
-def main() -> int:
-    ollama = OllamaEmbeddingProvider.from_default_nucleus_path()
-    ollama_health = ollama.health()
-    print(f"[ollama]  status={ollama_health.status}")
-    for key, value in ollama_health.detail.items():
+def _print_health(label: str, health, missing_hint: str) -> None:
+    print(f"[{label}]  status={health.status}")
+    for key, value in health.detail.items():
         if key == "installed_models":
             print(f"          installed_models={value}")
         elif key != "error":
             print(f"          {key}={value}")
-    if ollama_health.status == "error":
-        print(f"          error: {ollama_health.detail.get('error')}")
-    if ollama_health.status == "model_missing":
-        print("          -> ollama pull nomic-embed-text")
+    if health.status == "error":
+        print(f"          error: {health.detail.get('error')}")
+    if health.status == "model_missing":
+        print(f"          -> {missing_hint}")
+
+
+def main() -> int:
+    ollama_embed = OllamaEmbeddingProvider.from_default_nucleus_path()
+    ollama_embed_health = ollama_embed.health()
+    _print_health("ollama-embeddings", ollama_embed_health, "ollama pull nomic-embed-text")
+
+    print()
+
+    ollama_text = OllamaTextProvider()
+    ollama_text_health = ollama_text.health()
+    _print_health(
+        "ollama-text (default de Alfred)",
+        ollama_text_health,
+        f"ollama pull {ollama_text.model}",
+    )
 
     print()
 
     gemini = GeminiTextProvider()
     gemini_health = gemini.health()
-    print(f"[gemini]  status={gemini_health.status}")
+    print(f"[gemini (opt-in)]  status={gemini_health.status}")
     if gemini_health.status != "ok":
         print(f"          detail={gemini_health.detail}")
         print(
-            "          -> export GEMINI_API_KEY=... (chequeá 'brain gemini "
-            "keys-list' por si ya hay una clave real cargada)"
+            "          -> export GEMINI_API_KEY=... solo si vas a usar "
+            "--provider gemini (chequeá 'brain gemini keys-list' por si ya "
+            "hay una clave real cargada)"
         )
     else:
         print(f"          model={gemini_health.detail.get('model')}")
 
-    return 0 if ollama_health.status == "ok" and gemini_health.status == "ok" else 1
+    # El chequeo pasa con que Ollama-texto (el default) esté ok. Gemini es
+    # opcional — no bloquea el smoke test si no está configurado.
+    return 0 if ollama_text_health.status == "ok" else 1
 
 
 if __name__ == "__main__":

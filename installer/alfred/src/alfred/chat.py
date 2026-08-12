@@ -8,31 +8,43 @@ Alfred-Go esté estable, este loop puede invocarlo como una tool más (POST a
 http://localhost:48216/alfred/verify) para pedir un veredicto de gobernanza
 en medio de la charla — hoy no lo hace, para no acoplar algo inestable.
 
-Usa el arm de Gemini (alfred/providers/gemini_provider.py) tal cual.
+Provider default: Ollama local (OllamaTextProvider), no Gemini. Decisión
+de Jose (2026-08-09): el arm de Ollama no se hizo para después reemplazarlo
+por Gemini — es el motor real, para tener un bot local. Gemini queda
+disponible detrás de la misma interfaz (TextGenerationProviderArm) como
+opt-in explícito (--provider gemini o ALFRED_TEXT_PROVIDER=gemini), nunca
+como default silencioso — mandar el contexto real de la organización a un
+proveedor externo es una decisión consciente, no automática. Ver también
+la nota de seguridad en BTIPS sobre distribución agnóstica de cargas: que
+un solo punto (ni siquiera una IA) pueda reconstruir el negocio completo
+es justamente lo que se evita eligiendo local por default.
+
 AIPromptPayload.text es un string único, no un array de turnos, así que el
 historial de conversación se arma acá mismo, concatenando turnos con
-roles, y se manda entero en cada llamada.
-
-Requiere GEMINI_API_KEY en el entorno. Chequeá si ya hay una clave real
-cargada en el vault de Nucleus con `brain gemini keys-list` antes de pedir
-una nueva.
+roles, y se manda entero en cada llamada — esto aplica igual para
+cualquiera de los dos providers, el loop no cambia de forma.
 
 Uso:
-    export GEMINI_API_KEY=...
-    python -m alfred.chat
+    python -m alfred.chat                        # Ollama local (default)
+    python -m alfred.chat --provider gemini       # opt-in explícito
+    export GEMINI_API_KEY=...                     # solo si usás --provider gemini
 
 Migrado desde agentic-harness/harness/alfred_chat.py (2026-08-09).
+OllamaTextProvider agregado el mismo día.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 from alfred.contracts.errors import ProviderError
 from alfred.contracts.types import AIPromptPayload
+from alfred.providers.base import TextGenerationProviderArm
 from alfred.providers.gemini_provider import GeminiTextProvider
+from alfred.providers.ollama_text_provider import OllamaTextProvider
 
 # Contexto real de elias-repos — no el mock de portfolio (Northwind Labs).
 NUCLEUS_CORE = Path(
@@ -89,10 +101,32 @@ def parse_args() -> argparse.Namespace:
             "test rápido sin sentarse a conversar."
         ),
     )
+    parser.add_argument(
+        "--provider",
+        "-p",
+        choices=("ollama", "gemini"),
+        default=os.environ.get("ALFRED_TEXT_PROVIDER", "ollama"),
+        help=(
+            "Qué arm genera la conversación. Default: ollama (local). "
+            "gemini es opt-in explícito, manda contexto real de la "
+            "organización a un proveedor externo — usalo a consciencia."
+        ),
+    )
     return parser.parse_args()
 
 
-def one_shot(system: str, provider: GeminiTextProvider, message: str) -> int:
+def build_provider(name: str) -> TextGenerationProviderArm:
+    if name == "gemini":
+        print(
+            "[Alfred: usando Gemini — el contexto de esta conversación sale "
+            "de esta máquina hacia un proveedor externo.]",
+            file=sys.stderr,
+        )
+        return GeminiTextProvider()
+    return OllamaTextProvider()
+
+
+def one_shot(system: str, provider: TextGenerationProviderArm, message: str) -> int:
     payload = AIPromptPayload(context="general", text=build_prompt(system, [], message))
     try:
         reply = provider.generate_text(payload)
@@ -106,12 +140,12 @@ def one_shot(system: str, provider: GeminiTextProvider, message: str) -> int:
 def main() -> None:
     args = parse_args()
     system = load_context()
-    provider = GeminiTextProvider()
+    provider = build_provider(args.provider)
 
     if args.message:
         raise SystemExit(one_shot(system, provider, args.message))
 
-    print("=== Alfred (conversacional) — elias-repos ===")
+    print(f"=== Alfred (conversacional, provider={args.provider}) — elias-repos ===")
     print("Escribí 'salir' para terminar.\n")
 
     history: list[tuple[str, str]] = []

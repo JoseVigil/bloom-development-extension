@@ -28,7 +28,7 @@ const net = require('net');
 // En build: esbuild resuelve estos paths y los incrusta en bundle.js.
 // En dev:   requieren NODE_PATH=<repo>/out o paths relativos funcionando.
 const { WebSocketManager } = require('../../out/server/WebSocketManager');
-const { startAPIServer } = require('../../out/api/server');
+const { createAPIServer } = require('../../out/api/server');
 const { HeadlessUserManager } = require('../../out/managers/HeadlessUserManager');
 const { BrainExecutor } = require('../../out/src/utils/brainExecutor');
 
@@ -446,12 +446,31 @@ async function bootstrap() {
   console.log('[Bootstrap] ✅ Brain CLI initialized');
 
   console.log('[Bootstrap] Starting API server (port 48215)...');
-  const apiServer = await startAPIServer({
+  // FIX (FST_ERR_INSTANCE_ALREADY_LISTENING, confirmado en
+  // nucleus_control_plane_20260812.log — crash-loop cada boot): startAPIServer()
+  // ya hace .listen() internamente, y Fastify prohíbe agregar rutas sobre una
+  // instancia que ya está escuchando. Por eso acá se usa createAPIServer()
+  // (no escucha todavía) → se registra /api/health/summary → recién ahí
+  // .listen() explícito. Ver DIAGNOSTICO_Bootstrap_ControlPlane_CIERRE.md.
+  const apiServer = await createAPIServer({
     wsManager,
     userManager,
     port: 48215,
     role: process.env.BLOOM_USER_ROLE
   });
+
+  // ── /api/health/summary ────────────────────────────────────────────────
+  // Propuesto en AUDITORIA_HEALTH_RESOURCES.md §3: el Bootstrap no reimplementa
+  // los checks de salud, solo re-expone `nucleus --json health` (Go, única
+  // fuente de verdad — checkSystemHealthParallel en health.go) con CORS, que
+  // ya viene registrado en apiServer vía @fastify/cors dentro de createAPIServer.
+  // Se registra ANTES de .listen() — es el único momento en que Fastify permite
+  // agregar rutas.
+  registerHealthSummaryRoute(apiServer);
+
+  await apiServer.listen({ port: 48215, host: '127.0.0.1' });
+  console.log(`[Bootstrap] ✅ Bloom API Server started on http://localhost:48215`);
+  console.log(`[Bootstrap] 📚 Swagger UI: http://localhost:48215/api/docs`);
 
   await updateTelemetry('control_plane_api', {
     label: '📡 API SERVER',
@@ -461,15 +480,6 @@ async function bootstrap() {
     port: 48215,
     state: 'READY'
   });
-
-  // ── /api/health/summary ────────────────────────────────────────────────
-  // Propuesto en AUDITORIA_HEALTH_RESOURCES.md §3: el Bootstrap no reimplementa
-  // los checks de salud, solo re-expone `nucleus --json health` (Go, única
-  // fuente de verdad — checkSystemHealthParallel en health.go) con CORS, que
-  // ya viene registrado en apiServer vía @fastify/cors dentro de startAPIServer.
-  // Se registra directo sobre la instancia devuelta por startAPIServer en vez
-  // de tocar out/api/server.js (compilado, fuera de este archivo fuente).
-  registerHealthSummaryRoute(apiServer);
 
   const fileWatcher = startHeadlessFileWatcher(wsManager);
 
