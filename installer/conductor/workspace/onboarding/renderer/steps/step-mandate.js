@@ -1,42 +1,45 @@
 // workspace/onboarding/renderer/steps/step-mandate.js
 //
-// Step: mandate_genesis — screen-mandate. NUEVO (25/07/2026, ver
-// MANDATE-STEP-IMPLEMENTATION-PROMPT.md). Contiene lo que hasta esta
-// sesión vivía escondido dentro de step-project.js como
-// createMandateAndContinue()/continueToMandate() — separado a su propio
-// step real del SSOT, con su propia screen y su propio copy explicativo
-// (Requerimiento 2.2 del prompt de implementación).
+// Step: mandate_genesis — screen-mandate.
 //
-// mandate_genesis tiene cortex_events: [] en el SSOT (onboarding_steps.json)
-// — Brain/Cortex nunca emite un evento para este step, así que no hay nada
-// que esperar por ese lado. La confirmación se resuelve síncronamente acá:
-// se llama a window.onboarding.createMandate(...) y, recién cuando esa
-// llamada IPC devuelve éxito (y el handler en Main ya escribió
-// onboarding.genesis_mandate_id en nucleus.json — ver onboarding-handlers.js
-// 'onboarding:create-mandate'), se navega a __onboarding_complete__.
+// REDEFINIDO (D-22, BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6,
+// Fase B — diseño ya cerrado, esto es la implementación): este step deja de
+// disparar la creación real del Genesis Mandate. Ya no llama a
+// `window.onboarding.createMandate(...)` — esa llamada (mismo canal IPC,
+// sin cambios de Electron) se mueve a Core, disparada automáticamente al
+// bootear si viene de un Onboarding recién cerrado (D-23,
+// onboarding.pending_genesis_launch en nucleus.json) o a demanda más
+// adelante. Ver onboarding-handlers.js 'onboarding:create-mandate' (handler
+// sin tocar, solo cambia quién lo invoca) y 'onboarding:complete'
+// (quien escribe el flag antes de abrir Core).
 //
-// registerMilestoneHandler('mandate_genesis', ...) se registra igual como
-// red de seguridad (ej: si algún día se usa el harness de dev para inyectar
-// el milestone manualmente vía mark-step-complete), pero en el camino normal
-// nunca se dispara — quien realmente avanza la UI es el resultado directo
-// del IPC de create-mandate, no un push de Brain.
+// Este step pasa a ser una pantalla puramente explicativa: comunica qué es
+// Genesis y qué va a pasar al entrar a Core, sin ejecutar nada de negocio.
+// El criterio de "step completo" ya no es `genesis_mandate_id` (a esta
+// altura del flujo ese mandate todavía no existe) — pasa a ser
+// `onboarding.mandate_screen_acknowledged`, seteado por el mismo mecanismo
+// genérico que ya usan otros steps sin cortex_events propios:
+// window.onboarding.markStepComplete({step:'mandate_genesis'}) →
+// onboarding-handlers.js 'onboarding:mark-step-complete' →
+// reactor.handleMilestone() → _persistStepComplete() (milestone-reactor.js).
+// No se inventa un mecanismo de verificación nuevo — ver step-verifiers.js
+// (D-22), que ya soporta json_field sobre cualquier campo booleano.
 
 import { log } from '../core/ipc-bridge.js';
 import { addNotification } from '../core/notifications.js';
 import { navigateTo, registerStepHandler } from '../core/navigation.js';
 import { registerMilestoneHandler } from '../core/ipc-bridge.js';
-import { selection } from '../core/shared-state.js';
 
 function getStatusEl() {
   return document.getElementById('mandate-status');
 }
 
-function getCreateBtn() {
+function getContinueBtn() {
   return document.getElementById('btn-mandate-continue');
 }
 
 /**
- * Pinta el estado de la creación del mandate dentro de screen-mandate.
+ * Pinta el estado de la confirmación dentro de screen-mandate.
  * Mismo patrón que showImportStatus() en step-project.js.
  * @param {string} msg
  * @param {'pending'|'success'|'error'} kind
@@ -58,75 +61,60 @@ function hideMandateStatus() {
 
 /**
  * Resetea screen-mandate a su estado inicial — se llama al entrar al step.
- * A diferencia de screen-project, acá no hay nada que cargar de forma
- * asíncrona (el proyecto ya está confirmado desde project_select) — el
- * botón arranca habilitado, listo para que el usuario confirme.
+ * No hay nada que cargar de forma asíncrona: es una pantalla informativa,
+ * el botón arranca habilitado, listo para que el usuario la reconozca.
  */
 function resetMandateScreen() {
   hideMandateStatus();
-  const btn = getCreateBtn();
+  const btn = getContinueBtn();
   if (btn) {
     btn.disabled = false;
-    btn.textContent = 'Create Mandate →';
-    btn.onclick = createGenesisMandate;
+    btn.textContent = 'Got it — Continue →';
+    btn.onclick = acknowledgeMandateScreen;
   }
 }
 
 /**
- * Crea el Genesis Mandate — único trabajo real de este step. Se dispara al
- * click de "Create Mandate →" en screen-mandate, ya con project_name/
- * project_path confirmados por project_select.
+ * Único trabajo de este step: registrar que el usuario reconoció la
+ * pantalla explicativa de Genesis. NO crea ningún mandate — eso ocurre
+ * después, del lado de Core (ver comentario de cabecera).
  */
-export async function createGenesisMandate() {
-  log('info', 'click — btn-mandate-continue');
-  const btn = getCreateBtn();
+export async function acknowledgeMandateScreen() {
+  log('info', 'click — btn-mandate-continue (acknowledge, sin crear mandate)');
+  const btn = getContinueBtn();
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Creating mandate…';
+    btn.textContent = 'Continuing…';
   }
-  showMandateStatus('Analyzing project and assembling the foundation…', 'pending');
+  showMandateStatus('Confirming…', 'pending');
 
-  const project = selection.selectedProject;
-  if (!project) {
-    // No debería poder pasar (project_select es requires de este step),
-    // pero si pasa, no tiene sentido llamar al IPC sin proyecto.
-    log('error', 'createGenesisMandate: selection.selectedProject vacío — ¿se saltó project_select?');
-    showMandateStatus('No project selected — go back to Project and select one first.', 'error');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Create Mandate →';
-    }
-    return;
-  }
-
-  log('info', `IPC → onboarding:create-mandate — project: ${project.name}`);
-  const result = await window.onboarding.createMandate({
-    project: project.name,
-    projectPath: selection.importedProjectPath || '',
-  });
+  log('info', "IPC → onboarding:mark-step-complete — step: 'mandate_genesis'");
+  const result = await window.onboarding.markStepComplete({ step: 'mandate_genesis' });
   log(result.success ? 'info' : 'error',
-    `IPC ← onboarding:create-mandate — success: ${result.success}`);
+    `IPC ← onboarding:mark-step-complete — success: ${result.success}`);
 
   if (result.success) {
-    showMandateStatus('✓ Genesis Mandate created', 'success');
-    addNotification('Genesis Mandate created', { icon: '✓', type: 'success' });
+    showMandateStatus('✓ Got it', 'success');
+    addNotification('Genesis will start once you enter your workspace', { icon: '✓', type: 'success' });
     navigateTo('__onboarding_complete__');
   } else {
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Retry';
-      btn.onclick = createGenesisMandate;
+      btn.onclick = acknowledgeMandateScreen;
     }
-    const errMsg = result?.error || result?.result?.error || result?.message
-      || 'Unknown error — Main no devolvió detalle (ver logs de conductor_onboarding).';
-    log('error', `createGenesisMandate failed: ${JSON.stringify(result)}`);
-    showMandateStatus(`Mandate failed: ${errMsg}`, 'error');
+    const errMsg = result?.error || 'Unknown error — Main no devolvió detalle (ver logs de conductor_onboarding).';
+    log('error', `acknowledgeMandateScreen failed: ${JSON.stringify(result)}`);
+    showMandateStatus(`Could not continue: ${errMsg}`, 'error');
   }
 }
 
 /**
  * Fallback de red de seguridad — ver comentario de cabecera. En el camino
- * normal esto nunca se dispara (cortex_events: [] para mandate_genesis).
+ * normal esto puede llegar a dispararse ahora sí (a diferencia de antes):
+ * markStepComplete() pasa por reactor.handleMilestone(), que emite
+ * milestone:reached para 'mandate_genesis'. Queda igual de idempotente que
+ * antes — solo navega si screen-milestone todavía no está activa.
  */
 function onMilestoneMandateGenesis(_data) {
   log('info', 'milestone: mandate_genesis confirmado (push)');

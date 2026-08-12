@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('onboarding', {
   listRepos:     (params) => ipcRenderer.invoke('onboarding:list-repos', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),
 
+  // D-23 — flag "arrancá Genesis" (onboarding.pending_genesis_launch en
+  // nucleus.json). Core lo llama una vez al bootear; el handler en Main
+  // consume Y borra el flag, no solo lo lee. Ver onboarding-handlers.js →
+  // 'onboarding:consume-pending-genesis-launch'.
+  consumePendingGenesisLaunch: () => ipcRenderer.invoke('onboarding:consume-pending-genesis-launch'),
+
   // Marcar step como completado (confirmación externa o fallback manual)
   markStepComplete: (params) => ipcRenderer.invoke('onboarding:mark-step-complete', params),
 

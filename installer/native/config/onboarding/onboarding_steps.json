@@ -1,7 +1,7 @@
 {
   "_version": "3.1.0",
   "_comment": "SSOT único de steps de onboarding — Bloom Conductor. Consumido por MilestoneRegistry (Main, vía fs) y expuesto al Renderer vía IPC (getStepsConfig). Cualquier cambio de orden, requires o verificación se hace acá, no en onboarding.js.",
-  "_changelog": "v3.0.0 (2026-07-10): Migración GitHub App / Device Flow. Retirado el step 'github_auth' (PAT clásico, GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED). Reemplazado por 'github_app_auth', reordenado DESPUÉS de vault_init (el token de la App se guarda en el Vault — Nucleus debe Authorize() antes de tocar el Keyring real, ver BTIPS-VAULT-MULTIKEY-ANALYSIS.md v1.1 y milestone-registry.js FALLBACK_STEPS). google_auth migrado de GOOGLE_AUTH_COMPLETE (nunca implementado) a ACCOUNT_REGISTERED:google discriminado por 'service'. Este JSON es el SSOT en disco: si diverge del fallback hardcoded de milestone-registry.js, el fallback pierde — sincronizar ambos ante cualquier cambio futuro.",
+  "_changelog": "v3.0.0 (2026-07-10): Migración GitHub App / Device Flow. Retirado el step 'github_auth' (PAT clásico, GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED). Reemplazado por 'github_app_auth', reordenado DESPUÉS de vault_init (el token de la App se guarda en el Vault — Nucleus debe Authorize() antes de tocar el Keyring real, ver BTIPS-VAULT-MULTIKEY-ANALYSIS.md v1.1 y milestone-registry.js FALLBACK_STEPS). google_auth migrado de GOOGLE_AUTH_COMPLETE (nunca implementado) a ACCOUNT_REGISTERED:google discriminado por 'service'. v3.1.0 (2026-08-11 — D-22, BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6): 'mandate_genesis' deja de crear el mandate real (eso pasa a Core, ver D-23) y pasa a ser pantalla puramente explicativa. produces/verifyArgs.field cambian de 'genesis_mandate_id' a 'mandate_screen_acknowledged' — mismo mecanismo verify:'json_field', sin tipo nuevo. Este JSON es el SSOT en disco: si diverge del fallback hardcoded de milestone-registry.js (o de la copia embebida en navigation.js), el fallback pierde — sincronizar los tres ante cualquier cambio futuro.",
   "steps": [
     {
       "id": "nucleus_create",
@@ -90,11 +90,11 @@
     {
       "id": "mandate_genesis",
       "view": "mandate",
-      "label": "Crear Genesis Mandate",
+      "label": "Genesis Mandate — overview",
       "requires": ["project_name"],
-      "produces": "genesis_mandate_id",
+      "produces": "mandate_screen_acknowledged",
       "verify": "json_field",
-      "verifyArgs": { "field": "onboarding.genesis_mandate_id" },
+      "verifyArgs": { "field": "onboarding.mandate_screen_acknowledged" },
       "blocking": true,
       "cortex_events": [],
       "conductor_reaction": "onOnboardingSuccess"

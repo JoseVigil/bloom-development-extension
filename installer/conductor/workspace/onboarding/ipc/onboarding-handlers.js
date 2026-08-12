@@ -11,7 +11,7 @@ const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
-const { migrateToNestedSchema, getActiveOrg, getOrCreateOrg, getOrCreateProject } = require('../../../shared/onboarding-schema');
+const { migrateToNestedSchema, getActiveOrg, getOrCreateOrg, getOrCreateProject, getActiveProject } = require('../../../shared/onboarding-schema');
 
 const log = getLogger('onboarding');
 
@@ -723,6 +723,14 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   });
 
   // ── HANDLER: Completar onboarding + handoff al workspace ────────────────
+  // D-23 (BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6, diseño
+  // cerrado, Fase B): acá es donde se escribe onboarding.pending_genesis_launch
+  // — el flag que le indica a Core "arrancá Genesis para este proyecto" al
+  // bootear. Confirmado en Fase A que no existe ningún canal de Electron
+  // (query string, additionalArguments, env var) para esto — createWorkspaceWindow
+  // solo recibe la URL — así que se usa el mismo patrón que ya domina este
+  // archivo: un flag persistido en nucleus.json, consumido y borrado por el
+  // otro lado (ver 'onboarding:consume-pending-genesis-launch' más abajo).
   ipcMain.handle('onboarding:complete', async (event, { workspaceUrl }) => {
     log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:5173');
     try {
@@ -734,6 +742,25 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         workspace_url: workspaceUrl || 'http://localhost:5173',
         current_step:  'success'
       };
+
+      // Resolver el proyecto activo (elegido en project_select) para armar
+      // el flag. migrateToNestedSchema es idempotente — seguro llamarla acá
+      // aunque ya haya corrido antes en este mismo onboarding.
+      migrateToNestedSchema(nucleusData.onboarding);
+      const activeProject = getActiveProject(nucleusData.onboarding);
+      if (activeProject?.project_name) {
+        nucleusData.onboarding.pending_genesis_launch = {
+          project:     activeProject.project_name,
+          projectPath: activeProject.project_path || '',
+        };
+        log.info('[IPC] onboarding:complete — pending_genesis_launch escrito para project:', activeProject.project_name);
+      } else {
+        // No debería poder pasar (project_select/mandate_genesis son requires
+        // previos), pero si pasa, mejor no escribir un flag con datos vacíos
+        // que Core intentaría consumir sin proyecto real.
+        log.warn('[IPC] onboarding:complete — no hay proyecto activo, pending_genesis_launch NO se escribe');
+      }
+
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
 
       // Opción C: ventana nueva con preload_conductor.js (createWorkspaceWindow,
@@ -756,6 +783,33 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     } catch (err) {
       log.error('[IPC] onboarding:complete — FAILED:', err.message);
       return { success: false, error: err.message };
+    }
+  });
+
+  // ── HANDLER: Consumir (leer + borrar) el flag de arranque de Genesis ────
+  // D-23 — contraparte de 'onboarding:complete' de arriba. Lo llama Core al
+  // bootear (ver webview/app/src/routes/+layout.svelte). Regla no negociable
+  // del diseño (§1.2 del roadmap): esto CONSUME el flag, no solo lo lee — si
+  // no se borra, cada apertura posterior de Core (sin venir de un Onboarding
+  // recién cerrado) volvería a intentar arrancar Genesis. Devuelve
+  // { success, pending: {project, projectPath} | null }.
+  ipcMain.handle('onboarding:consume-pending-genesis-launch', async () => {
+    log.info('[IPC] onboarding:consume-pending-genesis-launch');
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const pending = data.onboarding?.pending_genesis_launch || null;
+      if (pending) {
+        delete data.onboarding.pending_genesis_launch;
+        data.onboarding.updated_at = new Date().toISOString();
+        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+        log.success('[IPC] onboarding:consume-pending-genesis-launch — consumido y borrado:', JSON.stringify(pending));
+      } else {
+        log.info('[IPC] onboarding:consume-pending-genesis-launch — nada pendiente');
+      }
+      return { success: true, pending };
+    } catch (err) {
+      log.error('[IPC] onboarding:consume-pending-genesis-launch — FAILED:', err.message);
+      return { success: false, pending: null, error: err.message };
     }
   });
 

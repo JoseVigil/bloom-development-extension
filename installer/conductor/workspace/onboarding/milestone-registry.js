@@ -201,19 +201,28 @@ const FALLBACK_STEPS = [
   },
   {
     id:                 'mandate_genesis',
-    label:              'Crear Genesis Mandate',
+    label:              'Genesis Mandate — overview',
     screen:             'mandate-genesis',
     vault_required:     true,
     requires:           ['project_name'],
-    produces:           'genesis_mandate_id',
+    // D-22 (BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6, diseño
+    // cerrado, Fase B): este step deja de disparar la creación real del
+    // mandate (eso se mueve a Core, ver D-23 / onboarding-handlers.js
+    // 'onboarding:consume-pending-genesis-launch') y pasa a ser una pantalla
+    // puramente explicativa. produces/verifyArgs pasan de 'genesis_mandate_id'
+    // (que a esta altura del flujo todavía no existe) a
+    // 'mandate_screen_acknowledged' — mismo mecanismo verify:'json_field'
+    // que ya usa el resto de esta lista, sin tipo de verify nuevo.
+    produces:           'mandate_screen_acknowledged',
     verify:             'json_field',
-    verifyArgs:         { field: 'onboarding.genesis_mandate_id' },
+    verifyArgs:         { field: 'onboarding.mandate_screen_acknowledged' },
     blocking:           true,
     // cortex_events vacío a propósito: Brain/Cortex nunca emite un evento
-    // para este step (no hay contraparte en Discovery/Chrome, es un IPC
-    // sincrónico de Electron) — ver milestone-reactor.js
-    // _onMandateGenesisComplete() y onboarding-handlers.js
-    // 'onboarding:create-mandate', que resuelven esto sin esperar a Brain.
+    // para este step (no hay contraparte en Discovery/Chrome). El "completo"
+    // ahora lo dispara el click de "Entendido" en step-mandate.js, vía
+    // window.onboarding.markStepComplete({step:'mandate_genesis'}) —
+    // mecanismo genérico ya existente (ver onboarding-handlers.js
+    // 'onboarding:mark-step-complete'), no uno nuevo.
     cortex_events:      [],
     conductor_reaction: 'onOnboardingSuccess',
   },

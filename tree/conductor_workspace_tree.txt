@@ -39,16 +39,16 @@ bloom-development-extension/
     │   │   │   └── ui-stepper.js
     │   │   └── steps/
     │   │       ├── step-identity.js
+    │   │       ├── step-mandate.js
     │   │       ├── step-milestone.js
     │   │       ├── step-project.js
     │   │       ├── step-vault.js
     │   │       └── step-workspace.js
     │   ├── resolution-engine.js
-    │   └── step-verifiers.js
+    │   ├── step-verifiers.js
+    │   └── verify-nucleus-init-hook.js
     ├── package-lock.json
     ├── package.json
     ├── shared/
     │   └── debug.html
-    ├── tree/
-    │   └── btips_tree.txt
     └── version.json

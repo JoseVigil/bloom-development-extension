@@ -337,7 +337,10 @@ const FALLBACK_STEPS = [
   // SSOT real (v3.1.0) — reemplazado acá por los mismos dos steps que ya
   // tiene el JSON de disco, para que este fallback no vuelva a divergir.
   { id: 'project_select', view: 'project', requires: ['vault_initialized', 'github_app_token'], produces: 'project_name' },
-  { id: 'mandate_genesis', view: 'mandate', requires: ['project_name'], produces: 'genesis_mandate_id' },
+  // D-22 (v3.2, Fase B): produces cambia de 'genesis_mandate_id' a
+  // 'mandate_screen_acknowledged' — el mandate real ya no se crea en este
+  // step, ver milestone-registry.js FALLBACK_STEPS para el detalle.
+  { id: 'mandate_genesis', view: 'mandate', requires: ['project_name'], produces: 'mandate_screen_acknowledged' },
 ];
 
 export { refreshStepperPendingStates };

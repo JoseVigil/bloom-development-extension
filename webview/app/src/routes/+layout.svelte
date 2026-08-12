@@ -8,6 +8,7 @@
   import LedgerPanel from '$lib/components/LedgerPanel.svelte';
   import { tabsStore, activeTab } from '$lib/stores/tabs';
   import { mandateStore } from '$lib/stores/mandateStore';
+  import { runPendingGenesisLaunch } from '$lib/bootstrap/genesisLaunch';
   import { FileText, Zap } from 'lucide-svelte';
 
   // ============================================================================
@@ -44,6 +45,11 @@
     // Ya no hay chequeo de onboarding acá: el webview no gatea navegación
     // por ese estado. Solo un breve loading inicial para evitar flash.
     isChecking = false;
+
+    // D-23 / B.4.1 (roadmap v3.2 §1.2/§6): al bootear, consumir el flag
+    // "arrancá Genesis" si Onboarding lo dejó pendiente. No-op silencioso
+    // fuera de Electron o si no hay nada pendiente — ver genesisLaunch.ts.
+    runPendingGenesisLaunch();
 
     console.log('✅ [Layout] Ready');
   });
