@@ -113,8 +113,19 @@ func getNucleusRepoRoot() string {
 	return getBloomDir()
 }
 
-// readOrganizationFromNucleusJSON reads the organization slug from nucleus.json.
-// Returns "" if unreadable or absent (pre-onboarding is the safe default).
+// readOrganizationFromNucleusJSON reads the active organization slug from
+// nucleus.json. Returns "" if unreadable or absent (pre-onboarding is the
+// safe default).
+//
+// FIX (bug de nombre de campo): esta función leía "onboarding.organization",
+// una clave que nunca existió en el schema real de nucleus.json — el
+// onboarding la escribe como "onboarding.active_org_slug" (ver
+// installation/onboarding writer). Como resultado, org siempre resolvía a
+// "" para CUALQUIER instalación post-onboarding real, sin importar cuántas
+// orgs tuviera nucleus.json ni cuál estuviera activa: getOwnershipPath()
+// caía siempre al fallback legado (getBloomDir()/.ownership.json),
+// ignorando por completo la carpeta .bloom/.nucleus-{org}/ que create.go sí
+// genera. Corregido para leer la clave real.
 func readOrganizationFromNucleusJSON() string {
 	nucleusJSON := filepath.Join(getBloomNucleusBase(), "config", "nucleus.json")
 	data, err := os.ReadFile(nucleusJSON)
@@ -123,13 +134,13 @@ func readOrganizationFromNucleusJSON() string {
 	}
 	var cfg struct {
 		Onboarding struct {
-			Organization string `json:"organization"` // populated after GitHub auth
+			ActiveOrgSlug string `json:"active_org_slug"`
 		} `json:"onboarding"`
 	}
 	if json.Unmarshal(data, &cfg) != nil {
 		return ""
 	}
-	return cfg.Onboarding.Organization
+	return cfg.Onboarding.ActiveOrgSlug
 }
 
 // isOnboardingCompleted reads nucleus.json and returns onboarding.completed.

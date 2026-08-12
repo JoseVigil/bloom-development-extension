@@ -707,6 +707,249 @@
     .config-val.ok    { color: var(--success); }
     .config-val.warn  { color: var(--warning); }
 
+    /* Quick links — recursos de infraestructura (Swagger / health / Temporal) */
+    .quicklinks-section {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-muted);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .quicklinks-section-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .quicklinks-section-header .badge-mini {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--purple);
+      background: rgba(188, 140, 255, 0.12);
+      border: 1px solid rgba(188, 140, 255, 0.25);
+      padding: 1px 6px;
+      border-radius: 999px;
+    }
+
+    .quicklinks-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .quicklinks-table tr {
+      border-bottom: 1px solid var(--border-muted);
+    }
+
+    .quicklinks-table tr:last-child { border-bottom: none; }
+
+    .quicklinks-table td {
+      padding: 8px 12px;
+      font-size: 11px;
+      vertical-align: middle;
+    }
+
+    .quicklinks-table td.ql-name {
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      white-space: nowrap;
+      width: 1%;
+    }
+
+    .quicklinks-table td.ql-link a {
+      color: var(--accent);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .quicklinks-table td.ql-link a:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+
+    .quicklinks-table td.ql-status {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .ql-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 5px;
+      background: var(--text-muted);
+      vertical-align: middle;
+    }
+
+    .ql-dot.unknown { background: var(--text-muted); }
+
+    .quicklinks-note {
+      padding: 8px 12px;
+      font-size: 10px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-muted);
+      line-height: 1.4;
+    }
+
+    /* Info button (ⓘ) — abre el popover explicativo + dropdown de health real */
+    .ql-info-btn {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid var(--border-muted);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-family: var(--font-mono);
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 6px;
+    }
+
+    .ql-info-btn:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .ql-info-panel {
+      display: none;
+      border-top: 1px solid var(--border-muted);
+      padding: 8px 12px;
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .ql-info-panel.open { display: block; }
+
+    .ql-health-toggle {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--accent);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: var(--font-mono);
+    }
+
+    .ql-health-toggle:hover { color: var(--accent-hover); }
+
+    .ql-health-toggle .chevron {
+      display: inline-block;
+      transition: transform 0.15s ease;
+      font-size: 9px;
+    }
+
+    .ql-health-toggle.expanded .chevron {
+      transform: rotate(90deg);
+    }
+
+    .ql-health-detail {
+      display: none;
+      margin-top: 8px;
+      border: 1px solid var(--border-muted);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .ql-health-detail.open { display: block; }
+
+    .ql-health-summary-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 10px;
+    }
+
+    .ql-health-summary-bar .state-badge {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 9px;
+    }
+
+    .ql-health-summary-bar .state-badge.HEALTHY { color: var(--success); background: rgba(87, 217, 138, 0.12); border: 1px solid rgba(87, 217, 138, 0.3); }
+    .ql-health-summary-bar .state-badge.DEGRADED { color: var(--warning); background: rgba(255, 196, 92, 0.12); border: 1px solid rgba(255, 196, 92, 0.3); }
+    .ql-health-summary-bar .state-badge.FAILED { color: var(--error); background: rgba(255, 100, 100, 0.12); border: 1px solid rgba(255, 100, 100, 0.3); }
+
+    .ql-health-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .ql-health-table tr { border-bottom: 1px solid var(--border-muted); }
+    .ql-health-table tr:last-child { border-bottom: none; }
+
+    .ql-health-table td {
+      padding: 6px 10px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      vertical-align: top;
+    }
+
+    .ql-health-table td.hc-name {
+      color: var(--text-secondary);
+      white-space: nowrap;
+      width: 1%;
+    }
+
+    .ql-health-table td.hc-name .crit-tag {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 8px;
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .ql-health-table td.hc-state {
+      white-space: nowrap;
+      width: 1%;
+    }
+
+    .ql-health-table td.hc-state .hc-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+
+    .ql-health-table td.hc-error {
+      color: var(--text-muted);
+      opacity: 0.85;
+    }
+
+    .ql-health-loading, .ql-health-error {
+      padding: 10px;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .ql-health-error { color: var(--error); }
+
     #config-raw-toggle {
       margin: 10px 14px 0;
       font-size: 11px;
@@ -972,6 +1215,49 @@
 
     <!-- Config tab -->
     <div class="tab-panel active" id="tab-config">
+
+      <!-- Quick Links — recursos de infraestructura local (dev only) -->
+      <div class="quicklinks-section">
+        <div class="quicklinks-section-header">
+          Quick Links
+          <span>
+            <button class="ql-info-btn" id="ql-info-btn" title="Info" onclick="QuickLinks.toggleHealthInfo()">i</button>
+            <span class="badge-mini">dev only</span>
+          </span>
+        </div>
+        <table class="quicklinks-table">
+          <tbody>
+            <tr>
+              <td class="ql-name">bootstrap api<br><span style="opacity:.6;">(swagger)</span></td>
+              <td class="ql-link"><a href="http://localhost:48215/api/docs" target="_blank" rel="noopener">localhost:48215/api/docs</a></td>
+              <td class="ql-status"><span class="ql-dot unknown" id="ql-dot-bootstrap"></span><span id="ql-status-bootstrap">—</span></td>
+            </tr>
+            <tr>
+              <td class="ql-name">temporal ui</td>
+              <td class="ql-link"><a href="http://localhost:8233" target="_blank" rel="noopener">localhost:8233</a></td>
+              <td class="ql-status"><span class="ql-dot unknown" id="ql-dot-temporal"></span><span id="ql-status-temporal">—</span></td>
+            </tr>
+            <tr>
+              <td class="ql-name">health summary</td>
+              <td class="ql-link"><a href="http://localhost:48215/api/health/summary" target="_blank" rel="noopener">localhost:48215/api/health/summary</a></td>
+              <td class="ql-status"><span class="ql-dot unknown" id="ql-dot-health"></span><span id="ql-status-health">—</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="ql-info-panel" id="ql-info-panel">
+          "bootstrap api" y "swagger" son el mismo check (mismo puerto/endpoint) — consolidados en una sola fila. "health summary" es un endpoint real registrado en <code>server-bootstrap.js</code> sobre la instancia Fastify (<code>registerHealthSummaryRoute</code>), que re-expone <code>nucleus --json health</code>. El estado (●) de las 3 filas de arriba se pinguea en runtime.
+
+          <button class="ql-health-toggle" id="ql-health-toggle" onclick="QuickLinks.toggleHealthDetail()">
+            <span class="chevron">▸</span>
+            <span id="ql-health-toggle-label">Ver estado completo (componentes reales)</span>
+          </button>
+
+          <div class="ql-health-detail" id="ql-health-detail">
+            <div class="ql-health-loading" id="ql-health-body">Cargando…</div>
+          </div>
+        </div>
+      </div>
 
       <div class="config-section">
         <div class="config-section-header">HARNESS_CONFIG</div>

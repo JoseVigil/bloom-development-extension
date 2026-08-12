@@ -719,6 +719,145 @@ const ConfigReader = {
 // ============================================================================
 // Harness — top-level coordinator
 // ============================================================================
+// ============================================================================
+// QuickLinks
+// Ping liviano a los recursos locales listados en la sección "Quick Links"
+// del panel Config (swagger/bootstrap api en :48215, Temporal UI en :8233).
+// Solo lectura de disponibilidad — no autentica ni interactúa con nada.
+// ============================================================================
+const QuickLinks = {
+  targets: [
+    { id: 'bootstrap', url: 'http://localhost:48215/api/docs' },
+    { id: 'temporal',  url: 'http://localhost:8233' },
+    { id: 'health',    url: 'http://localhost:48215/api/health/summary' },
+  ],
+
+  async checkOne(url) {
+    try {
+      // El Bootstrap registra @fastify/cors (ver BOOTSTRAP_ARCHITECTURE.md),
+      // así que un fetch normal (no 'no-cors') puede leer el status real.
+      // Esto importa para /api/health/summary, que puede responder 502 si
+      // el exec de "nucleus --json health" falla — un no-cors opaco no
+      // distinguiría eso de "puerto caído".
+      const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+      return res.ok;
+    } catch (_err) {
+      // Puede ser el host caído, o un bloqueo CORS real si el puerto
+      // responde pero sin el header — en ambos casos lo tratamos como
+      // no disponible para el panel.
+      return false;
+    }
+  },
+
+  async checkStatus() {
+    for (const t of this.targets) {
+      const dot = document.getElementById(`ql-dot-${t.id}`);
+      const label = document.getElementById(`ql-status-${t.id}`);
+      if (!dot || !label) continue;
+
+      const reachable = await this.checkOne(t.url);
+      dot.className = `ql-dot ${reachable ? 'connected' : 'disconnected'}`;
+      dot.style.background = reachable ? 'var(--success)' : 'var(--error)';
+      label.textContent = reachable ? 'reachable' : 'unreachable';
+      Logger.log('INFO', `[QuickLinks] ${t.id} → ${reachable ? 'reachable' : 'unreachable'}`);
+    }
+  },
+
+  // Componentes críticos según health.go / AUDITORIA_HEALTH_RESOURCES.md §1.
+  // Usado solo para el tag visual "crit" en la tabla desplegable — el cálculo
+  // real de critical/non-critical ya lo hace server-bootstrap.js.
+  CRITICAL_NAMES: ['temporal', 'worker', 'vault', 'governance'],
+
+  async fetchHealthDetail() {
+    const res = await fetch('http://localhost:48215/api/health/summary', { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  renderHealthDetail(data) {
+    const body = document.getElementById('ql-health-body');
+    if (!body) return;
+
+    const stateBadge = `<span class="state-badge ${data.system_state}">${data.system_state}</span>`;
+    const summaryBar = `
+      <div class="ql-health-summary-bar">
+        <span>${stateBadge} · ${data.critical_count} críticos, ${data.non_critical_count} no-críticos</span>
+        <span style="color:var(--text-muted);">${new Date(data.timestamp * 1000).toLocaleTimeString()}</span>
+      </div>
+    `;
+
+    const componentNames = Object.keys(data.components || {});
+    const rows = componentNames.map((name) => {
+      const c = data.components[name] || {};
+      const isCrit = this.CRITICAL_NAMES.includes(name);
+      const healthy = c.healthy === true;
+      const dotColor = healthy ? 'var(--success)' : 'var(--error)';
+      const stateText = c.state || '—';
+      const errorText = c.error ? c.error : '';
+      return `
+        <tr>
+          <td class="hc-name">${name}${isCrit ? '<span class="crit-tag">[crit]</span>' : ''}</td>
+          <td class="hc-state"><span class="hc-dot" style="background:${dotColor};"></span>${stateText}</td>
+          <td class="hc-error">${errorText}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const mem = data.resources?.memory;
+    const memRow = mem ? `
+        <tr>
+          <td class="hc-name">memory</td>
+          <td class="hc-state"><span class="hc-dot" style="background:${mem.state === 'OK' ? 'var(--success)' : 'var(--warning)'};"></span>${mem.state}</td>
+          <td class="hc-error">${mem.message || ''}</td>
+        </tr>
+    ` : '';
+
+    body.innerHTML = `
+      ${summaryBar}
+      <table class="ql-health-table"><tbody>${rows}${memRow}</tbody></table>
+    `;
+  },
+
+  toggleHealthInfo() {
+    const panel = document.getElementById('ql-info-panel');
+    if (!panel) return;
+    panel.classList.toggle('open');
+  },
+
+  async toggleHealthDetail() {
+    const detail = document.getElementById('ql-health-detail');
+    const toggleBtn = document.getElementById('ql-health-toggle');
+    const label = document.getElementById('ql-health-toggle-label');
+    if (!detail || !toggleBtn) return;
+
+    const isOpen = detail.classList.contains('open');
+    if (isOpen) {
+      detail.classList.remove('open');
+      toggleBtn.classList.remove('expanded');
+      label.textContent = 'Ver estado completo (componentes reales)';
+      return;
+    }
+
+    detail.classList.add('open');
+    toggleBtn.classList.add('expanded');
+    label.textContent = 'Ocultar estado completo';
+
+    const body = document.getElementById('ql-health-body');
+    body.innerHTML = '<div class="ql-health-loading">Cargando desde /api/health/summary…</div>';
+
+    try {
+      const data = await this.fetchHealthDetail();
+      this.renderHealthDetail(data);
+      Logger.log('INFO', `[QuickLinks] health detail loaded — system_state=${data.system_state}`);
+    } catch (err) {
+      body.innerHTML = `<div class="ql-health-error">No se pudo leer /api/health/summary — ${err.message}</div>`;
+      Logger.log('ERROR', `[QuickLinks] health detail fetch failed: ${err.message}`);
+    }
+  }
+};
+
 const Harness = {
   _activeTab: 'config',
   _rawConfigVisible: false,
@@ -729,6 +868,10 @@ const Harness = {
     // 1. Read config — lee self.HARNESS_CONFIG y self.SYNAPSE_CONFIG inyectados por script tags.
     await ConfigReader.read();
     ConfigReader.render();
+
+    // 1a. Quick Links — ping de disponibilidad a swagger/bootstrap api/temporal.
+    //     No bloqueante: corre en paralelo, no retrasa el resto del boot.
+    QuickLinks.checkStatus();
 
     // 1b. Listen for late HARNESS_CONFIG_READY from background.js (race condition guard:
     //     background may load the config after this page is already open).

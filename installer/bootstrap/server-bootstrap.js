@@ -305,6 +305,111 @@ function startHeadlessFileWatcher(wsManager) {
 }
 
 // ============================================
+// HEALTH SUMMARY ROUTE
+// ============================================
+
+// Binario nucleus: por defecto se asume en PATH del proceso que corre el
+// Bootstrap. Si no lo está (build empaquetado, entorno sin PATH heredado),
+// setear BLOOM_NUCLEUS_BIN con la ruta absoluta.
+const NUCLEUS_BIN = process.env.BLOOM_NUCLEUS_BIN || 'nucleus';
+const NUCLEUS_HEALTH_TIMEOUT_MS = 5000;
+
+// Nombres tal como los emite checkSystemHealthParallel (health.go:281/585).
+// AUDITORIA §1: 4 críticos, resto no-crítico.
+const CRITICAL_COMPONENTS = ['temporal', 'worker', 'vault', 'governance'];
+
+function isComponentHealthy(component) {
+  // BUG corregido: el campo real que emite nucleus es `state` (RUNNING,
+  // DEGRADED, FAILED, CONNECTED, ACTIVE, VALID...) — no `status`, que no
+  // existe en el payload y siempre daba undefined. Además, en vez de
+  // reinterpretar esos strings acá (duplicando lógica que Go ya resolvió),
+  // usamos directamente el booleano `component.healthy` que health.go ya
+  // calcula — es la fuente de verdad, no hay que re-derivarla.
+  // Nota: governance/harness pueden estar en state "DEGRADED" con
+  // healthy:true (degradado pero no crítico) — por eso no alcanza con
+  // mirar el string de estado.
+  return component?.healthy === true;
+}
+
+function registerHealthSummaryRoute(apiServer) {
+  apiServer.get('/api/health/summary', async (request, reply) => {
+    const { exec } = require('child_process');
+
+    let stdout;
+    try {
+      stdout = await new Promise((resolve, reject) => {
+        exec(`${NUCLEUS_BIN} --json health`, { timeout: NUCLEUS_HEALTH_TIMEOUT_MS }, (err, out, stderr) => {
+          if (err) {
+            err.stderr = stderr;
+            reject(err);
+            return;
+          }
+          resolve(out);
+        });
+      });
+    } catch (err) {
+      console.error('[Bootstrap] /api/health/summary — nucleus exec failed:', err.message);
+      reply.code(502);
+      return {
+        error: 'nucleus_health_exec_failed',
+        message: err.message,
+        hint: `Verificar que "${NUCLEUS_BIN}" esté en PATH, o setear BLOOM_NUCLEUS_BIN con la ruta absoluta.`,
+      };
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch (err) {
+      console.error('[Bootstrap] /api/health/summary — nucleus output no es JSON válido:', err.message);
+      reply.code(502);
+      return { error: 'nucleus_health_parse_failed', message: err.message };
+    }
+
+    const components = parsed.components || {};
+    const resources = parsed.resources || {};
+
+    // AUDITORIA §2: control_plane y bloom_api son el mismo chequeo (mismo
+    // puerto 48215, mismo GET /api/docs). Se deduplican por (port, endpoint)
+    // antes de contar, para no inflar el número de recursos no-críticos.
+    const seenChecks = new Set();
+    const dedupedNames = [];
+    for (const [name, comp] of Object.entries(components)) {
+      const dedupeKey = comp?.port
+        ? `${comp.port}:${comp.method || comp.endpoint || ''}`
+        : name; // sin puerto (ej. governance, worker) → dedupe por nombre
+      if (seenChecks.has(dedupeKey)) continue;
+      seenChecks.add(dedupeKey);
+      dedupedNames.push(name);
+    }
+
+    const unhealthy_critical = dedupedNames.filter(
+      name => CRITICAL_COMPONENTS.includes(name) && !isComponentHealthy(components[name])
+    );
+    const unhealthy_non_critical = dedupedNames.filter(
+      name => !CRITICAL_COMPONENTS.includes(name) && !isComponentHealthy(components[name])
+    );
+
+    const system_state = unhealthy_critical.length > 0
+      ? 'FAILED'
+      : (unhealthy_non_critical.length > 0 ? 'DEGRADED' : 'HEALTHY');
+
+    return {
+      system_state,
+      critical_count: dedupedNames.filter(n => CRITICAL_COMPONENTS.includes(n)).length,
+      non_critical_count: dedupedNames.filter(n => !CRITICAL_COMPONENTS.includes(n)).length,
+      unhealthy_critical,
+      unhealthy_non_critical,
+      components,
+      resources,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+  });
+
+  console.log('[Bootstrap] ✅ Route registered: GET /api/health/summary');
+}
+
+// ============================================
 // MAIN BOOTSTRAP
 // ============================================
 async function bootstrap() {
@@ -357,6 +462,15 @@ async function bootstrap() {
     state: 'READY'
   });
 
+  // ── /api/health/summary ────────────────────────────────────────────────
+  // Propuesto en AUDITORIA_HEALTH_RESOURCES.md §3: el Bootstrap no reimplementa
+  // los checks de salud, solo re-expone `nucleus --json health` (Go, única
+  // fuente de verdad — checkSystemHealthParallel en health.go) con CORS, que
+  // ya viene registrado en apiServer vía @fastify/cors dentro de startAPIServer.
+  // Se registra directo sobre la instancia devuelta por startAPIServer en vez
+  // de tocar out/api/server.js (compilado, fuera de este archivo fuente).
+  registerHealthSummaryRoute(apiServer);
+
   const fileWatcher = startHeadlessFileWatcher(wsManager);
 
   const svelteServer = await startSvelteDevServer();
@@ -377,6 +491,7 @@ async function bootstrap() {
   console.log('[Bootstrap]    WebSocket: ws://localhost:4124');
   console.log('[Bootstrap]    API: http://localhost:48215');
   console.log('[Bootstrap]    Swagger: http://localhost:48215/api/docs');
+  console.log('[Bootstrap]    Health:  http://localhost:48215/api/health/summary');
   if (svelteServer) {
     console.log('[Bootstrap]    UI: http://localhost:5173');
   }
