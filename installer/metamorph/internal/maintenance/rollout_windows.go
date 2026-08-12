@@ -69,44 +69,58 @@ func isElevated() (bool, error) {
 }
 
 // controlService stops (start=false) or starts (start=true) a Windows service
-// using the Service Control Manager. Waits up to 10 seconds for the transition.
-func controlService(name string, start bool) error {
+// using the Service Control Manager. Waits up to 10 seconds for the
+// transition.
+//
+// Returns (wasNoop, err): wasNoop is true when there was nothing to do
+// (service not installed, already stopped when asked to stop, already
+// running when asked to start) so callers can log the idempotent case
+// explicitly instead of implying an action that didn't happen — same
+// contract as controlService in rollout_other.go.
+func controlService(name string, start bool) (bool, error) {
 	m, err := mgr.Connect()
 	if err != nil {
-		return fmt.Errorf("could not connect to SCM: %w", err)
+		return false, fmt.Errorf("could not connect to SCM: %w", err)
 	}
 	defer m.Disconnect()
 
 	s, err := m.OpenService(name)
 	if err != nil {
 		// Service not found is not an error — it may not be installed yet.
-		return nil
+		return true, nil
 	}
 	defer s.Close()
 
 	status, err := s.Query()
 	if err != nil {
-		return fmt.Errorf("could not query service: %w", err)
+		return false, fmt.Errorf("could not query service: %w", err)
 	}
 
 	if start {
 		if status.State == svc.Running {
-			return nil // already running
+			return true, nil // already running
 		}
 		if err := s.Start(); err != nil {
-			return fmt.Errorf("could not start: %w", err)
+			return false, fmt.Errorf("could not start: %w", err)
 		}
-		return waitForServiceState(s, svc.Running, 10*time.Second)
+		return false, waitForServiceState(s, svc.Running, 10*time.Second)
 	}
 
 	// Stop
 	if status.State == svc.Stopped {
-		return nil // already stopped
+		return true, nil // already stopped
 	}
 	if _, err := s.Control(svc.Stop); err != nil {
-		return fmt.Errorf("could not send stop: %w", err)
+		return false, fmt.Errorf("could not send stop: %w", err)
 	}
-	return waitForServiceState(s, svc.Stopped, 10*time.Second)
+	if err := waitForServiceState(s, svc.Stopped, 10*time.Second); err != nil {
+		return false, err
+	}
+	// Same socket-release race flagged for Linux/macOS: SERVICE_STOPPED
+	// confirms the process exited, but the kernel can still hold the port
+	// briefly afterward. Give it a beat before the caller re-binds it.
+	time.Sleep(2 * time.Second)
+	return false, nil
 }
 
 // waitForServiceState polls until the service reaches the desired state or times out.

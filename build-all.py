@@ -1259,6 +1259,14 @@ def rollout_bootstrap() -> StepResult:
     Necesario porque bootControlPlane() en service.go busca el bundle en
     NUCLEUS_HOME/bin/bootstrap/bundle.js. Sin este paso el Control Plane
     (puertos 48215 y 4124) nunca levanta.
+
+    Tras copiar, reinicia el proceso de Control Plane con
+    'nucleus service restart-bootstrap' y espera a que reporte healthy — sin
+    esto, un proceso Node viejo sigue sirviendo el bundle anterior desde
+    memoria indefinidamente, porque Node no relee su propio archivo en disco
+    mientras corre (ver PROCEDIMIENTO_ACTUALIZAR_BOOTSTRAP.md §1.5, caso real
+    documentado: bundle.js zombie sirviendo :48215 varias horas después de
+    haber sido reemplazado en disco).
     """
     import shutil
 
@@ -1283,7 +1291,95 @@ def rollout_bootstrap() -> StepResult:
     except OSError as exc:
         return StepResult("Rollout:Bootstrap", False, error=f"Rollout a NUCLEUS_HOME falló: {exc}")
 
-    return StepResult("Rollout:Bootstrap", True, output=f"{deployed} archivos → {bundle_dst_dir}")
+    # Reiniciar y confirmar salud. Best-effort por diseño (igual criterio que
+    # _stop_running_brain_service/_stop_running_nucleus_service): el archivo
+    # ya está correctamente en disco en este punto — eso es lo que este paso
+    # garantiza siempre. Que el proceso en memoria haya recogido el cambio es
+    # una verificación adicional que no debería tirar abajo todo el pipeline
+    # de build si falla, pero SÍ tiene que quedar visible como advertencia
+    # explícita — no silenciosa (ver Invariante de Certificación: ninguna
+    # dependencia puede degradar sin que el propio sistema lo señale).
+    healthy, detail = _restart_bootstrap_and_wait_healthy()
+    if not healthy:
+        log(f"  ⚠️  {detail}")
+        log("  ⚠️  El bundle nuevo está en disco, pero no se pudo confirmar que el proceso")
+        log("      en memoria ya lo esté sirviendo. Reiniciar a mano: 'nucleus service restart-bootstrap'")
+        return StepResult(
+            "Rollout:Bootstrap", True,
+            output=f"{deployed} archivo(s) → {bundle_dst_dir}  ⚠️ restart/health NO confirmado: {detail}",
+        )
+
+    return StepResult(
+        "Rollout:Bootstrap", True,
+        output=f"{deployed} archivo(s) → {bundle_dst_dir}, control_plane reiniciado y healthy",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RESTART BOOTSTRAP — companion de rollout_bootstrap(). Distinto en forma a
+# _stop_running_brain_service()/_stop_running_nucleus_service(): esos paran
+# ANTES de compilar/rollear porque el destino es un binario con lock de
+# ejecución (Text file busy en Linux). bundle.js es un archivo de datos que
+# Node lee al iniciar, no tiene ese lock — sobreescribirlo mientras el
+# proceso viejo corre no falla, solo lo deja sirviendo código desactualizado
+# hasta que algo lo reinicie. Por eso acá el orden es copiar → reiniciar,
+# no parar → copiar.
+#
+# Usa el comando escopado 'nucleus service restart-bootstrap' (documentado en
+# PROCEDIMIENTO_ACTUALIZAR_BOOTSTRAP.md §4) en vez de
+# _stop_running_nucleus_service(): ese último cascadea a TODO el servicio de
+# Nucleus (temporal_server, nucleus_worker, brain_server, control_plane) —
+# innecesario y desproporcionado para actualizar solo el bundle del Control
+# Plane.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _restart_bootstrap_and_wait_healthy(timeout_seconds: int = 30) -> tuple[bool, str]:
+    """
+    Reinicia el Control Plane con 'nucleus service restart-bootstrap' y hace
+    polling de 'nucleus --json health --component control_plane' hasta que
+    reporte healthy o se agote el timeout.
+
+    No levanta excepción — devuelve (healthy: bool, detail: str) para que el
+    llamador decida cómo reportarlo. 'nucleus' ausente de PATH se trata como
+    caso válido (primera instalación, nada que reiniciar todavía), no como
+    error — mismo criterio que los otros dos stop helpers de este script.
+    """
+    nucleus_bin = shutil.which("nucleus")
+    if not nucleus_bin:
+        return False, "'nucleus' no está en PATH — probablemente primera instalación, nada que reiniciar"
+
+    log("  🔄 Reiniciando Control Plane con el bundle nuevo (nucleus service restart-bootstrap) ...")
+    result = subprocess.run(
+        [nucleus_bin, "--json", "service", "restart-bootstrap"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        encoding="utf-8", errors="replace",
+    )
+    if result.returncode != 0:
+        return False, f"restart-bootstrap devolvió código {result.returncode}: {(result.stdout or '').strip()[:300]}"
+
+    deadline = time.time() + timeout_seconds
+    last_output = ""
+    while time.time() < deadline:
+        health = subprocess.run(
+            [nucleus_bin, "--json", "health", "--component", "control_plane"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        last_output = health.stdout or ""
+        try:
+            data = json.loads(last_output)
+            # Tolerar tanto {"components": {"control_plane": {...}}} como
+            # {"healthy": ..., "state": ...} directo, según cómo responda
+            # --component a un solo componente.
+            comp = data.get("components", {}).get("control_plane", data) if isinstance(data, dict) else {}
+            if comp.get("healthy") is True or comp.get("state") == "RUNNING":
+                log("  ✅ Control Plane reiniciado y healthy con el bundle nuevo")
+                return True, "healthy"
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        time.sleep(1.5)
+
+    return False, f"control_plane no reportó healthy tras {timeout_seconds}s. Último chequeo: {last_output.strip()[:300]}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

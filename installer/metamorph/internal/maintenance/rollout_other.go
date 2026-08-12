@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
+	"time"
 )
 
 // ensureElevated is a no-op on Darwin and Linux.
@@ -37,48 +39,116 @@ func ensureElevated() error {
 // failing to stop/start the service is treated as fatal for the bootstrap
 // component, since copying a new bundle.js is pointless if the old process
 // keeps serving it.
-func controlService(name string, start bool) error {
+//
+// Returns (wasNoop, err): wasNoop is true when there was nothing to do
+// (already stopped when asked to stop, already running when asked to start)
+// so callers can log "nothing to stop/start" instead of implying an action
+// that didn't actually happen — the idempotency-visibility gap flagged
+// against build-all.py's logging.
+func controlService(name string, start bool) (bool, error) {
 	switch runtime.GOOS {
 	case "linux":
 		return systemctlUserControl(name, start)
 	case "darwin":
 		return launchctlControl(name, start)
 	default:
-		return fmt.Errorf("controlService: unsupported OS %s", runtime.GOOS)
+		return false, fmt.Errorf("controlService: unsupported OS %s", runtime.GOOS)
 	}
 }
 
 // systemctlUserControl stops or starts a systemd --user unit on Linux.
-func systemctlUserControl(name string, start bool) error {
+func systemctlUserControl(name string, start bool) (bool, error) {
 	action := "stop"
 	if start {
 		action = "start"
 	}
+
+	if !start {
+		// Idempotency check: if the unit is already inactive, skip the stop
+		// call entirely and let the caller log "nothing to stop" instead of
+		// "stopping..." followed by a command that did nothing. A check
+		// error here (systemctl unavailable, unit unknown) is not fatal —
+		// fall through to the unconditional stop below, same as before.
+		if active, checkErr := systemctlUserIsActive(name); checkErr == nil && !active {
+			return true, nil
+		}
+	}
+
 	cmd := exec.Command("systemctl", "--user", action, name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("systemctl --user %s %s: %w", action, name, err)
+		return false, fmt.Errorf("systemctl --user %s %s: %w", action, name, err)
 	}
-	return nil
+
+	if !start {
+		// Race condition confirmed in build-all.py: the kernel can take a
+		// moment to release the socket after systemd reports the unit
+		// stopped, even though the process no longer shows up in process
+		// listings. Give it a beat before the caller tries to bind the same
+		// port again (e.g. the health check in bootstrapPostDeploy/
+		// nucleusPostDeploy right after this).
+		time.Sleep(2 * time.Second)
+	}
+
+	return false, nil
+}
+
+// systemctlUserIsActive reports whether a systemd --user unit is currently
+// active. `systemctl --user is-active` exits non-zero for anything other
+// than "active" (inactive, failed, or not loaded at all) — all of those are
+// treated as "nothing to stop" here, since that's the only distinction the
+// caller needs.
+func systemctlUserIsActive(name string) (bool, error) {
+	out, err := exec.Command("systemctl", "--user", "is-active", name).Output()
+	if err != nil {
+		return false, nil
+	}
+	return strings.TrimSpace(string(out)) == "active", nil
 }
 
 // launchctlControl stops or starts a launchd job on macOS via its label.
 // Assumes the job is already loaded/bootstrapped as a LaunchAgent (the
 // installer's responsibility) — this only toggles running state, mirroring
 // systemctl stop/start rather than unload/load.
-func launchctlControl(name string, start bool) error {
+func launchctlControl(name string, start bool) (bool, error) {
 	action := "stop"
 	if start {
 		action = "start"
 	}
+
+	if !start {
+		if running, checkErr := launchctlIsLoaded(name); checkErr == nil && !running {
+			return true, nil
+		}
+	}
+
 	cmd := exec.Command("launchctl", action, name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("launchctl %s %s: %w", action, name, err)
+		return false, fmt.Errorf("launchctl %s %s: %w", action, name, err)
 	}
-	return nil
+
+	if !start {
+		// Same socket-release race as systemctl above.
+		time.Sleep(2 * time.Second)
+	}
+
+	return false, nil
+}
+
+// launchctlIsLoaded is a best-effort check: `launchctl list <label>` exits
+// non-zero when launchd doesn't know about the label at all, which reliably
+// means there's nothing to stop. A zero exit only confirms the label is
+// loaded — not that it's currently running — so this can under-report a
+// no-op (log "stopping" for a loaded-but-idle job) but will never wrongly
+// skip a stop that was actually needed.
+func launchctlIsLoaded(name string) (bool, error) {
+	if err := exec.Command("launchctl", "list", name).Run(); err != nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 // sudoChown changes ownership of path to uid:gid using the system sudo command.

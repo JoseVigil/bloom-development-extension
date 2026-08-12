@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"metamorph/internal/core"
@@ -77,11 +80,26 @@ func nativeBin(r, comp string) string {
 
 var allComponents = []component{
 	{
+		// Brain has no OS-level service unit of its own — confirmed against
+		// internal/supervisor/service.go, not assumed by symmetry with
+		// Nucleus. It is always either a child process spawned by
+		// "nucleus service start" (registered at
+		// <basePath>/run/brain_server.pid, see startBrainServer/
+		// writePidFile) or, if something was already listening on :5678
+		// when the supervisor booted, "adopted" without ever writing a
+		// pidfile. brainPreDeploy handles both: kill by pidfile first (the
+		// scoped, targeted mechanism, not a full "nucleus service stop"),
+		// then confirm the port is actually free — because the adopted case
+		// leaves no pidfile for step one to find, and would otherwise let
+		// this proceed to overwrite the binary under a process that's still
+		// running, reproducing the original bug.
 		Key: "brain",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "brain")
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "brain") },
+		DestFn:       func(b string) string { return filepath.Join(b, "bin", "brain") },
+		PreDeployFn:  brainPreDeploy,
+		PostDeployFn: brainPostDeploy,
 	},
 	{
 		// The nucleus binary itself is the process that the Nucleus OS service
@@ -505,10 +523,15 @@ func bootstrapPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 	}
 
 	c.Logger.Info("🛑 Stopping %s before updating the bootstrap bundle...", name)
-	if err := controlService(name, false); err != nil {
+	wasNoop, err := controlService(name, false)
+	if err != nil {
 		return fmt.Errorf("bootstrap: could not stop %s: %w", name, err)
 	}
-	c.Logger.Success("✓ %s stopped", name)
+	if wasNoop {
+		c.Logger.Info("ℹ️  %s was not running — nothing to stop", name)
+	} else {
+		c.Logger.Success("✓ %s stopped", name)
+	}
 	return nil
 }
 
@@ -532,10 +555,15 @@ func bootstrapPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error 
 	}
 
 	c.Logger.Info("🚀 Starting %s with the updated bundle.js...", name)
-	if err := controlService(name, true); err != nil {
+	wasNoop, err := controlService(name, true)
+	if err != nil {
 		return fmt.Errorf("bootstrap: could not start %s: %w", name, err)
 	}
-	c.Logger.Success("✓ %s started", name)
+	if wasNoop {
+		c.Logger.Info("ℹ️  %s was already running", name)
+	} else {
+		c.Logger.Success("✓ %s started", name)
+	}
 
 	c.Logger.Info("🔎 Waiting for Control Plane to come up on :48215 ...")
 	if err := waitForControlPlane(10 * time.Second); err != nil {
@@ -563,10 +591,15 @@ func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 	}
 
 	c.Logger.Info("🛑 Stopping %s before updating the nucleus binary...", name)
-	if err := controlService(name, false); err != nil {
+	wasNoop, err := controlService(name, false)
+	if err != nil {
 		return fmt.Errorf("nucleus: could not stop %s: %w", name, err)
 	}
-	c.Logger.Success("✓ %s stopped", name)
+	if wasNoop {
+		c.Logger.Info("ℹ️  %s was not running — nothing to stop", name)
+	} else {
+		c.Logger.Success("✓ %s stopped", name)
+	}
 	return nil
 }
 
@@ -589,10 +622,15 @@ func nucleusPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 	}
 
 	c.Logger.Info("🚀 Starting %s with the updated binary...", name)
-	if err := controlService(name, true); err != nil {
+	wasNoop, err := controlService(name, true)
+	if err != nil {
 		return fmt.Errorf("nucleus: could not start %s: %w", name, err)
 	}
-	c.Logger.Success("✓ %s started", name)
+	if wasNoop {
+		c.Logger.Info("ℹ️  %s was already running", name)
+	} else {
+		c.Logger.Success("✓ %s started", name)
+	}
 
 	c.Logger.Info("🔎 Waiting for Control Plane to come up on :48215 ...")
 	if err := waitForControlPlane(10 * time.Second); err != nil {
@@ -601,6 +639,207 @@ func nucleusPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 	}
 	c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")
 	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// brain pre/post-deploy hooks — scoped stop via the Nucleus supervisor's own
+// pidfile convention, not an OS service unit (there isn't one — see the
+// comment on the "brain" component above).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const brainPort = "5678"
+
+// brainPidFile mirrors runDir()+pidFilePath() from
+// internal/supervisor/service.go: runDir(binDir) = filepath.Dir(binDir)+"/run",
+// and binDir there is <basePath>/bin — the same basePath rollout.go resolves
+// via core.GetBaseAppDataPath(). dst for the brain component is always
+// <basePath>/bin/brain (see DestFn above), so walking up two levels recovers
+// basePath without needing a separate parameter threaded through PreDeployFn's
+// fixed signature. This assumes that DestFn shape; if it ever changes, this
+// needs to change with it.
+func brainPidFile(dst string) string {
+	basePath := filepath.Dir(filepath.Dir(dst))
+	return filepath.Join(basePath, "run", "brain_server.pid")
+}
+
+// isBrainListening mirrors isBrainRunning() in service.go — a plain TCP
+// probe, not a PID check, so it also catches the "adopted, no pidfile" case
+// that a pidfile-only check would miss entirely.
+func isBrainListening() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+brainPort, 1*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// brainPreDeploy stops any running Brain process before its binary is
+// overwritten.
+//
+//  1. Kill by pidfile — graceful SIGTERM (taskkill /T on Windows), wait,
+//     SIGKILL fallback. Same sequence as killByPidFile() in
+//     internal/supervisor/service.go. Idempotent: a missing or stale pidfile
+//     is not an error, and is reported as "nothing to stop via PID".
+//  2. Confirm :5678 is actually free afterward. Step 1 can legitimately kill
+//     nothing (Brain was adopted by the supervisor rather than spawned by
+//     it, so no pidfile was ever written for it — confirmed in service.go,
+//     not hypothetical) — if the port is still answering, that is exactly
+//     that case, and this rollout has no safe way to identify or stop
+//     whatever is holding it. Fail loudly rather than copy over it.
+func brainPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	pidFile := brainPidFile(dst)
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] brain: would stop any running instance (pidfile %s), then verify :%s is free", pidFile, brainPort)
+		return nil
+	}
+
+	pid, killErr := killByPidFilePath(pidFile, 10*time.Second)
+	switch {
+	case killErr != nil:
+		c.Logger.Warning("⚠️  brain: error stopping previous process (pid %d): %v", pid, killErr)
+	case pid != 0:
+		c.Logger.Success("✓ brain: stopped previous process (pid %d)", pid)
+		// Same socket-release race flagged for Nucleus/Bootstrap.
+		time.Sleep(2 * time.Second)
+	default:
+		c.Logger.Info("ℹ️  brain: no pidfile found — nothing to stop via PID")
+	}
+
+	if isBrainListening() {
+		return fmt.Errorf("brain: something is still listening on :%s after stop — likely a Brain instance the supervisor adopted rather than spawned (no pidfile was ever written for it), which this rollout cannot identify or stop safely; stop it manually and retry", brainPort)
+	}
+
+	return nil
+}
+
+// brainPostDeploy deliberately does NOT restart Brain.
+//
+// Restarting it correctly means reproducing startBrainServer's spawn
+// sequence from internal/supervisor/service.go — detached process, log file
+// setup, pidfile write, port-ready polling — including its
+// setSvelteProcAttr-based process-detachment step, which was not in the
+// files reviewed for this change. Guessing at that platform-specific
+// detachment logic risks a spawn that looks successful but is subtly wrong
+// (e.g. dies when this CLI invocation exits, or double-manages the process
+// alongside a future "nucleus service start"). Leaving Brain stopped and
+// telling the operator explicitly is the safer failure mode here — loud and
+// recoverable with one known command, rather than a silent partial fix.
+//
+// If Brain restart-on-rollout is wanted, it belongs here once
+// setSvelteProcAttr (and the log-path/logsDir resolution startBrainServer
+// depends on) is available to mirror against directly.
+func brainPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] brain: would leave the service stopped — restart via `nucleus service start` (or `nucleus service restart`) when ready")
+		return nil
+	}
+	c.Logger.Info("ℹ️  brain: binary updated, service left stopped — restart it with `nucleus service start` when ready")
+	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared pidfile kill mechanism — mirrors isProcessAlive / sendGracefulTerm /
+// killByPidFile in internal/supervisor/service.go exactly, so a process this
+// rollout kills is killed the same way the supervisor's own
+// `nucleus service stop` would kill it. Reimplemented here (not imported)
+// because rollout.go's module and service.go's module are different
+// binaries with no shared package between them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func readPIDFile(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0, fmt.Errorf("corrupt pidfile at %s: %w", path, err)
+	}
+	return pid, nil
+}
+
+func isPIDAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH").Output()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(out), strconv.Itoa(pid))
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+func sendGracefulTermToPID(pid int) error {
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("taskkill: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return proc.Signal(syscall.SIGTERM)
+}
+
+// killByPidFilePath reads pidPath, confirms the process is alive, requests a
+// graceful exit, waits up to timeout, and force-kills if it doesn't die in
+// time. Always removes the pidfile before returning. Returns the PID that
+// was targeted (0 if no pidfile existed), matching killByPidFile's contract
+// in service.go so callers can use the same "0 means nothing to do" check.
+func killByPidFilePath(pidPath string, timeout time.Duration) (int, error) {
+	pid, err := readPIDFile(pidPath)
+	if err != nil {
+		return 0, nil // no pidfile — nothing to kill, not an error
+	}
+	defer os.Remove(pidPath)
+
+	if !isPIDAlive(pid) {
+		return pid, nil // stale pidfile — process already gone
+	}
+
+	proc, ferr := os.FindProcess(pid)
+	if ferr != nil {
+		return pid, ferr
+	}
+	if err := sendGracefulTermToPID(pid); err != nil {
+		if !isPIDAlive(pid) {
+			return pid, nil
+		}
+		// Fall through to the wait/force-kill loop below regardless — a
+		// failed graceful-term request must not skip the force-kill
+		// fallback (this is the exact bug killByPidFile itself had to fix
+		// on Windows, per its own comment in service.go).
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !isPIDAlive(pid) {
+			return pid, nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	_ = proc.Kill()
+	killDeadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(killDeadline) {
+		if !isPIDAlive(pid) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return pid, nil
 }
 
 // waitForControlPlane polls the Control Plane's /api/docs endpoint until it
@@ -1005,7 +1244,11 @@ does not update the running Control Plane. --only bootstrap therefore:
   2. Copies the new bundle.js
   3. Starts the Nucleus service again
   4. Polls http://127.0.0.1:48215/api/docs for up to 10s to confirm the new
-     Control Plane build is actually serving traffic`,
+     Control Plane build is actually serving traffic
+
+The 'brain' component stops any running Brain process before its binary is
+overwritten (by pidfile, then verifying :5678 is free) and leaves it stopped
+afterward — restart it with 'nucleus service start' when ready.`,
 
 		Annotations: map[string]string{
 			"category": "MAINTENANCE",
