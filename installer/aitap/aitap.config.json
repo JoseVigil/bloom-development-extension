@@ -1,0 +1,16 @@
+{
+  "_comment": "AITap CLI - Configuration file. Mirrors brain.config.json's 'help' section convention, pointed at installer/help/ to match nucleus/sentinel/metamorph/sensor instead of appdata:// (aitap ships as part of the installer bundle, not as a standalone runtime-installed CLI).",
+  "version": "0.1.0",
+  "help": {
+    "_comment": "output_dir es LOCAL a proposito (./help, no ../help). Todavia no escribimos al installer/help/ compartido con nucleus/sentinel/metamorph/sensor -- eso depende de una decision de pipeline de build que no se tomo todavia. Cuando se tome, cambiar a '../help'.",
+    "output_dir": "./help",
+    "variants": [
+      { "file": "aitap_help.txt", "description": "Human help (full, all commands)", "mode": "text", "full": true },
+      { "file": "aitap_help.json", "description": "AI-native JSON schema (full, all commands)", "mode": "ai", "full": true }
+    ]
+  },
+  "vault": {
+    "owner": "nucleus",
+    "note": "aitap nunca guarda secretos. Solo referencias (key_id) y politica de ruteo. El valor real de las keys vive exclusivamente en Nucleus Vault (OS Keyring), accedido via 'nucleus vault' subprocess, igual que brain/shared/credentials/vault.py hace hoy para Gemini."
+  }
+}

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Output local de scripts/generate_help.py. A proposito NO va a installer/help/
+# compartido todavia (ver README) -- y tampoco se commitea localmente hasta
+# que ese pipeline este decidido.
+help/

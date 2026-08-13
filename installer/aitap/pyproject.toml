@@ -1,0 +1,15 @@
+[project]
+name = "bloom-aitap"
+version = "0.1.0"
+description = "AITap — router centralizado de acceso a proveedores de IA (Gemini/Claude/OpenAI/xAI) para el ecosistema Bloom. No es dueño del vault: las credenciales viven en Nucleus (OS Keyring)."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+aitap = "aitap.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
