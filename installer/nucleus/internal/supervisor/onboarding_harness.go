@@ -57,15 +57,24 @@ type HarnessResult struct {
 //   Returns "" — no file is expected.
 //
 // POST-ONBOARDING:
-//   The file lives inside the nucleus repository at:
-//     <nucleusRepoRoot>/.bloom/.nucleus-{org}/.ownership.json
-//   where <nucleusRepoRoot> is the value of installation.origin_path in
-//   nucleus.json (same value returned by getBloomDir() for the dev extension
-//   repo) plus the relative path to the nucleus sub-repo.
+//   The file lives inside the USER'S PROJECT WORKSPACE at:
+//     <workspacePath>/.bloom/.nucleus-{org}/.ownership.json
+//   where <workspacePath> is onboarding.organizations[].workspace_path in
+//   nucleus.json (same value returned by getWorkspacePath()) — NOT
+//   installation.origin_path (getBloomDir(), the Bloom dev/extension repo
+//   root). `nucleus create` writes .bloom/.nucleus-{org}/ under the
+//   workspace the user is actually working in, never under the Bloom repo
+//   itself.
 //
-//   In practice, origin_path already points to bloom-development-extension
-//   (the monorepo root).  The nucleus repo is the root itself (or a
-//   sub-directory — adapt nucleusSubPath below if your layout differs).
+// FIX (confirmado 2026-08-12): esta función usaba getNucleusRepoRoot() →
+// getBloomDir() (origin_path), que apunta al repo de bloom-development-extension.
+// Reproducido en vivo: con origin_path=/home/jose/repos/bloom-development-extension
+// y workspace_path=/home/jose/repos/elias-repos, "nucleus --json health" reportaba
+// governance/harness DEGRADED buscando .ownership.json en
+// bloom-development-extension/.bloom/.nucleus-elias-repos/.ownership.json, cuando
+// el archivo real está en elias-repos/.bloom/.nucleus-elias-repos/.ownership.json.
+// Mismo patrón que el bug de BLOOM_NUCLEUS_PATH resuelto antes en getWorkspacePath()
+// — origin_path y workspace_path son campos distintos y no intercambiables.
 //
 // SIMULATION:
 //   Returns the simulation fixture path (unchanged from original logic).
@@ -80,7 +89,7 @@ func getOwnershipPath(simulation bool, onboardingCompleted bool) string {
 
 	// POST-ONBOARDING: resolve from nucleus.json → organization field.
 	// .ownership.json lives at:
-	//   <nucleusRepoRoot>/.bloom/.nucleus-{org}/.ownership.json
+	//   <workspacePath>/.bloom/.nucleus-{org}/.ownership.json
 	org := readOrganizationFromNucleusJSON()
 	if org == "" {
 		// Fallback: try the legacy path (getBloomDir()/.ownership.json).
@@ -101,16 +110,18 @@ func getOwnershipPath(simulation bool, onboardingCompleted bool) string {
 		".nucleus-"+org, ".ownership.json")
 }
 
-// getNucleusRepoRoot returns the root of the nucleus repository.
-// For the current layout (nucleus lives inside bloom-development-extension)
-// this is the same as getBloomDir().  Override this function or add an
-// env var (BLOOM_NUCLEUS_REPO) if the repos diverge.
+// getNucleusRepoRoot returns the root under which .bloom/.nucleus-{org}/
+// lives — the user's project workspace, NOT the Bloom dev/extension repo.
+// BLOOM_NUCLEUS_REPO remains available as an explicit override (e.g. a
+// layout where the two genuinely diverge from what nucleus.json records).
 func getNucleusRepoRoot() string {
 	if v := os.Getenv("BLOOM_NUCLEUS_REPO"); v != "" {
 		return v
 	}
-	// Default: nucleus repo root == monorepo root (origin_path in nucleus.json)
-	return getBloomDir()
+	// Default: .bloom/.nucleus-{org}/ lives under the active org's
+	// workspace_path (nucleus.json → onboarding.organizations[]), the same
+	// source of truth getWorkspacePath() already resolves for BLOOM_NUCLEUS_PATH.
+	return getWorkspacePath()
 }
 
 // readOrganizationFromNucleusJSON reads the active organization slug from

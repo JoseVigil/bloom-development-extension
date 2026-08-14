@@ -1,0 +1,251 @@
+bloom-development-extension/
+└── docs/
+    ├── AITAP/
+    │   └── AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md
+    ├── ALFRED/
+    │   └── AGENTIC_HARNESS_OVERVIEW.md
+    ├── ANA/
+    │   └── # BTips Ana.md
+    ├── BATCAVE/
+    │   └── BATCAVE_ARCHITECTURE.md
+    ├── BOOTSTRAP/
+    │   ├── BOOTSTRAP_ARCHITECTURE.md
+    │   ├── BOOTSTRAP_CONTROL_PLANE.md
+    │   ├── BTIP_home_webview_documentacion.md
+    │   └── PROCEDIMIENTO_ACTUALIZAR_BOOTSTRAP.md
+    ├── BRAIN/
+    │   ├── brain-troubleshooting.md
+    │   ├── logger_best_practices.md
+    │   ├── unified_command_prompt.md
+    │   └── version_readme.md
+    ├── BSIP/
+    │   ├── BLOOM_BISP_Companion_Integration_v2_0.md
+    │   ├── BLOOM_BISP_Fuente_de_Verdad_v1_0.md
+    │   ├── BLOOM_BISP_Session_Decisions_v1_1.md
+    │   ├── BLOOM_Intent_Types_Gap_Analysis_v1_0.md
+    │   └── TYPES/
+    │       ├── DEV_Intent_Spec_v1_0.md
+    │       ├── DIS_Intent_Spec_v1_0.md
+    │       ├── DOC_Intent_Spec_v1_0.md
+    │       └── ING_Intent_Spec_v1_1.md
+    ├── BTIPS/
+    │   └── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
+    ├── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
+    ├── BTIP_resumen_ecosistema_1.0.md
+    ├── BUILD/
+    │   └── BUILD_ALL_Documentacion_v1_0.md
+    ├── COGNITTUUM_MANIFEST_v0_1.md
+    ├── COMPILE_RUN_COMMANDS.txt
+    ├── CONDUCTOR/
+    │   ├── INSTALLER/
+    │   │   ├── DARWIN_CONDUCTOR_INSTALLATION_PROMPT_MAESTRO_BLOOM.md
+    │   │   ├── NUCLEUS_SUPERVISOR_BOOT_LOGGING_TELEMETRY.md
+    │   │   ├── WINDOWS_BLOOM_NUCLEUS_INSTALLER_TECHNICAL_REFERENCE.md
+    │   │   ├── WINDOWS_CONDUCTOR_INSTALLATION_PROMPT_MAESTRO_BLOOM.md
+    │   │   └── conductor-setup-asset-map.md
+    │   ├── ONBOARDING/
+    │   │   ├── BTIPS-ONBOARDING-ARCHITECTURE-SPEC-v4_0.md
+    │   │   ├── Backup/
+    │   │   │   ├── BLOOM_CONDUCTOR_MILESTONE_BRIDGE_SPEC_v0_4.md
+    │   │   │   ├── BLOOM_ONBOARDING_WORKFLOW_SPEC_v2_3.md
+    │   │   │   ├── BLOOM_SYNAPSE_BRIDGE_GAP_ANALYSIS.md
+    │   │   │   ├── Guia-Maestra-Stepper-Onboarding-v2_2.md
+    │   │   │   ├── ONBOARDING_CORTEX_INTEGRATION.md
+    │   │   │   └── auditoria-stepper-workspace.md
+    │   │   ├── Fase-A-Relevamiento-Mandate-Genesis-v1.md
+    │   │   └── Guia-Maestra-Stepper-Onboarding-v2_2.md
+    │   └── WORKSPACE/
+    │       ├── BACKUP/
+    │       │   └── btips_workspace_v3.html
+    │       ├── BLOOM_CORE_GENESIS_MANDATE_PRELUDIO_v0_1.md
+    │       ├── Bloom_Conductor_Workspace_Core_UI_01.md
+    │       └── bloom-conductor-genesis-v1_1.html
+    ├── CONTROL_PLANE/
+    │   └── CONTROL_PLANE_DEBUG_PANEL_STATUS.md
+    ├── CORTEX/
+    │   ├── AUTHORITY_BOUNDARY.md
+    │   ├── BTIPS-CORTEX-REFERENCE-v1.2.md
+    │   ├── COMPANION/
+    │   │   └── Cognituum_Companion_Implementation_Guide_v1_2.md
+    │   └── HANDOFF-github-app-batcave-synapse.md
+    ├── DESIGN/
+    │   ├── # BTIPS Foundational UX-UI Design Doctrine Prompt v0.1.md
+    │   └── FUNCTIONAL_DESIGN_GUIDE_BTIPS.docx
+    ├── GENES/
+    │   └── BTIPS_GENES_CONCEPT_v2_0.md
+    ├── GENESIS/
+    │   ├── BLOOM_Genesis_Intent_Gen_Design_v1_0.md
+    │   └── GENESIS_INTENT_CREATE.md
+    ├── GENIUS.txt
+    ├── GIT/
+    │   └── GIT_BLOOM_GIT_FILTERS.md
+    ├── GOVERNANCE/
+    │   ├── G1-G8_multi-org-switch-design.md
+    │   ├── GOVERNANCE_OWNERSHIP_SPEC_v1_0.md
+    │   ├── PROMPT-EJECUCION-synapse-switch-organization.md
+    │   └── PROMPT-synapse-switch-organization.md
+    ├── HARNESS/
+    │   ├── ARCHITECTURE_HarnessProtocol.md
+    │   ├── BACKUP/
+    │   │   ├── BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md
+    │   │   ├── HARNESS_Manual_Onboarding_Debug.md
+    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_Harness_v2.md
+    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_Harness_v2.md
+    │   │   ├── IMPL_PROMPT_METAMORPH_IonRecipes.md
+    │   │   ├── INVESTIGACION_Harness_Protocol_Autodiscovery.md
+    │   │   └── IONPUMP_IMPLEMENTATION_PROMPT_v2.md
+    │   ├── HARNESS_Cortex_Manual_Uso_y_Debug_Synapse.md
+    │   ├── HARNESS_SOURCE_OF_TRUTH_1_6.md
+    │   └── HARNESS_Workspace_Manual.md
+    ├── HOOKS/
+    │   └── nucleus_hook_system.md
+    ├── HOST/
+    │   └── bloom-host-documentation.md
+    ├── INTENT/
+    │   ├── BLOOM_INTENT_SEMANTIC_PACKAGE_v1_0.md
+    │   └── brain_intent_state.md
+    ├── IONPUMP/
+    │   ├── BACKUP/
+    │   │   ├── ION SDK Developer Guide.md
+    │   │   ├── IONPUMP_IMPLEMENTATION_PROMPT_v5.md
+    │   │   └── IONSITE_DEPLOY_GUIDE.md
+    │   ├── BLOOM_HARNESS_IONPUMP_SOT_v3.md
+    │   └── iosites/
+    │       └── tu-primer-ion-github.md
+    ├── LANDING/
+    │   └── BLOOM_LANDING_VAULT_SPEC_v1_0.md
+    ├── MANDATE/
+    │   ├── BLOOM_Mandate_CLI_Command_Surface_v0_2_0.md
+    │   ├── BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md
+    │   ├── BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md
+    │   ├── BLOOM_Mandate_Universal_Schema_v1_0_0.md
+    │   ├── Core_Mandate_No_Aparece_Auditoria_v1.md
+    │   ├── MARKETPLACE/
+    │   │   ├── BLOOM_Cognitive_Evidence_Model_v1_0_0.md
+    │   │   ├── BLOOM_Mandate_Package_Spec_v1_0_0.md
+    │   │   └── CUUM_cognituum-tokenomics.md
+    │   ├── Mandate_Domain_Spec_v1.0.0.md
+    │   ├── Mandate_Event_Mechanism_Auditoria_v1.md
+    │   └── bloom-mandate-arquitectura-genesis-conductor.md
+    ├── MEDIA.txt
+    ├── METAMORPH/
+    │   ├── Guía_Maestra_Implementación_Comandos_METAMORPH.md
+    │   ├── METAMORPH-INSPECTION-IMPLEMENTATION-PROMPT.md
+    │   ├── METAMORPH_COMANDOS.md
+    │   ├── metamorph-ionpump-reference.md
+    │   └── metamorph_rollout_prompt.md
+    ├── MIGRATION/
+    │   └── BTIPS_CrossPlatform_Migration_Guide_v1.md
+    ├── NUCLEUS/
+    │   ├── Guía Maestra de Implementación Comandos NUCLEUS.md
+    │   ├── NUCLEUS_SYNAPSE_USAGE_GUIDE_v3.1.md
+    │   └── SYNAPSE_NEW_COMMAND_GUIDE_v1_0.md
+    ├── Onboarding_Harness.txt
+    ├── PALETTE/
+    │   └── # 🎨 Bloom Color Palette.md
+    ├── PROMPTS/
+    │   ├── DISCIPLINA_DE_ENTREGA.md
+    │   ├── HARNESS-IONPUMP/
+    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_Harness.md
+    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_Harness.md
+    │   │   └── IMPL_PROMPT_METAMORPH_IonRecipes.md
+    │   ├── INSTRUCCIÓN CRÍTICA PARA CLAUDE.md
+    │   ├── REGLAS ABSOLUTAS PARA CLAUDE.md
+    │   └── TRIGGER_RESPUESTA_DIRECTA.md
+    ├── REVISE_ME/
+    │   ├── BTIPS-MODULE-METAMORPH.md
+    │   ├── BTIPS-MODULE-ROADMAP.md
+    │   ├── BTIPS-MODULE-SENSOR.md
+    │   ├── BTIPS-SECURITY-COMPLIANCE.md
+    │   ├── BTIPS-SYNAPSE-PROTOCOL.md
+    │   └── BTIPS-TECHNICAL-OVERVIEW.md
+    ├── SENSOR/
+    │   ├── BACKUP/
+    │   │   ├── PROMPT_MAESTRO_BLOOM_SENSOR_v1.md
+    │   │   └── SENSOR_Future_Features_Cognituum_v1_0.md
+    │   ├── Guia_Maestra_Implementacion_Comandos_SENSOR_v1_1.md
+    │   └── SENSOR_Spec_v2_0.md
+    ├── SENTINEL/
+    │   └── Implementación de Comandos Sentinel.md
+    ├── SYNAPSE/
+    │   ├── BACKUP/
+    │   │   ├── BTIPS-SYNAPSE-PROTOCOL-v4.0.md
+    │   │   ├── Perfill Nivel Dios.md
+    │   │   └── SYNAPSE_PROTOCOL_MASTER_v2.md
+    │   ├── BTIPS_SYNAPSE_COMMAND_IMPLEMENTATION_REFERENCE.md
+    │   ├── PROTOCOLO-synapse-homologacion-v3.md
+    │   ├── SYNAPSE_BRIDGE_ELECTRON_IMPLEMENTATION.md
+    │   └── SYNAPSE_PROTOCOL_MASTER_v3.md
+    ├── TELEMETRY/
+    │   └── BLOOM_NUCLEUS_LOGGING_SPEC.md
+    ├── VAULT/
+    │   ├── BTIPS-VAULT-MULTIKEY-ANALYSIS.md
+    │   ├── VAULT_SYSTEM_CODE_EXAMPLES.md
+    │   └── VAULT_SYSTEM_TECHNICAL_SPECIFICATION.md
+    ├── VERSIONS/
+    │   ├── v1/
+    │   │   ├── Arquitectura BTIP — Descripción General.md
+    │   │   ├── BLOOM_BTIP.md
+    │   │   ├── BLOOM_BTIP_CLI_SPEC.md
+    │   │   ├── BLOOM_BTIP_CLOUDE_GUIDE.md
+    │   │   ├── BLOOM_BTIP_CLOUDE_GUIDE_SUMMARY.md
+    │   │   ├── BLOOM_BTIP_CREATECODEBASE_IMPLEMENTATION.md
+    │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_SPEC.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_SPEC_REVISED.md
+    │   │   ├── BLOOM_BTIP_SPEC_BASE.md
+    │   │   ├── BLOOM_BTIP_UNIVERSAL_CODEBASE_TEMPLATE.md
+    │   │   ├── BLOOM_CODE_BASE_CONCEPTO.md
+    │   │   ├── BLOOM_CODE_CLI_SPEC.md
+    │   │   ├── BLOOM_CODE_PLUGIN_SPEC.md
+    │   │   └── BLOOM_PLUGIN_ARCHITECTURE.md
+    │   ├── v1.0.1/
+    │   │   ├── Prompt Superador para Implementar Intent DEV.md
+    │   │   └── bloom-nucleus_v1.0.1.bl
+    │   ├── v10/
+    │   │   ├── bloom-nucleus-1.0.1.md
+    │   │   └── bloom-unified-specs_backup.md
+    │   ├── v11/
+    │   │   ├── Elementos Para Onboarding.md
+    │   │   ├── Entry Point para Brain CLI en el Plugin.md
+    │   │   └── Ingeniería inversa de límites de rate-limiting en APIs de LLM.md
+    │   ├── v12/
+    │   │   ├── Contexto Detallado de los Tres Elementos Para Onboarding.md
+    │   │   ├── Lógicas de Negocio en el Plugin Desarrollado.md
+    │   │   └── SISTEMA_DE_DIOS_BLOOM_NUCLEUS.md
+    │   ├── v2/
+    │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+    │   │   └── BLOOM_BTIP_PLUGIN_SPEC.md
+    │   ├── v3/
+    │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_SPEC_REVISED.md
+    │   │   ├── BLOOM_Codebase_Generator.md
+    │   │   └── SETUP_GUIDE.md
+    │   ├── v4/
+    │   │   ├── BLOOM_BTIP_CODEBASE_GENERATOR.md
+    │   │   └── BLOOM_BTIP_INTENT_MANAGER.md
+    │   ├── v5/
+    │   │   └── bloom_intent_lifecycle.md
+    │   ├── v6/
+    │   │   ├── bloom-lifecycle-updated.md
+    │   │   ├── bloom-nucleus-spec.md
+    │   │   └── nucleus_implementation_guide.md
+    │   ├── v7/
+    │   │   ├── bloom_unified_spec.md
+    │   │   └── nucleus_creation_management.md
+    │   ├── v8/
+    │   │   ├── bloom-btip-resumen.md
+    │   │   └── bloom_unified_spec.md
+    │   └── v9/
+    │       ├── BLOOM – Git Orchestration Plan.md
+    │       ├── Desvincular Nucleus (Unlink Nucleus).md
+    │       ├── bloom_unified_spec.md
+    │       └── git-orchestration-impl.md
+    ├── VSCODE/
+    │   └── BTIPS_VSCODE_PLUGIN.md
+    ├── resources.txt
+    └── tech-debt/
+        └── TD-001-mandate-cli-watcher-fix.md
