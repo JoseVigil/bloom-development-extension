@@ -6,21 +6,33 @@
 // Contraparte de onboarding-handlers.js → 'onboarding:consume-pending-
 // genesis-launch': si Onboarding acaba de cerrar y dejó
 // onboarding.pending_genesis_launch en nucleus.json, Core lo consume (lee +
-// borra, vía el mismo IPC) al bootear y dispara la creación real del
-// mandate con window.onboarding.createMandate(...) — el mismo canal IPC que
-// ya existía (onboarding:create-mandate), sin cambios de Electron; lo único
-// que cambia es quién lo invoca.
+// borra, vía el mismo IPC, sin cambios acá) al bootear.
 //
-// Alcance deliberadamente acotado (ver D-25 en el roadmap, todavía abierto):
-// esto NO abre un tab de MandateTab ni actualiza mandateStore.ts — ese
-// store hoy es un placeholder de datos de ejemplo (ver mandateStore.ts), y
-// la UI final donde "aterriza" un mandate recién creado depende de que D-25
-// (frontera GenesisTab/StandardMandateTab, ya resuelta como "no hace
-// falta") se termine de construir en el Paso 4 de la migración de UI. Este
-// módulo es el hook preparado que pide B.4.1 — queda listo para que, una
-// vez que exista esa UI, alguien conecte el resultado de createMandate acá
-// abajo a tabsStore/mandateStore reales, en vez de tener que descubrir de
-// cero el mecanismo de consumo del flag.
+// CAMBIO (implementación post Mandate_Event_Mechanism_Auditoria_v1.md,
+// frente 1): la creación del mandate en sí pasó de Camino 1 (IPC → CLI Go,
+// `window.onboarding.createMandate`) a Camino 2 (Fastify → Node, `POST
+// /api/v1/mandates`). Motivo, con evidencia en la auditoría: Camino 2 emite
+// `publishMandateEvent` de forma inmediata y síncrona, sin depender de
+// `mandate_watcher.go` — que está confirmado sin arrancar bajo `nucleus
+// dev-start` (ver TD-001, docs/tech-debt/). Camino 1 seguía siendo válido
+// para *escribir* el mandate, pero no emitía ningún evento bajo el flujo
+// real de la app; Camino 2 sí, en cualquier escenario. El timing de
+// `:48215` (Control Plane) está confirmado disponible antes de que este
+// hook corra — ver mismo documento, Addendum B — así que no hay riesgo de
+// carrera al cambiar de camino.
+//
+// El consumo del flag (lectura + borrado de onboarding.pending_genesis_launch
+// en nucleus.json) sigue siendo IPC — eso es lógica de archivo del proceso
+// main de Electron, no tiene camino alternativo ni falta cambiarlo.
+//
+// Alcance: este módulo dispara la creación y logea el resultado. La
+// hidratación de la UI (abrir/actualizar el tab correspondiente) ya no
+// depende de este hook — corre por su cuenta vía websocketStore +
+// mandateStore (ver +layout.svelte, frente 3 de la misma auditoría): el
+// evento `mandate:genesis:initiated` que este POST dispara llega por WS y
+// actualiza mandateStore igual, sin importar quién disparó la creación.
+
+import { createMandate as createMandateApi } from '$lib/api';
 
 type PendingGenesisLaunch = {
   project: string;
@@ -33,21 +45,15 @@ type ConsumePendingGenesisLaunchResult = {
   error?: string;
 };
 
-type CreateMandateResult = {
-  success: boolean;
-  result?: unknown;
-  error?: string;
-};
-
 function getOnboardingBridge(): any {
   return typeof window !== 'undefined' ? (window as any).onboarding : undefined;
 }
 
 /**
  * Consume el flag "arrancá Genesis" (si existe) y, de estar presente,
- * dispara la creación real del mandate. Seguro de llamar siempre —
- * no-op silencioso si no hay bridge de Electron (ej. dev server standalone
- * sin Conductor) o si no hay nada pendiente.
+ * dispara la creación real del mandate vía Camino 2 (Fastify). Seguro de
+ * llamar siempre — no-op silencioso si no hay bridge de Electron (ej. dev
+ * server standalone sin Conductor) o si no hay nada pendiente.
  *
  * Se llama una vez, en el onMount de +layout.svelte.
  */
@@ -79,30 +85,23 @@ export async function runPendingGenesisLaunch(): Promise<void> {
     return;
   }
 
-  console.log('[genesisLaunch] pending_genesis_launch encontrado — creando mandate:', pending);
+  console.log('[genesisLaunch] pending_genesis_launch encontrado — creando mandate vía Camino 2 (Fastify):', pending);
 
-  if (!onboarding.createMandate) {
-    console.error('[genesisLaunch] window.onboarding.createMandate no disponible — no se puede completar el arranque automático');
-    return;
-  }
-
-  let createResult: CreateMandateResult;
   try {
-    createResult = await onboarding.createMandate({
+    const result = await createMandateApi({
+      mandateType: 'genesis',
       project: pending.project,
-      projectPath: pending.projectPath,
+      // No existe todavía un concepto de "nombre" separado del proyecto en
+      // este flujo (ver mandate.go: la CLI tampoco lo pedía) — se reusa el
+      // nombre de proyecto, igual que hacía Camino 1 implícitamente.
+      name: pending.project,
+      // Camino 1 mandaba --source <projectPath>. projectPath puede venir
+      // vacío (selección de repo de GitHub sin carpeta local) — GenesisCreateBody
+      // exige source no vacío, así que se cae a un marcador explícito.
+      source: pending.projectPath || 'onboarding',
     });
+    console.log('[genesisLaunch] Genesis Mandate creado automáticamente al entrar a Core (Camino 2):', result);
   } catch (e) {
-    console.error('[genesisLaunch] createMandate falló:', e);
-    return;
-  }
-
-  if (createResult?.success) {
-    console.log('[genesisLaunch] Genesis Mandate creado automáticamente al entrar a Core:', createResult.result);
-    // TODO (D-25, Paso 4 de la migración de UI): una vez que exista la UI
-    // final de MandateTab conectada a datos reales, abrir acá el tab
-    // correspondiente en vez de solo loguear.
-  } else {
-    console.error('[genesisLaunch] createMandate — success:false', createResult);
+    console.error('[genesisLaunch] createMandate (Camino 2) falló:', e);
   }
 }

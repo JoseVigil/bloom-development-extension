@@ -8,6 +8,8 @@
   import LedgerPanel from '$lib/components/LedgerPanel.svelte';
   import { tabsStore, activeTab } from '$lib/stores/tabs';
   import { mandateStore } from '$lib/stores/mandateStore';
+  import { websocketStore } from '$lib/stores/websocket';
+  import { listMandates } from '$lib/api';
   import { runPendingGenesisLaunch } from '$lib/bootstrap/genesisLaunch';
   import { FileText, Zap } from 'lucide-svelte';
 
@@ -51,8 +53,50 @@
     // fuera de Electron o si no hay nada pendiente — ver genesisLaunch.ts.
     runPendingGenesisLaunch();
 
+    // Mandate_Event_Mechanism_Auditoria_v1.md, frente 3: antes el WS solo
+    // se conectaba desde routes/debug/+page.svelte — el arranque normal de
+    // Core nunca escuchaba nada. Se conecta acá y se suscribe al wildcard
+    // 'mandate:*' (ver websocket.ts) que delega a mandateStore.applyMandateEvent.
+    // El WS solo entrega eventos EN VIVO — no reemplaza el catch-up de abajo,
+    // son complementarios: catch-up trae lo que ya existía, el WS mantiene
+    // eso (y lo nuevo) actualizado después.
+    websocketStore.connect();
+    websocketStore.on('mandate:*', ({ event, data }: { event: string; data: any }) => {
+      mandateStore.applyMandateEvent(event, data);
+    });
+
+    hydrateMandatesFromDisk();
+
     console.log('✅ [Layout] Ready');
   });
+
+  // Catch-up (Addendum A de la auditoría): puebla mandateStore con lo que ya
+  // existe en disco al montar, y abre tab para los mandates activos (no
+  // completed/failed) — mismo criterio de "closable" que handleNewMandate ya
+  // usa para mandates en 'building'. Silencioso si el Control Plane todavía
+  // no está arriba (timing confirmado como no-riesgo en la auditoría, pero
+  // no bloqueante: un fallo acá no debe tumbar el resto del layout).
+  async function hydrateMandatesFromDisk() {
+    try {
+      const { mandates } = await listMandates();
+      mandateStore.hydrateFromList(mandates);
+
+      mandates
+        .filter((m) => m.status !== 'completed' && m.status !== 'failed')
+        .forEach((m) => {
+          tabsStore.openTab({
+            id: m.mandateId,
+            title: m.name || m.project || m.mandateId,
+            mandateId: m.mandateId,
+            closable: m.status !== 'building'
+          });
+        });
+
+      console.log('✅ [Layout] Catch-up de mandates completo:', mandates.length);
+    } catch (e) {
+      console.warn('[Layout] catch-up de mandates falló (Control Plane offline?):', e);
+    }
+  }
 
   function toggleRightPane() {
     rightPaneCollapsed = !rightPaneCollapsed;

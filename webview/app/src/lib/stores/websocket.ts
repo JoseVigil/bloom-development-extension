@@ -97,6 +97,24 @@ function createWebSocketStore() {
       if (callbacks) callbacks.forEach(cb => cb(data));
     }
 
+    // Mandate events (Mandate_Event_Mechanism_Auditoria_v1.md, frente 3).
+    // Antes no había ningún caso acá para 'mandate:*' — un evento de este
+    // tipo se ignoraba en silencio (confirmado en la auditoría previa,
+    // Core_Mandate_No_Aparece_Auditoria_v1.md, punto 1). Se despacha por
+    // wildcard ('mandate:*', un solo suscriptor genérico en +layout.svelte
+    // que delega a mandateStore.applyMandateEvent) en vez de agregar un
+    // `if` por cada uno de los ~10 eventos de WsEventMap — evita tener que
+    // tocar este archivo cada vez que se agregue un evento mandate:* nuevo.
+    // También se respeta el patrón exacto ya existente (eventCallbacks.get(event))
+    // por si algún caller puntual necesita suscribirse a un evento específico.
+    if (typeof event === 'string' && event.startsWith('mandate:')) {
+      const wildcardCallbacks = eventCallbacks.get('mandate:*');
+      if (wildcardCallbacks) wildcardCallbacks.forEach(cb => cb({ event, data }));
+
+      const specificCallbacks = eventCallbacks.get(event);
+      if (specificCallbacks) specificCallbacks.forEach(cb => cb(data));
+    }
+
     // AI events
     if (event === 'bloom.ai.execution.stream_start') {
       update(state => ({

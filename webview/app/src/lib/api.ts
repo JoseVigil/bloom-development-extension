@@ -422,6 +422,61 @@ export async function finalizeIntent(id: string, nucleusPath?: string): Promise<
 }
 
 // ============================================================================
+// MANDATE API
+//
+// Implementación del plan derivado de Mandate_Event_Mechanism_Auditoria_v1.md
+// (frentes 1 y 2): Camino 2 (Fastify → Node, POST /mandates) pasa a ser el
+// que dispara genesisLaunch.ts porque emite publishMandateEvent de forma
+// síncrona sin depender de la cadena watcher→workflow→activity que sigue
+// muerta bajo dev-start (Camino 1, CLI). listMandates() es el mecanismo de
+// catch-up (Addendum A del mismo documento): antes no existía ninguna forma
+// de que Core supiera qué mandates ya existían en disco al montar — el WS
+// solo entrega eventos en vivo, no repite nada de antes de conectarse.
+// ============================================================================
+
+export interface MandateSummary {
+  mandateId: string;
+  mandateType?: 'standard' | 'genesis' | 'domain_expansion';
+  project?: string;
+  name?: string;
+  source?: string;
+  status?: string;
+  currentPhase?: string;
+  createdAt?: string;
+  /** 'state' = leído de mandate_state.json (genesis/domain_expansion en curso). 'draft' = mandate_draft.json (standard sin confirmar). */
+  fileKind?: 'state' | 'draft';
+}
+
+export async function listMandates(): Promise<{ mandates: MandateSummary[] }> {
+  console.log('🔡 [API] Listing mandates (catch-up)');
+  return apiGet('/mandates');
+}
+
+export interface CreateMandateParams {
+  mandateType: 'genesis' | 'domain_expansion' | 'standard';
+  project: string;
+  /** Requerido por el schema del server para genesis/domain_expansion/standard (GenesisCreateBody.name, ver create-mandate.schema.ts). */
+  name: string;
+  /** Requerido para genesis/domain_expansion — origen del mandate (path o marcador, ej. 'onboarding'). */
+  source?: string;
+  /** Solo domain_expansion. */
+  baseGenesis?: string;
+  /** Solo standard. */
+  objective?: string;
+  mandateId?: string;
+}
+
+export interface CreateMandateResponse {
+  mandateId: string;
+  status: string;
+}
+
+export async function createMandate(params: CreateMandateParams): Promise<CreateMandateResponse> {
+  console.log('🔡 [API] Creating mandate (Camino 2 — Fastify):', params.mandateType, params.project);
+  return apiPost('/mandates', params);
+}
+
+// ============================================================================
 // BTIP TYPES
 // ============================================================================
 

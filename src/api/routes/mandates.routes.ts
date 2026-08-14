@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { CreateMandateBody } from '../schemas/create-mandate.schema';
 import { makeAssertBaseGenesisCompletedIfApplicable } from '../hooks/assert-base-genesis-completed.hook';
 import { createMandateHandler } from '../handlers/create-mandate.handler';
+import { listMandatesHandler } from '../handlers/list-mandates.handler';
 import type { MandateFsContext } from '../../utils/mandate-paths';
 
 export interface RegisterMandateRoutesDeps {
@@ -10,13 +11,16 @@ export interface RegisterMandateRoutesDeps {
 }
 
 /**
- * Registra `POST /mandates` (§5.1). Deliberadamente NO registra acá
- * `genesis domains list|confirm|reject`, `pause`, `resume`, `status` —
- * quedan fuera del pedido puntual de esta tarea (A, B, C de creación).
+ * Registra `POST /mandates` (§5.1) y `GET /mandates` (catch-up — ver
+ * Mandate_Event_Mechanism_Auditoria_v1.md, Addendum A). Deliberadamente NO
+ * registra acá `genesis domains list|confirm|reject`, `pause`, `resume`,
+ * `status` — quedan fuera del pedido puntual de esta tarea (A, B, C de
+ * creación, + catch-up de lectura).
  *
- * NOTA: ya no recibe temporalClient/createStandardMandate/publishMandateEvent
- * como deps — el handler reescrito (create-mandate.handler.ts) los resuelve
- * todos internamente (imports directos + env vars). Ver JSDoc del handler.
+ * NOTA: ni `createMandateHandler` ni `listMandatesHandler` reciben
+ * temporalClient/createStandardMandate/publishMandateEvent/fsCtx como deps
+ * — ambos resuelven todo internamente (imports directos + env vars). Ver
+ * JSDoc de cada handler. `deps.fsCtx` solo lo sigue usando el hook de abajo.
  *
  * NOTA (fix Swagger def-0/def-1/def-2): StandardCreateBody, GenesisCreateBody
  * y DomainExpansionCreateBody ya NO se registran acá vía fastify.addSchema().
@@ -27,6 +31,48 @@ export interface RegisterMandateRoutesDeps {
  */
 export function registerMandateRoutes(fastify: FastifyInstance, deps: RegisterMandateRoutesDeps): void {
   const assertBaseGenesisCompletedIfApplicable = makeAssertBaseGenesisCompletedIfApplicable(deps.fsCtx);
+
+  fastify.get(
+    '/mandates',
+    {
+      schema: {
+        tags: ['mandates'],
+        description: 'Lista los mandates existentes en disco (catch-up al montar Core).',
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              mandates: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    mandateId: { type: 'string' },
+                    mandateType: { type: 'string' },
+                    project: { type: 'string' },
+                    name: { type: 'string' },
+                    source: { type: 'string' },
+                    status: { type: 'string' },
+                    currentPhase: { type: 'string' },
+                    createdAt: { type: 'string' },
+                    fileKind: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          500: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              detail: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    listMandatesHandler,
+  );
 
   fastify.post(
     '/mandates',
