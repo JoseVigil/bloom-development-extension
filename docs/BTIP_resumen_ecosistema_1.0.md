@@ -34,6 +34,18 @@ diga cada intent.
 Puente en C++ entre Brain y el navegador (Cortex). Bajo nivel, poco visible,
 pero necesario para que ambos mundos se comuniquen.
 
+### 🔌 Bootstrap
+Control Plane independiente, un proceso Node.js que corre **fuera de VS Code**
+y que Nucleus lanza y supervisa como proceso hijo (`bootControlPlane()`).
+Levanta el WebSocket Server (puerto 4124) y el API Server (puerto 48215),
+reutilizando los mismos módulos compilados del VS Code Plugin (`out/`) pero
+con el módulo `vscode` interceptado por un stub vacío en tiempo de build, lo
+que le permite correr de forma standalone. Existe porque esos servidores no
+pueden depender de que el editor esté abierto: si VS Code se cierra, el
+Bootstrap sigue corriendo para que Nucleus no pierda su puente hacia el
+plugin y el webview. No reemplaza al VS Code Plugin — ambos corren en
+paralelo y comparten módulos, pero tienen ciclos de vida independientes.
+
 ### 🎛️ Bloom Conductor
 La terminal de gobernanza. Interfaz standalone (Electron) donde se observa el
 Event Bus en tiempo real y se crean intents, especialmente los de coordinación

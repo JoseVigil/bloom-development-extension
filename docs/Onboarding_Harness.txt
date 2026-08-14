@@ -1,3 +1,5 @@
+ONBOARDING SYNAPSE STEPS
+
 1. onboarding_navigate  → step: "vault_init"
 2. onboarding_navigate  → step: "github_app_auth"
 3. github_device_code
