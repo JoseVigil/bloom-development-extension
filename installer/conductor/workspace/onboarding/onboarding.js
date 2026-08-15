@@ -25,7 +25,7 @@ import {
   setStepperEstablished, refreshStepperPendingStates,
   handleStepperNodeClick, bindNodeClickHandler,
 } from './renderer/core/ui-stepper.js';
-import { switchTab, initTabShortcut, initHarnessMessageBridge } from './renderer/core/tab-system.js';
+import { switchTab, initTabShortcut, initSynapseSimulatorMessageBridge } from './renderer/core/tab-system.js';
 import { setUserEmail } from './renderer/core/shared-state.js';
 
 // Los steps se registran a sí mismos contra navigation.js/ipc-bridge.js con
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   initIpcBridge({ addNotification, setStepperEstablished, nodeForStep: navigation.nodeForStep });
   initTabShortcut();
-  initHarnessMessageBridge();
+  initSynapseSimulatorMessageBridge();
 
   // Resume de sesión interrumpida — reemplaza resumeOnboarding()/goTo(n).
   // Se llama al final para que todos los listeners y registros de steps

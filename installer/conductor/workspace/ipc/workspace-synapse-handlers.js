@@ -173,7 +173,7 @@ function _connectMilestoneReactor(bridge, registry, reactor) {
     // DIAGNÓSTICO: log de TODO mensaje clasificado como ONBOARDING_MILESTONE
     // que llega a este listener, con su evento original. Antes de esto no
     // había ningún rastro local de que el mensaje hubiera llegado hasta acá
-    // (el único log visible era el feed de debug del Harness, que no pasa
+    // (el único log visible era el feed de debug del SynapseSimulator, que no pasa
     // por este código — ver CAMBIOS v4.1 en synapse-bridge.js). Con esto,
     // grep 'GOOGLE_LOGIN_DETECTED' en la consola del main process debería
     // mostrar esta línea si la clasificación (fix del Set) funcionó.

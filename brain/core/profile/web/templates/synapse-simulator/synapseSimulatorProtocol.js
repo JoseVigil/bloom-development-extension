@@ -5,21 +5,21 @@
 
 // ============================================================================
 // IONPUMP PROTOCOL MANIFEST
-// Autodescriptive contract for the Harness ProtocolReader.
+// Autodescriptive contract for the SynapseSimulator ProtocolReader.
 // Append-only — does NOT modify any existing PROTOCOL object.
 // ============================================================================
 
 if (typeof self !== 'undefined') {
-  self.HARNESS_PROTOCOL_MANIFEST = {
+  self.SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST = {
     version: "1.0.0",
-    protocol: "harness",
+    protocol: "synapse-simulator",
     description: "IonPump runtime — web automation DOM commands and event triggers for registered ion sites",
 
     messages: [
       {
         id: "dom_click",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a DOM_CLICK command on a CSS selector in a given tab",
         payload_template: {
@@ -47,7 +47,7 @@ if (typeof self !== 'undefined') {
       {
         id: "dom_type",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a DOM_TYPE command — focus a field and type a value",
         payload_template: {
@@ -82,7 +82,7 @@ if (typeof self !== 'undefined') {
       {
         id: "dom_wait",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a DOM_WAIT command — wait for a selector to appear in the DOM",
         payload_template: {
@@ -117,7 +117,7 @@ if (typeof self !== 'undefined') {
       {
         id: "dom_focus",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a DOM_FOCUS command — focus a specific element",
         payload_template: {
@@ -145,7 +145,7 @@ if (typeof self !== 'undefined') {
       {
         id: "dom_scroll",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a DOM_SCROLL command — scroll to a position or element",
         payload_template: {
@@ -180,7 +180,7 @@ if (typeof self !== 'undefined') {
       {
         id: "dom_extract",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a DOM_EXTRACT command — extract text or attribute from an element",
         payload_template: {
@@ -215,7 +215,7 @@ if (typeof self !== 'undefined') {
       {
         id: "event_emit",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate an EVENT_EMIT — trigger a named event in a tab context",
         payload_template: {
@@ -251,7 +251,7 @@ if (typeof self !== 'undefined') {
       {
         id: "ion_execute_flow",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Trigger IonPump to execute a registered flow for a site",
         payload_template: {
@@ -292,7 +292,7 @@ if (typeof self !== 'undefined') {
       {
         id: "ion_reload",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Force IonPump to hot-reload recipes for a specific site or all sites",
         payload_template: {
@@ -311,7 +311,7 @@ if (typeof self !== 'undefined') {
       {
         id: "ion_inspect",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Request the current IonPump registry state — registered sites and loaded recipes",
         payload_template: {

@@ -787,3 +787,18 @@ notimation
 Preguntas de desarrollo Pytorch
 https://claude.ai/chat/d487bfbc-9d0a-4e6a-a33b-3ee723c0dac9
 
+gesturekit
+Expandir tipos de intents en intent_state_manager bsip intents dev doc 
+https://claude.ai/chat/138ad54d-93b3-4f27-9c1b-edabbb753d8d
+
+perplexity 
+Data Annotation Work 
+Coding/Software AI Trainer + Linux/Networking/Embedded Systems + NLP/Chatbot Evaluation.
+https://www.perplexity.ai/search/d733595b-93e4-435d-aac0-2af67516215c
+
+jose gmail
+Arreglar vaut, con conversacion de gemini
+https://claude.ai/chat/e7cfbcd9-f7e9-41bc-beb4-3be2cd601947
+Claude for Chrome Extension Internals
+https://gist.github.com/sshh12/e352c053627ccbe1636781f73d6d715b
+

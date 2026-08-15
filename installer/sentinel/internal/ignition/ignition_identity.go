@@ -351,12 +351,12 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	ig.Core.Logger.Info("           - %s.synapse.config.js: ✅", mode)
 	ig.Core.Logger.Info("           - native host manifest: ✅")
 
-	// === 7. GENERAR HARNESS CONFIG (si el perfil tiene assets de harness) ===
+	// === 7. GENERAR SYNAPSE_SIMULATOR CONFIG (si el perfil tiene assets de synapse-simulator) ===
 	profileAlias := getStringField(profileData, "alias", "")
-	if err := writeHarnessConfig(profileID, launchID, profileAlias, extDir); err != nil {
-		ig.Core.Logger.Info("[WARN] No se pudo generar harness config: %v", err)
+	if err := writeSynapseSimulatorConfig(profileID, launchID, profileAlias, extDir); err != nil {
+		ig.Core.Logger.Info("[WARN] No se pudo generar synapse-simulator config: %v", err)
 	}
-	ig.Core.Logger.Info("           - harness.synapse.config.js: generado (o inactivo si no hay harness/)")
+	ig.Core.Logger.Info("           - synapse-simulator.synapse.config.js: generado (o inactivo si no hay synapse-simulator/)")
 
 	return configData, nil
 }
@@ -460,41 +460,41 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 	return os.WriteFile(profilesPath, updatedData, 0644)
 }
 
-// writeHarnessConfig escribe harness.synapse.config.js en extensionDir.
+// writeSynapseSimulatorConfig escribe synapse-simulator.synapse.config.js en extensionDir.
 //
-// Es un no-op silencioso si harness/index.html no existe en extensionDir,
+// Es un no-op silencioso si synapse-simulator/index.html no existe en extensionDir,
 // lo que garantiza que solo actúa en perfiles creados con `sentinel seed --dev`.
 //
-// El archivo de salida es JS con wrapper self.HARNESS_CONFIG = {...} porque
-// harness/index.html lo carga con un <script src="..."> tag y lee
-// self.HARNESS_CONFIG directamente — el mismo patron que discovery.synapse.config.js.
+// El archivo de salida es JS con wrapper self.SYNAPSE_SIMULATOR_CONFIG = {...} porque
+// synapse-simulator/index.html lo carga con un <script src="..."> tag y lee
+// self.SYNAPSE_SIMULATOR_CONFIG directamente — el mismo patron que discovery.synapse.config.js.
 // background.js lo carga con fetch() como fallback (el importScripts falla en
 // MV3 post-instalacion, pero el fetch funciona correctamente).
 //
 // No es fatal: un error solo emite Warning y no interrumpe el launch.
-func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) error {
-	// Deteccion de dev mode: la presencia del archivo harness/index.html
+func writeSynapseSimulatorConfig(profileID, launchID, profileAlias, extensionDir string) error {
+	// Deteccion de dev mode: la presencia del archivo synapse-simulator/index.html
 	// es la senal canonica — solo existe en perfiles creados con --dev.
-	harnessPage := filepath.Join(extensionDir, "harness", "index.html")
-	if _, err := os.Stat(harnessPage); os.IsNotExist(err) {
+	synapseSimulatorPage := filepath.Join(extensionDir, "synapse-simulator", "index.html")
+	if _, err := os.Stat(synapseSimulatorPage); os.IsNotExist(err) {
 		// Perfil prod — no-op normal
 		return nil
 	}
 
-	harnessData := map[string]string{
+	synapseSimulatorData := map[string]string{
 		"profileId":    profileID,
 		"launchId":     launchID,
 		"profileAlias": profileAlias,
 		"generatedAt":  time.Now().UTC().Format(time.RFC3339),
 	}
 
-	configJSON, err := json.MarshalIndent(harnessData, "", "  ")
+	configJSON, err := json.MarshalIndent(synapseSimulatorData, "", "  ")
 	if err != nil {
-		return fmt.Errorf("error serializando harness config: %v", err)
+		return fmt.Errorf("error serializando synapse-simulator config: %v", err)
 	}
 
-	jsContent := fmt.Sprintf("self.HARNESS_CONFIG = %s;", string(configJSON))
-	configPath := filepath.Join(extensionDir, "harness.synapse.config.js")
+	jsContent := fmt.Sprintf("self.SYNAPSE_SIMULATOR_CONFIG = %s;", string(configJSON))
+	configPath := filepath.Join(extensionDir, "synapse-simulator.synapse.config.js")
 	return os.WriteFile(configPath, []byte(jsContent), 0644)
 }
 

@@ -105,7 +105,7 @@ bloom-development-extension/
     │   │   ├── health_windows.go
     │   │   ├── logs.go
     │   │   ├── mandate_config.go
-    │   │   ├── onboarding_harness.go
+    │   │   ├── onboarding_synapse_simulator.go
     │   │   ├── service.go
     │   │   ├── supervisor.go
     │   │   └── workers.go

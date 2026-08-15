@@ -18,7 +18,7 @@
     { key: 'bloom_api',      label: 'API' },
     { key: 'control_plane',  label: 'Control Plane' },
     { key: 'svelte_dev',     label: 'Svelte' },
-    { key: 'harness',        label: 'Harness' },
+    { key: 'synapse-simulator', label: 'Synapse Simulator' },
     { key: 'vault',          label: 'Vault' },
     { key: 'worker_manager', label: 'Profiles' },
   ];

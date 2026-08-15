@@ -220,7 +220,7 @@ body::after {
   border-bottom-color: var(--accent);
 }
 
-/* Dot de estado vivo en el tab de Harness */
+/* Dot de estado vivo en el tab de SynapseSimulator */
 .tab-live-dot {
   width: 5px; height: 5px;
   border-radius: 50%;
@@ -259,8 +259,8 @@ body::after {
   width: 100%; height: 100%;
 }
 
-/* Harness (panel debug) */
-#panel-harness {
+/* SynapseSimulator (panel debug) */
+#panel-synapse-simulator {
   width: 100%; height: 100%;
 }
 
@@ -1423,9 +1423,9 @@ body::after {
       <div class="content-tab active" id="tab-onboarding" onclick="switchTab('onboarding')">
         Onboarding
       </div>
-      <div class="content-tab" id="tab-harness" onclick="switchTab('harness')">
-        <span class="tab-live-dot" id="harness-live-dot"></span>
-        Harness
+      <div class="content-tab" id="tab-synapse-simulator" onclick="switchTab('synapse-simulator')">
+        <span class="tab-live-dot" id="synapse-simulator-live-dot"></span>
+        SynapseSimulator
       </div>
     </div>
 
@@ -1762,8 +1762,8 @@ body::after {
 </div><!-- /stage -->
       </div><!-- /panel-onboarding -->
 
-      <!-- Panel 2: Harness — iframe cargado desde el inicio, siempre activo -->
-      <div class="content-panel" id="panel-harness">
+      <!-- Panel 2: SynapseSimulator — iframe cargado desde el inicio, siempre activo -->
+      <div class="content-panel" id="panel-synapse-simulator">
         <iframe id="debug-frame" src="../shared/debug.html"></iframe>
       </div>
 

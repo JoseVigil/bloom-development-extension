@@ -964,27 +964,27 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     return { success: true };
   });
 
-  // ── HANDLER: Harness — inyectar milestone directamente al reactor ────────
+  // ── HANDLER: SynapseSimulator — inyectar milestone directamente al reactor ────────
   // Solo disponible en builds de desarrollo (!app.isPackaged).
   // Permite disparar handleMilestone() sin necesitar una cuenta real ni
   // que Brain emita el evento — útil para testear el flujo de UI completo.
   //
   // Payload: { stepId: string, data?: object }
   // Ejemplo: { stepId: 'github_app_auth', data: { username: 'test-user', org: 'bloom-labs' } }
-  ipcMain.handle('harness:inject-milestone', async (event, { stepId, data = {} }) => {
+  ipcMain.handle('synapse-simulator:inject-milestone', async (event, { stepId, data = {} }) => {
     if (app.isPackaged) {
-      log.warn('[HARNESS] inject-milestone rechazado — build empaquetado');
-      return { success: false, error: 'harness not available in production builds' };
+      log.warn('[SYNAPSE_SIMULATOR] inject-milestone rechazado — build empaquetado');
+      return { success: false, error: 'synapse-simulator not available in production builds' };
     }
     if (!stepId || typeof stepId !== 'string') {
       return { success: false, error: 'stepId is required' };
     }
     const reactor = getReactor?.();
     if (!reactor) {
-      log.warn('[HARNESS] inject-milestone: reactor no disponible todavía');
+      log.warn('[SYNAPSE_SIMULATOR] inject-milestone: reactor no disponible todavía');
       return { success: false, error: 'reactor not initialized — call after initOnboardingBridge()' };
     }
-    log.info(`[HARNESS] inject-milestone → stepId: "${stepId}" data: ${JSON.stringify(data)}`);
+    log.info(`[SYNAPSE_SIMULATOR] inject-milestone → stepId: "${stepId}" data: ${JSON.stringify(data)}`);
     try {
       // Construir un enriched mínimo que el reactor entienda
       const enriched = {
@@ -992,13 +992,13 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         event:    stepId.toUpperCase(),   // para que los handlers que inspeccionan enriched.event funcionen
         data,
         _ts:      Date.now(),
-        _harness: true,                   // trazabilidad: este evento fue inyectado por harness
+        _synapse_simulator: true,         // trazabilidad: este evento fue inyectado por synapse-simulator
       };
       reactor.handleMilestone(stepId, enriched);
-      log.info(`[HARNESS] inject-milestone ok — "${stepId}"`);
+      log.info(`[SYNAPSE_SIMULATOR] inject-milestone ok — "${stepId}"`);
       return { success: true, stepId };
     } catch (err) {
-      log.error(`[HARNESS] inject-milestone error — "${stepId}":`, err.message);
+      log.error(`[SYNAPSE_SIMULATOR] inject-milestone error — "${stepId}":`, err.message);
       return { success: false, error: err.message };
     }
   });

@@ -129,14 +129,14 @@ Un solo botón (`#btn-continue-identity`) y un solo popup de ayuda (`#info-popup
 
 ---
 
-## 4. Compatibilidad con el Harness de Debugging (requerimiento explícito, no negociable de acá en más)
+## 4. Compatibilidad con el SynapseSimulator de Debugging (requerimiento explícito, no negociable de acá en más)
 
 Confirmado en `onboarding-handlers.js`, ya implementado y en uso:
 
-1. **`harness:inject-milestone`** (línea ~563): `ipcMain.handle`, gateado por `!app.isPackaged`. Recibe `{ stepId, data }`, arma un `enriched` sintético (`type: 'ONBOARDING_MILESTONE'`, `event: stepId.toUpperCase()`, `_harness: true` para trazabilidad) y llama directo a `reactor.handleMilestone(stepId, enriched)` — salteando Brain y Chrome. Permite testear cualquier step sin cuenta real.
+1. **`synapse-simulator:inject-milestone`** (línea ~563): `ipcMain.handle`, gateado por `!app.isPackaged`. Recibe `{ stepId, data }`, arma un `enriched` sintético (`type: 'ONBOARDING_MILESTONE'`, `event: stepId.toUpperCase()`, `_synapse_simulator: true` para trazabilidad) y llama directo a `reactor.handleMilestone(stepId, enriched)` — salteando Brain y Chrome. Permite testear cualquier step sin cuenta real.
 2. **Raw event feed**: en `workspace-synapse-handlers.js`, si `opts.verbose` (`!app.isPackaged`), cada bridge reenvía **todo** mensaje de Synapse por `synapse:raw-event`. En `ipc-bridge.js`, `onSynapseEvent` clasifica esos eventos (`synapseCategory()`) y los postea al iframe `#debug-frame` en dos formatos (`SYNAPSE_RAW_EVENT` crudo y `SYNAPSE_EVENT` categorizado para el Event Feed de `debug.html`).
 
-**Regla de diseño para todo lo que sigue (Fase C incluida):** cualquier milestone nuevo que se agregue — incluidos los que surjan de rediseñar Discovery/Landing — tiene que seguir siendo disparable 1:1 vía `harness:inject-milestone` con un `stepId` del SSOT. Si Discovery/Landing terminan necesitando sub-milestones que no mapean a un `stepId` del JSON, hay que decidir explícitamente cómo se exponen al harness (¿se agregan como steps reales del SSOT aunque no bloqueen navegación, o se extiende el payload de `data` de un step existente?) — no se puede dejar una zona no inyectable sin cuenta real.
+**Regla de diseño para todo lo que sigue (Fase C incluida):** cualquier milestone nuevo que se agregue — incluidos los que surjan de rediseñar Discovery/Landing — tiene que seguir siendo disparable 1:1 vía `synapse-simulator:inject-milestone` con un `stepId` del SSOT. Si Discovery/Landing terminan necesitando sub-milestones que no mapean a un `stepId` del JSON, hay que decidir explícitamente cómo se exponen al synapse-simulator (¿se agregan como steps reales del SSOT aunque no bloqueen navegación, o se extiende el payload de `data` de un step existente?) — no se puede dejar una zona no inyectable sin cuenta real.
 
 ---
 
@@ -157,7 +157,7 @@ Confirmado en `onboarding-handlers.js`, ya implementado y en uso:
 - SSOT único consumido por Main (`resolution-engine.js`) y por Renderer (`navigation.js`, con fallback).
 - Renderer modularizado en `core/` + `steps/*` (parcial — ver §3, tres archivos sin auditar), dependencia unidireccional, patrón de auto-registro.
 - `vault_init` integrado como step de primera clase.
-- Harness de debugging operativo y documentado como constraint permanente.
+- SynapseSimulator de debugging operativo y documentado como constraint permanente.
 - **`onboarding.html` conectado de verdad a `onboarding.js` modular** (`type="module"` + `startOnboarding()`) — corregido 7 de julio de 2026, ver §0.
 
 **Abierto, orden sugerido:**

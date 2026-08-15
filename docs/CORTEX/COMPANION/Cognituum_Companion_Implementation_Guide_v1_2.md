@@ -27,10 +27,10 @@ Cognituum es un sistema de asistencia cognitiva para ingenieros de software dond
 
 El **Companion Cognitivo** es un panel lateral embebido en el navegador que provee una segunda opinión inmediata sin interrumpir el flujo de trabajo. No reemplaza el pipeline de BTIPS ni tiene acceso directo al contexto de Cortex — es un recurso solidario a la decisión del ingeniero.
 
-A partir de v1.2, el Companion deja de ser un módulo satélite y pasa a ser **el cuarto activo Synapse** del sistema, junto a Discovery, Landing y Harness. Esto significa que:
+A partir de v1.2, el Companion deja de ser un módulo satélite y pasa a ser **el cuarto activo Synapse** del sistema, junto a Discovery, Landing y SynapseSimulator. Esto significa que:
 
 - Vive en `extension/companion/`, con su propio manifiesto de protocolo (`companionProtocol.js`) y schema (`protocols/companion.schema.json`), igual que los otros tres activos.
-- Se integra en el mismo ciclo de boot y en el mismo ducto de mensajería que Discovery/Landing/Harness.
+- Se integra en el mismo ciclo de boot y en el mismo ducto de mensajería que Discovery/Landing/SynapseSimulator.
 - Su habilitación operativa depende del **handshake de 3 fases** del ducto Synapse, no únicamente de que el perfil tenga cuentas vinculadas (ver §2.6).
 
 El Companion puede recibir el **BISP activo de la sesión como contexto nativo**, cargado en background antes de que el ingeniero interactúe con la UI de la AI web. Esto lo convierte en un validador silencioso de arquitectura disponible bajo demanda, sin contaminar la sesión principal.
@@ -469,7 +469,7 @@ Todos estos mensajes solo se procesan si el ducto Synapse ya está en `handshake
 
 ## 6. companion/companionProtocol.js — Manifiesto del protocolo *(nuevo v1.2)*
 
-Este archivo formaliza, para el activo `companion`, lo que `discoveryProtocol.js`/`landingProtocol.js`/`harnessProtocol.js` ya hacen para sus respectivos activos: declarar los mensajes que el activo entiende, su dirección y su contrato de payload, de modo que `background.js` pueda validar el ruteo sin conocer los detalles internos de `companion.js`.
+Este archivo formaliza, para el activo `companion`, lo que `discoveryProtocol.js`/`landingProtocol.js`/`synapseSimulatorProtocol.js` ya hacen para sus respectivos activos: declarar los mensajes que el activo entiende, su dirección y su contrato de payload, de modo que `background.js` pueda validar el ruteo sin conocer los detalles internos de `companion.js`.
 
 ```javascript
 // companion/companionProtocol.js
@@ -826,7 +826,7 @@ Si un perfil no puede completar la Condición 2 (§2.1):
 1. Verificar que el formulario de Discovery emite `API_KEY_REGISTERED` al submit, no antes.
 2. Verificar que la validación local de formato (regex) no está rechazando keys válidas por un patrón desactualizado.
 3. Confirmar que no queda ningún listener de clipboard residual de v1.1 — su presencia junto al nuevo flujo manual duplicaría la detección y generaría estados inconsistentes en `linked_accounts`.
-4. Consultar `AUTHORITY_BOUNDARY.md` §6 antes de reactivar cualquier automatización de tipo `dom_type`/`dom_click` sobre la puerta del proveedor — ese camino está reservado exclusivamente al Harness de debug y nunca al onboarding real.
+4. Consultar `AUTHORITY_BOUNDARY.md` §6 antes de reactivar cualquier automatización de tipo `dom_type`/`dom_click` sobre la puerta del proveedor — ese camino está reservado exclusivamente al SynapseSimulator de debug y nunca al onboarding real.
 
 ---
 

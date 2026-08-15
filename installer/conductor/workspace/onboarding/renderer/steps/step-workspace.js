@@ -289,7 +289,7 @@ export function runNucleusTerminal() {
 // removida — ver el comentario "REMOVED (código zombie)" en el onboarding.js
 // original, línea ~1240). Ninguna function de acá abajo está enganchada a
 // navigateTo() ni a ningún botón de onboarding.html tal como está hoy.
-// Se preservan sin modificar por si algo externo (ej. el debug harness)
+// Se preservan sin modificar por si algo externo (ej. el debug synapse-simulator)
 // todavía las referencia — confirmar con grep en el HTML/tests antes de
 // borrarlas definitivamente.
 export async function loadOrgs() {

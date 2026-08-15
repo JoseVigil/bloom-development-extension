@@ -25,7 +25,7 @@ Esto no es una frase decorativa — es una restricción de diseño que ya vive e
 - **El Conductor convierte conflicto técnico en decisión asistida, no en decisión automática.** El merge cognitivo consulta al modelo, pero es el ingeniero quien fuerza la reconciliación a través de un intent `cor` (`§2.4`).
 - **La autoridad nunca se distribuye, aunque el acceso sí** — invariante ya explícito para Alfred y la app mobile (`§10.5`), y que Cognittuum eleva a ley general del sistema: ningún canal remoto, ningún agente, ningún loop autónomo adquiere autoridad. Solo la ejerce quien la tiene: el humano, a través de Nucleus.
 
-Los agentes, los loops y lo que venga como "ejército de harness cognitivos" no son la fuente de desarrollo. Son **superficie de ejecución**, subordinada siempre a la intención firmada por un humano.
+Los agentes, los loops y lo que venga como "ejército de synapse-simulator cognitivos" no son la fuente de desarrollo. Son **superficie de ejecución**, subordinada siempre a la intención firmada por un humano.
 
 ---
 

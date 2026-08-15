@@ -325,7 +325,7 @@ function isComponentHealthy(component) {
   // reinterpretar esos strings acá (duplicando lógica que Go ya resolvió),
   // usamos directamente el booleano `component.healthy` que health.go ya
   // calcula — es la fuente de verdad, no hay que re-derivarla.
-  // Nota: governance/harness pueden estar en state "DEGRADED" con
+  // Nota: governance/synapse-simulator pueden estar en state "DEGRADED" con
   // healthy:true (degradado pero no crítico) — por eso no alcanza con
   // mirar el string de estado.
   return component?.healthy === true;

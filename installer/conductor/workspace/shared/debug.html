@@ -865,9 +865,9 @@ function setWsState(state) {
   dot.className   = state === 'live' ? 'live' : state === 'error' ? 'error' : '';
   label.className = state === 'live' ? 'live' : '';
   label.textContent = state === 'live' ? 'live' : state === 'error' ? 'reconnecting' : 'connecting';
-  // Notificar al padre (onboarding.html) para que actualice el dot del tab Harness
+  // Notificar al padre (onboarding.html) para que actualice el dot del tab SynapseSimulator
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'HARNESS_WS_STATE', state }, '*');
+    window.parent.postMessage({ type: 'SYNAPSE_SIMULATOR_WS_STATE', state }, '*');
   }
 }
 
@@ -885,7 +885,7 @@ const HEALTH_COMPONENTS = [
   { key: 'bloom_api',     label: 'API' },
   { key: 'control_plane', label: 'Control Plane' },
   { key: 'svelte_dev',    label: 'Svelte' },
-  { key: 'harness',       label: 'Harness' },
+  { key: 'synapse-simulator', label: 'Synapse Simulator' },
   { key: 'vault',         label: 'Vault' },
   { key: 'worker_manager',label: 'Profiles' },
 ];

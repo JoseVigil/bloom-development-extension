@@ -219,7 +219,7 @@ class ProfileCreator:
 
     def _generate_profile_pages(self, profile_id: str, profile_name: str, dev_mode: bool = False) -> None:
         """
-        Generate discovery, landing, harness and companion pages for the profile.
+        Generate discovery, landing, synapse-simulator and companion pages for the profile.
         
         Uses web generators to create HTML pages inside the extension directory.
         The generators handle directory creation and template copying internally.
@@ -227,7 +227,7 @@ class ProfileCreator:
         Args:
             profile_id: Profile identifier (UUID)
             profile_name: Profile display name
-            dev_mode: Whether to generate harness page in dev mode
+            dev_mode: Whether to generate synapse-simulator page in dev mode
             
         Raises:
             ImportError: If page generators are not available
@@ -239,7 +239,7 @@ class ProfileCreator:
         try:
             from brain.core.profile.web.discovery_generator import generate_discovery_page
             from brain.core.profile.web.landing_generator import generate_profile_landing
-            from brain.core.profile.web.harness_generator import generate_harness_page
+            from brain.core.profile.web.synapse_simulator_generator import generate_synapse_simulator_page
             from brain.core.profile.web.companion_generator import generate_companion_page
         except ImportError as e:
             logger.error(f"❌ Page generators not available: {e}")
@@ -283,14 +283,14 @@ class ProfileCreator:
             logger.error(f"❌ Failed to generate landing page: {e}", exc_info=True)
             raise Exception(f"Landing page generation failed: {e}")
 
-        # Generate harness page
+        # Generate synapse-simulator page
         try:
-            generate_harness_page(extension_dir, profile_data, dev_mode=dev_mode)
+            generate_synapse_simulator_page(extension_dir, profile_data, dev_mode=dev_mode)
             if dev_mode:
-                logger.info(f"✅ Harness page generated (dev mode)")
+                logger.info(f"✅ SynapseSimulator page generated (dev mode)")
         except Exception as e:
-            logger.error(f"❌ Failed to generate harness page: {e}", exc_info=True)
-            raise Exception(f"Harness page generation failed: {e}")
+            logger.error(f"❌ Failed to generate synapse-simulator page: {e}", exc_info=True)
+            raise Exception(f"SynapseSimulator page generation failed: {e}")
 
         # Generate companion page
         try:

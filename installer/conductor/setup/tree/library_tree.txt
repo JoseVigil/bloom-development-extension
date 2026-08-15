@@ -3161,8 +3161,8 @@ BloomNucleus/
 │   ├── nucleus/
 │   │   ├── control_plane/
 │   │   │   └── nucleus_control_plane_20260622.log
-│   │   ├── harness/
-│   │   │   └── harness.log
+│   │   ├── synapse-simulator/
+│   │   │   └── synapse-simulator.log
 │   │   ├── hooks/
 │   │   │   ├── post_launch/
 │   │   │   │   └── nucleus_post_launch_20260622.log
@@ -3257,11 +3257,11 @@ BloomNucleus/
 │       │   │   ├── script.js
 │       │   │   └── styles.css
 │       │   ├── discovery.synapse.config.js
-│       │   ├── harness/
-│       │   │   ├── harness.js
+│       │   ├── synapse-simulator/
+│       │   │   ├── synapse-simulator.js
 │       │   │   ├── index.html
-│       │   │   └── harnessProtocol.js
-│       │   ├── harness.synapse.config.js
+│       │   │   └── synapseSimulatorProtocol.js
+│       │   ├── synapse-simulator.synapse.config.js
 │       │   ├── landing/
 │       │   │   ├── data-loader.js
 │       │   │   ├── index.html

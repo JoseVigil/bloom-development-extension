@@ -1,6 +1,6 @@
 // workspace/onboarding/renderer/core/tab-system.js
 //
-// Sistema de tabs superior (Onboarding / Harness-debug). No pedido
+// Sistema de tabs superior (Onboarding / SynapseSimulator-debug). No pedido
 // explícitamente en la misión, pero es infraestructura de UI ajena al flujo
 // de steps — dejarlo en el orquestador (onboarding.js) hubiese ido contra
 // el objetivo de "quede limpio" del entregable original.
@@ -28,22 +28,22 @@ export function getActiveTab() {
   return _activeTab;
 }
 
-/** Atajo Ctrl/Cmd+Shift+D → toggle Harness tab. Registrar una vez en boot. */
+/** Atajo Ctrl/Cmd+Shift+D → toggle SynapseSimulator tab. Registrar una vez en boot. */
 export function initTabShortcut() {
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'D') {
       e.preventDefault();
-      switchTab(_activeTab === 'harness' ? 'onboarding' : 'harness');
+      switchTab(_activeTab === 'synapse-simulator' ? 'onboarding' : 'synapse-simulator');
     }
   });
 }
 
-/** Live dot del tab Harness — refleja WS state que postea el iframe. */
-export function initHarnessMessageBridge() {
+/** Live dot del tab SynapseSimulator — refleja WS state que postea el iframe. */
+export function initSynapseSimulatorMessageBridge() {
   window.addEventListener('message', (evt) => {
     if (!evt.data) return;
-    if (evt.data.type === 'HARNESS_WS_STATE') {
-      const dot = document.getElementById('harness-live-dot');
+    if (evt.data.type === 'SYNAPSE_SIMULATOR_WS_STATE') {
+      const dot = document.getElementById('synapse-simulator-live-dot');
       if (dot) dot.className = 'tab-live-dot' + (evt.data.state === 'live' ? ' live' : '');
     }
     if (evt.data.type === 'REQUEST_HEALTH') {

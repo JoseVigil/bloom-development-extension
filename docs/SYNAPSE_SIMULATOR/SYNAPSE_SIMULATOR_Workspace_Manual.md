@@ -1,4 +1,4 @@
-# Bloom Workspace Harness — Manual de Referencia
+# Bloom Workspace SynapseSimulator — Manual de Referencia
 
 **Sistema:** Bloom Conductor · Workspace (Electron)
 **Protocolo:** Synapse v4
@@ -7,23 +7,23 @@
 
 ---
 
-## 1. Qué es el Harness y para qué existe
+## 1. Qué es el SynapseSimulator y para qué existe
 
-El Harness es el panel de debug del protocolo Synapse en el lado de Workspace. Su rol es doble:
+El SynapseSimulator es el panel de debug del protocolo Synapse en el lado de Workspace. Su rol es doble:
 
 - **Observar** todos los eventos que circulan por el bus de nucleus en tiempo real, vía WebSocket
 - **Simular** eventos del protocolo para testear que Cortex los recibe y los procesa correctamente
 
-El Harness **no modifica estado del sistema** por sí mismo. Cuando simula un evento, lo inyecta en el bus exactamente igual que lo haría cualquier otro componente. nucleus lo procesa y lo distribuye.
+El SynapseSimulator **no modifica estado del sistema** por sí mismo. Cuando simula un evento, lo inyecta en el bus exactamente igual que lo haría cualquier otro componente. nucleus lo procesa y lo distribuye.
 
-### Relación con el Cortex Harness
+### Relación con el Cortex SynapseSimulator
 
-El Workspace Harness y el Cortex Harness son **dos consumidores del mismo feed**. `background.js` (Cortex) emite cada evento hacia dos destinos simultáneos:
+El Workspace SynapseSimulator y el Cortex SynapseSimulator son **dos consumidores del mismo feed**. `background.js` (Cortex) emite cada evento hacia dos destinos simultáneos:
 
-1. **POST** `http://localhost:48215/api/internal/system-event` → llega aquí (Workspace Harness, via nucleus)
-2. **`chrome.runtime.sendMessage`** → llega al Cortex Harness (tab de la extensión)
+1. **POST** `http://localhost:48215/api/internal/system-event` → llega aquí (Workspace SynapseSimulator, via nucleus)
+2. **`chrome.runtime.sendMessage`** → llega al Cortex SynapseSimulator (tab de la extensión)
 
-Si el shape del mensaje `HARNESS_LOG` cambia, **rompe a los dos consumidores**. Cualquier cambio en el formato debe coordinarse.
+Si el shape del mensaje `SYNAPSE_SIMULATOR_LOG` cambia, **rompe a los dos consumidores**. Cualquier cambio en el formato debe coordinarse.
 
 ---
 
@@ -116,11 +116,11 @@ debug.html (iframe)
 
 ---
 
-## 4. Layout del Harness
+## 4. Layout del SynapseSimulator
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  🌱 Bloom Harness [DEV]  ●  ws://localhost:4124  [live/reconnecting]│  ← titlebar + WS dot
+│  🌱 Bloom SynapseSimulator [DEV]  ●  ws://localhost:4124  [live/reconnecting]│  ← titlebar + WS dot
 ├──────────────┬──────────────────────────────────────────────────────┤
 │              │                                                      │
 │  HEALTH      │  FEED                                                │
@@ -202,7 +202,7 @@ Checkbox por categoría. El contador muestra cuántos eventos de esa categoría 
 
 ---
 
-## 6. Cómo usar el Harness — flujos de trabajo
+## 6. Cómo usar el SynapseSimulator — flujos de trabajo
 
 ### Flujo A — Verificar que Cortex recibe un evento
 
@@ -210,7 +210,7 @@ Checkbox por categoría. El contador muestra cuántos eventos de esa categoría 
 2. En el sim-bar, seleccionar el evento a testear
 3. Presionar **POST →**
 4. Verificar en el feed de Workspace que aparece la entrada
-5. Verificar en el Cortex Harness (tab de la extensión) que el mismo evento aparece en su feed
+5. Verificar en el Cortex SynapseSimulator (tab de la extensión) que el mismo evento aparece en su feed
 
 ### Flujo B — Simular el flujo completo github_auth → Landing
 
@@ -228,7 +228,7 @@ Workspace sim-bar → Cortex background.js → Discovery → Landing
 7. synapse    · DISCOVERY_COMPLETE       ← onboarding finalizado
 ```
 
-Verificar en el feed del Cortex Harness que aparecen los mismos eventos con los mismos timestamps.
+Verificar en el feed del Cortex SynapseSimulator que aparecen los mismos eventos con los mismos timestamps.
 
 ### Flujo C — Testear resiliencia de Cortex
 
@@ -257,7 +257,7 @@ Verificar que la meta CSP de `debug.html` incluye `ws://localhost:4124` en `conn
 
 **Causa B:** nucleus no está corriendo. Verificar con `nucleus --json health`.
 
-**Causa C:** `/health` devuelve `{status:"ok"}` pero el Harness valida `data.components || data.state` — usar `renderHealthSimple()`.
+**Causa C:** `/health` devuelve `{status:"ok"}` pero el SynapseSimulator valida `data.components || data.state` — usar `renderHealthSimple()`.
 
 ---
 
@@ -277,15 +277,15 @@ curl -X POST http://localhost:48215/api/internal/system-event \
 
 ---
 
-### Evento llega al Workspace Harness pero no al Cortex Harness
+### Evento llega al Workspace SynapseSimulator pero no al Cortex SynapseSimulator
 
-**Causa probable:** `background.js` está emitiendo correctamente (el POST llegó a nucleus), pero la tab del Cortex Harness no tiene un listener activo o hubo un error silencioso en `chrome.runtime.sendMessage`.
+**Causa probable:** `background.js` está emitiendo correctamente (el POST llegó a nucleus), pero la tab del Cortex SynapseSimulator no tiene un listener activo o hubo un error silencioso en `chrome.runtime.sendMessage`.
 
 **Verificar en Dev Tools de background.js** (service worker):
-1. ¿`harnessLogBuffer` tiene entradas?
-2. ¿El `chrome.runtime.sendMessage(harnessMsg).catch(() => {})` falló silenciosamente?
+1. ¿`synapseSimulatorLogBuffer` tiene entradas?
+2. ¿El `chrome.runtime.sendMessage(synapseSimulatorMsg).catch(() => {})` falló silenciosamente?
 
-El Cortex Harness debería pedir el replay al abrir (`HARNESS_HELLO`). Si el replay no llega, verificar que la tab del Harness está completamente cargada antes de esperarlo.
+El Cortex SynapseSimulator debería pedir el replay al abrir (`SYNAPSE_SIMULATOR_HELLO`). Si el replay no llega, verificar que la tab del SynapseSimulator está completamente cargada antes de esperarlo.
 
 ---
 
@@ -312,7 +312,7 @@ if (rail2) rail2.style.display = '';
 [WARN] postMessage health bridge: timeout
 ```
 
-Comportamiento esperado si `onboarding.js` no tiene el bridge instalado. El Harness cae al fallback REST y muestra "API OK". No es bloqueante.
+Comportamiento esperado si `onboarding.js` no tiene el bridge instalado. El SynapseSimulator cae al fallback REST y muestra "API OK". No es bloqueante.
 
 Para eliminar el warning, agregar `_installDebugHealthBridge()` en `onboarding.js` y llamarla desde `toggleDebugPanel()`.
 
@@ -324,7 +324,7 @@ Para eliminar el warning, agregar `_installDebugHealthBridge()` en `onboarding.j
 
 | # | Problema | Impacto | Estado |
 |---|---|---|---|
-| 1 | Health sidebar muestra "API OK" sin detalle de componentes | No se puede ver el estado de brain, temporal, vault desde el Harness | Requiere bridge postMessage funcionando |
+| 1 | Health sidebar muestra "API OK" sin detalle de componentes | No se puede ver el estado de brain, temporal, vault desde el SynapseSimulator | Requiere bridge postMessage funcionando |
 | 2 | postMessage bridge da timeout | Health y sim funcionan igual por REST, pero los logs muestran warnings | Investigar `_installDebugHealthBridge()` |
 | 3 | `profile_id` hardcodeado en eventos del sim-bar | Los eventos simulados no corresponden al perfil activo | Leer el `profile_id` real desde `window.onboarding` |
 | 4 | WS se reconecta sin aviso en el feed | Se pierde contexto de cuándo el canal estuvo caído | Agregar entrada de sistema al feed en `ws.onopen` |
@@ -337,9 +337,9 @@ Para eliminar el warning, agregar `_installDebugHealthBridge()` en `onboarding.j
 | F2 | Historial de sesión | Exportar el feed completo como JSON |
 | F3 | Filtro por `profile_id` | Para múltiples perfiles activos |
 | F4 | Indicador de latencia | Tiempo entre POST y vuelta por WS |
-| F5 | Vista del catálogo de schemas de Cortex | *(actualizado Jun 26 2026)* — El catálogo JSON ya existe en Cortex (extension/protocols/*.schema.json, Fase 1–5). Pendiente: exponer esos schemas como lectura en el feed del Workspace Harness para tener visibilidad del contrato desde el lado Electron. |
+| F5 | Vista del catálogo de schemas de Cortex | *(actualizado Jun 26 2026)* — El catálogo JSON ya existe en Cortex (extension/protocols/*.schema.json, Fase 1–5). Pendiente: exponer esos schemas como lectura en el feed del Workspace SynapseSimulator para tener visibilidad del contrato desde el lado Electron. |
 | F6 | Health con detalle completo | Cuando el bridge esté funcionando |
-| F7 | Vista integrada con Cortex Harness | Ver en un solo feed los eventos de ambos Harnesses — hoy se ven separados |
+| F7 | Vista integrada con Cortex SynapseSimulator | Ver en un solo feed los eventos de ambos SynapseSimulatores — hoy se ven separados |
 
 ---
 
@@ -366,14 +366,14 @@ POST /api/internal/system-event        → { ok: true }
 ✓  Envelope WS: { type: "system:event", payload: { category, event, data, profile_id, timestamp } }
 ✓  POST /api/internal/system-event responde {"ok":true}
 ✓  Eventos simulados aparecen en el feed
-✓  background.js confirma doble destino: nucleus POST + Cortex Harness sendMessage
-✓  harnessLogBuffer (100 entradas) + HARNESS_HELLO/REPLAY funcionando en Cortex
+✓  background.js confirma doble destino: nucleus POST + Cortex SynapseSimulator sendMessage
+✓  synapseSimulatorLogBuffer (100 entradas) + SYNAPSE_SIMULATOR_HELLO/REPLAY funcionando en Cortex
 ✓  notification-rail y cortex-bar se ocultan al abrir el debug panel
 ✓  CSP permite img-src data:
 
 ✗  postMessage bridge da timeout (health via REST funciona como fallback)
 ✗  Health sidebar muestra "API OK" sin detalle de componentes
-?  Cortex Harness y Workspace Harness en sync — pendiente verificar en sesión integrada
+?  Cortex SynapseSimulator y Workspace SynapseSimulator en sync — pendiente verificar en sesión integrada
 ?  Landing abre correctamente post ACCOUNT_REGISTERED — pendiente test end-to-end
 ```
 
@@ -386,11 +386,11 @@ El objetivo del primer test es:
 > **Verificar que un registro correcto de GitHub (PAT detectado → confirmado → ACCOUNT_REGISTERED) llega correctamente al Workspace y dispara la apertura de Landing.**
 
 Para ejecutarlo:
-1. Tener ambos Harnesses abiertos (Workspace en Electron + Cortex en Chrome)
+1. Tener ambos SynapseSimulatores abiertos (Workspace en Electron + Cortex en Chrome)
 2. Verificar handshake completado en ambos feeds
 3. Ejecutar la secuencia del §6 Flujo B
-4. Verificar que `ACCOUNT_REGISTERED` aparece en el feed del Workspace Harness con categoría `synapse`
-5. Verificar que `→HOST:ACCOUNT_REGISTERED` y `→HOST:GITHUB_TOKEN_STORED` aparecen en el feed del Cortex Harness
+4. Verificar que `ACCOUNT_REGISTERED` aparece en el feed del Workspace SynapseSimulator con categoría `synapse`
+5. Verificar que `→HOST:ACCOUNT_REGISTERED` y `→HOST:GITHUB_TOKEN_STORED` aparecen en el feed del Cortex SynapseSimulator
 6. Verificar que Brain dispara el re-launch y Landing page abre
 
-Si el paso 6 no ocurre, el punto de falla está en el lado Brain (MilestoneReactor) — fuera del scope del Harness de Cortex.
+Si el paso 6 no ocurre, el punto de falla está en el lado Brain (MilestoneReactor) — fuera del scope del SynapseSimulator de Cortex.

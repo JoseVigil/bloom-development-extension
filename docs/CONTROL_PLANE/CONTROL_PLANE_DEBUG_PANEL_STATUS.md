@@ -1,6 +1,6 @@
 # Debug Panel — Estado de Implementación
 ## Qué se hizo, por qué, y qué falta
-_Referencia: IMPL_PROMPT_DEBUG_PANEL_v1.md · BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md_
+_Referencia: IMPL_PROMPT_DEBUG_PANEL_v1.md · BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md_
 
 ---
 
@@ -8,16 +8,16 @@ _Referencia: IMPL_PROMPT_DEBUG_PANEL_v1.md · BLOOM_HARNESS_IONPUMP_INTEGRATION_
 
 El objetivo declarado es poder debuguear el onboarding de Synapse en tiempo real. Hoy el sistema es opaco: se lanza `nucleus synapse launch <profile_id> --mode discovery` y los eventos quedan dispersos en ~28 archivos de log distintos (ver `telemetry.json`). No hay forma de ver en un solo lugar qué paso del onboarding está ejecutándose, cuándo llega un `GITHUB_PAT_DETECTED`, o por qué un workflow Temporal cambia de estado.
 
-El Harness es la solución a eso, pero está dividido en dos mundos distintos que hay que conectar.
+El SynapseSimulator es la solución a eso, pero está dividido en dos mundos distintos que hay que conectar.
 
 ---
 
-## 2. Los dos mundos del Harness — mapa conceptual
+## 2. Los dos mundos del SynapseSimulator — mapa conceptual
 
 ```
-MUNDO 1 — Chrome Extension (Harness original)
+MUNDO 1 — Chrome Extension (SynapseSimulator original)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Archivo fuente:  brain/core/profile/web/templates/harness/index.html
+Archivo fuente:  brain/core/profile/web/templates/synapse-simulator/index.html
 Vive en:         Tab especial dentro del perfil Chrome lanzado por Synapse
 Canal:           chrome.runtime.sendMessage / chrome.runtime.onMessage
 Qué hace:        Lee DISCOVERY_PROTOCOL_MANIFEST desde discoveryProtocol.js
@@ -25,7 +25,7 @@ Qué hace:        Lee DISCOVERY_PROTOCOL_MANIFEST desde discoveryProtocol.js
                  Dispara eventos hacia background.js (GITHUB_PAT_DETECTED, etc.)
                  Observa pasivamente los mensajes chrome.runtime
 Estado actual:   STUB — nucleus health lo reporta como healthy/STUB
-                 El log está en logs/nucleus/harness/harness.log
+                 El log está en logs/nucleus/synapse-simulator/synapse-simulator.log
                  Sentinel lo copia al directorio de Cortex durante el seed
 Limitación:      Solo existe dentro del contexto de la extensión Chrome.
                  No tiene acceso a WebSocket :4124 ni a la API :48215.
@@ -45,7 +45,7 @@ Estado actual:   El HTML existe y está listo.
                  El WebSocket no emite 'system:event' todavía.
 ```
 
-**La confusión razonable:** el nombre "Harness" en la documentación arquitectónica (BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md) se refiere al Mundo 1 — la herramienta dentro de Chrome. Lo que se construyó en esta sesión es el Mundo 2 — el panel de observabilidad desde Electron/Svelte.
+**La confusión razonable:** el nombre "SynapseSimulator" en la documentación arquitectónica (BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md) se refiere al Mundo 1 — la herramienta dentro de Chrome. Lo que se construyó en esta sesión es el Mundo 2 — el panel de observabilidad desde Electron/Svelte.
 
 Son complementarios, no el mismo componente.
 
@@ -244,16 +244,16 @@ El `DebugFeed.svelte` usa `websocketStore.on('system:event', callback)`. **Verif
 
 ---
 
-## 5. El Harness del Mundo 1 — qué falta ahí
+## 5. El SynapseSimulator del Mundo 1 — qué falta ahí
 
-El Harness dentro de la extensión Chrome (el `index.html` en Brain templates) está en estado STUB. Lo que eso significa en la práctica:
+El SynapseSimulator dentro de la extensión Chrome (el `index.html` en Brain templates) está en estado STUB. Lo que eso significa en la práctica:
 
 - El servicio existe y responde (por eso `nucleus health` lo reporta healthy)
-- El log `logs/nucleus/harness/harness.log` existe y está activo
+- El log `logs/nucleus/synapse-simulator/synapse-simulator.log` existe y está activo
 - Pero el `DISCOVERY_PROTOCOL_MANIFEST` **no está definido todavía** en `discoveryProtocol.js`
-- Sin ese manifest, el `ProtocolReader` del Harness no puede generar los botones de simulación
+- Sin ese manifest, el `ProtocolReader` del SynapseSimulator no puede generar los botones de simulación
 
-**Lo mínimo para que el Harness del Mundo 1 funcione en el milestone GitHub:**
+**Lo mínimo para que el SynapseSimulator del Mundo 1 funcione en el milestone GitHub:**
 
 1. Agregar `DISCOVERY_PROTOCOL_MANIFEST` al final de `extension/discovery/discoveryProtocol.js` con los 6 mensajes del milestone:
    - `onboarding_navigate`
@@ -263,22 +263,22 @@ El Harness dentro de la extensión Chrome (el `index.html` en Brain templates) e
    - `host_ready`
    - `discovery_complete`
 
-2. Que `seed.go` confirme que copia el `harness/index.html` al directorio de Cortex durante `nucleus synapse seed`.
+2. Que `seed.go` confirme que copia el `synapse-simulator/index.html` al directorio de Cortex durante `nucleus synapse seed`.
 
-3. Abrir el tab del Harness dentro del perfil Chrome lanzado y verificar que el `ProtocolReader` detecta el manifest.
+3. Abrir el tab del SynapseSimulator dentro del perfil Chrome lanzado y verificar que el `ProtocolReader` detecta el manifest.
 
-**El Harness del Mundo 1 no tiene visibilidad desde el Mundo 2** a menos que se implemente el puente: `background.js` hace `fetch('http://localhost:48215/internal/system-event', ...)` cuando recibe eventos `chrome.runtime`. Ese puente no está implementado todavía y no es bloqueante para arrancar con el panel standalone.
+**El SynapseSimulator del Mundo 1 no tiene visibilidad desde el Mundo 2** a menos que se implemente el puente: `background.js` hace `fetch('http://localhost:48215/internal/system-event', ...)` cuando recibe eventos `chrome.runtime`. Ese puente no está implementado todavía y no es bloqueante para arrancar con el panel standalone.
 
 ---
 
-## 6. Dónde ver los mensajes del Harness hoy
+## 6. Dónde ver los mensajes del SynapseSimulator hoy
 
-Mientras no esté el puente background.js → API, los mensajes del Harness del Mundo 1 son visibles en:
+Mientras no esté el puente background.js → API, los mensajes del SynapseSimulator del Mundo 1 son visibles en:
 
 | Dónde | Cómo |
 |-------|------|
-| Chrome DevTools del perfil | F12 → Console en el tab del Harness |
-| Log de harness | `tail -f ~/Library/BloomNucleus/logs/nucleus/harness/harness.log` |
+| Chrome DevTools del perfil | F12 → Console en el tab del SynapseSimulator |
+| Log de synapse-simulator | `tail -f ~/Library/BloomNucleus/logs/nucleus/synapse-simulator/synapse-simulator.log` |
 | Log de brain_service | `tail -f ~/Library/BloomNucleus/logs/brain/service/brain_service_20260607.log` |
 | Log de nucleus_synapse | `tail -f ~/Library/BloomNucleus/logs/nucleus/nucleus_synapse_20260607.log` |
 
@@ -302,14 +302,14 @@ PRÓXIMA SESIÓN
 DESPUÉS DEL MILESTONE
   7. Puente background.js → POST /internal/system-event
   8. Versión Svelte en /debug si se quiere en Workspace
-  9. IonPump integration (HARNESS_PROTOCOL_MANIFEST)
+  9. IonPump integration (SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST)
 ```
 
 ---
 
 ## 8. Pregunta abierta respondida
 
-> **¿La página de harness va a estar en el servidor local en una ruta específica?**
+> **¿La página de synapse-simulator va a estar en el servidor local en una ruta específica?**
 
 Sí. La ruta en la API Fastify (`:48215`) que le corresponde es:
 
@@ -329,4 +329,4 @@ Pero eso requiere que el error de `TipsChat.svelte` esté resuelto y que se impl
 
 ---
 
-_Generado: 2026-06-07 · Estado del sistema al momento: HEALTHY · harness: STUB · svelte_dev: RUNNING_
+_Generado: 2026-06-07 · Estado del sistema al momento: HEALTHY · synapse-simulator: STUB · svelte_dev: RUNNING_

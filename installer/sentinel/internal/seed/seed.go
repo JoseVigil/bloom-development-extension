@@ -54,7 +54,7 @@ func init() {
 
 		// NUEVO: flag --dev
 		cmd.Flags().BoolVar(&devMode, "dev", false,
-			"Enable dev mode: deploys Harness UI to extension via Brain")
+			"Enable dev mode: deploys SynapseSimulator UI to extension via Brain")
 
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)

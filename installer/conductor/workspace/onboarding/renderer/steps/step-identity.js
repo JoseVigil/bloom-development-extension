@@ -330,7 +330,7 @@ function _clearPollFallback() {
 // por navigateTo(stepId).
 //
 // FIX (bug reportado: al llegar API_KEY_REGISTERED —o cualquier milestone
-// de identity vía harness o tras el detour de Vault— solo se prendía el
+// de identity vía synapse-simulator o tras el detour de Vault— solo se prendía el
 // ícono pero el botón/copy de pantalla quedaban pisados con el texto de
 // GitHub, y el wizard nunca llegaba a mostrar "fin de IDENTITY").
 //
@@ -338,9 +338,9 @@ function _clearPollFallback() {
 // `IDENTITY_STEPS[identityWizard.stepIndex]` — un puntero que SOLO avanza
 // cuando el usuario clickea el botón (advanceToNextIdentityStep) o se
 // resetea a 0 en handleIdentityBtn(). Ese puntero nunca se sincronizaba
-// con el evento de milestone real que llegaba desde Cortex/harness. Como
+// con el evento de milestone real que llegaba desde Cortex/synapse-simulator. Como
 // resultado, si stepIndex se quedaba en 0 (típico: tras el detour a Vault,
-// o al simular eventos por harness sin pasar por el click de "Continue to
+// o al simular eventos por synapse-simulator sin pasar por el click de "Continue to
 // Google"), esta función SIEMPRE operaba como si el que se acababa de
 // confirmar fuera "github" — sin importar si en realidad era google o
 // gemini — y por eso `isLastStep` nunca daba true tras ai_provider_setup.

@@ -70,7 +70,7 @@ tree commands
 
 brain filesystem tree src -o tree/plugin_tree.txt
 
-brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/btips_tree.txt
+brain filesystem tree src installer webview brain contracts docs package.json tsconfig.json build-all.py -o tree/btips_tree.txt
 
 brain filesystem tree src -o tree/src_tree.txt
 
@@ -79,6 +79,8 @@ brain filesystem tree installer -o tree/installer_tree.txt
 brain filesystem tree brain -o tree/brain_tree.txt
 
 brain filesystem tree webview -o tree/webview_tree.txt
+
+brain filesystem tree contracts -o tree/contracts_tree.txt
 
 brain filesystem tree installer/electron-app -o tree/electron_tree.txt
 
@@ -118,14 +120,15 @@ brain filesystem tree /home/jose/.local/share/BloomNucleus -o tree/library_tree.
 
 brain filesystem tree /home/jose/repos/elias-repos -o tree/elias-repos_tree.txt
 
-
-
+brain filesystem tree /home/jose/repos/elias-repos/.bloom -o tree/bloom_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus\logs -o tree/appdata_logs_tree.txt
 
 brain filesystem tree installer -o tree/installer_tree.txt
 
 brain filesystem tree src webview -o tree/src_webview_tree.txt
+
+brain filesystem tree docs -o tree/docs_tree.txt
 
 Push help
 git add -f installer/native/bin/win64/nucleus/help

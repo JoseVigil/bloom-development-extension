@@ -12,12 +12,12 @@ def generate_companion_page(target_ext_dir: Path, profile_data: Dict[str, Any]) 
     """
     Genera assets estáticos del Companion dentro del directorio de extensión.
 
-    A diferencia de discovery/landing/harness, el Companion (guía v1.2 §6) no
+    A diferencia de discovery/landing/synapse-simulator, el Companion (guía v1.2 §6) no
     tiene un *.synapse.config.js con identidad de sesión — companionProtocol.js
     es un manifiesto de protocolo estático (declara INJECT_BISP, INJECT_BRIEF,
     INJECT_TEXT, NEW_SESSION) y no requiere generación en el launch sequence.
 
-    Patrón: idéntico a generate_harness_page() — solo copia assets estáticos.
+    Patrón: idéntico a generate_synapse_simulator_page() — solo copia assets estáticos.
 
     Args:
         target_ext_dir: Path a profiles/[UUID]/extension/

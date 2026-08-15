@@ -103,7 +103,7 @@ Archivos entregados con los fixes aplicados (ver adjuntos de esta sesión, o ped
 
 - [ ] **Bug medio — `DISCOVERY_COMPLETE` cierra `project_create` antes de tiempo** (auditoría §2). Estaba enmascarado por el bug de `allBlockingDone`; ahora que ese se arregló, **este puede volverse visible**. No se tocó esta sesión — revisar antes de dar por cerrado el onboarding.
 - [ ] **`onboarding_steps.json` sin `cortex_events`/`blocking`/`conductor_reaction`** (bug alto, latente). Hoy no rompe nada porque el archivo no existe en disco y el sistema cae al `FALLBACK_STEPS` hardcodeado. Si se completa el deploy del JSON ("Cambio 2 de 8") sin sincronizar estos campos, el step nuevo (`github_app_auth`) y todo el resto del pipeline de milestones se desconecta en silencio.
-- [ ] **Decisión de negocio sin resolver** (auditoría §9.4): `harness_simulate_handshake`/`harness_open_landing` bypasean el handshake nativo completo y están expuestos en builds de producción (el Harness ya no respeta `dev_mode`). No es parte del scope de GitHub App, pero quedó marcado como hallazgo de seguridad que alguien con visibilidad de producto tiene que resolver.
+- [ ] **Decisión de negocio sin resolver** (auditoría §9.4): `synapse_simulator_simulate_handshake`/`synapse_simulator_open_landing` bypasean el handshake nativo completo y están expuestos en builds de producción (el SynapseSimulator ya no respeta `dev_mode`). No es parte del scope de GitHub App, pero quedó marcado como hallazgo de seguridad que alguien con visibilidad de producto tiene que resolver.
 
 ---
 
@@ -128,6 +128,6 @@ Para poder implementar §5.3 con el mismo nivel de precisión que los fixes ya h
 - Revisar si el bug medio de `DISCOVERY_COMPLETE` (§5.4) ya se volvió visible con los fixes de esta sesión, y corregirlo si es necesario.
 
 **No incluye (fuera de scope, no traer a menos que bloquee lo anterior):**
-- La decisión de negocio sobre Harness/producción (§5.4, último punto) — es de otro dueño.
+- La decisión de negocio sobre SynapseSimulator/producción (§5.4, último punto) — es de otro dueño.
 - Sincronizar `onboarding_steps.json` con el registry — solo urgente el día que "Cambio 2 de 8" se despliegue, no antes.
 - Cualquier trabajo de la app mobile o de Batcave en sí — no entran en juego hasta una fase posterior, confirmado en §3.

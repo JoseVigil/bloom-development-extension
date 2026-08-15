@@ -19,7 +19,7 @@ const BASE_DELAY = 2000;
 
 // ============================================================================
 // DEBUG PANEL BRIDGE
-// Reenvía eventos del harness al feed del debug panel (debug.html / Control Plane).
+// Reenvía eventos del synapse-simulator al feed del debug panel (debug.html / Control Plane).
 //
 // Canal: POST http://localhost:48215/api/internal/system-event
 // Envelope: { category, event, data, profile_id, timestamp }
@@ -36,21 +36,21 @@ const BASE_DELAY = 2000;
 const DEBUG_API_URL = 'http://localhost:48215';
 
 // ============================================================================
-// HARNESS LOG BUFFER
+// SYNAPSE_SIMULATOR LOG BUFFER
 // Buffer circular en memoria — mismo patrón que pending_queue en synapse_logger.h.
 // Resuelve la condición de carrera: muchos eventos (HANDSHAKE_CONFIRMED,
-// EXTENSION_LOADED, etc.) se emiten ANTES de que la tab del Harness exista
+// EXTENSION_LOADED, etc.) se emiten ANTES de que la tab del SynapseSimulator exista
 // y esté escuchando. Sin buffer, esos sendMessage() se pierden en el aire.
-// Cuando el Harness abre y manda HARNESS_HELLO, le contestamos con todo
+// Cuando el SynapseSimulator abre y manda SYNAPSE_SIMULATOR_HELLO, le contestamos con todo
 // lo acumulado hasta ese momento.
 // ============================================================================
-const HARNESS_LOG_MAX = 100;
-const harnessLogBuffer = [];
+const SYNAPSE_SIMULATOR_LOG_MAX = 100;
+const synapseSimulatorLogBuffer = [];
 
-function pushHarnessLog(entry) {
-  harnessLogBuffer.push(entry);
-  if (harnessLogBuffer.length > HARNESS_LOG_MAX) {
-    harnessLogBuffer.shift();
+function pushSynapseSimulatorLog(entry) {
+  synapseSimulatorLogBuffer.push(entry);
+  if (synapseSimulatorLogBuffer.length > SYNAPSE_SIMULATOR_LOG_MAX) {
+    synapseSimulatorLogBuffer.shift();
   }
 }
 
@@ -71,10 +71,10 @@ function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
     // arrancando. No loguear para no contaminar la consola del service worker.
   });
 
-  // Espejo hacia el Cortex Harness (tab dentro de la extensión).
+  // Espejo hacia el Cortex SynapseSimulator (tab dentro de la extensión).
   // Mismo dato, segundo destino. No reemplaza el POST de arriba — lo acompaña.
-  const harnessMsg = {
-    event: 'HARNESS_LOG',
+  const synapseSimulatorMsg = {
+    event: 'SYNAPSE_SIMULATOR_LOG',
     category,
     sourceEvent: event,
     data,
@@ -83,17 +83,17 @@ function forwardToDebugPanel(category, event, data = {}, profile_id = null) {
   };
 
   // Guardar siempre en el buffer — sin importar si hay alguien escuchando ahora.
-  // Esto es lo que permite que un Harness que abre tarde igual vea todo lo que pasó.
-  pushHarnessLog(harnessMsg);
+  // Esto es lo que permite que un SynapseSimulator que abre tarde igual vea todo lo que pasó.
+  pushSynapseSimulatorLog(synapseSimulatorMsg);
 
   // Intento de entrega en vivo. Si no hay tab escuchando, falla silencioso
   // (catch vacío) — no pasa nada, el buffer ya lo tiene guardado igual.
-  chrome.runtime.sendMessage(harnessMsg).catch(() => {});
+  chrome.runtime.sendMessage(synapseSimulatorMsg).catch(() => {});
 }
 
 // ============================================================================
 // NAVIGATION HEALTH TRACKING — páginas propias de la extensión
-// (Discovery / Harness / Landing)
+// (Discovery / SynapseSimulator / Landing)
 //
 // Motivación (ver ERR_BLOCKED_BY_CLIENT del 2026-07-11): Chrome puede dejar
 // una tab con status === 'complete' y url === la URL esperada AUNQUE la
@@ -275,7 +275,7 @@ async function initialize() {
 // ============================================================================
 // 🔧 FIX (race condition post-fix Gemini button / API_KEY_REGISTERED):
 // En Manifest V3 el service worker se apaga tras ~30s de inactividad. Cuando
-// llega un evento (ej. chrome.runtime.onMessage de Harness), Chrome despierta
+// llega un evento (ej. chrome.runtime.onMessage de SynapseSimulator), Chrome despierta
 // el SW ejecutando TODO el script desde cero — incluyendo `let discoverySchema
 // = null;` y el `initialize()` de más abajo, que es fire-and-forget (async,
 // sin await). El listener de onMessage queda registrado de forma síncrona
@@ -432,7 +432,7 @@ async function loadConfig() {
       await enforceDiscoveryWindowSize();
     }
 
-    await loadHarnessConfig();
+    await loadSynapseSimulatorConfig();
 
   } catch (e) {
     console.error('[Synapse] ✗ Config load failed:', e);
@@ -441,37 +441,37 @@ async function loadConfig() {
 }
 
 // ============================================================================
-// HARNESS CONFIG — siempre activo (no requiere --dev)
+// SYNAPSE_SIMULATOR CONFIG — siempre activo (no requiere --dev)
 // ============================================================================
 
-async function loadHarnessConfig() {
-  console.log('[Harness] loadHarnessConfig ejecutando…');
+async function loadSynapseSimulatorConfig() {
+  console.log('[SynapseSimulator] loadSynapseSimulatorConfig ejecutando…');
 
-  const harnessFile = 'harness.synapse.config.js';
-  let harnessConfig = null;
+  const synapseSimulatorFile = 'synapse-simulator.synapse.config.js';
+  let synapseSimulatorConfig = null;
   let text = null;
 
   try {
-    const url = chrome.runtime.getURL(harnessFile);
-    console.log('[Harness] Fetching:', url);
+    const url = chrome.runtime.getURL(synapseSimulatorFile);
+    console.log('[SynapseSimulator] Fetching:', url);
     const resp = await fetch(url);
-    console.log('[Harness] Fetch response status:', resp.status, resp.ok ? 'OK' : 'NOT OK');
+    console.log('[SynapseSimulator] Fetch response status:', resp.status, resp.ok ? 'OK' : 'NOT OK');
 
     if (!resp.ok) {
-      console.log('[Harness] Archivo no encontrado (HTTP ' + resp.status + ') — Harness inactivo');
+      console.log('[SynapseSimulator] Archivo no encontrado (HTTP ' + resp.status + ') — SynapseSimulator inactivo');
       return;
     }
 
     text = await resp.text();
-    console.log('[Harness] Contenido recibido, length:', text.length);
-    console.log('[Harness] Primeros 150 chars:', text.substring(0, 150));
+    console.log('[SynapseSimulator] Contenido recibido, length:', text.length);
+    console.log('[SynapseSimulator] Primeros 150 chars:', text.substring(0, 150));
 
   } catch (fetchErr) {
-    console.error('[Harness] ✗ Fetch error:', fetchErr.message);
+    console.error('[SynapseSimulator] ✗ Fetch error:', fetchErr.message);
     return;
   }
 
-  harnessConfig = {};
+  synapseSimulatorConfig = {};
   const matchers = {
     profileId:    /["']?profileId["']?\s*:\s*["']([^"']+)["']/,
     launchId:     /["']?launchId["']?\s*:\s*["']([^"']+)["']/,
@@ -481,46 +481,46 @@ async function loadHarnessConfig() {
   for (const [key, regex] of Object.entries(matchers)) {
     const match = text.match(regex);
     if (match) {
-      harnessConfig[key] = match[1];
-      console.log('[Harness] ✓ Parsed', key + ':', match[1]);
+      synapseSimulatorConfig[key] = match[1];
+      console.log('[SynapseSimulator] ✓ Parsed', key + ':', match[1]);
     } else {
-      console.warn('[Harness] ✗ No match para:', key);
+      console.warn('[SynapseSimulator] ✗ No match para:', key);
     }
   }
 
-  if (!harnessConfig.profileId) {
-    console.error('[Harness] ✗ profileId no parseado — Harness inactivo. Contenido del archivo:', text);
+  if (!synapseSimulatorConfig.profileId) {
+    console.error('[SynapseSimulator] ✗ profileId no parseado — SynapseSimulator inactivo. Contenido del archivo:', text);
     return;
   }
 
-  console.log('[Harness] ✓ Config parseado correctamente:', JSON.stringify(harnessConfig));
+  console.log('[SynapseSimulator] ✓ Config parseado correctamente:', JSON.stringify(synapseSimulatorConfig));
 
-  config.harness = harnessConfig;
-  console.log('[Harness] ✓ config.harness seteado.');
-  console.log('[Harness] loadHarnessConfig completado — apertura de tab pendiente de host_ready.');
+  config.synapseSimulator = synapseSimulatorConfig;
+  console.log('[SynapseSimulator] ✓ config.synapseSimulator seteado.');
+  console.log('[SynapseSimulator] loadSynapseSimulatorConfig completado — apertura de tab pendiente de host_ready.');
 }
 
-async function openHarnessTab() {
+async function openSynapseSimulatorTab() {
   try {
-    const harnessUrl = chrome.runtime.getURL('harness/index.html');
-    console.log('[Harness] openHarnessTab() — URL:', harnessUrl);
+    const synapseSimulatorUrl = chrome.runtime.getURL('synapse-simulator/index.html');
+    console.log('[SynapseSimulator] openSynapseSimulatorTab() — URL:', synapseSimulatorUrl);
 
     const allTabs = await chrome.tabs.query({});
-    const existingTab = allTabs.find(t => t.url && t.url.startsWith(harnessUrl));
+    const existingTab = allTabs.find(t => t.url && t.url.startsWith(synapseSimulatorUrl));
 
     if (existingTab) {
       await chrome.tabs.update(existingTab.id, { active: true });
-      console.log('[Harness] ✓ Tab existente traída al frente (id:', existingTab.id + ')');
+      console.log('[SynapseSimulator] ✓ Tab existente traída al frente (id:', existingTab.id + ')');
     } else {
-      const newTab = await chrome.tabs.create({ url: harnessUrl, active: false });
-      console.log('[Harness] ✓ Tab creada (id:', newTab.id + ')');
+      const newTab = await chrome.tabs.create({ url: synapseSimulatorUrl, active: false });
+      console.log('[SynapseSimulator] ✓ Tab creada (id:', newTab.id + ')');
     }
   } catch (tabErr) {
-    console.error('[Harness] ✗ openHarnessTab error:', tabErr.message, tabErr.stack);
+    console.error('[SynapseSimulator] ✗ openSynapseSimulatorTab error:', tabErr.message, tabErr.stack);
   }
 }
 
-// ── NUEVO: abrir discovery tab desde el SW, igual que harness ─────────────
+// ── NUEVO: abrir discovery tab desde el SW, igual que synapse-simulator ─────────────
 async function openDiscoveryTab() {
   try {
     const discoveryUrl = chrome.runtime.getURL('discovery/index.html');
@@ -657,9 +657,9 @@ function connectNative() {
 
     nativePort.postMessage(extensionReadyMsg);
 
-    // ── Harness: reportar FASE 1 del handshake ───────────────────────────────
-    // Este evento se emite antes de que openHarnessTab() corra, así que va
-    // directo al buffer. El replay de HARNESS_HELLO lo entregará al Harness
+    // ── SynapseSimulator: reportar FASE 1 del handshake ───────────────────────────────
+    // Este evento se emite antes de que openSynapseSimulatorTab() corra, así que va
+    // directo al buffer. El replay de SYNAPSE_SIMULATOR_HELLO lo entregará al SynapseSimulator
     // cuando la tab abra.
     forwardToDebugPanel('synapse', '→HOST:extension_ready', {
       _dir:          'out',
@@ -730,10 +730,10 @@ function handleHostMessage(msg) {
   const label = msg.event || msg.command || msg.type || '(unknown)';
   console.log(`[Host → Synapse] [${new Date().toISOString()}] ${label}`, msg);
 
-  // ── Harness: reportar cada mensaje entrante del host ─────────────────────
+  // ── SynapseSimulator: reportar cada mensaje entrante del host ─────────────────────
   // Excluir keepalive (ruido). Sanitizar tokens si los hubiera.
-  const _skipHarnessLog = label === 'keepalive';
-  if (!_skipHarnessLog) {
+  const _skipSynapseSimulatorLog = label === 'keepalive';
+  if (!_skipSynapseSimulatorLog) {
     const _safeMsg = { ...msg };
     if (_safeMsg.token) _safeMsg.token = _safeMsg.token.substring(0, 10) + '…';
     if (_safeMsg.key)   _safeMsg.key   = _safeMsg.key.substring(0, 10) + '…';
@@ -792,11 +792,11 @@ function handleHostMessage(msg) {
       applyWindowLayout(msg.window);
     }
 
-    if (config?.harness) {
-      console.log('[Harness] host_ready → abriendo harness tab (SW activo)');
-      openHarnessTab();
+    if (config?.synapseSimulator) {
+      console.log('[SynapseSimulator] host_ready → abriendo synapse-simulator tab (SW activo)');
+      openSynapseSimulatorTab();
     } else {
-      console.warn('[Harness] host_ready → config.harness no disponible, tab no abierta');
+      console.warn('[SynapseSimulator] host_ready → config.synapseSimulator no disponible, tab no abierta');
     }
 
     // Abrir/recargar discovery tab ahora que el SW está listo y el host conectado.
@@ -864,7 +864,7 @@ function handleHostMessage(msg) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // IonPump events — forward al Harness y al debug panel
+  // IonPump events — forward al SynapseSimulator y al debug panel
   // ─────────────────────────────────────────────────────────────────────
   const IONPUMP_EVENTS = [
     'ION_FLOW_STARTED',
@@ -1130,7 +1130,7 @@ function applySchemaDefaults(msg, schema) {
 }
 
 // ============================================================================
-// SCHEMA LOADER — Harness Protocol Single Source of Truth
+// SCHEMA LOADER — SynapseSimulator Protocol Single Source of Truth
 // Carga los JSON schemas desde el bundle de la extensión y registra los
 // handlers que los consumen. Esto reemplaza la dependencia de los manifests
 // JS para los eventos migrados.
@@ -1180,9 +1180,9 @@ const forwardedEventNames = new Set();
  *      un valor hardcodeado.
  *   3. El default declarado en el schema, si no vino nada mejor.
  *
- * NOTA: los "auto" del schema usan HARNESS_CONFIG.profileId /
+ * NOTA: los "auto" del schema usan SYNAPSE_SIMULATOR_CONFIG.profileId /
  * SYNAPSE_CONFIG.launchId como `source` porque ese schema también lo
- * consume el Harness (que sí tiene esos objetos). Acá, en background.js, el
+ * consume el SynapseSimulator (que sí tiene esos objetos). Acá, en background.js, el
  * equivalente real es `config.profileId` / `config.launchId` — por eso el
  * mapeo es por NOMBRE de parámetro (profile_id/launch_id/timestamp), no por
  * el string literal de `source`.
@@ -1288,7 +1288,7 @@ function logNeverForwardedOnboardingEvents() {
  * 🔧 FIX: discovery.js solo escribe bloom_profile_state cuando el flujo de
  * confirmación de token corre DENTRO de su propia UI (popup de onboarding).
  * Pero ACCOUNT_REGISTERED también puede llegar acá directamente desde una
- * fuente externa (native host confirmando por su cuenta, o el harness de
+ * fuente externa (native host confirmando por su cuenta, o el synapse-simulator de
  * testing) sin que discovery.js haya corrido ese código. En ese caso, antes
  * de este fix, nadie escribía bloom_profile_state y Landing quedaba con el
  * checklist inicial en "pending" para siempre. Este handler ahora escribe
@@ -1338,7 +1338,7 @@ function registerOnboardingHandlers() {
 
     // 🔧 FIX: escribir bloom_profile_state acá, independientemente de si el
     // origen fue discovery.js (UI local) o una fuente externa (native host,
-    // harness). Ver comentario de updateAccountInProfileState() arriba.
+    // synapse-simulator). Ver comentario de updateAccountInProfileState() arriba.
     updateAccountInProfileState(msg.service, msg.username, msg.timestamp);
 
     forwardToDebugPanel('synapse', 'ACCOUNT_REGISTERED', {
@@ -1391,7 +1391,7 @@ function registerOnboardingHandlers() {
 
   // ── SWITCH_ORGANIZATION ──────────────────────────────────────────────────
   // Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md). La página
-  // (Discovery, o el panel de simulación del Harness) manda este evento vía
+  // (Discovery, o el panel de simulación del SynapseSimulator) manda este evento vía
   // chrome.runtime.sendMessage cuando quiere activar una organización
   // distinta a la actual. Este handler NO decide nada — solo reenvía el
   // pedido al host tal cual, leyendo la forma del payload de
@@ -1602,7 +1602,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 function handleRuntimeMessage(msg, sender, sendResp) {
   const { event, command } = msg;
 
-  // --- Registered handler dispatch (Harness Protocol SSoT) ---
+  // --- Registered handler dispatch (SynapseSimulator Protocol SSoT) ---
   // Chequear primero; si el evento está registrado, despachar y retornar.
   // Los handlers registrados reciben el mensaje con defaults de schema aplicados.
   // 🔧 FIX: mensajes marcados _internal:true son auto-broadcasts de un registered handler
@@ -1621,8 +1621,8 @@ function handleRuntimeMessage(msg, sender, sendResp) {
   // --- Fin registered handler dispatch ---
   // (el if-chain existente continúa sin modificaciones a partir de aquí)
 
-  // ── HARNESS: simular handshake completo sin native host ─────────────────
-  if (event === 'HARNESS_SIMULATE_HANDSHAKE') {
+  // ── SYNAPSE_SIMULATOR: simular handshake completo sin native host ─────────────────
+  if (event === 'SYNAPSE_SIMULATOR_SIMULATE_HANDSHAKE') {
     handshakeState = 'CONFIRMED';
     connectionState = 'CONNECTED';
     chrome.storage.local.set({
@@ -1636,14 +1636,14 @@ function handleRuntimeMessage(msg, sender, sendResp) {
         }
       }
     });
-    console.log('[Harness] ✓ HARNESS_SIMULATE_HANDSHAKE — handshakeState forzado a CONFIRMED');
+    console.log('[SynapseSimulator] ✓ SYNAPSE_SIMULATOR_SIMULATE_HANDSHAKE — handshakeState forzado a CONFIRMED');
     forwardToDebugPanel('synapse', 'HANDSHAKE_CONFIRMED', { _simulated: true }, config?.profileId);
     chrome.runtime.sendMessage({ event: 'HANDSHAKE_CONFIRMED', timestamp: Date.now() }).catch(() => {});
     sendResp({ received: true, handshakeState });
     return true;
   }
-  // ── HARNESS: abrir landing tab directamente ──────────────────────────────
-  if (event === 'HARNESS_OPEN_LANDING') {
+  // ── SYNAPSE_SIMULATOR: abrir landing tab directamente ──────────────────────────────
+  if (event === 'SYNAPSE_SIMULATOR_OPEN_LANDING') {
     openLandingTab();
     sendResp({ received: true });
     return true;
@@ -1659,9 +1659,9 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     return true;
   }
 
-  // ── HARNESS_GET_WATCHED_GOOGLE_TAB ─────────────────────────────────────────
-  // Utilitario solo para el Harness — NO es parte del flujo real de onboarding.
-  // Resuelve el bug de tab_id:"undefined" en GOOGLE_LOGIN_DETECTED: el Harness
+  // ── SYNAPSE_SIMULATOR_GET_WATCHED_GOOGLE_TAB ─────────────────────────────────────────
+  // Utilitario solo para el SynapseSimulator — NO es parte del flujo real de onboarding.
+  // Resuelve el bug de tab_id:"undefined" en GOOGLE_LOGIN_DETECTED: el SynapseSimulator
   // corre en su propia página/contexto de la extensión y nunca puede leer
   // window.GOOGLE_FLOW._watchedTabId porque esa variable vive en el window de
   // discovery/index.html, un documento distinto. googleLoginWatchers (arriba,
@@ -1669,7 +1669,7 @@ function handleRuntimeMessage(msg, sender, sendResp) {
   // ambos contextos, porque vive acá, en background.js. Devolvemos las tabIds
   // actualmente observadas (normalmente 0 o 1; más de 1 solo si el usuario
   // clickeó "Open Google" más de una vez sin resolver la primera).
-  if (command === 'HARNESS_GET_WATCHED_GOOGLE_TAB') {
+  if (command === 'SYNAPSE_SIMULATOR_GET_WATCHED_GOOGLE_TAB') {
     sendResp({ tabIds: Array.from(googleLoginWatchers.keys()) });
     return true;
   }
@@ -1685,12 +1685,12 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     return true;
   }
 
-  // Harness: handshake de buffer — la tab del Harness recién abierta pide
-  // "decime todo lo que me perdí" y le contestamos con harnessLogBuffer.
+  // SynapseSimulator: handshake de buffer — la tab del SynapseSimulator recién abierta pide
+  // "decime todo lo que me perdí" y le contestamos con synapseSimulatorLogBuffer.
   // Resuelve la condición de carrera donde HANDSHAKE_CONFIRMED, EXTENSION_LOADED,
-  // etc. se emiten antes de que openHarnessTab() haya terminado de cargar la página.
-  if (event === 'HARNESS_HELLO') {
-    sendResp({ event: 'HARNESS_REPLAY', entries: harnessLogBuffer.slice() });
+  // etc. se emiten antes de que openSynapseSimulatorTab() haya terminado de cargar la página.
+  if (event === 'SYNAPSE_SIMULATOR_HELLO') {
+    sendResp({ event: 'SYNAPSE_SIMULATOR_REPLAY', entries: synapseSimulatorLogBuffer.slice() });
     return true;
   }
 
@@ -1874,10 +1874,10 @@ function handleRuntimeMessage(msg, sender, sendResp) {
   // con el token viajando solo dentro del service worker hacia el host.
 
   // ── GITHUB_TOKEN_STORED ────────────────────────────────────────────────────
-  // CORREGIDO (ver HARNESS_SOURCE_OF_TRUTH): el handler de ACCOUNT_REGISTERED NO emite
+  // CORREGIDO (ver SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH): el handler de ACCOUNT_REGISTERED NO emite
   // este evento internamente — eso nunca estuvo implementado, era deuda documental.
   // discovery.js tampoco lo emite en el flujo de GithubAuthFlow._saveToken() (solo emite
-  // ACCOUNT_REGISTERED). Este handler solo se dispara si algún OTRO caller (Harness/simulación,
+  // ACCOUNT_REGISTERED). Este handler solo se dispara si algún OTRO caller (SynapseSimulator/simulación,
   // o un content script fuera de este repo) manda chrome.runtime.sendMessage con este evento.
   // Si en producción nunca ves este log, es señal de que nadie lo está emitiendo realmente.
   if (event === 'GITHUB_TOKEN_STORED') {
@@ -1907,7 +1907,7 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     // emisión real ahora vive en el handler de ACCOUNT_REGISTERED (arriba,
     // línea ~1104), guardada por service === 'github'. Este bloque queda
     // muerto a propósito; no se elimina el handler GITHUB_TOKEN_STORED en sí
-    // porque el Harness/simulación puede seguir emitiéndolo para testing.
+    // porque el SynapseSimulator/simulación puede seguir emitiéndolo para testing.
 
     sendResp({ received: true });
     return true;
@@ -2016,7 +2016,7 @@ function handleRuntimeMessage(msg, sender, sendResp) {
   // si alguna vez se reintroduce el permiso por error.
 
   // ─────────────────────────────────────────────────────────────────────
-  // IONPUMP COMMAND HANDLERS — Harness → background → Brain/IonPump
+  // IONPUMP COMMAND HANDLERS — SynapseSimulator → background → Brain/IonPump
   // ─────────────────────────────────────────────────────────────────────
 
   if (command === 'ION_EXECUTE_FLOW') {
@@ -2070,7 +2070,7 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     return true;
   }
 
-  // 🔧 FIX: onboarding_navigate llegaba por chrome.runtime.sendMessage (Harness,
+  // 🔧 FIX: onboarding_navigate llegaba por chrome.runtime.sendMessage (SynapseSimulator,
   // popup, Discovery) pero solo estaba manejado dentro de handleHostMessage,
   // que escucha nativePort.onMessage (mensajes del native host), no de la
   // extensión. Como nadie llamaba a sendResp() para este command, Chrome
@@ -2092,10 +2092,10 @@ function handleRuntimeMessage(msg, sender, sendResp) {
   }
 
   // 🔧 FIX: mismo patrón de bug que onboarding_navigate (ver arriba), aplicado
-  // a los comandos DOM del harness (dom_click, dom_type, dom_wait, dom_focus,
-  // dom_scroll, dom_extract). harness_schema.json/harnessProtocol.js los
-  // declaran como direction:"harness_to_background", channel:"runtime",
-  // type:"command" — Harness los manda con chrome.runtime.sendMessage(payload,
+  // a los comandos DOM del synapse-simulator (dom_click, dom_type, dom_wait, dom_focus,
+  // dom_scroll, dom_extract). synapse_simulator_schema.json/synapseSimulatorProtocol.js los
+  // declaran como direction:"synapse_simulator_to_background", channel:"runtime",
+  // type:"command" — SynapseSimulator los manda con chrome.runtime.sendMessage(payload,
   // callback) esperando sendResp(). Pero el único lugar donde estos comandos
   // se procesaban era dentro de handleHostMessage() (canal nativePort.onMessage,
   // mensajes del HOST/Electron — un origen distinto). Cuando llegaban acá, por
@@ -2146,15 +2146,15 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     return true; // canal async — chrome.tabs.sendMessage es asíncrono
   }
 
-  // 🔧 FIX: EVENT_EMIT (harness_schema.json / harnessProtocol.js, único
+  // 🔧 FIX: EVENT_EMIT (synapse_simulator_schema.json / synapseSimulatorProtocol.js, único
   // mensaje con "type": "event") nunca tuvo handler acá. No es que se haya
   // roto — el flujo real (GITHUB_APP_AUTHORIZED, etc.) nunca pasó por acá:
   // se dispara por llamada directa a reactToGithubAppAuthorized() desde
   // background-github-device-flow.js, no por chrome.runtime.sendMessage.
-  // EVENT_EMIT es una herramienta exclusiva del Harness para simular/replayear
+  // EVENT_EMIT es una herramienta exclusiva del SynapseSimulator para simular/replayear
   // eventos sin correr el flujo real, y jamás se conectó del lado de background.
   //
-  // Aunque Harness lo manda "fire-and-forget" (sin callback, chrome.runtime.
+  // Aunque SynapseSimulator lo manda "fire-and-forget" (sin callback, chrome.runtime.
   // sendMessage(payload).catch(...)), la Promise igual queda pendiente de
   // sendResponse — Chrome no distingue "no me importa la respuesta" de
   // "prometiste una respuesta (return true) y no la diste". Por eso el
@@ -2164,7 +2164,7 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     const eventName = msg.params?.event;
     const tabId = msg.tab_id;
 
-    console.log('[Harness] EVENT_EMIT →', eventName, 'tab:', tabId);
+    console.log('[SynapseSimulator] EVENT_EMIT →', eventName, 'tab:', tabId);
 
     if (tabId) {
       // Reenviar el evento simulado a la tab indicada, como si lo hubiera
@@ -2176,7 +2176,7 @@ function handleRuntimeMessage(msg, sender, sendResp) {
       }, (response) => {
         const err = chrome.runtime.lastError;
         if (err) {
-          console.warn('[Harness] EVENT_EMIT: no se pudo entregar a la tab', tabId, '—', err.message);
+          console.warn('[SynapseSimulator] EVENT_EMIT: no se pudo entregar a la tab', tabId, '—', err.message);
           sendResp({ received: true, delivered: false, error: err.message });
           return;
         }
@@ -2216,11 +2216,11 @@ function sendToHost(msg) {
     const label = msg.event || msg.command || msg.type || '(unknown)';
     console.log(`[Synapse → Host] [${new Date().toISOString()}] ${label}`, msg);
 
-    // ── Harness: reportar cada mensaje saliente al host ───────────────────────
+    // ── SynapseSimulator: reportar cada mensaje saliente al host ───────────────────────
     // Excluir HEARTBEAT (ruido de keepalive) y tokens completos (seguridad).
-    // El Harness ve el label, la dirección, y el payload sanitizado.
-    const _skipHarnessLog = label === 'HEARTBEAT' || label === 'keepalive';
-    if (!_skipHarnessLog) {
+    // El SynapseSimulator ve el label, la dirección, y el payload sanitizado.
+    const _skipSynapseSimulatorLog = label === 'HEARTBEAT' || label === 'keepalive';
+    if (!_skipSynapseSimulatorLog) {
       const _safePayload = { ...msg };
       if (_safePayload.token) _safePayload.token = _safePayload.token.substring(0, 10) + '…';
       if (_safePayload.key)   _safePayload.key   = _safePayload.key.substring(0, 10) + '…';

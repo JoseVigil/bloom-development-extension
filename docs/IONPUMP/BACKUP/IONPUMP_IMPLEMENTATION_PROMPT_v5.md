@@ -1263,7 +1263,7 @@ brain ionpump reload --all
 ---
 
 ### Phase 2: IPC Layer + Execution Engine — Brain
-**Estado:** `[ ]` No iniciado — crítico para harness Test 2
+**Estado:** `[ ]` No iniciado — crítico para synapse-simulator Test 2
 
 - [ ] Implementar `brain/core/synapse/synapse_ipc_server.py`
 - [ ] Crear directorio `BloomNucleus/run/` si no existe en `SynapseIPCServer.start()`
@@ -1309,7 +1309,7 @@ brain ionpump reload --all
 ---
 
 ### Phase 5: Admin Commands — Brain
-**Estado:** `[ ]` No iniciado — crítico para harness Test 3
+**Estado:** `[ ]` No iniciado — crítico para synapse-simulator Test 3
 
 - [ ] `brain/commands/ionpump/ionpump_inspect.py`
   - Output con `page_count` y `shared_count` (no `flow_count`)
@@ -1356,7 +1356,7 @@ en esta iteración. El documento `metamorph-ionpump-state.md` es la fuente de ve
 - [ ] Unit tests para resolución de `requires[]`
 - [ ] Integration tests para IPC layer (mock `SynapseIPCServer`)
 - [ ] End-to-end con browser real
-- [ ] Verificar harness Tests 1–5 del `SYNAPSE_PROTOCOL_MASTER`
+- [ ] Verificar synapse-simulator Tests 1–5 del `SYNAPSE_PROTOCOL_MASTER`
 
 ---
 
@@ -1400,7 +1400,7 @@ en esta iteración. El documento `metamorph-ionpump-state.md` es la fuente de ve
 - [ ] Status values en Brain alineados con Metamorph (4 estados)
 - [ ] Output de `brain ionpump inspect` tiene `page_count` y `shared_count`
 - [ ] `DOM_NAVIGATE`, `DOM_WATCH`, `DOM_WATCH_URL`, `DOM_UNWATCH` llegan a Chrome
-- [ ] Harness Tests 1–5 pasan
+- [ ] SynapseSimulator Tests 1–5 pasan
 
 ---
 

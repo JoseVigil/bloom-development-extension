@@ -234,12 +234,12 @@ hiddenimports = [
     'brain.core.profile.web',
     'brain.core.profile.web.companion_generator',
     'brain.core.profile.web.discovery_generator',
-    'brain.core.profile.web.harness_generator',
+    'brain.core.profile.web.synapse_simulator_generator',
     'brain.core.profile.web.landing_generator',
     'brain.core.profile.web.templates',
     'brain.core.profile.web.templates.companion',
     'brain.core.profile.web.templates.discovery',
-    'brain.core.profile.web.templates.harness',
+    'brain.core.profile.web.templates.synapse_simulator',
     'brain.core.profile.web.templates.landing',
     'brain.core.project',
     'brain.core.project.clone_manager',
@@ -287,10 +287,10 @@ datas = [
     (str(templates_src / 'landing' / 'script.js'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'styles.css'), 'brain/core/profile/web/templates/landing'),
 
-    (str(templates_src / 'harness' / '__init__.py'), 'brain/core/profile/web/templates/harness'),
-    (str(templates_src / 'harness' / 'index.html'), 'brain/core/profile/web/templates/harness'),
-    (str(templates_src / 'harness' / 'harness.js'), 'brain/core/profile/web/templates/harness'),
-    (str(templates_src / 'harness' / 'harnessProtocol.js'), 'brain/core/profile/web/templates/harness'),
+    (str(templates_src / 'synapse-simulator' / '__init__.py'), 'brain/core/profile/web/templates/synapse-simulator'),
+    (str(templates_src / 'synapse-simulator' / 'index.html'), 'brain/core/profile/web/templates/synapse-simulator'),
+    (str(templates_src / 'synapse-simulator' / 'synapse-simulator.js'), 'brain/core/profile/web/templates/synapse-simulator'),
+    (str(templates_src / 'synapse-simulator' / 'synapseSimulatorProtocol.js'), 'brain/core/profile/web/templates/synapse-simulator'),
 
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
 
@@ -324,7 +324,7 @@ datas.extend([
     (str(core_profile_src / 'logic' / 'synapse_handler.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'web' / '__init__.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'discovery_generator.py'), 'brain/core/profile/web'),
-    (str(core_profile_src / 'web' / 'harness_generator.py'), 'brain/core/profile/web'),
+    (str(core_profile_src / 'web' / 'synapse_simulator_generator.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'landing_generator.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'companion_generator.py'), 'brain/core/profile/web'),
 ])

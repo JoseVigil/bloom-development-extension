@@ -122,7 +122,7 @@ contextBridge.exposeInMainWorld('onboarding', {
   // estos campos por su cuenta. Ver onboarding-handlers.js → 'onboarding:persist-github-data'.
   persistGithubData: (params) => ipcRenderer.invoke('onboarding:persist-github-data', params),
 
-  // ── Harness — inyección directa de milestones (solo dev) ─────────────────
+  // ── SynapseSimulator — inyección directa de milestones (solo dev) ─────────────────
   //
   // Permite disparar handleMilestone() en el MilestoneReactor sin pasar por Brain.
   // Solo disponible en builds no empaquetados — el handler en main lo rechaza
@@ -131,5 +131,5 @@ contextBridge.exposeInMainWorld('onboarding', {
   // Uso en debug.html (via postMessage desde onboarding.js):
   //   window.onboarding.injectMilestone({ stepId: 'github_auth', data: { username: 'test' } })
   //
-  injectMilestone: (params) => ipcRenderer.invoke('harness:inject-milestone', params),
+  injectMilestone: (params) => ipcRenderer.invoke('synapse-simulator:inject-milestone', params),
 });

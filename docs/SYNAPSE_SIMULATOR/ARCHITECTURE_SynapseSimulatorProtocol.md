@@ -1,4 +1,4 @@
-# ARCHITECTURE — Harness Protocol Single Source of Truth
+# ARCHITECTURE — SynapseSimulator Protocol Single Source of Truth
 
 **Versión:** 1.0  
 **Proyecto:** Bloom Cortex Extension  
@@ -13,7 +13,7 @@
 2. [Nuevo estándar: JSON Schema como Single Source of Truth](#2-nuevo-estándar-json-schema-como-single-source-of-truth)
 3. [Estructura del JSON Schema de protocolo](#3-estructura-del-json-schema-de-protocolo)
 4. [El wrapper `registerHandler` en background.js](#4-el-wrapper-registerhandler-en-backgroundjs)
-5. [Cómo el Harness realiza el fetch de schemas](#5-cómo-el-harness-realiza-el-fetch-de-schemas)
+5. [Cómo el SynapseSimulator realiza el fetch de schemas](#5-cómo-el-synapse-simulator-realiza-el-fetch-de-schemas)
 6. [Flujo completo end-to-end](#6-flujo-completo-end-to-end)
 7. [Reglas de diseño — obligatorias para el equipo](#7-reglas-de-diseño--obligatorias-para-el-equipo)
 8. [Deuda técnica pendiente de migración](#8-deuda-técnica-pendiente-de-migración)
@@ -24,9 +24,9 @@
 
 Antes de la migración (Fases 1–4), la extensión Bloom Cortex mantenía la definición de sus mensajes de protocolo en tres lugares distintos y no coordinados:
 
-- **Archivos `*Protocol.js`** (`discovery/discoveryProtocol.js`, `landing/landingProtocol.js`, `harnessProtocol.js`): definían globals como `DISCOVERY_PROTOCOL_MANIFEST` inyectados en `window` / `self`. El Harness los leía de forma síncrona en boot.
+- **Archivos `*Protocol.js`** (`discovery/discoveryProtocol.js`, `landing/landingProtocol.js`, `synapseSimulatorProtocol.js`): definían globals como `DISCOVERY_PROTOCOL_MANIFEST` inyectados en `window` / `self`. El SynapseSimulator los leía de forma síncrona en boot.
 - **If-chains en `background.js`**: cada evento (`ACCOUNT_REGISTERED`, `GITHUB_PAT_DETECTED`, etc.) tenía su lógica de validación y defaults hardcodeados directamente en el listener.
-- **`*.synapse.config.js`**: archivos de configuración de sesión leídos vía regex en `loadConfig()` y `loadHarnessConfig()`.
+- **`*.synapse.config.js`**: archivos de configuración de sesión leídos vía regex en `loadConfig()` y `loadSynapseSimulatorConfig()`.
 
 Este diseño implicaba que agregar o modificar un campo en un mensaje requería cambios en al menos dos archivos distintos. Los schemas no eran la fuente de verdad — eran decoración.
 
@@ -41,10 +41,10 @@ extension/
 └── protocols/
     ├── discovery.schema.json   ← protocolo de onboarding / registro
     ├── landing.schema.json     ← protocolo de landing / sesión activa
-    └── harness.schema.json     ← protocolo de automatización DOM
+    └── synapse-simulator.schema.json     ← protocolo de automatización DOM
 ```
 
-Estos archivos están declarados en `web_accessible_resources` en `manifest.json` para que tanto `background.js` como el Harness puedan accederlos via `chrome.runtime.getURL()`.
+Estos archivos están declarados en `web_accessible_resources` en `manifest.json` para que tanto `background.js` como el SynapseSimulator puedan accederlos via `chrome.runtime.getURL()`.
 
 **Principio central:** si un campo tiene un valor por defecto, ese default existe únicamente en el JSON schema. Ningún archivo JS hardcodea defaults de mensajes de protocolo.
 
@@ -134,7 +134,7 @@ Cada archivo schema tiene la siguiente estructura:
 
 | Campo | Obligatorio | Descripción |
 |---|---|---|
-| `name` | Sí | Label legible para la UI del Harness. |
+| `name` | Sí | Label legible para la UI del SynapseSimulator. |
 | `variable` | Sí | Nombre de variable en el template. Prefijo `$`. |
 | `type` | Sí | `"string"`, `"enum"`, `"auto"`, `"boolean"`, `"number"` |
 | `default` | No | Valor por defecto. `applySchemaDefaults()` lo aplica antes de despachar. |
@@ -219,9 +219,9 @@ registerHandler('MY_EVENT', myMessageSchema, (msg, sender, sendResp) => {
 
 ---
 
-## 5. Cómo el Harness realiza el fetch de schemas
+## 5. Cómo el SynapseSimulator realiza el fetch de schemas
 
-El Harness (`harness/harness.js`) carga los schemas JSON a través de `ProtocolReader.discoverFromJSON()`. Este método:
+El SynapseSimulator (`synapse-simulator/synapse-simulator.js`) carga los schemas JSON a través de `ProtocolReader.discoverFromJSON()`. Este método:
 
 1. Construye la URL de cada schema con `chrome.runtime.getURL('protocols/*.schema.json')`.
 2. Hace `fetch()` de cada archivo (disponible porque están en `web_accessible_resources`).
@@ -233,7 +233,7 @@ async discoverFromJSON() {
   const SCHEMA_FILES = [
     { file: 'protocols/discovery.schema.json', key: 'DISCOVERY_PROTOCOL_MANIFEST' },
     { file: 'protocols/landing.schema.json',   key: 'LANDING_PROTOCOL_MANIFEST'   },
-    { file: 'protocols/harness.schema.json',   key: 'HARNESS_PROTOCOL_MANIFEST'   },
+    { file: 'protocols/synapse-simulator.schema.json',   key: 'SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST'   },
   ];
 
   const results = await Promise.allSettled(
@@ -250,17 +250,17 @@ async discoverFromJSON() {
 
 Una vez cargados, `ProtocolReader.render()` itera `this.manifests` y genera la UI del simulador: secciones colapsables por protocolo, items clicables por mensaje, y el formulario de parámetros en `Simulator.load()`.
 
-### Ciclo de boot del Harness
+### Ciclo de boot del SynapseSimulator
 
 ```
 DOMContentLoaded
   └─ loadScriptOptional (configs legacy — transitorio)
-  └─ Harness.init()
-       ├─ ConfigReader.read()          ← lee self.HARNESS_CONFIG (transitorio)
+  └─ SynapseSimulator.init()
+       ├─ ConfigReader.read()          ← lee self.SYNAPSE_SIMULATOR_CONFIG (transitorio)
        ├─ ProtocolReader.discover()    ← lee self.*_MANIFEST (transitorio)
        ├─ ProtocolReader.discoverFromJSON()  ← fetch JSON schemas ← NUEVO ESTÁNDAR
        ├─ ProtocolReader.render()
-       └─ chrome.runtime.sendMessage HARNESS_HELLO → replay de buffer
+       └─ chrome.runtime.sendMessage SYNAPSE_SIMULATOR_HELLO → replay de buffer
 ```
 
 ---
@@ -276,7 +276,7 @@ DOMContentLoaded
       │             └─ registerOnboardingHandlers()
       │                   └─ registerHandler('ACCOUNT_REGISTERED', schema, fn)
       │
-      └── harness/harness.js
+      └── synapse-simulator/synapse-simulator.js
             ProtocolReader.discoverFromJSON()
               └─ fetch(chrome.runtime.getURL('protocols/discovery.schema.json'))
                     └─ manifests.push({ key, manifest })
@@ -316,19 +316,19 @@ Antes de agregar un `registerHandler` en `background.js`, el evento debe existir
 
 ### Regla 3 — No agregar globals `self.*` para datos de protocolo
 
-Los datos de protocolo (estructura de mensajes, parámetros, defaults) no se inyectan como globals de JavaScript. Solo los configs de sesión (`harness.synapse.config.js`, `discovery.synapse.config.js`) pueden seguir usando este patrón mientras no sean migrados.
+Los datos de protocolo (estructura de mensajes, parámetros, defaults) no se inyectan como globals de JavaScript. Solo los configs de sesión (`synapse-simulator.synapse.config.js`, `discovery.synapse.config.js`) pueden seguir usando este patrón mientras no sean migrados.
 
 ### Regla 4 — Los schemas se cargan con `chrome.runtime.getURL` + `fetch`
 
-Nunca importar los schemas como módulos JS ni incrustarlos inline. El fetch via `getURL` garantiza que tanto background.js como el Harness y cualquier otro contexto de la extensión consuman exactamente el mismo archivo del bundle.
+Nunca importar los schemas como módulos JS ni incrustarlos inline. El fetch via `getURL` garantiza que tanto background.js como el SynapseSimulator y cualquier otro contexto de la extensión consuman exactamente el mismo archivo del bundle.
 
 ### Regla 5 — `applySchemaDefaults` no muta el mensaje original
 
 El mensaje entrante se copia con `Object.assign({}, msg)`. Si necesitás guardar referencia al mensaje original, está disponible. No pasar el objeto patcheado a funciones que esperen el mensaje raw.
 
-### Regla 6 — El Harness es el entorno de prueba del contrato
+### Regla 6 — El SynapseSimulator es el entorno de prueba del contrato
 
-Antes de implementar la lógica de negocio de un nuevo evento, la entrada del schema ya debe ser lo suficientemente completa como para que el Harness pueda simular el mensaje. Si el formulario del Harness no puede generar el payload, el schema está incompleto.
+Antes de implementar la lógica de negocio de un nuevo evento, la entrada del schema ya debe ser lo suficientemente completa como para que el SynapseSimulator pueda simular el mensaje. Si el formulario del SynapseSimulator no puede generar el payload, el schema está incompleto.
 
 ---
 
@@ -339,16 +339,16 @@ Los siguientes elementos siguen usando el sistema anterior y **no se deben borra
 | Elemento | Archivo | Bloqueador |
 |---|---|---|
 | `loadConfig()` con fetch + regex | `background.js` | Lee `discovery.synapse.config.js` y `landing.synapse.config.js` para datos de sesión (profileId, launchId, etc.). Estos no son datos de protocolo — son configs de runtime generados por Ignition/Sentinel. |
-| `loadHarnessConfig()` | `background.js` | Lee `harness.synapse.config.js` para poblar `config.harness`. |
-| `ProtocolReader.discover()` | `harness.js` | Aún lee globals legacy como fallback. Se puede eliminar cuando los archivos `*Protocol.js` sean removidos del bundle. |
-| `loadScriptOptional(*.js)` en boot | `harness.js` | Carga los configs legacy en boot. Se elimina junto con los archivos físicos. |
-| `ConfigReader.read()` desde `self.*` | `harness.js` | Lee `self.HARNESS_CONFIG` y `self.SYNAPSE_CONFIG`. Se reemplaza por la recepción de `HARNESS_CONFIG_READY` desde background cuando `loadHarnessConfig` sea migrado. |
+| `loadSynapseSimulatorConfig()` | `background.js` | Lee `synapse-simulator.synapse.config.js` para poblar `config.synapseSimulator`. |
+| `ProtocolReader.discover()` | `synapse-simulator.js` | Aún lee globals legacy como fallback. Se puede eliminar cuando los archivos `*Protocol.js` sean removidos del bundle. |
+| `loadScriptOptional(*.js)` en boot | `synapse-simulator.js` | Carga los configs legacy en boot. Se elimina junto con los archivos físicos. |
+| `ConfigReader.read()` desde `self.*` | `synapse-simulator.js` | Lee `self.SYNAPSE_SIMULATOR_CONFIG` y `self.SYNAPSE_CONFIG`. Se reemplaza por la recepción de `SYNAPSE_SIMULATOR_CONFIG_READY` desde background cuando `loadSynapseSimulatorConfig` sea migrado. |
 
-*(actualizado Jun 26 2026) — Los archivos legacy `discoveryProtocol.js`, `landingProtocol.js` e `harnessProtocol.js` están marcados para eliminación como parte de la Fase 5. La secuencia de limpieza documentada en "Orden recomendado" es el plan activo.*
+*(actualizado Jun 26 2026) — Los archivos legacy `discoveryProtocol.js`, `landingProtocol.js` e `synapseSimulatorProtocol.js` están marcados para eliminación como parte de la Fase 5. La secuencia de limpieza documentada en "Orden recomendado" es el plan activo.*
 
 **Orden recomendado para completar la limpieza:**
 
-1. Migrar `loadHarnessConfig()` en background.js para que lea de un JSON en lugar de parsear regex sobre `.js`.
-2. Una vez hecho, eliminar `harness.synapse.config.js` del bundle y simplificar `ConfigReader.read()` en harness.js.
+1. Migrar `loadSynapseSimulatorConfig()` en background.js para que lea de un JSON en lugar de parsear regex sobre `.js`.
+2. Una vez hecho, eliminar `synapse-simulator.synapse.config.js` del bundle y simplificar `ConfigReader.read()` en synapse-simulator.js.
 3. Eliminar los archivos `*Protocol.js` legacy y remover `ProtocolReader.discover()` y `loadScriptOptional` del boot sequence.
 4. Los `*.synapse.config.js` de sesión (discovery/landing) se mantienen hasta que Ignition/Sentinel los reemplace por otro mecanismo de entrega de config de runtime.

@@ -13,7 +13,7 @@
 
 | Versión | Fecha | Cambios |
 |---|---|---|
-| v1.0 | 2026-08-07 | Primera versión. Consolida el hallazgo de que `.ownership.json` no se genera en ningún flujo automático (confirmado contra `nucleus/internal/governance/ownership.go`, `nucleus/internal/supervisor/onboarding_harness.go`, `milestone-registry.js` y `nucleus.json` real post-onboarding). Define el esquema canónico único, el path canónico único, y dos invariantes nuevas de Alfred. **Pendiente de reconciliar contra `nucleus/docs/GOVERNANCE.md` y `nucleus-governance.json`**, cuyo contenido todavía no fue revisado en este proceso — ver §7. |
+| v1.0 | 2026-08-07 | Primera versión. Consolida el hallazgo de que `.ownership.json` no se genera en ningún flujo automático (confirmado contra `nucleus/internal/governance/ownership.go`, `nucleus/internal/supervisor/onboarding_synapse_simulator.go`, `milestone-registry.js` y `nucleus.json` real post-onboarding). Define el esquema canónico único, el path canónico único, y dos invariantes nuevas de Alfred. **Pendiente de reconciliar contra `nucleus/docs/GOVERNANCE.md` y `nucleus-governance.json`**, cuyo contenido todavía no fue revisado en este proceso — ver §7. |
 
 ---
 
@@ -47,9 +47,9 @@ Este documento es la fuente de verdad para todo lo relativo a: esquema de `.owne
 <nucleusRepoRoot>/.bloom/.nucleus-{organization}/.ownership.json
 ```
 
-Esta es la ruta que usan, de forma independiente y coincidente, tanto `onboarding_harness.go` (`getOwnershipPath()`, modo `GOVERNANCE`) como `BATCAVE_ARCHITECTURE.md` (§3/§4.1). Es la única ruta con dos fuentes independientes de acuerdo — por eso se fija como canónica.
+Esta es la ruta que usan, de forma independiente y coincidente, tanto `onboarding_synapse_simulator.go` (`getOwnershipPath()`, modo `GOVERNANCE`) como `BATCAVE_ARCHITECTURE.md` (§3/§4.1). Es la única ruta con dos fuentes independientes de acuerdo — por eso se fija como canónica.
 
-**Ruta que se descarta explícitamente:** `$HOME/.bloom/.nucleus/ownership.json` (sin guion, sin organización, sin punto inicial), que es la que hoy escribe `GetOwnershipPath()` en `ownership.go`. Esta ruta es incompatible con multi-organización por diseño (no hay lugar para distinguir de qué organización es) y no es la que lee Harness. `ownership.go` debe migrar a la ruta canónica — ver §6.1.
+**Ruta que se descarta explícitamente:** `$HOME/.bloom/.nucleus/ownership.json` (sin guion, sin organización, sin punto inicial), que es la que hoy escribe `GetOwnershipPath()` en `ownership.go`. Esta ruta es incompatible con multi-organización por diseño (no hay lugar para distinguir de qué organización es) y no es la que lee SynapseSimulator. `ownership.go` debe migrar a la ruta canónica — ver §6.1.
 
 **Simulación:** `getOwnershipPath(simulation=true, ...)` apunta a `installer/nucleus/scripts/simulation_env/.bloom/.ownership.json`, un fixture estático del repo. Esta ruta es válida *únicamente* en modo `SIMULATION` explícito y nunca debe ser alcanzable desde un flujo real ni desde el arranque por defecto de ningún componente (ver invariante GOV-INV-004 en §5).
 
@@ -57,7 +57,7 @@ Esta es la ruta que usan, de forma independiente y coincidente, tanto `onboardin
 
 ## §3. Esquema canónico
 
-Consolidado a partir de los **cuatro** esquemas reales encontrados en el proceso de auditoría (dos en documentos de diseño, dos en código Go real — `ownership.go` y el validador de `onboarding_harness.go`), ninguno de los cuales coincidía con otro:
+Consolidado a partir de los **cuatro** esquemas reales encontrados en el proceso de auditoría (dos en documentos de diseño, dos en código Go real — `ownership.go` y el validador de `onboarding_synapse_simulator.go`), ninguno de los cuales coincidía con otro:
 
 ```json
 {
@@ -101,7 +101,7 @@ Consolidado a partir de los **cuatro** esquemas reales encontrados en el proceso
 ```
 
 Notas de fusión:
-- `owner` (objeto) reemplaza a `owner_id`/`owner_name` sueltos de `ownership.go` **y** satisface el campo plano `"owner"` que `validateOwnershipFile()` exige en `onboarding_harness.go` — se resuelve dando `owner` como objeto pero garantizando que la clave de primer nivel se llame exactamente `owner` (no `owner_id`), que es lo único que el validador de Harness realmente chequea hoy (`owner`, `created_at`).
+- `owner` (objeto) reemplaza a `owner_id`/`owner_name` sueltos de `ownership.go` **y** satisface el campo plano `"owner"` que `validateOwnershipFile()` exige en `onboarding_synapse_simulator.go` — se resuelve dando `owner` como objeto pero garantizando que la clave de primer nivel se llame exactamente `owner` (no `owner_id`), que es lo único que el validador de SynapseSimulator realmente chequea hoy (`owner`, `created_at`).
 - `created_at` pasa de `time.Time` (formato Go) a ISO-8601 string explícito, para que sea legible cross-lenguaje (Go, Python, JS) sin depender de un unmarshaller específico.
 - `team_members` viene de `ownership.go` (`AddTeamMember`/`Member`).
 - `roles` viene de la v6.0 original de BTIPS.
@@ -141,7 +141,7 @@ Esto es la misma clase de bug, documentada por segunda vez en este ecosistema, q
 
 1. **`nucleus init` es manual, no reactivo.** Ver §4. Se agenda para después del MVP de Alfred de esta semana.
 2. **`ownership.go` escribe en la ruta legacy, no en la canónica de §2.** Requiere migración de `GetOwnershipPath()`.
-3. **El esquema de `ownership.go` (`OwnershipRecord`) no coincide con el validador de `onboarding_harness.go` (`validateOwnershipFile`)** — ni siquiera en el caso feliz de ejecución manual, el archivo resultante pasaría la validación de Harness tal como está hoy. Se resuelve migrando `ownership.go` al esquema de §3.
+3. **El esquema de `ownership.go` (`OwnershipRecord`) no coincide con el validador de `onboarding_synapse_simulator.go` (`validateOwnershipFile`)** — ni siquiera en el caso feliz de ejecución manual, el archivo resultante pasaría la validación de SynapseSimulator tal como está hoy. Se resuelve migrando `ownership.go` al esquema de §3.
 4. **Roles no conectados a autorización real** — GOV-INV-005 arriba. `alfred.go` autoriza hoy únicamente por posesión de la "constitución" (`.rules.bl` + `.ai_bot.sovereign.bl`) y un `golden_key`/`extension_id` de `nucleus-governance.json` (el "blueprint" — un tercer archivo, distinto de `.ownership.json` y no cubierto todavía por este documento).
 5. **`SignedHash` en `ownership.go` nunca se completa** — ver nota en §3.
 

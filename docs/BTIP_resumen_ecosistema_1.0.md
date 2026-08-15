@@ -60,7 +60,7 @@ que genera sean más precisos.
 Extensión de Chrome que conecta al usuario con las webs de IA. Vive en 4 páginas:
 - **Discovery** — onboarding inicial
 - **Landing** — dashboard del perfil activo
-- **Harness** — debug, solo existe en builds de desarrollo
+- **SynapseSimulator** — debug, solo existe en builds de desarrollo
 - **Companion** *(nuevo v6.0)* — panel lateral con Gemini que da una "segunda
   opinión" sin ensuciar la sesión principal de IA del ingeniero
 

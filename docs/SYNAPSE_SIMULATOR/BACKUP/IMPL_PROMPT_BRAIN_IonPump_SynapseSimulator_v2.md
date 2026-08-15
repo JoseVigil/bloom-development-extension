@@ -1,14 +1,14 @@
 # PROMPT DE IMPLEMENTACIÓN — Brain v2.0
-## IonPump Runtime + Harness Generator
-### Referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md · v2.0
+## IonPump Runtime + SynapseSimulator Generator
+### Referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md · v2.0
 
 > **CHANGELOG v2.0**
 > - IPC Layer agregado: `ionpump_ipc.py` y `synapse_ipc_server.py`
 > - `ionpump_executor.py` corregido: yield SynapseCommand objects, NO envía directamente
 > - `ionpump_manager.py` corregido: es quien llama al IPCClient
 > - `SynapseManager` corregido: inicia SynapseIPCServer en thread, agrega handlers DOM
-> - `HarnessGenerator` corregido: solo copia assets estáticos, SIN config (patrón v3.0)
-> - `harness.synapse.config.js` movido a Sentinel launch (ignition_identity.go), NO a Brain seed
+> - `SynapseSimulatorGenerator` corregido: solo copia assets estáticos, SIN config (patrón v3.0)
+> - `synapse-simulator.synapse.config.js` movido a Sentinel launch (ignition_identity.go), NO a Brain seed
 > - Phase 3 (IntentExecutor) marcada DEFERRED — archivo no confirmado en codebase
 
 ---
@@ -18,19 +18,19 @@
 Estás implementando dos responsabilidades de Brain en el contexto del milestone GitHub Onboarding:
 
 1. **IonPump** — runtime de automatización web (vive en `brain/core/ionpump/`)
-2. **Harness Generator** — despliega la página de debug en seed (vive en `brain/core/profile/web/`)
+2. **SynapseSimulator Generator** — despliega la página de debug en seed (vive en `brain/core/profile/web/`)
 
 **Principios que no negociamos:**
 - IonPump es un runtime interno. No es CLI de usuario.
 - IonPump no llama directamente a `SynapseManager` — usa el IPC layer (TCP localhost).
 - `SynapseManager` no se modifica para "enviar proactivamente" — se extiende con handlers DOM.
-- `HarnessGenerator` sigue el patrón exacto de `discovery_generator.py` v3.0: solo copia assets estáticos.
-- Brain no escribe configs de runtime (`harness.synapse.config.js`) — eso lo hace Sentinel en launch.
+- `SynapseSimulatorGenerator` sigue el patrón exacto de `discovery_generator.py` v3.0: solo copia assets estáticos.
+- Brain no escribe configs de runtime (`synapse-simulator.synapse.config.js`) — eso lo hace Sentinel en launch.
 
 **Documentos de referencia:**
 - `IONPUMP_IMPLEMENTATION_PROMPT_v2.md` — spec técnica completa con IPC layer
-- `BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
-- `discovery_generator.py` — patrón exacto que HarnessGenerator debe seguir
+- `BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
+- `discovery_generator.py` — patrón exacto que SynapseSimulatorGenerator debe seguir
 
 ---
 
@@ -623,18 +623,18 @@ Total: 2 sites
 
 ---
 
-## Parte 2 — Harness Generator
+## Parte 2 — SynapseSimulator Generator
 
-### 2.1 harness_generator.py
+### 2.1 synapse_simulator_generator.py
 
 Sigue el **patrón exacto** de `discovery_generator.py` v3.0:
 - Solo copia assets estáticos
 - No inyecta datos en el HTML
-- No genera configs (`harness.synapse.config.js` lo escribe Sentinel en launch)
+- No genera configs (`synapse-simulator.synapse.config.js` lo escribe Sentinel en launch)
 - En `dev_mode=False` es no-op completo
 
 ```python
-# brain/core/profile/web/harness_generator.py
+# brain/core/profile/web/synapse_simulator_generator.py
 
 import shutil
 from pathlib import Path
@@ -644,15 +644,15 @@ from brain.shared.logger import get_logger
 logger = get_logger(__name__)
 
 
-def generate_harness_page(target_ext_dir: Path, profile_data: Dict[str, Any], dev_mode: bool = False) -> None:
+def generate_synapse_simulator_page(target_ext_dir: Path, profile_data: Dict[str, Any], dev_mode: bool = False) -> None:
     """
-    Genera assets estáticos del Harness dentro del directorio de extensión.
+    Genera assets estáticos del SynapseSimulator dentro del directorio de extensión.
     
     En dev_mode=False: no-op completo. No crea ningún archivo.
-    En dev_mode=True: copia harness/index.html al extensionDir/harness/
+    En dev_mode=True: copia synapse-simulator/index.html al extensionDir/synapse-simulator/
     
     Patrón: idéntico a generate_discovery_page() — solo copia assets estáticos.
-    La configuración (harness.synapse.config.js) es responsabilidad de Sentinel
+    La configuración (synapse-simulator.synapse.config.js) es responsabilidad de Sentinel
     en el launch sequence (ignition_identity.go::prepareSessionFiles()).
     
     Args:
@@ -661,28 +661,28 @@ def generate_harness_page(target_ext_dir: Path, profile_data: Dict[str, Any], de
         dev_mode: Si False, es no-op. Si True, despliega assets.
     """
     if not dev_mode:
-        logger.debug("⏭️  Harness generator skipped (dev_mode=False)")
+        logger.debug("⏭️  SynapseSimulator generator skipped (dev_mode=False)")
         return
 
-    logger.info(f"🔧 Desplegando assets estáticos del Harness para: {profile_data.get('alias')}")
+    logger.info(f"🔧 Desplegando assets estáticos del SynapseSimulator para: {profile_data.get('alias')}")
 
-    harness_dir = target_ext_dir / "harness"
-    harness_dir.mkdir(parents=True, exist_ok=True)
+    synapse_simulator_dir = target_ext_dir / "synapse-simulator"
+    synapse_simulator_dir.mkdir(parents=True, exist_ok=True)
 
-    _copy_static_assets(harness_dir)
+    _copy_static_assets(synapse_simulator_dir)
 
-    logger.info(f"  ✅ Assets del Harness desplegados en: {harness_dir}")
-    logger.info(f"  ℹ️  harness.synapse.config.js será generado por Sentinel en launch")
+    logger.info(f"  ✅ Assets del SynapseSimulator desplegados en: {synapse_simulator_dir}")
+    logger.info(f"  ℹ️  synapse-simulator.synapse.config.js será generado por Sentinel en launch")
 
 
-def _copy_static_assets(harness_dir: Path) -> None:
+def _copy_static_assets(synapse_simulator_dir: Path) -> None:
     """
-    Copia archivos estáticos desde templates/harness/ SIN modificaciones.
+    Copia archivos estáticos desde templates/synapse-simulator/ SIN modificaciones.
     No incluye archivos de configuración — son responsabilidad de Sentinel.
     """
-    logger.debug("  📋 Copiando assets estáticos del Harness...")
+    logger.debug("  📋 Copiando assets estáticos del SynapseSimulator...")
 
-    template_dir = Path(__file__).parent / "templates" / "harness"
+    template_dir = Path(__file__).parent / "templates" / "synapse-simulator"
 
     files_to_copy = [
         "index.html",
@@ -692,7 +692,7 @@ def _copy_static_assets(harness_dir: Path) -> None:
     for file_name in files_to_copy:
         source = template_dir / file_name
         if source.exists():
-            shutil.copy2(source, harness_dir / file_name)
+            shutil.copy2(source, synapse_simulator_dir / file_name)
             copied += 1
             logger.debug(f"    ✓ {file_name}")
         else:
@@ -705,7 +705,7 @@ def _copy_static_assets(harness_dir: Path) -> None:
 
 ### 2.2 Modificación en profile_create.py
 
-Agregar llamada a `generate_harness_page()` en `_generate_profile_pages()`.
+Agregar llamada a `generate_synapse_simulator_page()` en `_generate_profile_pages()`.
 
 ```python
 # brain/core/profile/profile_create.py
@@ -713,12 +713,12 @@ Agregar llamada a `generate_harness_page()` en `_generate_profile_pages()`.
 
 def _generate_profile_pages(self, profile_id: str, profile_name: str, dev_mode: bool = False) -> None:
     """
-    Genera discovery, landing y (en dev) harness pages para el perfil.
+    Genera discovery, landing y (en dev) synapse-simulator pages para el perfil.
     """
     try:
         from brain.core.profile.web.discovery_generator import generate_discovery_page
         from brain.core.profile.web.landing_generator import generate_profile_landing
-        from brain.core.profile.web.harness_generator import generate_harness_page
+        from brain.core.profile.web.synapse_simulator_generator import generate_synapse_simulator_page
     except ImportError as e:
         logger.error(f"❌ Page generators not available: {e}")
         raise
@@ -744,10 +744,10 @@ def _generate_profile_pages(self, profile_id: str, profile_name: str, dev_mode: 
     generate_profile_landing(extension_dir, profile_data)
     logger.info(f"✅ Landing page generated")
 
-    # NUEVO: harness page (solo en dev_mode)
-    generate_harness_page(extension_dir, profile_data, dev_mode=dev_mode)
+    # NUEVO: synapse-simulator page (solo en dev_mode)
+    generate_synapse_simulator_page(extension_dir, profile_data, dev_mode=dev_mode)
     if dev_mode:
-        logger.info(f"✅ Harness page generated (dev mode)")
+        logger.info(f"✅ SynapseSimulator page generated (dev mode)")
 ```
 
 También actualizar `create_profile()` para recibir y pasar `dev_mode`:
@@ -766,9 +766,9 @@ def create_profile(
 
 ---
 
-### 2.3 harnessProtocol.js — archivo en templates de Cortex
+### 2.3 synapseSimulatorProtocol.js — archivo en templates de Cortex
 
-Este archivo vive en `brain/core/profile/web/templates/discovery/harnessProtocol.js`.
+Este archivo vive en `brain/core/profile/web/templates/discovery/synapseSimulatorProtocol.js`.
 Es copiado por `discovery_generator.py` al directorio de la extensión junto con los otros
 assets estáticos, exactamente igual que `discoveryProtocol.js`.
 
@@ -779,20 +779,20 @@ files_to_copy = [
     "discovery.js",
     "script.js",
     "discoveryProtocol.js",
-    "harnessProtocol.js",   # ← NUEVO
+    "synapseSimulatorProtocol.js",   # ← NUEVO
     "content-aistudio.js",
     "onboarding.js",
     "styles.css"
 ]
 ```
 
-**Contenido de `templates/discovery/harnessProtocol.js`:** ver `IMPL_PROMPT_BRAIN_IonPump_Harness.md` v1.0 sección 2.2 — el contenido del manifest no cambia.
+**Contenido de `templates/discovery/synapseSimulatorProtocol.js`:** ver `IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator.md` v1.0 sección 2.2 — el contenido del manifest no cambia.
 
 ---
 
 ### 2.4 discoveryProtocol.js — agregar manifest al final
 
-Agregar `DISCOVERY_PROTOCOL_MANIFEST` al **final** del archivo `templates/discovery/discoveryProtocol.js`. No modificar nada de la lógica existente. Ver contenido completo en `IMPL_PROMPT_CORTEX_SENTINEL_Harness.md` sección 1.1.
+Agregar `DISCOVERY_PROTOCOL_MANIFEST` al **final** del archivo `templates/discovery/discoveryProtocol.js`. No modificar nada de la lógica existente. Ver contenido completo en `IMPL_PROMPT_CORTEX_SENTINEL_SynapseSimulator.md` sección 1.1.
 
 ---
 
@@ -808,8 +808,8 @@ Agregar `DISCOVERY_PROTOCOL_MANIFEST` al **final** del archivo `templates/discov
 - [ ] `SynapseIPCServer` solo escucha en 127.0.0.1 — nunca en 0.0.0.0
 - [ ] El watchdog valida antes de aplicar un recipe nuevo
 - [ ] Si la validación falla, la versión anterior sigue activa (rollback implícito)
-- [ ] `generate_harness_page()` es no-op completo cuando `dev_mode=False`
-- [ ] `HarnessGenerator` NO genera `harness.synapse.config.js` — eso lo hace Sentinel en launch
+- [ ] `generate_synapse_simulator_page()` es no-op completo cuando `dev_mode=False`
+- [ ] `SynapseSimulatorGenerator` NO genera `synapse-simulator.synapse.config.js` — eso lo hace Sentinel en launch
 - [ ] Los handlers DOM en `SynapseManager._action_map` no modifican los handlers existentes
 - [ ] `ionpump_manager.py` es un singleton — no se crean múltiples instancias
 - [ ] La modificación a `_generate_profile_pages()` no rompe el path sin `dev_mode`
@@ -817,4 +817,4 @@ Agregar `DISCOVERY_PROTOCOL_MANIFEST` al **final** del archivo `templates/discov
 
 ---
 
-*Implementar en orden: models → registry → loader → validator → state → executor → ipc_client → ipc_server → manager → synapse_manager (modificación) → harness_generator → profile_create (modificación)*
+*Implementar en orden: models → registry → loader → validator → state → executor → ipc_client → ipc_server → manager → synapse_manager (modificación) → synapse_simulator_generator → profile_create (modificación)*

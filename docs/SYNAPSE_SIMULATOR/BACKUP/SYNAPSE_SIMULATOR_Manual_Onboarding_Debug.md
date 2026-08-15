@@ -1,4 +1,4 @@
-# Harness — Manual de Uso: Debug del Flujo Onboarding
+# SynapseSimulator — Manual de Uso: Debug del Flujo Onboarding
 
 **Versión del sistema:** Bloom Cortex · launchId `004_d7d6d36b_111324`  
 **Perfil activo:** MasterWorker · `d7d6d36b-300e-43db-bdf5-d6bfa40c2a12`  
@@ -6,16 +6,16 @@
 
 ---
 
-## 1. Contexto — qué es el Harness y para qué existe aquí
+## 1. Contexto — qué es el SynapseSimulator y para qué existe aquí
 
-El Harness es la herramienta de observabilidad y simulación del protocolo Synapse. **Solo existe en builds dev** — no se despliega en producción.
+El SynapseSimulator es la herramienta de observabilidad y simulación del protocolo Synapse. **Solo existe en builds dev** — no se despliega en producción.
 
 En esta sesión su rol es doble:
 
 - **Observar** todos los mensajes `chrome.runtime` que fluyen entre la extension, background.js y el host mientras el onboarding corre en Discovery.
 - **Simular** eventos del protocolo para avanzar o testear pasos del flujo sin depender del sistema real (clipboard, GitHub, Brain) cuando algo no responde.
 
-El Harness **no modifica** el estado del sistema. Despacha mensajes como si los hubiera enviado otro componente. background.js los recibe y los procesa exactamente igual.
+El SynapseSimulator **no modifica** el estado del sistema. Despacha mensajes como si los hubiera enviado otro componente. background.js los recibe y los procesa exactamente igual.
 
 ---
 
@@ -25,15 +25,15 @@ Para que un nuevo agente pueda continuar este trabajo sin reconstruir contexto, 
 
 | Archivo | Path en disco | Para qué sirve |
 |---|---|---|
-| `BTIPS_Bloom_Technical_Intent_Package_v5_0.md` | (raíz del proyecto) | Arquitectura completa: Cortex, Synapse, Brain, Harness, Discovery, Landing |
-| `INVESTIGACION_Harness_Protocol_Autodiscovery.md` | (raíz del proyecto) | Modelo mental del Harness: ProtocolReader, manifests, canales runtime vs tabs |
-| `harness_dead_diagnosis.svg` | (raíz del proyecto) | Diagnóstico de las 4 causas raíz + plan de reparación (ya ejecutado) |
+| `BTIPS_Bloom_Technical_Intent_Package_v5_0.md` | (raíz del proyecto) | Arquitectura completa: Cortex, Synapse, Brain, SynapseSimulator, Discovery, Landing |
+| `INVESTIGACION_SynapseSimulator_Protocol_Autodiscovery.md` | (raíz del proyecto) | Modelo mental del SynapseSimulator: ProtocolReader, manifests, canales runtime vs tabs |
+| `synapse_simulator_dead_diagnosis.svg` | (raíz del proyecto) | Diagnóstico de las 4 causas raíz + plan de reparación (ya ejecutado) |
 | `discoveryProtocol.js` | `.../extension/discovery/discoveryProtocol.js` | Protocolo real + `DISCOVERY_PROTOCOL_MANIFEST` con los 8 mensajes del flujo |
-| `harnessProtocol.js` | `.../extension/harness/harnessProtocol.js` | `HARNESS_PROTOCOL_MANIFEST` con los 10 comandos DOM |
-| `harness.synapse.config.js` | `.../extension/harness.synapse.config.js` | Config de sesión activa: profileId, launchId, profileAlias |
+| `synapseSimulatorProtocol.js` | `.../extension/synapse-simulator/synapseSimulatorProtocol.js` | `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` con los 10 comandos DOM |
+| `synapse-simulator.synapse.config.js` | `.../extension/synapse-simulator.synapse.config.js` | Config de sesión activa: profileId, launchId, profileAlias |
 | `manifest.json` | `.../extension/manifest.json` | Permisos, web_accessible_resources, content_scripts |
-| `index.html` | `.../extension/harness/index.html` | HTML del Harness (ahora sin inline scripts) |
-| `harness.js` | `.../extension/harness/harness.js` | JS del Harness: ProtocolReader, Simulator, Logger, ConfigReader |
+| `index.html` | `.../extension/synapse-simulator/index.html` | HTML del SynapseSimulator (ahora sin inline scripts) |
+| `synapse-simulator.js` | `.../extension/synapse-simulator/synapse-simulator.js` | JS del SynapseSimulator: ProtocolReader, Simulator, Logger, ConfigReader |
 
 **Path base de todos los archivos de extensión:**
 ```
@@ -42,29 +42,29 @@ Para que un nuevo agente pueda continuar este trabajo sin reconstruir contexto, 
 
 ---
 
-## 3. Cómo abrir el Harness
+## 3. Cómo abrir el SynapseSimulator
 
-La URL del Harness es una página interna de la extensión Chrome:
+La URL del SynapseSimulator es una página interna de la extensión Chrome:
 
 ```
-chrome-extension://hpblclepliicmihaplldignhjdggnkdh/harness/index.html
+chrome-extension://hpblclepliicmihaplldignhjdggnkdh/synapse-simulator/index.html
 ```
 
 **Prerequisitos para que esté vivo:**
 - La extensión está cargada en modo developer en `chrome://extensions`
 - `bloom-host` está corriendo (el handshake en el log de background.js debe mostrar `HANDSHAKE COMPLETADO`)
-- El Harness fue generado con `sentinel seed MasterWorker true --dev` (el directorio `harness/` existe)
+- El SynapseSimulator fue generado con `sentinel seed MasterWorker true --dev` (el directorio `synapse-simulator/` existe)
 
-**Para abrir dev tools del Harness:**
-En `chrome://extensions` → Bloom Nucleus Bridge → **Inspect views** → `harness/index.html`
+**Para abrir dev tools del SynapseSimulator:**
+En `chrome://extensions` → Bloom Nucleus Bridge → **Inspect views** → `synapse-simulator/index.html`
 
 ---
 
-## 4. Layout del Harness — los 3 paneles
+## 4. Layout del SynapseSimulator — los 3 paneles
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  🌱 Bloom Harness  [DEV]          MasterWorker  ● Connected     │  ← Top bar
+│  🌱 Bloom SynapseSimulator  [DEV]          MasterWorker  ● Connected     │  ← Top bar
 ├────────────────┬──────────────────────────────┬─────────────────┤
 │                │                              │  [Log] [Config] │
 │  PROTOCOLS     │  SIMULATE                    │                 │
@@ -94,16 +94,16 @@ Muestra el mensaje seleccionado con:
 - Preview del payload JSON que se va a despachar (se actualiza en tiempo real)
 - Botón **Send** — despacha via `chrome.runtime.sendMessage`
 
-Los parámetros `type: "auto"` (como `profile_id` y `launch_id`) se resuelven automáticamente desde `HARNESS_CONFIG` y `SYNAPSE_CONFIG` — no aparecen como campos editables.
+Los parámetros `type: "auto"` (como `profile_id` y `launch_id`) se resuelven automáticamente desde `SYNAPSE_SIMULATOR_CONFIG` y `SYNAPSE_CONFIG` — no aparecen como campos editables.
 
 ### Panel derecho — Log / Config
-**Tab Log:** stream en tiempo real de todos los mensajes que pasan por el Harness.
-- `INFO` — eventos de boot y ciclo de vida del Harness
+**Tab Log:** stream en tiempo real de todos los mensajes que pasan por el SynapseSimulator.
+- `INFO` — eventos de boot y ciclo de vida del SynapseSimulator
 - `SEND` — mensajes despachados desde Simulate, con payload completo
 - `ACK` — respuesta de background.js al mensaje despachado
 - `ERR` — errores de dispatch o chrome.runtime
 
-**Tab Config:** muestra el estado de `HARNESS_CONFIG` y `SYNAPSE_CONFIG` cargados. Útil para verificar que `profileId` y `launchId` son los correctos antes de despachar.
+**Tab Config:** muestra el estado de `SYNAPSE_SIMULATOR_CONFIG` y `SYNAPSE_CONFIG` cargados. Útil para verificar que `profileId` y `launchId` son los correctos antes de despachar.
 
 ---
 
@@ -149,21 +149,21 @@ complete
 
 ---
 
-## 6. Cómo usar el Harness para debuggear el onboarding
+## 6. Cómo usar el SynapseSimulator para debuggear el onboarding
 
 ### Caso A — Observar el flujo real
 
-1. Abrí el Harness y verificá en **Config** que `launchId` coincide con el de la sesión activa (`004_d7d6d36b_111324`).
+1. Abrí el SynapseSimulator y verificá en **Config** que `launchId` coincide con el de la sesión activa (`004_d7d6d36b_111324`).
 2. Abrí la Discovery page en otra tab: `chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html`
 3. Interactuá con Discovery normalmente (generá el PAT en GitHub, pegalo, confirmá).
-4. Cada evento que background.js procesa aparece en el **Log** del Harness en tiempo real.
+4. Cada evento que background.js procesa aparece en el **Log** del SynapseSimulator en tiempo real.
 
 **Lo que vas a ver en el Log:**
 ```
-[INFO]  Harness booting…
-[INFO]  HARNESS_CONFIG loaded — profile: d7d6d36b-300e-43db-bdf5-d6bfa40c2a12
+[INFO]  SynapseSimulator booting…
+[INFO]  SYNAPSE_SIMULATOR_CONFIG loaded — profile: d7d6d36b-300e-43db-bdf5-d6bfa40c2a12
 [INFO]  SYNAPSE_CONFIG loaded — launchId: 004_d7d6d36b_111324
-[INFO]  Harness ready.
+[INFO]  SynapseSimulator ready.
 ```
 Y luego, cuando Discovery procesa eventos:
 ```
@@ -171,7 +171,7 @@ Y luego, cuando Discovery procesa eventos:
 [INFO]  GITHUB_TOKEN_STORED            ← aparece cuando el usuario confirma
 ```
 
-> **Nota importante:** el Harness actualmente solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener. Mensajes que background.js consume internamente sin hacer broadcast pueden no aparecer en el Log. Esto es un límite de la arquitectura MV3 — el Harness no es un tap pasivo sobre el bus, es un participante más del broadcast.
+> **Nota importante:** el SynapseSimulator actualmente solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener. Mensajes que background.js consume internamente sin hacer broadcast pueden no aparecer en el Log. Esto es un límite de la arquitectura MV3 — el SynapseSimulator no es un tap pasivo sobre el bus, es un participante más del broadcast.
 
 ### Caso B — Simular un evento para testear background.js sin el flujo real
 
@@ -208,14 +208,14 @@ Secuencia de dispatches en orden, uno después del otro, esperando el ACK entre 
 
 ## 7. Inputs y outputs por componente — mapa completo
 
-### Harness → background.js
+### SynapseSimulator → background.js
 
 **Canal:** `chrome.runtime.sendMessage`  
 **Input:** payload JSON del manifest  
 **Output esperado:** objeto de respuesta o `null`
 
 ```
-Harness                    background.js
+SynapseSimulator                    background.js
   │                              │
   │── sendMessage(payload) ──→   │
   │                              │  procesa el evento
@@ -228,18 +228,18 @@ Harness                    background.js
 
 **Canal:** Chrome Native Messaging  
 **Visible en:** Dev Tools de background.js (`chrome://extensions` → Inspect background)  
-**No visible directamente en el Harness** — es una capa por debajo
+**No visible directamente en el SynapseSimulator** — es una capa por debajo
 
 ### bloom-host → Brain (Python)
 
 **Canal:** TCP socket  
 **Visible en:** logs de Sentinel/Brain en terminal  
-**No visible en el Harness** — es infraestructura local
+**No visible en el SynapseSimulator** — es infraestructura local
 
 ### Discovery page → background.js
 
 **Canal:** `chrome.runtime.sendMessage` desde discovery.js  
-**Visible en:** Log del Harness (si background.js hace broadcast) + Dev Tools de Discovery
+**Visible en:** Log del SynapseSimulator (si background.js hace broadcast) + Dev Tools de Discovery
 
 ---
 
@@ -247,8 +247,8 @@ Harness                    background.js
 
 | Síntoma | Dónde mirar | Qué buscar |
 |---|---|---|
-| Harness no carga protocolos | Dev Tools del Harness → Console | Errores de carga de scripts, `[ProtocolReader] Loaded 0 protocol(s)` |
-| Dispatch no tiene ACK | Dev Tools del Harness → Log | `ERR: chrome.runtime.lastError` |
+| SynapseSimulator no carga protocolos | Dev Tools del SynapseSimulator → Console | Errores de carga de scripts, `[ProtocolReader] Loaded 0 protocol(s)` |
+| Dispatch no tiene ACK | Dev Tools del SynapseSimulator → Log | `ERR: chrome.runtime.lastError` |
 | Discovery no avanza al siguiente paso | Dev Tools de background.js → Console | Handler del evento, posibles errores de validación |
 | Handshake no completa | Dev Tools de background.js → Console | `[HANDSHAKE]` logs, `host_ready` recibido o no |
 | Token no se almacena | Dev Tools de background.js → Console | Logs de Chrome Storage, Vault operations |
@@ -261,16 +261,16 @@ Harness                    background.js
 ## 9. Estado del sistema al cierre de esta sesión
 
 ### Qué se reparó en esta sesión
-1. **CSP violation:** el JS inline del Harness fue extraído a `harness/harness.js` — Chrome MV3 bloquea inline scripts.
+1. **CSP violation:** el JS inline del SynapseSimulator fue extraído a `synapse-simulator/synapse-simulator.js` — Chrome MV3 bloquea inline scripts.
 2. **discoveryProtocol.js nunca se cargaba:** el HTML no tenía el `<script src>` para ese archivo.
-3. **Timing del boot:** el boot ahora es `async` y espera cada script con `loadScriptOptional()` antes de llamar `Harness.init()`.
-4. **Landing condicional:** `landing.synapse.config.js` y `landing/landingProtocol.js` se cargan solo si existen — el Harness funciona en cualquier etapa del onboarding.
+3. **Timing del boot:** el boot ahora es `async` y espera cada script con `loadScriptOptional()` antes de llamar `SynapseSimulator.init()`.
+4. **Landing condicional:** `landing.synapse.config.js` y `landing/landingProtocol.js` se cargan solo si existen — el SynapseSimulator funciona en cualquier etapa del onboarding.
 
 ### Archivos modificados
-- `harness/index.html` — solo tiene `<script src="harness.js"></script>`, sin inline JS
-- `harness/harness.js` — archivo nuevo con todo el JS extraído + boot async con carga condicional
+- `synapse-simulator/index.html` — solo tiene `<script src="synapse-simulator.js"></script>`, sin inline JS
+- `synapse-simulator/synapse-simulator.js` — archivo nuevo con todo el JS extraído + boot async con carga condicional
 
 ### Próximo objetivo de sesión
-Completar el flujo `github_auth` → `DISCOVERY_COMPLETE` usando el Harness para observar y validar que cada evento es procesado correctamente por background.js y que el estado persiste en Chrome Storage.
+Completar el flujo `github_auth` → `DISCOVERY_COMPLETE` usando el SynapseSimulator para observar y validar que cada evento es procesado correctamente por background.js y que el estado persiste en Chrome Storage.
 
-El BTIP de implementación del flag `--dev` en el ciclo `sentinel seed` sigue pendiente — actualmente el Harness se genera manualmente.
+El BTIP de implementación del flag `--dev` en el ciclo `sentinel seed` sigue pendiente — actualmente el SynapseSimulator se genera manualmente.

@@ -23,7 +23,7 @@ bloom-development-extension/
     │   └── protocols/
     │       ├── companion.schema.json
     │       ├── discovery.schema.json
-    │       ├── harness.schema.json
+    │       ├── synapse-simulator.schema.json
     │       └── landing.schema.json
     └── legacy-crypto/
         ├── crx/

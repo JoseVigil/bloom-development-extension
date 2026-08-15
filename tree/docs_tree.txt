@@ -3,7 +3,7 @@ bloom-development-extension/
     ├── AITAP/
     │   └── AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md
     ├── ALFRED/
-    │   └── AGENTIC_HARNESS_OVERVIEW.md
+    │   └── AGENTIC_SYNAPSE_SIMULATOR_OVERVIEW.md
     ├── ANA/
     │   └── # BTips Ana.md
     ├── BATCAVE/
@@ -84,19 +84,19 @@ bloom-development-extension/
     │   ├── GOVERNANCE_OWNERSHIP_SPEC_v1_0.md
     │   ├── PROMPT-EJECUCION-synapse-switch-organization.md
     │   └── PROMPT-synapse-switch-organization.md
-    ├── HARNESS/
-    │   ├── ARCHITECTURE_HarnessProtocol.md
+    ├── SYNAPSE_SIMULATOR/
+    │   ├── ARCHITECTURE_SynapseSimulatorProtocol.md
     │   ├── BACKUP/
-    │   │   ├── BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md
-    │   │   ├── HARNESS_Manual_Onboarding_Debug.md
-    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_Harness_v2.md
-    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_Harness_v2.md
+    │   │   ├── BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md
+    │   │   ├── SYNAPSE_SIMULATOR_Manual_Onboarding_Debug.md
+    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator_v2.md
+    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_SynapseSimulator_v2.md
     │   │   ├── IMPL_PROMPT_METAMORPH_IonRecipes.md
-    │   │   ├── INVESTIGACION_Harness_Protocol_Autodiscovery.md
+    │   │   ├── INVESTIGACION_SynapseSimulator_Protocol_Autodiscovery.md
     │   │   └── IONPUMP_IMPLEMENTATION_PROMPT_v2.md
-    │   ├── HARNESS_Cortex_Manual_Uso_y_Debug_Synapse.md
-    │   ├── HARNESS_SOURCE_OF_TRUTH_1_6.md
-    │   └── HARNESS_Workspace_Manual.md
+    │   ├── SYNAPSE_SIMULATOR_Cortex_Manual_Uso_y_Debug_Synapse.md
+    │   ├── SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH_1_6.md
+    │   └── SYNAPSE_SIMULATOR_Workspace_Manual.md
     ├── HOOKS/
     │   └── nucleus_hook_system.md
     ├── HOST/
@@ -109,7 +109,7 @@ bloom-development-extension/
     │   │   ├── ION SDK Developer Guide.md
     │   │   ├── IONPUMP_IMPLEMENTATION_PROMPT_v5.md
     │   │   └── IONSITE_DEPLOY_GUIDE.md
-    │   ├── BLOOM_HARNESS_IONPUMP_SOT_v3.md
+    │   ├── BLOOM_SYNAPSE_SIMULATOR_IONPUMP_SOT_v3.md
     │   └── iosites/
     │       └── tu-primer-ion-github.md
     ├── LANDING/
@@ -140,14 +140,14 @@ bloom-development-extension/
     │   ├── Guía Maestra de Implementación Comandos NUCLEUS.md
     │   ├── NUCLEUS_SYNAPSE_USAGE_GUIDE_v3.1.md
     │   └── SYNAPSE_NEW_COMMAND_GUIDE_v1_0.md
-    ├── Onboarding_Harness.txt
+    ├── Onboarding_SynapseSimulator.txt
     ├── PALETTE/
     │   └── # 🎨 Bloom Color Palette.md
     ├── PROMPTS/
     │   ├── DISCIPLINA_DE_ENTREGA.md
-    │   ├── HARNESS-IONPUMP/
-    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_Harness.md
-    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_Harness.md
+    │   ├── SYNAPSE_SIMULATOR-IONPUMP/
+    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator.md
+    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_SynapseSimulator.md
     │   │   └── IMPL_PROMPT_METAMORPH_IonRecipes.md
     │   ├── INSTRUCCIÓN CRÍTICA PARA CLAUDE.md
     │   ├── REGLAS ABSOLUTAS PARA CLAUDE.md
