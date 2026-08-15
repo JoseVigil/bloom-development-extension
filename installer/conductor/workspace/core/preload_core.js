@@ -59,8 +59,9 @@ contextBridge.exposeInMainWorld('nucleus', {
   // Listar perfiles de Chrome disponibles
   listProfiles: () => ipcRenderer.invoke('nucleus:list-profiles'),
 
-  // Lanzar un perfil en modo discovery
-  launchProfile: (profileId) => ipcRenderer.invoke('nucleus:launch-profile', profileId),
+  // Lanzar un perfil. mode es opcional ('landing' | 'discovery'); sin mode
+  // cae en el default del binario (discovery).
+  launchProfile: (profileId, mode) => ipcRenderer.invoke('nucleus:launch-profile', profileId, mode),
 
   // Crear un nuevo perfil
   createProfile: (profileName) => ipcRenderer.invoke('nucleus:create-profile', profileName),

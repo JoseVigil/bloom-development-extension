@@ -49,24 +49,32 @@ function registerProfilesHandlers(execNucleus, NUCLEUS_JSON, logger = console) {
   });
 
   // ── nucleus:launch-profile ──────────────────────────────────────────────
-  // Comando: nucleus --json synapse launch <profileId>
+  // Comando: nucleus --json synapse launch <profileId> [--mode <mode>]
+  //
+  // `mode` es opcional — 'landing' | 'discovery' (ver --help de synapse
+  // launch). Si no se pasa, se omite el flag y el binario usa su propio
+  // default. El botón "Abrir landing" del perfil master en la vista de
+  // Profiles pasa mode:'landing' explícito (Tarea 2, Paso 1.3) — no se
+  // fuerza un default global acá porque no está confirmado que el resto
+  // de los perfiles (no-master) deba lanzar siempre en landing.
   //
   // Shape esperada del binario:
   // { "success": true, "profile_id": "prf_..." }
   //
   // Shape devuelta al renderer:
   // { success: true, profileId }
-  ipcMain.handle('nucleus:launch-profile', async (event, profileId) => {
+  ipcMain.handle('nucleus:launch-profile', async (event, profileId, mode) => {
     if (!profileId || typeof profileId !== 'string') {
       logger.warn('[PROFILES] launch-profile llamado sin profileId');
       return { success: false, error: 'profileId is required' };
     }
-    logger.info(`[PROFILES] Lanzando perfil ${profileId}...`);
+    const args = ['--json', 'synapse', 'launch', profileId];
+    if (mode && typeof mode === 'string') {
+      args.push('--mode', mode);
+    }
+    logger.info(`[PROFILES] Lanzando perfil ${profileId}${mode ? ` (mode=${mode})` : ''}...`);
     try {
-      const result = await execNucleus(
-        ['--json', 'synapse', 'launch', profileId],
-        30000
-      );
+      const result = await execNucleus(args, 30000);
       logger.info(`[PROFILES] Perfil ${profileId} lanzado. success=${result.success !== false}`);
       return {
         success:   result.success !== false,

@@ -371,6 +371,33 @@ export async function listNucleusProjects(nucleusPath: string, strategy?: string
 }
 
 // ============================================================================
+// PROFILE API
+// ============================================================================
+
+export interface ProfileAccountRegistration {
+  provider: string;
+  identifier: string;
+}
+
+export interface ChromeProfileSummary {
+  id: string;
+  name: string;
+  path: string;
+  ai_accounts: unknown[];
+  master_profile?: boolean;
+  linked_account?: string | null;
+  accounts?: ProfileAccountRegistration[];
+}
+
+export async function listProfiles(): Promise<{ profiles: ChromeProfileSummary[] }> {
+  console.log('🔡 [API] Listing profiles');
+  const res = await apiGet<{ ok: boolean; data: { profiles: ChromeProfileSummary[] }; timestamp: string }>(
+    '/profile/list'
+  );
+  return res.data;
+}
+
+// ============================================================================
 // PROJECT API (REQUIRED FOR ENHANCED COMPONENTS)
 // ============================================================================
 

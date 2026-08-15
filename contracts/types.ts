@@ -488,8 +488,24 @@ export interface ChromeProfile {
   name: string;
   /** Absolute profile directory path */
   path: string;
-  /** Linked AI service accounts */
+  /** Linked AI service accounts — placeholder vacío hasta que Brain trackee status/cuota real */
   ai_accounts: AIAccount[];
+  /** Si es el perfil marcado como master en profiles.json */
+  master_profile?: boolean;
+  /** Email vinculado como cuenta primaria del perfil (profile link/unlink), si hay */
+  linked_account?: string | null;
+  /** Registro crudo de cuentas de proveedor (profile accounts-register) — sin status/cuota, solo provider+identifier */
+  accounts?: ProfileAccountRegistration[];
+}
+
+/**
+ * Registro básico de una cuenta de proveedor vinculada a un perfil
+ * (brain profile accounts-register). Sin tracking de estado/cuota —
+ * eso no existe en Brain hoy, ver AIAccount para el shape aspiracional.
+ */
+export interface ProfileAccountRegistration {
+  provider: string;
+  identifier: string;
 }
 
 /**

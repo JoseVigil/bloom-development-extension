@@ -275,8 +275,37 @@ export class AIRuntimeAdapter {
   // PROFILE OPERATIONS
   // ============================================================================
 
+  /**
+   * normalizeChromeProfile — `brain profile list`/`status` devuelven el
+   * dict crudo de profiles.json (alias, master, linked_account, accounts
+   * como {provider,identifier}[] si se registró alguna) — no coincide 1:1
+   * con el contrato ChromeProfile (name, ai_accounts) que ya expone
+   * profile.schema.ts. Se mapea acá, en un solo lugar, en vez de tocar el
+   * schema o inventar campos que Brain no tiene. `ai_accounts` queda
+   * siempre vacío: Brain no trackea status/cuota por cuenta todavía.
+   */
+  private static normalizeChromeProfile(raw: any): ChromeProfile {
+    return {
+      id: raw.id,
+      name: raw.alias ?? raw.name ?? 'N/A',
+      path: raw.path,
+      ai_accounts: [],
+      master_profile: !!(raw.master_profile ?? raw.master),
+      linked_account: raw.linked_account ?? null,
+      accounts: raw.accounts ?? []
+    };
+  }
+
   static async profileList(): Promise<BrainResult<{ profiles: ChromeProfile[] }>> {
-    return BrainExecutor.execute(['profile', 'list'], {});
+    const result = await BrainExecutor.execute(['profile', 'list'], {});
+    if (result.status === 'success') {
+      const rawProfiles = (result.data as any)?.profiles ?? [];
+      return {
+        ...result,
+        data: { profiles: rawProfiles.map((p: any) => AIRuntimeAdapter.normalizeChromeProfile(p)) }
+      };
+    }
+    return result;
   }
 
   static async profileCreate(alias: string): Promise<BrainResult<ChromeProfile>> {
@@ -287,10 +316,6 @@ export class AIRuntimeAdapter {
     const args: Record<string, any> = {};
     if (force) args['-f'] = true;
     return BrainExecutor.execute(['profile', 'destroy', profileId], args);
-  }
-
-  static async profileRefreshAccounts(profileId: string): Promise<BrainResult<{ accounts: AIAccount[] }>> {
-    return BrainExecutor.execute(['profile', 'accounts-refresh', profileId], {});
   }
 
   static async profileAccountsRegister(

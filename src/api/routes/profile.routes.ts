@@ -71,41 +71,9 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
     };
   });
 
-  // POST /api/v1/profile/:id/refresh-accounts
-  fastify.post('/:id/refresh-accounts', {
-    schema: profileSchemas.refreshAccounts
-  }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    
-    const result = await BrainApiAdapter.profileRefreshAccounts(id);
-    
-    if (result.status !== 'success') {
-      return reply.code(500).send({
-        ok: false,
-        error: createErrorResponse(
-          'BRAIN_EXECUTION_FAILED',
-          result.error || 'Failed to refresh accounts'
-        ),
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Broadcast WebSocket update
-    const deps = (fastify as any).deps;
-    deps.wsManager?.broadcast('profile:update', {
-      profileId: id,
-      aiAccounts: result.data?.accounts || [],
-      timestamp: Date.now()
-    });
-
-    return {
-      ok: true,
-      data: {
-        accounts: result.data?.accounts || []
-      },
-      timestamp: new Date().toISOString()
-    };
-  });
+  // refresh-accounts removido — brain profile accounts-refresh no existe
+  // (confirmado contra el binario real, no hay comando que lo respalde).
+  // Ver diagnóstico de Tarea 2.
 
   // POST /api/v1/profile/create
   fastify.post('/create', {

@@ -38,6 +38,22 @@ export const profileSchemas = {
                           error: { type: 'string' }
                         }
                       }
+                    },
+                    // Campos reales que sí devuelve Brain (profiles.json) —
+                    // declarados acá porque fast-json-stringify descarta en
+                    // silencio cualquier propiedad no listada en el schema.
+                    master_profile: { type: 'boolean' },
+                    linked_account: { type: ['string', 'null'] },
+                    accounts: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        required: ['provider', 'identifier'],
+                        properties: {
+                          provider: { type: 'string' },
+                          identifier: { type: 'string' }
+                        }
+                      }
                     }
                   }
                 }
@@ -73,7 +89,20 @@ export const profileSchemas = {
               id: { type: 'string' },
               name: { type: 'string' },
               path: { type: 'string' },
-              ai_accounts: { type: 'array' }
+              ai_accounts: { type: 'array' },
+              master_profile: { type: 'boolean' },
+              linked_account: { type: ['string', 'null'] },
+              accounts: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['provider', 'identifier'],
+                  properties: {
+                    provider: { type: 'string' },
+                    identifier: { type: 'string' }
+                  }
+                }
+              }
             }
           },
           timestamp: { type: 'string' }
@@ -135,35 +164,6 @@ export const profileSchemas = {
         type: 'object',
         properties: {
           ok: { type: 'boolean' },
-          timestamp: { type: 'string' }
-        }
-      }
-    }
-  } as FastifySchema,
-
-  refreshAccounts: {
-    tags: ['profile'],
-    summary: 'Refresh AI accounts for profile',
-    params: {
-      type: 'object',
-      required: ['id'],
-      properties: {
-        id: { type: 'string' }
-      }
-    },
-    response: {
-      200: {
-        type: 'object',
-        required: ['ok', 'data'],
-        properties: {
-          ok: { type: 'boolean' },
-          data: {
-            type: 'object',
-            required: ['accounts'],
-            properties: {
-              accounts: { type: 'array' }
-            }
-          },
           timestamp: { type: 'string' }
         }
       }
