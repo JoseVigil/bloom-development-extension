@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { theme } from '$lib/stores/theme';
-  import SystemStatus from '$lib/components/SystemStatus.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
   import MandateTab from '$lib/components/MandateTab.svelte';
@@ -11,7 +10,6 @@
   import { websocketStore } from '$lib/stores/websocket';
   import { listMandates } from '$lib/api';
   import { runPendingGenesisLaunch } from '$lib/bootstrap/genesisLaunch';
-  import { FileText, Zap } from 'lucide-svelte';
 
   // ============================================================================
   // NOTA DE FIX (ver detalle en el PR/commit):
@@ -135,25 +133,6 @@
 {:else}
   <div class="btip-layout">
     {#if showSidebar}
-      <header class="header">
-        <div class="header-left">
-          <h1 class="title">CAMBIO TEST 123</h1>
-        </div>
-        <div class="header-center">
-          <SystemStatus mode="badge" />
-        </div>
-        <div class="header-right">
-          <button class="action-btn" aria-label="Create Nucleus">
-            <Zap size={16} />
-            <span>Crear Nucleus</span>
-          </button>
-          <button class="action-btn" aria-label="Open Explorer">
-            <FileText size={16} />
-            <span>Explorer</span>
-          </button>
-        </div>
-      </header>
-
       <div class="main-container">
         <Sidebar />
 
@@ -202,6 +181,32 @@
 
   :global(*) {
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  }
+
+  /* Scrollbar fina e integrada (Chromium/Electron) — reemplaza la barra
+     gris default del sistema en cualquier contenedor con overflow. */
+  :global(*::-webkit-scrollbar) {
+    width: 6px;
+    height: 6px;
+  }
+
+  :global(*::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  :global(*::-webkit-scrollbar-thumb) {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 3px;
+  }
+
+  :global(*::-webkit-scrollbar-thumb:hover) {
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  :global(*::-webkit-scrollbar-corner) {
+    background: transparent;
   }
 
   :global(.dark) {
@@ -256,47 +261,6 @@
     overflow: auto;
   }
 
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    height: 48px;
-  }
-
-  .header-left, .header-right {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .title {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--accent);
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.75rem;
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: background 0.2s;
-  }
-
-  .action-btn:hover {
-    background: var(--accent-hover);
-  }
-
   .main-container {
     display: flex;
     flex: 1;
@@ -348,9 +312,4 @@
     overflow: auto;
   }
 
-  @media (min-width: 1024px) {
-    .header {
-      padding: 0.75rem 1.5rem;
-    }
-  }
 </style>

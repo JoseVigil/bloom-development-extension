@@ -15,6 +15,11 @@ bloom-development-extension/
 │   │   │   ├── BrainApiAdapter.ts
 │   │   │   └── routes/
 │   │   │       └── auth.routes.ts
+│   │   ├── handlers/
+│   │   │   ├── create-mandate.handler.ts
+│   │   │   └── list-mandates.handler.ts
+│   │   ├── hooks/
+│   │   │   └── assert-base-genesis-completed.hook.ts
 │   │   ├── index.ts
 │   │   ├── middleware/
 │   │   │   ├── errorHandler.ts
@@ -24,12 +29,15 @@ bloom-development-extension/
 │   │   │   ├── explorer.routes.ts
 │   │   │   ├── health.routes.ts
 │   │   │   ├── intent.routes.ts
+│   │   │   ├── internal-mandate-event.routes.ts
 │   │   │   ├── internal.routes.ts
+│   │   │   ├── mandates.routes.ts
 │   │   │   ├── nucleus.routes.ts
 │   │   │   ├── profile.routes.ts
 │   │   │   └── project.routes.ts
 │   │   ├── schemas/
 │   │   │   ├── auth.schema.ts
+│   │   │   ├── create-mandate.schema.ts
 │   │   │   ├── explorer.schema.ts
 │   │   │   ├── intent.schema.ts
 │   │   │   ├── nucleus.schema.ts
@@ -127,7 +135,8 @@ bloom-development-extension/
 │   │   ├── BTIPExplorerController.ts
 │   │   ├── PluginApiServer.ts
 │   │   ├── WebSocketManager.ts
-│   │   └── index.ts
+│   │   ├── index.ts
+│   │   └── mandate-event-publisher.ts
 │   ├── strategies/
 │   │   ├── AndroidStrategy.ts
 │   │   ├── GenericStrategy.ts
@@ -137,9 +146,12 @@ bloom-development-extension/
 │   │   ├── ReactStrategy.ts
 │   │   ├── WebStrategy.ts
 │   │   └── helpers.ts
+│   ├── temporal/
+│   │   └── client.ts
 │   ├── types/
 │   │   ├── api-contracts.ts
 │   │   ├── brain-schemas.ts
+│   │   ├── gen-state.types.ts
 │   │   └── ws-events.ts
 │   ├── ui/
 │   │   ├── ClaudeBridgePanel.ts
@@ -156,20 +168,111 @@ bloom-development-extension/
 │   │       ├── profileManager.html
 │   │       ├── profileManager.js
 │   │       └── profileManagerPanel.ts
-│   └── utils/
-│       ├── brainExecutor.ts
-│       ├── gitExecutor.ts
-│       ├── gitManager.ts
-│       ├── gitPathResolver.ts
-│       ├── github.ts
-│       ├── githubApi.ts
-│       ├── githubOAuth.ts
-│       ├── logger.ts
-│       ├── runtimeResolver.ts
-│       ├── tokenEstimator.ts
-│       └── uriHelper.ts
+│   ├── utils/
+│   │   ├── brainExecutor.ts
+│   │   ├── gitExecutor.ts
+│   │   ├── gitManager.ts
+│   │   ├── gitPathResolver.ts
+│   │   ├── github.ts
+│   │   ├── githubApi.ts
+│   │   ├── githubOAuth.ts
+│   │   ├── logPaths.ts
+│   │   ├── logger.ts
+│   │   ├── mandate-paths.ts
+│   │   ├── nucleusManager.ts
+│   │   ├── nucleusTelemetry.ts
+│   │   ├── org-resolver.ts
+│   │   ├── runtimeResolver.ts
+│   │   ├── tokenEstimator.ts
+│   │   └── uriHelper.ts
+│   └── workflows/
+│       └── genesis-build-workflow.types.ts
 ├── installer/
 │   ├── README.md
+│   ├── aitap/
+│   │   ├── .gitignore
+│   │   ├── AGENTS.md
+│   │   ├── CLAUDE.md
+│   │   ├── README.md
+│   │   ├── VERSION
+│   │   ├── aitap.config.json
+│   │   ├── experiments/
+│   │   │   └── OPENCODE_IMPLEMENTER_TEST_PROTOCOL.md
+│   │   ├── help/
+│   │   │   ├── aitap_help.json
+│   │   │   └── aitap_help.txt
+│   │   ├── pyproject.toml
+│   │   ├── scripts/
+│   │   │   └── generate_help.py
+│   │   └── src/
+│   │       ├── aitap/
+│   │       │   ├── __init__.py
+│   │       │   ├── __main__.py
+│   │       │   ├── __pycache__/ [... cache]
+│   │       │   ├── cli/
+│   │       │   │   ├── __init__.py
+│   │       │   │   ├── __pycache__/ [... cache]
+│   │       │   │   ├── base.py
+│   │       │   │   ├── categories.py
+│   │       │   │   ├── help_renderer.py
+│   │       │   │   └── registry.py
+│   │       │   ├── commands/
+│   │       │   │   ├── __init__.py
+│   │       │   │   ├── __pycache__/ [... cache]
+│   │       │   │   ├── keys/
+│   │       │   │   │   ├── __init__.py
+│   │       │   │   │   ├── __pycache__/ [... cache]
+│   │       │   │   │   └── keys_list.py
+│   │       │   │   ├── route/
+│   │       │   │   │   ├── __init__.py
+│   │       │   │   │   ├── __pycache__/ [... cache]
+│   │       │   │   │   └── route_status.py
+│   │       │   │   └── system/
+│   │       │   │       ├── __init__.py
+│   │       │   │       ├── __pycache__/ [... cache]
+│   │       │   │       ├── status.py
+│   │       │   │       └── version.py
+│   │       │   └── core/
+│   │       │       ├── __init__.py
+│   │       │       ├── __pycache__/ [... cache]
+│   │       │       └── context.py
+│   │       └── bloom_aitap.egg-info/
+│   │           ├── PKG-INFO
+│   │           ├── SOURCES.txt
+│   │           ├── dependency_links.txt
+│   │           ├── entry_points.txt
+│   │           ├── requires.txt
+│   │           └── top_level.txt
+│   ├── alfred/
+│   │   ├── AGENTS.md
+│   │   ├── pyproject.toml
+│   │   ├── requirements.txt
+│   │   ├── scripts/
+│   │   │   └── check_health.py
+│   │   └── src/
+│   │       └── alfred/
+│   │           ├── __init__.py
+│   │           ├── __pycache__/ [... cache]
+│   │           ├── aitap/
+│   │           │   ├── __init__.py
+│   │           │   ├── __pycache__/ [... cache]
+│   │           │   ├── bisp_payload.py
+│   │           │   └── client.py
+│   │           ├── chat.py
+│   │           ├── contracts/
+│   │           │   ├── __init__.py
+│   │           │   ├── __pycache__/ [... cache]
+│   │           │   ├── errors.py
+│   │           │   └── types.py
+│   │           ├── health.py
+│   │           ├── providers/
+│   │           │   ├── __init__.py
+│   │           │   ├── __pycache__/ [... cache]
+│   │           │   ├── base.py
+│   │           │   ├── gemini_provider.py
+│   │           │   ├── ollama_provider.py
+│   │           │   └── ollama_text_provider.py
+│   │           └── server.py
 │   ├── batcave/
 │   │   ├── .gitignore
 │   │   ├── DEPLOY.md
@@ -204,7 +307,19 @@ bloom-development-extension/
 │   │   ├── bundle-bootstrap.js
 │   │   ├── server-bootstrap.js
 │   │   ├── static/
-│   │   │   └── logo.svg
+│   │   │   ├── csp.json
+│   │   │   ├── favicon-16x16.png
+│   │   │   ├── favicon-32x32.png
+│   │   │   ├── index.css
+│   │   │   ├── index.html
+│   │   │   ├── logo-swagger-default.svg
+│   │   │   ├── logo.svg
+│   │   │   ├── oauth2-redirect.html
+│   │   │   ├── oauth2-redirect.js
+│   │   │   ├── swagger-ui-bundle.js
+│   │   │   ├── swagger-ui-standalone-preset.js
+│   │   │   ├── swagger-ui.css
+│   │   │   └── swagger-ui.js
 │   │   └── version-bootstrap.py
 │   ├── chrome/
 │   │   └── chrome-linux.tar.xz
@@ -293,6 +408,7 @@ bloom-development-extension/
 │   │   │   │   ├── renderer.js
 │   │   │   │   └── styles.css
 │   │   │   ├── tree/
+│   │   │   │   ├── library_tree.txt
 │   │   │   │   └── nucleus_tree.txt
 │   │   │   ├── utils/
 │   │   │   │   ├── exec-helper.js
@@ -303,10 +419,10 @@ bloom-development-extension/
 │   │   │   ├── bump-version.js
 │   │   │   ├── global_paths.js
 │   │   │   ├── logger.js
+│   │   │   ├── onboarding-schema.js
 │   │   │   ├── preload-synapse.js
+│   │   │   ├── project-copier.js
 │   │   │   └── synapse-bridge.js
-│   │   ├── tree/
-│   │   │   └── src_webview_tree.txt
 │   │   └── workspace/
 │   │       ├── assets/
 │   │       │   ├── bloom.icns
@@ -332,15 +448,33 @@ bloom-development-extension/
 │   │       ├── onboarding/
 │   │       │   ├── ipc/
 │   │       │   │   └── onboarding-handlers.js
+│   │       │   ├── milestone-reactor.js
+│   │       │   ├── milestone-registry.js
 │   │       │   ├── onboarding.html
 │   │       │   ├── onboarding.js
-│   │       │   └── preload_onboarding.js
+│   │       │   ├── preload_onboarding.js
+│   │       │   ├── renderer/
+│   │       │   │   ├── core/
+│   │       │   │   │   ├── ipc-bridge.js
+│   │       │   │   │   ├── navigation.js
+│   │       │   │   │   ├── notifications.js
+│   │       │   │   │   ├── shared-state.js
+│   │       │   │   │   ├── tab-system.js
+│   │       │   │   │   └── ui-stepper.js
+│   │       │   │   └── steps/
+│   │       │   │       ├── step-identity.js
+│   │       │   │       ├── step-mandate.js
+│   │       │   │       ├── step-milestone.js
+│   │       │   │       ├── step-project.js
+│   │       │   │       ├── step-vault.js
+│   │       │   │       └── step-workspace.js
+│   │       │   ├── resolution-engine.js
+│   │       │   ├── step-verifiers.js
+│   │       │   └── verify-nucleus-init-hook.js
 │   │       ├── package-lock.json
 │   │       ├── package.json
 │   │       ├── shared/
 │   │       │   └── debug.html
-│   │       ├── tree/
-│   │       │   └── btips_tree.txt
 │   │       └── version.json
 │   ├── cortex/
 │   │   ├── build-cortex/
@@ -357,9 +491,16 @@ bloom-development-extension/
 │   │   │   │   ├── 128x128.png
 │   │   │   │   ├── icon128.png
 │   │   │   │   └── icon16.png
+│   │   │   ├── background-companion.js
+│   │   │   ├── background-github-device-flow.js
 │   │   │   ├── background.js
 │   │   │   ├── content.js
-│   │   │   └── manifest.json
+│   │   │   ├── manifest.json
+│   │   │   └── protocols/
+│   │   │       ├── companion.schema.json
+│   │   │       ├── discovery.schema.json
+│   │   │       ├── harness.schema.json
+│   │   │       └── landing.schema.json
 │   │   └── legacy-crypto/
 │   │       ├── crx/
 │   │       │   ├── id.json
@@ -369,6 +510,8 @@ bloom-development-extension/
 │   │           └── key_generation_extesion.pem
 │   ├── create_installer.py
 │   ├── help/
+│   │   ├── aitap_help.json
+│   │   ├── aitap_help.txt
 │   │   ├── metamorph_help.json
 │   │   ├── metamorph_help.txt
 │   │   ├── nucleus_help.json
@@ -404,12 +547,7 @@ bloom-development-extension/
 │   │   └── version_number.txt
 │   ├── ions/
 │   │   └── github.com/
-│   │       ├── actions/
-│   │       │   └── generate_pat.ion
 │   │       ├── domain.manifest.json
-│   │       ├── pages/
-│   │       │   ├── new_token_page.page.ion
-│   │       │   └── tokens_page.page.ion
 │   │       └── shared/
 │   │           └── session_guard.ion
 │   ├── metamorph/
@@ -502,7 +640,19 @@ bloom-development-extension/
 │   │   │   │   ├── bundle.js.map
 │   │   │   │   ├── server-bootstrap.js
 │   │   │   │   ├── static/
-│   │   │   │   │   └── logo.svg
+│   │   │   │   │   ├── csp.json
+│   │   │   │   │   ├── favicon-16x16.png
+│   │   │   │   │   ├── favicon-32x32.png
+│   │   │   │   │   ├── index.css
+│   │   │   │   │   ├── index.html
+│   │   │   │   │   ├── logo-swagger-default.svg
+│   │   │   │   │   ├── logo.svg
+│   │   │   │   │   ├── oauth2-redirect.html
+│   │   │   │   │   ├── oauth2-redirect.js
+│   │   │   │   │   ├── swagger-ui-bundle.js
+│   │   │   │   │   ├── swagger-ui-standalone-preset.js
+│   │   │   │   │   ├── swagger-ui.css
+│   │   │   │   │   └── swagger-ui.js
 │   │   │   │   └── version-bootstrap.py
 │   │   │   ├── config/
 │   │   │   ├── cortex/
@@ -596,6 +746,41 @@ bloom-development-extension/
 │   │   │   │   │       │   │   │   ├── nucleus_help.json
 │   │   │   │   │       │   │   │   └── nucleus_help.txt
 │   │   │   │   │       │   │   └── nucleus
+│   │   │   │   │       │   ├── runtime/
+│   │   │   │   │       │   │   ├── LICENSE.txt
+│   │   │   │   │       │   │   ├── _asyncio.pyd
+│   │   │   │   │       │   │   ├── _bz2.pyd
+│   │   │   │   │       │   │   ├── _ctypes.pyd
+│   │   │   │   │       │   │   ├── _decimal.pyd
+│   │   │   │   │       │   │   ├── _elementtree.pyd
+│   │   │   │   │       │   │   ├── _hashlib.pyd
+│   │   │   │   │       │   │   ├── _lzma.pyd
+│   │   │   │   │       │   │   ├── _msi.pyd
+│   │   │   │   │       │   │   ├── _multiprocessing.pyd
+│   │   │   │   │       │   │   ├── _overlapped.pyd
+│   │   │   │   │       │   │   ├── _queue.pyd
+│   │   │   │   │       │   │   ├── _socket.pyd
+│   │   │   │   │       │   │   ├── _sqlite3.pyd
+│   │   │   │   │       │   │   ├── _ssl.pyd
+│   │   │   │   │       │   │   ├── _uuid.pyd
+│   │   │   │   │       │   │   ├── _zoneinfo.pyd
+│   │   │   │   │       │   │   ├── libcrypto-1_1.dll
+│   │   │   │   │       │   │   ├── libffi-7.dll
+│   │   │   │   │       │   │   ├── libssl-1_1.dll
+│   │   │   │   │       │   │   ├── pyexpat.pyd
+│   │   │   │   │       │   │   ├── python.cat
+│   │   │   │   │       │   │   ├── python.exe
+│   │   │   │   │       │   │   ├── python3.dll
+│   │   │   │   │       │   │   ├── python310._pth
+│   │   │   │   │       │   │   ├── python310.dll
+│   │   │   │   │       │   │   ├── python310.zip
+│   │   │   │   │       │   │   ├── pythonw.exe
+│   │   │   │   │       │   │   ├── select.pyd
+│   │   │   │   │       │   │   ├── sqlite3.dll
+│   │   │   │   │       │   │   ├── unicodedata.pyd
+│   │   │   │   │       │   │   ├── vcruntime140.dll
+│   │   │   │   │       │   │   ├── vcruntime140_1.dll
+│   │   │   │   │       │   │   └── winsound.pyd
 │   │   │   │   │       │   └── sentinel/
 │   │   │   │   │       │       ├── help/
 │   │   │   │   │       │       │   ├── sentinel_help.json
@@ -641,57 +826,165 @@ bloom-development-extension/
 │   │   │   │       │   ├── brain_core_20260611.log
 │   │   │   │       │   ├── brain_core_20260612.log
 │   │   │   │       │   ├── brain_core_20260614.log
-│   │   │   │       │   └── brain_core_20260615.log
+│   │   │   │       │   ├── brain_core_20260615.log
+│   │   │   │       │   ├── brain_core_20260618.log
+│   │   │   │       │   ├── brain_core_20260621.log
+│   │   │   │       │   ├── brain_core_20260622.log
+│   │   │   │       │   ├── brain_core_20260627.log
+│   │   │   │       │   ├── brain_core_20260628.log
+│   │   │   │       │   ├── brain_core_20260630.log
+│   │   │   │       │   ├── brain_core_20260701.log
+│   │   │   │       │   ├── brain_core_20260708.log
+│   │   │   │       │   ├── brain_core_20260710.log
+│   │   │   │       │   ├── brain_core_20260711.log
+│   │   │   │       │   ├── brain_core_20260713.log
+│   │   │   │       │   ├── brain_core_20260714.log
+│   │   │   │       │   ├── brain_core_20260717.log
+│   │   │   │       │   ├── brain_core_20260719.log
+│   │   │   │       │   ├── brain_core_20260720.log
+│   │   │   │       │   ├── brain_core_20260721.log
+│   │   │   │       │   ├── brain_core_20260725.log
+│   │   │   │       │   ├── brain_core_20260727.log
+│   │   │   │       │   ├── brain_core_20260728.log
+│   │   │   │       │   ├── brain_core_20260729.log
+│   │   │   │       │   ├── brain_core_20260803.log
+│   │   │   │       │   ├── brain_core_20260804.log
+│   │   │   │       │   ├── brain_core_20260805.log
+│   │   │   │       │   ├── brain_core_20260807.log
+│   │   │   │       │   ├── brain_core_20260808.log
+│   │   │   │       │   └── brain_core_20260811.log
 │   │   │   │       ├── profile/
 │   │   │   │       │   ├── brain_profile_20260610.log
 │   │   │   │       │   ├── brain_profile_20260611.log
 │   │   │   │       │   ├── brain_profile_20260612.log
 │   │   │   │       │   ├── brain_profile_20260614.log
-│   │   │   │       │   └── brain_profile_20260615.log
+│   │   │   │       │   ├── brain_profile_20260615.log
+│   │   │   │       │   ├── brain_profile_20260618.log
+│   │   │   │       │   ├── brain_profile_20260621.log
+│   │   │   │       │   ├── brain_profile_20260622.log
+│   │   │   │       │   ├── brain_profile_20260627.log
+│   │   │   │       │   ├── brain_profile_20260628.log
+│   │   │   │       │   ├── brain_profile_20260630.log
+│   │   │   │       │   ├── brain_profile_20260701.log
+│   │   │   │       │   ├── brain_profile_20260708.log
+│   │   │   │       │   ├── brain_profile_20260710.log
+│   │   │   │       │   ├── brain_profile_20260711.log
+│   │   │   │       │   ├── brain_profile_20260713.log
+│   │   │   │       │   ├── brain_profile_20260714.log
+│   │   │   │       │   ├── brain_profile_20260717.log
+│   │   │   │       │   ├── brain_profile_20260719.log
+│   │   │   │       │   ├── brain_profile_20260720.log
+│   │   │   │       │   ├── brain_profile_20260721.log
+│   │   │   │       │   ├── brain_profile_20260725.log
+│   │   │   │       │   ├── brain_profile_20260727.log
+│   │   │   │       │   ├── brain_profile_20260728.log
+│   │   │   │       │   ├── brain_profile_20260729.log
+│   │   │   │       │   ├── brain_profile_20260803.log
+│   │   │   │       │   ├── brain_profile_20260804.log
+│   │   │   │       │   ├── brain_profile_20260805.log
+│   │   │   │       │   ├── brain_profile_20260807.log
+│   │   │   │       │   ├── brain_profile_20260808.log
+│   │   │   │       │   └── brain_profile_20260811.log
 │   │   │   │       └── server/
 │   │   │   │           ├── brain_server_20260610.log
 │   │   │   │           ├── brain_server_20260611.log
 │   │   │   │           ├── brain_server_20260612.log
 │   │   │   │           ├── brain_server_20260614.log
 │   │   │   │           ├── brain_server_20260615.log
+│   │   │   │           ├── brain_server_20260618.log
+│   │   │   │           ├── brain_server_20260621.log
+│   │   │   │           ├── brain_server_20260622.log
+│   │   │   │           ├── brain_server_20260627.log
+│   │   │   │           ├── brain_server_20260628.log
+│   │   │   │           ├── brain_server_20260630.log
+│   │   │   │           ├── brain_server_20260701.log
+│   │   │   │           ├── brain_server_20260708.log
+│   │   │   │           ├── brain_server_20260710.log
+│   │   │   │           ├── brain_server_20260711.log
+│   │   │   │           ├── brain_server_20260713.log
+│   │   │   │           ├── brain_server_20260714.log
+│   │   │   │           ├── brain_server_20260717.log
+│   │   │   │           ├── brain_server_20260719.log
+│   │   │   │           ├── brain_server_20260720.log
+│   │   │   │           ├── brain_server_20260721.log
+│   │   │   │           ├── brain_server_20260725.log
+│   │   │   │           ├── brain_server_20260727.log
+│   │   │   │           ├── brain_server_20260728.log
+│   │   │   │           ├── brain_server_20260729.log
+│   │   │   │           ├── brain_server_20260803.log
+│   │   │   │           ├── brain_server_20260804.log
+│   │   │   │           ├── brain_server_20260805.log
+│   │   │   │           ├── brain_server_20260807.log
+│   │   │   │           ├── brain_server_20260808.log
+│   │   │   │           ├── brain_server_20260811.log
 │   │   │   │           ├── brain_server_event_bus_20260610.log
 │   │   │   │           ├── brain_server_event_bus_20260611.log
 │   │   │   │           ├── brain_server_event_bus_20260612.log
 │   │   │   │           ├── brain_server_event_bus_20260614.log
 │   │   │   │           ├── brain_server_event_bus_20260615.log
+│   │   │   │           ├── brain_server_event_bus_20260618.log
+│   │   │   │           ├── brain_server_event_bus_20260621.log
+│   │   │   │           ├── brain_server_event_bus_20260622.log
+│   │   │   │           ├── brain_server_event_bus_20260627.log
+│   │   │   │           ├── brain_server_event_bus_20260628.log
+│   │   │   │           ├── brain_server_event_bus_20260630.log
+│   │   │   │           ├── brain_server_event_bus_20260701.log
+│   │   │   │           ├── brain_server_event_bus_20260708.log
+│   │   │   │           ├── brain_server_event_bus_20260710.log
+│   │   │   │           ├── brain_server_event_bus_20260711.log
+│   │   │   │           ├── brain_server_event_bus_20260713.log
+│   │   │   │           ├── brain_server_event_bus_20260714.log
+│   │   │   │           ├── brain_server_event_bus_20260717.log
+│   │   │   │           ├── brain_server_event_bus_20260719.log
+│   │   │   │           ├── brain_server_event_bus_20260720.log
+│   │   │   │           ├── brain_server_event_bus_20260721.log
+│   │   │   │           ├── brain_server_event_bus_20260725.log
+│   │   │   │           ├── brain_server_event_bus_20260727.log
+│   │   │   │           ├── brain_server_event_bus_20260728.log
+│   │   │   │           ├── brain_server_event_bus_20260729.log
+│   │   │   │           ├── brain_server_event_bus_20260803.log
+│   │   │   │           ├── brain_server_event_bus_20260804.log
+│   │   │   │           ├── brain_server_event_bus_20260805.log
+│   │   │   │           ├── brain_server_event_bus_20260807.log
+│   │   │   │           ├── brain_server_event_bus_20260808.log
+│   │   │   │           ├── brain_server_event_bus_20260811.log
 │   │   │   │           ├── brain_server_manager_20260610.log
 │   │   │   │           ├── brain_server_manager_20260611.log
 │   │   │   │           ├── brain_server_manager_20260612.log
 │   │   │   │           ├── brain_server_manager_20260614.log
-│   │   │   │           └── brain_server_manager_20260615.log
+│   │   │   │           ├── brain_server_manager_20260615.log
+│   │   │   │           ├── brain_server_manager_20260618.log
+│   │   │   │           ├── brain_server_manager_20260621.log
+│   │   │   │           ├── brain_server_manager_20260622.log
+│   │   │   │           ├── brain_server_manager_20260627.log
+│   │   │   │           ├── brain_server_manager_20260628.log
+│   │   │   │           ├── brain_server_manager_20260630.log
+│   │   │   │           ├── brain_server_manager_20260701.log
+│   │   │   │           ├── brain_server_manager_20260708.log
+│   │   │   │           ├── brain_server_manager_20260710.log
+│   │   │   │           ├── brain_server_manager_20260711.log
+│   │   │   │           ├── brain_server_manager_20260713.log
+│   │   │   │           ├── brain_server_manager_20260714.log
+│   │   │   │           ├── brain_server_manager_20260717.log
+│   │   │   │           ├── brain_server_manager_20260719.log
+│   │   │   │           ├── brain_server_manager_20260720.log
+│   │   │   │           ├── brain_server_manager_20260721.log
+│   │   │   │           ├── brain_server_manager_20260725.log
+│   │   │   │           ├── brain_server_manager_20260727.log
+│   │   │   │           ├── brain_server_manager_20260728.log
+│   │   │   │           ├── brain_server_manager_20260729.log
+│   │   │   │           ├── brain_server_manager_20260803.log
+│   │   │   │           ├── brain_server_manager_20260804.log
+│   │   │   │           ├── brain_server_manager_20260805.log
+│   │   │   │           ├── brain_server_manager_20260807.log
+│   │   │   │           ├── brain_server_manager_20260808.log
+│   │   │   │           └── brain_server_manager_20260811.log
 │   │   │   ├── profiles/
 │   │   │   ├── run/
-│   │   │   ├── win32/
-│   │   │   │   ├── nucleus/
-│   │   │   │   │   └── help/
-│   │   │   │   │       ├── nucleus_help.json
-│   │   │   │   │       └── nucleus_help.txt
-│   │   │   │   └── sentinel/
-│   │   │   │       └── help/
-│   │   │   │           ├── sentinel_help.json
-│   │   │   │           └── sentinel_help.txt
 │   │   │   ├── win64/
 │   │   │   │   ├── host/
-│   │   │   │   │   ├── bloom-host.exe
-│   │   │   │   │   ├── help/
-│   │   │   │   │   │   └── help.txt
-│   │   │   │   │   ├── libgcc_s_seh-1.dll
-│   │   │   │   │   ├── libstdc++-6.dll
-│   │   │   │   │   └── libwinpthread-1.dll
-│   │   │   │   ├── metamorph/
 │   │   │   │   │   └── help/
-│   │   │   │   │       ├── metamorph_help.json
-│   │   │   │   │       ├── metamorph_help.txt
-│   │   │   │   │       └── metamorph_info.json
-│   │   │   │   ├── sentinel/
-│   │   │   │   │   └── help/
-│   │   │   │   │       ├── sentinel_help.json
-│   │   │   │   │       └── sentinel_help.txt
+│   │   │   │   │       └── help.txt
 │   │   │   │   ├── setup/
 │   │   │   │   │   ├── bloom-nucleus-installer-1.0.0-x64.nsis.7z
 │   │   │   │   │   ├── bloom-setup.exe
@@ -819,17 +1112,23 @@ bloom-development-extension/
 │   │   │   │   ├── core.go
 │   │   │   │   ├── logger.go
 │   │   │   │   ├── metadata.go
+│   │   │   │   ├── org_context.go
 │   │   │   │   ├── paths.go
 │   │   │   │   ├── registry.go
 │   │   │   │   ├── settings.go
 │   │   │   │   ├── telemetry.go
 │   │   │   │   └── version.go
+│   │   │   ├── etapa2test/
+│   │   │   │   └── org_switch_test.go
 │   │   │   ├── governance/
 │   │   │   │   ├── alfred.go
 │   │   │   │   ├── alfred_server.go
 │   │   │   │   ├── audit.go
 │   │   │   │   ├── blueprint.go
+│   │   │   │   ├── create.go
 │   │   │   │   ├── ollama_client.go
+│   │   │   │   ├── org_switch_guard.go
+│   │   │   │   ├── org_switch_guard_test.go
 │   │   │   │   └── ownership.go
 │   │   │   ├── mandates/
 │   │   │   │   ├── mandate_activities.go
@@ -841,8 +1140,12 @@ bloom-development-extension/
 │   │   │   ├── orchestration/
 │   │   │   │   ├── activities/
 │   │   │   │   │   ├── brain_poller.go
+│   │   │   │   │   ├── mandate_genesis_activities.go
+│   │   │   │   │   ├── mandate_genesis_sign_activity.go
 │   │   │   │   │   └── sentinel_activities.go
 │   │   │   │   ├── commands/
+│   │   │   │   │   ├── mandate.go
+│   │   │   │   │   ├── mandate_genesis_domains_cmd.go
 │   │   │   │   │   ├── synapse.go
 │   │   │   │   │   ├── sysproc_other.go
 │   │   │   │   │   └── sysproc_windows.go
@@ -870,14 +1173,19 @@ bloom-development-extension/
 │   │   │   │   │   │   ├── schedule_bootstrap.go
 │   │   │   │   │   │   └── temporal_health.go
 │   │   │   │   │   ├── temporal_client.go
+│   │   │   │   │   ├── temporal_client_test.go
 │   │   │   │   │   ├── worker.go
 │   │   │   │   │   └── workflows/
+│   │   │   │   │       ├── mandate_execution_workflow.go
+│   │   │   │   │       ├── mandate_genesis_build_workflow.go
 │   │   │   │   │       ├── onboarding_workflow.go
 │   │   │   │   │       ├── profile_lifecycle.go
 │   │   │   │   │       ├── system_health_workflow.go
 │   │   │   │   │       └── system_workflows.go
 │   │   │   │   ├── types/
 │   │   │   │   │   └── orchestration.go
+│   │   │   │   ├── watchers/
+│   │   │   │   │   └── mandate_watcher.go
 │   │   │   │   └── workflows/
 │   │   │   │       ├── recovery_flow.go
 │   │   │   │       └── system_gate.go
@@ -890,13 +1198,16 @@ bloom-development-extension/
 │   │   │   │   ├── health_unix.go
 │   │   │   │   ├── health_windows.go
 │   │   │   │   ├── logs.go
+│   │   │   │   ├── mandate_config.go
 │   │   │   │   ├── onboarding_harness.go
 │   │   │   │   ├── service.go
+│   │   │   │   ├── supervisor.go
 │   │   │   │   └── workers.go
 │   │   │   ├── system/
 │   │   │   │   └── info.go
 │   │   │   └── vault/
-│   │   │       └── vault.go
+│   │   │       ├── vault.go
+│   │   │       └── vault_test.go
 │   │   ├── main.go
 │   │   ├── nucleus-governance.json
 │   │   └── scripts/
@@ -934,6 +1245,41 @@ bloom-development-extension/
 │   ├── package.json
 │   ├── resources/
 │   │   ├── .gitkeep
+│   │   ├── runtime/
+│   │   │   ├── LICENSE.txt
+│   │   │   ├── _asyncio.pyd
+│   │   │   ├── _bz2.pyd
+│   │   │   ├── _ctypes.pyd
+│   │   │   ├── _decimal.pyd
+│   │   │   ├── _elementtree.pyd
+│   │   │   ├── _hashlib.pyd
+│   │   │   ├── _lzma.pyd
+│   │   │   ├── _msi.pyd
+│   │   │   ├── _multiprocessing.pyd
+│   │   │   ├── _overlapped.pyd
+│   │   │   ├── _queue.pyd
+│   │   │   ├── _socket.pyd
+│   │   │   ├── _sqlite3.pyd
+│   │   │   ├── _ssl.pyd
+│   │   │   ├── _uuid.pyd
+│   │   │   ├── _zoneinfo.pyd
+│   │   │   ├── libcrypto-1_1.dll
+│   │   │   ├── libffi-7.dll
+│   │   │   ├── libssl-1_1.dll
+│   │   │   ├── pyexpat.pyd
+│   │   │   ├── python.cat
+│   │   │   ├── python.exe
+│   │   │   ├── python3.dll
+│   │   │   ├── python310._pth
+│   │   │   ├── python310.dll
+│   │   │   ├── python310.zip
+│   │   │   ├── pythonw.exe
+│   │   │   ├── select.pyd
+│   │   │   ├── sqlite3.dll
+│   │   │   ├── unicodedata.pyd
+│   │   │   ├── vcruntime140.dll
+│   │   │   ├── vcruntime140_1.dll
+│   │   │   └── winsound.pyd
 │   │   └── runtime-linux/
 │   │       ├── bin/
 │   │       │   ├── 2to3
@@ -5330,6 +5676,22 @@ bloom-development-extension/
 │   │   ├── setup_runtime.js
 │   │   └── validate.js
 │   ├── sensor/
+│   │   ├── BloomNucleus/
+│   │   │   └── logs/
+│   │   │       └── sensor/
+│   │   │           ├── sensor_20260628.log
+│   │   │           ├── sensor_20260630.log
+│   │   │           ├── sensor_20260701.log
+│   │   │           ├── sensor_20260702.log
+│   │   │           ├── sensor_20260711.log
+│   │   │           ├── sensor_20260713.log
+│   │   │           ├── sensor_20260714.log
+│   │   │           ├── sensor_20260717.log
+│   │   │           ├── sensor_20260725.log
+│   │   │           ├── sensor_20260726.log
+│   │   │           ├── sensor_20260727.log
+│   │   │           ├── sensor_20260808.log
+│   │   │           └── sensor_20260812.log
 │   │   ├── README.md
 │   │   ├── cmd/
 │   │   │   └── main.go
@@ -5485,6 +5847,8 @@ bloom-development-extension/
 │       │   ├── app.html
 │       │   ├── lib/
 │       │   │   ├── api.ts
+│       │   │   ├── bootstrap/
+│       │   │   │   └── genesisLaunch.ts
 │       │   │   ├── components/
 │       │   │   │   ├── BriefingEditor.svelte
 │       │   │   │   ├── ChatBTIP.svelte
@@ -5492,22 +5856,30 @@ bloom-development-extension/
 │       │   │   │   ├── GeminiTokenForm.svelte
 │       │   │   │   ├── GithubAuthButton.svelte
 │       │   │   │   ├── IntentsLink.svelte
+│       │   │   │   ├── LedgerPanel.svelte
+│       │   │   │   ├── MandateTab.svelte
 │       │   │   │   ├── NucleusPanel.svelte
-│       │   │   │   ├── OnboardingWizard.svelte
 │       │   │   │   ├── ProjectsPanel.svelte
+│       │   │   │   ├── Sidebar.svelte
 │       │   │   │   ├── SystemStatus.svelte
+│       │   │   │   ├── TabBar.svelte
 │       │   │   │   ├── TokenEstimator.svelte
-│       │   │   │   └── debug/
-│       │   │   │       ├── DebugDetail.svelte
-│       │   │   │       ├── DebugFeed.svelte
-│       │   │   │       ├── DebugSidebar.svelte
-│       │   │   │       └── DebugSimBar.svelte
+│       │   │   │   ├── debug/
+│       │   │   │   │   ├── DebugDetail.svelte
+│       │   │   │   │   ├── DebugFeed.svelte
+│       │   │   │   │   ├── DebugSidebar.svelte
+│       │   │   │   │   └── DebugSimBar.svelte
+│       │   │   │   └── docsGate.ts
 │       │   │   ├── stores/
 │       │   │   │   ├── auth.ts
+│       │   │   │   ├── docsGate.ts
 │       │   │   │   ├── intents.ts
+│       │   │   │   ├── ledgerStore.ts
+│       │   │   │   ├── mandateStore.ts
 │       │   │   │   ├── navigation.ts
 │       │   │   │   ├── onboarding.ts
 │       │   │   │   ├── system.ts
+│       │   │   │   ├── tabs.ts
 │       │   │   │   ├── theme.ts
 │       │   │   │   └── websocket.ts
 │       │   │   ├── types.ts
@@ -5515,9 +5887,9 @@ bloom-development-extension/
 │       │   └── routes/
 │       │       ├── +layout.svelte
 │       │       ├── +page.svelte
-│       │       ├── debug/
+│       │       ├── account/
 │       │       │   └── +page.svelte
-│       │       ├── genesis/
+│       │       ├── debug/
 │       │       │   └── +page.svelte
 │       │       ├── home/
 │       │       │   └── +page.svelte
@@ -5532,9 +5904,15 @@ bloom-development-extension/
 │       │       │   └── doc/
 │       │       │       └── [id]/
 │       │       │           └── +page.svelte
-│       │       ├── onboarding/
+│       │       ├── nucleus/
 │       │       │   └── +page.svelte
-│       │       └── welcome/
+│       │       ├── profiles/
+│       │       │   └── +page.svelte
+│       │       ├── settings/
+│       │       │   └── +page.svelte
+│       │       ├── welcome/
+│       │       │   └── +page.svelte
+│       │       └── wisdom/
 │       │           └── +page.svelte
 │       ├── svelte.config.js
 │       ├── tsconfig.json
@@ -5658,6 +6036,7 @@ bloom-development-extension/
 │   │   │   ├── delete.py
 │   │   │   ├── download.py
 │   │   │   ├── finalize.py
+│   │   │   ├── freeze.py
 │   │   │   ├── get.py
 │   │   │   ├── hydrate.py
 │   │   │   ├── list.py
@@ -5666,7 +6045,6 @@ bloom-development-extension/
 │   │   │   ├── parse.py
 │   │   │   ├── plan.py
 │   │   │   ├── recover.py
-│   │   │   ├── router_prompt.md
 │   │   │   ├── stage.py
 │   │   │   ├── submit.py
 │   │   │   ├── unlock.py
@@ -5794,6 +6172,7 @@ bloom-development-extension/
 │   │   │   └── repository.py
 │   │   ├── github/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── api_client.py
 │   │   │   └── models.py
 │   │   ├── health/
@@ -5810,6 +6189,8 @@ bloom-development-extension/
 │   │   │   ├── staging_manager.py
 │   │   │   └── validation_manager.py
 │   │   ├── intent_manager.py
+│   │   ├── intent_state_manager.py
+│   │   ├── intent_types.py
 │   │   ├── ionpump/
 │   │   │   ├── __init__.py
 │   │   │   ├── ionpump_executor.py
@@ -5840,25 +6221,30 @@ bloom-development-extension/
 │   │   │   ├── session1_launcher.py
 │   │   │   └── web/
 │   │   │       ├── __init__.py
+│   │   │       ├── companion_generator.py
 │   │   │       ├── discovery_generator.py
 │   │   │       ├── harness_generator.py
 │   │   │       ├── landing_generator.py
 │   │   │       └── templates/
 │   │   │           ├── __init__.py
+│   │   │           ├── companion/
+│   │   │           │   ├── __init__.py
+│   │   │           │   ├── companion.js
+│   │   │           │   ├── companionProtocol.js
+│   │   │           │   ├── index.html
+│   │   │           │   └── styles.css
 │   │   │           ├── discovery/
 │   │   │           │   ├── __init__.py
-│   │   │           │   ├── content-aistudio.js
 │   │   │           │   ├── discovery.js
 │   │   │           │   ├── discoveryProtocol.js
 │   │   │           │   ├── index.html
-│   │   │           │   ├── onboarding.js
 │   │   │           │   ├── script.js
 │   │   │           │   └── styles.css
 │   │   │           ├── harness/
 │   │   │           │   ├── __init__.py
 │   │   │           │   ├── harness.js
-│   │   │           │   ├── index.html
-│   │   │           │   └── harnessProtocol.js
+│   │   │           │   ├── harnessProtocol.js
+│   │   │           │   └── index.html
 │   │   │           └── landing/
 │   │   │               ├── __init__.py
 │   │   │               ├── data-loader.js
@@ -5875,6 +6261,7 @@ bloom-development-extension/
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   ├── server/
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── server_event_bus.py
 │   │   │   └── server_manager.py
 │   │   ├── synapse/
@@ -5903,12 +6290,15 @@ bloom-development-extension/
 │       ├── context.py
 │       ├── credentials/
 │       │   ├── __init__.py
+│       │   ├── __pycache__/ [... cache]
 │       │   ├── base.py
 │       │   ├── claude_manager.py
+│       │   ├── gemini_manager.py
+│       │   ├── github_manager.py
 │       │   ├── openai_manager.py
 │       │   ├── unified_manager.py
+│       │   ├── vault.py
 │       │   └── xai_manager.py
-│       ├── credentials.py
 │       ├── environment.py
 │       ├── github_types.py
 │       ├── logger.py
@@ -5928,5 +6318,260 @@ bloom-development-extension/
 │   ├── websocket-protocol.js
 │   ├── websocket-protocol.js.map
 │   └── websocket-protocol.ts
+├── docs/
+│   ├── AITAP/
+│   │   ├── AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md
+│   │   ├── AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md
+│   │   ├── Alfred_Integracion_AITAP_Disparo2_v1_0.md
+│   │   └── BSIP_Response_Spec_PoC_Disparo1_v1_0.md
+│   ├── ALFRED/
+│   │   └── AGENTIC_HARNESS_OVERVIEW.md
+│   ├── ANA/
+│   │   └── # BTips Ana.md
+│   ├── BATCAVE/
+│   │   └── BATCAVE_ARCHITECTURE.md
+│   ├── BOOTSTRAP/
+│   │   ├── BOOTSTRAP_ARCHITECTURE.md
+│   │   ├── BOOTSTRAP_CONTROL_PLANE.md
+│   │   ├── BTIP_home_webview_documentacion.md
+│   │   └── PROCEDIMIENTO_ACTUALIZAR_BOOTSTRAP.md
+│   ├── BRAIN/
+│   │   ├── brain-troubleshooting.md
+│   │   ├── logger_best_practices.md
+│   │   ├── unified_command_prompt.md
+│   │   └── version_readme.md
+│   ├── BSIP/
+│   │   ├── BLOOM_BISP_Companion_Integration_v2_0.md
+│   │   ├── BLOOM_BISP_Fuente_de_Verdad_v1_0.md
+│   │   ├── BLOOM_BISP_Session_Decisions_v1_1.md
+│   │   ├── BLOOM_Intent_Types_Gap_Analysis_v1_0.md
+│   │   └── TYPES/
+│   │       ├── DEV_Intent_Spec_v1_0.md
+│   │       ├── DIS_Intent_Spec_v1_0.md
+│   │       ├── DOC_Intent_Spec_v1_0.md
+│   │       └── ING_Intent_Spec_v1_1.md
+│   ├── BTIPS/
+│   │   └── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
+│   ├── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
+│   ├── BTIP_resumen_ecosistema_1.0.md
+│   ├── BUILD/
+│   │   └── BUILD_ALL_Documentacion_v1_0.md
+│   ├── COGNITTUUM_MANIFEST_v0_1.md
+│   ├── COMPILE_RUN_COMMANDS.txt
+│   ├── CONDUCTOR/
+│   │   ├── INSTALLER/
+│   │   │   ├── DARWIN_CONDUCTOR_INSTALLATION_PROMPT_MAESTRO_BLOOM.md
+│   │   │   ├── NUCLEUS_SUPERVISOR_BOOT_LOGGING_TELEMETRY.md
+│   │   │   ├── WINDOWS_BLOOM_NUCLEUS_INSTALLER_TECHNICAL_REFERENCE.md
+│   │   │   ├── WINDOWS_CONDUCTOR_INSTALLATION_PROMPT_MAESTRO_BLOOM.md
+│   │   │   └── conductor-setup-asset-map.md
+│   │   ├── ONBOARDING/
+│   │   │   ├── BTIPS-ONBOARDING-ARCHITECTURE-SPEC-v4_0.md
+│   │   │   ├── Backup/
+│   │   │   │   ├── BLOOM_CONDUCTOR_MILESTONE_BRIDGE_SPEC_v0_4.md
+│   │   │   │   ├── BLOOM_ONBOARDING_WORKFLOW_SPEC_v2_3.md
+│   │   │   │   ├── BLOOM_SYNAPSE_BRIDGE_GAP_ANALYSIS.md
+│   │   │   │   ├── Guia-Maestra-Stepper-Onboarding-v2_2.md
+│   │   │   │   ├── ONBOARDING_CORTEX_INTEGRATION.md
+│   │   │   │   └── auditoria-stepper-workspace.md
+│   │   │   ├── Fase-A-Relevamiento-Mandate-Genesis-v1.md
+│   │   │   └── Guia-Maestra-Stepper-Onboarding-v2_2.md
+│   │   └── WORKSPACE/
+│   │       ├── BACKUP/
+│   │       │   └── btips_workspace_v3.html
+│   │       ├── BLOOM_CORE_GENESIS_MANDATE_PRELUDIO_v0_1.md
+│   │       ├── Bloom_Conductor_Workspace_Core_UI_01.md
+│   │       └── bloom-conductor-genesis-v1_1.html
+│   ├── CONTROL_PLANE/
+│   │   └── CONTROL_PLANE_DEBUG_PANEL_STATUS.md
+│   ├── CORTEX/
+│   │   ├── AUTHORITY_BOUNDARY.md
+│   │   ├── BTIPS-CORTEX-REFERENCE-v1.2.md
+│   │   ├── COMPANION/
+│   │   │   └── Cognituum_Companion_Implementation_Guide_v1_2.md
+│   │   └── HANDOFF-github-app-batcave-synapse.md
+│   ├── DESIGN/
+│   │   ├── # BTIPS Foundational UX-UI Design Doctrine Prompt v0.1.md
+│   │   └── FUNCTIONAL_DESIGN_GUIDE_BTIPS.docx
+│   ├── GENES/
+│   │   └── BTIPS_GENES_CONCEPT_v2_0.md
+│   ├── GENESIS/
+│   │   ├── BLOOM_Genesis_Intent_Gen_Design_v1_0.md
+│   │   └── GENESIS_INTENT_CREATE.md
+│   ├── GENIUS.txt
+│   ├── GIT/
+│   │   └── GIT_BLOOM_GIT_FILTERS.md
+│   ├── GOVERNANCE/
+│   │   ├── G1-G8_multi-org-switch-design.md
+│   │   ├── GOVERNANCE_OWNERSHIP_SPEC_v1_0.md
+│   │   ├── PROMPT-EJECUCION-synapse-switch-organization.md
+│   │   └── PROMPT-synapse-switch-organization.md
+│   ├── HARNESS/
+│   │   ├── ARCHITECTURE_HarnessProtocol.md
+│   │   ├── BACKUP/
+│   │   │   ├── BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md
+│   │   │   ├── HARNESS_Manual_Onboarding_Debug.md
+│   │   │   ├── IMPL_PROMPT_BRAIN_IonPump_Harness_v2.md
+│   │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_Harness_v2.md
+│   │   │   ├── IMPL_PROMPT_METAMORPH_IonRecipes.md
+│   │   │   ├── INVESTIGACION_Harness_Protocol_Autodiscovery.md
+│   │   │   └── IONPUMP_IMPLEMENTATION_PROMPT_v2.md
+│   │   ├── HARNESS_Cortex_Manual_Uso_y_Debug_Synapse.md
+│   │   ├── HARNESS_SOURCE_OF_TRUTH_1_6.md
+│   │   └── HARNESS_Workspace_Manual.md
+│   ├── HOOKS/
+│   │   └── nucleus_hook_system.md
+│   ├── HOST/
+│   │   └── bloom-host-documentation.md
+│   ├── INTENT/
+│   │   ├── BLOOM_INTENT_SEMANTIC_PACKAGE_v1_0.md
+│   │   └── brain_intent_state.md
+│   ├── IONPUMP/
+│   │   ├── BACKUP/
+│   │   │   ├── ION SDK Developer Guide.md
+│   │   │   ├── IONPUMP_IMPLEMENTATION_PROMPT_v5.md
+│   │   │   └── IONSITE_DEPLOY_GUIDE.md
+│   │   ├── BLOOM_HARNESS_IONPUMP_SOT_v3.md
+│   │   └── iosites/
+│   │       └── tu-primer-ion-github.md
+│   ├── LANDING/
+│   │   └── BLOOM_LANDING_VAULT_SPEC_v1_0.md
+│   ├── MANDATE/
+│   │   ├── BLOOM_Mandate_CLI_Command_Surface_v0_2_0.md
+│   │   ├── BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md
+│   │   ├── BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_1.md
+│   │   ├── BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md
+│   │   ├── BLOOM_Mandate_Universal_Schema_v1_0_0.md
+│   │   ├── Core_Mandate_No_Aparece_Auditoria_v1.md
+│   │   ├── MARKETPLACE/
+│   │   │   ├── BLOOM_Cognitive_Evidence_Model_v1_0_0.md
+│   │   │   ├── BLOOM_Mandate_Package_Spec_v1_0_0.md
+│   │   │   └── CUUM_cognituum-tokenomics.md
+│   │   ├── Mandate_Domain_Spec_v1.0.0.md
+│   │   ├── Mandate_Event_Mechanism_Auditoria_v1.md
+│   │   └── bloom-mandate-arquitectura-genesis-conductor.md
+│   ├── MEDIA.txt
+│   ├── METAMORPH/
+│   │   ├── Guía_Maestra_Implementación_Comandos_METAMORPH.md
+│   │   ├── METAMORPH-INSPECTION-IMPLEMENTATION-PROMPT.md
+│   │   ├── METAMORPH_COMANDOS.md
+│   │   ├── metamorph-ionpump-reference.md
+│   │   └── metamorph_rollout_prompt.md
+│   ├── MIGRATION/
+│   │   └── BTIPS_CrossPlatform_Migration_Guide_v1.md
+│   ├── NUCLEUS/
+│   │   ├── Guía Maestra de Implementación Comandos NUCLEUS.md
+│   │   ├── NUCLEUS_SYNAPSE_USAGE_GUIDE_v3.1.md
+│   │   └── SYNAPSE_NEW_COMMAND_GUIDE_v1_0.md
+│   ├── Onboarding_Harness.txt
+│   ├── PALETTE/
+│   │   └── # 🎨 Bloom Color Palette.md
+│   ├── PROMPTS/
+│   │   ├── DISCIPLINA_DE_ENTREGA.md
+│   │   ├── HARNESS-IONPUMP/
+│   │   │   ├── IMPL_PROMPT_BRAIN_IonPump_Harness.md
+│   │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_Harness.md
+│   │   │   └── IMPL_PROMPT_METAMORPH_IonRecipes.md
+│   │   ├── INSTRUCCIÓN CRÍTICA PARA CLAUDE.md
+│   │   ├── REGLAS ABSOLUTAS PARA CLAUDE.md
+│   │   └── TRIGGER_RESPUESTA_DIRECTA.md
+│   ├── REVISE_ME/
+│   │   ├── BTIPS-MODULE-METAMORPH.md
+│   │   ├── BTIPS-MODULE-ROADMAP.md
+│   │   ├── BTIPS-MODULE-SENSOR.md
+│   │   ├── BTIPS-SECURITY-COMPLIANCE.md
+│   │   ├── BTIPS-SYNAPSE-PROTOCOL.md
+│   │   └── BTIPS-TECHNICAL-OVERVIEW.md
+│   ├── SENSOR/
+│   │   ├── BACKUP/
+│   │   │   ├── PROMPT_MAESTRO_BLOOM_SENSOR_v1.md
+│   │   │   └── SENSOR_Future_Features_Cognituum_v1_0.md
+│   │   ├── Guia_Maestra_Implementacion_Comandos_SENSOR_v1_1.md
+│   │   └── SENSOR_Spec_v2_0.md
+│   ├── SENTINEL/
+│   │   └── Implementación de Comandos Sentinel.md
+│   ├── SYNAPSE/
+│   │   ├── BACKUP/
+│   │   │   ├── BTIPS-SYNAPSE-PROTOCOL-v4.0.md
+│   │   │   ├── Perfill Nivel Dios.md
+│   │   │   └── SYNAPSE_PROTOCOL_MASTER_v2.md
+│   │   ├── BTIPS_SYNAPSE_COMMAND_IMPLEMENTATION_REFERENCE.md
+│   │   ├── PROTOCOLO-synapse-homologacion-v3.md
+│   │   ├── SYNAPSE_BRIDGE_ELECTRON_IMPLEMENTATION.md
+│   │   └── SYNAPSE_PROTOCOL_MASTER_v3.md
+│   ├── TELEMETRY/
+│   │   └── BLOOM_NUCLEUS_LOGGING_SPEC.md
+│   ├── VAULT/
+│   │   ├── BTIPS-VAULT-MULTIKEY-ANALYSIS.md
+│   │   ├── VAULT_SYSTEM_CODE_EXAMPLES.md
+│   │   └── VAULT_SYSTEM_TECHNICAL_SPECIFICATION.md
+│   ├── VERSIONS/
+│   │   ├── v1/
+│   │   │   ├── Arquitectura BTIP — Descripción General.md
+│   │   │   ├── BLOOM_BTIP.md
+│   │   │   ├── BLOOM_BTIP_CLI_SPEC.md
+│   │   │   ├── BLOOM_BTIP_CLOUDE_GUIDE.md
+│   │   │   ├── BLOOM_BTIP_CLOUDE_GUIDE_SUMMARY.md
+│   │   │   ├── BLOOM_BTIP_CREATECODEBASE_IMPLEMENTATION.md
+│   │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+│   │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+│   │   │   ├── BLOOM_BTIP_PLUGIN_SPEC.md
+│   │   │   ├── BLOOM_BTIP_PLUGIN_SPEC_REVISED.md
+│   │   │   ├── BLOOM_BTIP_SPEC_BASE.md
+│   │   │   ├── BLOOM_BTIP_UNIVERSAL_CODEBASE_TEMPLATE.md
+│   │   │   ├── BLOOM_CODE_BASE_CONCEPTO.md
+│   │   │   ├── BLOOM_CODE_CLI_SPEC.md
+│   │   │   ├── BLOOM_CODE_PLUGIN_SPEC.md
+│   │   │   └── BLOOM_PLUGIN_ARCHITECTURE.md
+│   │   ├── v1.0.1/
+│   │   │   ├── Prompt Superador para Implementar Intent DEV.md
+│   │   │   └── bloom-nucleus_v1.0.1.bl
+│   │   ├── v10/
+│   │   │   ├── bloom-nucleus-1.0.1.md
+│   │   │   └── bloom-unified-specs_backup.md
+│   │   ├── v11/
+│   │   │   ├── Elementos Para Onboarding.md
+│   │   │   ├── Entry Point para Brain CLI en el Plugin.md
+│   │   │   └── Ingeniería inversa de límites de rate-limiting en APIs de LLM.md
+│   │   ├── v12/
+│   │   │   ├── Contexto Detallado de los Tres Elementos Para Onboarding.md
+│   │   │   ├── Lógicas de Negocio en el Plugin Desarrollado.md
+│   │   │   └── SISTEMA_DE_DIOS_BLOOM_NUCLEUS.md
+│   │   ├── v2/
+│   │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+│   │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+│   │   │   └── BLOOM_BTIP_PLUGIN_SPEC.md
+│   │   ├── v3/
+│   │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+│   │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+│   │   │   ├── BLOOM_BTIP_PLUGIN_SPEC_REVISED.md
+│   │   │   ├── BLOOM_Codebase_Generator.md
+│   │   │   └── SETUP_GUIDE.md
+│   │   ├── v4/
+│   │   │   ├── BLOOM_BTIP_CODEBASE_GENERATOR.md
+│   │   │   └── BLOOM_BTIP_INTENT_MANAGER.md
+│   │   ├── v5/
+│   │   │   └── bloom_intent_lifecycle.md
+│   │   ├── v6/
+│   │   │   ├── bloom-lifecycle-updated.md
+│   │   │   ├── bloom-nucleus-spec.md
+│   │   │   └── nucleus_implementation_guide.md
+│   │   ├── v7/
+│   │   │   ├── bloom_unified_spec.md
+│   │   │   └── nucleus_creation_management.md
+│   │   ├── v8/
+│   │   │   ├── bloom-btip-resumen.md
+│   │   │   └── bloom_unified_spec.md
+│   │   └── v9/
+│   │       ├── BLOOM – Git Orchestration Plan.md
+│   │       ├── Desvincular Nucleus (Unlink Nucleus).md
+│   │       ├── bloom_unified_spec.md
+│   │       └── git-orchestration-impl.md
+│   ├── VSCODE/
+│   │   └── BTIPS_VSCODE_PLUGIN.md
+│   ├── resources.txt
+│   └── tech-debt/
+│       └── TD-001-mandate-cli-watcher-fix.md
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+└── build-all.py

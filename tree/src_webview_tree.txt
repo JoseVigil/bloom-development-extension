@@ -1,6 +1,5 @@
 bloom-development-extension/
 ├── src/
-│   ├── .DS_Store
 │   ├── ai/
 │   │   ├── AiAccountChecker.ts
 │   │   ├── adapters/
@@ -11,12 +10,16 @@ bloom-development-extension/
 │   │   │   └── OllamaNativeAdapter.ts
 │   │   └── index.ts
 │   ├── api/
-│   │   ├── .DS_Store
 │   │   ├── adapters/
 │   │   │   ├── AIRuntimeAdapter.ts
 │   │   │   ├── BrainApiAdapter.ts
 │   │   │   └── routes/
 │   │   │       └── auth.routes.ts
+│   │   ├── handlers/
+│   │   │   ├── create-mandate.handler.ts
+│   │   │   └── list-mandates.handler.ts
+│   │   ├── hooks/
+│   │   │   └── assert-base-genesis-completed.hook.ts
 │   │   ├── index.ts
 │   │   ├── middleware/
 │   │   │   ├── errorHandler.ts
@@ -26,12 +29,15 @@ bloom-development-extension/
 │   │   │   ├── explorer.routes.ts
 │   │   │   ├── health.routes.ts
 │   │   │   ├── intent.routes.ts
+│   │   │   ├── internal-mandate-event.routes.ts
 │   │   │   ├── internal.routes.ts
+│   │   │   ├── mandates.routes.ts
 │   │   │   ├── nucleus.routes.ts
 │   │   │   ├── profile.routes.ts
 │   │   │   └── project.routes.ts
 │   │   ├── schemas/
 │   │   │   ├── auth.schema.ts
+│   │   │   ├── create-mandate.schema.ts
 │   │   │   ├── explorer.schema.ts
 │   │   │   ├── intent.schema.ts
 │   │   │   ├── nucleus.schema.ts
@@ -129,7 +135,8 @@ bloom-development-extension/
 │   │   ├── BTIPExplorerController.ts
 │   │   ├── PluginApiServer.ts
 │   │   ├── WebSocketManager.ts
-│   │   └── index.ts
+│   │   ├── index.ts
+│   │   └── mandate-event-publisher.ts
 │   ├── strategies/
 │   │   ├── AndroidStrategy.ts
 │   │   ├── GenericStrategy.ts
@@ -139,12 +146,14 @@ bloom-development-extension/
 │   │   ├── ReactStrategy.ts
 │   │   ├── WebStrategy.ts
 │   │   └── helpers.ts
+│   ├── temporal/
+│   │   └── client.ts
 │   ├── types/
 │   │   ├── api-contracts.ts
 │   │   ├── brain-schemas.ts
+│   │   ├── gen-state.types.ts
 │   │   └── ws-events.ts
 │   ├── ui/
-│   │   ├── .DS_Store
 │   │   ├── ClaudeBridgePanel.ts
 │   │   ├── intent/
 │   │   │   ├── intentForm.css
@@ -159,32 +168,37 @@ bloom-development-extension/
 │   │       ├── profileManager.html
 │   │       ├── profileManager.js
 │   │       └── profileManagerPanel.ts
-│   └── utils/
-│       ├── brainExecutor.ts
-│       ├── gitExecutor.ts
-│       ├── gitManager.ts
-│       ├── gitPathResolver.ts
-│       ├── github.ts
-│       ├── githubApi.ts
-│       ├── githubOAuth.ts
-│       ├── logger.ts
-│       ├── runtimeResolver.ts
-│       ├── tokenEstimator.ts
-│       └── uriHelper.ts
+│   ├── utils/
+│   │   ├── brainExecutor.ts
+│   │   ├── gitExecutor.ts
+│   │   ├── gitManager.ts
+│   │   ├── gitPathResolver.ts
+│   │   ├── github.ts
+│   │   ├── githubApi.ts
+│   │   ├── githubOAuth.ts
+│   │   ├── logPaths.ts
+│   │   ├── logger.ts
+│   │   ├── mandate-paths.ts
+│   │   ├── nucleusManager.ts
+│   │   ├── nucleusTelemetry.ts
+│   │   ├── org-resolver.ts
+│   │   ├── runtimeResolver.ts
+│   │   ├── tokenEstimator.ts
+│   │   └── uriHelper.ts
+│   └── workflows/
+│       └── genesis-build-workflow.types.ts
 └── webview/
-    ├── .DS_Store
     └── app/
-        ├── .DS_Store
         ├── .svelte-kit/ [... svelte build]
         ├── node_modules/ [... dependencies]
         ├── package-lock.json
         ├── package.json
         ├── src/
-        │   ├── .DS_Store
         │   ├── app.html
         │   ├── lib/
-        │   │   ├── .DS_Store
         │   │   ├── api.ts
+        │   │   ├── bootstrap/
+        │   │   │   └── genesisLaunch.ts
         │   │   ├── components/
         │   │   │   ├── BriefingEditor.svelte
         │   │   │   ├── ChatBTIP.svelte
@@ -192,22 +206,30 @@ bloom-development-extension/
         │   │   │   ├── GeminiTokenForm.svelte
         │   │   │   ├── GithubAuthButton.svelte
         │   │   │   ├── IntentsLink.svelte
+        │   │   │   ├── LedgerPanel.svelte
+        │   │   │   ├── MandateTab.svelte
         │   │   │   ├── NucleusPanel.svelte
-        │   │   │   ├── OnboardingWizard.svelte
         │   │   │   ├── ProjectsPanel.svelte
+        │   │   │   ├── Sidebar.svelte
         │   │   │   ├── SystemStatus.svelte
+        │   │   │   ├── TabBar.svelte
         │   │   │   ├── TokenEstimator.svelte
-        │   │   │   └── debug/
-        │   │   │       ├── DebugDetail.svelte
-        │   │   │       ├── DebugFeed.svelte
-        │   │   │       ├── DebugSidebar.svelte
-        │   │   │       └── DebugSimBar.svelte
+        │   │   │   ├── debug/
+        │   │   │   │   ├── DebugDetail.svelte
+        │   │   │   │   ├── DebugFeed.svelte
+        │   │   │   │   ├── DebugSidebar.svelte
+        │   │   │   │   └── DebugSimBar.svelte
+        │   │   │   └── docsGate.ts
         │   │   ├── stores/
         │   │   │   ├── auth.ts
+        │   │   │   ├── docsGate.ts
         │   │   │   ├── intents.ts
+        │   │   │   ├── ledgerStore.ts
+        │   │   │   ├── mandateStore.ts
         │   │   │   ├── navigation.ts
         │   │   │   ├── onboarding.ts
         │   │   │   ├── system.ts
+        │   │   │   ├── tabs.ts
         │   │   │   ├── theme.ts
         │   │   │   └── websocket.ts
         │   │   ├── types.ts
@@ -215,10 +237,7 @@ bloom-development-extension/
         │   └── routes/
         │       ├── +layout.svelte
         │       ├── +page.svelte
-        │       ├── .DS_Store
         │       ├── debug/
-        │       │   └── +page.svelte
-        │       ├── genesis/
         │       │   └── +page.svelte
         │       ├── home/
         │       │   └── +page.svelte
@@ -233,8 +252,6 @@ bloom-development-extension/
         │       │   └── doc/
         │       │       └── [id]/
         │       │           └── +page.svelte
-        │       ├── onboarding/
-        │       │   └── +page.svelte
         │       └── welcome/
         │           └── +page.svelte
         ├── svelte.config.js

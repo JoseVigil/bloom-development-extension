@@ -201,3 +201,36 @@ invocación a OpenCode es local a Brain, no un servicio aparte.** Esto no se ext
 Alfred — si Alfred también termina invocando OpenCode, es una decisión de diseño de Alfred que puede compartir
 el mismo adapter técnico sin que eso implique que Alfred delega su ejecución a Brain ni a un tercer
 componente compartido.
+
+## 7. Decisión — identidad de consumidor para Alfred: por dispositivo, no por organización
+
+**Confirmado por Jose, 2026-08-14.** Alfred no es un consumidor único por organización — es
+**multi-instancia**: cada workspace Electron y, eventualmente, cada instalación mobile corre su propio
+Alfred, y cada uno habla con AITAP directo para cualquier uso de tokens, sea cual fuere el caso. No hay
+excepción ni ruteo indirecto a través de un único Alfred "primario".
+
+Esto descarta explícitamente un modelo alternativo que se evaluó y se dejó de lado: que un solo Alfred por
+organización (el del workspace primario) fuera el único consumidor real de AITAP, y que otros dispositivos
+(mobile, workspaces secundarios) llegaran a él como clientes remotos a través del túnel de Batcave, sin
+identidad propia frente a AITAP. Ese modelo alternativo es el que describe hoy `.ai_bot.sovereign.bl` de
+elias-repos ("routes through Batcave's sovereign tunnel to the local Nucleus") — confirmado por Jose como
+contenido **poco desarrollado y legacy**, no como la dirección a seguir. No se edita ese archivo desde acá
+(es contenido gestionado por el propio Jose / el pipeline de onboarding, no algo que este documento deba
+tocar), pero cualquier trabajo futuro sobre Alfred debe tratar esa descripción como desactualizada frente a
+esta decisión, no como fuente de verdad.
+
+**Consecuencia directa sobre el pilar 3 (Contabilidad) de §1:** "por consumidor" significa, para Alfred,
+**por dispositivo/instancia** — no por tipo de bot como pasa hoy con Brain (que es un solo proceso por
+organización). AITAP va a necesitar tantos `key_id`/registros de consumidor como dispositivos activos de
+Alfred existan, no uno solo por organización.
+
+**Pendiente, confirmado sin resolver (no inventar una solución acá):** hoy no existe en ningún lugar del
+ecosistema un mecanismo de alta de dispositivo/cliente — se buscó explícitamente en
+`installer/nucleus`, `installer/sentinel` y `installer/metamorph` (sin resultados para `device_id`,
+`machine_id`, `hardware_id` ni variantes) y en el lado Electron (sin uso de `safeStorage` ni `keytar` en
+todo `src/`/`webview/`). `.ownership.json` es identidad de organización, no de dispositivo. El vault de
+Nucleus (`installer/nucleus/internal/vault/vault.go`) valida el patrón de guardar secretos en el keyring
+del SO, pero no emite identidad — y su propia función `InitializeVault()` no la llama nadie en el código
+real todavía. Diseñar este mecanismo (quién emite la credencial inicial de cada dispositivo, dónde se
+guarda, cómo se referencia en AITAP) es trabajo nuevo, no una extensión de algo existente — queda como
+próximo paso explícito, no resuelto en este documento.

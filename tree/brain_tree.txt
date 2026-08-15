@@ -343,6 +343,7 @@ bloom-development-extension/
     │   │   └── scanner.py
     │   ├── project_manager.py
     │   ├── server/
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── server_event_bus.py
     │   │   └── server_manager.py
     │   ├── synapse/

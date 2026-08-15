@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { tabsStore, activeTab } from '$lib/stores/tabs';
 
   // ============================================================================
   // Sidebar fusionado — Opción 3 (plan-migracion-shell-v1-addendum.md, §2.3 / §6.1)
@@ -7,10 +8,9 @@
   // Qué se fusiona:
   //   - Identidad visual: el rail de iconos de btips_workspace_v3.html
   //     (56px, tooltip on hover, logo hex, tokens del design system BTIPS).
-  //   - Funcionalidad real: los 6 links que ya existían en +layout.svelte
-  //     (/home, /intents, /nucleus, /projects, /profiles, /account), como
-  //     <a href> reales de SvelteKit — no los <div onclick> del mock, que
-  //     ahí simulaban navegación porque el mock no tiene router.
+  //   - Funcionalidad real: los links, como <a href> reales de SvelteKit —
+  //     no los <div onclick> del mock, que ahí simulaban navegación porque
+  //     el mock no tiene router.
   //
   // Decisión de diseño explícita (no silenciosa):
   //   El sidebar viejo tenía un toggle expandir/colapsar (mostraba <span>
@@ -22,15 +22,20 @@
   //   lo que se quiere, es reversible: es la única decisión de producto
   //   implícita que tomé para poder avanzar con el fusion hoy.
   //
-  // Iconos:
-  //   Nucleus, Profiles (mapea a "Accounts" del mock) y Account (mapea a
-  //   "Settings" del mock) son el mismo SVG que btips_workspace_v3.html,
-  //   sin modificar. Home, Intents y Projects no existían en el mock
-  //   (que solo maqueteaba Nucleus/Accounts/Store/Continuity/Settings)
-  //   así que son iconos nuevos, dibujados en la misma familia visual
-  //   (viewBox 20x20, stroke-width 1.4, sin relleno) para no romper la
-  //   identidad. "Store" y "Continuity" del mock no se usan: no
-  //   corresponden a ningún link real hoy.
+  // Corte OPS_FINAL_Workspace_Core_UI.md §1 (Tarea 1):
+  //   - "Intents" y "Projects" se sacan del nav (solo la entrada — sus
+  //     rutas/componentes quedan huérfanos, no se tocan en esta tanda).
+  //   - "Wisdom" reemplaza a "Store" del mock (nunca se había portado).
+  //   - "Settings" se agrega como ítem propio, distinto de "Account"
+  //     (Account ya existía mapeado al ícono de engranaje del mock;
+  //     Settings es nuevo, necesita ícono propio para no duplicar visual).
+  //   - "Continuity" no requiere acción de código: nunca se portó del
+  //     mock, solo queda mencionado en este comentario a título histórico.
+  //
+  // Iconos: Nucleus y Profiles (mapea a "Accounts" del mock) son el mismo
+  //   SVG que btips_workspace_v3.html. Home, Wisdom y Settings son iconos
+  //   nuevos, dibujados en la misma familia visual (viewBox 20x20,
+  //   stroke-width 1.4, sin relleno) para no romper la identidad.
   // ============================================================================
 
   type NavItem = {
@@ -40,10 +45,9 @@
 
   const navItems: NavItem[] = [
     { href: '/home', label: 'Home' },
-    { href: '/intents', label: 'Intents' },
     { href: '/nucleus', label: 'Nucleus' },
-    { href: '/projects', label: 'Projects' },
-    { href: '/profiles', label: 'Profiles' }
+    { href: '/profiles', label: 'Profiles' },
+    { href: '/wisdom', label: 'Wisdom' }
     // El parche temporal "/genesis" (nav item provisorio, sin redirect ni
     // tab que lo alojara) se retira acá: la consolidación Genesis-como-
     // Mandate ya provee el camino real — botón "Nuevo Mandate" en TabBar
@@ -52,14 +56,41 @@
     // contenido vive ahora dentro de MandateTab.svelte.
   ];
 
-  // Account vive separado, en sidebar-bottom, igual que "Settings" en el mock.
+  // sidebar-bottom: Account (perfil, ya existía) y Settings (nuevo, stub
+  // vacío) son ítems separados — no fusionar aunque el mock solo tenía uno.
   const accountItem: NavItem = { href: '/account', label: 'Account' };
+  const settingsItem: NavItem = { href: '/settings', label: 'Settings' };
 
   $: pathname = $page.url.pathname;
 
-  function isActive(href: string): boolean {
-    // /intents también cubre /intents/[id], /intents/dev/[id], /intents/doc/[id]
-    return pathname === href || pathname.startsWith(href + '/');
+  // content-body en +layout.svelte muestra un MandateTab en vez del <slot/>
+  // de ruta cuando hay un tab activo con mandateId (ver handleNavClick más
+  // abajo). Mientras eso pase, ningún ítem del Sidebar corresponde a lo que
+  // se está viendo — un mandate-tab no es ninguna de estas rutas — así que
+  // ninguno debe marcarse activo, aunque el pathname siga siendo el de la
+  // última ruta visitada.
+  $: showingMandateTab = !!$activeTab?.mandateId;
+
+  // activeHref precomputado (en vez de llamar una función no-reactiva desde
+  // cada atributo del template): se detectó que `class:active={isActive(...)}`
+  // se re-evaluaba en cada render pero `aria-current={isActive(...) ? ... }`
+  // — la misma llamada — quedaba pegado al primer valor calculado. Un valor
+  // `$:` referenciado directo en el template no deja ambigüedad de qué es
+  // dinámico para el compilador de Svelte.
+  $: allHrefs = [...navItems.map((i) => i.href), settingsItem.href, accountItem.href];
+  $: activeHref = showingMandateTab
+    ? null
+    : allHrefs.find((href) => pathname === href || pathname.startsWith(href + '/')) ?? null;
+
+  // Fix regresión de navegación: content-body en +layout.svelte prioriza
+  // MandateTab sobre <slot/> siempre que haya un tab activo con mandateId
+  // (independiente de la ruta). Si hay un mandate tab activo (ej. abierto
+  // por el catch-up de hydrateMandatesFromDisk al bootear), cualquier link
+  // del Sidebar cambia la URL pero el contenido seguía mostrando ese
+  // mandate. Deseleccionar el tab (sin cerrarlo) al navegar por Sidebar
+  // deja que el <slot/> de la ruta real se muestre.
+  function handleNavClick() {
+    tabsStore.clearActive();
   }
 </script>
 
@@ -73,18 +104,16 @@
       <a
         href={item.href}
         class="nav-item"
-        class:active={isActive(item.href)}
-        aria-current={isActive(item.href) ? 'page' : undefined}
+        class:active={item.href === activeHref}
+        aria-current={item.href === activeHref ? 'page' : undefined}
         aria-label={item.label}
+        on:click={handleNavClick}
       >
         <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
           {#if item.href === '/home'}
             <path d="M4 9l6-5 6 5" />
             <path d="M5.5 8v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V8" />
             <path d="M8 16v-4h4v4" />
-          {:else if item.href === '/intents'}
-            <rect x="5" y="3" width="10" height="14" rx="1" />
-            <path d="M7.5 7h5M7.5 10h5M7.5 13h3" />
           {:else if item.href === '/nucleus'}
             <circle cx="10" cy="10" r="3" />
             <circle cx="10" cy="10" r="7" stroke-dasharray="2 2" />
@@ -92,15 +121,12 @@
             <circle cx="10" cy="17" r="1" fill="currentColor" stroke="none" />
             <circle cx="3" cy="10" r="1" fill="currentColor" stroke="none" />
             <circle cx="17" cy="10" r="1" fill="currentColor" stroke="none" />
-          {:else if item.href === '/projects'}
-            <circle cx="6" cy="4" r="1.6" />
-            <circle cx="6" cy="16" r="1.6" />
-            <circle cx="14" cy="10" r="1.6" />
-            <path d="M6 5.6v8.8" />
-            <path d="M6 8c0 2.5 2 3 4.5 3H12.4" />
           {:else if item.href === '/profiles'}
             <circle cx="10" cy="7" r="3" />
             <path d="M4 17c0-3.314 2.686-6 6-6s6 2.686 6 6" />
+          {:else if item.href === '/wisdom'}
+            <path d="M10 4.5c-2-1.4-4.5-1.4-6 0v10.5c1.5-1.4 4-1.4 6 0c2-1.4 4.5-1.4 6 0V4.5c-1.5-1.4-4-1.4-6 0z" />
+            <path d="M10 4.5v10.5" />
           {/if}
         </svg>
         <span class="nav-tooltip">{item.label}</span>
@@ -110,11 +136,30 @@
 
   <div class="sidebar-bottom">
     <a
+      href={settingsItem.href}
+      class="nav-item"
+      class:active={settingsItem.href === activeHref}
+      aria-current={settingsItem.href === activeHref ? 'page' : undefined}
+      aria-label={settingsItem.label}
+      on:click={handleNavClick}
+    >
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+        <path d="M4 6.5h8M14.5 6.5h1.5" />
+        <circle cx="10.5" cy="6.5" r="1.4" fill="currentColor" stroke="none" />
+        <path d="M4 10h2M8.5 10h7.5" />
+        <circle cx="6" cy="10" r="1.4" fill="currentColor" stroke="none" />
+        <path d="M4 13.5h5.5M12 13.5h4" />
+        <circle cx="10.5" cy="13.5" r="1.4" fill="currentColor" stroke="none" />
+      </svg>
+      <span class="nav-tooltip">{settingsItem.label}</span>
+    </a>
+    <a
       href={accountItem.href}
       class="nav-item"
-      class:active={isActive(accountItem.href)}
-      aria-current={isActive(accountItem.href) ? 'page' : undefined}
+      class:active={accountItem.href === activeHref}
+      aria-current={accountItem.href === activeHref ? 'page' : undefined}
       aria-label={accountItem.label}
+      on:click={handleNavClick}
     >
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
         <circle cx="10" cy="10" r="2.5" />
@@ -201,7 +246,6 @@
     align-items: center;
     padding: var(--space-sm) 0;
     gap: 2px;
-    overflow: hidden;
   }
 
   .nav-item {

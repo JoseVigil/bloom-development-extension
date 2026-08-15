@@ -66,11 +66,21 @@ function createTabsStore() {
     );
   }
 
+  /**
+   * Deselecciona el tab activo sin cerrarlo — el mandate sigue disponible
+   * en la TabBar, solo deja de tapar el <slot/> de ruta. Lo usa la
+   * navegación del Sidebar (rutas reales) para no quedar enmascarada
+   * detrás de un MandateTab activo (ver +layout.svelte content-body).
+   */
+  function clearActive() {
+    update((state) => ({ ...state, activeId: null }));
+  }
+
   function reset() {
     set(initialState);
   }
 
-  return { subscribe, openTab, closeTab, setActive, reset };
+  return { subscribe, openTab, closeTab, setActive, clearActive, reset };
 }
 
 export const tabsStore = createTabsStore();
