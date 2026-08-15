@@ -8,6 +8,9 @@ en medio de una conversación que la key no está configurada.
 
 Migrado desde agentic-harness/scripts/check_providers.py (2026-08-09).
 Chequeo de OllamaTextProvider agregado el mismo día, junto con el arm.
+Refactorizado para reusar alfred.health.collect_health() (2026-08-14),
+que ahora comparte instanciación de providers con server.py — antes cada
+consumidor armaba su propia lista de providers por separado.
 
 Uso:
     cd installer/alfred
@@ -21,9 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from alfred.providers.gemini_provider import GeminiTextProvider
-from alfred.providers.ollama_provider import OllamaEmbeddingProvider
-from alfred.providers.ollama_text_provider import OllamaTextProvider
+from alfred.health import collect_health
 
 
 def _print_health(label: str, health, missing_hint: str) -> None:
@@ -40,24 +41,23 @@ def _print_health(label: str, health, missing_hint: str) -> None:
 
 
 def main() -> int:
-    ollama_embed = OllamaEmbeddingProvider.from_default_nucleus_path()
-    ollama_embed_health = ollama_embed.health()
+    health = collect_health()
+
+    ollama_embed_health = health["ollama_embeddings"]
     _print_health("ollama-embeddings", ollama_embed_health, "ollama pull nomic-embed-text")
 
     print()
 
-    ollama_text = OllamaTextProvider()
-    ollama_text_health = ollama_text.health()
+    ollama_text_health = health["ollama_text"]
     _print_health(
         "ollama-text (default de Alfred)",
         ollama_text_health,
-        f"ollama pull {ollama_text.model}",
+        f"ollama pull {ollama_text_health.detail.get('model', '<modelo>')}",
     )
 
     print()
 
-    gemini = GeminiTextProvider()
-    gemini_health = gemini.health()
+    gemini_health = health["gemini"]
     print(f"[gemini (opt-in)]  status={gemini_health.status}")
     if gemini_health.status != "ok":
         print(f"          detail={gemini_health.detail}")

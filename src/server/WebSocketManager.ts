@@ -6,7 +6,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import { EventEmitter } from 'events';
-import OllamaNativeAdapter from '../ai/adapters/OllamaNativeAdapter';
+import OllamaNativeAdapter, { AlfredProviderError } from '../ai/adapters/OllamaNativeAdapter';
 import { AIRuntimeAdapter } from '../api/adapters/AIRuntimeAdapter';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -252,7 +252,8 @@ export class WebSocketManager extends EventEmitter {
       const result = await this.ollamaAdapter.executePrompt({
         prompt: text,
         context: { intentId, profileId, metadata },
-        stream: true
+        stream: true,
+        processId
       });
 
       for await (const chunk of result.chunks) {
@@ -367,6 +368,14 @@ Explain and derive, don't implement`
   }
 
   private classifyError(error: any): string {
+    // AlfredProviderError trae el error_code real que devolvió el servidor
+    // de Alfred (mismo catálogo que contracts/errors.ts) — confiar en eso
+    // antes que adivinar por substring en inglés, que nunca iba a matchear
+    // los mensajes en español que manda Alfred (p. ej. "Ollama no responde",
+    // no "ollama... not running").
+    if (error instanceof AlfredProviderError) {
+      return error.code;
+    }
     const msg = error.message?.toLowerCase() || '';
     if (msg.includes('rate limit')) return 'AI_RATE_LIMIT';
     if (msg.includes('quota')) return 'AI_QUOTA_EXCEEDED';

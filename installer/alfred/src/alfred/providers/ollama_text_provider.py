@@ -23,9 +23,11 @@ default no está descargado en vez de fallar recién en el primer generate.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
+from collections.abc import Iterator
 from pathlib import Path
 
 import requests
@@ -129,6 +131,82 @@ class OllamaTextProvider(TextGenerationProviderArm):
                 f"Respuesta de Ollama con formato inesperado: {data}",
             )
         return text
+
+    def generate_text_stream(self, payload: AIPromptPayload) -> Iterator[str]:
+        """
+        Igual que `generate_text`, pero yieldea fragmentos reales a medida
+        que Ollama los produce (`stream: true` real contra `/api/generate`,
+        NDJSON) en vez de esperar la respuesta completa.
+
+        Existe para `server.py` (`WS /ws/chat`) — es lo que reemplaza el
+        fake-chunking por palabra que hacía `OllamaNativeAdapter.ts` sobre
+        una respuesta que ni siquiera era real. Acá el chunk es real:
+        viene directo del campo "response" de cada línea NDJSON que manda
+        Ollama.
+
+        Mismos códigos de error que `generate_text` para la conexión
+        inicial. Una vez que el streaming arrancó, una línea NDJSON
+        malformada se descarta (se loggea) en vez de abortar todo el
+        stream — es preferible perder un fragmento a cortar la respuesta
+        a mitad de camino por un glitch de parseo.
+        """
+        if not payload.text or not payload.text.strip():
+            raise ProviderError.from_code(
+                "AI_EXECUTION_PROMPT_INVALID", "El prompt no puede estar vacío."
+            )
+
+        request_body = {
+            "model": self.model,
+            "prompt": payload.text,
+            "stream": True,
+            "options": {"temperature": 0.2},
+        }
+
+        try:
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json=request_body,
+                timeout=self.timeout,
+                stream=True,
+            )
+        except requests.ConnectionError:
+            raise ProviderError.from_code(
+                "AI_EXECUTION_OLLAMA_NOT_RUNNING",
+                self._connection_error_message(),
+            )
+        except requests.Timeout:
+            raise ProviderError.from_code(
+                "AI_TIMEOUT",
+                f"Timeout esperando respuesta de Ollama (>{self.timeout}s). "
+                "El modelo puede estar cargándose por primera vez.",
+            )
+
+        if response.status_code == 404:
+            raise ProviderError.from_code(
+                "AI_EXECUTION_OLLAMA_MODEL_MISSING",
+                f"Modelo '{self.model}' no encontrado en Ollama.",
+                details={"pull_command": f"ollama pull {self.model}"},
+            )
+        if response.status_code != 200:
+            raise ProviderError.from_code(
+                "AI_EXECUTION_STREAM_ERROR",
+                f"Ollama HTTP error {response.status_code}: {response.text}",
+            )
+
+        for line in response.iter_lines():
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning("Línea NDJSON malformada de Ollama, se descarta: %r", line)
+                continue
+
+            fragment = data.get("response")
+            if fragment:
+                yield fragment
+            if data.get("done"):
+                break
 
     def health(self) -> ProviderHealth:
         try:

@@ -23,7 +23,30 @@ orquestador, nunca el que parsea la respuesta de Alfred.** Ver
 `installer/aitap/AGENTS.md` para el guardrail completo del lado AITAP —
 no se duplica acá, se referencia.
 
-## Estado real hoy (2026-08-13) — para no asumir de más
+**Alfred es multi-instancia: un Alfred por dispositivo, no uno por
+organización.** Confirmado por Jose 2026-08-14 — ver
+`docs/AITAP/AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md` §7. Cada
+workspace Electron y, eventualmente, cada instalación mobile corre su
+propio Alfred y habla con AITAP directo para cualquier uso de tokens,
+sin excepción. Se evaluó y se descartó un modelo alternativo (un solo
+Alfred "primario" por organización, con el resto de los dispositivos
+llegando como clientes remotos a través del túnel de Batcave) — ese es
+el modelo que hoy describe `.ai_bot.sovereign.bl` de elias-repos, que
+Jose confirmó como contenido legacy y poco desarrollado, no como la
+dirección a seguir. No trates ese archivo como fuente de verdad de la
+arquitectura de identidad de Alfred.
+
+**Consecuencia todavía sin resolver, no inventar una solución acá:** no
+existe hoy ningún mecanismo de alta de dispositivo/cliente en el
+ecosistema (se buscó en Nucleus, Sentinel, Metamorph y en el lado
+Electron — nada, ver el §7 citado arriba para el detalle de la
+búsqueda). Antes de que un `--provider aitap` real tenga sentido en
+`chat.py`, alguien tiene que diseñar quién emite la credencial inicial
+de cada dispositivo y dónde vive. Es una pieza nueva, no una extensión
+de `.ownership.json` (identidad de organización, no de dispositivo) ni
+del vault de Nucleus (guarda secretos, no emite identidad).
+
+## Estado real hoy (2026-08-14) — para no asumir de más
 
 - Alfred conversa hoy con Ollama local (`OllamaTextProvider`, default) o
   Gemini directo (`GeminiTextProvider`, opt-in vía `--provider gemini`,
@@ -76,6 +99,13 @@ a una dependencia bloqueada.
   frontera (Gemini/Claude/OpenAI/xAI). Ollama es local y sigue siendo
   invocado directo por Alfred siempre — ver README de `installer/aitap`,
   sección "Decisiones ya tomadas".
+- **El renderer de Electron nunca tiene el token/credencial de Alfred
+  frente a AITAP.** Confirmado por Jose 2026-08-14, no negociable — el
+  renderer es contenido web, la superficie más atacable de todo
+  workspace. Solo el proceso main le habla a AITAP; el renderer le pide
+  cosas al main por IPC, y el main decide si eso implica consultar a
+  AITAP. Mismo criterio que ya aplica el guardrail de `installer/aitap`
+  sobre mantener el secreto lejos de la superficie más expuesta.
 - **Cuando el motor de ruteo de AITAP exista de verdad:** el candidato a
   migrar es el path Gemini de `chat.py` (hoy transicional, directo a
   `GEMINI_API_KEY`), no el path Ollama. Migrarlo es cambiar
