@@ -6,7 +6,7 @@
     {
       "id": "profile_load",
       "type": "command",
-      "direction": "harness_to_background",
+      "direction": "synapse_simulator_to_background",
       "channel": "runtime",
       "description": "Request a full profile data reload",
       "payload_template": {
@@ -18,14 +18,14 @@
           "name": "profile_id",
           "type": "auto",
           "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
+          "source": "SYNAPSE_SIMULATOR_CONFIG.profileId"
         }
       ]
     },
     {
       "id": "health_check",
       "type": "command",
-      "direction": "harness_to_background",
+      "direction": "synapse_simulator_to_background",
       "channel": "runtime",
       "description": "Trigger a full-stack health check",
       "payload_template": {
@@ -44,7 +44,7 @@
     {
       "id": "nucleus_sync",
       "type": "command",
-      "direction": "harness_to_background",
+      "direction": "synapse_simulator_to_background",
       "channel": "runtime",
       "description": "Trigger a nucleus project sync",
       "payload_template": {
@@ -57,7 +57,7 @@
           "name": "profile_id",
           "type": "auto",
           "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
+          "source": "SYNAPSE_SIMULATOR_CONFIG.profileId"
         },
         {
           "name": "launch_id",
@@ -70,7 +70,7 @@
     {
       "id": "intent_list",
       "type": "command",
-      "direction": "harness_to_background",
+      "direction": "synapse_simulator_to_background",
       "channel": "runtime",
       "description": "Request the list of active intents for this profile",
       "payload_template": {
@@ -82,14 +82,14 @@
           "name": "profile_id",
           "type": "auto",
           "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
+          "source": "SYNAPSE_SIMULATOR_CONFIG.profileId"
         }
       ]
     },
     {
       "id": "session_status",
       "type": "event",
-      "direction": "harness_to_background",
+      "direction": "synapse_simulator_to_background",
       "channel": "runtime",
       "description": "Simulate a session status update from the host",
       "payload_template": {
@@ -109,7 +109,7 @@
           "name": "profile_id",
           "type": "auto",
           "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
+          "source": "SYNAPSE_SIMULATOR_CONFIG.profileId"
         },
         {
           "name": "launch_id",
@@ -122,7 +122,7 @@
     {
       "id": "stats_update",
       "type": "event",
-      "direction": "harness_to_background",
+      "direction": "synapse_simulator_to_background",
       "channel": "runtime",
       "description": "Simulate a stats update payload (launches, uptime, intents)",
       "payload_template": {
@@ -139,7 +139,7 @@
           "name": "profile_id",
           "type": "auto",
           "variable": "$PROFILE_ID",
-          "source": "HARNESS_CONFIG.profileId"
+          "source": "SYNAPSE_SIMULATOR_CONFIG.profileId"
         },
         {
           "name": "total_launches",

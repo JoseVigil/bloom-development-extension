@@ -69,7 +69,7 @@ const COMMAND_EVENTS = [
 // la sección de abajo.
 //
 // Requisito: el Side Panel NUNCA debe abrirse en las páginas core de la
-// propia extensión (discovery/harness/landing) ni en sitios generales
+// propia extensión (discovery/synapse-simulator/landing) ni en sitios generales
 // (github.com, etc) — solo se activa en dominios de IA (ChatGPT, Claude,
 // Gemini), donde carga companion/index.html.
 //
@@ -104,7 +104,7 @@ async function updateSidePanelForTab(tabId, url) {
       await chrome.sidePanel.setOptions({ tabId, path: COMPANION_PANEL_PATH, enabled: true });
       console.log('[CognituumEngine][SidePanel] ✓ Habilitado para tab', tabId, `(${hostname})`);
     } else {
-      // Cubre explícitamente: tabs de discovery/harness/landing/companion
+      // Cubre explícitamente: tabs de discovery/synapse-simulator/landing/companion
       // (chrome-extension://<id>/...) y cualquier sitio general (github,
       // etc) — todo lo que no matchee un dominio de IA queda deshabilitado.
       await chrome.sidePanel.setOptions({ tabId, enabled: false });

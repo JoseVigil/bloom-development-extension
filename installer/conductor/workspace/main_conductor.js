@@ -139,7 +139,7 @@ function bootServices(onboardingDone) {
   return new Promise((resolve) => {
     const args = [
       '--json', 'dev-start',
-      '--enable-harness-onboarding',   // siempre: bypasea Master role check
+      '--enable-synapse-simulator-onboarding',   // siempre: bypasea Master role check
     ];
 
     if (!onboardingDone) {
@@ -664,7 +664,7 @@ app.whenReady().then(async () => {
     // la app con onboarding.completed=true — dentro de la misma sesión que
     // completa el onboarding no se nota, porque ahí el bridge sigue vivo
     // (onboarding:complete solo hace win.loadURL() sobre la misma ventana).
-    // registerOnboardingHandlers también se registra acá: harness:inject-milestone
+    // registerOnboardingHandlers también se registra acá: synapse-simulator:inject-milestone
     // y onboarding:mark-step-complete deben seguir funcionando post-onboarding
     // (ej. reintentar un step no-blocking) y dependen de () => _reactor / () => _registry.
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:5173';

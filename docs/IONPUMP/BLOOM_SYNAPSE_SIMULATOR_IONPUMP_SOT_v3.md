@@ -1,37 +1,37 @@
-# Bloom Nucleus Bridge — Harness + IonPump: Fuente de Verdad
+# Bloom Nucleus Bridge — SynapseSimulator + IonPump: Fuente de Verdad
 ## v3 · 8 de julio 2026
-### Supersede a: `HARNESS_SOURCE_OF_TRUTH.md`, `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` (v1 y v2 fusionada del 17 de junio de 2026), y todos los documentos que estos listaban como fuente.
+### Supersede a: `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md`, `SYNAPSE_SIMULATOR_IONPUMP_SOURCE_OF_TRUTH.md` (v1 y v2 fusionada del 17 de junio de 2026), y todos los documentos que estos listaban como fuente.
 
-> **Nota de esta revisión (v3):** el 8 de julio de 2026 se hizo una revisión de seguridad de la extensión (`CLEANUP_NOTES.md`) que eliminó del código real varios mecanismos que la v2 de este documento describía como parte de la arquitectura "canónica" de IonPump/Harness — en particular, extracción de tokens de GitHub vía scraping de `/settings/tokens*` y un monitor de clipboard que reenviaba credenciales completas a un host nativo. Esta revisión actualiza el documento para que coincida con el código real post-limpieza. Ver §0.3 para el detalle punto por punto y §21 para las reglas que quedan vigentes hacia adelante.
+> **Nota de esta revisión (v3):** el 8 de julio de 2026 se hizo una revisión de seguridad de la extensión (`CLEANUP_NOTES.md`) que eliminó del código real varios mecanismos que la v2 de este documento describía como parte de la arquitectura "canónica" de IonPump/SynapseSimulator — en particular, extracción de tokens de GitHub vía scraping de `/settings/tokens*` y un monitor de clipboard que reenviaba credenciales completas a un host nativo. Esta revisión actualiza el documento para que coincida con el código real post-limpieza. Ver §0.3 para el detalle punto por punto y §21 para las reglas que quedan vigentes hacia adelante.
 
 ---
 
 ## 0. Cómo se construyó este documento
 
-Existían dos documentos de "fuente de verdad" independientes — `HARNESS_SOURCE_OF_TRUTH.md` y `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` — cada uno autodeclarado como la única referencia vigente, sin que ninguno supiera de la existencia del otro. Compartían ~85% del contenido (vienen de las mismas fuentes v2), pero diferían en puntos concretos de arquitectura, y en algunos casos cada uno se contradecía a sí mismo.
+Existían dos documentos de "fuente de verdad" independientes — `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md` y `SYNAPSE_SIMULATOR_IONPUMP_SOURCE_OF_TRUTH.md` — cada uno autodeclarado como la única referencia vigente, sin que ninguno supiera de la existencia del otro. Compartían ~85% del contenido (vienen de las mismas fuentes v2), pero diferían en puntos concretos de arquitectura, y en algunos casos cada uno se contradecía a sí mismo.
 
-Durante esta fusión se aportó el código real de `harness_generator.py` y `harness.js`. Eso cambió el resultado: ninguno de los dos documentos anteriores describe correctamente el estado actual del sistema en al menos tres puntos. La jerarquía de autoridad usada acá es:
+Durante esta fusión se aportó el código real de `synapse_simulator_generator.py` y `synapse-simulator.js`. Eso cambió el resultado: ninguno de los dos documentos anteriores describe correctamente el estado actual del sistema en al menos tres puntos. La jerarquía de autoridad usada acá es:
 
-1. **Código real** (`harness_generator.py`, `harness.js`, aportados en esta sesión) — máxima autoridad.
-2. **`HARNESS_IONPUMP_SOURCE_OF_TRUTH.md`** — su metodología ya priorizaba código real verificado sobre specs, y tenía mayor profundidad en IonPump (capa IPC, formato `.ion`, Metamorph). Se usa como base para esas secciones.
-3. **`HARNESS_SOURCE_OF_TRUTH.md`** — tenía mejor cobertura operativa (manual de debug, estructura de checklist por componente) y un índice más completo. Se usa como base para esas secciones.
+1. **Código real** (`synapse_simulator_generator.py`, `synapse-simulator.js`, aportados en esta sesión) — máxima autoridad.
+2. **`SYNAPSE_SIMULATOR_IONPUMP_SOURCE_OF_TRUTH.md`** — su metodología ya priorizaba código real verificado sobre specs, y tenía mayor profundidad en IonPump (capa IPC, formato `.ion`, Metamorph). Se usa como base para esas secciones.
+3. **`SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md`** — tenía mejor cobertura operativa (manual de debug, estructura de checklist por componente) y un índice más completo. Se usa como base para esas secciones.
 4. Donde ambos coincidían, no hubo nada que resolver.
 
 ### 0.1 Contradicciones entre los dos documentos y cómo se resolvieron
 
 | # | Contradicción | Qué decía cada uno | Resolución |
 |---|---|---|---|
-| 1 | `dev_mode` y el deploy del Harness | Ambos: "no-op completo si `dev_mode=False`", "no existe en prod" | **Código real lo contradice a los dos.** Ver §0.2 — es el hallazgo más importante de esta fusión. |
-| 2 | Archivos que copia `harness_generator.py` | IONPUMP-SOT decía 4 (`index.html`, `harness.js`, `harnessProtocol.js`, `ion.manifest.json`), citando "código real" de una sesión anterior. SOURCE_OF_TRUTH mostraba un snippet con solo 1 (`index.html`), pero su propio texto narrativo asumía que `harness.js` también existía. | **Código real (esta sesión): son 3** — `index.html`, `harness.js`, `harnessProtocol.js`. Ninguno de los dos documentos tenía razón. `ion.manifest.json` no se copia a `extension/harness/` con el código actual; la pregunta abierta que IONPUMP-SOT dejaba pendiente sobre ese archivo queda resuelta: no aplica a esta versión del generador. |
-| 3 | Ubicación de `harnessProtocol.js` | IONPUMP-SOT: doble ubicación por diseño, origen canónico en `templates/harness/`. SOURCE_OF_TRUTH: única ubicación en `templates/discovery/`, sin copia en `harness/`. | El boot real de `harness.js` (línea 631) carga `harnessProtocol.js` con ruta relativa local (sin `../`), y `harness_generator.py` real lo incluye en su propio `files_to_copy`. Esto **confirma que existe una copia local en `harness/`**, consistente con el modelo de IONPUMP-SOT. No hay evidencia en esta sesión sobre si `discovery/` tiene o no su propia copia — se preserva esa parte como no verificada (§18). |
-| 4 | Estructura del manifest `HARNESS_PROTOCOL_MANIFEST` | IONPUMP-SOT: un solo array `messages` mezclando canales `runtime` y `tabs`. SOURCE_OF_TRUTH: dos arrays separados, `messages` (runtime) y `tab_messages` (tabs). | El `ProtocolReader.discover()` real (`harness.js` línea 76) solo itera `manifest.messages` — nunca lee `tab_messages`. **Con la estructura de SOURCE_OF_TRUTH, los mensajes de canal `tabs` nunca aparecerían en el panel Protocols.** Se adopta el formato de array único de IONPUMP-SOT como el correcto. |
+| 1 | `dev_mode` y el deploy del SynapseSimulator | Ambos: "no-op completo si `dev_mode=False`", "no existe en prod" | **Código real lo contradice a los dos.** Ver §0.2 — es el hallazgo más importante de esta fusión. |
+| 2 | Archivos que copia `synapse_simulator_generator.py` | IONPUMP-SOT decía 4 (`index.html`, `synapse-simulator.js`, `synapseSimulatorProtocol.js`, `ion.manifest.json`), citando "código real" de una sesión anterior. SOURCE_OF_TRUTH mostraba un snippet con solo 1 (`index.html`), pero su propio texto narrativo asumía que `synapse-simulator.js` también existía. | **Código real (esta sesión): son 3** — `index.html`, `synapse-simulator.js`, `synapseSimulatorProtocol.js`. Ninguno de los dos documentos tenía razón. `ion.manifest.json` no se copia a `extension/synapse-simulator/` con el código actual; la pregunta abierta que IONPUMP-SOT dejaba pendiente sobre ese archivo queda resuelta: no aplica a esta versión del generador. |
+| 3 | Ubicación de `synapseSimulatorProtocol.js` | IONPUMP-SOT: doble ubicación por diseño, origen canónico en `templates/synapse-simulator/`. SOURCE_OF_TRUTH: única ubicación en `templates/discovery/`, sin copia en `synapse-simulator/`. | El boot real de `synapse-simulator.js` (línea 631) carga `synapseSimulatorProtocol.js` con ruta relativa local (sin `../`), y `synapse_simulator_generator.py` real lo incluye en su propio `files_to_copy`. Esto **confirma que existe una copia local en `synapse-simulator/`**, consistente con el modelo de IONPUMP-SOT. No hay evidencia en esta sesión sobre si `discovery/` tiene o no su propia copia — se preserva esa parte como no verificada (§18). |
+| 4 | Estructura del manifest `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` | IONPUMP-SOT: un solo array `messages` mezclando canales `runtime` y `tabs`. SOURCE_OF_TRUTH: dos arrays separados, `messages` (runtime) y `tab_messages` (tabs). | El `ProtocolReader.discover()` real (`synapse-simulator.js` línea 76) solo itera `manifest.messages` — nunca lee `tab_messages`. **Con la estructura de SOURCE_OF_TRUTH, los mensajes de canal `tabs` nunca aparecerían en el panel Protocols.** Se adopta el formato de array único de IONPUMP-SOT como el correcto. |
 | 5 | Dispatcher de canal `tabs` | Ambos documentan un dispatcher que diferencia `runtime` de `tabs`, con `chrome.tabs.sendMessage` implementado. | El `Simulator.send()` real solo implementa `channel === 'runtime'`. El `else` loguea `Unknown channel` como error. **Esto no es una contradicción entre los documentos — es algo que los dos documentaron como ya resuelto y en realidad no lo está.** Ver §18.1. |
 
 ### 0.2 El hallazgo que invalida un principio "no negociable" de ambos documentos
 
-El docstring real de `generate_harness_page()` dice textualmente que el parámetro `dev_mode` **"se mantiene por compatibilidad pero ya no suprime el deploy"**, y que el Harness **"siempre se despliega igual que discovery y landing"**. Hay un `TODO` confirmando que es una decisión consciente, no un bug: *"dev_mode puede usarse a futuro para assets o config adicional de desarrollo. Por ahora harness siempre se despliega igual que discovery y landing."*
+El docstring real de `generate_synapse_simulator_page()` dice textualmente que el parámetro `dev_mode` **"se mantiene por compatibilidad pero ya no suprime el deploy"**, y que el SynapseSimulator **"siempre se despliega igual que discovery y landing"**. Hay un `TODO` confirmando que es una decisión consciente, no un bug: *"dev_mode puede usarse a futuro para assets o config adicional de desarrollo. Por ahora synapse-simulator siempre se despliega igual que discovery y landing."*
 
-Esto contradice directamente el principio que ambos documentos previos trataban como fundacional: que el Harness existe exclusivamente en builds dev "por construcción", y que `harness_generator.py` es no-op cuando `dev_mode=False`. Con el código actual, **el Harness se copia a `extension/harness/` en todos los perfiles, dev o no**. Las implicancias en cascada de esto (¿se sigue escribiendo `harness.synapse.config.js` en producción? ¿la URL `harness/index.html` queda accesible en perfiles de usuarios finales?) se documentan en §10 y §18 — no se inventan respuestas donde no hay evidencia.
+Esto contradice directamente el principio que ambos documentos previos trataban como fundacional: que el SynapseSimulator existe exclusivamente en builds dev "por construcción", y que `synapse_simulator_generator.py` es no-op cuando `dev_mode=False`. Con el código actual, **el SynapseSimulator se copia a `extension/synapse-simulator/` en todos los perfiles, dev o no**. Las implicancias en cascada de esto (¿se sigue escribiendo `synapse-simulator.synapse.config.js` en producción? ¿la URL `synapse-simulator/index.html` queda accesible en perfiles de usuarios finales?) se documentan en §10 y §18 — no se inventan respuestas donde no hay evidencia.
 
 ### 0.3 Revisión de seguridad del 8 de julio de 2026 — qué invalida en este documento
 
@@ -50,13 +50,13 @@ Ninguno de estos seis puntos es una preferencia de estilo — son código que ex
 
 ---
 
-## 1. Qué es el Harness y qué es IonPump
+## 1. Qué es el SynapseSimulator y qué es IonPump
 
-### Harness
+### SynapseSimulator
 
 Herramienta de **observabilidad y simulación** del protocolo Synapse. Sus dos roles: **observar** los mensajes `chrome.runtime` que fluyen entre la extensión, `background.js` y el host durante el onboarding; y **simular** eventos del protocolo para avanzar o testear pasos sin depender del sistema real (clipboard, GitHub, Brain).
 
-El Harness no modifica el estado del sistema. Despacha mensajes como si los hubiera enviado otro componente; `background.js` los procesa exactamente igual que a un mensaje real.
+El SynapseSimulator no modifica el estado del sistema. Despacha mensajes como si los hubiera enviado otro componente; `background.js` los procesa exactamente igual que a un mensaje real.
 
 ### IonPump
 
@@ -64,23 +64,23 @@ El Harness no modifica el estado del sistema. Despacha mensajes como si los hubi
 
 ### Relación entre ambos
 
-Problemas ortogonales que comparten infraestructura: ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump produce `HARNESS_PROTOCOL_MANIFEST`; el Harness lo consume. Relación unidireccional.
+Problemas ortogonales que comparten infraestructura: ambos necesitan que Cortex exponga manifests de protocolo legibles en runtime. IonPump produce `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST`; el SynapseSimulator lo consume. Relación unidireccional.
 
-> **Regla de oro:** la fuente de verdad es el protocolo. El Harness la lee. IonPump la alimenta. Nadie la duplica.
+> **Regla de oro:** la fuente de verdad es el protocolo. El SynapseSimulator la lee. IonPump la alimenta. Nadie la duplica.
 
 ---
 
 ## 2. Principios de diseño
 
-**El Harness no tiene protocolo propio.** Lee los protocolos existentes en runtime vía `ProtocolReader`. Es un lector, no un duplicador. Agregar un mensaje al protocolo actualiza el Harness automáticamente — no hay paso 2.
+**El SynapseSimulator no tiene protocolo propio.** Lee los protocolos existentes en runtime vía `ProtocolReader`. Es un lector, no un duplicador. Agregar un mensaje al protocolo actualiza el SynapseSimulator automáticamente — no hay paso 2.
 
 **El manifest es el contrato.** Cada protocolo expone un `*_PROTOCOL_MANIFEST` autodescriptivo, agregado al **final** de su archivo existente, sin tocar la lógica existente.
 
-**Los canales son tipos, no hardcoding** — *en el diseño*. El manifest diferencia `runtime` de `tabs`. **Nota de implementación real:** el dispatcher actual del Harness solo ejecuta `runtime`; `tabs` está modelado en el contrato pero no implementado en `Simulator.send()` (§18.1).
+**Los canales son tipos, no hardcoding** — *en el diseño*. El manifest diferencia `runtime` de `tabs`. **Nota de implementación real:** el dispatcher actual del SynapseSimulator solo ejecuta `runtime`; `tabs` está modelado en el contrato pero no implementado en `Simulator.send()` (§18.1).
 
-**~~Dev/prod por construcción, no por flags~~ — ya no es así.** Este principio decía que el Harness existe en dev porque Brain lo genera en seed con `--dev`, y no existe en prod porque Brain no lo genera. El código real de `harness_generator.py` ya no respeta esto: despliega los assets del Harness siempre, independientemente de `dev_mode`. Se preserva el principio acá tachado porque describe la *intención* de diseño original — el comportamiento actual diverge de ella, y eso es exactamente lo que hay que decidir si corregir o documentar como cambio de rumbo (§18.2).
+**~~Dev/prod por construcción, no por flags~~ — ya no es así.** Este principio decía que el SynapseSimulator existe en dev porque Brain lo genera en seed con `--dev`, y no existe en prod porque Brain no lo genera. El código real de `synapse_simulator_generator.py` ya no respeta esto: despliega los assets del SynapseSimulator siempre, independientemente de `dev_mode`. Se preserva el principio acá tachado porque describe la *intención* de diseño original — el comportamiento actual diverge de ella, y eso es exactamente lo que hay que decidir si corregir o documentar como cambio de rumbo (§18.2).
 
-**Re-seed como mecanismo de actualización.** Cambios en el Harness se aplican con `sentinel seed <alias> <master> --dev`. No requiere empaquetar ni distribuir Cortex.
+**Re-seed como mecanismo de actualización.** Cambios en el SynapseSimulator se aplican con `sentinel seed <alias> <master> --dev`. No requiere empaquetar ni distribuir Cortex.
 
 **Brain es el único escritor del `extensionDir`.** Sentinel orquesta el seed y pasa flags, pero no toca `extensionDir` después de invocar a `brain profile create`.
 
@@ -90,65 +90,65 @@ Problemas ortogonales que comparten infraestructura: ambos necesitan que Cortex 
 
 | Componente | Rol |
 |---|---|
-| **Brain** | Aloja `IonPumpManager` (runtime singleton). Expone admin CLI. Genera los assets del Harness vía `harness_generator.py` — **siempre**, no solo en `--dev` (ver §0.2). Genera `discovery/` vía `discovery_generator.py` (incluye su propia copia de `harnessProtocol.js`). Único escritor del `extensionDir` durante el seed. |
-| **Sentinel** | Pasa el flag `--dev` a `brain profile create` en seed (su efecto real sobre el Harness está en duda, ver §0.2). Escribe `harness.synapse.config.js` en **launch** (no en seed), condicionado a que `harness/index.html` exista — condición que ahora se cumple casi siempre, dado que Brain ya no lo gatea por `dev_mode`. No toca `extensionDir` después de llamar a Brain. |
-| **Cortex** | Aloja `harness/index.html`, `harness/harness.js`, `harness/harnessProtocol.js` (copiados por Brain). Expone `DISCOVERY_PROTOCOL_MANIFEST` e `HARNESS_PROTOCOL_MANIFEST` en `self.*`. `content.js` ejecuta comandos DOM de IonPump. No modifica nada más. |
+| **Brain** | Aloja `IonPumpManager` (runtime singleton). Expone admin CLI. Genera los assets del SynapseSimulator vía `synapse_simulator_generator.py` — **siempre**, no solo en `--dev` (ver §0.2). Genera `discovery/` vía `discovery_generator.py` (incluye su propia copia de `synapseSimulatorProtocol.js`). Único escritor del `extensionDir` durante el seed. |
+| **Sentinel** | Pasa el flag `--dev` a `brain profile create` en seed (su efecto real sobre el SynapseSimulator está en duda, ver §0.2). Escribe `synapse-simulator.synapse.config.js` en **launch** (no en seed), condicionado a que `synapse-simulator/index.html` exista — condición que ahora se cumple casi siempre, dado que Brain ya no lo gatea por `dev_mode`. No toca `extensionDir` después de llamar a Brain. |
+| **Cortex** | Aloja `synapse-simulator/index.html`, `synapse-simulator/synapse-simulator.js`, `synapse-simulator/synapseSimulatorProtocol.js` (copiados por Brain). Expone `DISCOVERY_PROTOCOL_MANIFEST` e `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` en `self.*`. `content.js` ejecuta comandos DOM de IonPump. No modifica nada más. |
 | **Metamorph** | Único escritor de `ionsites/`. Inspecciona y reconcilia `.ion` recipes. No participa del runtime IonPump ni del Event Bus. |
-| **Harness** | Lee manifests de protocolo en runtime. Genera UI dinámica. Observa y simula. No tiene tabla de mensajes propia, no abre canales propios. |
+| **SynapseSimulator** | Lee manifests de protocolo en runtime. Genera UI dinámica. Observa y simula. No tiene tabla de mensajes propia, no abre canales propios. |
 
 ---
 
-## 4. Arquitectura del Harness
+## 4. Arquitectura del SynapseSimulator
 
 ### 4.1 Dónde vive y quién lo genera
 
-El Harness **no vive en el `.blx` de Cortex**. Brain lo despliega vía `harness_generator.py`, siguiendo el mismo patrón que `discovery_generator.py`: solo copia assets estáticos, no inyecta datos de runtime, no genera configs.
+El SynapseSimulator **no vive en el `.blx` de Cortex**. Brain lo despliega vía `synapse_simulator_generator.py`, siguiendo el mismo patrón que `discovery_generator.py`: solo copia assets estáticos, no inyecta datos de runtime, no genera configs.
 
 ```
 brain/core/profile/web/
-├── templates/harness/
+├── templates/synapse-simulator/
 │   ├── index.html            ← sin scripts inline (fix CSP)
-│   ├── harness.js             ← todo el JS, boot async
-│   └── harnessProtocol.js    ← copia local del manifest IonPump para el Harness
-└── harness_generator.py
+│   ├── synapse-simulator.js             ← todo el JS, boot async
+│   └── synapseSimulatorProtocol.js    ← copia local del manifest IonPump para el SynapseSimulator
+└── synapse_simulator_generator.py
 
-profiles/<uuid>/extension/harness/
+profiles/<uuid>/extension/synapse-simulator/
 ├── index.html
-├── harness.js
-└── harnessProtocol.js
+├── synapse-simulator.js
+└── synapseSimulatorProtocol.js
 ```
 
-**Código real de `harness_generator.py`** (verificado en esta sesión, reemplaza cualquier versión anterior citada en los documentos fuente):
+**Código real de `synapse_simulator_generator.py`** (verificado en esta sesión, reemplaza cualquier versión anterior citada en los documentos fuente):
 
 ```python
-def generate_harness_page(target_ext_dir: Path, profile_data: Dict[str, Any], dev_mode: bool = False) -> None:
+def generate_synapse_simulator_page(target_ext_dir: Path, profile_data: Dict[str, Any], dev_mode: bool = False) -> None:
     """
-    Siempre despliega los assets estáticos de harness/ al extensionDir/harness/.
+    Siempre despliega los assets estáticos de synapse-simulator/ al extensionDir/synapse-simulator/.
     El parámetro dev_mode se mantiene por compatibilidad pero ya no suprime el deploy.
     Patrón: idéntico a generate_discovery_page() — solo copia assets estáticos.
-    La configuración (harness.synapse.config.js) es responsabilidad de Sentinel en el launch.
+    La configuración (synapse-simulator.synapse.config.js) es responsabilidad de Sentinel en el launch.
     """
-    harness_dir = target_ext_dir / "harness"
-    harness_dir.mkdir(parents=True, exist_ok=True)
-    _copy_static_assets(harness_dir)
+    synapse_simulator_dir = target_ext_dir / "synapse-simulator"
+    synapse_simulator_dir.mkdir(parents=True, exist_ok=True)
+    _copy_static_assets(synapse_simulator_dir)
 
 
-def _copy_static_assets(harness_dir: Path) -> None:
-    template_dir = Path(__file__).parent / "templates" / "harness"
-    files_to_copy = ["index.html", "harness.js", "harnessProtocol.js"]
+def _copy_static_assets(synapse_simulator_dir: Path) -> None:
+    template_dir = Path(__file__).parent / "templates" / "synapse-simulator"
+    files_to_copy = ["index.html", "synapse-simulator.js", "synapseSimulatorProtocol.js"]
     for file_name in files_to_copy:
         source = template_dir / file_name
         if source.exists():
-            shutil.copy2(source, harness_dir / file_name)
+            shutil.copy2(source, synapse_simulator_dir / file_name)
 ```
 
 No hay rama `if not dev_mode: return`. El parámetro se recibe pero no condiciona nada en el cuerpo de la función.
 
-### 4.2 Los 3 paneles del Harness
+### 4.2 Los 3 paneles del SynapseSimulator
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  🌱 Bloom Harness  [DEV]          MasterWorker  ● Connected     │  ← Top bar
+│  🌱 Bloom SynapseSimulator  [DEV]          MasterWorker  ● Connected     │  ← Top bar
 ├────────────────┬──────────────────────────────┬─────────────────┤
 │                │                              │  [Log] [Config] │
 │  PROTOCOLS     │  SIMULATE                    │                 │
@@ -161,27 +161,27 @@ No hay rama `if not dev_mode: return`. El parámetro se recibe pero no condicion
 
 **Protocols (izquierda):** lista los manifests cargados al boot, sección colapsable por protocolo. `landing` solo aparece si el onboarding ya completó.
 
-**Simulate (centro):** mensaje seleccionado con descripción, campos editables para parámetros `string`/`enum`, preview del payload JSON, botón **Send**. Los parámetros `type: "auto"` se resuelven desde `HARNESS_CONFIG`/`SYNAPSE_CONFIG` y no son editables.
+**Simulate (centro):** mensaje seleccionado con descripción, campos editables para parámetros `string`/`enum`, preview del payload JSON, botón **Send**. Los parámetros `type: "auto"` se resuelven desde `SYNAPSE_SIMULATOR_CONFIG`/`SYNAPSE_CONFIG` y no son editables.
 
 **Log / Config (derecha):** stream en tiempo real (`INFO`, `SEND`, `ACK`, `ERR`) y estado de la config cargada.
 
-### 4.3 Cómo abrir el Harness
+### 4.3 Cómo abrir el SynapseSimulator
 
 ```
-chrome-extension://<extension_id>/harness/index.html
+chrome-extension://<extension_id>/synapse-simulator/index.html
 ```
 
 Prerrequisitos: extensión en modo developer, `bloom-host` corriendo (log de `background.js` con `HANDSHAKE COMPLETADO`), perfil existente. **Nota:** dado §0.2, ya no se puede asumir que esto requiera haber seedeado con `--dev` — confirmar contra el comportamiento real antes de documentar esto como prerrequisito estricto.
 
-Dev Tools del Harness: `chrome://extensions` → la extensión → **Inspect views** → `harness/index.html`.
+Dev Tools del SynapseSimulator: `chrome://extensions` → la extensión → **Inspect views** → `synapse-simulator/index.html`.
 
-### 4.4 `ProtocolReader` — el motor del Harness (código real)
+### 4.4 `ProtocolReader` — el motor del SynapseSimulator (código real)
 
 ```javascript
 const ProtocolReader = {
   manifests: [],
   discover() {
-    const candidates = ['DISCOVERY_PROTOCOL_MANIFEST', 'LANDING_PROTOCOL_MANIFEST', 'HARNESS_PROTOCOL_MANIFEST'];
+    const candidates = ['DISCOVERY_PROTOCOL_MANIFEST', 'LANDING_PROTOCOL_MANIFEST', 'SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST'];
     this.manifests = [];
     for (const key of candidates) {
       const manifest = (typeof self !== 'undefined' && self[key]) || (typeof window !== 'undefined' && window[key]);
@@ -215,29 +215,29 @@ El diseño documentado en ambas fuentes anteriores (diferenciar `tabs` con `chro
 ```javascript
 document.addEventListener('DOMContentLoaded', async () => {
   // Siempre presentes (según comentario del código — revisar a la luz de §0.2)
-  await loadScriptOptional('../harness.synapse.config.js');
+  await loadScriptOptional('../synapse-simulator.synapse.config.js');
   await loadScriptOptional('../discovery.synapse.config.js');
   await loadScriptOptional('../discovery/discoveryProtocol.js');
-  await loadScriptOptional('harnessProtocol.js');        // ← local, mismo directorio que index.html
+  await loadScriptOptional('synapseSimulatorProtocol.js');        // ← local, mismo directorio que index.html
 
   // Solo existen post-onboarding
   await loadScriptOptional('../landing.synapse.config.js');
   await loadScriptOptional('../landing/landingProtocol.js');
 
-  Harness.init();
+  SynapseSimulator.init();
 });
 ```
 
-`loadScriptOptional()` nunca lanza error ante un 404 — resuelve la promesa igual y el Harness arranca con lo que haya disponible. Esto es lo que permite que protocolos opcionales (`landing`) no rompan el boot cuando no existen.
+`loadScriptOptional()` nunca lanza error ante un 404 — resuelve la promesa igual y el SynapseSimulator arranca con lo que haya disponible. Esto es lo que permite que protocolos opcionales (`landing`) no rompan el boot cuando no existen.
 
-**Nota de coherencia interna del código:** el comentario "Siempre presentes desde seed --dev" en este boot asume el modelo viejo (Harness exclusivo de `--dev`). Con `harness_generator.py` desplegando siempre, ese comentario quedó desactualizado respecto al propio código que lo acompaña — deuda de documentación in-code, no solo de los SOT (§18.4).
+**Nota de coherencia interna del código:** el comentario "Siempre presentes desde seed --dev" en este boot asume el modelo viejo (SynapseSimulator exclusivo de `--dev`). Con `synapse_simulator_generator.py` desplegando siempre, ese comentario quedó desactualizado respecto al propio código que lo acompaña — deuda de documentación in-code, no solo de los SOT (§18.4).
 
 ### 4.7 El manifest autodescriptivo — formato (adoptado: array único)
 
 ```javascript
-self.HARNESS_PROTOCOL_MANIFEST = {
+self.SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST = {
   version: "1.0.0",
-  protocol: "harness",
+  protocol: "synapse-simulator",
   description: "Web automation runtime — ion site control",
   messages: [
     {
@@ -261,14 +261,14 @@ self.HARNESS_PROTOCOL_MANIFEST = {
 
 Tipos de parámetro: `auto` (se resuelve solo, invisible), `string` (campo editable), `enum` (dropdown). Tipos de canal: `runtime` → `chrome.runtime.sendMessage`; `tabs` → diseñado para `chrome.tabs.sendMessage`, no implementado hoy (§4.5).
 
-### 4.8 Lo que el Harness hace y lo que no hace
+### 4.8 Lo que el SynapseSimulator hace y lo que no hace
 
 | Hace | No hace |
 |---|---|
 | Observa mensajes `chrome.runtime` pasivamente | Abre su propio Native Messaging port |
 | Genera UI dinámica desde manifests | Tiene tabla de mensajes hardcodeada |
 | Despacha vía `chrome.runtime.sendMessage` | Despacha vía `chrome.tabs.sendMessage` (modelado, no implementado) |
-| Lee `SYNAPSE_CONFIG`/`HARNESS_CONFIG` para resolver `auto` | Modifica el estado de iones |
+| Lee `SYNAPSE_CONFIG`/`SYNAPSE_SIMULATOR_CONFIG` para resolver `auto` | Modifica el estado de iones |
 | Se actualiza con re-seed `--dev` | Requiere rebuild de Cortex para actualizarse |
 
 ### 4.9 `manifest.json` — `web_accessible_resources`
@@ -279,11 +279,11 @@ Tipos de parámetro: `auto` (se resuelve solo, invisible), `string` (campo edita
     {
       "matches": ["github.com"],
       "resources": [
-        "harness/index.html",
-        "harness/harness.js",
-        "harness/harnessProtocol.js",
-        "harness.synapse.config.js",
-        "discovery/harnessProtocol.js"
+        "synapse-simulator/index.html",
+        "synapse-simulator/synapse-simulator.js",
+        "synapse-simulator/synapseSimulatorProtocol.js",
+        "synapse-simulator.synapse.config.js",
+        "discovery/synapseSimulatorProtocol.js"
       ]
     }
   ]
@@ -492,11 +492,11 @@ brain ionpump test github.com bootstrap [--dry-run]
 
 ## 6. Manifests de protocolo — `DISCOVERY_PROTOCOL_MANIFEST`
 
-5 mensajes del milestone GitHub, agregados al final de `discoveryProtocol.js`: `onboarding_navigate` (command, enum `step`), `github_token_stored` (event, string + 2 auto), `account_registered` (event, 2 auto), `host_ready` (command, sin parámetros), `discovery_complete` (event, 2 auto). Todos `channel: "runtime"`, dirección `harness_to_background`. `observable_events`: `HANDSHAKE_CONFIRMED`, `API_KEY_REGISTERED`, `ACCOUNT_REGISTERED`, `DISCOVERY_COMPLETE`, `GITHUB_TOKEN_STORED`.
+5 mensajes del milestone GitHub, agregados al final de `discoveryProtocol.js`: `onboarding_navigate` (command, enum `step`), `github_token_stored` (event, string + 2 auto), `account_registered` (event, 2 auto), `host_ready` (command, sin parámetros), `discovery_complete` (event, 2 auto). Todos `channel: "runtime"`, dirección `synapse_simulator_to_background`. `observable_events`: `HANDSHAKE_CONFIRMED`, `API_KEY_REGISTERED`, `ACCOUNT_REGISTERED`, `DISCOVERY_COMPLETE`, `GITHUB_TOKEN_STORED`.
 
 > **Cambio respecto a v2:** el mensaje `github_pat_detected` (evento que transportaba el string crudo del token) se elimina del manifest. Correspondía al handler `GITHUB_PAT_DETECTED` de `background.js` que reenviaba al host cualquier string con formato de token sin verificar su origen — eliminado en la revisión de seguridad (§0.3). El único evento de este flujo que sigue existiendo es `github_token_stored`, emitido después de que el Device Flow completó su polling autorizado; no transporta el token crudo, solo confirmación + fingerprint.
 
-**Agregar un sitio nuevo a IonPump (ej. `perplexity.ai`):** crear `ionsites/perplexity.ai/{message.ion, ion.manifest.json}` (IonPumpManager lo detecta por hot-reload); agregar el dominio a `matches` del content script si falta; agregar `perplexity.ai` a `options` del parámetro `site` en `HARNESS_PROTOCOL_MANIFEST`. **El Harness no se toca** — `ProtocolReader` refleja el cambio automáticamente en runtime.
+**Agregar un sitio nuevo a IonPump (ej. `perplexity.ai`):** crear `ionsites/perplexity.ai/{message.ion, ion.manifest.json}` (IonPumpManager lo detecta por hot-reload); agregar el dominio a `matches` del content script si falta; agregar `perplexity.ai` a `options` del parámetro `site` en `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST`. **El SynapseSimulator no se toca** — `ProtocolReader` refleja el cambio automáticamente en runtime.
 
 ---
 
@@ -508,8 +508,8 @@ brain ionpump test github.com bootstrap [--dry-run]
 sentinel seed <alias> <master> --dev
   ├── 1. Extrae .blx → bin/extension/ (temporal)
   ├── 2. Llama: brain profile create <alias> --dev
-  │       └── discovery_generator.py: copia discoveryProtocol.js, harnessProtocol.js
-  │       └── harness_generator.py: copia index.html, harness.js, harnessProtocol.js
+  │       └── discovery_generator.py: copia discoveryProtocol.js, synapseSimulatorProtocol.js
+  │       └── synapse_simulator_generator.py: copia index.html, synapse-simulator.js, synapseSimulatorProtocol.js
   │           ⚠️ esto ocurre SIEMPRE — el flag --dev ya no lo condiciona (§0.2)
   └── 3. bin/extension/ se borra (Sentinel)
 ```
@@ -520,11 +520,11 @@ sentinel seed <alias> <master> --dev
 sentinel launch <alias>
   └── ignition_identity.go::prepareSessionFiles()
         ├── writeDiscoveryConfig() / writeLandingConfig()  ← existentes
-        └── writeHarnessConfig()                            ← solo si harness/index.html existe
-              escribe harness.synapse.config.js con profileId, launchId, profileAlias, generatedAt
+        └── writeSynapseSimulatorConfig()                            ← solo si synapse-simulator/index.html existe
+              escribe synapse-simulator.synapse.config.js con profileId, launchId, profileAlias, generatedAt
 ```
 
-`harness.synapse.config.js` se escribe en **launch**, no en seed (en seed aún no existe `launch_id`). El guard `if harness/index.html no existe → no-op` fue diseñado como el mecanismo real de "es dev o no". **Dado que `harness_generator.py` ya despliega `index.html` siempre, este guard prácticamente ya no filtra nada** — ver §18.2 para la pregunta abierta sobre si esto es intencional.
+`synapse-simulator.synapse.config.js` se escribe en **launch**, no en seed (en seed aún no existe `launch_id`). El guard `if synapse-simulator/index.html no existe → no-op` fue diseñado como el mecanismo real de "es dev o no". **Dado que `synapse_simulator_generator.py` ya despliega `index.html` siempre, este guard prácticamente ya no filtra nada** — ver §18.2 para la pregunta abierta sobre si esto es intencional.
 
 ### 7.3 Re-seed como actualización
 
@@ -532,25 +532,25 @@ sentinel launch <alias>
 sentinel seed <alias> <master> --dev
 ```
 
-Sobrescribe los assets del Harness. No requiere reinstalar Cortex ni empaquetar un nuevo `.blx`.
+Sobrescribe los assets del SynapseSimulator. No requiere reinstalar Cortex ni empaquetar un nuevo `.blx`.
 
 ---
 
 ## 8. Implementación — Brain
 
-Ver §5.7 para la estructura de módulos de IonPump y §4.1 para el código real y verificado de `harness_generator.py`. Modificación en `profile_create.py`:
+Ver §5.7 para la estructura de módulos de IonPump y §4.1 para el código real y verificado de `synapse_simulator_generator.py`. Modificación en `profile_create.py`:
 
 ```python
 def _generate_profile_pages(self, profile_id, profile_name, dev_mode=False):
-    from brain.core.profile.web.harness_generator import generate_harness_page
-    generate_harness_page(extension_dir, profile_data, dev_mode=dev_mode)
+    from brain.core.profile.web.synapse_simulator_generator import generate_synapse_simulator_page
+    generate_synapse_simulator_page(extension_dir, profile_data, dev_mode=dev_mode)
 ```
 
 `discovery_generator.py` — agregar a `files_to_copy`:
 ```python
 files_to_copy = [
     "index.html", "discovery.js", "script.js", "discoveryProtocol.js",
-    "harnessProtocol.js",  # copia para el contexto de discovery
+    "synapseSimulatorProtocol.js",  # copia para el contexto de discovery
     "onboarding.js", "styles.css",
 ]
 ```
@@ -563,7 +563,7 @@ files_to_copy = [
 
 ## 9. Implementación — Cortex
 
-Reglas de qué NO se toca: `discovery.js`, `content.js`, `background.js` (salvo fix de URL pendiente), `discoveryProtocol.js` excepto agregar el manifest al final. No abrir un segundo `chrome.runtime.connectNative()` en el Harness. No agregar lógica de negocio al Harness. Ver §4.9 para `web_accessible_resources`.
+Reglas de qué NO se toca: `discovery.js`, `content.js`, `background.js` (salvo fix de URL pendiente), `discoveryProtocol.js` excepto agregar el manifest al final. No abrir un segundo `chrome.runtime.connectNative()` en el SynapseSimulator. No agregar lógica de negocio al SynapseSimulator. Ver §4.9 para `web_accessible_resources`.
 
 ---
 
@@ -577,21 +577,21 @@ if devMode { args = append(args, "--dev") }
 ```
 
 ```go
-// ignition_identity.go — writeHarnessConfig() en launch
-func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) error {
-    harnessPage := filepath.Join(extensionDir, "harness", "index.html")
-    if _, err := os.Stat(harnessPage); os.IsNotExist(err) {
+// ignition_identity.go — writeSynapseSimulatorConfig() en launch
+func writeSynapseSimulatorConfig(profileID, launchID, profileAlias, extensionDir string) error {
+    synapseSimulatorPage := filepath.Join(extensionDir, "synapse-simulator", "index.html")
+    if _, err := os.Stat(synapseSimulatorPage); os.IsNotExist(err) {
         return nil  // diseñado como guard de "solo en dev" — ya no es confiable como tal, ver §18.2
     }
-    config := fmt.Sprintf(`self.HARNESS_CONFIG = { profileId: %q, launchId: %q, profileAlias: %q, generatedAt: %q };`,
+    config := fmt.Sprintf(`self.SYNAPSE_SIMULATOR_CONFIG = { profileId: %q, launchId: %q, profileAlias: %q, generatedAt: %q };`,
         profileID, launchID, profileAlias, time.Now().UTC().Format(time.RFC3339))
-    return os.WriteFile(filepath.Join(extensionDir, "harness.synapse.config.js"), []byte(config), 0644)
+    return os.WriteFile(filepath.Join(extensionDir, "synapse-simulator.synapse.config.js"), []byte(config), 0644)
 }
 ```
 
-Llamada no fatal: si falla, se loguea warning y el Harness simplemente no tiene config.
+Llamada no fatal: si falla, se loguea warning y el SynapseSimulator simplemente no tiene config.
 
-**Lo que Sentinel NO hace:** no implementa `copyHarnessPage()` ni `copyIonPumpProtocol()` en seed (eso es de Brain); no escribe en `extensionDir` después de invocar a `brain profile create`.
+**Lo que Sentinel NO hace:** no implementa `copySynapseSimulatorPage()` ni `copyIonPumpProtocol()` en seed (eso es de Brain); no escribe en `extensionDir` después de invocar a `brain profile create`.
 
 ---
 
@@ -657,7 +657,7 @@ Cuando IonPump está activo, `IonPumpManager` corre el flow `bootstrap` de `gith
 
 Verificar en **Config** que `launchId` coincide con la sesión activa → abrir Discovery en otra tab → interactuar normalmente → cada evento que `background.js` procesa aparece en el **Log**.
 
-> **Límite de arquitectura:** el Harness solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener — es un participante más del broadcast, no un tap pasivo sobre el bus. Mensajes que `background.js` consume internamente sin broadcast pueden no aparecer.
+> **Límite de arquitectura:** el SynapseSimulator solo registra mensajes que `chrome.runtime.onMessage` entrega a su propio listener — es un participante más del broadcast, no un tap pasivo sobre el bus. Mensajes que `background.js` consume internamente sin broadcast pueden no aparecer.
 
 ### 12.3 Caso B — Simular un evento puntual
 
@@ -671,8 +671,8 @@ Secuencia con ACK entre cada uno: `onboarding_navigate(github_auth)` → `github
 
 | Síntoma | Dónde mirar | Qué buscar |
 |---|---|---|
-| Harness no carga protocolos | Dev Tools del Harness → Console | `[ProtocolReader] Loaded 0 protocol(s)` |
-| Dispatch sin ACK | Log del Harness | `ERR: chrome.runtime.lastError` |
+| SynapseSimulator no carga protocolos | Dev Tools del SynapseSimulator → Console | `[ProtocolReader] Loaded 0 protocol(s)` |
+| Dispatch sin ACK | Log del SynapseSimulator | `ERR: chrome.runtime.lastError` |
 | Discovery no avanza | Dev Tools de `background.js` | Handler del evento, errores de validación |
 | Handshake no completa | Dev Tools de `background.js` | logs `[HANDSHAKE]`, `host_ready` recibido o no |
 | Token no se almacena | Dev Tools de `background.js` | logs de Chrome Storage / Vault |
@@ -683,7 +683,7 @@ Dev Tools de `background.js`: `chrome://extensions` → la extensión → **Insp
 
 ## 13. Estado conocido al momento de esta fusión
 
-Ninguno de los dos documentos previos refleja el estado real verificado en esta sesión. El snapshot operativo que traía `HARNESS_SOURCE_OF_TRUTH.md` (perfil de referencia, launchId, "`--dev` pendiente de implementación formal") es **anterior** al código aportado acá y queda superado — el código ya no depende de ese flag para decidir si despliega el Harness. No se reconstruye un nuevo snapshot de estado porque no hay evidencia de primera mano sobre el perfil/launch activos en este momento; cualquier snapshot futuro debería generarse contra el sistema corriendo, no copiarse de este documento.
+Ninguno de los dos documentos previos refleja el estado real verificado en esta sesión. El snapshot operativo que traía `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md` (perfil de referencia, launchId, "`--dev` pendiente de implementación formal") es **anterior** al código aportado acá y queda superado — el código ya no depende de ese flag para decidir si despliega el SynapseSimulator. No se reconstruye un nuevo snapshot de estado porque no hay evidencia de primera mano sobre el perfil/launch activos en este momento; cualquier snapshot futuro debería generarse contra el sistema corriendo, no copiarse de este documento.
 
 ---
 
@@ -691,8 +691,8 @@ Ninguno de los dos documentos previos refleja el estado real verificado en esta 
 
 **Nuevos:**
 ```
-brain/core/profile/web/templates/harness/{index.html, harness.js, harnessProtocol.js}
-brain/core/profile/web/harness_generator.py
+brain/core/profile/web/templates/synapse-simulator/{index.html, synapse-simulator.js, synapseSimulatorProtocol.js}
+brain/core/profile/web/synapse_simulator_generator.py
 brain/core/ionpump/{ionpump_manager,ionpump_loader,ionpump_registry,ionpump_executor,ionpump_state,ionpump_models,ionpump_validator,ionpump_ipc}.py
 brain/core/synapse/synapse_ipc_server.py
 brain/commands/ionpump/{ionpump_inspect,ionpump_validate,ionpump_reload,ionpump_test}.py
@@ -702,13 +702,13 @@ installer/metamorph/internal/inspection/ionrecipes.go
 
 **Modificados:**
 ```
-brain/core/profile/web/templates/discovery/{discoveryProtocol.js (+manifest al final), harnessProtocol.js (nuevo)}
-brain/core/profile/web/discovery_generator.py        ← agrega harnessProtocol.js a files_to_copy
-brain/core/profile/profile_create.py                  ← agrega llamada a generate_harness_page
+brain/core/profile/web/templates/discovery/{discoveryProtocol.js (+manifest al final), synapseSimulatorProtocol.js (nuevo)}
+brain/core/profile/web/discovery_generator.py        ← agrega synapseSimulatorProtocol.js a files_to_copy
+brain/core/profile/profile_create.py                  ← agrega llamada a generate_synapse_simulator_page
 brain/core/synapse/synapse_manager.py                  ← lanza SynapseIPCServer en thread, agrega handlers DOM
 sentinel/internal/seed/seed.go                         ← agrega flag --dev
-sentinel/internal/ignition/ignition_identity.go        ← agrega writeHarnessConfig()
-extension/manifest.json                                ← agrega harness/*, harness.synapse.config.js, discovery/harnessProtocol.js
+sentinel/internal/ignition/ignition_identity.go        ← agrega writeSynapseSimulatorConfig()
+extension/manifest.json                                ← agrega synapse-simulator/*, synapse-simulator.synapse.config.js, discovery/synapseSimulatorProtocol.js
 installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo, flag --ion-recipes
 ```
 
@@ -718,11 +718,11 @@ installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo
 
 ## 15. Checklist de implementación por componente
 
-**Brain:** `ionpump_models.py` con dataclasses completas · `ionpump_registry.py` con invariantes · `ionpump_loader.py` crea `ionsites/` si no existe (no error) · `ionpump_validator.py` retorna `ValidationResult`, no lanza excepciones · `ionpump_executor.py` es async generator puro, no envía · `ionpump_ipc.py` con error claro si falta el port file · `synapse_ipc_server.py` solo en 127.0.0.1, port file borrado en `try/finally` · `ionpump_manager.py` singleton · `harness_generator.py` — **verificar con el equipo si el deploy incondicional (§0.2) es la conducta deseada o hay que reintroducir el gate de `dev_mode`** · `discovery_generator.py` con `harnessProtocol.js` en `files_to_copy` · scan de manifests al arrancar no bloquea el start de Brain.
+**Brain:** `ionpump_models.py` con dataclasses completas · `ionpump_registry.py` con invariantes · `ionpump_loader.py` crea `ionsites/` si no existe (no error) · `ionpump_validator.py` retorna `ValidationResult`, no lanza excepciones · `ionpump_executor.py` es async generator puro, no envía · `ionpump_ipc.py` con error claro si falta el port file · `synapse_ipc_server.py` solo en 127.0.0.1, port file borrado en `try/finally` · `ionpump_manager.py` singleton · `synapse_simulator_generator.py` — **verificar con el equipo si el deploy incondicional (§0.2) es la conducta deseada o hay que reintroducir el gate de `dev_mode`** · `discovery_generator.py` con `synapseSimulatorProtocol.js` en `files_to_copy` · scan de manifests al arrancar no bloquea el start de Brain.
 
-**Cortex:** `DISCOVERY_PROTOCOL_MANIFEST` al final de `discoveryProtocol.js`, 6 mensajes del milestone · `harnessProtocol.js` en `templates/discovery/` · `manifest.json` con los recursos de §4.9 · `harness/index.html` con `ProtocolReader` y UI dinámica, sin JS inline · boot async con `loadScriptOptional()` · **implementar el dispatcher de canal `tabs` en `Simulator.send()`, hoy ausente (§4.5, §18.1)**.
+**Cortex:** `DISCOVERY_PROTOCOL_MANIFEST` al final de `discoveryProtocol.js`, 6 mensajes del milestone · `synapseSimulatorProtocol.js` en `templates/discovery/` · `manifest.json` con los recursos de §4.9 · `synapse-simulator/index.html` con `ProtocolReader` y UI dinámica, sin JS inline · boot async con `loadScriptOptional()` · **implementar el dispatcher de canal `tabs` en `Simulator.send()`, hoy ausente (§4.5, §18.1)**.
 
-**Sentinel:** flag `--dev` en `seed.go` · `writeHarnessConfig()` en launch, no en seed · no fatal si falla · sin `copyHarnessPage()` ni `copyIonPumpProtocol()` en seed.go.
+**Sentinel:** flag `--dev` en `seed.go` · `writeSynapseSimulatorConfig()` en launch, no en seed · no fatal si falla · sin `copySynapseSimulatorPage()` ni `copyIonPumpProtocol()` en seed.go.
 
 **Metamorph:** `IonRecipeInfo`/`IonRecipesResult` en `types.go` · `ionrecipes.go` con `InspectIonRecipe`/`InspectAllIonRecipes` · flag `--ion-recipes` · 0 recipes sin error si `ionsites/` vacío · reconciliación marcada BLOCKED hasta Bartcave.
 
@@ -730,11 +730,11 @@ installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo
 
 ## 16. Restricciones absolutas
 
-**Harness:** (1) no define contratos de mensajes, los lee · (2) no abre `chrome.runtime.connectNative()` · (3) no habla directamente con bloom-host · (4) ~~no existe en prod, `harness_generator.py` es no-op cuando `dev_mode=False`~~ — **falso en el código actual, ver §0.2** · (5) no modifica el estado de iones, solo observa y simula.
+**SynapseSimulator:** (1) no define contratos de mensajes, los lee · (2) no abre `chrome.runtime.connectNative()` · (3) no habla directamente con bloom-host · (4) ~~no existe en prod, `synapse_simulator_generator.py` es no-op cuando `dev_mode=False`~~ — **falso en el código actual, ver §0.2** · (5) no modifica el estado de iones, solo observa y simula.
 
 **IonPump:** (6) no es CLI de usuario, es runtime interno · (7) no hace eager loading, lazy only · (8) no modifica el protocolo Synapse · (9) no modifica `content.js` · (10) no hace llamadas de red, recipes locales · (11) no escribe en `ionsites/` · (12) no llama directo a `SynapseManager`, usa IPC · (13) no existe `send_command()` en `SynapseManager`, IPC es el único canal para envíos proactivos.
 
-**Manifests:** (14) cada protocolo exporta su manifest como adición al final del archivo · (15) IDs únicos dentro del protocolo · (16) parámetros `auto` invisibles al developer · (17) `SynapseIPCServer` solo en `127.0.0.1` · (18) Brain es el único escritor del `extensionDir` · (19) `harness.synapse.config.js` se escribe en launch, no en seed.
+**Manifests:** (14) cada protocolo exporta su manifest como adición al final del archivo · (15) IDs únicos dentro del protocolo · (16) parámetros `auto` invisibles al developer · (17) `SynapseIPCServer` solo en `127.0.0.1` · (18) Brain es el único escritor del `extensionDir` · (19) `synapse-simulator.synapse.config.js` se escribe en launch, no en seed.
 
 ---
 
@@ -755,23 +755,23 @@ installer/metamorph/internal/inspection/{types.go, inspect.go} ← IonRecipeInfo
 
 ### 18.1 Canal `tabs` no implementado en el dispatcher real — ALTA PRIORIDAD
 
-Ambos documentos fuente y el propio manifest modelan `channel: "tabs"` como un mecanismo de primera clase, pero `Simulator.send()` real solo maneja `runtime`. Si `HARNESS_PROTOCOL_MANIFEST` incluye mensajes `tabs` (razonable, dado que las acciones DOM de IonPump ocurren en una tab), hoy esos mensajes no se pueden simular desde el Harness — caen en `Unknown channel`. Implementar el branch faltante (`chrome.tabs.sendMessage` + selector de tab activo) o, si se decidió deprioritizar `tabs` para esta fase, dejarlo documentado explícitamente en vez de tácito.
+Ambos documentos fuente y el propio manifest modelan `channel: "tabs"` como un mecanismo de primera clase, pero `Simulator.send()` real solo maneja `runtime`. Si `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` incluye mensajes `tabs` (razonable, dado que las acciones DOM de IonPump ocurren en una tab), hoy esos mensajes no se pueden simular desde el SynapseSimulator — caen en `Unknown channel`. Implementar el branch faltante (`chrome.tabs.sendMessage` + selector de tab activo) o, si se decidió deprioritizar `tabs` para esta fase, dejarlo documentado explícitamente en vez de tácito.
 
-### 18.2 Deploy incondicional del Harness — requiere decisión del equipo, no solo documentación
+### 18.2 Deploy incondicional del SynapseSimulator — requiere decisión del equipo, no solo documentación
 
-`harness_generator.py` ya no respeta `dev_mode`. Antes de seguir construyendo sobre este documento, alguien con visibilidad del repo actual debería confirmar: ¿es intencional que el Harness (y por viabilidad, `harness.synapse.config.js` con `profileId`/`launchId` reales) se despliegue en perfiles de producción? Si no lo es, es una regresión a corregir. Si lo es, hay que actualizar el principio "dev/prod por construcción" en este mismo documento y evaluar si corresponde ocultar la entrada en el menú de extensión o restringir el acceso a la URL en prod por otra vía.
+`synapse_simulator_generator.py` ya no respeta `dev_mode`. Antes de seguir construyendo sobre este documento, alguien con visibilidad del repo actual debería confirmar: ¿es intencional que el SynapseSimulator (y por viabilidad, `synapse-simulator.synapse.config.js` con `profileId`/`launchId` reales) se despliegue en perfiles de producción? Si no lo es, es una regresión a corregir. Si lo es, hay que actualizar el principio "dev/prod por construcción" en este mismo documento y evaluar si corresponde ocultar la entrada en el menú de extensión o restringir el acceso a la URL en prod por otra vía.
 
-### 18.3 `ion.manifest.json` en `extension/harness/` — resuelto, no aplica
+### 18.3 `ion.manifest.json` en `extension/synapse-simulator/` — resuelto, no aplica
 
-La pregunta abierta que `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md` dejaba pendiente sobre este archivo queda cerrada: el `harness_generator.py` real no lo copia. Si en algún momento se necesita, hay que agregarlo explícitamente a `files_to_copy`.
+La pregunta abierta que `SYNAPSE_SIMULATOR_IONPUMP_SOURCE_OF_TRUTH.md` dejaba pendiente sobre este archivo queda cerrada: el `synapse_simulator_generator.py` real no lo copia. Si en algún momento se necesita, hay que agregarlo explícitamente a `files_to_copy`.
 
-### 18.4 Comentario desactualizado en `harness.js`
+### 18.4 Comentario desactualizado en `synapse-simulator.js`
 
 La línea de boot que dice "Siempre presentes desde seed --dev" asume el modelo viejo. Corregir el comentario para que no induzca a pensar que esos archivos dependen de `--dev`, dado §0.2.
 
-### 18.5 Copia de `harnessProtocol.js` en `discovery/` — no verificado en esta sesión
+### 18.5 Copia de `synapseSimulatorProtocol.js` en `discovery/` — no verificado en esta sesión
 
-Se confirmó la copia local en `harness/`. No se aportó código de `discovery_generator.py` en esta sesión, así que no se puede confirmar si también copia su propia versión a `extension/discovery/` o si depende de algún otro mecanismo. No asumir — confirmar leyendo `discovery_generator.py` real antes de tocar esa ruta.
+Se confirmó la copia local en `synapse-simulator/`. No se aportó código de `discovery_generator.py` en esta sesión, así que no se puede confirmar si también copia su propia versión a `extension/discovery/` o si depende de algún otro mecanismo. No asumir — confirmar leyendo `discovery_generator.py` real antes de tocar esa ruta.
 
 ### 18.6 Heredadas de las fuentes anteriores, aún sin resolver
 
@@ -788,11 +788,11 @@ Se confirmó la copia local en `harness/`. No se aportó código de `discovery_g
 ## 19. Orden de implementación recomendado
 
 ```
-Semana 1 — Fundaciones Harness
+Semana 1 — Fundaciones SynapseSimulator
   1. DISCOVERY_PROTOCOL_MANIFEST en discoveryProtocol.js (6 mensajes GitHub)
-  2. Confirmar con el equipo el comportamiento de dev_mode en harness_generator.py (§18.2) antes de seguir
+  2. Confirmar con el equipo el comportamiento de dev_mode en synapse_simulator_generator.py (§18.2) antes de seguir
   3. Flag --dev en seed.go + paso a brain profile create
-  4. writeHarnessConfig() en ignition_identity.go (launch, no seed)
+  4. writeSynapseSimulatorConfig() en ignition_identity.go (launch, no seed)
 
 Semana 2 — IonPump Core
   5. ionpump_models.py, ionpump_registry.py, ionpump_loader.py (sin watchdog)
@@ -802,14 +802,14 @@ Semana 3 — IonPump IPC + Ejecución
   7. synapse_ipc_server.py + modificación de SynapseManager
   8. ionpump_ipc.py (IonPumpIPCClient)
   9. ionpump_executor.py (async generator) + ionpump_manager.py
-  10. Implementar el branch channel: "tabs" en Simulator.send() del Harness (§18.1)
+  10. Implementar el branch channel: "tabs" en Simulator.send() del SynapseSimulator (§18.1)
   11. manifest.json de Cortex actualizado (web_accessible_resources)
 
 Semana 4 — Hot-reload + Metamorph + Validación end-to-end
   12. Watchdog en ionpump_loader.py (confirmar dependencia declarada primero)
   13. ionpump_validator.py
   14. ionrecipes.go en Metamorph (--ion-recipes)
-  15. Test completo del flujo GitHub con Harness (Casos A/B/C de §12)
+  15. Test completo del flujo GitHub con SynapseSimulator (Casos A/B/C de §12)
 
 Fase siguiente (no bloquea milestone GitHub)
   16. Integración con IntentExecutor (confirmar dispatcher real primero)
@@ -867,7 +867,7 @@ A diferencia de las páginas de credenciales, las páginas de chat de un AI prov
 
 **1. Gatillo por Intent, nunca espontáneo.** Ninguna acción de escritura (`DOM_TYPE`, `DOM_CLICK`) ni de lectura extensiva (`DOM_EXTRACT` sobre el historial completo de una conversación) sobre un AI provider puede dispararse por `on_load`, por un watcher pasivo, o por cualquier trigger que no sea la ejecución directa de un Intent iniciado por el usuario o por el pipeline de razonamiento ya autorizado. Mismo principio que `session_guard.ion`: observar pasivamente está bien, actuar sin que un Intent lo pidió no.
 
-**2. Transparencia de lectura — y exclusividad del canal.** Todo dato extraído de una conversación de IA por un Ion se emite al Event Bus local (Synapse), visible en el Conductor/Harness. Esto no es solo "hay que emitirlo ahí" — es que **ese es el único destino permitido**. Un Ion no tiene capability de red saliente propia ni un segundo canal de emisión; si `IonExecutor` no lo traduce a un `SynapseCommand` dirigido al bus, no sale. Esta exclusividad es la que impide reconstruir, con otro nombre, el patrón del monitor de clipboard que reenviaba secretos a un endpoint paralelo mientras "también" notificaba al usuario. En otras palabras: no hay invasión porque no hay secreto — pero eso solo es cierto mientras el Event Bus siga siendo el *único* espejo, no *uno de varios*.
+**2. Transparencia de lectura — y exclusividad del canal.** Todo dato extraído de una conversación de IA por un Ion se emite al Event Bus local (Synapse), visible en el Conductor/SynapseSimulator. Esto no es solo "hay que emitirlo ahí" — es que **ese es el único destino permitido**. Un Ion no tiene capability de red saliente propia ni un segundo canal de emisión; si `IonExecutor` no lo traduce a un `SynapseCommand` dirigido al bus, no sale. Esta exclusividad es la que impide reconstruir, con otro nombre, el patrón del monitor de clipboard que reenviaba secretos a un endpoint paralelo mientras "también" notificaba al usuario. En otras palabras: no hay invasión porque no hay secreto — pero eso solo es cierto mientras el Event Bus siga siendo el *único* espejo, no *uno de varios*.
 
 **3. Aislamiento de propósito — Companion e IonPump no se tocan entre sí.** IonPump ejecuta tareas (Intents); Companion da contexto pasivo (§2.3). Aunque ambos puedan operar sobre la misma página de AI provider, ninguno de los dos invoca ni modifica el estado del otro: IonPump no escribe en el webview de Companion, Companion no dispara `ION_EXECUTE_FLOW` ni comandos DOM de IonPump. Esta separación ya está fijada para Companion (§2.3, cierre de la subsección); acá se declara la contraparte simétrica para IonPump.
 
@@ -887,4 +887,4 @@ Hasta que las tres existan, el invariante vigente sigue siendo el de §7: **solo
 
 ---
 
-*Documento fusionado originalmente el 17 de junio de 2026 (v2) a partir de `HARNESS_SOURCE_OF_TRUTH.md`, `HARNESS_IONPUMP_SOURCE_OF_TRUTH.md`, y el código real de `harness_generator.py` y `harness.js`. Revisado el 8 de julio de 2026 (v3) para incorporar los hallazgos de una auditoría de seguridad de la extensión (`CLEANUP_NOTES.md`) que eliminó mecanismos de scraping de credenciales y monitoreo de clipboard que la v2 documentaba como arquitectura vigente — ver §0.3 y §21. Extendido el mismo 8 de julio (v3, misma versión) con el framework de "Superficie de Interacción vs. Superficie de Credenciales" (§5.1, §21.5) para la ampliación planeada de IonPump hacia sitios de AI providers (Claude, ChatGPT, Grok). Los documentos fuente v1/v2 quedan archivados — no usar como fuente de verdad para nuevas decisiones. Las secciones marcadas con ⚠️ en §0.2, §18.1 y §18.2, y el punto 6 de §21.5 (superficie de terceros), requieren una decisión humana, no son inferencias a resolver por este documento.*
+*Documento fusionado originalmente el 17 de junio de 2026 (v2) a partir de `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md`, `SYNAPSE_SIMULATOR_IONPUMP_SOURCE_OF_TRUTH.md`, y el código real de `synapse_simulator_generator.py` y `synapse-simulator.js`. Revisado el 8 de julio de 2026 (v3) para incorporar los hallazgos de una auditoría de seguridad de la extensión (`CLEANUP_NOTES.md`) que eliminó mecanismos de scraping de credenciales y monitoreo de clipboard que la v2 documentaba como arquitectura vigente — ver §0.3 y §21. Extendido el mismo 8 de julio (v3, misma versión) con el framework de "Superficie de Interacción vs. Superficie de Credenciales" (§5.1, §21.5) para la ampliación planeada de IonPump hacia sitios de AI providers (Claude, ChatGPT, Grok). Los documentos fuente v1/v2 quedan archivados — no usar como fuente de verdad para nuevas decisiones. Las secciones marcadas con ⚠️ en §0.2, §18.1 y §18.2, y el punto 6 de §21.5 (superficie de terceros), requieren una decisión humana, no son inferencias a resolver por este documento.*

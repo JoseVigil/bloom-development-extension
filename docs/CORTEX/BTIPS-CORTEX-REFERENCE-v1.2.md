@@ -22,8 +22,8 @@
 10. [Slave Mode — Control de UI](#10-slave-mode--control-de-ui)
 11. [Clipboard Monitor — Detección de API Keys](#11-clipboard-monitor--detección-de-api-keys)
 12. [IonPump — Automatización web desde Cortex](#12-ionpump--automatización-web-desde-cortex)
-13. [Harness — Debugging y desarrollo](#13-harness--debugging-y-desarrollo)
-14. [Harness Protocol SSoT y registerHandler](#14-harness-protocol-ssot-y-registerhandler)
+13. [SynapseSimulator — Debugging y desarrollo](#13-synapse-simulator--debugging-y-desarrollo)
+14. [SynapseSimulator Protocol SSoT y registerHandler](#14-synapse-simulator-protocol-ssot-y-registerhandler)
 15. [Manifest de la extensión](#15-manifest-de-la-extensión)
 16. [Generadores de assets estáticos](#16-generadores-de-assets-estáticos)
 17. [Despliegue — Artefacto .blx](#17-despliegue--artefacto-blx)
@@ -100,7 +100,7 @@ extension/
 ├── protocols/
 │   ├── discovery.schema.json        ← Schema SSoT del protocolo Discovery
 │   ├── landing.schema.json          ← Schema SSoT del protocolo Landing
-│   └── harness.schema.json          ← Schema SSoT del protocolo IonPump
+│   └── synapse-simulator.schema.json          ← Schema SSoT del protocolo IonPump
 │
 ├── discovery/
 │   ├── index.html                   ← UI de la página de discovery/onboarding
@@ -119,12 +119,12 @@ extension/
 │   ├── script.js                    ← Helpers de UI
 │   └── styles.css                   ← Estilos de la página
 │
-├── harness/
+├── synapse-simulator/
 │   └── index.html                   ← Herramienta de debug (solo builds dev)
 │
 ├── discovery.synapse.config.js      ← Config de sesión para modo discovery (generado por Sentinel)
 ├── landing.synapse.config.js        ← Config de sesión para modo landing (generado por Sentinel)
-├── harness.synapse.config.js        ← Config de sesión para el Harness (generado por Sentinel, solo builds dev)
+├── synapse-simulator.synapse.config.js        ← Config de sesión para el SynapseSimulator (generado por Sentinel, solo builds dev)
 │
 └── assets/
     ├── icon16.png
@@ -143,7 +143,7 @@ extension/
 | `landing.js` | Ciclo de vida del cockpit, connection checks, command dispatcher |
 | `landingProtocol.js` | Renderizado de dashboard, stats, accounts, actions, manifiesto del protocolo |
 | `*.synapse.config.js` | Contexto de sesión inyectado por Sentinel — profileId, launchId, flags |
-| `protocols/*.schema.json` | Contratos SSoT de mensajes del Harness — fuente canónica de parámetros y defaults |
+| `protocols/*.schema.json` | Contratos SSoT de mensajes del SynapseSimulator — fuente canónica de parámetros y defaults |
 
 ---
 
@@ -877,7 +877,7 @@ IonPump no modifica Cortex. Usa la API existente de comandos DOM. El mapping de 
 
 IonPump usa `chrome.tabs.sendMessage(tabId, ...)` para enviar comandos al content script. Esto es diferente de `chrome.runtime.sendMessage` que usan Discovery y Landing.
 
-**Implicación:** El Harness (herramienta de debug) puede interceptar mensajes `runtime` directamente, pero necesita conocer el `tabId` para interceptar mensajes `tabs`. Ver sección 13 para el mecanismo de Tab-Aware Proxy del Harness.
+**Implicación:** El SynapseSimulator (herramienta de debug) puede interceptar mensajes `runtime` directamente, pero necesita conocer el `tabId` para interceptar mensajes `tabs`. Ver sección 13 para el mecanismo de Tab-Aware Proxy del SynapseSimulator.
 
 ### Agregar soporte para un nuevo sitio
 
@@ -885,25 +885,25 @@ Para agregar `perplexity.ai` u otro sitio:
 
 1. **Brain:** Crear recipe `ionsites/perplexity.ai/message.ion`. IonPump lo detecta por hot-reload del filesystem.
 2. **Cortex:** Si el dominio no está en `content_scripts.matches` del manifest, agregar `"*://perplexity.ai/*"`. Esto requiere re-empaquetar y desplegar el `.blx`.
-3. **Harness:** En `HARNESS_PROTOCOL_MANIFEST`, agregar el dominio al campo `options` del parámetro `site`. El Harness lo refleja automáticamente.
+3. **SynapseSimulator:** En `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST`, agregar el dominio al campo `options` del parámetro `site`. El SynapseSimulator lo refleja automáticamente.
 
 ---
 
-## 13. Harness — Debugging y desarrollo
+## 13. SynapseSimulator — Debugging y desarrollo
 
-El Harness es la herramienta de desarrollo de Cortex. **Solo existe en builds de desarrollo** — en producción, `brain/core/profile/web/harness_generator.py` no se ejecuta y la URL `chrome-extension://{id}/harness/index.html` devuelve 404.
+El SynapseSimulator es la herramienta de desarrollo de Cortex. **Solo existe en builds de desarrollo** — en producción, `brain/core/profile/web/synapse_simulator_generator.py` no se ejecuta y la URL `chrome-extension://{id}/synapse-simulator/index.html` devuelve 404.
 
-### Arquitectura del Harness
+### Arquitectura del SynapseSimulator
 
-El Harness vive en `brain/core/profile/web/templates/harness/index.html` y Brain lo copia durante el seed del perfil. No está en el artefacto `.blx`. Esta separación permite:
+El SynapseSimulator vive en `brain/core/profile/web/templates/synapse-simulator/index.html` y Brain lo copia durante el seed del perfil. No está en el artefacto `.blx`. Esta separación permite:
 
-- Actualizar el Harness con un re-seed sin reempaquetar Cortex.
+- Actualizar el SynapseSimulator con un re-seed sin reempaquetar Cortex.
 - Garantizar que no existe en producción sin flags ni builds separados.
 - Inyectar datos del perfil en el HTML durante el seed.
 
 ### Protocol Reader — autodescubrimiento de protocolos
 
-El principio central del Harness es que **no tiene protocolo propio**. Lee los manifests de protocolo que los propios archivos de Cortex exponen y genera su UI dinámicamente desde ellos.
+El principio central del SynapseSimulator es que **no tiene protocolo propio**. Lee los manifests de protocolo que los propios archivos de Cortex exponen y genera su UI dinámicamente desde ellos.
 
 Cada protocolo expone un objeto `*_PROTOCOL_MANIFEST` en el contexto global:
 
@@ -916,7 +916,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "onboarding_navigate",
       type: "command",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       description: "Navigate Discovery to a specific onboarding step",
       payload_template: { command: "onboarding_navigate", payload: { step: "$STEP" } },
       parameters: [
@@ -933,10 +933,10 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
 self.LANDING_PROTOCOL_MANIFEST = { ... };
 
 // content.js (o ionsites-protocol.js) expone:
-self.HARNESS_PROTOCOL_MANIFEST = { ... };
+self.SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST = { ... };
 ```
 
-El `ProtocolReader` del Harness carga todos los manifests disponibles al inicializarse. El mecanismo es un **escaneo de `self.*`**: itera sobre el contexto global buscando cualquier objeto que tenga la forma `{ version, protocol, messages: [] }`. No existe un array hardcodeado de nombres de protocolo en `harness/index.html`.
+El `ProtocolReader` del SynapseSimulator carga todos los manifests disponibles al inicializarse. El mecanismo es un **escaneo de `self.*`**: itera sobre el contexto global buscando cualquier objeto que tenga la forma `{ version, protocol, messages: [] }`. No existe un array hardcodeado de nombres de protocolo en `synapse-simulator/index.html`.
 
 ```javascript
 class ProtocolReader {
@@ -955,11 +955,11 @@ class ProtocolReader {
 }
 ```
 
-Esta arquitectura garantiza que **agregar un nuevo protocolo no requiere modificar `harness/index.html`**. El Harness detecta automáticamente cualquier `*_PROTOCOL_MANIFEST` que esté presente en el contexto global — siempre que el archivo que lo define sea accesible desde el Service Worker del Harness y esté incluido en `web_accessible_resources` del `manifest.json`.
+Esta arquitectura garantiza que **agregar un nuevo protocolo no requiere modificar `synapse-simulator/index.html`**. El SynapseSimulator detecta automáticamente cualquier `*_PROTOCOL_MANIFEST` que esté presente en el contexto global — siempre que el archivo que lo define sea accesible desde el Service Worker del SynapseSimulator y esté incluido en `web_accessible_resources` del `manifest.json`.
 
 ### Protocol SSoT — schemas JSON
 
-En la arquitectura Harness Protocol Single Source of Truth (SSoT), los **JSON schemas** en `extension/protocols/` son la fuente canónica de los contratos de mensajes. Los manifests JS (`self.*_PROTOCOL_MANIFEST`) son su reflejo de runtime para el ProtocolReader, pero la autoridad sobre parámetros, tipos y valores por defecto reside en los schemas.
+En la arquitectura SynapseSimulator Protocol Single Source of Truth (SSoT), los **JSON schemas** en `extension/protocols/` son la fuente canónica de los contratos de mensajes. Los manifests JS (`self.*_PROTOCOL_MANIFEST`) son su reflejo de runtime para el ProtocolReader, pero la autoridad sobre parámetros, tipos y valores por defecto reside en los schemas.
 
 Los tres schemas son:
 
@@ -967,11 +967,11 @@ Los tres schemas son:
 |---------|-----------|-------------|
 | `protocols/discovery.schema.json` | `discovery` | Onboarding, handshake, GitHub auth, registro de cuentas |
 | `protocols/landing.schema.json` | `landing` | Cockpit de sesión, stats, health check, sync |
-| `protocols/harness.schema.json` | `ionpump` | Comandos DOM y eventos de automatización web |
+| `protocols/synapse-simulator.schema.json` | `ionpump` | Comandos DOM y eventos de automatización web |
 
 **Por qué los schemas son la fuente canónica, no los manifests JS**
 
-Los manifests JS son leídos por el `ProtocolReader` en runtime y se consumen en el navegador, donde JavaScript es el único formato disponible. Los schemas JSON, en cambio, son interpretables por herramientas externas, validadores, y — críticamente — por `background.js` directamente via `fetch()`. Esta dualidad permite que `background.js` aplique defaults declarados en el schema sobre mensajes entrantes antes de invocar cualquier handler, sin depender de la UI del Harness.
+Los manifests JS son leídos por el `ProtocolReader` en runtime y se consumen en el navegador, donde JavaScript es el único formato disponible. Los schemas JSON, en cambio, son interpretables por herramientas externas, validadores, y — críticamente — por `background.js` directamente via `fetch()`. Esta dualidad permite que `background.js` aplique defaults declarados en el schema sobre mensajes entrantes antes de invocar cualquier handler, sin depender de la UI del SynapseSimulator.
 
 **Relación de sync entre `*.schema.json` y `self.*_PROTOCOL_MANIFEST`**
 
@@ -979,7 +979,7 @@ Los schemas y los manifests JS deben mantenerse en sincronía. La dirección can
 
 **El ProtocolReader no cambia**
 
-El mecanismo de autodescubrimiento del Harness no fue modificado. Sigue leyendo `self.*_PROTOCOL_MANIFEST` por escaneo de contexto global. Los schemas son consumidos exclusivamente por `background.js` via `loadProtocolSchemas()`, no por el Harness directamente.
+El mecanismo de autodescubrimiento del SynapseSimulator no fue modificado. Sigue leyendo `self.*_PROTOCOL_MANIFEST` por escaneo de contexto global. Los schemas son consumidos exclusivamente por `background.js` via `loadProtocolSchemas()`, no por el SynapseSimulator directamente.
 
 **El fix de `ACCOUNT_REGISTERED` como caso canónico**
 
@@ -989,7 +989,7 @@ El manifest original de `discoveryProtocol.js` definía `ACCOUNT_REGISTERED` sin
 if (msg.service === 'github' && msg.token_fingerprint)
 ```
 
-Cuando el Harness simulaba `ACCOUNT_REGISTERED` sin esos campos, la guarda fallaba silenciosamente: el mensaje llegaba, pero `GITHUB_TOKEN_STORED` nunca se emitía. El error no era visible en el flujo real porque `discovery.js` siempre incluía esos campos; el problema solo se manifestaba en testing via Harness.
+Cuando el SynapseSimulator simulaba `ACCOUNT_REGISTERED` sin esos campos, la guarda fallaba silenciosamente: el mensaje llegaba, pero `GITHUB_TOKEN_STORED` nunca se emitía. El error no era visible en el flujo real porque `discovery.js` siempre incluía esos campos; el problema solo se manifestaba en testing via SynapseSimulator.
 
 El schema corregido en `discovery.schema.json` declara explícitamente:
 
@@ -1004,11 +1004,11 @@ El schema corregido en `discovery.schema.json` declara explícitamente:
 }
 ```
 
-Con este schema, `applySchemaDefaults()` rellena `service` y `token_fingerprint` antes de que el handler evalúe la guarda — que ahora siempre ve valores válidos en el contexto del Harness. Este es el patrón que `registerHandler` resuelve de forma sistemática: el schema declara qué campos son requeridos y cuáles son sus defaults de simulación, y el handler recibe siempre un mensaje completo.
+Con este schema, `applySchemaDefaults()` rellena `service` y `token_fingerprint` antes de que el handler evalúe la guarda — que ahora siempre ve valores válidos en el contexto del SynapseSimulator. Este es el patrón que `registerHandler` resuelve de forma sistemática: el schema declara qué campos son requeridos y cuáles son sus defaults de simulación, y el handler recibe siempre un mensaje completo.
 
 ### Panel Simulate — UI generada dinámicamente
 
-El Panel Simulate del Harness genera sus controles desde los manifests, sin hardcoding:
+El Panel Simulate del SynapseSimulator genera sus controles desde los manifests, sin hardcoding:
 
 ```
 Para cada message en el manifest:
@@ -1022,18 +1022,18 @@ Para cada message en el manifest:
 **Tipos de parámetros:**
 - `type: "string"` → campo de texto editable
 - `type: "enum"` → dropdown con las opciones definidas
-- `type: "auto"` → se resuelve desde `source` (ej: `"HARNESS_CONFIG.profileId"`, `"SYNAPSE_CONFIG.launchId"`) sin intervención del developer
+- `type: "auto"` → se resuelve desde `source` (ej: `"SYNAPSE_SIMULATOR_CONFIG.profileId"`, `"SYNAPSE_CONFIG.launchId"`) sin intervención del developer
 
 ### Canales de dispatch — runtime vs tabs
 
-El Harness diferencia el canal de dispatch por el campo `channel` del mensaje:
+El SynapseSimulator diferencia el canal de dispatch por el campo `channel` del mensaje:
 
 ```javascript
 channel: "runtime"  → chrome.runtime.sendMessage(payload)
 channel: "tabs"     → chrome.tabs.sendMessage(selectedTabId, payload)
 ```
 
-Para mensajes de tipo `tabs`, el Panel Config del Harness muestra un selector de tab activo donde el developer elige a qué tab (claude.ai, chatgpt.com, etc.) dirigir el comando.
+Para mensajes de tipo `tabs`, el Panel Config del SynapseSimulator muestra un selector de tab activo donde el developer elige a qué tab (claude.ai, chatgpt.com, etc.) dirigir el comando.
 
 ### Tab-Aware Proxy — debugging de IonPump
 
@@ -1041,7 +1041,7 @@ Para debuggear flujos de IonPump sin Brain corriendo:
 
 **Dirección A — simular comandos DOM desde Brain:**
 ```javascript
-// El Harness descubre tabs de ION sites
+// El SynapseSimulator descubre tabs de ION sites
 const ionTabs = await chrome.tabs.query({})
   .filter(tab => ['claude.ai','chatgpt.com','grok.com'].some(d => tab.url.includes(d)));
 
@@ -1055,34 +1055,34 @@ const ionTabs = await chrome.tabs.query({})
 chrome.runtime.sendMessage({ event: 'RESPONSE_READY', site: 'claude.ai', tab_id: X })
 ```
 
-### Ciclo de actualización del Harness
+### Ciclo de actualización del SynapseSimulator
 
 ```bash
-# Actualizar Harness (no requiere reempaquetar Cortex):
+# Actualizar SynapseSimulator (no requiere reempaquetar Cortex):
 sentinel seed --profile-id {id} --reseed
 
-# Esto sobreescribe harness/index.html y harness.synapse.config.js
+# Esto sobreescribe synapse-simulator/index.html y synapse-simulator.synapse.config.js
 # El .blx de Cortex no se toca
 ```
 
-### Boot sequence del Harness
+### Boot sequence del SynapseSimulator
 
-El boot de `harness/index.html` carga protocolos y configs en orden explícito via `loadScriptOptional()`:
+El boot de `synapse-simulator/index.html` carga protocolos y configs en orden explícito via `loadScriptOptional()`:
 
 ```javascript
 document.addEventListener('DOMContentLoaded', async () => {
   // --- Siempre presentes desde seed --dev ---
-  await loadScriptOptional('../harness.synapse.config.js');
+  await loadScriptOptional('../synapse-simulator.synapse.config.js');
   await loadScriptOptional('../discovery.synapse.config.js');
   await loadScriptOptional('../discovery/discoveryProtocol.js');
-  await loadScriptOptional('harnessProtocol.js');
+  await loadScriptOptional('synapseSimulatorProtocol.js');
 
   // --- Solo existen post-onboarding ---
   await loadScriptOptional('../landing.synapse.config.js');
   await loadScriptOptional('../landing/landingProtocol.js');
 
   // Todos los scripts que van a llegar, llegaron. Arrancar.
-  Harness.init();
+  SynapseSimulator.init();
 });
 ```
 
@@ -1092,23 +1092,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 1. Developer actualiza el handler real en `discoveryProtocol.js` o `landingProtocol.js`.
 2. Developer agrega la entrada al `*_PROTOCOL_MANIFEST` correspondiente.
-3. El Harness refleja el cambio automáticamente en el próximo re-seed.
+3. El SynapseSimulator refleja el cambio automáticamente en el próximo re-seed.
 
-No hay paso 3 en el Harness. Esta es la garantía de que el Harness siempre está en sincronía con el protocolo real.
+No hay paso 3 en el SynapseSimulator. Esta es la garantía de que el SynapseSimulator siempre está en sincronía con el protocolo real.
 
 ---
 
-## 14. Harness Protocol SSoT y registerHandler
+## 14. SynapseSimulator Protocol SSoT y registerHandler
 
 Esta sección documenta la infraestructura de Fase 2 introducida en v1.2: el sistema de handler registry schema-aware que convive con el if-chain existente de `chrome.runtime.onMessage`.
 
 ### Motivación
 
-El if-chain existente en `background.js` (~líneas 969-1369) acumula handlers para todos los eventos del protocolo interno. En ese modelo, los campos requeridos por cada handler se documentan implícitamente en el código del handler — no hay contrato explícito. Cuando el Harness simula un evento sin algún campo, el handler falla silenciosamente porque JavaScript acepta `undefined` sin error.
+El if-chain existente en `background.js` (~líneas 969-1369) acumula handlers para todos los eventos del protocolo interno. En ese modelo, los campos requeridos por cada handler se documentan implícitamente en el código del handler — no hay contrato explícito. Cuando el SynapseSimulator simula un evento sin algún campo, el handler falla silenciosamente porque JavaScript acepta `undefined` sin error.
 
 La arquitectura SSoT resuelve esto en dos capas:
 1. Los schemas JSON declaran explícitamente cada campo y su valor por defecto.
-2. `registerHandler` aplica esos defaults antes de invocar el handler, garantizando que el handler siempre recibe un mensaje completo independientemente de si el origen es el Harness o el flujo de producción.
+2. `registerHandler` aplica esos defaults antes de invocar el handler, garantizando que el handler siempre recibe un mensaje completo independientemente de si el origen es el SynapseSimulator o el flujo de producción.
 
 ### REGISTERED_HANDLERS
 
@@ -1185,7 +1185,7 @@ Al inicio del cuerpo del listener, antes del if-chain existente, se agregó el b
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
 
-  // --- Registered handler dispatch (Harness Protocol SSoT) ---
+  // --- Registered handler dispatch (SynapseSimulator Protocol SSoT) ---
   // Chequear primero; si el evento está registrado, despachar y retornar.
   // Los handlers registrados reciben el mensaje con defaults de schema aplicados.
   const _registeredEvent = msg.event || msg.command;
@@ -1281,7 +1281,7 @@ function registerOnboardingHandlers() {
 }
 ```
 
-La guarda `if (msg.service === 'github' && msg.token_fingerprint)` que antes fallaba silenciosamente en el Harness ahora funciona correctamente: `applySchemaDefaults` garantiza que `msg.service` tiene valor `"github"` y `msg.token_fingerprint` tiene valor `"ghp_simulatedToken"` si el mensaje llegó sin ellos.
+La guarda `if (msg.service === 'github' && msg.token_fingerprint)` que antes fallaba silenciosamente en el SynapseSimulator ahora funciona correctamente: `applySchemaDefaults` garantiza que `msg.service` tiene valor `"github"` y `msg.token_fingerprint` tiene valor `"ghp_simulatedToken"` si el mensaje llegó sin ellos.
 
 ### Ciclo de vida completo — schema a handler invocado
 
@@ -1317,13 +1317,13 @@ protocols/discovery.schema.json
 ### Cuándo usar registerHandler vs el if-chain
 
 **Usar `registerHandler` cuando:**
-- El handler depende de campos que pueden estar ausentes en mensajes de prueba del Harness.
+- El handler depende de campos que pueden estar ausentes en mensajes de prueba del SynapseSimulator.
 - El evento tiene parámetros con defaults bien definidos en el schema correspondiente.
 - Se quiere documentar explícitamente el contrato del mensaje en `protocols/*.schema.json`.
 - Es un evento nuevo — no hay razón para añadir al if-chain algo que puede ir al registry.
 
 **Dejar en el if-chain cuando:**
-- El handler es interno (ej: `ping`, `checkHost`, `HARNESS_HELLO`) sin schema de Harness.
+- El handler es interno (ej: `ping`, `checkHost`, `SYNAPSE_SIMULATOR_HELLO`) sin schema de SynapseSimulator.
 - El handler no tiene parámetros con defaults relevantes.
 - El evento es parte del if-chain original y aún no ha sido priorizado para migración.
 
@@ -1443,16 +1443,16 @@ def generate_profile_landing(target_ext_dir: Path, profile_data: Dict) -> None:
 # script.js, styles.css
 ```
 
-### harness_generator.py (solo builds dev)
+### synapse_simulator_generator.py (solo builds dev)
 
 ```python
-def generate_harness_page(target_ext_dir: Path, profile_data: Dict) -> None:
+def generate_synapse_simulator_page(target_ext_dir: Path, profile_data: Dict) -> None:
     """
-    Despliega el Harness de debug.
+    Despliega el SynapseSimulator de debug.
     En builds de producción: no-op o no se llama.
     """
-    harness_dir = target_ext_dir / "harness"
-    shutil.copy(template_dir / "index.html", harness_dir / "index.html")
+    synapse_simulator_dir = target_ext_dir / "synapse-simulator"
+    shutil.copy(template_dir / "index.html", synapse_simulator_dir / "index.html")
 ```
 
 ### Responsabilidad de Sentinel vs Python
@@ -1568,14 +1568,14 @@ Esta sección describe los puntos de extensión de Cortex para desarrollo de nue
 
 1. **`content.js`**: Implementar la función `executeNewCommand(payload)` y agregar el case en el switch del `onMessage` listener.
 2. **Brain**: Agregar el nuevo tipo de comando en `SynapseServer` y en los módulos que lo necesiten (IonPump, intent executor, etc.).
-3. **Harness**: Si el nuevo comando necesita testing, agregar al `HARNESS_PROTOCOL_MANIFEST` o al manifest correspondiente.
+3. **SynapseSimulator**: Si el nuevo comando necesita testing, agregar al `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` o al manifest correspondiente.
 
 ### Agregar un nuevo sitio a IonPump
 
 Ver sección 12. Resumen:
 1. Crear recipe `.ion` en `ionsites/{dominio}/message.ion`.
 2. Si el dominio no está en `content_scripts.matches`, agregar y reempaquetar `.blx`.
-3. Agregar el dominio al `options` del parámetro `site` en `HARNESS_PROTOCOL_MANIFEST`.
+3. Agregar el dominio al `options` del parámetro `site` en `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST`.
 
 ### Agregar una nueva página interna
 
@@ -1635,9 +1635,9 @@ El campo `window` en el payload de `host_ready` ya es el mecanismo existente par
 4. Actualizar los steps de onboarding en Sentinel para incluir el nuevo servicio.
 5. Agregar el dominio de la consola en `content_scripts.matches` si se necesita `content-aistudio.js` equivalente.
 
-### Extender el Harness con nuevos protocolos
+### Extender el SynapseSimulator con nuevos protocolos
 
-El Harness se extiende automáticamente cuando se agrega un nuevo `*_PROTOCOL_MANIFEST` en cualquier archivo de la extensión. El `ProtocolReader` lo detectará en el próximo re-seed.
+El SynapseSimulator se extiende automáticamente cuando se agrega un nuevo `*_PROTOCOL_MANIFEST` en cualquier archivo de la extensión. El `ProtocolReader` lo detectará en el próximo re-seed.
 
 Para agregar soporte de un nuevo protocolo:
 1. Crear el schema en `extension/protocols/NUEVO_PROTOCOL.schema.json`. Este es el contrato canónico.
@@ -1645,11 +1645,11 @@ Para agregar soporte de un nuevo protocolo:
 3. Asegurarse de que el archivo JS que define el manifest esté incluido en `web_accessible_resources` del `manifest.json` de la extensión.
 4. Si el protocolo necesita handlers con defaults en `background.js`, cargarlo desde `loadProtocolSchemas()` y registrar los handlers con `registerHandler`.
 
-> ❌ **No modificar `harness/index.html`.** El `ProtocolReader` escanea `self.*` en el contexto global — no requiere registro manual de ningún protocolo.
+> ❌ **No modificar `synapse-simulator/index.html`.** El `ProtocolReader` escanea `self.*` en el contexto global — no requiere registro manual de ningún protocolo.
 
 ### Migrar un handler del if-chain a registerHandler
 
-Cuando un handler existente en el if-chain depende de campos que pueden estar ausentes en mensajes del Harness, el procedimiento de migración es:
+Cuando un handler existente en el if-chain depende de campos que pueden estar ausentes en mensajes del SynapseSimulator, el procedimiento de migración es:
 
 1. **Identificar el evento y su guarda en el if-chain.** Por ejemplo: `if (msg.event === 'MI_EVENTO') { ... if (msg.campo_x) { ... } }`.
 2. **Localizar o crear el schema correspondiente** en `extension/protocols/`. Si el protocolo ya tiene schema, verificar que el mensaje esté declarado; si no, agregarlo.

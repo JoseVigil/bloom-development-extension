@@ -8,8 +8,8 @@ BTIP convierte la interacción con inteligencia artificial en un proceso de inge
 
 | Versión | Cambios |
 |---|---|
-| v4.0 | Línea base: Bloom Runtime (Sentinel, Synapse, Nucleus), Bloom Cortex (Discovery/Landing/Harness), Bloom Conductor, VS Code Plugin, Brain/IonPump, Bloom Sensor, Metamorph, Nucleus, Intents, Mandates, Batcave, Alfred, App Mobile. |
-| **v6.0** | **Nuevo:** Bloom Companion incorporado como **cuarto activo nativo de Cortex** (§2.3), junto a Discovery/Landing/Harness. A diferencia de Harness (dev-only), Companion es un activo de **producción** orientado al ingeniero final: panel lateral de segunda opinión cognitiva embebido en el navegador, con su propio `COMPANION_PROTOCOL_MANIFEST` y schema de validación de payload. Su gating de activación depende de `linked_accounts` **y** del handshake Synapse de 3 fases (§2.3, subsección Companion). Fuente: `Cognituum_Companion_Implementation_Guide_v1_2.md`. Ver también `AUTHORITY_BOUNDARY.md` para el límite de autoridad sobre credenciales de terceros, que este feature respeta sin excepción (no automatiza login/registro de ningún proveedor). |
+| v4.0 | Línea base: Bloom Runtime (Sentinel, Synapse, Nucleus), Bloom Cortex (Discovery/Landing/SynapseSimulator), Bloom Conductor, VS Code Plugin, Brain/IonPump, Bloom Sensor, Metamorph, Nucleus, Intents, Mandates, Batcave, Alfred, App Mobile. |
+| **v6.0** | **Nuevo:** Bloom Companion incorporado como **cuarto activo nativo de Cortex** (§2.3), junto a Discovery/Landing/SynapseSimulator. A diferencia de SynapseSimulator (dev-only), Companion es un activo de **producción** orientado al ingeniero final: panel lateral de segunda opinión cognitiva embebido en el navegador, con su propio `COMPANION_PROTOCOL_MANIFEST` y schema de validación de payload. Su gating de activación depende de `linked_accounts` **y** del handshake Synapse de 3 fases (§2.3, subsección Companion). Fuente: `Cognituum_Companion_Implementation_Guide_v1_2.md`. Ver también `AUTHORITY_BOUNDARY.md` para el límite de autoridad sobre credenciales de terceros, que este feature respeta sin excepción (no automatiza login/registro de ningún proveedor). |
 
 ---
 
@@ -107,7 +107,7 @@ flowchart LR
             Dashboard"]
             Landing["🔧 Landing Page
             Tool"]
-            Harness["🔬 Harness
+            SynapseSimulator["🔬 SynapseSimulator
             Debug UI (dev only)"]
         end
 
@@ -131,7 +131,7 @@ flowchart LR
 
         Ext --> Discovery
         Ext --> Landing
-        Ext --> Harness
+        Ext --> SynapseSimulator
 
         User --> VS
         User <--> Workspace
@@ -236,8 +236,8 @@ El runtime de Cortex incluye tres páginas web locales que operan sobre el mismo
 
 * **Discovery** — Onboarding del usuario. Guía el flujo desde la instalación hasta tener GitHub auth, API key y cuenta registrada en Nucleus.
 * **Landing** — Dashboard del perfil activo. Estado de sesión, cuentas vinculadas, stats de uso y acciones rápidas post-onboarding.
-* **Harness** — Herramienta de debug y observabilidad del protocolo. Existe **únicamente en builds dev** — no se despliega en producción.
-* **Companion** *(v6.0)* — Panel lateral de segunda opinión cognitiva. A diferencia de Harness, **sí es un activo de producción**: vive permanentemente disponible para el ingeniero, gateado por onboarding completo + handshake Synapse confirmado. Ver subsección dedicada más abajo.
+* **SynapseSimulator** — Herramienta de debug y observabilidad del protocolo. Existe **únicamente en builds dev** — no se despliega en producción.
+* **Companion** *(v6.0)* — Panel lateral de segunda opinión cognitiva. A diferencia de SynapseSimulator, **sí es un activo de producción**: vive permanentemente disponible para el ingeniero, gateado por onboarding completo + handshake Synapse confirmado. Ver subsección dedicada más abajo.
 
 Cortex es deliberadamente **stateless**, delegando autoridad, versionado y despliegue a Sentinel, y razonamiento profundo a Brain.
 
@@ -247,14 +247,14 @@ Los cuatro activos de Cortex comparten un canal único de **Chrome Native Messag
 
 * `DISCOVERY_PROTOCOL_MANIFEST` — mensajes del flujo de onboarding
 * `LANDING_PROTOCOL_MANIFEST` — mensajes del dashboard del perfil
-* `HARNESS_PROTOCOL_MANIFEST` — comandos DOM y eventos de automatización web
+* `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` — comandos DOM y eventos de automatización web
 * `COMPANION_PROTOCOL_MANIFEST` *(v6.0)* — mensajes de inyección de contexto (`INJECT_BISP`, `INJECT_BRIEF`, `INJECT_TEXT`, `NEW_SESSION`) y su contraparte saliente (`SLAVE_MODE_CHANGED`)
 
 Este mecanismo garantiza que agregar un mensaje al protocolo actualice automáticamente cualquier componente que los consuma — sin pasos adicionales, sin builds separados.
 
-#### Harness — Observabilidad del Protocolo
+#### SynapseSimulator — Observabilidad del Protocolo
 
-El Harness es la herramienta de observabilidad y simulación del protocolo Synapse para developers. No tiene conocimiento hardcodeado de ningún mensaje: lee los `*_PROTOCOL_MANIFEST` dinámicamente al cargar y genera su UI a partir de ellos.
+El SynapseSimulator es la herramienta de observabilidad y simulación del protocolo Synapse para developers. No tiene conocimiento hardcodeado de ningún mensaje: lee los `*_PROTOCOL_MANIFEST` dinámicamente al cargar y genera su UI a partir de ellos.
 
 Sus cuatro paneles:
 
@@ -263,7 +263,7 @@ Sus cuatro paneles:
 * **Config** — identidad de sesión. Muestra `profileId` y `launchId`, permite override manual, y contiene el selector de tab activo para mensajes de IonPump.
 * **Protocols** — inspección de manifests. Visualiza los manifests cargados para verificar que el autodescubrimiento funcionó correctamente.
 
-**Activación:** `sentinel seed <alias> <master> --dev`. En producción, `generate_harness_page()` es un no-op y el directorio `harness/` nunca se crea. **El Harness no requiere rebuild de Cortex para actualizarse** — un re-seed es suficiente.
+**Activación:** `sentinel seed <alias> <master> --dev`. En producción, `generate_synapse_simulator_page()` es un no-op y el directorio `synapse-simulator/` nunca se crea. **El SynapseSimulator no requiere rebuild de Cortex para actualizarse** — un re-seed es suficiente.
 
 ---
 
@@ -286,7 +286,7 @@ El botón de activación vive en Landing (`isCompanionAvailable()`), nunca en Di
 
 **Nota de diseño abierta:** la inyección silenciosa (`autoSend: true` para el contexto BISP) y el forzado de user-agent móvil para obtener la UI colapsada de Gemini son decisiones de UX ya tomadas en la guía de implementación (v1.2). Vale dejarlas explícitas acá porque son la clase de detalle que un ToS de un proveedor de terceros puede tratar de forma distinta a una extensión que solo lee `tabs.onUpdated` — el Kickoff Intent (ver `.bloom/.intents/.dev/`) incluye un ítem de revisión de esa superficie antes de merge a producción, no como bloqueo sino como checklist de higiene.
 
-**Companion no depende de Harness — y no debe llegar a depender.** Son activos ortogonales: Harness es dev-only (§16 restricción #4 de `HARNESS_SOURCE_OF_TRUTH_1_2.md`: *"El Harness NO existe en prod"*), Companion es de producción continua. Companion tiene su propio manifiesto (`COMPANION_PROTOCOL_MANIFEST`) y su propio mecanismo de inyección (`executeScript()`/`insertCSS()` directo sobre su `<webview>`) — en ningún punto invoca `ION_EXECUTE_FLOW`, comandos DOM de IonPump, ni nada de `content.js`/`harnessProtocol.js`. Salvedad a tener presente: lo que está gateado a `--dev` en `harness_generator.py` es solo la UI (`harness/index.html`); el routing de esos comandos en `background.js`/`content.js` no está condicionado al mismo flag y existe en todo build. Companion no debe, bajo ningún diseño futuro, invocar esa vía — mantenerlo así es lo que preserva la separación limpia entre "activo de producción" y "herramienta de debug".
+**Companion no depende de SynapseSimulator — y no debe llegar a depender.** Son activos ortogonales: SynapseSimulator es dev-only (§16 restricción #4 de `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH_1_2.md`: *"El SynapseSimulator NO existe en prod"*), Companion es de producción continua. Companion tiene su propio manifiesto (`COMPANION_PROTOCOL_MANIFEST`) y su propio mecanismo de inyección (`executeScript()`/`insertCSS()` directo sobre su `<webview>`) — en ningún punto invoca `ION_EXECUTE_FLOW`, comandos DOM de IonPump, ni nada de `content.js`/`synapseSimulatorProtocol.js`. Salvedad a tener presente: lo que está gateado a `--dev` en `synapse_simulator_generator.py` es solo la UI (`synapse-simulator/index.html`); el routing de esos comandos en `background.js`/`content.js` no está condicionado al mismo flag y existe en todo build. Companion no debe, bajo ningún diseño futuro, invocar esa vía — mantenerlo así es lo que preserva la separación limpia entre "activo de producción" y "herramienta de debug".
 
 ---
 

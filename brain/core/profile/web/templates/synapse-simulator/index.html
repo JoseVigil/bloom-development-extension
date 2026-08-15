@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bloom Harness</title>
+  <title>Bloom SynapseSimulator</title>
   <style>
     /* ===================================================================
        RESET & BASE
@@ -49,7 +49,7 @@
     /* ===================================================================
        LAYOUT
     =================================================================== */
-    #harness-root {
+    #synapse-simulator-root {
       display: grid;
       grid-template-rows: 48px 1fr;
       grid-template-columns: 360px 1fr 520px;
@@ -1102,7 +1102,7 @@
 </head>
 <body>
 
-<div id="harness-root">
+<div id="synapse-simulator-root">
 
   <!-- ================================================================
        TOP BAR
@@ -1114,7 +1114,7 @@
         <path d="M6 10 L10 6 L14 10 L10 14 Z" fill="#58a6ff" opacity="0.7"/>
         <circle cx="10" cy="10" r="2" fill="#58a6ff"/>
       </svg>
-      Bloom Harness
+      Bloom SynapseSimulator
     </div>
     <span class="badge">dev</span>
     <div class="spacer"></div>
@@ -1260,7 +1260,7 @@
       </div>
 
       <div class="config-section">
-        <div class="config-section-header">HARNESS_CONFIG</div>
+        <div class="config-section-header">SYNAPSE_SIMULATOR_CONFIG</div>
         <div class="config-row">
           <span class="config-key">profileId</span>
           <span class="config-val missing" id="cfg-profile-id">—</span>
@@ -1322,14 +1322,14 @@
 
   </aside>
 
-</div><!-- /#harness-root -->
+</div><!-- /#synapse-simulator-root -->
 
 <div id="notifications"></div>
 
 <!-- ================================================================
-     HARNESS RUNTIME
+     SYNAPSE_SIMULATOR RUNTIME
 ================================================================ -->
-<script src="harness.js"></script>
+<script src="synapse-simulator.js"></script>
 
 </body>
 </html>

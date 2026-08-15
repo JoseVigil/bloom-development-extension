@@ -267,7 +267,7 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 // ============================================================================
 // DISCOVERY PROTOCOL MANIFEST
-// Autodescriptive contract for the Harness ProtocolReader.
+// Autodescriptive contract for the SynapseSimulator ProtocolReader.
 // Append-only — does NOT modify the PROTOCOL object above.
 // ============================================================================
 
@@ -281,7 +281,7 @@ if (typeof self !== 'undefined') {
       {
         id: "onboarding_navigate",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Navigate Discovery to a specific onboarding step. nucleus_create, vault_init y project_create son host-driven (no tienen UI propia en Discovery). ai_provider_setup → provider-select. success → onboarding-success.",
         payload_template: {
@@ -304,7 +304,7 @@ if (typeof self !== 'undefined') {
       {
         id: "github_device_code",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate background.js recibiendo el device code de GitHub (POST /login/device/code), para que Discovery lo pinte en screen-github-app-device",
         payload_template: {
@@ -322,7 +322,7 @@ if (typeof self !== 'undefined') {
       {
         id: "github_app_authorized",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate background.js confirmando que el Device Flow fue autorizado. Nunca lleva el token completo — solo fingerprint/scopes, misma política que el contrato real background.js → discovery.js (el token completo viaja solo por Native Messaging hacia Brain).",
         payload_template: {
@@ -338,7 +338,7 @@ if (typeof self !== 'undefined') {
           { name: "username", type: "string", variable: "$USERNAME", default: "octocat" },
           { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ghu_simulatedFingerprint" },
           { name: "scopes", type: "string", variable: "$SCOPES", default: "contents:write,administration:write,members:read" },
-          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "SYNAPSE_SIMULATOR_CONFIG.profileId" },
           { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
           { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
         ]
@@ -346,7 +346,7 @@ if (typeof self !== 'undefined') {
       {
         id: "vault_initialized",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Paridad con discovery_schema.json v1.1.0 — este mensaje faltaba por
         // completo acá (no solo en observable_events), mismo patrón transversal
@@ -369,7 +369,7 @@ if (typeof self !== 'undefined') {
           { name: "vault_key", type: "string", variable: "$VAULT_KEY", default: "sk_bloom_github_app" },
           { name: "token_fingerprint", type: "string", variable: "$TOKEN_FINGERPRINT", default: "ghu_simulatedFingerprint" },
           { name: "scopes", type: "string", variable: "$SCOPES", default: "contents:write,administration:write,members:read" },
-          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "SYNAPSE_SIMULATOR_CONFIG.profileId" },
           { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
           { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
         ]
@@ -377,27 +377,27 @@ if (typeof self !== 'undefined') {
       {
         id: "google_login_detected",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Paridad con discovery.schema.json (Entregable 3) — agregado
-        // acá también porque loadScriptOptional() en harness.js carga este
+        // acá también porque loadScriptOptional() en synapse-simulator.js carga este
         // manifest legacy ANTES de que ProtocolReader.discoverFromJSON() lea
         // el JSON, y discover() prioriza el global legacy si ya existe
         // (discoverFromJSON lo salta con "legacy global present"). Sin este
-        // espejo, el mensaje del schema JSON nunca llega a la UI del Harness.
+        // espejo, el mensaje del schema JSON nunca llega a la UI del SynapseSimulator.
         // HALLAZGO 2026-07-17: el resolver que tenía tabId acá (auto, source
         // GOOGLE_FLOW._watchedTabId) NUNCA funcionó — no es timing, es
-        // estructural: el Harness corre en su propio documento y
+        // estructural: el SynapseSimulator corre en su propio documento y
         // window.GOOGLE_FLOW vive en el window de discovery/index.html, un
         // documento distinto. Confirmado en telemetry.json: se mandó
         // tabId:"undefined" (string literal), GoogleAuthFlow lo comparó
         // contra this._watchedTabId, nunca matcheó, y descartó el evento en
         // silencio — nunca llegó a background.js ni al host. Fix: live_resolver
-        // 'google_watched_tab' — el botón "Detect" en el Harness le pregunta a
-        // background.js su propio Map googleLoginWatchers (HARNESS_GET_WATCHED_GOOGLE_TAB),
+        // 'google_watched_tab' — el botón "Detect" en el SynapseSimulator le pregunta a
+        // background.js su propio Map googleLoginWatchers (SYNAPSE_SIMULATOR_GET_WATCHED_GOOGLE_TAB),
         // que sí ve ambos contextos porque vive ahí. Sigue requiriendo que el
         // usuario haya clickeado "Open Google" en Discovery antes.
-        description: "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google. IMPORTANTE — orden de uso: el listener real en discovery.js (GoogleAuthFlow.init()) descarta el mensaje si tabId no coincide con window.GOOGLE_FLOW._watchedTabId, que solo existe después de clickear 'Open Google' en el flujo real. Secuencia: 1) abrir Discovery real y avanzar a google_auth, 2) click en 'Open Google', 3) en el Harness, clickear 'Detect' para resolver el tabId real via background.js (no window traversal), 4) recién ahí enviar este mensaje.",
+        description: "Simulate background.js (watchGoogleLoginTab) detectando que la tab observada llegó a un host terminal de Google. IMPORTANTE — orden de uso: el listener real en discovery.js (GoogleAuthFlow.init()) descarta el mensaje si tabId no coincide con window.GOOGLE_FLOW._watchedTabId, que solo existe después de clickear 'Open Google' en el flujo real. Secuencia: 1) abrir Discovery real y avanzar a google_auth, 2) click en 'Open Google', 3) en el SynapseSimulator, clickear 'Detect' para resolver el tabId real via background.js (no window traversal), 4) recién ahí enviar este mensaje.",
         payload_template: {
           event: "GOOGLE_LOGIN_DETECTED",
           tabId: "$TAB_ID",
@@ -407,28 +407,28 @@ if (typeof self !== 'undefined') {
           timestamp: "$TIMESTAMP"
         },
         parameters: [
-          { name: "tabId", type: "auto", variable: "$TAB_ID", live_resolver: "google_watched_tab", live_resolver_hint: "Requiere haber clickeado 'Open Google' en Discovery antes — resuelto vía HARNESS_GET_WATCHED_GOOGLE_TAB en background.js, no via window traversal." },
+          { name: "tabId", type: "auto", variable: "$TAB_ID", live_resolver: "google_watched_tab", live_resolver_hint: "Requiere haber clickeado 'Open Google' en Discovery antes — resuelto vía SYNAPSE_SIMULATOR_GET_WATCHED_GOOGLE_TAB en background.js, no via window traversal." },
           { name: "detected_host", type: "enum", variable: "$DETECTED_HOST", options: ["myaccount.google.com", "mail.google.com"], default: "myaccount.google.com" },
-          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "SYNAPSE_SIMULATOR_CONFIG.profileId" },
           { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
           { name: "timestamp", type: "auto", variable: "$TIMESTAMP", source: "Date.now()" }
         ]
       },
       {
-        id: "harness_get_watched_google_tab",
+        id: "synapse_simulator_get_watched_google_tab",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
-        description: "Utilitario solo-Harness (no es parte del flujo real de onboarding, igual que harness_simulate_handshake y harness_open_landing). Pide a background.js las tabIds actualmente en googleLoginWatchers. Es el mecanismo detrás del botón 'Detect' del campo tabId en google_login_detected. Devuelve { tabIds: number[] }, normalmente 0 o 1 elemento.",
+        description: "Utilitario solo-SynapseSimulator (no es parte del flujo real de onboarding, igual que synapse_simulator_simulate_handshake y synapse_simulator_open_landing). Pide a background.js las tabIds actualmente en googleLoginWatchers. Es el mecanismo detrás del botón 'Detect' del campo tabId en google_login_detected. Devuelve { tabIds: number[] }, normalmente 0 o 1 elemento.",
         payload_template: {
-          command: "HARNESS_GET_WATCHED_GOOGLE_TAB"
+          command: "SYNAPSE_SIMULATOR_GET_WATCHED_GOOGLE_TAB"
         },
         parameters: []
       },
       {
         id: "github_device_flow_error",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate background.js reportando una falla del Device Flow (denied, expired_token, access_denied) — para probar que Discovery vuelve a github-app-start con mensaje de error en vez de colgarse. NOTA: agregado proactivamente para completar el contrato de 4 mensajes acordado; no estaba pedido explícitamente — remover si no se quiere en este pase.",
         payload_template: {
@@ -442,7 +442,7 @@ if (typeof self !== 'undefined') {
       {
         id: "api_key_registered",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Contrato unificado con discovery.js MultiProviderOnboarding.handleAPIKeyRegistered()
         // (ver HANDOFF — fix del onboarding roto tras la limpieza de clipboardRead).
@@ -483,7 +483,7 @@ if (typeof self !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "launch_id",
@@ -502,7 +502,7 @@ if (typeof self !== 'undefined') {
       {
         id: "account_registered",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Ajustado: GitHub ya no pasa por ACCOUNT_REGISTERED (retirado en
         // favor de GITHUB_APP_AUTHORIZED, evento propio no discriminado —
@@ -519,7 +519,7 @@ if (typeof self !== 'undefined') {
           token_fingerprint: "$TOKEN_FINGERPRINT"
         },
         parameters: [
-          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "SYNAPSE_SIMULATOR_CONFIG.profileId" },
           { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" },
           { name: "service", type: "enum", variable: "$SERVICE", options: ["google"], default: "google" },
           { name: "username", type: "string", variable: "$USERNAME", default: "user@gmail.com" },
@@ -529,7 +529,7 @@ if (typeof self !== 'undefined') {
       {
         id: "discovery_complete",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate full discovery/onboarding flow completion",
         payload_template: {
@@ -542,7 +542,7 @@ if (typeof self !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "launch_id",
@@ -555,7 +555,7 @@ if (typeof self !== 'undefined') {
       {
         id: "handshake_confirmed",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate extension handshake confirmation",
         payload_template: {
@@ -568,7 +568,7 @@ if (typeof self !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "launch_id",
@@ -581,7 +581,7 @@ if (typeof self !== 'undefined') {
       {
         id: "host_ready",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate bloom-host signaling it is ready to receive commands",
         payload_template: {
@@ -594,7 +594,7 @@ if (typeof self !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "launch_id",
@@ -605,44 +605,44 @@ if (typeof self !== 'undefined') {
         ]
       },
       {
-        id: "harness_simulate_handshake",
+        id: "synapse_simulator_simulate_handshake",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Bypass del handshake nativo — fuerza handshakeState a CONFIRMED sin native host",
         payload_template: {
-          event: "HARNESS_SIMULATE_HANDSHAKE",
+          event: "SYNAPSE_SIMULATOR_SIMULATE_HANDSHAKE",
           profile_id: "$PROFILE_ID",
           launch_id: "$LAUNCH_ID"
         },
         parameters: [
-          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "HARNESS_CONFIG.profileId" },
+          { name: "profile_id", type: "auto", variable: "$PROFILE_ID", source: "SYNAPSE_SIMULATOR_CONFIG.profileId" },
           { name: "launch_id", type: "auto", variable: "$LAUNCH_ID", source: "SYNAPSE_CONFIG.launchId" }
         ]
       },
       {
-        id: "harness_open_landing",
+        id: "synapse_simulator_open_landing",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
-        description: "Abre o trae al frente la tab de landing directamente desde el Harness",
+        description: "Abre o trae al frente la tab de landing directamente desde el SynapseSimulator",
         payload_template: {
-          event: "HARNESS_OPEN_LANDING"
+          event: "SYNAPSE_SIMULATOR_OPEN_LANDING"
         },
         parameters: []
       },
       {
         id: "switch_organization",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Paridad con discovery.schema.json v1.2.0 (Etapa 1 de
         // PROMPT-EJECUCION-synapse-switch-organization.md) — declarado acá TAMBIÉN
-        // porque loadScriptOptional() en harness.js carga este manifest legacy ANTES
+        // porque loadScriptOptional() en synapse-simulator.js carga este manifest legacy ANTES
         // de que ProtocolReader.discoverFromJSON() lea el JSON, y discover() prioriza
         // el global legacy si ya existe (mismo mecanismo confirmado en el HALLAZGO
         // 2026-07-17 de google_login_detected, arriba). Sin este espejo, el mensaje
-        // del schema JSON nunca llega a la UI del Harness.
+        // del schema JSON nunca llega a la UI del SynapseSimulator.
         // SOLO contrato — sin lógica de negocio (Etapa 5 del prompt de ejecución).
         // Payload literal de PROMPT-synapse-switch-organization.md §2 (org_id,
         // org_slug) — sin profile_id/launch_id/timestamp de correlación como el
@@ -662,7 +662,7 @@ if (typeof self !== 'undefined') {
       {
         id: "organization_switched",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Mismo mecanismo de paridad que switch_organization (ver comentario arriba).
         // NOTA: PROMPT-EJECUCION-synapse-switch-organization.md nombra un tercer
@@ -690,7 +690,7 @@ if (typeof self !== 'undefined') {
     // `messages` (arriba) pero no acá — exactamente el patrón "zombie" que la
     // auditoría de Synapse encontró con GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED
     // (HANDOFF §5.3, último bullet: "no repetir el patrón"). Un evento que solo
-    // vive en `messages` puede simularse desde el Harness pero el
+    // vive en `messages` puede simularse desde el SynapseSimulator pero el
     // ProtocolReader nunca lo reconoce como observable real.
     observable_events: [
       "HOST_READY",
@@ -703,8 +703,8 @@ if (typeof self !== 'undefined') {
       "GITHUB_DEVICE_FLOW_ERROR",
       "VAULT_INITIALIZED",
       "DISCOVERY_COMPLETE",
-      "HARNESS_SIMULATE_HANDSHAKE",
-      "HARNESS_OPEN_LANDING",
+      "SYNAPSE_SIMULATOR_SIMULATE_HANDSHAKE",
+      "SYNAPSE_SIMULATOR_OPEN_LANDING",
       "SWITCH_ORGANIZATION",
       "ORGANIZATION_SWITCHED"
     ]

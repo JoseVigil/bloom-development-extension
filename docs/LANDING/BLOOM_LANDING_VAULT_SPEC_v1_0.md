@@ -3,7 +3,7 @@
 
 > **Propósito:** Fuente de verdad del diseño decidido en sesión de análisis sobre la relación entre Discovery, Landing y el sistema de vaults en Cortex. Cubre decisiones de producto, contratos de eventos nuevos, schema de estado compartido, secuencia de apertura de Landing, y gaps de código a implementar.
 >
-> **Contexto:** Este documento surge del análisis de `ONBOARDING_CORTEX_INTEGRATION.md`, `BLOOM_ONBOARDING_WORKFLOW_SPEC_v2_1.md` y `HARNESS_SOURCE_OF_TRUTH.md`. Las decisiones aquí registradas resuelven ambigüedades no cubiertas en esos documentos y deben incorporarse a ellos en la próxima revisión.
+> **Contexto:** Este documento surge del análisis de `ONBOARDING_CORTEX_INTEGRATION.md`, `BLOOM_ONBOARDING_WORKFLOW_SPEC_v2_1.md` y `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md`. Las decisiones aquí registradas resuelven ambigüedades no cubiertas en esos documentos y deben incorporarse a ellos en la próxima revisión.
 
 ---
 
@@ -26,13 +26,13 @@
 
 ## 1. El problema que este spec resuelve
 
-Dentro del onboarding de Bloom existen tres páginas en Cortex: Discovery, Harness y Landing. Discovery y Harness estaban suficientemente documentadas. Landing estaba marcada como pendiente o fuera de alcance en versiones anteriores — la revisión del 19 de junio de 2026 confirmó que `landingProtocol.js` ya existe con su manifest completo, pero el rol de Landing en el flujo de onboarding, su momento de apertura, y su relación con el sistema de vaults no estaban definidos.
+Dentro del onboarding de Bloom existen tres páginas en Cortex: Discovery, SynapseSimulator y Landing. Discovery y SynapseSimulator estaban suficientemente documentadas. Landing estaba marcada como pendiente o fuera de alcance en versiones anteriores — la revisión del 19 de junio de 2026 confirmó que `landingProtocol.js` ya existe con su manifest completo, pero el rol de Landing en el flujo de onboarding, su momento de apertura, y su relación con el sistema de vaults no estaban definidos.
 
 El análisis identificó dos desafíos concretos sin resolver:
 
 **Desafío 1 — Discovery**: la pantalla de discovery se lanza junto con el registro, acompaña al usuario en el handshake inicial y en todo el flujo de onboarding. Se cierra cuando cumple su función. Es transitoria por diseño.
 
-**Desafío 2 — Harness**: página de desarrollo y debugging. Acompaña al desarrollador para observar y simular el protocolo. No tiene rol en producción.
+**Desafío 2 — SynapseSimulator**: página de desarrollo y debugging. Acompaña al desarrollador para observar y simular el protocolo. No tiene rol en producción.
 
 **El problema no resuelto — Landing**: la página estable, siempre abierta, donde el usuario puede ver todos los elementos vivos del perfil. Existía como implementación pero sin integración definida en el flujo de onboarding. Específicamente: el vault que se crea cuando una clave se guarda en el shield de Chrome (`chrome.storage.local`) tiene naturaleza de Landing — es estado vivo del perfil — pero ocurre durante Discovery.
 
@@ -43,14 +43,14 @@ El análisis identificó dos desafíos concretos sin resolver:
 | Página | Cuándo corre | Quién la necesita | Ciclo de vida |
 |---|---|---|---|
 | **Discovery** (`discovery/index.html`) | Handshake inicial + todo el onboarding | Usuario en proceso de registro | Transitoria — se cierra al completar el onboarding |
-| **Harness** (`harness/index.html`) | Solo en builds `--dev` | Desarrollador debuggeando | Solo en dev — no existe en prod |
+| **SynapseSimulator** (`synapse-simulator/index.html`) | Solo en builds `--dev` | Desarrollador debuggeando | Solo en dev — no existe en prod |
 | **Landing** (`landing/index.html`) | Post-onboarding, en cada uso normal | Usuario operando el perfil | Permanente — siempre abierta durante el uso |
 
 **Regla de propiedad de funcionalidades:**
 
 - Discovery es dueña de: handshake, registro de cuentas, captura de tokens, confirmación de steps de onboarding.
 - Landing es dueña de: estado vivo del perfil, vaults activos, cuentas registradas, intents en curso, panel de control.
-- Harness es dueño de: observación del protocolo, simulación de eventos, debugging.
+- SynapseSimulator es dueño de: observación del protocolo, simulación de eventos, debugging.
 
 ---
 
@@ -208,7 +208,7 @@ Un perfil puede tener vault sin identidad confirmada si el fetch falla. En ese c
 
 ### El gap de código actual
 
-`routeToStep()` en `discovery.js` (línea 397) solo tiene cases para `github_auth` y `google_auth`. Los steps `vault_init`, `ai_provider_setup` y `project_create` caen al `default`, que llama a `routeToServiceFlow(this.serviceTarget)` — pantalla incorrecta, sin error visible. Este gap está documentado en `HARNESS_SOURCE_OF_TRUTH.md` §9.4 como deuda de código real.
+`routeToStep()` en `discovery.js` (línea 397) solo tiene cases para `github_auth` y `google_auth`. Los steps `vault_init`, `ai_provider_setup` y `project_create` caen al `default`, que llama a `routeToServiceFlow(this.serviceTarget)` — pantalla incorrecta, sin error visible. Este gap está documentado en `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md` §9.4 como deuda de código real.
 
 ### Qué hace la pantalla
 
@@ -348,7 +348,7 @@ Este objeto se crea al inicio del onboarding — no cuando los steps completan. 
 
 ### Prerequisitos
 
-Landing solo existe en `extensionDir` post-onboarding. `harness.js` usa `loadScriptOptional()` para cargarla condicionalmente. Este comportamiento no cambia.
+Landing solo existe en `extensionDir` post-onboarding. `synapse-simulator.js` usa `loadScriptOptional()` para cargarla condicionalmente. Este comportamiento no cambia.
 
 Landing se abre por primera vez cuando Conductor ejecuta `tab.create landing/index.html` al recibir el step `success`. En ese momento `bloom_profile_state.onboarding_complete` puede ser `false` todavía — Landing arranca de todas formas con el estado disponible.
 
@@ -667,7 +667,7 @@ Prioridad 5 (apertura de Landing)
   └── depende de: P3 (Landing necesita bloom_profile_state para arrancar)
 
 Prioridad 6 (manifest actualizado)
-  └── depende de: nada — trabajo paralelo, desbloquea el Harness
+  └── depende de: nada — trabajo paralelo, desbloquea el SynapseSimulator
 ```
 
 ---
@@ -684,7 +684,7 @@ Prioridad 6 (manifest actualizado)
 | `discovery/discoveryProtocol.js` | Para actualizar el enum de steps en el manifest |
 | `ONBOARDING_CORTEX_INTEGRATION.md` | Fuente de verdad de los contratos existentes de Cortex |
 | `BLOOM_ONBOARDING_WORKFLOW_SPEC_v2_1.md` | Para entender la cadena Go → Temporal → Sentinel → Brain → Chrome |
-| `HARNESS_SOURCE_OF_TRUTH.md` | Para no romper el Harness al actualizar los manifests |
+| `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH.md` | Para no romper el SynapseSimulator al actualizar los manifests |
 
 ### Si disponibles
 

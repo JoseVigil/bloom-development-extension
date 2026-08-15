@@ -21,7 +21,7 @@
 
 **v2.0 — Post-implementación Prompts A, B, C**
 - Sección 7 (Gaps) actualizada: todos los handlers de `background.js` están implementados
-- Tablas de estado actualizadas: Discovery, Landing, Harness
+- Tablas de estado actualizadas: Discovery, Landing, SynapseSimulator
 - Layer 3 actualizado: `_action_map` refleja handlers DOM + Landing + IonPump
 - Constraint #7 de IonPump aclarado: aplica a `content.js`, no a `background.js`
 - `SYNAPSE_DEBUG` corregido: estructura real del objeto en `background.js`
@@ -49,7 +49,7 @@ el único que Chrome permite para comunicación con procesos nativos del host.
 │                                                                     │
 │  Discovery  ←→  Onboarding (GitHub auth, API key, registro)        │
 │  Landing    ←→  Dashboard del perfil (estado, cuentas, acciones)   │
-│  Harness    ←→  Debug UI (simular mensajes, observar eventos)       │
+│  SynapseSimulator    ←→  Debug UI (simular mensajes, observar eventos)       │
 │                                                                     │
 │  Los tres comparten el mismo canal Native Messaging.                │
 │  Los tres son páginas dentro de la extensión Cortex.                │
@@ -58,23 +58,23 @@ el único que Chrome permite para comunicación con procesos nativos del host.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Por qué el Harness existe y qué rol cumple en esta etapa
+### Por qué el SynapseSimulator existe y qué rol cumple en esta etapa
 
 El protocolo Synapse tiene tres activos, mensajes bidireccionales, un handshake de
 múltiples fases, y una capa IPC para automatización. Desarrollar y depurar este sistema
 sin observabilidad es inviable.
 
-**El Harness es la herramienta de observabilidad y simulación del protocolo.** Permite:
+**El SynapseSimulator es la herramienta de observabilidad y simulación del protocolo.** Permite:
 - Observar todos los mensajes en tiempo real sin modificar el código de producción
 - Simular mensajes de cualquier protocolo sin que el flujo completo esté implementado
 - Verificar que los contratos (manifests) reflejan la realidad del código
 - Testear handlers individuales de forma aislada
 
-El Harness no tiene conocimiento hardcodeado de ningún mensaje — lee los manifests
-dinámicamente. Cuando se agrega un nuevo mensaje al protocolo, el Harness lo refleja
-automáticamente sin modificar `harness/index.html`.
+El SynapseSimulator no tiene conocimiento hardcodeado de ningún mensaje — lee los manifests
+dinámicamente. Cuando se agrega un nuevo mensaje al protocolo, el SynapseSimulator lo refleja
+automáticamente sin modificar `synapse-simulator/index.html`.
 
-**El Harness es la herramienta principal para verificar que el ducto Synapse funciona
+**El SynapseSimulator es la herramienta principal para verificar que el ducto Synapse funciona
 end-to-end antes de que los flujos de producción estén completos.**
 
 ---
@@ -127,7 +127,7 @@ end-to-end antes de que los flujos de producción estén completos.**
 │                   ⚠️ DOM commands recibidos, ejecución pendiente    │
 │   discovery/    — Onboarding UI                                     │
 │   landing/      — Dashboard UI                                      │
-│   harness/      — Debug UI (solo en dev builds)                     │
+│   synapse-simulator/      — Debug UI (solo en dev builds)                     │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -190,7 +190,7 @@ brain/core/profile/web/templates/discovery/
 ├── discovery.js
 ├── script.js
 ├── discoveryProtocol.js        ← PROTOCOL object + DISCOVERY_PROTOCOL_MANIFEST
-├── harnessProtocol.js         ← HARNESS_PROTOCOL_MANIFEST (leído por Harness)
+├── synapseSimulatorProtocol.js         ← SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST (leído por SynapseSimulator)
 ├── content-aistudio.js
 ├── onboarding.js
 └── styles.css
@@ -224,7 +224,7 @@ profiles/<uuid>/extension/
 | Componente | Estado |
 |---|---|
 | Assets estáticos copiados por `discovery_generator.py` | ✅ |
-| `harnessProtocol.js` incluido en `files_to_copy` | ✅ |
+| `synapseSimulatorProtocol.js` incluido en `files_to_copy` | ✅ |
 | `DISCOVERY_PROTOCOL_MANIFEST` al final de `discoveryProtocol.js` | ✅ |
 | `discovery.synapse.config.js` generado por Sentinel en launch | ✅ |
 | PROTOCOL object (fases, UI, mensajes) | ✅ |
@@ -303,46 +303,46 @@ profiles/<uuid>/extension/
 
 ---
 
-### 3.3 Harness
+### 3.3 SynapseSimulator
 
 **Propósito:** Herramienta de debug. Observador pasivo + simulador activo del protocolo.
 Existe únicamente en dev builds — no afecta producción.
 
 **Archivos en templates (Brain):**
 ```
-brain/core/profile/web/templates/harness/
+brain/core/profile/web/templates/synapse-simulator/
 └── index.html                  ← UI completa autocontenida (HTML + CSS + JS inline)
 ```
 
 **Archivos generados en runtime:**
 ```
-profiles/<uuid>/extension/harness/   ← SOLO si el perfil fue creado con --dev
+profiles/<uuid>/extension/synapse-simulator/   ← SOLO si el perfil fue creado con --dev
 └── index.html
 
 profiles/<uuid>/extension/
-└── harness.synapse.config.js         ← generado por Sentinel en launch
-                                         SOLO si harness/index.html existe
+└── synapse-simulator.synapse.config.js         ← generado por Sentinel en launch
+                                         SOLO si synapse-simulator/index.html existe
 ```
 
 **Activación:** `sentinel seed <alias> <master> --dev`
 
-**Estado del Harness:**
+**Estado del SynapseSimulator:**
 
 | Componente | Estado |
 |---|---|
-| `harness_generator.py` — patrón v3.0, solo assets estáticos | ✅ |
-| `harness/index.html` — ProtocolReader, Feed, Simulate, Config, Protocols | ✅ |
-| `harness.synapse.config.js` generado por Sentinel en launch | ✅ |
+| `synapse_simulator_generator.py` — patrón v3.0, solo assets estáticos | ✅ |
+| `synapse-simulator/index.html` — ProtocolReader, Feed, Simulate, Config, Protocols | ✅ |
+| `synapse-simulator.synapse.config.js` generado por Sentinel en launch | ✅ |
 | Flag `--dev` en `sentinel seed` | ✅ |
 | `dev_mode` propagado `create_profile` → `_generate_profile_pages` | ✅ |
-| `manifest.json` con `harness/*` en `web_accessible_resources` | ✅ |
+| `manifest.json` con `synapse-simulator/*` en `web_accessible_resources` | ✅ |
 | Test end-to-end: seed --dev → estructura correcta en disco | ⚠️ Pendiente — Test 1 |
-| Test end-to-end: launch → port file + harness config creados | ⚠️ Pendiente — Test 2 |
-| Harness carga los tres manifests en Panel Protocols | ⚠️ Pendiente — Test 4 |
+| Test end-to-end: launch → port file + synapse-simulator config creados | ⚠️ Pendiente — Test 2 |
+| SynapseSimulator carga los tres manifests en Panel Protocols | ⚠️ Pendiente — Test 4 |
 
 ---
 
-## 4. CÓMO FUNCIONA EL HARNESS — REFERENCIA TÉCNICA
+## 4. CÓMO FUNCIONA EL SYNAPSE_SIMULATOR — REFERENCIA TÉCNICA
 
 ### 4.1 Autodescubrimiento de manifests (ProtocolReader)
 
@@ -355,11 +355,11 @@ la forma `{ version, protocol, messages: [] }`. No hay lista hardcodeada.
 |---|---|---|
 | `self.DISCOVERY_PROTOCOL_MANIFEST` | `templates/discovery/discoveryProtocol.js` | `extension/discovery/discoveryProtocol.js` |
 | `self.LANDING_PROTOCOL_MANIFEST` | `templates/landing/landingProtocol.js` | `extension/landing/landingProtocol.js` |
-| `self.HARNESS_PROTOCOL_MANIFEST` | `templates/discovery/harnessProtocol.js` | `extension/discovery/harnessProtocol.js` |
+| `self.SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` | `templates/discovery/synapseSimulatorProtocol.js` | `extension/discovery/synapseSimulatorProtocol.js` |
 
 **Para agregar un nuevo protocolo:** crear el manifest en el template correspondiente,
 agregar el archivo a `web_accessible_resources`, y asegurarse de que se copia en seed.
-No se modifica `harness/index.html`.
+No se modifica `synapse-simulator/index.html`.
 
 ### 4.2 Los cuatro paneles
 
@@ -370,7 +370,7 @@ El listener es adicional al de `background.js` — no interfiere con el routing.
 ```javascript
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   addToFeed('received', msg, sender);
-  sendResponse({ harness_ack: true });
+  sendResponse({ synapse_simulator_ack: true });
   return true;
 });
 ```
@@ -382,7 +382,7 @@ y despacha al canal correcto:
 - Canal `"tabs"` → `chrome.tabs.sendMessage(tabId, payload)`
 
 **Config — identidad de sesión:**
-Muestra `profileId` y `launchId` de `HARNESS_CONFIG` y `SYNAPSE_CONFIG`.
+Muestra `profileId` y `launchId` de `SYNAPSE_SIMULATOR_CONFIG` y `SYNAPSE_CONFIG`.
 Permite override manual. Contiene selector de tab activo para mensajes `channel: "tabs"`.
 
 **Protocols — inspección de manifests:**
@@ -394,7 +394,7 @@ Visualiza los manifests cargados. Verificación de que el autodescubrimiento fun
 |---|---|
 | `"string"` | Input de texto libre |
 | `"enum"` | Dropdown generado desde `options[]` |
-| `"auto"` | Inyectado desde `source` (ej: `"HARNESS_CONFIG.profileId"`) |
+| `"auto"` | Inyectado desde `source` (ej: `"SYNAPSE_SIMULATOR_CONFIG.profileId"`) |
 
 ### 4.4 SYNAPSE_DEBUG — Helper de diagnóstico
 
@@ -423,7 +423,7 @@ self.SYNAPSE_DEBUG = {
 > Solo disponible cuando la URL del Service Worker contiene `debug=true`.
 > En builds de producción `self.SYNAPSE_DEBUG` es `undefined`.
 
-### 4.5 HARNESS_PROTOCOL_MANIFEST — 10 mensajes disponibles
+### 4.5 SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST — 10 mensajes disponibles
 
 | id | Comando | Descripción |
 |---|---|---|
@@ -457,11 +457,11 @@ sentinel seed <alias> <master> [--dev]
                     ├── _copy_extension_to_profile()
                     └── _generate_profile_pages(dev_mode=devMode)
                           ├── generate_discovery_page()
-                          │     → extension/discovery/ (incluye harnessProtocol.js)
+                          │     → extension/discovery/ (incluye synapseSimulatorProtocol.js)
                           ├── generate_profile_landing()
                           │     → extension/landing/
-                          └── generate_harness_page(dev_mode=devMode)
-                                dev_mode=True  → extension/harness/index.html
+                          └── generate_synapse_simulator_page(dev_mode=devMode)
+                                dev_mode=True  → extension/synapse-simulator/index.html
                                 dev_mode=False → no-op
 ```
 
@@ -472,8 +472,8 @@ sentinel launch <profile_id>
   └── ignition_identity.go::prepareSessionFiles()
         ├── writeDiscoveryConfig() → extension/discovery.synapse.config.js
         ├── writeLandingConfig()   → extension/landing.synapse.config.js
-        └── writeHarnessConfig()   → extension/harness.synapse.config.js
-              (solo si extension/harness/index.html existe)
+        └── writeSynapseSimulatorConfig()   → extension/synapse-simulator.synapse.config.js
+              (solo si extension/synapse-simulator/index.html existe)
 ```
 
 **Resultado en disco después del launch (perfil --dev):**
@@ -481,7 +481,7 @@ sentinel launch <profile_id>
 profiles/<uuid>/extension/
 ├── discovery.synapse.config.js     ← self.SYNAPSE_CONFIG
 ├── landing.synapse.config.js       ← self.SYNAPSE_CONFIG
-└── harness.synapse.config.js       ← self.HARNESS_CONFIG
+└── synapse-simulator.synapse.config.js       ← self.SYNAPSE_SIMULATOR_CONFIG
 
 BloomNucleus/run/
 └── ipc_{launch_id}.port            ← puerto TCP del SynapseIPCServer
@@ -500,8 +500,8 @@ sentinel seed dev_test_01 true --dev
 ```
 Verificar:
 ```
-profiles/<uuid>/extension/discovery/harnessProtocol.js  ← si falta: template no está
-profiles/<uuid>/extension/harness/index.html             ← si falta: dev_mode no llegó
+profiles/<uuid>/extension/discovery/synapseSimulatorProtocol.js  ← si falta: template no está
+profiles/<uuid>/extension/synapse-simulator/index.html             ← si falta: dev_mode no llegó
 ```
 
 ### Test 2 — IPC port file
@@ -511,7 +511,7 @@ sentinel launch <profile_id_del_test_1>
 Verificar:
 ```
 BloomNucleus/run/ipc_{launch_id}.port          ← entero (1024-65535)
-profiles/<uuid>/extension/harness.synapse.config.js
+profiles/<uuid>/extension/synapse-simulator.synapse.config.js
 ```
 Si el port file no existe: `SynapseManager` no recibe `launch_id` y `run_dir`.
 Identificar dónde se instancia `SynapseManager` en el entry point de Brain como Host.
@@ -530,14 +530,14 @@ IonPump Registry
 Total: 1 sites
 ```
 
-### Test 4 — Harness carga los tres manifests
+### Test 4 — SynapseSimulator carga los tres manifests
 Prerequisito: Tests 1 y 2 pasados.
-Abrir `chrome-extension://<id>/harness/index.html` → Panel Protocols.
+Abrir `chrome-extension://<id>/synapse-simulator/index.html` → Panel Protocols.
 Verificar: `discovery` (8 mensajes), `landing` (6 mensajes), `ionpump` (10 mensajes).
 
 ### Test 5 — Handshake end-to-end
 Prerequisito: Test 4 pasado.
-1. Harness → Panel Feed
+1. SynapseSimulator → Panel Feed
 2. `sentinel launch <profile_id>`
 3. Feed debe mostrar `SYSTEM_ACK` de Brain
 4. Simulate → Discovery → `host_ready` → ejecutar
@@ -615,7 +615,7 @@ Ver `IONPUMP_IMPLEMENTATION_PROMPT_v3.md` sección Phase 3 para el gate de desbl
 2. Agregar el handler en `background.js` (chrome.runtime.onMessage)
 3. Si llega de Brain: agregar routing en `handleHostMessage`
 4. Si Brain debe responder: agregar handler en `SynapseManager._action_map`
-5. El Harness refleja el nuevo mensaje automáticamente — no tocar `harness/index.html`
+5. El SynapseSimulator refleja el nuevo mensaje automáticamente — no tocar `synapse-simulator/index.html`
 
 ### Agregar un protocolo completamente nuevo
 
@@ -623,7 +623,7 @@ Ver `IONPUMP_IMPLEMENTATION_PROMPT_v3.md` sección Phase 3 para el gate de desbl
 2. Crear `<nombre>_generator.py` siguiendo el patrón de `discovery_generator.py` v3.0
 3. Agregar la llamada en `_generate_profile_pages()` en `profile_create.py`
 4. Agregar archivos del nuevo protocolo a `web_accessible_resources` en `manifest.json`
-5. El Harness detecta el nuevo manifest automáticamente
+5. El SynapseSimulator detecta el nuevo manifest automáticamente
 
 ### Convención de naming de manifests
 
@@ -653,9 +653,9 @@ if (typeof self !== 'undefined') {
 | `ionpump_ipc.py` | TCP client en proceso IonPump | Cambios en contrato IPC |
 | `discoveryProtocol.js` | PROTOCOL UI + DISCOVERY_PROTOCOL_MANIFEST | Se agrega mensaje Discovery |
 | `landingProtocol.js` | PROTOCOL UI + LANDING_PROTOCOL_MANIFEST | Se agrega mensaje Landing |
-| `harnessProtocol.js` | HARNESS_PROTOCOL_MANIFEST | Se agrega comando DOM o evento IonPump |
-| `harness/index.html` | Debug UI completa | Solo si cambia arquitectura del Harness |
-| `harness_generator.py` | Copia assets Harness en seed | Si se agregan más assets |
+| `synapseSimulatorProtocol.js` | SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST | Se agrega comando DOM o evento IonPump |
+| `synapse-simulator/index.html` | Debug UI completa | Solo si cambia arquitectura del SynapseSimulator |
+| `synapse_simulator_generator.py` | Copia assets SynapseSimulator en seed | Si se agregan más assets |
 | `discovery_generator.py` | Copia assets Discovery en seed | Si se agregan archivos a `templates/discovery/` |
 | `profile_create.py` | Orquesta creación del perfil | Si se agrega un nuevo activo |
 | `seed.go` | Flags de seed, llama a Brain | Si cambia la interfaz CLI del seed |

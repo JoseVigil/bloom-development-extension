@@ -6,18 +6,18 @@
 // 🔧 FIX: todo el archivo va envuelto en un IIFE. Antes, `const PROTOCOL` se
 // declaraba en el scope global de un script clásico (no módulo); si el mismo
 // <script src="landingProtocol.js"> se ejecuta más de una vez en el mismo
-// documento (harness re-inyectando el script, recarga dinámica, etc.), la
+// documento (synapse-simulator re-inyectando el script, recarga dinámica, etc.), la
 // segunda ejecución choca contra la declaración global anterior y tira
 // "Uncaught SyntaxError: Identifier 'PROTOCOL' has already been declared".
 // Con el IIFE, `const PROTOCOL` queda en un scope local nuevo cada vez que el
 // script corre, y el guard de abajo evita rehacer todo el trabajo si ya está
 // cargado.
 // 🔧 FIX (v2): el IIFE se mantiene para aislar el scope de `const PROTOCOL` y
-// evitar el SyntaxError de redeclaración cuando varios *Protocol.js (harness,
-// discovery, landing) se cargan en el mismo documento (harness/index.html).
+// evitar el SyntaxError de redeclaración cuando varios *Protocol.js (synapse-simulator,
+// discovery, landing) se cargan en el mismo documento (synapse-simulator/index.html).
 // PERO el guard de "si window.PROTOCOL ya existe, no hacer nada" que había acá
 // antes era el bug real: discoveryProtocol.js carga ANTES que landingProtocol.js
-// en la secuencia de boot del harness (ver harness.js boot sequence), así que
+// en la secuencia de boot del synapse-simulator (ver synapse-simulator.js boot sequence), así que
 // window.PROTOCOL ya estaba tomado por el protocolo de Discovery cuando le
 // tocaba el turno a Landing — y el guard impedía que el PROTOCOL de Landing se
 // instalara nunca. Cada protocolo tiene que poder pisar window.PROTOCOL con el
@@ -525,7 +525,7 @@ if (typeof window !== 'undefined') {
   }
   // ============================================================================
   // LANDING PROTOCOL MANIFEST
-  // Autodescriptive contract for the Harness ProtocolReader.
+  // Autodescriptive contract for the SynapseSimulator ProtocolReader.
   // Append-only — does NOT modify the PROTOCOL object above.
   // ============================================================================
 
@@ -539,7 +539,7 @@ if (typeof window !== 'undefined') {
       {
         id: "profile_load",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Request a full profile data reload",
         payload_template: {
@@ -551,14 +551,14 @@ if (typeof window !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           }
         ]
       },
       {
         id: "health_check",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Trigger a full-stack health check",
         payload_template: {
@@ -577,7 +577,7 @@ if (typeof window !== 'undefined') {
       {
         id: "nucleus_sync",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Trigger a nucleus project sync",
         payload_template: {
@@ -590,7 +590,7 @@ if (typeof window !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "launch_id",
@@ -603,7 +603,7 @@ if (typeof window !== 'undefined') {
       {
         id: "intent_list",
         type: "command",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Request the list of active intents for this profile",
         payload_template: {
@@ -615,14 +615,14 @@ if (typeof window !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           }
         ]
       },
       {
         id: "session_status",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a session status update from the host",
         payload_template: {
@@ -642,7 +642,7 @@ if (typeof window !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "launch_id",
@@ -655,7 +655,7 @@ if (typeof window !== 'undefined') {
       {
         id: "stats_update",
         type: "event",
-        direction: "harness_to_background",
+        direction: "synapse_simulator_to_background",
         channel: "runtime",
         description: "Simulate a stats update payload (launches, uptime, intents)",
         payload_template: {
@@ -672,7 +672,7 @@ if (typeof window !== 'undefined') {
             name: "profile_id",
             type: "auto",
             variable: "$PROFILE_ID",
-            source: "HARNESS_CONFIG.profileId"
+            source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
           },
           {
             name: "total_launches",

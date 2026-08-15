@@ -305,7 +305,7 @@ bloom-development-extension/
     │   │       ├── __init__.py
     │   │       ├── companion_generator.py
     │   │       ├── discovery_generator.py
-    │   │       ├── harness_generator.py
+    │   │       ├── synapse_simulator_generator.py
     │   │       ├── landing_generator.py
     │   │       └── templates/
     │   │           ├── __init__.py
@@ -322,10 +322,10 @@ bloom-development-extension/
     │   │           │   ├── index.html
     │   │           │   ├── script.js
     │   │           │   └── styles.css
-    │   │           ├── harness/
+    │   │           ├── synapse-simulator/
     │   │           │   ├── __init__.py
-    │   │           │   ├── harness.js
-    │   │           │   ├── harnessProtocol.js
+    │   │           │   ├── synapse-simulator.js
+    │   │           │   ├── synapseSimulatorProtocol.js
     │   │           │   └── index.html
     │   │           └── landing/
     │   │               ├── __init__.py

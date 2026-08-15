@@ -20,7 +20,7 @@
 | §8 | Nuevo gate `waitForProfileConnected` antes de `nucleus synapse onboarding` | `onboarding-handlers.js` líneas 87-115 |
 | §8 | Apertura de Landing via `nucleus synapse launch --mode landing` (Incógnita 5 resuelta) | `milestone-reactor.js` `_openLandingTab()` |
 | §8 | `nucleus_create` marcado por el handler de `onboarding:init-nucleus`, no por Brain | `onboarding-handlers.js` líneas 316-335 |
-| §9.5 | **Nueva subsección** — Harness de desarrollo: `harness:inject-milestone` | `onboarding-handlers.js`, `preload_onboarding.js` |
+| §9.5 | **Nueva subsección** — SynapseSimulator de desarrollo: `synapse-simulator:inject-milestone` | `onboarding-handlers.js`, `preload_onboarding.js` |
 
 ---
 
@@ -873,15 +873,15 @@ if (!screen) {
 La activity falla. Temporal reintenta. Brain es un servicio con nssm — se reinicia
 automáticamente. En la práctica el reintento debería encontrar Brain disponible.
 
-### 9.5 Harness de desarrollo — `harness:inject-milestone`
+### 9.5 SynapseSimulator de desarrollo — `synapse-simulator:inject-milestone`
 
 Para testing en builds de desarrollo sin una cuenta real ni Brain corriendo,
-el handler `harness:inject-milestone` permite inyectar milestones directamente
+el handler `synapse-simulator:inject-milestone` permite inyectar milestones directamente
 al `MilestoneReactor`:
 
 ```javascript
 // Solo disponible cuando app.isPackaged === false
-// Rechazado en production builds con error 'harness not available in production builds'
+// Rechazado en production builds con error 'synapse-simulator not available in production builds'
 
 // Desde preload_onboarding.js (renderer):
 window.onboarding.injectMilestone({ stepId: 'github_auth', data: { username: 'test' } });
@@ -892,7 +892,7 @@ const enriched = {
   event:    stepId.toUpperCase(),
   data,
   _ts:      Date.now(),
-  _harness: true,   // trazabilidad: indica que fue inyectado por harness
+  _synapse_simulator: true,   // trazabilidad: indica que fue inyectado por synapse-simulator
 };
 reactor.handleMilestone(stepId, enriched);
 ```

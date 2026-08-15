@@ -16,7 +16,7 @@ const ProtocolReader = {
     const candidates = [
       'DISCOVERY_PROTOCOL_MANIFEST',
       'LANDING_PROTOCOL_MANIFEST',
-      'HARNESS_PROTOCOL_MANIFEST',
+      'SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST',
     ];
 
     this.manifests = [];
@@ -44,7 +44,7 @@ const ProtocolReader = {
     const SCHEMA_FILES = [
       { file: 'protocols/discovery.schema.json', key: 'DISCOVERY_PROTOCOL_MANIFEST' },
       { file: 'protocols/landing.schema.json',   key: 'LANDING_PROTOCOL_MANIFEST'   },
-      { file: 'protocols/harness.schema.json',   key: 'HARNESS_PROTOCOL_MANIFEST'   },
+      { file: 'protocols/synapse-simulator.schema.json',   key: 'SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST'   },
     ];
 
     // Solo disponible dentro de la extensión; en dev standalone esta función
@@ -227,9 +227,9 @@ const Simulator = {
 
       if (param.type === 'auto' && param.live_resolver) {
         // 🔧 live_resolver: params cuyo valor real vive en OTRO contexto de
-        // ejecución (ej: la página discovery/index.html, no la del Harness).
+        // ejecución (ej: la página discovery/index.html, no la del SynapseSimulator).
         // window.<Foo> traversal (_resolveAutoParam) es estructuralmente
-        // incapaz de verlos — Harness y Discovery son documentos distintos,
+        // incapaz de verlos — SynapseSimulator y Discovery son documentos distintos,
         // no comparten window aunque estén en la misma extensión. Para estos
         // casos no mostramos un valor auto-resuelto (siempre iba a ser
         // "(not available)" o, peor, el string literal "undefined" colándose
@@ -276,12 +276,12 @@ const Simulator = {
               input.value = result.value;
               this.currentValues[param.variable] = result.value;
               this._updatePreview();
-              Harness.notify(`Detected ${param.name}: ${result.value}`, 'success');
+              SynapseSimulator.notify(`Detected ${param.name}: ${result.value}`, 'success');
             } else {
-              Harness.notify(result.message || 'Nothing detected — check hint below', 'error');
+              SynapseSimulator.notify(result.message || 'Nothing detected — check hint below', 'error');
             }
           } catch (e) {
-            Harness.notify(e.message, 'error');
+            SynapseSimulator.notify(e.message, 'error');
           } finally {
             detectBtn.disabled = false;
             detectBtn.textContent = '🔍 Detect';
@@ -396,7 +396,7 @@ const Simulator = {
    * _resolveLiveParam(resolverName)
    *
    * Contraparte de _resolveAutoParam para valores que NO viven en el window
-   * del Harness. Cada resolver le pregunta a background.js (que sí tiene
+   * del SynapseSimulator. Cada resolver le pregunta a background.js (que sí tiene
    * visibilidad real, porque el estado vive ahí) en vez de intentar leer
    * un global de otro documento. Devuelve { ok: boolean, value?, message? }.
    */
@@ -407,7 +407,7 @@ const Simulator = {
 
     if (resolverName === 'google_watched_tab') {
       return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ command: 'HARNESS_GET_WATCHED_GOOGLE_TAB' }, (response) => {
+        chrome.runtime.sendMessage({ command: 'SYNAPSE_SIMULATOR_GET_WATCHED_GOOGLE_TAB' }, (response) => {
           const err = chrome.runtime.lastError;
           if (err) {
             resolve({ ok: false, message: err.message });
@@ -466,7 +466,7 @@ const Simulator = {
   send() {
     const msg = this.currentMessage;
     if (!msg) {
-      Harness.notify('Seleccioná un mensaje primero', 'error');
+      SynapseSimulator.notify('Seleccioná un mensaje primero', 'error');
       return;
     }
 
@@ -478,13 +478,13 @@ const Simulator = {
 
     if (channel === 'runtime') {
       // Send via chrome.runtime.sendMessage to background
-      const extensionId = ConfigReader.harnessConfig?.extensionId;
+      const extensionId = ConfigReader.synapseSimulatorConfig?.extensionId;
 
       if (typeof chrome === 'undefined' || !chrome.runtime) {
         Logger.log('ERR', `chrome.runtime not available`);
         statusEl.textContent = '✗ chrome.runtime unavailable';
         statusEl.className = 'error';
-        Harness.notify('chrome.runtime not available — are you inside the extension?', 'error');
+        SynapseSimulator.notify('chrome.runtime not available — are you inside the extension?', 'error');
         return;
       }
 
@@ -515,12 +515,12 @@ const Simulator = {
             Logger.log('ERR', `sendMessage failed: ${err.message}`);
             statusEl.textContent = '✗ Send failed';
             statusEl.className = 'error';
-            Harness.notify(err.message, 'error');
+            SynapseSimulator.notify(err.message, 'error');
           });
           Logger.log('ACK', 'fire-and-forget (event, sin respuesta esperada)');
           statusEl.textContent = '✓ Sent';
           statusEl.className = 'ok';
-          Harness.notify(`${msg.id} sent`, 'success');
+          SynapseSimulator.notify(`${msg.id} sent`, 'success');
         } else {
           chrome.runtime.sendMessage(payload, (response) => {
             const err = chrome.runtime.lastError; // consumir sincrónicamente
@@ -528,13 +528,13 @@ const Simulator = {
               Logger.log('ERR', err.message);
               statusEl.textContent = '✗ Error';
               statusEl.className = 'error';
-              Harness.notify(err.message, 'error');
+              SynapseSimulator.notify(err.message, 'error');
             } else {
               const responseStr = response !== undefined ? JSON.stringify(response) : 'null (fire-and-forget)';
               Logger.log('ACK', responseStr);
               statusEl.textContent = '✓ Sent';
               statusEl.className = 'ok';
-              Harness.notify(`${msg.id} sent`, 'success');
+              SynapseSimulator.notify(`${msg.id} sent`, 'success');
             }
           });
         }
@@ -542,7 +542,7 @@ const Simulator = {
         Logger.log('ERR', e.message);
         statusEl.textContent = '✗ Exception';
         statusEl.className = 'error';
-        Harness.notify(e.message, 'error');
+        SynapseSimulator.notify(e.message, 'error');
       }
 
     } else {
@@ -619,15 +619,15 @@ const Logger = {
 };
 
 // ============================================================================
-// _harnessLogLevel
-// Determina el nivel de display para un evento HARNESS_LOG recibido de
+// _synapseSimulatorLogLevel
+// Determina el nivel de display para un evento SYNAPSE_SIMULATOR_LOG recibido de
 // background.js. Diferencia mensajes entrantes del host (IN), salientes al
 // host o a content.js (OUT), errores (ERROR) e informativos genéricos (INFO).
 //
-// Usado tanto en el listener de HARNESS_LOG en tiempo real como en el
-// procesamiento del replay de HARNESS_HELLO, para que la UI sea consistente.
+// Usado tanto en el listener de SYNAPSE_SIMULATOR_LOG en tiempo real como en el
+// procesamiento del replay de SYNAPSE_SIMULATOR_HELLO, para que la UI sea consistente.
 // ============================================================================
-function _harnessLogLevel(data) {
+function _synapseSimulatorLogLevel(data) {
   if (data?._level === 'error') return 'ERROR';
   if (data?._dir  === 'in')    return 'IN';
   if (data?._dir  === 'out')   return 'OUT';
@@ -636,32 +636,32 @@ function _harnessLogLevel(data) {
 
 // ============================================================================
 // ConfigReader
-// Lee HARNESS_CONFIG y SYNAPSE_CONFIG desde los globals inyectados por los
-// script tags al final del body (harness.synapse.config.js y
+// Lee SYNAPSE_SIMULATOR_CONFIG y SYNAPSE_CONFIG desde los globals inyectados por los
+// script tags al final del body (synapse-simulator.synapse.config.js y
 // discovery.synapse.config.js). Mismo patrón que discovery/index.html.
-// También escucha HARNESS_CONFIG_READY de background.js como guard de race condition.
+// También escucha SYNAPSE_SIMULATOR_CONFIG_READY de background.js como guard de race condition.
 // ============================================================================
 const ConfigReader = {
-  harnessConfig: null,
+  synapseSimulatorConfig: null,
   synapseConfig: null,
 
-  // Lee HARNESS_CONFIG desde self — inyectado por harness.synapse.config.js vía script tag.
+  // Lee SYNAPSE_SIMULATOR_CONFIG desde self — inyectado por synapse-simulator.synapse.config.js vía script tag.
   // Mismo patrón que discovery.js lee self.SYNAPSE_CONFIG.
   // No fetch, no eval, no CSP violations.
   async read() {
-    this.harnessConfig = (typeof self !== 'undefined' && self.HARNESS_CONFIG)
-      ? { ...self.HARNESS_CONFIG }
+    this.synapseSimulatorConfig = (typeof self !== 'undefined' && self.SYNAPSE_SIMULATOR_CONFIG)
+      ? { ...self.SYNAPSE_SIMULATOR_CONFIG }
       : null;
 
     this.synapseConfig = (typeof self !== 'undefined' && self.SYNAPSE_CONFIG)
       ? { ...self.SYNAPSE_CONFIG }
       : (window.SYNAPSE_CONFIG || null);
 
-    return { harness: this.harnessConfig, synapse: this.synapseConfig };
+    return { synapse-simulator: this.synapseSimulatorConfig, synapse: this.synapseConfig };
   },
 
   render() {
-    const h = this.harnessConfig;
+    const h = this.synapseSimulatorConfig;
     const s = this.synapseConfig;
 
     const set = (id, value, cls) => {
@@ -693,7 +693,7 @@ const ConfigReader = {
     // Raw config
     const raw = document.getElementById('config-raw');
     if (raw) {
-      raw.textContent = JSON.stringify({ HARNESS_CONFIG: h, SYNAPSE_CONFIG: s }, null, 2);
+      raw.textContent = JSON.stringify({ SYNAPSE_SIMULATOR_CONFIG: h, SYNAPSE_CONFIG: s }, null, 2);
     }
 
     // Connection status
@@ -702,22 +702,22 @@ const ConfigReader = {
     if (h && s) {
       dot.className = 'status-dot connected';
       lbl.textContent = 'Config loaded';
-      Logger.log('INFO', `HARNESS_CONFIG loaded — profile: ${h.profileId}`);
+      Logger.log('INFO', `SYNAPSE_SIMULATOR_CONFIG loaded — profile: ${h.profileId}`);
       Logger.log('INFO', `SYNAPSE_CONFIG loaded — launchId: ${s.launchId}`);
     } else if (h && !s) {
       dot.className = 'status-dot waiting';
       lbl.textContent = 'SYNAPSE_CONFIG missing';
-      Logger.log('INFO', 'HARNESS_CONFIG loaded, SYNAPSE_CONFIG not found');
+      Logger.log('INFO', 'SYNAPSE_SIMULATOR_CONFIG loaded, SYNAPSE_CONFIG not found');
     } else {
       dot.className = 'status-dot disconnected';
       lbl.textContent = 'No config (dev only)';
-      Logger.log('INFO', 'No HARNESS_CONFIG — running without Sentinel config');
+      Logger.log('INFO', 'No SYNAPSE_SIMULATOR_CONFIG — running without Sentinel config');
     }
   }
 };
 
 // ============================================================================
-// Harness — top-level coordinator
+// SynapseSimulator — top-level coordinator
 // ============================================================================
 // ============================================================================
 // QuickLinks
@@ -858,14 +858,14 @@ const QuickLinks = {
   }
 };
 
-const Harness = {
+const SynapseSimulator = {
   _activeTab: 'config',
   _rawConfigVisible: false,
 
   async init() {
-    Logger.log('INFO', 'Harness booting…');
+    Logger.log('INFO', 'SynapseSimulator booting…');
 
-    // 1. Read config — lee self.HARNESS_CONFIG y self.SYNAPSE_CONFIG inyectados por script tags.
+    // 1. Read config — lee self.SYNAPSE_SIMULATOR_CONFIG y self.SYNAPSE_CONFIG inyectados por script tags.
     await ConfigReader.read();
     ConfigReader.render();
 
@@ -873,29 +873,29 @@ const Harness = {
     //     No bloqueante: corre en paralelo, no retrasa el resto del boot.
     QuickLinks.checkStatus();
 
-    // 1b. Listen for late HARNESS_CONFIG_READY from background.js (race condition guard:
+    // 1b. Listen for late SYNAPSE_SIMULATOR_CONFIG_READY from background.js (race condition guard:
     //     background may load the config after this page is already open).
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((msg) => {
-        if (msg.event === 'HARNESS_CONFIG_READY' && msg.harness) {
-          ConfigReader.harnessConfig = msg.harness;
+        if (msg.event === 'SYNAPSE_SIMULATOR_CONFIG_READY' && msg.synapseSimulator) {
+          ConfigReader.synapseSimulatorConfig = msg.synapseSimulator;
           ConfigReader.render();
-          Logger.log('INFO', `HARNESS_CONFIG_READY received — profile: ${msg.harness.profileId}`);
+          Logger.log('INFO', `SYNAPSE_SIMULATOR_CONFIG_READY received — profile: ${msg.synapseSimulator.profileId}`);
           return;
         }
 
         // Espejo de messaging real: todo lo que background.js reporta al
         // debug panel (Workspace) llega también acá vía forwardToDebugPanel.
         // Esto es lo que cierra el punto ciego de Native Messaging / runtime
-        // — el Cortex Harness ahora ve el mismo feed que el Workspace Harness.
-        if (msg.event === 'HARNESS_LOG') {
+        // — el Cortex SynapseSimulator ahora ve el mismo feed que el Workspace SynapseSimulator.
+        if (msg.event === 'SYNAPSE_SIMULATOR_LOG') {
           const level = msg.data?._level === 'error' ? 'ERROR' : 'INFO';
           const tag = `[${msg.category}] ${msg.sourceEvent}`;
           Logger.log(level, `${tag} ${JSON.stringify(msg.data)}`);
         }
       });
 
-      // HARNESS_HELLO: pedirle a background.js todo lo que pasó antes de que
+      // SYNAPSE_SIMULATOR_HELLO: pedirle a background.js todo lo que pasó antes de que
       // esta tab existiera. Sin esto, cualquier evento emitido entre el boot
       // del sistema y la apertura de esta página se pierde para siempre.
       //
@@ -906,24 +906,24 @@ const Harness = {
       // hasta 4 veces antes de rendirse.
       const _HELLO_DELAYS = [0, 200, 500, 1000]; // ms antes de cada intento
 
-      const _sendHarnessHello = (attempt) => {
+      const _sendSynapseSimulatorHello = (attempt) => {
         setTimeout(() => {
-          chrome.runtime.sendMessage({ event: 'HARNESS_HELLO' }, (resp) => {
+          chrome.runtime.sendMessage({ event: 'SYNAPSE_SIMULATOR_HELLO' }, (resp) => {
             const err = chrome.runtime.lastError; // consumir siempre
             if (err) {
               if (attempt < _HELLO_DELAYS.length - 1) {
                 // SW todavía arrancando — reintentar
-                _sendHarnessHello(attempt + 1);
+                _sendSynapseSimulatorHello(attempt + 1);
               } else {
-                Logger.log('INFO', 'HARNESS_HELLO: background no disponible (normal en standalone dev)');
+                Logger.log('INFO', 'SYNAPSE_SIMULATOR_HELLO: background no disponible (normal en standalone dev)');
               }
               return;
             }
-            if (resp?.event === 'HARNESS_REPLAY' && Array.isArray(resp.entries)) {
+            if (resp?.event === 'SYNAPSE_SIMULATOR_REPLAY' && Array.isArray(resp.entries)) {
               if (resp.entries.length === 0) {
-                Logger.log('INFO', 'HARNESS_HELLO: sin eventos previos en buffer');
+                Logger.log('INFO', 'SYNAPSE_SIMULATOR_HELLO: sin eventos previos en buffer');
               } else {
-                Logger.log('INFO', `HARNESS_HELLO: replay de ${resp.entries.length} evento(s) previos`);
+                Logger.log('INFO', `SYNAPSE_SIMULATOR_HELLO: replay de ${resp.entries.length} evento(s) previos`);
                 for (const entry of resp.entries) {
                   const level = entry.data?._level === 'error' ? 'ERROR' : 'INFO';
                   const tag = `[${entry.category}] ${entry.sourceEvent}`;
@@ -935,7 +935,7 @@ const Harness = {
         }, _HELLO_DELAYS[attempt] ?? 1000);
       };
 
-      _sendHarnessHello(0);
+      _sendSynapseSimulatorHello(0);
     }
 
     // 2. Discover protocols — primero los globales legacy (síncronos),
@@ -987,7 +987,7 @@ const Harness = {
     const logClear = document.getElementById('log-clear');
     if (logClear) logClear.addEventListener('click', () => this.clearLog());
 
-    Logger.log('INFO', 'Harness ready.');
+    Logger.log('INFO', 'SynapseSimulator ready.');
   },
 
   // ── Public API called from inline handlers ────────────────────────────────
@@ -1087,17 +1087,17 @@ function loadScriptOptional(src) {
     fetch(url, { method: 'HEAD' })
       .then(res => {
         if (!res.ok) {
-          console.log(`[Harness] ↷ Not found (skipped): ${src}`);
+          console.log(`[SynapseSimulator] ↷ Not found (skipped): ${src}`);
           return resolve();
         }
         const s = document.createElement('script');
         s.src = url;
-        s.onload  = () => { console.log(`[Harness] ✓ Loaded: ${src}`); resolve(); };
-        s.onerror = () => { console.log(`[Harness] ↷ Load error (skipped): ${src}`); resolve(); };
+        s.onload  = () => { console.log(`[SynapseSimulator] ✓ Loaded: ${src}`); resolve(); };
+        s.onerror = () => { console.log(`[SynapseSimulator] ↷ Load error (skipped): ${src}`); resolve(); };
         document.head.appendChild(s);
       })
       .catch(() => {
-        console.log(`[Harness] ↷ Not found (skipped): ${src}`);
+        console.log(`[SynapseSimulator] ↷ Not found (skipped): ${src}`);
         resolve();
       });
   });
@@ -1107,20 +1107,20 @@ function loadScriptOptional(src) {
  * Boot sequence:
  * 1. Carga configs y protocolos requeridos (siempre presentes desde seed --dev).
  * 2. Intenta cargar landing config + protocolo — solo existen post-onboarding.
- *    Si no existen, el Harness arranca igual sin ellos.
- * 3. Lanza Harness.init() una vez que todos los scripts que van a llegar, llegaron.
+ *    Si no existen, el SynapseSimulator arranca igual sin ellos.
+ * 3. Lanza SynapseSimulator.init() una vez que todos los scripts que van a llegar, llegaron.
  */
 document.addEventListener('DOMContentLoaded', async () => {
   // --- Siempre presentes desde seed --dev ---
-  await loadScriptOptional('../harness.synapse.config.js');
+  await loadScriptOptional('../synapse-simulator.synapse.config.js');
   await loadScriptOptional('../discovery.synapse.config.js');
   await loadScriptOptional('../discovery/discoveryProtocol.js');
-  await loadScriptOptional('harnessProtocol.js');
+  await loadScriptOptional('synapseSimulatorProtocol.js');
 
   // --- Solo existen post-onboarding ---
   await loadScriptOptional('../landing.synapse.config.js');
   await loadScriptOptional('../landing/landingProtocol.js');
 
   // Todos los scripts que van a llegar, llegaron. Arrancar.
-  Harness.init();
+  SynapseSimulator.init();
 });

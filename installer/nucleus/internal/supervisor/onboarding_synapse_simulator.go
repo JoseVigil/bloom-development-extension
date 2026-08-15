@@ -1,23 +1,23 @@
-// File: internal/supervisor/onboarding_harness.go
+// File: internal/supervisor/onboarding_synapse_simulator.go
 //
-// Onboarding-mode Harness bootstrap.
+// Onboarding-mode SynapseSimulator bootstrap.
 //
-// Harness is the debug/observability layer inside the governance subsystem.
+// SynapseSimulator is the debug/observability layer inside the governance subsystem.
 // In a fully onboarded project it is registered after .ownership.json is
 // validated.  During onboarding that file does not yet exist, which caused
-// bootGovernance() to return nil early and Harness to never start.
+// bootGovernance() to return nil early and SynapseSimulator to never start.
 //
-// This file extracts Harness bootstrap into a dedicated, lifecycle-aware
-// function (bootHarness) that:
+// This file extracts SynapseSimulator bootstrap into a dedicated, lifecycle-aware
+// function (bootSynapseSimulator) that:
 //   - Is ALWAYS called by the boot sequence, regardless of onboarding state.
 //   - Resolves the correct .ownership.json path depending on lifecycle phase:
-//       PRE-ONBOARDING  → no file required; Harness runs in stub mode.
+//       PRE-ONBOARDING  → no file required; SynapseSimulator runs in stub mode.
 //       POST-ONBOARDING → .bloom/.nucleus-{org}/.ownership.json inside the
 //                         nucleus repo (getOwnershipPath returns this path).
-//   - Is non-fatal: a Harness failure produces a WARN, never a boot abort.
+//   - Is non-fatal: a SynapseSimulator failure produces a WARN, never a boot abort.
 //
 // Design invariant: this file must NOT import the governance package directly.
-// Harness in stub mode is a pure supervisor concern — it registers the debug
+// SynapseSimulator in stub mode is a pure supervisor concern — it registers the debug
 // streams and telemetry endpoints without requiring a governance context.
 package supervisor
 
@@ -31,19 +31,19 @@ import (
 	"time"
 )
 
-// HarnessMode describes how Harness was started.
-type HarnessMode string
+// SynapseSimulatorMode describes how SynapseSimulator was started.
+type SynapseSimulatorMode string
 
 const (
-	HarnessModeStub       HarnessMode = "STUB"       // onboarding — no ownership file
-	HarnessModeGovernance HarnessMode = "GOVERNANCE"  // post-onboarding — full governance
-	HarnessModeSimulation HarnessMode = "SIMULATION"  // --simulation flag
+	SynapseSimulatorModeStub       SynapseSimulatorMode = "STUB"       // onboarding — no ownership file
+	SynapseSimulatorModeGovernance SynapseSimulatorMode = "GOVERNANCE"  // post-onboarding — full governance
+	SynapseSimulatorModeSimulation SynapseSimulatorMode = "SIMULATION"  // --simulation flag
 )
 
-// HarnessResult is returned by bootHarness so callers can log/telemetry the
+// SynapseSimulatorResult is returned by bootSynapseSimulator so callers can log/telemetry the
 // outcome without inspecting internal state.
-type HarnessResult struct {
-	Mode        HarnessMode `json:"mode"`
+type SynapseSimulatorResult struct {
+	Mode        SynapseSimulatorMode `json:"mode"`
 	Healthy     bool        `json:"healthy"`
 	OwnershipOK bool        `json:"ownership_ok"`
 	Org         string      `json:"org,omitempty"`
@@ -70,7 +70,7 @@ type HarnessResult struct {
 // getBloomDir() (origin_path), que apunta al repo de bloom-development-extension.
 // Reproducido en vivo: con origin_path=/home/jose/repos/bloom-development-extension
 // y workspace_path=/home/jose/repos/elias-repos, "nucleus --json health" reportaba
-// governance/harness DEGRADED buscando .ownership.json en
+// governance/synapse-simulator DEGRADED buscando .ownership.json en
 // bloom-development-extension/.bloom/.nucleus-elias-repos/.ownership.json, cuando
 // el archivo real está en elias-repos/.bloom/.nucleus-elias-repos/.ownership.json.
 // Mismo patrón que el bug de BLOOM_NUCLEUS_PATH resuelto antes en getWorkspacePath()
@@ -160,82 +160,82 @@ func isOnboardingCompleted() bool {
 	return loadOnboardingCompleted(getBloomNucleusBase())
 }
 
-// bootHarness starts the Harness debug/observability subsystem.
+// bootSynapseSimulator starts the SynapseSimulator debug/observability subsystem.
 //
 // It is always called during the boot sequence, before or after governance,
 // and operates in two modes:
 //
 //   STUB mode (pre-onboarding):
-//     Harness registers its telemetry streams without a governance context.
+//     SynapseSimulator registers its telemetry streams without a governance context.
 //     No .ownership.json is required.  All debug endpoints are available.
 //
 //   GOVERNANCE mode (post-onboarding):
-//     Harness validates .ownership.json at the canonical path and registers
+//     SynapseSimulator validates .ownership.json at the canonical path and registers
 //     with the full governance context.
 //
 // The function is intentionally non-fatal: any error is logged as WARN and
-// returned in HarnessResult.Error, but the boot sequence continues.
-func (s *Supervisor) bootHarness(ctx context.Context, simulation bool) *HarnessResult {
+// returned in SynapseSimulatorResult.Error, but the boot sequence continues.
+func (s *Supervisor) bootSynapseSimulator(ctx context.Context, simulation bool) *SynapseSimulatorResult {
 	onboardingDone := isOnboardingCompleted()
 
-	result := &HarnessResult{
-		Mode:    resolveHarnessMode(simulation, onboardingDone),
+	result := &SynapseSimulatorResult{
+		Mode:    resolveSynapseSimulatorMode(simulation, onboardingDone),
 		Healthy: false,
 	}
 
 	switch result.Mode {
-	case HarnessModeSimulation:
-		return s.bootHarnessSimulation(ctx, result)
-	case HarnessModeStub:
-		return s.bootHarnessStub(ctx, result)
-	case HarnessModeGovernance:
-		return s.bootHarnessGovernance(ctx, result)
+	case SynapseSimulatorModeSimulation:
+		return s.bootSynapseSimulatorSimulation(ctx, result)
+	case SynapseSimulatorModeStub:
+		return s.bootSynapseSimulatorStub(ctx, result)
+	case SynapseSimulatorModeGovernance:
+		return s.bootSynapseSimulatorGovernance(ctx, result)
 	}
 
-	result.Error = fmt.Sprintf("unknown harness mode: %s", result.Mode)
+	result.Error = fmt.Sprintf("unknown synapse-simulator mode: %s", result.Mode)
 	return result
 }
 
-func resolveHarnessMode(simulation, onboardingDone bool) HarnessMode {
+func resolveSynapseSimulatorMode(simulation, onboardingDone bool) SynapseSimulatorMode {
 	if simulation {
-		return HarnessModeSimulation
+		return SynapseSimulatorModeSimulation
 	}
 	if !onboardingDone {
-		return HarnessModeStub
+		return SynapseSimulatorModeStub
 	}
-	return HarnessModeGovernance
+	return SynapseSimulatorModeGovernance
 }
 
-// bootHarnessStub runs Harness in onboarding (stub) mode.
+// bootSynapseSimulatorStub runs SynapseSimulator in onboarding (stub) mode.
 // No .ownership.json required.  Registers debug telemetry streams.
-func (s *Supervisor) bootHarnessStub(ctx context.Context, result *HarnessResult) *HarnessResult {
-	s.slog("INFO", "⚙️  Harness: starting in STUB mode (onboarding — no .ownership.json required)")
+func (s *Supervisor) bootSynapseSimulatorStub(ctx context.Context, result *SynapseSimulatorResult) *SynapseSimulatorResult {
+	s.slog("INFO", "⚙️  SynapseSimulator: starting in STUB mode (onboarding — no .ownership.json required)")
 
-	hlog := s.registerHarnessTelemetry("STUB")
+	hlog := s.registerSynapseSimulatorTelemetry("STUB")
 	hlogf(hlog, "INFO", "starting in STUB mode — onboarding not completed, no .ownership.json required")
 
 	result.Healthy = true
 	result.OwnershipOK = false // expected in stub mode
 
 	hlogf(hlog, "SUCCESS", "✓ STUB mode ready — debug endpoints available")
-	s.slog("SUCCESS", "✓ Harness running in STUB mode — debug endpoints available")
+	s.slog("SUCCESS", "✓ SynapseSimulator running in STUB mode — debug endpoints available")
 	return result
 }
 
-// bootHarnessSimulation runs Harness against the simulation fixture.
-func (s *Supervisor) bootHarnessSimulation(ctx context.Context, result *HarnessResult) *HarnessResult {
+// bootSynapseSimulatorSimulation runs SynapseSimulator against the simulation fixture.
+func (s *Supervisor) bootSynapseSimulatorSimulation(ctx context.Context, result *SynapseSimulatorResult) *SynapseSimulatorResult {
 	ownershipPath := getOwnershipPath(true, true)
-	s.slog("INFO", "⚙️  Harness: starting in SIMULATION mode (fixture: %s)", ownershipPath)
+	s.slog("INFO", "⚙️  SynapseSimulator: starting in SIMULATION mode (fixture: %s)", ownershipPath)
 
 	if _, err := os.Stat(ownershipPath); err != nil {
 		result.Error = fmt.Sprintf("simulation .ownership.json not found at %s: %v", ownershipPath, err)
-		s.slog("WARN", "Harness SIMULATION: %s", result.Error)
+		s.slog("WARN", "SynapseSimulator SIMULATION: %s", result.Error)
 		// Non-fatal: still register telemetry
 	} else {
 		result.OwnershipOK = true
 	}
 
-	hlog := s.registerHarnessTelemetry("SIMULATION")
+	hlog := s.registerSynapseSimulatorTelemetry("SIMULATION")
 	hlogf(hlog, "INFO", "starting in SIMULATION mode (fixture: %s)", ownershipPath)
 	if result.Error != "" {
 		hlogf(hlog, "WARN", result.Error)
@@ -245,14 +245,14 @@ func (s *Supervisor) bootHarnessSimulation(ctx context.Context, result *HarnessR
 
 	result.Healthy = true
 	hlogf(hlog, "SUCCESS", "✓ SIMULATION mode ready")
-	s.slog("SUCCESS", "✓ Harness running in SIMULATION mode")
+	s.slog("SUCCESS", "✓ SynapseSimulator running in SIMULATION mode")
 	return result
 }
 
-// bootHarnessGovernance runs Harness with full post-onboarding governance.
+// bootSynapseSimulatorGovernance runs SynapseSimulator with full post-onboarding governance.
 // Validates .ownership.json at the canonical path:
 //   <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
-func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessResult) *HarnessResult {
+func (s *Supervisor) bootSynapseSimulatorGovernance(ctx context.Context, result *SynapseSimulatorResult) *SynapseSimulatorResult {
 	org := readOrganizationFromNucleusJSON()
 	result.Org = org
 
@@ -260,14 +260,14 @@ func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessR
 	if ownershipPath == "" {
 		// Can happen if org is empty and bloom_dir unresolvable — degrade gracefully.
 		result.Error = "cannot resolve .ownership.json path (org slug absent from nucleus.json and BLOOM_DIR unset)"
-		s.slog("WARN", "Harness GOVERNANCE: %s", result.Error)
-		hlog := s.registerHarnessTelemetry("DEGRADED")
+		s.slog("WARN", "SynapseSimulator GOVERNANCE: %s", result.Error)
+		hlog := s.registerSynapseSimulatorTelemetry("DEGRADED")
 		hlogf(hlog, "WARN", result.Error)
-		result.Healthy = true // non-fatal; Harness still registers
+		result.Healthy = true // non-fatal; SynapseSimulator still registers
 		return result
 	}
 
-	s.slog("INFO", "⚙️  Harness: starting in GOVERNANCE mode (org=%s, path=%s)", org, ownershipPath)
+	s.slog("INFO", "⚙️  SynapseSimulator: starting in GOVERNANCE mode (org=%s, path=%s)", org, ownershipPath)
 
 	if _, err := os.Stat(ownershipPath); err != nil {
 		if os.IsNotExist(err) ||
@@ -275,15 +275,15 @@ func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessR
 			strings.Contains(err.Error(), "invalid") {
 			// Onboarding completed but file missing — migration in progress.
 			result.Error = fmt.Sprintf(".ownership.json not found at %s (migration pending?)", ownershipPath)
-			s.slog("WARN", "Harness GOVERNANCE: %s — running in degraded mode", result.Error)
-			hlog := s.registerHarnessTelemetry("DEGRADED")
+			s.slog("WARN", "SynapseSimulator GOVERNANCE: %s — running in degraded mode", result.Error)
+			hlog := s.registerSynapseSimulatorTelemetry("DEGRADED")
 			hlogf(hlog, "WARN", "%s — running in degraded mode", result.Error)
 			result.Healthy = true // non-fatal
 			return result
 		}
 		// Real filesystem error (permissions, disk, etc.)
 		result.Error = fmt.Sprintf("ownership.json access error: %v", err)
-		s.slog("ERROR", "Harness GOVERNANCE: %s", result.Error)
+		s.slog("ERROR", "SynapseSimulator GOVERNANCE: %s", result.Error)
 		result.Healthy = false
 		return result
 	}
@@ -291,20 +291,20 @@ func (s *Supervisor) bootHarnessGovernance(ctx context.Context, result *HarnessR
 	// Validate required fields
 	if err := validateOwnershipFile(ownershipPath); err != nil {
 		result.Error = fmt.Sprintf("ownership validation failed: %v", err)
-		s.slog("WARN", "Harness GOVERNANCE: %s", result.Error)
-		hlog := s.registerHarnessTelemetry("DEGRADED")
+		s.slog("WARN", "SynapseSimulator GOVERNANCE: %s", result.Error)
+		hlog := s.registerSynapseSimulatorTelemetry("DEGRADED")
 		hlogf(hlog, "WARN", result.Error)
 		result.Healthy = true // schema errors are non-fatal
 		return result
 	}
 
 	result.OwnershipOK = true
-	hlog := s.registerHarnessTelemetry("GOVERNANCE")
+	hlog := s.registerSynapseSimulatorTelemetry("GOVERNANCE")
 	hlogf(hlog, "INFO", "starting in GOVERNANCE mode (org=%s, path=%s)", org, ownershipPath)
 	hlogf(hlog, "INFO", ".ownership.json validated — owner and created_at present")
 	hlogf(hlog, "SUCCESS", "✓ GOVERNANCE mode ready (org=%s)", org)
 	result.Healthy = true
-	s.slog("SUCCESS", "✓ Harness running in GOVERNANCE mode (org=%s)", org)
+	s.slog("SUCCESS", "✓ SynapseSimulator running in GOVERNANCE mode (org=%s)", org)
 	return result
 }
 
@@ -327,51 +327,51 @@ func validateOwnershipFile(path string) error {
 	return nil
 }
 
-// registerHarnessTelemetry registers the Harness debug stream in telemetry.json
-// and creates the physical harness.log file so the declared stream has a real
+// registerSynapseSimulatorTelemetry registers the SynapseSimulator debug stream in telemetry.json
+// and creates the physical synapse-simulator.log file so the declared stream has a real
 // file on disk from the first boot.
 //
-// Returns an open *os.File pointing to harness.log (append mode) so the caller
+// Returns an open *os.File pointing to synapse-simulator.log (append mode) so the caller
 // can write boot-time entries via hlogf.  The file is left open intentionally —
 // the OS will close it when the process exits, and the Supervisor does not need
 // to track it beyond the boot sequence.  Returns nil if the file cannot be
 // created (non-fatal — callers must guard with hlogf which is nil-safe).
-func (s *Supervisor) registerHarnessTelemetry(mode string) *os.File {
+func (s *Supervisor) registerSynapseSimulatorTelemetry(mode string) *os.File {
 	logsBase := getBloomNucleusBase()
-	logPath := filepath.Join(logsBase, "logs", "nucleus", "harness", "harness.log")
+	logPath := filepath.Join(logsBase, "logs", "nucleus", "synapse-simulator", "synapse-simulator.log")
 
-	// Ensure log directory exists (best-effort — harness is non-fatal)
+	// Ensure log directory exists (best-effort — synapse-simulator is non-fatal)
 	_ = os.MkdirAll(filepath.Dir(logPath), 0755)
 
 	// Open (or create) the physical log file.  This is the step that was
 	// previously missing: the directory was created and the stream was
 	// registered in telemetry.json, but no file descriptor was ever opened,
-	// so harness.log never appeared on disk.
+	// so synapse-simulator.log never appeared on disk.
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		s.slog("WARN", "Harness: could not open harness.log — %v", err)
+		s.slog("WARN", "SynapseSimulator: could not open synapse-simulator.log — %v", err)
 		// Continue: registerStream still runs so telemetry stays consistent.
 		f = nil
 	} else {
 		// Write session header — marks each boot attempt in the log.
-		fmt.Fprintf(f, "======== [%s] Harness session started — mode: %s ========\n",
+		fmt.Fprintf(f, "======== [%s] SynapseSimulator session started — mode: %s ========\n",
 			time.Now().UTC().Format(time.RFC3339), mode)
 	}
 
 	s.registerStream(
-		"harness",
-		fmt.Sprintf("🛠  HARNESS [%s]", mode),
+		"synapse-simulator",
+		fmt.Sprintf("🛠  SYNAPSE_SIMULATOR [%s]", mode),
 		logPath,
-		fmt.Sprintf("Harness debug/observability stream — mode: %s", mode),
+		fmt.Sprintf("SynapseSimulator debug/observability stream — mode: %s", mode),
 		"nucleus",
 		1,
-		[]string{"nucleus", "harness", "debug"},
+		[]string{"nucleus", "synapse-simulator", "debug"},
 	)
 
 	return f
 }
 
-// hlogf writes a timestamped log line to the harness log file.
+// hlogf writes a timestamped log line to the synapse-simulator log file.
 // It is nil-safe: if f is nil (file could not be opened) it does nothing.
 // Format mirrors the supervisor's own slog output for easy cross-referencing.
 func hlogf(f *os.File, level, format string, args ...interface{}) {

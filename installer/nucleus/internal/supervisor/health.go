@@ -231,7 +231,7 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 		{"governance", func(ctx context.Context) ComponentHealth { return checkGovernance(ctx, s, appDataDir, validate) }},
 		{"brain_service", func(ctx context.Context) ComponentHealth { return checkBrainService(ctx, s, validate) }},
 		{"bloom_api", func(ctx context.Context) ComponentHealth { return checkBloomAPI(ctx, s, validate) }},
-		{"harness", func(ctx context.Context) ComponentHealth { return checkHarness(ctx, s, appDataDir, validate) }},
+		{"synapse-simulator", func(ctx context.Context) ComponentHealth { return checkSynapseSimulator(ctx, s, appDataDir, validate) }},
 		{"svelte_dev", func(ctx context.Context) ComponentHealth { return checkSvelteDev(ctx, s, validate) }},
 		{"worker_manager", func(ctx context.Context) ComponentHealth { return checkWorkerManager(ctx, s, appDataDir, validate) }},
 	}
@@ -277,8 +277,8 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 
 evaluate:
 	criticalComponents := []string{"temporal", "worker", "vault", "governance"}
-	// harness es non-critical: disponible durante onboarding, no bloquea el boot.
-	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "harness", "svelte_dev", "worker_manager"}
+	// synapse-simulator es non-critical: disponible durante onboarding, no bloquea el boot.
+	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "synapse-simulator", "svelte_dev", "worker_manager"}
 
 	criticalFailures, degradedCount := 0, 0
 
@@ -1078,15 +1078,15 @@ func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, vali
 	return health
 }
 
-// checkHarness verifica el subsistema de debug/observabilidad Harness.
+// checkSynapseSimulator verifica el subsistema de debug/observabilidad SynapseSimulator.
 //
-// Pre-onboarding: Harness corre en modo STUB. Siempre Healthy=true.
-//   bootHarness() es non-fatal y no tiene condición de fallo en stub mode —
-//   si nucleus service está corriendo, Harness está en STUB por diseño.
+// Pre-onboarding: SynapseSimulator corre en modo STUB. Siempre Healthy=true.
+//   bootSynapseSimulator() es non-fatal y no tiene condición de fallo en stub mode —
+//   si nucleus service está corriendo, SynapseSimulator está en STUB por diseño.
 //
 //   DISEÑO: NO se usa la existencia del directorio de log como proxy de
-//   "bootHarness corrió". El directorio lo crea registerHarnessTelemetry()
-//   dentro del proceso de larga vida (nucleus service), pero checkHarness
+//   "bootSynapseSimulator corrió". El directorio lo crea registerSynapseSimulatorTelemetry()
+//   dentro del proceso de larga vida (nucleus service), pero checkSynapseSimulator
 //   corre en un proceso efímero nuevo que no comparte ese estado. Usar el
 //   directorio como proxy producía STUB_NOT_STARTED falsos en cada ciclo
 //   del system_health hook (cada minuto), manteniendo health_state en
@@ -1095,18 +1095,18 @@ func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, vali
 // Post-onboarding: verifica que .ownership.json existe en la ruta canónica.
 //
 // Nota sobre dev_mode: no es un campo del ignition_spec.json ni del health
-// check. La detección de perfil dev usa la presencia de harness/index.html
-// en el extensionDir como señal canónica (ver writeHarnessConfig en
+// check. La detección de perfil dev usa la presencia de synapse-simulator/index.html
+// en el extensionDir como señal canónica (ver writeSynapseSimulatorConfig en
 // ignition_identity.go). No se requiere ningún flag adicional en el spec.
-func checkHarness(ctx context.Context, s *Supervisor, appDataDir string, validate bool) ComponentHealth {
+func checkSynapseSimulator(ctx context.Context, s *Supervisor, appDataDir string, validate bool) ComponentHealth {
 	health := ComponentHealth{}
 
 	onboardingDone := loadOnboardingCompleted(appDataDir)
 
 	if !onboardingDone {
-		// Pre-onboarding: Harness corre siempre en STUB mode.
-		// bootHarness() garantiza esto — es non-fatal e incondicional en el boot.
-		// No hay condición de fallo aquí: si nucleus service está vivo, Harness está en STUB.
+		// Pre-onboarding: SynapseSimulator corre siempre en STUB mode.
+		// bootSynapseSimulator() garantiza esto — es non-fatal e incondicional en el boot.
+		// No hay condición de fallo aquí: si nucleus service está vivo, SynapseSimulator está en STUB.
 		health.Healthy = true
 		health.State = "STUB"
 		return health
@@ -1117,7 +1117,7 @@ func checkHarness(ctx context.Context, s *Supervisor, appDataDir string, validat
 	if ownershipPath == "" || !fileExists(ownershipPath) {
 		health.Healthy = true // non-critical — migración puede estar en progreso
 		health.State = "DEGRADED"
-		health.Error = "Harness: .ownership.json not found at expected governance path"
+		health.Error = "SynapseSimulator: .ownership.json not found at expected governance path"
 		return health
 	}
 

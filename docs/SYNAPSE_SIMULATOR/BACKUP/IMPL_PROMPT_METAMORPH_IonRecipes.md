@@ -1,6 +1,6 @@
 # PROMPT DE IMPLEMENTACIÓN — Metamorph
 ## Ion Recipes Inspection + Reconciliation
-### Referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md · v1.0
+### Referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md · v1.0
 
 ---
 
@@ -11,7 +11,7 @@ Metamorph agrega soporte para inspeccionar y reconciliar `.ion` recipes. Es la �
 **Principio:** Metamorph trata los `.ion` recipes como un tipo más de artefacto gestionado — igual que los binarios. El proceso es: inspect → compare → download staging → validate → swap atómico.
 
 **Documentos de referencia:**
-- `BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
+- `BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
 - `METAMORPH-INSPECTION-IMPLEMENTATION-PROMPT.md` — patrón existente de inspect (seguirlo)
 - `IONPUMP_IMPLEMENTATION_PROMPT_Complete_Specification.md` — spec de IonPump
 
@@ -439,6 +439,6 @@ metamorph --json inspect --all --ion-recipes
 
 ---
 
-*Este prompt referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md*
+*Este prompt referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md*
 *Implementar en orden: types.go → ionrecipes.go → inspect.go (flag) → validar output*
 *La reconciliación completa de ion recipes es Fase siguiente al milestone GitHub.*

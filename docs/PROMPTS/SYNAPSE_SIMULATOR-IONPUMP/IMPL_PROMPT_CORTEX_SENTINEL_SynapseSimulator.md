@@ -1,19 +1,19 @@
 # PROMPT DE IMPLEMENTACIÓN — Cortex + Sentinel
-## Harness Integration + Protocol Manifests
-### Referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md · v1.0
+## SynapseSimulator Integration + Protocol Manifests
+### Referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md · v1.0
 
 ---
 
 ## Contexto para el implementador
 
-Este prompt cubre los cambios en **Cortex** (extensión Chrome) y **Sentinel** (seed orchestrator) para soportar Harness e IonPump en el milestone GitHub Onboarding.
+Este prompt cubre los cambios en **Cortex** (extensión Chrome) y **Sentinel** (seed orchestrator) para soportar SynapseSimulator e IonPump en el milestone GitHub Onboarding.
 
-**Principio rector:** Cortex es stateless y pasivo. Los cambios son mínimos: agregar manifests de protocolo al final de archivos existentes y actualizar `manifest.json`. Sentinel agrega la copia del Harness al seed. Nada más.
+**Principio rector:** Cortex es stateless y pasivo. Los cambios son mínimos: agregar manifests de protocolo al final de archivos existentes y actualizar `manifest.json`. Sentinel agrega la copia del SynapseSimulator al seed. Nada más.
 
 **Documentos de referencia:**
-- `BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
-- `INVESTIGACION_Harness_Protocol_Autodiscovery.md` — fuente de verdad del Harness
-- `SYNAPSE_HARNESS_PROTOCOL.md` — insights de implementación (no es fuente de verdad)
+- `BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
+- `INVESTIGACION_SynapseSimulator_Protocol_Autodiscovery.md` — fuente de verdad del SynapseSimulator
+- `SYNAPSE_SYNAPSE_SIMULATOR_PROTOCOL.md` — insights de implementación (no es fuente de verdad)
 
 ---
 
@@ -23,7 +23,7 @@ Este prompt cubre los cambios en **Cortex** (extensión Chrome) y **Sentinel** (
 
 **Agregar al FINAL del archivo.** No modificar nada de la lógica existente.
 
-El manifest es autodescriptivo: describe los mensajes que el protocolo ya maneja. El Harness lo lee para generar su UI dinámica.
+El manifest es autodescriptivo: describe los mensajes que el protocolo ya maneja. El SynapseSimulator lo lee para generar su UI dinámica.
 
 ```javascript
 // ============================================================
@@ -42,7 +42,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "onboarding_navigate",
       type: "command",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       channel: "runtime",
       description: "Navigate Discovery to a specific onboarding step",
       payload_template: {
@@ -63,7 +63,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "github_pat_detected",
       type: "event",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       channel: "runtime",
       description: "Simulate clipboard monitor detecting a GitHub PAT",
       payload_template: {
@@ -82,7 +82,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "github_token_stored",
       type: "event",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       channel: "runtime",
       description: "Simulate user confirming GitHub token in Discovery",
       payload_template: {
@@ -102,7 +102,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
           name: "profile_id",
           type: "auto",
           variable: "$PROFILE_ID",
-          source: "HARNESS_CONFIG.profileId"     // resuelto automáticamente
+          source: "SYNAPSE_SIMULATOR_CONFIG.profileId"     // resuelto automáticamente
         },
         {
           name: "launch_id",
@@ -115,7 +115,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "account_registered",
       type: "event",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       channel: "runtime",
       description: "Simulate GitHub account registered in Nucleus",
       payload_template: {
@@ -129,7 +129,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
           name: "profile_id",
           type: "auto",
           variable: "$PROFILE_ID",
-          source: "HARNESS_CONFIG.profileId"
+          source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
         },
         {
           name: "launch_id",
@@ -144,7 +144,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "host_ready",
       type: "command",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       channel: "runtime",
       description: "Manually complete the 3-phase handshake",
       payload_template: {
@@ -157,7 +157,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     {
       id: "discovery_complete",
       type: "event",
-      direction: "harness_to_background",
+      direction: "synapse_simulator_to_background",
       channel: "runtime",
       description: "Simulate Discovery flow completion",
       payload_template: {
@@ -172,7 +172,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
           name: "profile_id",
           type: "auto",
           variable: "$PROFILE_ID",
-          source: "HARNESS_CONFIG.profileId"
+          source: "SYNAPSE_SIMULATOR_CONFIG.profileId"
         },
         {
           name: "launch_id",
@@ -184,7 +184,7 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
     }
   ],
 
-  // Eventos que el Harness observa (los muestra en el Feed cuando los recibe)
+  // Eventos que el SynapseSimulator observa (los muestra en el Feed cuando los recibe)
   observable_events: [
     "HANDSHAKE_CONFIRMED",
     "API_KEY_REGISTERED",
@@ -198,17 +198,17 @@ self.DISCOVERY_PROTOCOL_MANIFEST = {
 
 ---
 
-### 1.2 Crear harnessProtocol.js
+### 1.2 Crear synapseSimulatorProtocol.js
 
-Archivo nuevo en `extension/`. Expone `HARNESS_PROTOCOL_MANIFEST` en `self.*`.
+Archivo nuevo en `extension/`. Expone `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` en `self.*`.
 
-Ver contenido completo en: `IMPL_PROMPT_BRAIN_IonPump_Harness.md` sección 2.2
+Ver contenido completo en: `IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator.md` sección 2.2
 
 El archivo es copiado por Brain/Sentinel en seed. No editar manualmente en producción.
 
-**Ubicación:** `extension/harness/harnessProtocol.js`
+**Ubicación:** `extension/synapse-simulator/synapseSimulatorProtocol.js`
 
-**Regla:** los `options` del parámetro `site` se actualizan cuando se agrega un nuevo ion site. El Harness refleja el cambio automáticamente sin modificar su código.
+**Regla:** los `options` del parámetro `site` se actualizan cuando se agrega un nuevo ion site. El SynapseSimulator refleja el cambio automáticamente sin modificar su código.
 
 ---
 
@@ -224,10 +224,10 @@ Agregar a `web_accessible_resources`:
       "resources": [
         "protocols/discovery.schema.json",
         "protocols/landing.schema.json",
-        "protocols/harness.schema.json",
+        "protocols/synapse-simulator.schema.json",
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
-        "harness.synapse.config.js",
+        "synapse-simulator.synapse.config.js",
         "discovery/*",
         "landing/*",
         "discovery/index.html",
@@ -237,9 +237,9 @@ Agregar a `web_accessible_resources`:
         "landing/index.html",
         "landing/styles.css",
         "landing/landing.js",
-        "harness/index.html",
-        "harness/harnessProtocol.js",
-        "harness/*"
+        "synapse-simulator/index.html",
+        "synapse-simulator/synapseSimulatorProtocol.js",
+        "synapse-simulator/*"
       ]
     }
   ]
@@ -247,30 +247,30 @@ Agregar a `web_accessible_resources`:
 ```
 
 **Cambios respecto al manifest actual:**
-- Agrega `"harness.synapse.config.js"` — config que Sentinel escribe
-- Agrega `"harness/index.html"` — ya estaba pero confirmar
-- Agrega `"harnessProtocol.js"` — NUEVO
-- Agrega `"harness/*"` — para recursos futuros del Harness
+- Agrega `"synapse-simulator.synapse.config.js"` — config que Sentinel escribe
+- Agrega `"synapse-simulator/index.html"` — ya estaba pero confirmar
+- Agrega `"synapseSimulatorProtocol.js"` — NUEVO
+- Agrega `"synapse-simulator/*"` — para recursos futuros del SynapseSimulator
 
-**Nota:** `harness/index.html` solo existe en el filesystem de la extensión cuando Sentinel lo copió (builds de dev). En prod, la entrada en `web_accessible_resources` no causa error si el archivo no existe — Chrome simplemente devuelve 404.
+**Nota:** `synapse-simulator/index.html` solo existe en el filesystem de la extensión cuando Sentinel lo copió (builds de dev). En prod, la entrada en `web_accessible_resources` no causa error si el archivo no existe — Chrome simplemente devuelve 404.
 
 ---
 
-### 1.4 harness/index.html — el Harness UI
+### 1.4 synapse-simulator/index.html — el SynapseSimulator UI
 
-El archivo vive en `brain/core/profile/web/templates/harness/index.html` y Sentinel lo copia al directorio de la extensión en seed.
+El archivo vive en `brain/core/profile/web/templates/synapse-simulator/index.html` y Sentinel lo copia al directorio de la extensión en seed.
 
-El Harness es completamente autocontenido: un solo archivo HTML+CSS+JS. No tiene dependencias externas.
+El SynapseSimulator es completamente autocontenido: un solo archivo HTML+CSS+JS. No tiene dependencias externas.
 
-**Estructura interna del Harness:**
+**Estructura interna del SynapseSimulator:**
 
 ```
-harness/index.html
+synapse-simulator/index.html
 ├── Estilos CSS (inline)
 ├── ProtocolReader class
 │   ├── loadAll()              ← descubre manifests en self.*
 │   ├── resolvePayload()       ← resuelve variables en templates
-│   └── _resolveAutoSource()   ← lee paths como "HARNESS_CONFIG.profileId"
+│   └── _resolveAutoSource()   ← lee paths como "SYNAPSE_SIMULATOR_CONFIG.profileId"
 ├── Panel: Feed
 │   └── chrome.runtime.onMessage listener (pasivo — solo observa)
 ├── Panel: Simulate
@@ -288,7 +288,7 @@ harness/index.html
 // Observador pasivo — NO interfiere con el routing de background.js
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   addToFeed('received', msg, sender);
-  sendResponse({ harness_ack: true });
+  sendResponse({ synapse_simulator_ack: true });
   return true;
 });
 ```
@@ -315,7 +315,7 @@ async function dispatchMessage(message, overrides) {
 }
 ```
 
-**Importante:** el Harness registra su propio `onMessage` listener. Esto es seguro porque `background.js` no se modifica — el listener del Harness es adicional, no reemplaza nada. Chrome entrega el mensaje a todos los listeners registrados.
+**Importante:** el SynapseSimulator registra su propio `onMessage` listener. Esto es seguro porque `background.js` no se modifica — el listener del SynapseSimulator es adicional, no reemplaza nada. Chrome entrega el mensaje a todos los listeners registrados.
 
 ---
 
@@ -325,29 +325,29 @@ async function dispatchMessage(message, overrides) {
 - NO modificar `discoveryProtocol.js` excepto agregar el manifest al final
 - NO modificar `content.js`
 - NO modificar `background.js` (excepto el fix de URL que ya estaba pendiente)
-- NO abrir un segundo `chrome.runtime.connectNative()` en el Harness
-- NO agregar lógica de negocio al Harness
+- NO abrir un segundo `chrome.runtime.connectNative()` en el SynapseSimulator
+- NO agregar lógica de negocio al SynapseSimulator
 - NO modificar el comportamiento del Service Worker
 
 ---
 
 ## Parte 2 — Sentinel
 
-### 2.1 seed.go — agregar writeHarnessConfig()
+### 2.1 seed.go — agregar writeSynapseSimulatorConfig()
 
-Sentinel ya escribe `discovery.synapse.config.js` y `landing.synapse.config.js` en seed. Agregar el mismo patrón para el Harness.
+Sentinel ya escribe `discovery.synapse.config.js` y `landing.synapse.config.js` en seed. Agregar el mismo patrón para el SynapseSimulator.
 
 ```go
 // sentinel/internal/seed/seed.go
 
 // NUEVO: Agrega junto a writeDiscoveryConfig() y writeLandingConfig()
 
-func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) error {
+func writeSynapseSimulatorConfig(profileID, launchID, profileAlias, extensionDir string) error {
     config := fmt.Sprintf(`
-// harness.synapse.config.js — generado por Sentinel en seed
+// synapse-simulator.synapse.config.js — generado por Sentinel en seed
 // No editar manualmente
 
-self.HARNESS_CONFIG = {
+self.SYNAPSE_SIMULATOR_CONFIG = {
   profileId: %q,
   launchId:  %q,
   profileAlias: %q,
@@ -360,11 +360,11 @@ self.HARNESS_CONFIG = {
         time.Now().UTC().Format(time.RFC3339),
     )
 
-    configPath := filepath.Join(extensionDir, "harness.synapse.config.js")
+    configPath := filepath.Join(extensionDir, "synapse-simulator.synapse.config.js")
     return os.WriteFile(configPath, []byte(strings.TrimSpace(config)), 0644)
 }
 
-func copyHarnessPage(brainTemplatesDir, extensionDir string) error {
+func copySynapseSimulatorPage(brainTemplatesDir, extensionDir string) error {
     // Solo en modo dev. En prod, no copiar.
     // La detección de modo dev puede ser un flag del seed command o
     // una variable de entorno BLOOM_DEV_MODE=true.
@@ -373,31 +373,31 @@ func copyHarnessPage(brainTemplatesDir, extensionDir string) error {
         return nil  // no-op en prod
     }
 
-    src := filepath.Join(brainTemplatesDir, "harness", "index.html")
+    src := filepath.Join(brainTemplatesDir, "synapse-simulator", "index.html")
     if _, err := os.Stat(src); os.IsNotExist(err) {
         // El template no existe — no es un error en prod
         return nil
     }
 
-    harnessDir := filepath.Join(extensionDir, "harness")
-    if err := os.MkdirAll(harnessDir, 0755); err != nil {
-        return fmt.Errorf("creating harness dir: %w", err)
+    synapseSimulatorDir := filepath.Join(extensionDir, "synapse-simulator")
+    if err := os.MkdirAll(synapseSimulatorDir, 0755); err != nil {
+        return fmt.Errorf("creating synapse-simulator dir: %w", err)
     }
 
-    dst := filepath.Join(harnessDir, "index.html")
+    dst := filepath.Join(synapseSimulatorDir, "index.html")
     return copyFile(src, dst)
 }
 
 func copyIonPumpProtocol(brainTemplatesDir, extensionDir string) error {
-    // Copia harnessProtocol.js al directorio raíz de la extensión.
+    // Copia synapseSimulatorProtocol.js al directorio raíz de la extensión.
     // Siempre se copia (dev y prod) — es parte del runtime de Cortex.
     
-    src := filepath.Join(brainTemplatesDir, "harnessProtocol.js")
+    src := filepath.Join(brainTemplatesDir, "synapseSimulatorProtocol.js")
     if _, err := os.Stat(src); os.IsNotExist(err) {
-        return fmt.Errorf("harnessProtocol.js not found in Brain templates: %s", src)
+        return fmt.Errorf("synapseSimulatorProtocol.js not found in Brain templates: %s", src)
     }
     
-    dst := filepath.Join(extensionDir, "harnessProtocol.js")
+    dst := filepath.Join(extensionDir, "synapseSimulatorProtocol.js")
     return copyFile(src, dst)
 }
 ```
@@ -414,11 +414,11 @@ func RunSeed(cfg SeedConfig) error {
     }
 
     // NUEVOS — agregar después de writeDiscoveryConfig:
-    if err := writeHarnessConfig(cfg.ProfileID, cfg.LaunchID, cfg.ProfileAlias, cfg.ExtensionDir); err != nil {
-        return fmt.Errorf("writing harness config: %w", err)
+    if err := writeSynapseSimulatorConfig(cfg.ProfileID, cfg.LaunchID, cfg.ProfileAlias, cfg.ExtensionDir); err != nil {
+        return fmt.Errorf("writing synapse-simulator config: %w", err)
     }
-    if err := copyHarnessPage(cfg.BrainTemplatesDir, cfg.ExtensionDir); err != nil {
-        return fmt.Errorf("copying harness page: %w", err)
+    if err := copySynapseSimulatorPage(cfg.BrainTemplatesDir, cfg.ExtensionDir); err != nil {
+        return fmt.Errorf("copying synapse-simulator page: %w", err)
     }
     if err := copyIonPumpProtocol(cfg.BrainTemplatesDir, cfg.ExtensionDir); err != nil {
         return fmt.Errorf("copying ionpump protocol: %w", err)
@@ -432,16 +432,16 @@ func RunSeed(cfg SeedConfig) error {
 
 ### 2.2 Re-seed como mecanismo de actualización
 
-Cuando el Harness se actualiza (nueva versión del template en Brain), el developer ejecuta:
+Cuando el SynapseSimulator se actualiza (nueva versión del template en Brain), el developer ejecuta:
 
 ```bash
 sentinel seed --profile-id <id> --reseed
 ```
 
 Esto sobrescribe:
-- `harness/index.html` → nueva versión del Harness
-- `harness.synapse.config.js` → regenerado con timestamps actualizados
-- `harnessProtocol.js` → actualizado si cambió
+- `synapse-simulator/index.html` → nueva versión del SynapseSimulator
+- `synapse-simulator.synapse.config.js` → regenerado con timestamps actualizados
+- `synapseSimulatorProtocol.js` → actualizado si cambió
 
 No requiere reinstalar Cortex. No requiere empaquetar un nuevo `.blx`.
 
@@ -455,9 +455,9 @@ Después del seed, verificar que existen:
 {extension_dir}/
 ├── discovery.synapse.config.js   ← existente
 ├── landing.synapse.config.js     ← existente
-├── harness.synapse.config.js     ← NUEVO (siempre)
-├── harnessProtocol.js           ← NUEVO (siempre)
-└── harness/
+├── synapse-simulator.synapse.config.js     ← NUEVO (siempre)
+├── synapseSimulatorProtocol.js           ← NUEVO (siempre)
+└── synapse-simulator/
     └── index.html                ← NUEVO (solo en dev)
 ```
 
@@ -466,9 +466,9 @@ El Sentinel puede agregar estas verificaciones a su output de seed:
 ```
 ✓ Discovery config written
 ✓ Landing config written
-✓ Harness config written
+✓ SynapseSimulator config written
 ✓ IonPump protocol copied
-✓ Harness page copied (dev mode)
+✓ SynapseSimulator page copied (dev mode)
 ```
 
 ---
@@ -477,25 +477,25 @@ El Sentinel puede agregar estas verificaciones a su output de seed:
 
 - [ ] `DISCOVERY_PROTOCOL_MANIFEST` agregado al final de `discoveryProtocol.js`
 - [ ] 6 mensajes del milestone GitHub presentes en el manifest
-- [ ] `harnessProtocol.js` creado con `HARNESS_PROTOCOL_MANIFEST`
-- [ ] `manifest.json` actualizado: `harness.synapse.config.js`, `harness/*`, `harnessProtocol.js`
-- [ ] `harness/index.html` implementado con ProtocolReader y UI dinámica
-- [ ] Harness dispatcher diferencia `channel: "runtime"` vs `channel: "tabs"`
-- [ ] Harness listener es pasivo — no interfiere con routing de background.js
+- [ ] `synapseSimulatorProtocol.js` creado con `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST`
+- [ ] `manifest.json` actualizado: `synapse-simulator.synapse.config.js`, `synapse-simulator/*`, `synapseSimulatorProtocol.js`
+- [ ] `synapse-simulator/index.html` implementado con ProtocolReader y UI dinámica
+- [ ] SynapseSimulator dispatcher diferencia `channel: "runtime"` vs `channel: "tabs"`
+- [ ] SynapseSimulator listener es pasivo — no interfiere con routing de background.js
 - [ ] `LANDING_PROTOCOL_MANIFEST` pendiente (no bloqueante para milestone GitHub)
 
 ## Checklist de implementación — Sentinel
 
-- [ ] `writeHarnessConfig()` implementado en seed.go
-- [ ] `copyHarnessPage()` implementado — no-op en prod
+- [ ] `writeSynapseSimulatorConfig()` implementado en seed.go
+- [ ] `copySynapseSimulatorPage()` implementado — no-op en prod
 - [ ] `copyIonPumpProtocol()` implementado — siempre activo
 - [ ] `RunSeed()` llama las tres funciones nuevas
 - [ ] Output de seed muestra confirmación de archivos copiados
-- [ ] Re-seed (`--reseed`) sobrescribe harness/index.html correctamente
+- [ ] Re-seed (`--reseed`) sobrescribe synapse-simulator/index.html correctamente
 - [ ] `isDevMode()` tiene lógica clara (flag o env var) — no ambiguo
 
 ---
 
-*Este prompt referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md*
-*Cortex: implementar en orden: manifest discovery → manifest ionpump → manifest.json → harness/index.html*
-*Sentinel: implementar writeHarnessConfig → copyHarnessPage → copyIonPumpProtocol → integrar en RunSeed*
+*Este prompt referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md*
+*Cortex: implementar en orden: manifest discovery → manifest ionpump → manifest.json → synapse-simulator/index.html*
+*Sentinel: implementar writeSynapseSimulatorConfig → copySynapseSimulatorPage → copyIonPumpProtocol → integrar en RunSeed*

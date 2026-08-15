@@ -34,10 +34,10 @@ No hagas lo que la sesión de investigación evitó hacer a propósito: no compl
 
 **Archivos a pedir y tocar** (según `installer/cortex/extension/` y `brain/core/profile/web/templates/discovery/`):
 - `installer/cortex/extension/protocols/discovery.schema.json` — declarar los tres mensajes en `messages` **y** en `observable_events` según corresponda. Confirmar explícitamente cuáles van en cada lista antes de escribir — no asumir por simetría con otros mensajes existentes.
-- `brain/core/profile/web/templates/discovery/discoveryProtocol.js` — el Harness carga este manifest manual **con prioridad sobre el JSON** (confirmado en comentario propio del archivo, líneas ~382-399, "HALLAZGO 2026-07-17"). Si se declara el mensaje solo en el `.schema.json` y no acá, es un evento zombie de manual — declarar en los dos, sin excepción.
+- `brain/core/profile/web/templates/discovery/discoveryProtocol.js` — el SynapseSimulator carga este manifest manual **con prioridad sobre el JSON** (confirmado en comentario propio del archivo, líneas ~382-399, "HALLAZGO 2026-07-17"). Si se declara el mensaje solo en el `.schema.json` y no acá, es un evento zombie de manual — declarar en los dos, sin excepción.
 - `installer/cortex/extension/background.js` — confirmar si hace falta registrar el mensaje en `REGISTERED_HANDLERS`/`forwardToHost()` para que efectivamente se despache, o si eso es automático a partir del schema.
 
-**Criterio de verificación de esta etapa:** el Harness (`harness/index.html`, dev-only) debe poder simular `SWITCH_ORGANIZATION` y ver los tres eventos aparecer en su UI de "Protocols" sin que nada del otro lado responda todavía (no hay lógica real aún) — eso confirma que no quedó zombie.
+**Criterio de verificación de esta etapa:** el SynapseSimulator (`synapse-simulator/index.html`, dev-only) debe poder simular `SWITCH_ORGANIZATION` y ver los tres eventos aparecer en su UI de "Protocols" sin que nada del otro lado responda todavía (no hay lógica real aún) — eso confirma que no quedó zombie.
 
 **No incluir en esta etapa:** ningún cambio en `main_conductor.js`, `workspace-synapse-handlers.js`, `milestone-registry.js` ni `milestone-reactor.js`. Eso es Etapa 5.
 

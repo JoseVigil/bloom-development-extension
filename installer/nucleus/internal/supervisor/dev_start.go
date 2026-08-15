@@ -29,7 +29,7 @@ func createDevStartCommand(c *core.Core) *cobra.Command {
 	var simulation bool
 	var skipVault bool
 	var skipControlPlane bool
-	var enableHarnessOnboarding bool
+	var enableSynapseSimulatorOnboarding bool
 	var outputJSON bool
 
 	cmd := &cobra.Command{
@@ -54,7 +54,7 @@ deterministic startup order.`,
 		Example: `  nucleus dev-start
   nucleus dev-start --simulation
   nucleus dev-start --skip-vault
-  nucleus dev-start --enable-harness-onboarding`,
+  nucleus dev-start --enable-synapse-simulator-onboarding`,
 
 		Run: func(cmd *cobra.Command, args []string) {
 			// Inherit global --json flag (same pattern as all other nucleus commands)
@@ -63,15 +63,15 @@ deterministic startup order.`,
 			}
 
 			// Verify authorization (dev-start requires Master role).
-			// EXCEPCIÓN: --enable-harness-onboarding bypassa el Master check para que
-			// Harness sea usable antes del registro de GitHub (fase de onboarding).
-			if !enableHarnessOnboarding {
+			// EXCEPCIÓN: --enable-synapse-simulator-onboarding bypassa el Master check para que
+			// SynapseSimulator sea usable antes del registro de GitHub (fase de onboarding).
+			if !enableSynapseSimulatorOnboarding {
 				if err := governance.RequireMaster(c); err != nil {
 					c.Logger.Printf("[ERROR] ⛔ dev-start requires Master role: %v", err)
 					return
 				}
 			} else {
-				c.Logger.Printf("[INFO] 🛠  --enable-harness-onboarding: skipping Master role check")
+				c.Logger.Printf("[INFO] 🛠  --enable-synapse-simulator-onboarding: skipping Master role check")
 			}
 
 			// Create supervisor instance
@@ -87,7 +87,7 @@ deterministic startup order.`,
 
 			// Execute boot sequence
 			ctx := context.Background()
-			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane, enableHarnessOnboarding, logW)
+			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane, enableSynapseSimulatorOnboarding, logW)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Boot sequence failed: %v", err)
 
@@ -126,7 +126,7 @@ deterministic startup order.`,
 	cmd.Flags().BoolVar(&simulation, "simulation", false, "Run in simulation mode (use test ownership.json)")
 	cmd.Flags().BoolVar(&skipVault, "skip-vault", false, "Skip vault verification (development only)")
 	cmd.Flags().BoolVar(&skipControlPlane, "skip-control-plane", false, "Skip Control Plane startup (pre-onboarding mode)")
-	cmd.Flags().BoolVar(&enableHarnessOnboarding, "enable-harness-onboarding", false, "Enable Harness in onboarding mode (skips Master role check)")
+	cmd.Flags().BoolVar(&enableSynapseSimulatorOnboarding, "enable-synapse-simulator-onboarding", false, "Enable SynapseSimulator in onboarding mode (skips Master role check)")
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")
 
 	return cmd
@@ -149,7 +149,7 @@ type BootSequenceResult struct {
 // El parámetro logW recibe os.Stderr cuando el caller está en modo --json,
 // o os.Stdout en modo interactivo. Esto garantiza que los logs de progreso
 // nunca contaminen el JSON que lee Electron u otros callers.
-func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane, enableHarnessOnboarding bool, logW io.Writer) (*BootSequenceResult, error) {
+func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane, enableSynapseSimulatorOnboarding bool, logW io.Writer) (*BootSequenceResult, error) {
 	log := func(format string, args ...interface{}) {
 		fmt.Fprintf(logW, format+"\n", args...)
 	}
@@ -162,16 +162,16 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	}
 
 	// ========================================================================
-	// Phase 0: Harness (siempre — antes de governance, independiente del
+	// Phase 0: SynapseSimulator (siempre — antes de governance, independiente del
 	// estado de onboarding). En modo onboarding es la capa de debug principal.
-	// Non-fatal: un fallo de Harness no aborta el boot.
+	// Non-fatal: un fallo de SynapseSimulator no aborta el boot.
 	// ========================================================================
-	log("[INFO] Starting Harness (debug/observability layer)...")
-	harnessResult := s.bootHarness(ctx, simulation)
-	if !harnessResult.Healthy {
-		log("[WARN] ⚠️  Harness failed to start (mode=%s): %s", harnessResult.Mode, harnessResult.Error)
+	log("[INFO] Starting SynapseSimulator (debug/observability layer)...")
+	synapseSimulatorResult := s.bootSynapseSimulator(ctx, simulation)
+	if !synapseSimulatorResult.Healthy {
+		log("[WARN] ⚠️  SynapseSimulator failed to start (mode=%s): %s", synapseSimulatorResult.Mode, synapseSimulatorResult.Error)
 	} else {
-		log("[INFO] ✓ Harness started (mode=%s)", harnessResult.Mode)
+		log("[INFO] ✓ SynapseSimulator started (mode=%s)", synapseSimulatorResult.Mode)
 	}
 
 	// ========================================================================

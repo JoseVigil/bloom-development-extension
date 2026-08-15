@@ -348,18 +348,18 @@ body::after {
 .ledger-footer-note { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; color: var(--color-text-dim); line-height: 1.6; }
 
 /* ═══════════════════════════════════════════════════
-   DEMO HARNESS — no es parte del producto, simula al Daemon
+   DEMO SYNAPSE_SIMULATOR — no es parte del producto, simula al Daemon
    emitiendo eventos WS para poder recorrer el ciclo sin backend.
 ═══════════════════════════════════════════════════ */
 
-.demo-harness {
+.demo-synapse-simulator {
   position: fixed; left: calc(var(--sidebar-w) + 16px); bottom: 16px; z-index: 300;
   background: var(--color-surface); border: 1px dashed var(--color-border-active);
   border-radius: var(--radius-md); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
   max-width: 480px; box-shadow: var(--shadow-md);
 }
-.demo-harness-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; color: var(--color-text-dim); text-transform: uppercase; }
-.demo-harness-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.demo-synapse-simulator-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; color: var(--color-text-dim); text-transform: uppercase; }
+.demo-synapse-simulator-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .demo-btn {
   font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; padding: 5px 9px;
   background: var(--color-surface-hover); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
@@ -467,10 +467,10 @@ body::after {
   </div>
 </div>
 
-<!-- ═══ DEMO HARNESS — simula al Daemon emitiendo eventos WS ═══ -->
-<div class="demo-harness" id="demoHarness">
-  <span class="demo-harness-label">Simulador de eventos WS (no es parte del producto)</span>
-  <div class="demo-harness-row" id="demoRow"><!-- botones contextuales por fase, renderizado por JS --></div>
+<!-- ═══ DEMO SYNAPSE_SIMULATOR — simula al Daemon emitiendo eventos WS ═══ -->
+<div class="demo-synapse-simulator" id="demoSynapseSimulator">
+  <span class="demo-synapse-simulator-label">Simulador de eventos WS (no es parte del producto)</span>
+  <div class="demo-synapse-simulator-row" id="demoRow"><!-- botones contextuales por fase, renderizado por JS --></div>
   <label class="demo-toggle">
     <input type="checkbox" id="domainExpansionToggle" onchange="onMandateTypeToggle()">
     mandateType: domain_expansion (en vez de genesis)
@@ -511,7 +511,7 @@ const MOCK_FILES = [
 ];
 
 // Escenario de 3 dominios reales (no 3 copias del mismo) para poder demostrar
-// Fase 4 corriendo en paralelo. Se activa con el toggle del harness; por
+// Fase 4 corriendo en paralelo. Se activa con el toggle del synapse-simulator; por
 // default el ciclo sigue siendo 1 dominio = nombre del proyecto.
 const MOCK_DOMAIN_DEFS = [
   { name: 'auth',          slice: [0, 7],  cohesion: 0.91 },

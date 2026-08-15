@@ -124,8 +124,8 @@ func parseSinceDuration(since string) (time.Duration, error) {
 //     Month+day = 0223 → Feb 23; time = 000150.567 → 00:01:50.567
 //     The year is inferred from the current UTC year since Chromium omits it.
 //
-//  6. Harness banner (timestamp bracketed inline, not at line start):
-//     "======== [2006-01-02T15:04:05Z] Harness session started ..."
+//  6. SynapseSimulator banner (timestamp bracketed inline, not at line start):
+//     "======== [2006-01-02T15:04:05Z] SynapseSimulator session started ..."
 //
 //  7. Pino/nucleus_control_plane JSON logger (epoch milliseconds in "time" field):
 //     {"level":30,"time":1780841595866,"msg":"..."}
@@ -356,7 +356,7 @@ func parseLineTimestamp(line string) time.Time {
 		return t
 	}
 
-	// BUG 2 FIX — Harness banner: "======== [2026-06-07T14:12:54Z] Harness session ..."
+	// BUG 2 FIX — SynapseSimulator banner: "======== [2026-06-07T14:12:54Z] SynapseSimulator session ..."
 	// The timestamp is bracketed but NOT at the start of the line, so the
 	// formats table never matched it.  Find the first '[' and re-run the
 	// format search against the substring starting there.

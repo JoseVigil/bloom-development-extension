@@ -1,6 +1,6 @@
 # PROMPT DE IMPLEMENTACIÓN — Brain
-## IonPump Runtime + Harness Generator
-### Referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md · v1.0
+## IonPump Runtime + SynapseSimulator Generator
+### Referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md · v1.0
 
 ---
 
@@ -9,13 +9,13 @@
 Estás implementando dos responsabilidades de Brain en el contexto del milestone GitHub Onboarding:
 
 1. **IonPump** — runtime de automatización web (vive en `brain/core/ionpump/`)
-2. **Harness Generator** — genera la página de debug en seed (vive en `brain/core/profile/web/`)
+2. **SynapseSimulator Generator** — genera la página de debug en seed (vive en `brain/core/profile/web/`)
 
 IonPump es un runtime interno. No es un módulo CLI de usuario. Se activa cuando IntentExecutor detecta `intent_subtype == "web_automation"`. No modifica Synapse. No modifica content.js. No hace llamadas de red.
 
 **Documentos de referencia que debés leer antes de implementar:**
-- `BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
-- `INVESTIGACION_Harness_Protocol_Autodiscovery.md` — fuente de verdad del Harness
+- `BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md` — arquitectura completa
+- `INVESTIGACION_SynapseSimulator_Protocol_Autodiscovery.md` — fuente de verdad del SynapseSimulator
 - `IONPUMP_IMPLEMENTATION_PROMPT_Complete_Specification.md` — spec técnica de IonPump
 
 ---
@@ -469,16 +469,16 @@ Total: 2 sites
 
 ---
 
-## Parte 2 — Harness Generator
+## Parte 2 — SynapseSimulator Generator
 
-### 2.1 harness_generator.py
+### 2.1 synapse_simulator_generator.py
 
-Brain genera el Harness en seed. El template vive en `brain/core/profile/web/templates/harness/index.html`.
+Brain genera el SynapseSimulator en seed. El template vive en `brain/core/profile/web/templates/synapse-simulator/index.html`.
 
 ```python
-# brain/core/profile/web/harness_generator.py
+# brain/core/profile/web/synapse_simulator_generator.py
 
-class HarnessGenerator:
+class SynapseSimulatorGenerator:
     def __init__(self, template_dir: Path):
         self.template_dir = template_dir
 
@@ -491,42 +491,42 @@ class HarnessGenerator:
         dev_mode: bool = False
     ) -> Optional[Path]:
         """
-        En dev_mode=True: copia harness/index.html a output_dir/harness/
+        En dev_mode=True: copia synapse-simulator/index.html a output_dir/synapse-simulator/
         En dev_mode=False: no-op. Retorna None.
         
         No modifica el template. Solo copia.
-        El template lee SYNAPSE_CONFIG y HARNESS_CONFIG en runtime.
+        El template lee SYNAPSE_CONFIG y SYNAPSE_SIMULATOR_CONFIG en runtime.
         """
         if not dev_mode:
             return None
 
-        harness_dir = output_dir / "harness"
-        harness_dir.mkdir(exist_ok=True)
+        synapse_simulator_dir = output_dir / "synapse-simulator"
+        synapse_simulator_dir.mkdir(exist_ok=True)
         
-        src = self.template_dir / "harness" / "index.html"
-        dst = harness_dir / "index.html"
+        src = self.template_dir / "synapse-simulator" / "index.html"
+        dst = synapse_simulator_dir / "index.html"
         shutil.copy2(src, dst)
         
         return dst
 ```
 
-**Regla de diseño:** el generator no inyecta datos en el HTML. El Harness lee `SYNAPSE_CONFIG` y `HARNESS_CONFIG` en runtime desde `self.*`. Si en el futuro se necesita hidratación, se hace en el generator — no en el template.
+**Regla de diseño:** el generator no inyecta datos en el HTML. El SynapseSimulator lee `SYNAPSE_CONFIG` y `SYNAPSE_SIMULATOR_CONFIG` en runtime desde `self.*`. Si en el futuro se necesita hidratación, se hace en el generator — no en el template.
 
 ---
 
-### 2.2 harnessProtocol.js — nuevo archivo en Cortex
+### 2.2 synapseSimulatorProtocol.js — nuevo archivo en Cortex
 
-Este archivo es generado por Brain en seed y copiado al directorio de la extensión. Expone `HARNESS_PROTOCOL_MANIFEST` en `self.*` para que el Harness lo lea.
+Este archivo es generado por Brain en seed y copiado al directorio de la extensión. Expone `SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST` en `self.*` para que el SynapseSimulator lo lea.
 
 ```javascript
-// harnessProtocol.js
+// synapseSimulatorProtocol.js
 // Generado por Brain en seed. No editar manualmente.
-// Actualizar HARNESS_PROTOCOL_MANIFEST cuando cambien los comandos Synapse
+// Actualizar SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST cuando cambien los comandos Synapse
 // soportados por IonPump.
 
-self.HARNESS_PROTOCOL_MANIFEST = {
+self.SYNAPSE_SIMULATOR_PROTOCOL_MANIFEST = {
   version: "1.0.0",
-  protocol: "harness",
+  protocol: "synapse-simulator",
   description: "Web automation runtime — ion site control and DOM commands",
 
   messages: [
@@ -627,7 +627,7 @@ self.HARNESS_PROTOCOL_MANIFEST = {
           name: "text",
           type: "string",
           variable: "$TEXT",
-          default: "Test input from Harness"
+          default: "Test input from SynapseSimulator"
         }
       ]
     },
@@ -660,14 +660,14 @@ self.HARNESS_PROTOCOL_MANIFEST = {
 
 ## Constraintas de implementación — checklist Brain
 
-Antes de considerar completa cualquier PR de IonPump o Harness Generator, verificar:
+Antes de considerar completa cualquier PR de IonPump o SynapseSimulator Generator, verificar:
 
 - [ ] IonPump no hace eager loading de recipes `.ion`
 - [ ] IonPump no llama a `chrome.runtime` directamente — solo SynapseServer
 - [ ] IonPump no modifica ningún archivo en `ionsites/` — solo Metamorph escribe
 - [ ] El watchdog valida antes de aplicar un recipe nuevo
 - [ ] Si la validación falla, la versión anterior sigue activa (rollback implícito)
-- [ ] `HarnessGenerator.generate()` es no-op cuando `dev_mode=False`
+- [ ] `SynapseSimulatorGenerator.generate()` es no-op cuando `dev_mode=False`
 - [ ] Los comandos admin `brain ionpump *` no están disponibles en prod
 - [ ] `ionpump_manager.py` es un singleton — no se crean múltiples instancias
 - [ ] La modificación a `intent_executor.py` no rompe ningún intent type existente
@@ -675,5 +675,5 @@ Antes de considerar completa cualquier PR de IonPump o Harness Generator, verifi
 
 ---
 
-*Este prompt referencia: BLOOM_HARNESS_IONPUMP_INTEGRATION_MASTER.md*
+*Este prompt referencia: BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md*
 *Implementar en orden: models → registry → loader → validator → state → executor → manager → integración*

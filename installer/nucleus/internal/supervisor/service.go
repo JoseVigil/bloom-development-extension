@@ -1485,19 +1485,19 @@ func (s *Supervisor) verifyWorkerRunning(ctx context.Context) error {
 
 // bootGovernance validates the governance layer (.ownership.json) when
 // onboarding is complete. During onboarding (pre-github) the file is
-// legitimately absent and governance is a no-op — Harness is handled
-// separately by bootHarness, which is ALWAYS called before this function.
+// legitimately absent and governance is a no-op — SynapseSimulator is handled
+// separately by bootSynapseSimulator, which is ALWAYS called before this function.
 //
 // Path resolution (via getOwnershipPath — single source of truth):
 //   SIMULATION:      installer/nucleus/scripts/simulation_env/.bloom/.ownership.json
-//   PRE-ONBOARDING:  skipped (no file required — Harness runs in stub mode)
+//   PRE-ONBOARDING:  skipped (no file required — SynapseSimulator runs in stub mode)
 //   POST-ONBOARDING: <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
 func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error {
 	onboardingDone := isOnboardingCompleted()
 
-	// Pre-onboarding: governance is skipped; Harness is managed by bootHarness.
+	// Pre-onboarding: governance is skipped; SynapseSimulator is managed by bootSynapseSimulator.
 	if !simulation && !onboardingDone {
-		fmt.Fprintln(os.Stderr, "[INFO] ⚙️  governance: pre-onboarding mode — skipping (Harness handles debug layer)")
+		fmt.Fprintln(os.Stderr, "[INFO] ⚙️  governance: pre-onboarding mode — skipping (SynapseSimulator handles debug layer)")
 		return nil
 	}
 
@@ -2048,14 +2048,14 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			defer bootCancel()
 			result := &ServiceStartResult{Timestamp: time.Now().Unix()}
 
-			// ── Harness (siempre — independiente del estado de governance) ──────
-			// bootHarness es non-fatal y DEBE correr antes de governance para que
-			// Harness esté disponible durante el onboarding para debugging.
-			harnessResult := sup.bootHarness(bootCtx, simulation)
-			if !harnessResult.Healthy {
-				sup.slog("WARN", "Harness failed to start (mode=%s): %s", harnessResult.Mode, harnessResult.Error)
+			// ── SynapseSimulator (siempre — independiente del estado de governance) ──────
+			// bootSynapseSimulator es non-fatal y DEBE correr antes de governance para que
+			// SynapseSimulator esté disponible durante el onboarding para debugging.
+			synapseSimulatorResult := sup.bootSynapseSimulator(bootCtx, simulation)
+			if !synapseSimulatorResult.Healthy {
+				sup.slog("WARN", "SynapseSimulator failed to start (mode=%s): %s", synapseSimulatorResult.Mode, synapseSimulatorResult.Error)
 			} else {
-				sup.slog("INFO", "✓ Harness started (mode=%s)", harnessResult.Mode)
+				sup.slog("INFO", "✓ SynapseSimulator started (mode=%s)", synapseSimulatorResult.Mode)
 			}
 
 			// ── Governance (skipped automáticamente pre-onboarding) ─────────────

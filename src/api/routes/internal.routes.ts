@@ -4,7 +4,7 @@
 //
 // Canal: background.js → POST /api/internal/system-event → WebSocketManager → debug panel
 //
-// Propósito: recibir eventos del harness/background.js (IonPump flows, synapse events
+// Propósito: recibir eventos del synapse-simulator/background.js (IonPump flows, synapse events
 // como GITHUB_PAT_DETECTED, handshake confirmations, etc.) y forwardearlos al
 // WebSocketManager para que aparezcan en el feed del debug panel (debug.html).
 //

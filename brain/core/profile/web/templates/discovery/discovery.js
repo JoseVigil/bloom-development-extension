@@ -871,7 +871,7 @@ class DiscoveryFlow {
 
     // FIX: antes esto siempre hacía push(), sin chequear si ya existía un
     // vault para este provider. Si _updateVaultState() se llama más de una
-    // vez para el mismo provider (reconexión, reintento del harness, etc.)
+    // vez para el mismo provider (reconexión, reintento del synapse-simulator, etc.)
     // terminaba duplicando la entrada en el array. Ahora se actualiza in-place
     // si ya existe.
     const entry = {
@@ -1039,7 +1039,7 @@ class OnboardingFlow {
         window.BLOOM_VALIDATOR?.routeToStep?.(msg.payload.step);
       }
 
-      // FIX: VAULT_INITIALIZED (harness/host) nunca escribía en
+      // FIX: VAULT_INITIALIZED (synapse-simulator/host) nunca escribía en
       // bloom_profile_state.vaults. _updateVaultState() solo se llamaba
       // desde GithubAuthFlow._saveToken(), atada al flujo real de
       // clipboard/paste del token en la pantalla github-login — un evento
@@ -1617,7 +1617,7 @@ class MultiProviderOnboarding extends OnboardingFlow {
     }
 
     // Dedup: por si el mismo evento llega más de una vez (reintento del
-    // origen que lo emite, o una simulación repetida del Harness).
+    // origen que lo emite, o una simulación repetida del SynapseSimulator).
     const dedupeKey = `${provider}:${key_fingerprint}:${timestamp}`;
     this._processedAPIKeyEvents = this._processedAPIKeyEvents || new Set();
     if (this._processedAPIKeyEvents.has(dedupeKey)) {
