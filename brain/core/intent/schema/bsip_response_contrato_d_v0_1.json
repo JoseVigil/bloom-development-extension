@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bloom.dev/schemas/bsip_response_contrato_d_v0_1.json",
+  "title": "BSIP-Response (Contrato D) v0.1",
+  "description": "Formato estructurado de salida de operaciones de filesystem (create/edit/patch/delete) con checksums por operación. Ver docs/AITAP/BSIP_Response_Spec_PoC_Disparo1_v1_0.md §2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bsip_response_version", "intent_id", "turn_id", "operations", "metadata"],
+  "properties": {
+    "bsip_response_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Versión del contrato. Fija en '1.0' para Contrato D v0.1."
+    },
+    "intent_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "turn_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/operation" }
+    },
+    "metadata": { "$ref": "#/$defs/metadata" }
+  },
+  "$defs": {
+    "sha256_hex": {
+      "type": "string",
+      "description": "Hash sha256 en hex minúscula (64 caracteres). Mismo patrón que _SHA256_RE en fs_contracts.py.",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safe_path": {
+      "type": "string",
+      "description": "Path relativo al root del codebase: no puede empezar con '/' ni contener '..'.",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\.).+$"
+    },
+    "operation_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["create", "edit", "patch", "delete"]
+        },
+        "path": { "$ref": "#/$defs/safe_path" },
+        "content": {
+          "type": "string",
+          "description": "Contenido completo del archivo. Requerido para op=create/edit, prohibido para patch/delete."
+        },
+        "diff": {
+          "type": "string",
+          "description": "Unified diff. Requerido para op=patch, prohibido para create/edit/delete."
+        },
+        "checksum_before": { "$ref": "#/$defs/sha256_hex" },
+        "checksum_after": { "$ref": "#/$defs/sha256_hex" }
+      }
+    },
+    "operation": {
+      "allOf": [
+        { "$ref": "#/$defs/operation_base" },
+        {
+          "if": { "properties": { "op": { "const": "create" } } },
+          "then": {
+            "required": ["content"],
+            "not": { "required": ["diff"] }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "edit" } } },
+          "then": {
+            "required": ["content"],
+            "not": { "required": ["diff"] }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "patch" } } },
+          "then": {
+            "required": ["diff"],
+            "not": { "required": ["content"] }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "delete" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["content"] },
+                { "required": ["diff"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "channel"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["api", "web"]
+        },
+        "confidence_or_notes": {
+          "type": "string",
+          "description": "Opcional: nota de confianza o comentario libre del modelo. Nunca se usa como fuente de scope autorizado."
+        }
+      }
+    }
+  }
+}

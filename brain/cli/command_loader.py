@@ -436,6 +436,12 @@ def load_all_commands_explicit() -> CommandRegistry:
     except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load ValidateCommand: {e}")
     
+    try:
+        from brain.commands.intent.validate_contract import ValidateContractCommand
+        registry.register(ValidateContractCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load ValidateContractCommand: {e}")
+    
     # =================================================================
     # IONPUMP
     # =================================================================
@@ -866,6 +872,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.unlock',
         'brain.commands.intent.update',
         'brain.commands.intent.validate',
+        'brain.commands.intent.validate_contract',
         'brain.commands.ionpump.ionpump',
         'brain.commands.ionpump.ionpump_inspect',
         'brain.commands.ionpump.ionpump_reload',

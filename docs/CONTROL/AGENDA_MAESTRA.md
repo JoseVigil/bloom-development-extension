@@ -1,0 +1,346 @@
+# BTIPS / Cognituum — Agenda Maestra
+
+**Propósito:** fuente única de control y coordinación de los ocho frentes activos. Esta agenda no sustituye las fuentes técnicas de cada tema: registra su estado consolidado, dependencias, próximos pasos y decisiones vigentes.
+
+**Fecha de creación:** 2026-08-15  
+**Canal de actualización:** únicamente esta sesión de control.
+
+---
+
+## Reglas de control
+
+- El usuario y esta sesión son los únicos canales de escritura de este archivo. Las sesiones externas (Claude Web, Cowork, Claude Code u otras instancias de Codex) no lo editan directamente.
+- Cada avance externo se incorpora aquí solo después de que el usuario lo reporte en esta sesión. Así se evita el conflicto entre contextos y versiones no compartidos.
+- Esta agenda coordina y deriva trabajo; no implementa soluciones técnicas ni reemplaza los documentos fuente.
+- Cuando una fuente antigua contradice una decisión posterior confirmada, se conserva como deuda documental a corregir. No se la trata como una decisión abierta.
+- El BTIPS v6.0 es contexto general; los documentos específicos y posteriores prevalecen para el estado de cada frente.
+
+## Decisiones transversales vigentes
+
+| Decisión | Estado | Consecuencia de coordinación |
+|---|---|---|
+| AITAP es Gateway + Vault por referencia + Accounting | Cerrada | AITAP no ejecuta código, no toca filesystem y no parsea el BSIP-Response. |
+| OpenCode es la capa de implementación | Cerrada | OpenCode opera en una Implementation Layer separada de AITAP; Nucleus gobierna la aplicación de cambios. |
+| Alfred es multi-instancia | Cerrada | Existe un Alfred por dispositivo y cada instancia consume AITAP directamente; el renderer de Electron no recibe credenciales. |
+| GitHub App + Device Flow | Cerrada | Es el patrón para Cortex y para la segunda app de Batcave. Las referencias a OAuth clásico son deuda documental/técnica a corregir, no alternativas vigentes. |
+| Agenda maestra | Cerrada | Solo se actualiza en esta sesión mediante reportes del usuario. |
+
+## Tabla compacta de control
+
+| # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
+|---|---|---|---|---|
+| 1 | Mandate Genesis | Parcialmente implementado; QA y motor real pendientes | QA de D-22/D-23 y definir ejecución del plan de finalización | Motor genérico Mandate → Actions → Intents; Core UI |
+| 2 | Core UI Redesign | Sidebar y Profiles cerrados | Definir/armar panel derecho, Home y Wisdom tras diagnóstico | Switch de organización; Alfred; contrato de Mandate |
+| 3 | BSIP Response | Investigación cerrada; PoC externo listo para trasladar | Crear contrato aislado, schema y comando `validate-contract` con tests | Brain; sesión de ejecución |
+| 4 | AITAP | Frontera arquitectónica cerrada; scaffold incompleto | Resolver integración real de Contrato D y alta de dispositivos | BSIP Response; Nucleus; Alfred |
+| 5 | OpenCode | Rol definido, componente aún sin ubicar | Diseñar ubicación y bridge de gobernanza; luego instalación | AITAP; Nucleus; Contrato D futuro |
+| 6 | Alfred | Backend/pipe avanzados; UI y recepción pendientes | Diseñar alta de dispositivo y construir UI de chat | AITAP; Contrato D; Core UI |
+| 7 | CORTEX / IonPump | Remediación diseñada, no ejecutada | Planificar migración user-scoped + APIs oficiales | Vault; GitHub App + Device Flow; Batcave |
+| 8 | Batcave | Arquitectura multi-org definida | Corregir deuda OAuth y diseñar segunda GitHub App + Device Flow | CORTEX; Nucleus; Alfred remoto |
+
+---
+
+## 1. Mandate Genesis en Workspace Core
+
+**Estado actual**
+
+El paso de Onboarding a Core para Genesis avanzó: D-22 y D-23 están implementados, pero todavía no recibieron QA manual end-to-end. El mecanismo de eventos y la presentación en Core fueron trabajados; sin embargo, el mandate real permanece bloqueado por el watcher y el registro de activities necesarias para completar el workflow.
+
+El rumbo estructural ya no es ampliar un camino Genesis especial: el roadmap fija como ruta crítica el motor genérico Mandate → Actions → Intents, con Genesis iniciando mediante `ing` y `domain_baseline: "empty"`.
+
+**Fuentes de verdad**
+
+- `docs/MANDATE/BLOOM_Estado_Consolidado_Takeaway_v1.md`
+- `docs/MANDATE/BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md`
+- `docs/MANDATE/Mandate_Genesis_Completion_Plan_v1.md`
+- `docs/CONDUCTOR/WORKSPACE/Bloom_Conductor_Workspace_Core_UI_01.md`
+
+**Próximo paso concreto**
+
+1. Ejecutar QA manual de D-22/D-23: onboarding completo, apertura de Core, consumo y borrado de `pending_genesis_launch`, y reapertura sin relanzamiento.
+2. Si el mandato real debe finalizarse antes del motor genérico, llevar el checklist de `Mandate_Genesis_Completion_Plan_v1.md` a una sesión de implementación, verificando primero exports de activities y ciclos de import.
+
+**Entorno recomendado**
+
+Claude Code para QA asistida y cambios verificables sobre Electron/Go/Temporal; Claude Web o Cowork para validar primero decisiones de producto/UI como D-25. Esta sesión conserva el resultado y actualiza el mapa.
+
+**Dependencias cruzadas**
+
+- Tema 2: D-25 define la forma final de la tab y dónde integra Genesis en Core.
+- Tema 3: el motor genérico de intents y la respuesta estructurada condicionan la evolución posterior.
+- Tema 6: el flujo de Core comparte superficie con Alfred, pero no debe mezclar scopes.
+
+**Decisiones/riesgos abiertos**
+
+- D-25: confirmar si hace falta separar `GenesisTab` de `StandardMandateTab` o unificar en un `MandateTab` orientado por estado.
+- D-27: el step `mandate_genesis` está triplicado y es vulnerable a drift.
+
+---
+
+## 2. Core UI Redesign
+
+**Estado actual**
+
+Sidebar y Profiles están cerrados y funcionales; Wisdom, Settings y Account tienen las superficies previstas, con contenido todavía parcial. La vista Profiles muestra datos reales y evitó simular accounts o cuotas que el backend aún no provee.
+
+Quedan pendientes el panel lateral derecho, Alfred, el switch de organización, y confirmar el alcance final de Home y Wisdom. El scope de esta línea es UI de Core: los cambios de backend de Mandate Genesis se derivan al tema 1.
+
+**Fuentes de verdad**
+
+- `docs/CONDUCTOR/WORKSPACE/Bloom_Conductor_Core_UI_Contexto_para_Codex.md`
+- `docs/CONDUCTOR/WORKSPACE/Bloom_Conductor_Workspace_Core_UI_01.md`
+- `docs/CONDUCTOR/WORKSPACE/OPS_FINAL_Workspace_Core_UI.md`
+
+**Próximo paso concreto**
+
+Producir un diagnóstico basado en código real para el panel derecho: reutilización de `org-resolver.ts`, datos reales disponibles para system-info, contrato de Home y el modelo de Pillar para Wisdom. Con esa evidencia, preparar el prompt de implementación de una sola pieza de UI acotada.
+
+**Entorno recomendado**
+
+Claude Code para inspección y cambios Svelte/Electron verificables. Claude Web o Cowork sirven para decisiones de experiencia, siempre que el resultado llegue aquí para consolidarse antes de implementar.
+
+**Dependencias cruzadas**
+
+- Tema 1: el contrato y estados de Mandate determinan la UI de Mandate.
+- Tema 6: Alfred ocupa el bloque inferior del panel derecho.
+- Tema 8 / D-21: el switch de organización debe respetar la gobernanza de organización activa.
+
+**Decisiones/riesgos abiertos**
+
+- No construir el switch de organización antes de confirmar la reutilización del resolver existente.
+- El launch de `synapse-simulator` permanece pendiente cruzado de Genesis/Sentinel; no resolverlo desde esta línea UI.
+
+---
+
+## 3. BSIP Response
+
+**Estado actual**
+
+La investigación contra código real está cerrada. El pipeline legacy de `dev/` y `doc/` —`ResponseParser → StagingManager → MergeManager`— valida y mueve archivos completos; no maneja operaciones granulares, diffs ni checksums por operación. Por lo tanto, no es el consumidor del Contrato D y `fs_contracts.py` no debe conectarse a esa cadena.
+
+No existe un ciclo de imports ni una relación pendiente con `intent_manager.py`. `fs_contracts.py` sigue siendo un PoC externo y debe trasladarse a `brain/core/intent/`, junto a `response_parser.py`, `validation_manager.py`, `staging_manager.py` y `merge_manager.py`; no corresponde ubicarlo en `brain/core/`. La baseline conserva decisiones de protocolo posteriores, como NDJSON frente a blob único para recuperación parcial, pero no bloquean este primer traslado aislado.
+
+**Fuentes de verdad**
+
+- `docs/BSIP/SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline_v0_1.md`
+- `docs/AITAP/BSIP_Response_Spec_PoC_Disparo1_v1_0.md`
+- `docs/BSIP/TYPES/`
+- `tree/bloom/bloom_project_tree.txt`
+
+**Próximo paso concreto**
+
+Ejecutar el prompt ya preparado en una sesión de implementación: trasladar `fs_contracts.py`, agregar el schema del Contrato D y exponer un comando delgado `validate-contract` en `brain/commands/intent/`, con lógica en `brain/core/intent/` y pruebas. El alcance está cerrado: no tocar el pipeline legacy, no conectar `add_turn()` y no iniciar todavía el adapter de OpenCode.
+
+**Entorno recomendado**
+
+Claude Code, Claude Web con capacidad de ejecución o una sesión de Codex con acceso al repo: el prompt es autocontenido y el trabajo consiste en trasladar, exponer y probar una pieza delimitada. Esta sesión registra el resultado cuando el usuario lo reporte.
+
+**Dependencias cruzadas**
+
+- Tema 4: AITAP transporta la respuesta cruda, pero no la valida.
+- Tema 5: OpenCode podrá consumir una salida estructurada más adelante; su adapter no forma parte de este paso.
+- Tema 6: Alfred no debe diseñar su parser de recepción antes del cierre posterior del Contrato D completo.
+
+**Decisiones/riesgos abiertos**
+
+- Formato de transporte para recuperación parcial: NDJSON vs. blob JSON único.
+- La integración futura con consumidores reales se define fuera del pipeline legacy de `dev/`/`doc/`.
+
+---
+
+## 4. AITAP
+
+**Estado actual**
+
+La frontera es definitiva: AITAP es Grifo + Vault por referencia + Contabilidad. No ejecuta código, no toca filesystem y no interpreta ni valida `BSIP-Response`; Brain y Alfred son los orquestadores que consumen y parsean la respuesta cruda.
+
+El scaffold de `installer/aitap` existe, pero el routing interproveedor y la conexión real al Vault todavía no. Para Alfred, la emisión está preparada y la recepción sigue bloqueada hasta el cierre del Contrato D.
+
+**Fuentes de verdad**
+
+- `docs/AITAP/AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`
+- `docs/AITAP/AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md`
+- `installer/aitap/AGENTS.md`
+- `installer/aitap/README.md`
+
+**Próximo paso concreto**
+
+Separar dos trabajos: confirmar la integración real de Contrato D en Brain (tema 3) y diseñar el mecanismo de alta/identidad de dispositivo necesario para consumidores directos de AITAP, incluido el caso mobile sin Nucleus local.
+
+**Entorno recomendado**
+
+Cowork o Claude Web para el diseño de identidad y responsabilidades entre dispositivos/Nucleus; Claude Code para la implementación del scaffold una vez que el contrato esté cerrado.
+
+**Dependencias cruzadas**
+
+- Tema 3: Contrato D y validación en el consumidor.
+- Tema 5: la Implementation Layer de OpenCode consume AITAP, pero no vive dentro de él.
+- Tema 6: Alfred es consumidor directo multi-instancia.
+
+**Decisiones/riesgos abiertos**
+
+- Alta, emisión, almacenamiento y revocación de identidad por dispositivo.
+- Alcance de Nucleus cuando el consumidor no posee un Nucleus local.
+
+---
+
+## 5. OpenCode — Implementation Layer
+
+**Estado actual**
+
+El nombre vigente es **OpenCode**. Su función definida es implementar localmente una decisión ya tomada por el modelo de frontera, mediante sesiones headless; no es una capacidad que pueda absorber AITAP.
+
+La capa de implementación todavía no está construida ni ubicada en el repositorio. También falta definir el bridge específico con Nucleus para autorizar, validar y aplicar cambios al codebase. El adapter de OpenCode no es parte del traslado inicial de `fs_contracts.py`/Contrato D y no debe iniciarse en esa sesión.
+
+**Fuentes de verdad**
+
+- `docs/AITAP/AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`
+- `docs/BSIP/SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline_v0_1.md`
+- `docs/CONDUCTOR/INSTALLER/`
+
+**Próximo paso concreto**
+
+Definir en una sesión de arquitectura la ubicación, límites, contrato de entrada/salida y bridge de gobernanza de la Implementation Layer. Solo después preparar un prompt de instalación/distribución que incluya Workspace Setup, `installer.js` y Metamorph.
+
+**Entorno recomendado**
+
+Cowork o Claude Web para el diseño del componente y sus límites; Claude Code para materializarlo, probar `opencode serve` y actualizar distribución cuando exista un contrato concreto.
+
+**Dependencias cruzadas**
+
+- Tema 3: podrá recibir un contrato de implementación estructurado y verificable en una fase posterior; el comando `validate-contract` no integra OpenCode.
+- Tema 4: usa AITAP como proveedor de razonamiento.
+- Tema 8: no debe confundirse con el control plane remoto de Batcave.
+
+**Decisiones/riesgos abiertos**
+
+- Ubicación física y propietario del componente.
+- Bridge Implementation Layer ↔ Nucleus, distinto de `nucleus vault`.
+
+---
+
+## 6. Alfred
+
+**Estado actual**
+
+Alfred conversacional está implementado como componente independiente en `installer/alfred`, con Ollama local como default, Gemini opt-in y un pipe de streaming hacia Core ya reparado. Alfred-Go, separado, es el custodio angosto de gobernanza dentro de Nucleus.
+
+Falta la UI Svelte de chat real en Core y el diseño de alta por dispositivo. La recepción de respuestas estructuradas no debe implementarse antes de cerrar el Contrato D.
+
+**Fuentes de verdad**
+
+- `docs/ALFRED/ALFRED_STATUS_2026-08-14.md`
+- `docs/AITAP/Alfred_Integracion_AITAP_Disparo2_v1_0.md`
+- `installer/alfred/AGENTS.md`
+- `docs/AITAP/AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md`
+
+**Próximo paso concreto**
+
+Diseñar el alta de dispositivo junto con AITAP/Nucleus y, en paralelo no bloqueante, preparar la implementación del componente Svelte de chat que consume `bloom.ai.execution.*` sin exponer credenciales al renderer.
+
+**Entorno recomendado**
+
+Cowork o Claude Web para la arquitectura de identidad de dispositivos; Claude Code para la UI Svelte y la integración Electron/WebSocket delimitada.
+
+**Dependencias cruzadas**
+
+- Tema 2: Alfred ocupa el panel lateral derecho de Core.
+- Tema 3: Contrato D bloquea la recepción estructurada.
+- Tema 4: AITAP es el canal directo para todo uso de tokens cloud.
+- Tema 8: Batcave sirve a la autorización de acciones remotas, no al razonamiento cotidiano de Alfred.
+
+**Decisiones/riesgos abiertos**
+
+- Emisión de credencial inicial y revocación por dispositivo, especialmente para mobile.
+- Deuda Alfred-Go: ruta de configuración relativa y modelo Ollama hardcodeado.
+
+---
+
+## 7. CORTEX — IonPump Policies
+
+**Estado actual**
+
+La remediación está especificada: abandonar vault compartido multi-tenant y automatización DOM, migrar a almacenamiento cifrado user-scoped y llamadas mediante APIs/SDKs oficiales. La extensión queda limitada a captura de contexto local y despacho de mensajes; no ejecuta acciones sobre superficies de terceros.
+
+El criterio de autenticación GitHub está cerrado: **GitHub App + Device Flow**. La referencia a OAuth clásica en `REMEDIACION-TECNICA-v1.md` está desactualizada y es deuda técnica/documental de la próxima intervención, no una alternativa de diseño.
+
+**Fuentes de verdad**
+
+- `docs/CORTEX/AUTHORITY_BOUNDARY.md`
+- `docs/CORTEX/REMEDIACION-TECNICA-v1.md`
+- `docs/CORTEX/HANDOFF-github-app-batcave-synapse.md`
+
+**Próximo paso concreto**
+
+Preparar una sesión de implementación con inventario de recipes IonPump, auditoría de Vault y archivos reales de Discovery. Su primer objetivo debe ser el guardrail de Vault/almacenamiento user-scoped y el Device Flow de la GitHub App; la corrección de terminología OAuth debe formar parte del mismo cambio documental/técnico.
+
+**Entorno recomendado**
+
+Claude Code para relevar los archivos reales, implementar seguridad y ejecutar verificaciones. Cowork o Claude Web para revisar el orden de migración y la experiencia de onboarding antes de cambios irreversibles.
+
+**Dependencias cruzadas**
+
+- Tema 8: segunda GitHub App de Batcave usa el mismo patrón GitHub App + Device Flow.
+- Tema 4: comparte límites de credenciales y consumo de proveedores, sin mezclar responsabilidades.
+- Tema 6: los modelos locales mantienen API directa, sin vault de cloud ni automatización DOM.
+
+**Deuda técnica a corregir**
+
+- Reemplazar en `REMEDIACION-TECNICA-v1.md` la referencia a OAuth App de Batcave por la segunda GitHub App con Device Flow.
+- Eliminar físicamente la automatización DOM y permisos asociados una vez migradas las capacidades equivalentes.
+
+---
+
+## 8. Batcave
+
+**Estado actual**
+
+Batcave es el control plane remoto: autentica, verifica autorización mediante BlindJudge y enruta por túnel al Nucleus local, que conserva la firma y ejecución reales. La arquitectura multi-org y la separación entre Batcave, Alfred local y AITAP están diseñadas.
+
+La autenticación remota debe usar una segunda **GitHub App + Device Flow**. Las referencias restantes a `middleware/github-oauth.ts`, GitHub OAuth clásica y configuración asociada en la arquitectura son deuda técnica/documental explícita.
+
+**Fuentes de verdad**
+
+- `docs/BATCAVE/BATCAVE_ARCHITECTURE.md`
+- `docs/CORTEX/HANDOFF-github-app-batcave-synapse.md`
+- `docs/CORTEX/REMEDIACION-TECNICA-v1.md` (requiere corrección de la referencia OAuth)
+- `docs/GOVERNANCE/GOVERNANCE_OWNERSHIP_SPEC_v1_0.md`
+
+**Próximo paso concreto**
+
+Preparar el prompt de corrección de arquitectura e implementación para sustituir OAuth clásico por una segunda GitHub App con Device Flow, conservando scopes mínimos y separación rigurosa frente a Repo Ops. Verificar en el código real que no persistan `github-oauth.ts` ni una clase `Alfred` dentro de Batcave.
+
+**Entorno recomendado**
+
+Cowork o Claude Web para revisar contrato de autenticación remota, scopes y límites de BlindJudge; Claude Code para inspeccionar/actualizar el árbol TypeScript y validar los invariantes de multi-org.
+
+**Dependencias cruzadas**
+
+- Tema 7: comparte Device Flow, pero conserva una app y finalidad separadas de Repo Ops.
+- Tema 6: Alfred remoto puede requerir autorización de Batcave para actuar sobre Nucleus, pero consume AITAP directamente para razonamiento.
+- Tema 4: AITAP no forma parte del relay ni del control plane remoto.
+
+**Deuda técnica a corregir**
+
+- Sustituir las menciones OAuth clásico y `middleware/github-oauth.ts` por la segunda GitHub App con Device Flow.
+- Mantener y verificar la ausencia de `alfred.ts`/clase Alfred en Batcave.
+
+---
+
+## Cola de prompts para sesiones externas
+
+| Prioridad | Tema | Prompt/entregable a preparar | Precondición |
+|---|---|---|---|
+| Alta | 1 | QA manual D-22/D-23 y/o finalización del mandate real | Elegir si se prioriza cierre operativo o motor genérico |
+| Alta | 3 | Traslado de `fs_contracts.py` + schema + comando `validate-contract` con tests | Prompt de ejecución ya preparado; elegir sesión ejecutora |
+| Alta | 7 | Vault user-scoped + GitHub App Device Flow en Cortex | Aportar archivos reales de Discovery/Cortex |
+| Alta | 8 | Migración de arquitectura/auth de Batcave a GitHub App Device Flow | Confirmar alcance de la segunda app y sus scopes mínimos |
+| Media | 4 + 6 | Diseño de identidad y alta de dispositivos AITAP/Alfred | Definir caso mobile sin Nucleus local |
+| Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
+| Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
+
+## Registro cronológico de avances
+
+| Fecha | Tema(s) | Avance reportado | Fuente / sesión externa | Actualización realizada aquí |
+|---|---|---|---|---|
+| 2026-08-15 | 1–8 | Creación de la agenda y consolidación inicial basada en las fuentes existentes. | Sesión de control | Se fijaron ownership exclusivo, OpenCode como nombre vigente y GitHub App + Device Flow como criterio cerrado. |
