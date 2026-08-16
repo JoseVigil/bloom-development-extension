@@ -1,5 +1,7 @@
 # BATCAVE — Arquitectura del Control Plane Soberano
-## Multi-Tenant Sovereign Control Plane · v1.0
+## Multi-Tenant Sovereign Control Plane · v1.2
+
+> **Nota de versión (v1.2):** esta revisión aplica al archivo en disco dos rondas de cambios que nunca se habían escrito acá — la v1.1 (GitHub App + Device Flow para autenticación de organización, nunca aplicada, solo existía en un documento compartido suelto) y el cambio de hoy: separación en **dos** aplicaciones de GitHub con propósitos distintos (§4.3), y una corrección de fondo sobre qué es y qué no es Alfred dentro de Batcave (§9). Batcave nunca interpreta lenguaje natural ni aloja razonamiento — eso ocurre en el dispositivo del usuario (Alfred local en Go, puerto 48216, o AITAP en mobile), ambos por fuera de Batcave. Lo único que Batcave hace es autenticar, validar autoridad (BlindJudge) y enrutar (RelayEngine) instrucciones ya estructuradas. Ver §9.1 para el detalle completo de esta distinción.
 
 ---
 
@@ -48,9 +50,9 @@ Sus tres responsabilidades son distintas e independientes:
 |---|---|
 | **Canal de actualización** | Mirror inteligente que distribuye manifests firmados e ion recipes desde el servidor de origen hacia las instalaciones de Nucleus |
 | **Sovereign Link** | Túnel seguro que permite a clientes autorizados conectarse al sistema local vía WebSocket |
-| **Alfred Runtime** | Entorno de ejecución del agente remoto con conocimiento organizacional completo |
+| **Authorization Relay** | Valida (BlindJudge) y enruta (RelayEngine) instrucciones ya interpretadas y estructuradas que llegan desde un cliente autorizado — nunca interpreta lenguaje natural ni aloja razonamiento propio (ver §9.1) |
 
-Batcave no contiene lógica de negocio. Es infraestructura soberana: valida identidad, enruta comandos y protege el acceso al Nucleus local.
+Batcave no contiene lógica de negocio ni capacidad de interpretación. Es infraestructura soberana: valida identidad, valida autoridad, enruta comandos y protege el acceso al Nucleus local. La interpretación de instrucciones — convertir "lenguaje natural" en un intent o Mandate concreto — ocurre siempre del lado del cliente (Alfred local en Go para la máquina de desarrollo, AITAP para mobile), nunca dentro de Batcave.
 
 ---
 
@@ -62,24 +64,24 @@ Batcave no contiene lógica de negocio. Es infraestructura soberana: valida iden
     ├── .batcave/                          # Control Plane Soberano
     │   ├── src/
     │   │   ├── core/
-    │   │   │   ├── relay-engine.ts
-    │   │   │   ├── blind-judge.ts
-    │   │   │   └── alfred.ts              # ← Runtime del agente Alfred
+    │   │   │   ├── relay-engine.ts        # Enruta instrucciones ya validadas hacia el túnel local
+    │   │   │   └── blind-judge.ts         # Valida autoridad: carga .ai_bot.sovereign.bl + .ownership.json
+    │   │   │                               # No existe alfred.ts — Batcave no interpreta, ver §9.1
     │   │   ├── api/
     │   │   │   ├── rest/
     │   │   │   │   ├── index.ts
     │   │   │   │   ├── middleware/
-    │   │   │   │   │   ├── github-oauth.ts
+    │   │   │   │   │   ├── batcave-auth.ts    # OAuth App clásica "Batcave Auth" — ver §4.3
     │   │   │   │   │   └── org-validator.ts
     │   │   │   │   └── routes/
     │   │   │   │       ├── status.ts
     │   │   │   │       ├── sovereign-link.ts
-    │   │   │   │       └── commands.ts    # ← Recibe comandos de Alfred
+    │   │   │   │       └── commands.ts    # ← Recibe instrucciones ya estructuradas del cliente
     │   │   │   └── ws/
     │   │   │       ├── server.ts
     │   │   │       └── handlers/
     │   │   │           ├── auth.ts
-    │   │   │           ├── ai-stream.ts   # ← Stream de respuestas de Alfred
+    │   │   │           ├── relay-stream.ts   # ← Stream del resultado, no de razonamiento
     │   │   │           └── heartbeat.ts
     │   │   ├── security/
     │   │   │   ├── ownership-loader.ts
@@ -121,7 +123,7 @@ Batcave no contiene lógica de negocio. Es infraestructura soberana: valida iden
     ├── .core/
     │   ├── .ai_bot.governance.bl
     │   ├── .ai_bot.plane.bl
-    │   ├── .ai_bot.sovereign.bl           # ← Contrato de Alfred (REAL)
+    │   ├── .ai_bot.sovereign.bl           # ← Contrato soberano — reglas de capacidad, cargado por BlindJudge
     │   ├── .rules.bl
     │   └── nucleus-config.json
     │
@@ -271,6 +273,18 @@ export class PathResolver {
   }
 }
 ```
+
+### 4.3 Autenticación — dos aplicaciones de GitHub, dos propósitos distintos
+
+Batcave y Cortex/Discovery resuelven autenticación de GitHub con mecanismos distintos, a propósito — no por inconsistencia, sino porque cada uno vive en un contexto de red diferente.
+
+**Repo Ops** (GitHub App, Device Flow) — vive en Cortex/Discovery, no en Batcave. Se encarga de operaciones sobre repositorios y organización: push, clone, create repo, verificación de membresía. Scopes: `Contents: Read & write`, `Administration: Read & write`, `Members: Read-only`. Usa Device Flow porque Cortex corre como Chrome Extension y no tiene callback URL disponible — confirmado como el patrón recomendado por GitHub para este tipo de entorno restringido. Detalle completo en `HANDOFF-github-app-batcave-synapse.md`. Batcave no valida contra esta app en ningún punto de su propio código — la instalación y el token viven del lado de Cortex/onboarding, por fuera del alcance de este documento.
+
+**Batcave Auth** (OAuth App clásica, con callback) — vive en Batcave. Su único propósito es autenticar al usuario que se conecta a la sesión de Batcave y confirmar que tiene acceso al Codespace donde corre. Sin scope de `Contents` ni `Administration` — no puede tocar repositorios. A diferencia de Cortex, Batcave corre en un Codespace con URL real y port forwarding, así que OAuth clásica con Authorization Code Flow es viable y es la opción más simple: no hace falta el polling de Device Flow cuando sí hay un callback URL alcanzable.
+
+Cada token se guarda bajo su propio `key_id` en el store cifrado — `{user_id}:github:repo_ops` y `{user_id}:github:batcave_auth` — de modo que revocar uno no invalida el otro. Reduce el blast radius si alguno de los dos canales se compromete.
+
+A diferencia de Repo Ops, una OAuth App clásica no tiene el concepto de "instalación por organización" — es un client_id/client_secret únicos registrados una vez por Bloom, y cualquier usuario autorizado obtiene su propio token contra esa misma app. Lo que sí varía por organización es el resultado de la autorización: qué Codespace/Batcave queda habilitado para ese usuario y esa sesión, no la app en sí. Ver `INVARIANT-ORG-008` en §11 para el detalle de qué invariante aplica a cada app.
 
 ---
 
@@ -536,17 +550,22 @@ Cada log entry queda etiquetado con `organization` y `fingerprint`. Los logs de 
 
 ## 9. Alfred — El Agente Remoto Soberano
 
-### 9.1 Qué es Alfred
+### 9.1 Qué es Alfred, y qué no es Batcave
 
-Alfred es el agente de inteligencia artificial que opera remotamente a través de Batcave. A diferencia de los componentes del sistema local (Nucleus, Brain, Sentinel), Alfred vive en el control plane remoto y se comunica con el sistema local a través del túnel soberano que provee Batcave.
+Esta sección se reescribió por completo — la versión anterior describía a Alfred como un agente que vive y razona dentro de Batcave. Eso nunca se implementó así, y no es el diseño vigente.
 
-Alfred no es un chatbot genérico. Es un agente con **conocimiento total del modelo de negocio de la organización**: conoce la arquitectura de Bloom, el significado de cada tipo de intent, la jerarquía de Mandates, las reglas de gobernanza del Nucleus, y el estado actual de los proyectos. Su contrato operacional está definido en `.ai_bot.sovereign.bl`, un archivo que especifica sus capacidades, restricciones y alcance de autoridad dentro de la organización.
+Hay dos fuentes de interpretación, ambas fuera de Batcave, ambas resuelven en local sin pasar por el control plane remoto:
 
-La capacidad central de Alfred es **ejecutar intents y Mandates de forma remota**. Un usuario con acceso autorizado puede instruir a Alfred desde una aplicación móvil, y Alfred traduce esa instrucción en la acción concreta dentro del sistema local: crea un intent, dispara un Mandate, consulta el estado de un pipeline, o reporta el resultado de una ejecución. Alfred es, en definitiva, **la voz del Nucleus hacia el exterior**.
+- **Alfred local** (Go, `nucleus alfred start`, puerto 48216) — corre en la máquina de desarrollo, dentro de Nucleus. Carga el contrato soberano (`.ai_bot.sovereign.bl`) y `.ownership.json`, y audita/aprueba/deniega intents usando un modelo local (Ollama). Es el custodio constitucional de esa máquina.
+- **AITAP** (mobile) — corre en el dispositivo del usuario. Interpreta lenguaje natural y produce el intent o Mandate estructurado de forma autónoma, por dispositivo, sin pasar por Batcave.
+
+Ninguna de las dos habla con la otra. Ambas producen, de forma independiente, un intent o Mandate ya estructurado — la diferencia es solo cuál de las dos tenía la capacidad de interpretación disponible en ese momento (local si estás en la máquina, AITAP si estás en el teléfono).
+
+Lo que Batcave hace con eso, en los dos casos, es siempre lo mismo: **autenticar, validar autoridad, y enrutar** — nunca interpretar. `src/core/` no tiene una clase `Alfred`. Tiene `blind-judge.ts` (carga `.ai_bot.sovereign.bl` + `.ownership.json`, valida que la instrucción ya estructurada esté permitida) y `relay-engine.ts` (la enruta al túnel soberano hacia Nucleus local). Eso es todo — Batcave es la puerta de entrada autenticada y gobernada al Nucleus, no un tercer intérprete.
 
 ### 9.2 Modelo de capacidades
 
-Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Mandate puede expresar:
+Lo que Batcave enruta puede expresar cualquier acción que un intent o Mandate ya estructurado exprese:
 
 | Acción | Tipo de instrucción | Efecto en el sistema local |
 |---|---|---|
@@ -556,74 +575,57 @@ Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Ma
 | Documentar una decisión | Intent `doc` | Nucleus persiste el conocimiento en el filesystem |
 | Ejecutar un proceso complejo de múltiples pasos | Mandate | Nucleus firma el contrato y lo persiste vía Temporal |
 
-Alfred no ejecuta estos pasos directamente. Traduce la instrucción del usuario en el intent o Mandate correcto, lo envía al Nucleus local a través del túnel de Batcave, y devuelve el resultado al usuario en tiempo real vía streaming WebSocket.
+Quien traduce lenguaje natural a esta forma estructurada es siempre el cliente (Alfred local o AITAP, §9.1), nunca Batcave. Batcave recibe el intent/Mandate ya construido, lo valida contra el contrato soberano y lo envía al Nucleus local a través del túnel; el resultado vuelve al cliente en tiempo real vía streaming WebSocket.
 
-### 9.3 Contrato de Alfred: `.ai_bot.sovereign.bl`
+### 9.3 Contrato soberano: `.ai_bot.sovereign.bl`, y quién lo usa
 
-El contrato soberano es el archivo que define la identidad operacional de Alfred para una organización específica. Contiene:
+El contrato soberano define las reglas de capacidad de la organización — qué puede y qué no puede hacer cada rol sin aprobación humana. No define identidad (eso vive en `.ownership.json` — quién es Master/Architect/Specialist); define qué le está permitido a cada rol una vez identificado. Ambos archivos se leen juntos para tomar una decisión de autorización.
 
-- La descripción del modelo de negocio de la organización en lenguaje natural
-- Las reglas de gobernanza que Alfred debe respetar (qué puede y qué no puede hacer sin aprobación humana)
-- El mapa de proyectos activos y su estado
-- Las capacidades habilitadas para esta instancia de Alfred
-- Los usuarios autorizados a interactuar con Alfred y sus niveles de permiso
+Este archivo vive en `.nucleus-{organization}/.core/.ai_bot.sovereign.bl`. Lo cargan **dos** consumidores distintos, cada uno en su propio contexto, sin relación entre sí:
 
-Este archivo vive en `.nucleus-{organization}/.core/.ai_bot.sovereign.bl` y es cargado por Alfred al inicializarse. Es la diferencia entre un agente genérico y uno que conoce que la organización tiene tres proyectos activos, que el Mandate de estabilización de autenticación está en curso, y que solo el Master puede aprobar merges en producción.
+1. **Alfred local** (Go, puerto 48216) — lo carga para auditar intents contra la constitución antes de aprobarlos localmente.
+2. **BlindJudge**, dentro de Batcave — lo carga para la misma clase de validación, pero sobre instrucciones que llegan de forma remota (mobile, vía AITAP).
 
 ```typescript
-// src/core/alfred.ts
-export class Alfred {
-  private contractPath: string;
+// src/core/blind-judge.ts
+export class BlindJudge {
+  private contractPath: string;      // path a .ai_bot.sovereign.bl
+  private ownershipPath: string;     // path a .ownership.json
   private org: OrganizationContext;
-  private relayEngine: RelayEngine;
-  private blindJudge: BlindJudge;
-  
-  constructor(
-    relayEngine: RelayEngine,
-    blindJudge: BlindJudge,
-    contractPath: string,    // path a .ai_bot.sovereign.bl
-    org: OrganizationContext
-  ) {
+
+  constructor(contractPath: string, ownershipPath: string, org: OrganizationContext) {
     this.contractPath = contractPath;
+    this.ownershipPath = ownershipPath;
     this.org = org;
-    this.relayEngine = relayEngine;
-    this.blindJudge = blindJudge;
   }
-  
+
   async initialize(): Promise<void> {
-    // Carga el contrato soberano de la organización
-    // Establece el contexto de negocio para las sesiones
+    // Carga contrato soberano + ownership de la organización activa
   }
-  
-  async handleSession(session: AlfredSession): Promise<void> {
-    // Procesa instrucciones del usuario externo
-    // Traduce a intents/Mandates
-    // Enruta al Nucleus local via relayEngine
-    // Devuelve resultado via streaming WebSocket
+
+  async authorize(instruction: StructuredInstruction): Promise<AuthorizationResult> {
+    // Valida firma, resuelve rol del usuario (.ownership.json),
+    // valida la acción contra las reglas de capacidad (.ai_bot.sovereign.bl)
+    // No interpreta, no traduce — la instrucción ya llega estructurada
   }
 }
 ```
 
-### 9.4 Flujo de ejecución remota
-
-Cuando un usuario interactúa con Alfred desde la aplicación móvil, el flujo completo es:
+### 9.4 Flujo de ejecución remota (mobile, vía AITAP)
 
 ```
 Usuario (app mobile)
-    │  instrucción en lenguaje natural o comando estructurado
+    │  AITAP interpreta lenguaje natural → intent/Mandate estructurado, en el dispositivo
     ▼
 Batcave (WebSocket / wss-endpoint)
-    │  autenticación GitHub OAuth + validación de nonce
+    │  autenticación Batcave Auth (OAuth App clásica, §4.3) + validación de nonce
     ▼
-BlindJudge (validación de autoridad)
-    │  verifica que el usuario tiene permiso para la acción solicitada
-    ▼
-Alfred (src/core/alfred.ts)
-    │  interpreta la instrucción usando el contrato soberano
-    │  construye el intent o Mandate correspondiente
+BlindJudge (src/core/blind-judge.ts)
+    │  resuelve rol del usuario contra .ownership.json
+    │  valida la instrucción ya estructurada contra .ai_bot.sovereign.bl
     ▼
 RelayEngine (src/core/relay-engine.ts)
-    │  enruta hacia el túnel soberano local
+    │  enruta hacia el túnel soberano local — no interpreta, no decide
     ▼
 Nucleus (sistema local)
     │  valida, firma y ejecuta el intent/Mandate
@@ -631,19 +633,21 @@ Nucleus (sistema local)
 Brain / Temporal (sistema local)
     │  ejecución concreta
     ▼
-Resultado → RelayEngine → Alfred → WebSocket stream → app mobile
+Resultado → RelayEngine → WebSocket stream → app mobile
 ```
 
-Cada paso es auditado. Los logs de governance registran qué instrucción llegó, qué intent fue creado, qué resultado retornó, y en qué timestamp. El usuario ve el progreso en tiempo real vía el stream de Alfred.
+El flujo para la máquina de desarrollo (Alfred local, puerto 48216) es distinto y no pasa por este diagrama en absoluto — Alfred local habla directo con Nucleus en la misma máquina, sin túnel, sin Batcave.
+
+Cada paso del flujo remoto es auditado. Los logs de governance registran qué instrucción llegó, qué intent fue creado, qué resultado retornó, y en qué timestamp.
 
 ### 9.5 Autenticación y autorización
 
-Alfred solo acepta sesiones que pasen por el protocolo completo de Batcave:
+Batcave solo acepta sesiones que pasen por su protocolo completo:
 
-1. **GitHub OAuth**: el usuario se autentica con su cuenta de GitHub. Batcave valida que ese usuario pertenezca a la organización.
+1. **Batcave Auth (OAuth App clásica, §4.3)**: el usuario se autentica con su cuenta de GitHub contra esta app específica — no contra Repo Ops. Batcave valida que ese usuario tenga acceso al Codespace/organización.
 2. **QR + nonce**: el acceso inicial desde la app mobile usa un QR efímero (TTL: 30 segundos) que contiene los endpoints de Batcave y un nonce de un solo uso.
-3. **BlindJudge**: verifica la firma de cada comando antes de enviarlo a Alfred. Un comando sin firma válida activa lockdown automático.
-4. **Nivel de permiso**: el contrato soberano define qué puede hacer cada usuario. Un Specialist puede crear intents `exp` y `doc`. Solo el Master puede crear Mandates o aprobar intents `dev` en producción.
+3. **BlindJudge**: verifica la firma de cada instrucción antes de enrutarla. Una instrucción sin firma válida activa lockdown automático. BlindJudge nunca recibe lenguaje natural — solo instrucciones ya estructuradas por AITAP del lado del cliente.
+4. **Nivel de permiso**: el contrato soberano (junto con `.ownership.json`) define qué puede hacer cada usuario. Un Specialist puede crear intents `exp` y `doc`. Solo el Master puede crear Mandates o aprobar intents `dev` en producción.
 
 ```typescript
 // Configuración de seguridad (de batcave.config.json)
@@ -655,35 +659,37 @@ security: {
 }
 ```
 
-### 9.6 Configuración de Alfred
+### 9.6 Configuración del relay
 
-Alfred tiene su propia sección en `batcave.config.json`:
+Batcave tiene su propia sección en `batcave.config.json` para los límites de sesión de relay — el nombre de la clave se conserva por continuidad con logs/config existentes, pero configura el relay, no un agente:
 
 ```json
 {
-  "alfred": {
+  "relay": {
     "stream_chunk_size": 1024,
     "max_concurrent_sessions": 10
   }
 }
 ```
 
-`stream_chunk_size` controla el tamaño de los chunks de respuesta en el stream WebSocket. `max_concurrent_sessions` limita cuántos usuarios pueden tener sesiones activas con Alfred simultáneamente por instancia de Batcave.
+`stream_chunk_size` controla el tamaño de los chunks de respuesta en el stream WebSocket. `max_concurrent_sessions` limita cuántos usuarios pueden tener sesiones activas enrutadas simultáneamente por instancia de Batcave.
 
-### 9.7 Qué puede hacer Alfred que ningún otro componente puede
+### 9.7 Qué permite Batcave que ningún otro componente permite
 
-Alfred es el único punto del ecosistema Bloom que permite **operar el sistema desde el exterior sin estar físicamente en la máquina local**. Todos los demás componentes (Conductor, Sentinel, Brain) requieren presencia local. Alfred rompe esa restricción de forma soberana: el acceso es remoto, pero la autoridad sigue siendo local. Nucleus sigue siendo quien firma y valida. Brain sigue siendo quien ejecuta. Alfred es el canal gobernado que los conecta con el usuario móvil.
+Batcave es el único punto del ecosistema Bloom que permite **operar el sistema desde el exterior sin estar físicamente en la máquina local**. Todos los demás componentes (Conductor, Sentinel, Brain, y el propio Alfred local de 48216) requieren presencia local. Batcave rompe esa restricción de forma soberana: el acceso es remoto, pero la autoridad y la interpretación siguen siendo locales — la interpretación en el dispositivo del cliente (AITAP), la autoridad en Nucleus. Nucleus sigue siendo quien firma y valida. Brain sigue siendo quien ejecuta. Batcave es el canal autenticado y gobernado que los conecta con el usuario móvil, sin razonar por su cuenta en ningún punto del camino.
 
 Esto lo convierte en el mecanismo central para:
 
 - **Supervisión remota**: consultar el estado de un Mandate en curso desde el teléfono mientras el sistema corre en la máquina de desarrollo.
 - **Aprobación de acciones**: recibir una notificación de que un intent `cor` requiere decisión humana y resolverlo desde la app.
 - **Instrucción asíncrona**: iniciar un `exp` intent antes de llegar a la oficina para que Brain ya tenga resultados cuando el usuario se siente.
-- **Reporting bajo demanda**: pedirle a Alfred que genere y envíe el reporte de estado del Nucleus sin necesidad de abrir el Conductor.
+- **Reporting bajo demanda**: pedir el reporte de estado del Nucleus desde mobile sin necesidad de abrir el Conductor.
 
 ---
 
 ## 10. Workflow de inicialización
+
+> **Nota:** el mecanismo de build/deploy de esta sección (`npx degit your-org/batcave-template`) está desactualizado y se está reemplazando en una sesión de trabajo separada, delegada específicamente para el pipeline de build (`build-all.py --only batcave`) y deploy por organización (`metamorph rollout --only batcave --org <name>`). No editar esta sección desde acá — se actualiza cuando esa sesión cierre, para no pisar ese trabajo.
 
 ### Primera vez — inicializar organización
 
@@ -774,10 +780,12 @@ INVARIANT-ORG-004: Logs segregados por organización
 INVARIANT-ORG-005: Endpoints namespaciados por organización
 INVARIANT-ORG-006: Runtime data aislado por organización
 INVARIANT-ORG-007: .ownership.json es la fuente de verdad de identidad
-INVARIANT-ALF-001: Alfred solo opera bajo un contrato soberano válido
-INVARIANT-ALF-002: Cada instrucción remota pasa por BlindJudge antes de llegar a Alfred
-INVARIANT-ALF-003: Alfred no ejecuta intents directamente — los enruta a Nucleus local
+INVARIANT-ORG-008: Una instalación de Repo Ops (GitHub App) por organización — sin instalaciones compartidas. No aplica a Batcave Auth (OAuth App clásica, sin concepto de instalación por-org — ver §4.3)
+INVARIANT-ALF-001: Ninguna instrucción se autoriza sin un contrato soberano válido cargado (Alfred local o BlindJudge, según el origen)
+INVARIANT-ALF-002: Cada instrucción remota pasa por BlindJudge antes de llegar al túnel hacia Nucleus
+INVARIANT-ALF-003: Ni Alfred local ni Batcave ejecutan intents directamente — ambos enrutan a Nucleus local, que es el único que firma y ejecuta (vía Brain)
 INVARIANT-ALF-004: El contrato .ai_bot.sovereign.bl nunca se carga desde fuera del Nucleus org
+INVARIANT-ALF-005: Batcave nunca interpreta lenguaje natural ni genera intents/Mandates — solo valida (BlindJudge) y enruta (RelayEngine) instrucciones que ya llegan estructuradas desde el cliente (Alfred local o AITAP)
 ```
 
 ---
@@ -810,17 +818,22 @@ INVARIANT-ALF-004: El contrato .ai_bot.sovereign.bl nunca se carga desde fuera d
 - [ ] Cada organización aislada en `.nucleus-{org}` separado
 - [ ] Sin data leakage entre organizaciones
 
-### Alfred
-- [ ] Contrato soberano carga correctamente al iniciar
-- [ ] Autenticación GitHub OAuth funciona
+### Autorización remota (Batcave)
+- [ ] Contrato soberano + `.ownership.json` cargan correctamente al iniciar BlindJudge
+- [ ] Autenticación Batcave Auth (OAuth App clásica, callback real) funciona
 - [ ] QR + nonce expiran en TTL configurado
-- [ ] BlindJudge rechaza comandos sin firma válida
+- [ ] BlindJudge rechaza instrucciones sin firma válida
 - [ ] Lockdown se activa ante fallo de firma
 - [ ] Stream WebSocket devuelve progreso en tiempo real
-- [ ] Intent creado por Alfred es firmado por Nucleus local (no por Alfred)
-- [ ] Logs de governance registran cada sesión de Alfred con timestamp y usuario
+- [ ] Intent/Mandate que llega a Batcave es firmado por Nucleus local, nunca por Batcave
+- [ ] Logs de governance registran cada sesión con timestamp y usuario
+- [ ] `src/core/` no contiene ninguna clase que interprete lenguaje natural — verificar que no exista `alfred.ts`
+
+### Repo Ops (fuera de Batcave, referencia)
+- [ ] Repo Ops (GitHub App, Device Flow) vive en Cortex/Discovery — no está en el código de Batcave
+- [ ] Token de Repo Ops y token de Batcave Auth se guardan bajo `key_id` distintos en el vault
 
 ---
 
 *BATCAVE — Bloom Sovereign Control Plane*
-*Referencia: BTIPS v4.0 · BATCAVE_DYNAMIC_ARCHITECTURE · IMPL_PROMPT_METAMORPH*
+*Referencia: BTIPS v4.0 · BATCAVE_DYNAMIC_ARCHITECTURE · IMPL_PROMPT_METAMORPH · HANDOFF-github-app-batcave-synapse.md*
