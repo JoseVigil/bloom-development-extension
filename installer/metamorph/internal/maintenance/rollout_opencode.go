@@ -46,16 +46,30 @@ import (
 
 func init() {
 	allComponents = append(allComponents, component{
-		Key: "opencode",
-		SourceFn: func(r string) string {
-			return nativeBin(r, "opencode")
-		},
+		Key:          "opencode",
+		SourceFn:     opencodeSourcePath,
 		DestFn:       func(b string) string { return filepath.Join(b, "bin", "opencode") },
 		PreDeployFn:  opencodePreDeploy,
 		PostDeployFn: opencodePostDeploy,
 		// No Platforms restriction: opencode is supported on all three,
 		// same as bootstrap.
 	})
+}
+
+// opencodeSourcePath resolves the binary directly, matching the
+// "generic component" convention already used by ollama/temporal/node
+// (own top-level installer/<name>/ folder, per-platform subdir, points at
+// the file itself) rather than the brain/sentinel/nucleus convention
+// (installer/native/bin/{platform}/{comp}/, points at a directory).
+// Confirmed against the real repo layout:
+//
+//	installer/opencode/linux_x64/opencode
+//
+// nativePlatformDir() already returns the right subdir name for all 5
+// combos (win64, darwin_arm64, darwin_x64, linux_x64, linux_arm64) — reused
+// as-is, only the base path differs from nativeBin().
+func opencodeSourcePath(r string) string {
+	return filepath.Join(r, "installer", "opencode", nativePlatformDir(), exe("opencode"))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
