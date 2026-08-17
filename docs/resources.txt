@@ -32,3 +32,6 @@ https://claude.ai/chat/2894c85a-4e31-4ef3-bd00-6915b24335a2
 
 Synergy
 https://github.com/DEAKSoftware/Synergy-Binaries/releases/tag/1.14.6.19-stable
+
+OpenCode
+https://github.com/opencode-ai/opencode/releases
