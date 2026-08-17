@@ -25,18 +25,29 @@
 | GitHub App + Device Flow | Cerrada | Es el patrón para Cortex y para la segunda app de Batcave. Las referencias a OAuth clásico son deuda documental/técnica a corregir, no alternativas vigentes. |
 | Agenda maestra | Cerrada | Solo se actualiza en esta sesión mediante reportes del usuario. |
 
+## Material para Resolución Arquitectónica Transversal
+
+La investigación transversal debe usar el split vigente de CORTEX por dominio, sin volver a tomar `REMEDIACION-TECNICA-v1.md` como fuente activa:
+
+| Eje de análisis | Material vigente o candidato | Límite de coordinación |
+|---|---|---|
+| Supply | `docs/CORTEX/PROVIDER-EXECUTION-SPEC.md` | SDKs/endpoints oficiales, modelos locales y fallbacks; nunca DOM de providers externos. |
+| Identity | `docs/CORTEX/VAULT-STORAGE-SPEC.md` | Cifrado, user scope y tokens; no promover hasta corregir §2.2 para GitHub App + Device Flow. |
+| Synapse / DOM | `docs/CORTEX/PROVIDER-EXECUTION-SPEC.md` + `docs/CORTEX/AUTHORITY_BOUNDARY.md` | Se preserva automatización first-party del Cognituum Runner; se excluye permanentemente DOM de proveedores externos. |
+| Governance | `docs/BATCAVE/BATCAVE_ARCHITECTURE.md` + handoff de GitHub App | Batcave autoriza y enruta; Nucleus firma/ejecuta; la segunda GitHub App permanece separada de Repo Ops. |
+
 ## Tabla compacta de control
 
 | # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
 |---|---|---|---|---|
 | 1 | Mandate Genesis | Parcialmente implementado; QA y motor real pendientes | QA de D-22/D-23 y definir ejecución del plan de finalización | Motor genérico Mandate → Actions → Intents; Core UI |
 | 2 | Core UI Redesign | Sidebar y Profiles cerrados | Definir/armar panel derecho, Home y Wisdom tras diagnóstico | Switch de organización; Alfred; contrato de Mandate |
-| 3 | BSIP Response | Investigación cerrada; PoC externo listo para trasladar | Crear contrato aislado, schema y comando `validate-contract` con tests | Brain; sesión de ejecución |
+| 3 | BSIP Response | Validador aislado listo; formato de patch con evidencia inicial | Ejecutar batería de adherencia antes de cerrar schema | Modelos de frontera; OpenCode; canal API/web |
 | 4 | AITAP | Frontera arquitectónica cerrada; scaffold incompleto | Resolver integración real de Contrato D y alta de dispositivos | BSIP Response; Nucleus; Alfred |
-| 5 | OpenCode | Rol definido, componente aún sin ubicar | Diseñar ubicación y bridge de gobernanza; luego instalación | AITAP; Nucleus; Contrato D futuro |
+| 5 | OpenCode | `run --format json` probado en headless; adapter aún sin diseñar | Batería adicional de pruebas antes de decidir schema/adapter | Contrato D; AITAP/Vault; Nucleus |
 | 6 | Alfred | Backend/pipe avanzados; UI y recepción pendientes | Diseñar alta de dispositivo y construir UI de chat | AITAP; Contrato D; Core UI |
-| 7 | CORTEX / IonPump | Remediación diseñada, no ejecutada | Planificar migración user-scoped + APIs oficiales | Vault; GitHub App + Device Flow; Batcave |
-| 8 | Batcave | Arquitectura multi-org definida | Corregir deuda OAuth y diseñar segunda GitHub App + Device Flow | CORTEX; Nucleus; Alfred remoto |
+| 7 | CORTEX / IonPump | Ownership documental dividido; Vault spec pendiente de corrección | Corregir §2.2 de Vault y migrar referencias antes de retirar la spec previa | GitHub App + Device Flow; Batcave; specs nuevas |
+| 8 | Batcave | Arquitectura multi-org definida; decisión GitHub App vigente | Corregir regresión de Batcave Auth en Vault spec y actualizar referencias | CORTEX; Nucleus; Alfred remoto |
 
 ---
 
@@ -116,9 +127,9 @@ Claude Code para inspección y cambios Svelte/Electron verificables. Claude Web 
 
 **Estado actual**
 
-La investigación contra código real está cerrada. El pipeline legacy de `dev/` y `doc/` —`ResponseParser → StagingManager → MergeManager`— valida y mueve archivos completos; no maneja operaciones granulares, diffs ni checksums por operación. Por lo tanto, no es el consumidor del Contrato D y `fs_contracts.py` no debe conectarse a esa cadena.
+La investigación contra código real está cerrada y el primer entregable ejecutable existe: `brain/core/intent/fs_contracts.py`, su schema `brain/core/intent/schema/bsip_response_contrato_d_v0_1.json` y el comando `brain intent validate-contract` en `brain/commands/intent/validate_contract.py`. Está registrado en `command_loader.py`, Brain compila, el comando aparece en el help real y hay pruebas de integración para payloads válidos, violaciones de scope y violaciones de shape con reporte por `json_pointer`.
 
-No existe un ciclo de imports ni una relación pendiente con `intent_manager.py`. `fs_contracts.py` sigue siendo un PoC externo y debe trasladarse a `brain/core/intent/`, junto a `response_parser.py`, `validation_manager.py`, `staging_manager.py` y `merge_manager.py`; no corresponde ubicarlo en `brain/core/`. La baseline conserva decisiones de protocolo posteriores, como NDJSON frente a blob único para recuperación parcial, pero no bloquean este primer traslado aislado.
+El alcance cerrado es preciso: este componente es un **validador aislado y probado**, no una integración end-to-end. El pipeline legacy de `dev/` y `doc/` —`ResponseParser → StagingManager → MergeManager`— valida y mueve archivos completos, sin operaciones granulares, diffs ni checksums por operación; no es consumidor del Contrato D y `fs_contracts.py` no se conecta a esa cadena. No hay todavía productor real de `BSIP-Response` ni consumidor real que aplique operaciones.
 
 **Fuentes de verdad**
 
@@ -129,21 +140,25 @@ No existe un ciclo de imports ni una relación pendiente con `intent_manager.py`
 
 **Próximo paso concreto**
 
-Ejecutar el prompt ya preparado en una sesión de implementación: trasladar `fs_contracts.py`, agregar el schema del Contrato D y exponer un comando delgado `validate-contract` en `brain/commands/intent/`, con lógica en `brain/core/intent/` y pruebas. El alcance está cerrado: no tocar el pipeline legacy, no conectar `add_turn()` y no iniciar todavía el adapter de OpenCode.
+Ejecutar antes que cualquier adapter de OpenCode el protocolo de pruebas de adherencia pendiente del PoC original (Entregables 2 y 3): medir el cumplimiento del schema por modelos de frontera mediante structured output/tool-calling en el canal API y prompt rígido con reintento en el canal web. Usar `brain intent validate-contract` como validador, registrar tasa de cumplimiento y fallos de formato, diff y checksum. Los resultados decidirán si el Contrato D se conserva o se ajusta antes de construir sobre él.
 
 **Entorno recomendado**
 
-Claude Code, Claude Web con capacidad de ejecución o una sesión de Codex con acceso al repo: el prompt es autocontenido y el trabajo consiste en trasladar, exponer y probar una pieza delimitada. Esta sesión registra el resultado cuando el usuario lo reporte.
+Claude Code, Claude Web o una sesión de Codex que pueda acceder a los modelos y ejecutar el comando local de validación. El trabajo debe preservar métricas y ejemplos de salida para que esta sesión pueda consolidar conclusiones de contrato.
 
 **Dependencias cruzadas**
 
 - Tema 4: AITAP transporta la respuesta cruda, pero no la valida.
-- Tema 5: OpenCode podrá consumir una salida estructurada más adelante; su adapter no forma parte de este paso.
+- Tema 5: OpenCode demostró formato nativo `apply_patch` y unified diff posterior; todavía no define el formato del Contrato D ni integra un adapter.
 - Tema 6: Alfred no debe diseñar su parser de recepción antes del cierre posterior del Contrato D completo.
 
 **Decisiones/riesgos abiertos**
 
 - Formato de transporte para recuperación parcial: NDJSON vs. blob JSON único.
+- Productor real de `BSIP-Response`: no existe todavía; debe validarse por API y web.
+- Consumidor real que aplique operaciones: no existe todavía; el adapter de OpenCode permanece sin diseñar.
+- Formato de `op=patch`: una prueba de OpenCode muestra `apply_patch`/V4A como formato nativo de edición del modelo y unified diff generado por OpenCode después de aplicar. Hace falta una batería adicional antes de decidir si Contrato D recibe una instrucción nativa o el diff posterior verificado.
+- Checksum por operación: OpenCode no lo generó durante la corrida; continúa siendo responsabilidad de una capa propia (`fs_contracts.py`/adapter futuro).
 - La integración futura con consumidores reales se define fuera del pipeline legacy de `dev/`/`doc/`.
 
 ---
@@ -190,7 +205,9 @@ Cowork o Claude Web para el diseño de identidad y responsabilidades entre dispo
 
 El nombre vigente es **OpenCode**. Su función definida es implementar localmente una decisión ya tomada por el modelo de frontera, mediante sesiones headless; no es una capacidad que pueda absorber AITAP.
 
-La capa de implementación todavía no está construida ni ubicada en el repositorio. También falta definir el bridge específico con Nucleus para autorizar, validar y aplicar cambios al codebase. El adapter de OpenCode no es parte del traslado inicial de `fs_contracts.py`/Contrato D y no debe iniciarse en esa sesión.
+La primera prueba real confirmó que `opencode-windows-x64` v1.18.18 funciona de modo headless mediante `opencode run --format json "<prompt>"`: sin TUI, invocable por script y con stdout como stream parseable de eventos JSON (`step_start`, `text`, `tool_use`, `step_finish`). Una corrida con OpenAI/GPT-5.6 usó herramientas reales para leer, aplicar una modificación y ejecutar una verificación. Esto prueba la capacidad de ejecución programática, no un adapter de Brain ya construido.
+
+La corrida aporta evidencia al Contrato D: el modelo editó con el formato nativo `apply_patch`/V4A, no con unified diff. OpenCode aplicó ese patch y solo después produjo un unified diff estándar como reporte del resultado. No generó checksums. También emitió tokens y costo en cada `step_finish`, pero esa telemetría no pasó por AITAP porque la prueba usó autenticación propia de OpenCode mediante cuenta ChatGPT. `opencode serve` existe como servidor HTTP headless persistente, pero todavía no fue probado.
 
 **Fuentes de verdad**
 
@@ -200,7 +217,7 @@ La capa de implementación todavía no está construida ni ubicada en el reposit
 
 **Próximo paso concreto**
 
-Definir en una sesión de arquitectura la ubicación, límites, contrato de entrada/salida y bridge de gobernanza de la Implementation Layer. Solo después preparar un prompt de instalación/distribución que incluya Workspace Setup, `installer.js` y Metamorph.
+Ejecutar una batería adicional de pruebas de adherencia antes de decidir el schema y antes de diseñar el adapter: contrastar la estabilidad de formatos nativos de edición frente al unified diff posterior reportado por OpenCode, y medir la viabilidad de checksum y validación de scope. En paralelo, mantener la prueba de `opencode serve` como pendiente separado. Solo con resultados consistentes definir la ubicación, límites, contrato de entrada/salida y bridge de gobernanza de la Implementation Layer.
 
 **Entorno recomendado**
 
@@ -208,14 +225,17 @@ Cowork o Claude Web para el diseño del componente y sus límites; Claude Code p
 
 **Dependencias cruzadas**
 
-- Tema 3: podrá recibir un contrato de implementación estructurado y verificable en una fase posterior; el comando `validate-contract` no integra OpenCode.
-- Tema 4: usa AITAP como proveedor de razonamiento.
+- Tema 3: la evidencia sobre `apply_patch`/unified diff informa la decisión de schema; el comando `validate-contract` aún no integra OpenCode.
+- Tema 4: AITAP debe recibir la telemetría y resolver Vault/Contabilidad para evitar que el adapter dependa de auth propia de OpenCode.
 - Tema 8: no debe confundirse con el control plane remoto de Batcave.
 
 **Decisiones/riesgos abiertos**
 
 - Ubicación física y propietario del componente.
 - Bridge Implementation Layer ↔ Nucleus, distinto de `nucleus vault`.
+- `opencode serve`: existente, pero no probado todavía.
+- Contabilidad/Vault: los datos de tokens y costo de OpenCode fueron observados, pero no pasaron por AITAP en la prueba standalone.
+- No elegir aún entre patch nativo y unified diff posterior como representación de Contrato D.
 
 ---
 
@@ -260,19 +280,22 @@ Cowork o Claude Web para la arquitectura de identidad de dispositivos; Claude Co
 
 **Estado actual**
 
-La remediación está especificada: abandonar vault compartido multi-tenant y automatización DOM, migrar a almacenamiento cifrado user-scoped y llamadas mediante APIs/SDKs oficiales. La extensión queda limitada a captura de contexto local y despacho de mensajes; no ejecuta acciones sobre superficies de terceros.
+La remediación anterior fue dividida por responsabilidad y ciclo de vida. `VAULT-STORAGE-SPEC.md` cubre credenciales, cifrado, aislamiento user-scoped, namespacing, identidad y separación de tokens; `PROVIDER-EXECUTION-SPEC.md` cubre inferencia, SDKs/endpoints oficiales, modelos locales, fallbacks y límites de automatización. `REMEDIACION-TECNICA-v1.md` dejó de ser fuente de verdad activa y debe eliminarse una vez migradas sus referencias.
 
-El criterio de autenticación GitHub está cerrado: **GitHub App + Device Flow**. La referencia a OAuth clásica en `REMEDIACION-TECNICA-v1.md` está desactualizada y es deuda técnica/documental de la próxima intervención, no una alternativa de diseño.
+La frontera de automatización queda corregida: se preserva la automatización first-party dentro de las superficies propias del Cognituum Runner, incluido parseo de BTIP y orquestación interna. Está permanentemente fuera de alcance automatizar el DOM de proveedores externos (`claude.ai`, `chatgpt.com`, `grok.com`, `aistudio.google.com` y equivalentes), sin importar el sandbox.
+
+`VAULT-STORAGE-SPEC.md` no puede promoverse todavía como fuente vigente: su §2.2 reintroduce erróneamente una OAuth App clásica para Batcave Auth. La decisión cerrada sigue siendo una segunda GitHub App con Device Flow, separada de Repo Ops.
 
 **Fuentes de verdad**
 
 - `docs/CORTEX/AUTHORITY_BOUNDARY.md`
-- `docs/CORTEX/REMEDIACION-TECNICA-v1.md`
+- `docs/CORTEX/PROVIDER-EXECUTION-SPEC.md` — vigente para ejecución, providers, modelos locales, fallbacks y límite DOM.
+- `docs/CORTEX/VAULT-STORAGE-SPEC.md` — candidata para Vault/identidad; pendiente de corregir §2.2 antes de promoverla.
 - `docs/CORTEX/HANDOFF-github-app-batcave-synapse.md`
 
 **Próximo paso concreto**
 
-Preparar una sesión de implementación con inventario de recipes IonPump, auditoría de Vault y archivos reales de Discovery. Su primer objetivo debe ser el guardrail de Vault/almacenamiento user-scoped y el Device Flow de la GitHub App; la corrección de terminología OAuth debe formar parte del mismo cambio documental/técnico.
+Corregir §2.2 de `VAULT-STORAGE-SPEC.md` para que defina una segunda GitHub App con Device Flow para Batcave Auth. Luego migrar las referencias que aún dependan de `REMEDIACION-TECNICA-v1.md` y eliminar ese documento. Las sesiones de ejecución deben usar las dos specs separadas según responsabilidad, no la remediación previa.
 
 **Entorno recomendado**
 
@@ -283,11 +306,13 @@ Claude Code para relevar los archivos reales, implementar seguridad y ejecutar v
 - Tema 8: segunda GitHub App de Batcave usa el mismo patrón GitHub App + Device Flow.
 - Tema 4: comparte límites de credenciales y consumo de proveedores, sin mezclar responsabilidades.
 - Tema 6: los modelos locales mantienen API directa, sin vault de cloud ni automatización DOM.
+- Tema 1: este cambio documental y de alcance no bloquea Mandate Genesis.
 
-**Deuda técnica a corregir**
+**Deuda documental/técnica a corregir**
 
-- Reemplazar en `REMEDIACION-TECNICA-v1.md` la referencia a OAuth App de Batcave por la segunda GitHub App con Device Flow.
-- Eliminar físicamente la automatización DOM y permisos asociados una vez migradas las capacidades equivalentes.
+- Corregir la regresión OAuth de §2.2 en `VAULT-STORAGE-SPEC.md` antes de promoverla como fuente vigente.
+- Migrar referencias y eliminar `REMEDIACION-TECNICA-v1.md`.
+- Retirar automatización DOM y permisos únicamente sobre dominios de proveedores externos; conservar la automatización first-party del Cognituum Runner.
 
 ---
 
@@ -297,18 +322,18 @@ Claude Code para relevar los archivos reales, implementar seguridad y ejecutar v
 
 Batcave es el control plane remoto: autentica, verifica autorización mediante BlindJudge y enruta por túnel al Nucleus local, que conserva la firma y ejecución reales. La arquitectura multi-org y la separación entre Batcave, Alfred local y AITAP están diseñadas.
 
-La autenticación remota debe usar una segunda **GitHub App + Device Flow**. Las referencias restantes a `middleware/github-oauth.ts`, GitHub OAuth clásica y configuración asociada en la arquitectura son deuda técnica/documental explícita.
+La autenticación remota debe usar una segunda **GitHub App + Device Flow**. Las referencias restantes a `middleware/github-oauth.ts`, GitHub OAuth clásica y configuración asociada en la arquitectura son deuda técnica/documental explícita. La misma regresión aparece ahora en §2.2 de `VAULT-STORAGE-SPEC.md`; esa spec no se promueve para el dominio de identidad hasta que se corrija.
 
 **Fuentes de verdad**
 
 - `docs/BATCAVE/BATCAVE_ARCHITECTURE.md`
 - `docs/CORTEX/HANDOFF-github-app-batcave-synapse.md`
-- `docs/CORTEX/REMEDIACION-TECNICA-v1.md` (requiere corrección de la referencia OAuth)
+- `docs/CORTEX/VAULT-STORAGE-SPEC.md` — pendiente de corregir §2.2 antes de promoverla para Batcave Auth.
 - `docs/GOVERNANCE/GOVERNANCE_OWNERSHIP_SPEC_v1_0.md`
 
 **Próximo paso concreto**
 
-Preparar el prompt de corrección de arquitectura e implementación para sustituir OAuth clásico por una segunda GitHub App con Device Flow, conservando scopes mínimos y separación rigurosa frente a Repo Ops. Verificar en el código real que no persistan `github-oauth.ts` ni una clase `Alfred` dentro de Batcave.
+Corregir primero §2.2 de `VAULT-STORAGE-SPEC.md`; después preparar el prompt de corrección de arquitectura e implementación para sustituir OAuth clásico por una segunda GitHub App con Device Flow, conservando scopes mínimos y separación rigurosa frente a Repo Ops. Verificar en el código real que no persistan `github-oauth.ts` ni una clase `Alfred` dentro de Batcave.
 
 **Entorno recomendado**
 
@@ -323,6 +348,7 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 **Deuda técnica a corregir**
 
 - Sustituir las menciones OAuth clásico y `middleware/github-oauth.ts` por la segunda GitHub App con Device Flow.
+- Corregir la regresión OAuth de §2.2 en `VAULT-STORAGE-SPEC.md` antes de usarla como fuente de identidad de Batcave.
 - Mantener y verificar la ausencia de `alfred.ts`/clase Alfred en Batcave.
 
 ---
@@ -332,9 +358,9 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
 |---|---|---|---|
 | Alta | 1 | QA manual D-22/D-23 y/o finalización del mandate real | Elegir si se prioriza cierre operativo o motor genérico |
-| Alta | 3 | Traslado de `fs_contracts.py` + schema + comando `validate-contract` con tests | Prompt de ejecución ya preparado; elegir sesión ejecutora |
-| Alta | 7 | Vault user-scoped + GitHub App Device Flow en Cortex | Aportar archivos reales de Discovery/Cortex |
-| Alta | 8 | Migración de arquitectura/auth de Batcave a GitHub App Device Flow | Confirmar alcance de la segunda app y sus scopes mínimos |
+| Alta | 3 + 5 | Batería de adherencia API/web y OpenCode para decidir formato de patch, checksum y scope usando `validate-contract` | Prompt de ejecución pendiente de preparar; acceso a modelos, OpenCode y comando local |
+| Alta | 7 | Corregir §2.2 de Vault Storage y migrar referencias desde la remediación anterior | GitHub App + Device Flow confirmado; mapear referencias a migrar |
+| Alta | 8 | Migración de arquitectura/auth de Batcave a GitHub App + Device Flow | Corregir primero la regresión de Vault Storage y confirmar scopes mínimos |
 | Media | 4 + 6 | Diseño de identidad y alta de dispositivos AITAP/Alfred | Definir caso mobile sin Nucleus local |
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
@@ -344,3 +370,6 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | Fecha | Tema(s) | Avance reportado | Fuente / sesión externa | Actualización realizada aquí |
 |---|---|---|---|---|
 | 2026-08-15 | 1–8 | Creación de la agenda y consolidación inicial basada en las fuentes existentes. | Sesión de control | Se fijaron ownership exclusivo, OpenCode como nombre vigente y GitHub App + Device Flow como criterio cerrado. |
+| 2026-08-16 | 3, 5 | Se integró y verificó el validador aislado de Contrato D; se decidió probar adherencia de modelos antes de diseñar el adapter de OpenCode. | Sesión externa de ejecución, reportada por el usuario | Se cerró el traslado del validador; se registraron como abiertos el productor, el consumidor y el adapter. |
+| 2026-08-16 | 3, 5 | Primera prueba headless de OpenCode v1.18.18 con salida JSON parseable y edición/verificación reales. | Sesión externa de investigación, reportada por el usuario | Se agregó evidencia para el formato de patch; no se cerró el schema ni se inició el adapter. |
+| 2026-08-17 | 7, 8 | Split documental de la remediación CORTEX y corrección de alcance de automatización DOM. | Actualización del usuario sobre fuentes y alcance | Se retiró la remediación previa como fuente activa; se condicionó la promoción de Vault Storage a corregir Batcave Auth como segunda GitHub App + Device Flow. |
