@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── setup/
-    ├── .DS_Store
     ├── app.manifest
     ├── assets/
     │   ├── bloom.ico
@@ -8,6 +7,7 @@ bloom-development-extension/
     ├── bloom-setup-version.ps1
     ├── build_info.json
     ├── build_number.darwin.txt
+    ├── build_number.linux.txt
     ├── build_number.windows.txt
     ├── config/
     │   ├── constants.js
@@ -17,7 +17,6 @@ bloom-development-extension/
     │   ├── menu-builder.js
     │   └── window-manager.js
     ├── install/
-    │   ├── .DS_Store
     │   ├── chromium-installer.js
     │   ├── diagnose/
     │   │   ├── diagnose-service.js
@@ -28,15 +27,20 @@ bloom-development-extension/
     │   ├── pre-install-cleanup.js
     │   ├── runtime-installer.js
     │   ├── service-installer-brain-darwin.js
+    │   ├── service-installer-brain-linux.js
     │   ├── service-installer-brain.js
     │   ├── service-installer-nucleus-darwin.js
+    │   ├── service-installer-nucleus-linux.js
     │   ├── service-installer-nucleus.js
     │   ├── service-installer-ollama-darwin.js
+    │   ├── service-installer-ollama-linux.js
     │   ├── service-installer-sensor-darwin.js
+    │   ├── service-installer-sensor-linux.js
     │   └── service-installer-sensor.js
     ├── ipc/
     │   ├── install-handlers.js
     │   ├── launch-handlers.js
+    │   ├── setup-synapse-handlers.js
     │   └── shared-handlers.js
     ├── main.js
     ├── node_modules/ [... dependencies]
@@ -61,10 +65,12 @@ bloom-development-extension/
     │   ├── uninstall-brain-service.bat
     │   └── uninstall-nucleus-service.bat
     ├── src/
-    │   ├── .DS_Store
     │   ├── index.html
     │   ├── renderer.js
     │   └── styles.css
+    ├── tree/
+    │   ├── library_tree.txt
+    │   └── nucleus_tree.txt
     ├── utils/
     │   ├── exec-helper.js
     │   └── repair-tools.js

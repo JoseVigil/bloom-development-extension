@@ -101,6 +101,19 @@ const {
   ? require('./service-installer-ollama-linux.js')
   : require('./service-installer-ollama');
 
+// ── OpenCode service installer — condicional por plataforma ──────────────────
+const {
+  installWindowsService: installOpencodeService,
+  startService: startOpencodeService,
+  cleanupOldServices: cleanupOldOpencodeServices,
+  waitForOpencodeReady,
+  NEW_SERVICE_NAME: OPENCODE_SERVICE_NAME
+} = process.platform === 'darwin'
+  ? require('./service-installer-opencode-darwin.js')
+  : process.platform === 'linux'
+  ? require('./service-installer-opencode-linux.js')
+  : require('./service-installer-opencode.js');
+
 // ── Sensor installer — condicional por plataforma ─────────────────────────────
 const { installSensor } = process.platform === 'darwin'
   ? require('./service-installer-sensor-darwin.js')
@@ -279,7 +292,7 @@ async function seedMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 12, 12, 'Seeding master profile...');
+  emitProgress(win, 13, 13, 'Seeding master profile...');
 
   try {
     // Esperar que Temporal este efectivamente escuchando antes de intentar el seed.
@@ -949,6 +962,28 @@ async function deployAllSystemBinaries(win) {
         results.temporal = { success: false, skipped: true };
       }
     }
+
+    // ========================================================================
+    // 9b. OPENCODE (Persistent Coding Agent Server)
+    // ========================================================================
+    logger.info('\n🧠 OPENCODE SERVICE');
+
+    // Asset map: FILE único — opencode(.exe) — sin subdirectorio de arch propio,
+    // mismo patrón que ollama/temporal.
+    {
+      const opencodeExeName = process.platform === 'win32' ? 'opencode.exe' : 'opencode';
+      const opencodeExeSrc  = path.join(paths.opencodeSource, opencodeExeName);
+      const opencodeExeDest = path.join(paths.opencodeDir, opencodeExeName);
+
+      if (await fs.pathExists(opencodeExeSrc)) {
+        await fs.ensureDir(paths.opencodeDir);
+        results.opencode = await copyFileSafe(opencodeExeSrc, opencodeExeDest, opencodeExeName);
+        if (process.platform !== 'win32') await fs.chmod(opencodeExeDest, 0o755);
+      } else {
+        logger.warn(`⚠️ OpenCode binary not found at: ${opencodeExeSrc}, skipping`);
+        results.opencode = { success: false, skipped: true };
+      }
+    }
     
     // ========================================================================
     // 10. WORKSPACE (ex-Conductor)
@@ -1302,7 +1337,7 @@ async function installOllamaServiceStep(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 12, 'Installing Ollama Service...');
+  emitProgress(win, 9, 13, 'Installing Ollama Service...');
 
   try {
     logger.separator('INSTALLING OLLAMA SERVICE');
@@ -1332,6 +1367,53 @@ async function installOllamaServiceStep(win) {
   }
 }
 
+async function installOpencodeServiceStep(win) {
+  const MILESTONE = 'opencode_service_install';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 10, 13, 'Installing OpenCode Service...');
+
+  try {
+    logger.separator('INSTALLING OPENCODE SERVICE');
+
+    logger.info('Cleaning up previous OpenCode Service instances...');
+    await cleanupOldOpencodeServices();
+
+    logger.info('Installing OpenCode service definition...');
+    await installOpencodeService();
+
+    logger.info('Starting OpenCode Service...');
+    const started = await startOpencodeService();
+
+    if (!started) {
+      // No fatal: el binario/puerto de OpenCode puede tardar en levantar y
+      // se re-verifica en runCertification, igual que Ollama/Temporal.
+      logger.warn('⚠️ OpenCode Service did not confirm RUNNING/ready — will be re-verified in certification');
+    } else {
+      logger.success('✅ OpenCode Service started');
+    }
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      service_running: !!started,
+      verify: { type: 'port_health_check', service: OPENCODE_SERVICE_NAME }
+    });
+
+    return { success: true };
+
+  } catch (error) {
+    // No crítico para el resto de la instalación: OpenCode es un servicio
+    // adicional, no bloqueante como Brain/Temporal.
+    logger.warn(`⚠️ OpenCode Service install warning: ${error.message}`);
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    return { success: false, non_critical: true };
+  }
+}
+
 async function runCertification(win) {
   const MILESTONE = 'certification';
   
@@ -1341,7 +1423,7 @@ async function runCertification(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 11, 12, 'Certifying system components...');
+  emitProgress(win, 12, 13, 'Certifying system components...');
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
@@ -1389,11 +1471,28 @@ async function runCertification(win) {
       // throw new Error(`Critical components unhealthy: ${unhealthy.join(', ')}`);
     }
 
+    // ── OpenCode: no forma parte del health check de Nucleus, se verifica
+    // de forma autocontenida vía puerto, mismo patrón que waitForTemporal.
+    // No bloqueante: un fallo aquí no aborta la certificación.
+    logger.info('Verifying OpenCode Service (port health check)...');
+    let opencodeReady = false;
+    try {
+      opencodeReady = await waitForOpencodeReady(30000, 3000);
+      if (opencodeReady) {
+        logger.info('  ✓ opencode_service: LISTENING');
+      } else {
+        logger.warn('  ⚠️ opencode_service: not listening yet (non-critical, will retry post-install)');
+      }
+    } catch (opencodeError) {
+      logger.warn(`  ⚠️ opencode_service verification error (non-critical): ${opencodeError.message}`);
+    }
+
     logger.success('✅ SYSTEM CERTIFIED (Pre-Seed Phase)');
 
     await nucleusManager.completeMilestone(MILESTONE, {
       pre_seed_certification: true,
       critical_components: critical,
+      opencode_service_ready: opencodeReady,
       health_snapshot: healthResult
     });
     
@@ -1419,7 +1518,7 @@ async function installSessionSensor(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 10, 12, 'Installing Session Agent...');
+  emitProgress(win, 11, 13, 'Installing Session Agent...');
 
   try {
     const started = await installSensor();
@@ -1567,10 +1666,11 @@ async function installService(win, { onBeforeLaunch } = {}) {
     // porque seed necesita Temporal workflows
     await installNucleusService(win);       // 7/12 - Arranca Temporal
     await deployBootstrapIonSites(win);     // 8/12 - Ion sites para onboarding
-    await installOllamaServiceStep(win);    // 9/12 - Arranca Ollama
-    await installSessionSensor(win);        // 10/12 — non-critical, cannot abort
-    await runCertification(win);            // 11/12 - Verifica Temporal ready
-    await seedMasterProfile(win);                                        // 12/12 - Usa Temporal
+    await installOllamaServiceStep(win);    // 9/13 - Arranca Ollama
+    await installOpencodeServiceStep(win);  // 10/13 - Arranca OpenCode (non-critical, cannot abort)
+    await installSessionSensor(win);        // 11/13 — non-critical, cannot abort
+    await runCertification(win);            // 12/13 - Verifica Temporal ready + OpenCode port
+    await seedMasterProfile(win);                                        // 13/13 - Usa Temporal
     const launchResult = await launchMasterProfile(win, onBeforeLaunch); // Heartbeat final
 
     await nucleusManager.markInstallationComplete();

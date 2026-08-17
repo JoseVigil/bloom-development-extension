@@ -95,6 +95,7 @@ bloom-development-extension/
     │   ├── bump-version.js
     │   ├── global_paths.js
     │   ├── logger.js
+    │   ├── onboarding-schema.js
     │   ├── preload-synapse.js
     │   ├── project-copier.js
     │   └── synapse-bridge.js
@@ -144,7 +145,8 @@ bloom-development-extension/
         │   │       ├── step-vault.js
         │   │       └── step-workspace.js
         │   ├── resolution-engine.js
-        │   └── step-verifiers.js
+        │   ├── step-verifiers.js
+        │   └── verify-nucleus-init-hook.js
         ├── package-lock.json
         ├── package.json
         ├── shared/

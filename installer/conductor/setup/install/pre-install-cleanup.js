@@ -21,7 +21,8 @@ async function stopAllBloomServices(logger) {
     'BloomBrainService',
     'BloomNucleusService', 
     'BloomBrain',
-    'BloomNucleus'
+    'BloomNucleus',
+    'BloomOpencodeService'
   ];
   
   for (const service of services) {
@@ -58,7 +59,8 @@ async function removeAllBloomServices(logger) {
     'BloomBrainService',
     'BloomNucleusService',
     'BloomBrain', 
-    'BloomNucleus'
+    'BloomNucleus',
+    'BloomOpencodeService'
   ];
   
   for (const service of services) {
@@ -94,7 +96,8 @@ async function killBloomProcesses(logger) {
         'bloom-conductor.exe',
         'bloom-sensor.exe',   // CRÍTICO: liberar antes del deploy de binarios
         'temporal.exe',       // CRÍTICO: liberar temporal.exe
-        'ollama.exe'          // CRÍTICO: liberar ollama.exe
+        'ollama.exe',         // CRÍTICO: liberar ollama.exe
+        'opencode.exe'        // CRÍTICO: liberar opencode.exe antes del deploy
         // ❌ NO INCLUIR node.exe - el instalador Electron lo usa
         // ❌ NO INCLUIR nssm.exe - puede causar problemas si servicios están activos
       ]
@@ -107,7 +110,8 @@ async function killBloomProcesses(logger) {
         'bloom-sensor',            // CRÍTICO: liberar antes del deploy de binarios
         'Bloom Nucleus Workspace', // nombre del proceso en macOS
         'temporal',                // CRÍTICO: liberar temporal
-        'ollama'                   // CRÍTICO: liberar ollama
+        'ollama',                  // CRÍTICO: liberar ollama
+        'opencode'                 // CRÍTICO: liberar opencode antes del deploy
         // ❌ NO INCLUIR node - el instalador Electron lo usa
       ];
   
@@ -300,7 +304,8 @@ async function killSpecificProcess(filename, logger) {
         'nucleus.exe': 'nucleus.exe',
         'sentinel.exe': 'sentinel.exe',
         'temporal.exe': 'temporal.exe',
-        'ollama.exe': 'ollama.exe'
+        'ollama.exe': 'ollama.exe',
+        'opencode.exe': 'opencode.exe'
         // NO incluir node.exe - el instalador lo usa
       }
     : {
@@ -309,6 +314,7 @@ async function killSpecificProcess(filename, logger) {
         'sentinel': 'sentinel',
         'temporal': 'temporal',
         'ollama': 'ollama',
+        'opencode': 'opencode',
         'Bloom Nucleus Workspace': 'Bloom Nucleus Workspace'
         // NO incluir node - el instalador lo usa
       };

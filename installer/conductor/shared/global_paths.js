@@ -174,6 +174,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, 'setup', 'assets');
     case 'sentinel-config':
       return path.join(workspaceRoot, '..', 'native', 'config', 'sentinel-config.json');
+    case 'opencode':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'opencode');
     default:
       return path.join(workspaceRoot, '..', 'resources', resourceName);
   }
@@ -295,6 +297,12 @@ const paths = {
     ? path.join(baseDir, 'bin', 'sensor', 'bloom-sensor.exe')
     : path.join(baseDir, 'bin', 'sensor', 'bloom-sensor'),
 
+  // OpenCode (Persistent Coding Agent Server)
+  opencodeDir: path.join(baseDir, 'bin', 'opencode'),
+  opencodeExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'opencode', 'opencode.exe')
+    : path.join(baseDir, 'bin', 'opencode', 'opencode'),
+
   // Setup (Installer / Self-update binary - tracked by Metamorph)
   setupDir: path.join(baseDir, 'bin', 'setup'),
   setupExe: platform === 'win32'
@@ -379,6 +387,7 @@ const paths = {
   workspaceSource: getResourcePath('workspace'),
   launcherSource: getResourcePath('launcher'),
   sensorSource: getResourcePath('sensor'),
+  opencodeSource: getResourcePath('opencode'),
   setupSource:  getResourcePath('setup'),
   cortexSource: getResourcePath('cortex'),
   temporalSource: getResourcePath('temporal'),
@@ -460,6 +469,7 @@ const criticalPaths = [
   'temporalDir', 'temporalExe',
   'conductorDir', 'cortexDir',
   'workspaceDir', 'workspaceExe',
+  'opencodeDir', 'opencodeExe',
   'chromeDir',
   'extensionDir', 'engineDir', 'runtimeDir', 
   'configDir', 'profilesDir', 'logsDir'
