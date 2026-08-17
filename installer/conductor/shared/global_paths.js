@@ -175,7 +175,7 @@ const getResourcePath = (resourceName) => {
     case 'sentinel-config':
       return path.join(workspaceRoot, '..', 'native', 'config', 'sentinel-config.json');
     case 'opencode':
-      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'opencode');
+      return path.join(workspaceRoot, '..', 'native', 'opencode', arch, 'opencode');
     default:
       return path.join(workspaceRoot, '..', 'resources', resourceName);
   }
@@ -297,11 +297,12 @@ const paths = {
     ? path.join(baseDir, 'bin', 'sensor', 'bloom-sensor.exe')
     : path.join(baseDir, 'bin', 'sensor', 'bloom-sensor'),
 
-  // OpenCode (Persistent Coding Agent Server)
+// OpenCode (Persistent Coding Agent Server)
   opencodeDir: path.join(baseDir, 'bin', 'opencode'),
   opencodeExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'opencode', 'opencode.exe')
     : path.join(baseDir, 'bin', 'opencode', 'opencode'),
+  opencodeSource: getResourcePath('opencode'),
 
   // Setup (Installer / Self-update binary - tracked by Metamorph)
   setupDir: path.join(baseDir, 'bin', 'setup'),
