@@ -1,5 +1,7 @@
-# Bloom Nucleus Installer — Technical Reference# Bloom Nucleus Installer — Technical Reference
+# Bloom Nucleus Installer — Technical Reference
 > `workspace` · v1.0 · Electron (Windows x64) · Internal Dev Reference
+
+> 📎 **Rol de este documento:** referencia profunda de implementación (funciones reales, eventos IPC, pantallas del renderer) para la plataforma Windows. El mapeo de assets y la vista consolidada multi-plataforma viven en el documento principal: [`BLOOM_WORKSPACE_SETUP_MANIFEST_v1.0.md`](../BLOOM_WORKSPACE_SETUP_MANIFEST_v1.0.md). Este doc queda aparte a propósito — su nivel de detalle no escala bien si se fusiona, y es candidato a tener hermanos equivalentes (`reference/darwin.md`, `reference/linux.md`) el día que se documenten con el mismo nivel de profundidad.
 
 ---
 
