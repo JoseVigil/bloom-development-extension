@@ -1,6 +1,6 @@
 // internal/orchestration/temporal/temporal_client_test.go
 //
-// Test de verificación de Etapa 3 (PROMPT-EJECUCION-synapse-switch-organization.md):
+// Test de verificación de Etapa 3 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md):
 // "una query (workflow.Query de Temporal, o el mecanismo que G1 termine
 // usando) que devuelva true/false para '¿hay algo no-terminal para esta
 // organización?' contra un Mandate real en ejecución de prueba."

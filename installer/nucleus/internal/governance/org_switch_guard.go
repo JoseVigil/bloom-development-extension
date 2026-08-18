@@ -1,8 +1,8 @@
 // internal/governance/org_switch_guard.go
 //
-// Etapa 4 (docs/GOVERNANCE/PROMPT-EJECUCION-synapse-switch-organization.md):
+// Etapa 4 (docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md):
 // G2 (`can-switch-org`) y G4 (lock de drenado), diseño detallado en
-// docs/GOVERNANCE/G1-G8_multi-org-switch-design.md.
+// docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_ARCHITECTURE.md.
 //
 // Decisión de diseño confirmada con el usuario (ver AskUserQuestion de esta
 // sesión) antes de escribir este archivo, tal como pide la Etapa 4:
@@ -100,7 +100,7 @@ func LoadDrainingState() (*DrainingState, error) {
 // (archivo temporal + rename) — mismo patrón que SaveOwnership(). La
 // atomicidad importa acá específicamente: G4 existe para que un crash a
 // mitad del drenado no deje al sistema en un estado ambiguo (ver nota en
-// G1-G8_multi-org-switch-design.md sobre este mismo riesgo para G3).
+// ORGANIZATION_SWITCH_ARCHITECTURE.md sobre este mismo riesgo para G3).
 func SaveDrainingState(state *DrainingState) error {
 	path, err := GetDrainingStatePath()
 	if err != nil {
@@ -204,7 +204,7 @@ func CanSwitchOrg(ctx context.Context, tc *temporal.Client, mandatesRoot string)
 }
 
 // ============================================
-// CLI — Etapa 5 (docs/GOVERNANCE/PROMPT-EJECUCION-synapse-switch-organization.md)
+// CLI — Etapa 5 (docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md)
 //
 // G2/G4 no tenían forma de invocarse desde fuera de Go hasta acá. Brain
 // (brain/core/server/server_manager.py) no reimplementa esta lógica en

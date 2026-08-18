@@ -287,7 +287,7 @@ func TestLockedVault_FailsBeforeAuthorize(t *testing.T) {
 // withOrgOverride sets BLOOM_NUCLEUS_ROOT to <tmp>/.bloom/.nucleus-<slug>
 // for the duration of the test and restores the previous value afterwards.
 //
-// FIX (Etapa 2, PROMPT-EJECUCION-synapse-switch-organization.md): this test
+// FIX (Etapa 2, ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md): this test
 // used to assert GetVaultPath() resolved to the unsuffixed legacy path
 // (".bloom/.nucleus/vault.json", no "-{org}"), which stopped being true the
 // moment ResolveNucleusRoot() started requiring an explicit org (see the

@@ -23,7 +23,7 @@ const { registerProfilesHandlers } = require('./core/ipc/profiles-handlers');
 const { SynapseBridge, ONBOARDING_EVENTS } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
 const { MilestoneRegistry } = require('./onboarding/milestone-registry');
 const { MilestoneReactor }  = require('./onboarding/milestone-reactor');
-// Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md) — switchActiveOrg
+// Etapa 5 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md) — switchActiveOrg
 // es el único punto de escritura de active_org_slug para un switch (G7).
 const { switchActiveOrg } = require(path.join(_sharedDir, 'onboarding-schema'));
 const log     = getLogger('onboarding');

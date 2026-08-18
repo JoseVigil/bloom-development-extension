@@ -75,7 +75,7 @@ type Config struct {
 //  4. Leer .core/.nucleus-config.json bajo esa carpeta para validar que es
 //     un Nucleus real (no solo una carpeta con el nombre correcto).
 func LoadNucleusConfig() (*Config, error) {
-	// Etapa 2 (PROMPT-EJECUCION-synapse-switch-organization.md): el escaneo
+	// Etapa 2 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md): el escaneo
 	// en sí (antes duplicado acá como findBloomDir+findNucleusDir, con el
 	// override BLOOM_NUCLEUS_PATH manejado en esta misma función) ahora vive
 	// en internal/core.ScanForNucleus() — el mismo código que
@@ -138,7 +138,7 @@ func loadNucleusConfigAt(workspaceRoot, slug, nucleusDir string) (*Config, error
 
 // findBloomDir/findNucleusDir vivían acá — se movieron a
 // internal/core.ScanForNucleusFrom() en Etapa 2
-// (PROMPT-EJECUCION-synapse-switch-organization.md) para que
+// (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md) para que
 // core.ResolveNucleusRoot() (Vault/Ownership/Blueprint/Alfred) y este
 // LoadNucleusConfig (Mandates) compartan un único escaneo en vez de dos
 // copias independientes que podían divergir. Ver nucleus_scan.go para el

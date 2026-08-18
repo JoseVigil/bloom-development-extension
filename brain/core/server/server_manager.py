@@ -784,7 +784,7 @@ class ServerManager:
                     })
 
                 elif msg_type == 'SWITCH_ORGANIZATION':
-                    # Etapa 5 (docs/GOVERNANCE/PROMPT-EJECUCION-synapse-switch-organization.md):
+                    # Etapa 5 (docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md):
                     # Cortex/Discovery pide activar una organización distinta
                     # a la actual. Brain NO ejecuta el switch acá — mismo
                     # motivo estructural que API_KEY_REGISTERED/
@@ -799,7 +799,7 @@ class ServerManager:
                     # escribir el resultado: `active_org_slug` en
                     # nucleus.json solo lo escribe getOrCreateOrg() en
                     # shared/onboarding-schema.js (Node/Conductor), y
-                    # G1-G8_multi-org-switch-design.md (G7) exige que ese
+                    # ORGANIZATION_SWITCH_ARCHITECTURE.md (G7) exige que ese
                     # siga siendo el único punto de escritura — reimplementar
                     # esa lógica acá en Python sería la segunda fuente de
                     # verdad que el propio roadmap de Mandate Genesis prohíbe

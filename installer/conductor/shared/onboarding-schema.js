@@ -147,15 +147,15 @@ function getOrCreateOrg(onboarding, orgSlug, { workspacePath } = {}) {
 /**
  * switchActiveOrg(onboarding, orgSlug)
  *
- * Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md). A diferencia
+ * Etapa 5 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md). A diferencia
  * de getOrCreateOrg(), NUNCA crea la organización si no existe — un switch
  * a una org inexistente tiene que fallar de forma explícita (§4.1 de
- * PROMPT-synapse-switch-organization.md: "si no hay .nucleus-{org_slug} con
+ * ORGANIZATION_SWITCH_PROTOCOL.md: "si no hay .nucleus-{org_slug} con
  * .ownership.json válido, el switch tiene que fallar... no en silencio"),
  * no crearla como sí hace el flujo de onboarding (donde "no existe todavía"
  * es el caso normal, no un error).
  *
- * G7 (docs/GOVERNANCE/G1-G8_multi-org-switch-design.md): esta función sigue
+ * G7 (docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_ARCHITECTURE.md): esta función sigue
  * siendo, a propósito, un primitivo "tonto" de persistencia — igual que
  * getOrCreateOrg(). NO consulta G2 acá adentro. El caller
  * (main_conductor.js#handleSwitchOrganization) es quien tiene que haber

@@ -1390,7 +1390,7 @@ function registerOnboardingHandlers() {
   });
 
   // ── SWITCH_ORGANIZATION ──────────────────────────────────────────────────
-  // Etapa 5 (PROMPT-EJECUCION-synapse-switch-organization.md). La página
+  // Etapa 5 (docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md). La página
   // (Discovery, o el panel de simulación del SynapseSimulator) manda este evento vía
   // chrome.runtime.sendMessage cuando quiere activar una organización
   // distinta a la actual. Este handler NO decide nada — solo reenvía el

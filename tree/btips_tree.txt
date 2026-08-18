@@ -6402,10 +6402,12 @@ bloom-development-extension/
 │   ├── GIT/
 │   │   └── GIT_BLOOM_GIT_FILTERS.md
 │   ├── GOVERNANCE/
-│   │   ├── G1-G8_multi-org-switch-design.md
 │   │   ├── GOVERNANCE_OWNERSHIP_SPEC_v1_0.md
-│   │   ├── PROMPT-EJECUCION-synapse-switch-organization.md
-│   │   └── PROMPT-synapse-switch-organization.md
+│   │   └── SWITCH-ORG/
+│   │       ├── ORGANIZATION_SWITCH_ARCHITECTURE.md
+│   │       ├── ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md
+│   │       ├── ORGANIZATION_SWITCH_PROTOCOL.md
+│   │       └── README.md
 │   ├── SYNAPSE_SIMULATOR/
 │   │   ├── ARCHITECTURE_SynapseSimulatorProtocol.md
 │   │   ├── BACKUP/

@@ -492,7 +492,7 @@
       "type": "event",
       "direction": "synapse_simulator_to_background",
       "channel": "runtime",
-      "description": "Etapa 1 de PROMPT-EJECUCION-synapse-switch-organization.md — SOLO declaración de contrato, sin lógica de negocio (eso es Etapa 5). Simula la solicitud de cambio de organización activa que originaría Discovery/Cortex camino a Conductor. Payload tomado literal de PROMPT-synapse-switch-organization.md §2 (org_id, org_slug) — NO se agregaron profile_id/launch_id/timestamp de correlación como en otros eventos de este schema porque esos campos no están en el payload confirmado; agregarlos requiere confirmación explícita, no una inferencia por simetría con los demás mensajes. Declarar este mensaje acá NO implica que background.js lo despache — no hay registerHandler()/forwardToHost() todavía (ver background.js, confirmado en la investigación de Etapa 1: forwardToHost() solo arma el payload si algún caller lo invoca explícitamente con este eventName).",
+      "description": "Contrato de docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_PROTOCOL.md. Simula la solicitud de cambio de organización activa que originaría Discovery/Cortex camino a Conductor. Payload confirmado: org_id y org_slug. No se agregaron profile_id/launch_id/timestamp de correlación porque no forman parte del contrato vigente. La declaración en el schema no sustituye el despacho explícito desde background.js.",
       "payload_template": {
         "event": "SWITCH_ORGANIZATION",
         "org_id": "$ORG_ID",
@@ -518,7 +518,7 @@
       "type": "event",
       "direction": "synapse_simulator_to_background",
       "channel": "runtime",
-      "description": "Etapa 1 de PROMPT-EJECUCION-synapse-switch-organization.md — SOLO declaración de contrato, sin lógica de negocio (eso es Etapa 5). Simula la confirmación que Conductor devolvería tras un switch exitoso, con los endpoints reales de Batcave de la organización recién activada. Payload tomado literal de PROMPT-synapse-switch-organization.md §2 (org_id, org_slug, batcave_endpoint_rest, batcave_endpoint_wss). NOTA: el PROMPT-EJECUCION-synapse-switch-organization.md nombra un tercer mensaje, ORGANIZATION_SWITCH_STATUS, cuyo payload no está definido en ningún archivo del repo (grep confirmado) — queda deliberadamente sin declarar en este pase hasta que se confirme su shape; no inventarlo acá.",
+      "description": "Contrato de docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_PROTOCOL.md. Simula la confirmación de un switch exitoso con org_id, org_slug y los endpoints REST/WSS de Batcave. ORGANIZATION_SWITCH_STATUS continúa reservado y sin payload aprobado, por lo que no debe declararse por inferencia.",
       "payload_template": {
         "event": "ORGANIZATION_SWITCHED",
         "org_id": "$ORG_ID",

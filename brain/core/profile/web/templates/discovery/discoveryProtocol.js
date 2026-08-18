@@ -637,14 +637,14 @@ if (typeof self !== 'undefined') {
         direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Paridad con discovery.schema.json v1.2.0 (Etapa 1 de
-        // PROMPT-EJECUCION-synapse-switch-organization.md) — declarado acá TAMBIÉN
+        // ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md) — declarado acá TAMBIÉN
         // porque loadScriptOptional() en synapse-simulator.js carga este manifest legacy ANTES
         // de que ProtocolReader.discoverFromJSON() lea el JSON, y discover() prioriza
         // el global legacy si ya existe (mismo mecanismo confirmado en el HALLAZGO
         // 2026-07-17 de google_login_detected, arriba). Sin este espejo, el mensaje
         // del schema JSON nunca llega a la UI del SynapseSimulator.
         // SOLO contrato — sin lógica de negocio (Etapa 5 del prompt de ejecución).
-        // Payload literal de PROMPT-synapse-switch-organization.md §2 (org_id,
+        // Payload de ORGANIZATION_SWITCH_PROTOCOL.md (org_id,
         // org_slug) — sin profile_id/launch_id/timestamp de correlación como el
         // resto de los eventos de este manifest, porque esos campos no están en el
         // payload confirmado; no se infirieron por simetría.
@@ -665,11 +665,11 @@ if (typeof self !== 'undefined') {
         direction: "synapse_simulator_to_background",
         channel: "runtime",
         // Mismo mecanismo de paridad que switch_organization (ver comentario arriba).
-        // NOTA: PROMPT-EJECUCION-synapse-switch-organization.md nombra un tercer
+        // NOTA: ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md nombra un tercer
         // mensaje, ORGANIZATION_SWITCH_STATUS, cuyo payload no está definido en
         // ningún archivo del repo (confirmado por grep) — queda deliberadamente
         // sin declarar hasta que se confirme su shape real.
-        description: "Simulate la confirmación que Conductor devolvería tras un switch de organización exitoso, con los endpoints reales de Batcave de la organización activada. Payload literal de PROMPT-synapse-switch-organization.md §2.",
+        description: "Simula la confirmación que Conductor devolvería tras un switch de organización exitoso, con los endpoints reales de Batcave de la organización activada. Payload de ORGANIZATION_SWITCH_PROTOCOL.md.",
         payload_template: {
           event: "ORGANIZATION_SWITCHED",
           org_id: "$ORG_ID",

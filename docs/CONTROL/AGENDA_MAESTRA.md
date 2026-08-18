@@ -40,11 +40,11 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 | # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
 |---|---|---|---|---|
-| 1 | Mandate Genesis | Parcialmente implementado; QA y motor real pendientes | QA de D-22/D-23 y definir ejecución del plan de finalización | Motor genérico Mandate → Actions → Intents; Core UI |
+| 1 | Mandate Genesis | Etapa A del vertical con Synapse Simulator cerrada; implementación en gate | Aprobar contrato del Simulator y luego cerrar diseño de integración Genesis | Synapse Simulator contractual; Brain/Temporal/Core locales |
 | 2 | Core UI Redesign | Sidebar y Profiles cerrados | Definir/armar panel derecho, Home y Wisdom tras diagnóstico | Switch de organización; Alfred; contrato de Mandate |
 | 3 | BSIP Response | Validador aislado listo; formato de patch con evidencia inicial | Ejecutar batería de adherencia antes de cerrar schema | Modelos de frontera; OpenCode; canal API/web |
 | 4 | AITAP | Frontera arquitectónica cerrada; scaffold incompleto | Resolver integración real de Contrato D y alta de dispositivos | BSIP Response; Nucleus; Alfred |
-| 5 | OpenCode | `run --format json` probado en headless; adapter aún sin diseñar | Batería adicional de pruebas antes de decidir schema/adapter | Contrato D; AITAP/Vault; Nucleus |
+| 5 | OpenCode | Instalación multiplataforma y rollout básico implementados; adapter pendiente | Certificación operativa multiplataforma | Sistemas destino; comando `serve`; Metamorph |
 | 6 | Alfred | Backend/pipe avanzados; UI y recepción pendientes | Diseñar alta de dispositivo y construir UI de chat | AITAP; Contrato D; Core UI |
 | 7 | CORTEX / IonPump | Ownership documental dividido; Vault spec pendiente de corrección | Corregir §2.2 de Vault y migrar referencias antes de retirar la spec previa | GitHub App + Device Flow; Batcave; specs nuevas |
 | 8 | Batcave | Arquitectura multi-org definida; decisión GitHub App vigente | Corregir regresión de Batcave Auth en Vault spec y actualizar referencias | CORTEX; Nucleus; Alfred remoto |
@@ -57,7 +57,11 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 El paso de Onboarding a Core para Genesis avanzó: D-22 y D-23 están implementados, pero todavía no recibieron QA manual end-to-end. El mecanismo de eventos y la presentación en Core fueron trabajados; sin embargo, el mandate real permanece bloqueado por el watcher y el registro de activities necesarias para completar el workflow.
 
-El rumbo estructural ya no es ampliar un camino Genesis especial: el roadmap fija como ruta crítica el motor genérico Mandate → Actions → Intents, con Genesis iniciando mediante `ing` y `domain_baseline: "empty"`.
+Se abrió el Work **MANDATE GENESIS — SYNAPSE SIMULATOR END-TO-END** para priorizar un primer corte vertical determinístico antes de depender de AITAP, credenciales, browser o modelos reales. Su Etapa A de relevamiento y diseño está completa y la implementación permanece detenida en gate de aprobación. El diseño reconstruyó el flujo consumidor, los blockers internos, los contratos que necesita consumir, ownership, idempotencia, recuperación y la continuidad Brain/Temporal/Core.
+
+En paralelo se abrió el Work **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES**, todavía en investigación y diseño. Es dueño de definir una contraparte cognitiva determinística, reusable, agnóstica y headless: envelopes request/response, correlación, idempotencia, fixtures versionados, failure modes, retry/replay/recovery y observabilidad. No implementará hasta entregar su informe y recibir aprobación explícita.
+
+La división de ownership queda fijada: Genesis consume la frontera y conserva el workflow, Brain/intents, continuidad de Temporal y proyección a Core; Synapse Simulator provee la contraparte determinística genérica. El Simulator no conoce fases de Genesis, Domains, Genes, Temporal ni estado canónico de Mandates. La futura migración al motor genérico Mandate → Actions → Intents permanece como dirección arquitectónica, pero no bloquea este vertical.
 
 **Fuentes de verdad**
 
@@ -68,21 +72,28 @@ El rumbo estructural ya no es ampliar un camino Genesis especial: el roadmap fij
 
 **Próximo paso concreto**
 
-1. Ejecutar QA manual de D-22/D-23: onboarding completo, apertura de Core, consumo y borrado de `pending_genesis_launch`, y reapertura sin relanzamiento.
-2. Si el mandato real debe finalizarse antes del motor genérico, llevar el checklist de `Mandate_Genesis_Completion_Plan_v1.md` a una sesión de implementación, verificando primero exports de activities y ciclos de import.
+1. Recibir y aprobar el informe contractual de **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES**.
+2. Entregar ese contrato al Work **MANDATE GENESIS — SYNAPSE SIMULATOR END-TO-END** para cerrar su integración propuesta sin asumir detalles de la contraparte.
+3. Aprobar explícitamente la Etapa B de cada Work antes de implementar.
+4. Mantener QA de D-22/D-23 y los blockers internos comprobados dentro del plan de ejecución del vertical, sin sustituirlos por eventos o estados simulados.
 
 **Entorno recomendado**
 
-Claude Code para QA asistida y cambios verificables sobre Electron/Go/Temporal; Claude Web o Cowork para validar primero decisiones de producto/UI como D-25. Esta sesión conserva el resultado y actualiza el mapa.
+Works de investigación separados hasta superar sus gates; después, Codex o Claude Code para cambios verificables sobre Brain, Go/Temporal, Core y el Simulator. Esta sesión conserva las devoluciones y coordina dependencias, sin retener el análisis detallado de ambos Works en contexto activo.
 
 **Dependencias cruzadas**
 
+- Synapse Simulator: contrato genérico aprobado antes de fijar detalles de integración del consumidor Genesis.
 - Tema 2: D-25 define la forma final de la tab y dónde integra Genesis en Core.
 - Tema 3: el motor genérico de intents y la respuesta estructurada condicionan la evolución posterior.
 - Tema 6: el flujo de Core comparte superficie con Alfred, pero no debe mezclar scopes.
+- AITAP, OpenCode, credenciales, proveedores reales y `dis/` no son bloqueantes para el primer corte.
 
 **Decisiones/riesgos abiertos**
 
+- Ambos Works están en gate de diseño: no interpretar su apertura ni el cierre de Etapa A como implementación iniciada.
+- Genesis no debe inventar el contrato del Simulator; el Simulator no debe incorporar lógica de Genesis.
+- Elevar a esta agenda solamente blockers transversales reales encontrados por cualquiera de los dos Works.
 - D-25: confirmar si hace falta separar `GenesisTab` de `StandardMandateTab` o unificar en un `MandateTab` orientado por estado.
 - D-27: el step `mandate_genesis` está triplicado y es vulnerable a drift.
 
@@ -209,19 +220,27 @@ La primera prueba real confirmó que `opencode-windows-x64` v1.18.18 funciona de
 
 La corrida aporta evidencia al Contrato D: el modelo editó con el formato nativo `apply_patch`/V4A, no con unified diff. OpenCode aplicó ese patch y solo después produjo un unified diff estándar como reporte del resultado. No generó checksums. También emitió tokens y costo en cada `step_finish`, pero esa telemetría no pasó por AITAP porque la prueba usó autenticación propia de OpenCode mediante cuenta ChatGPT. `opencode serve` existe como servidor HTTP headless persistente, pero todavía no fue probado.
 
+La instalación y distribución inicial están implementadas en el instalador Electron para Windows, macOS y Linux. El binario se despliega desde `installer/opencode/{platformDir}/` hacia `{baseDir}/bin/opencode/opencode` (con `.exe` en Windows), con cleanup de procesos/servicios previo, servicio persistente por plataforma (NSSM, LaunchAgent o `systemd --user`), inicio y readiness TCP en `127.0.0.1:4096`. OpenCode también fue agregado a certificación general, `global_paths.js` y `criticalPaths`.
+
+Metamorph incorpora `rollout_opencode.go`, que hace el deploy básico por `copyFile` desde `installer/opencode/{platformDir}/opencode`; se corrigió el segmento de ruta erróneo `native/bin` y el rollout recompiló para Linux, Darwin arm64 y Windows. Este cierre cubre código de instalación/distribución, no certificación real sobre los tres sistemas ni gestión del servicio desde Metamorph. En este checkout aún no son visibles algunos de los artefactos reportados (`service-installer-opencode*`, `rollout_opencode.go` y el documento REQ), por lo que corresponde verificar su sincronización antes de una auditoría local.
+
 **Fuentes de verdad**
 
 - `docs/AITAP/AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`
 - `docs/BSIP/SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline_v0_1.md`
-- `docs/CONDUCTOR/INSTALLER/`
+- `REQ-metamorph-opencode-rollout.md`
+- Código de instalación: `installer.js`, `pre-install-cleanup.js`, `service-installer-opencode.js`, `service-installer-opencode-darwin.js`, `service-installer-opencode-linux.js` y `global_paths.js`.
+- `rollout_opencode.go`
 
 **Próximo paso concreto**
 
-Ejecutar una batería adicional de pruebas de adherencia antes de decidir el schema y antes de diseñar el adapter: contrastar la estabilidad de formatos nativos de edición frente al unified diff posterior reportado por OpenCode, y medir la viabilidad de checksum y validación de scope. En paralelo, mantener la prueba de `opencode serve` como pendiente separado. Solo con resultados consistentes definir la ubicación, límites, contrato de entrada/salida y bridge de gobernanza de la Implementation Layer.
+Ejecutar la fase de certificación operativa: confirmar `opencode serve --help` y fijar el comando real de arranque; probar instalación limpia, inicio y readiness en Windows/macOS/Linux; y probar reinstalación con proceso o servicio activo. Después confirmar si Electron y Metamorph comparten `nucleus.json` y requieren el mismo milestone, implementar gestión de servicio por plataforma en Metamorph y definir versionado, pinning y actualización incremental.
+
+La batería de adherencia de patch/checksum/scope del tema 3 sigue siendo prerequisito separado antes de diseñar el adapter de Execution Layer.
 
 **Entorno recomendado**
 
-Cowork o Claude Web para el diseño del componente y sus límites; Claude Code para materializarlo, probar `opencode serve` y actualizar distribución cuando exista un contrato concreto.
+Claude Code o Codex con acceso a cada sistema destino para pruebas de instalación y servicios reales; el trabajo requiere observar procesos, puertos y reinstalación, no solo compilación cruzada. Cowork o Claude Web siguen siendo útiles para la política de versión, pinning y actualización una vez recogida la evidencia operativa.
 
 **Dependencias cruzadas**
 
@@ -233,7 +252,10 @@ Cowork o Claude Web para el diseño del componente y sus límites; Claude Code p
 
 - Ubicación física y propietario del componente.
 - Bridge Implementation Layer ↔ Nucleus, distinto de `nucleus vault`.
-- `opencode serve`: existente, pero no probado todavía.
+- Instalación limpia, reinstalación, arranque headless y readiness no están certificados end-to-end en los tres sistemas.
+- Flag exacto de `opencode serve --port`: no validado todavía.
+- Metamorph aún no gestiona el servicio; solo despliega el binario.
+- Versionado, pinning, detección de versión instalada y política de actualización incremental: sin definir.
 - Contabilidad/Vault: los datos de tokens y costo de OpenCode fueron observados, pero no pasaron por AITAP en la prueba standalone.
 - No elegir aún entre patch nativo y unified diff posterior como representación de Contrato D.
 
@@ -357,7 +379,9 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
 |---|---|---|---|
-| Alta | 1 | QA manual D-22/D-23 y/o finalización del mandate real | Elegir si se prioriza cierre operativo o motor genérico |
+| Alta | 1 / Synapse Simulator | Aprobar diseño contractual de `SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES` | Informe de Etapa A del Simulator; implementación detenida en gate |
+| Alta | 1 | Cerrar integración propuesta de `MANDATE GENESIS — SYNAPSE SIMULATOR END-TO-END` | Contrato del Simulator aprobado; implementación Genesis detenida en gate |
+| Alta | 5 | Certificación operativa de instalación/servicio OpenCode en Windows, macOS y Linux | Acceso a los tres sistemas; confirmar comando real de `serve` |
 | Alta | 3 + 5 | Batería de adherencia API/web y OpenCode para decidir formato de patch, checksum y scope usando `validate-contract` | Prompt de ejecución pendiente de preparar; acceso a modelos, OpenCode y comando local |
 | Alta | 7 | Corregir §2.2 de Vault Storage y migrar referencias desde la remediación anterior | GitHub App + Device Flow confirmado; mapear referencias a migrar |
 | Alta | 8 | Migración de arquitectura/auth de Batcave a GitHub App + Device Flow | Corregir primero la regresión de Vault Storage y confirmar scopes mínimos |
@@ -372,4 +396,6 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | 2026-08-15 | 1–8 | Creación de la agenda y consolidación inicial basada en las fuentes existentes. | Sesión de control | Se fijaron ownership exclusivo, OpenCode como nombre vigente y GitHub App + Device Flow como criterio cerrado. |
 | 2026-08-16 | 3, 5 | Se integró y verificó el validador aislado de Contrato D; se decidió probar adherencia de modelos antes de diseñar el adapter de OpenCode. | Sesión externa de ejecución, reportada por el usuario | Se cerró el traslado del validador; se registraron como abiertos el productor, el consumidor y el adapter. |
 | 2026-08-16 | 3, 5 | Primera prueba headless de OpenCode v1.18.18 con salida JSON parseable y edición/verificación reales. | Sesión externa de investigación, reportada por el usuario | Se agregó evidencia para el formato de patch; no se cerró el schema ni se inició el adapter. |
+| 2026-08-17 | 5 | Se implementaron instalación Electron y rollout básico de Metamorph para OpenCode en tres plataformas. | Sesión externa de implementación, reportada por el usuario | Se cerró distribución inicial; se abrió certificación operativa, gestión de servicio en Metamorph, versionado y autenticación. |
 | 2026-08-17 | 7, 8 | Split documental de la remediación CORTEX y corrección de alcance de automatización DOM. | Actualización del usuario sobre fuentes y alcance | Se retiró la remediación previa como fuente activa; se condicionó la promoción de Vault Storage a corregir Batcave Auth como segunda GitHub App + Device Flow. |
+| 2026-08-18 | 1 / Synapse Simulator | Se separó el vertical Genesis en dos Works coordinados con gates independientes. | AGENDA FOLLOWUP, reportado por el usuario | Genesis cerró Etapa A y espera el contrato del Simulator; el Simulator inició investigación contractual. Ninguno comenzó implementación. |

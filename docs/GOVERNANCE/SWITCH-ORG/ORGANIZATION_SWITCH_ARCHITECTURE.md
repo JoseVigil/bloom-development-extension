@@ -1,8 +1,9 @@
-# Bloom — Diseño: Switch de Organización con Single-Org Activa
+# Bloom — Arquitectura: Switch de Organización con Single-Org Activa
 
-**Estado:** Borrador de diseño, pendiente de verificación contra código real.
-**Alcance:** Nucleus (Go) y Conductor (Electron). Sentinel/Brain/Metamorph quedan fuera de este documento hasta auditar Nucleus primero.
-**Última actualización:** sesión de auditoría multi-org, continuación del trabajo sobre `nucleus.json` (onboarding).
+**Estado:** Decisión arquitectónica vigente. La implementación está avanzada, con certificación end-to-end pendiente.
+**Alcance:** Feature transversal con autoridad en Nucleus y participación de Conductor/Workspace Core, Cortex, Brain, Temporal, Vault y Batcave.
+**Estado de implementación:** ver `ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md`.
+**Contrato de mensajes:** ver `ORGANIZATION_SWITCH_PROTOCOL.md`.
 
 ---
 
@@ -51,6 +52,8 @@ Un intento de switch bloqueado debe quedar registrado igual que uno exitoso — 
 ---
 
 ## 3. Hallazgo ya confirmado en código (sesión anterior)
+
+> **Registro histórico:** las secciones 3 a 6 preservan el punto de partida de la auditoría que condujo a la implementación actual. No describen por sí solas el estado vigente. Para conocer qué piezas existen hoy y qué certificaciones siguen abiertas, consultar `ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md`.
 
 `getOrCreateOrg()` en `shared/onboarding-schema.js` escribe `active_org_slug` sin ninguna condición:
 

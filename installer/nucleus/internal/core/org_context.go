@@ -34,7 +34,7 @@ const (
 // create.go jamás generó — silenciosamente tratada como "no existe todavía"
 // en vez de "es la org equivocada".
 //
-// FIX 2 (Etapa 2, PROMPT-EJECUCION-synapse-switch-organization.md): el
+// FIX 2 (Etapa 2, ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md): el
 // fallback de más abajo dependía enteramente de BLOOM_ORG, una env var que
 // (confirmado por auditoría de código — grep completo de Setenv/spawn-env/
 // export en todo el repo) NINGÚN proceso escribe nunca. Ni vault.go,
@@ -98,7 +98,7 @@ func ResolveNucleusRoot(orgSlug string) (string, error) {
 // que contenga exactamente una subcarpeta .nucleus-{slug}. Devuelve
 // (workspacePath, slug, nucleusDir).
 //
-// ETAPA 2 de PROMPT-EJECUCION-synapse-switch-organization.md — antes de este
+// ETAPA 2 de ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md — antes de este
 // cambio existían DOS copias independientes de este escaneo: una en
 // internal/supervisor/supervisor.go (findBloomDir + findNucleusDir, usada
 // por Mandates) y ninguna equivalente del lado de ResolveNucleusRoot()

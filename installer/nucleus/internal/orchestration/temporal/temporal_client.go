@@ -427,7 +427,7 @@ func IsAlreadyStarted(err error) bool {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Etapa 3 (PROMPT-EJECUCION-synapse-switch-organization.md) — condición
+// Etapa 3 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md) — condición
 // previa de G1/G3: "¿hay algo no-terminal para esta organización?".
 //
 // DECISIÓN DE DISEÑO (reemplaza el plan original de la Etapa 3): el pedido

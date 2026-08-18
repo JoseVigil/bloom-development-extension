@@ -1,10 +1,10 @@
-# PROMPT DE EJECUCIÓN — Implementación por etapas de `SWITCH_ORGANIZATION` / `ORGANIZATION_SWITCHED`
+# Estado de implementación — `SWITCH_ORGANIZATION` / `ORGANIZATION_SWITCHED`
 
-## Cómo usar este documento
+## Propósito y fuente de verdad
 
-Este prompt es la continuación directa de `PROMPT-synapse-switch-organization.md` y de la investigación posterior (`INVESTIGACION-synapse-switch-organization.md` + auditoría de código real contra `bloom-development-extension`). **No repite esa investigación** — la da por cerrada y por cierta. Si quien lee esto necesita el "por qué" de alguna decisión, está en esos documentos, no acá.
+Este documento registra la auditoría, las decisiones de implementación y el estado verificable del feature. La arquitectura vigente está en `ORGANIZATION_SWITCH_ARCHITECTURE.md` y el contrato estable de mensajes en `ORGANIZATION_SWITCH_PROTOCOL.md`.
 
-Este documento asume que ya se decidió: **modelo single-org activa con drenado** (G1-G8), no instancia-por-organización. Esa decisión no está abierta a discusión en esta sesión — si algo de lo que aparece abajo parece contradecirla, es un bug del prompt, avisar antes de reinterpretar.
+La decisión vigente es el **modelo single-org activa con drenado** (G1-G8), no instancia-por-organización. Si una nota histórica de este documento contradice la arquitectura vigente, prevalece `ORGANIZATION_SWITCH_ARCHITECTURE.md`.
 
 No hagas lo que la sesión de investigación evitó hacer a propósito: no completes un gap con una suposición razonable. Si un archivo pedido acá no existe o no se puede compartir, decilo explícitamente y seguí con lo que sí hay.
 
@@ -108,7 +108,7 @@ G2 se implementó como función Go síncrona, no como workflow sobre `SystemGate
 
 ### Etapa 5 — Handler end-to-end + integración Conductor/Cortex
 
-**Objetivo:** recién acá se conecta la Etapa 1 (contrato ya declarado) con las Etapas 2-4 (infraestructura real). Es el trabajo que el prompt original (`PROMPT-synapse-switch-organization.md`) describía como si fuera todo el alcance — en esta ejecución es el paso final, no el primero.
+**Objetivo:** recién acá se conecta la Etapa 1 (contrato ya declarado) con las Etapas 2-4 (infraestructura real). El alcance histórico se conserva aquí como registro; la definición vigente del intercambio está en `ORGANIZATION_SWITCH_PROTOCOL.md`.
 
 **Archivos a tocar** (confirmados en la investigación previa, sección 3.3):
 - `installer/conductor/workspace/main_conductor.js` y `installer/conductor/workspace/ipc/workspace-synapse-handlers.js` — los dos call sites de resolución de eventos. Si el switch se engancha en cualquiera de los dos, tocar ambos y mantenerlos sincronizados — no es opcional, es la advertencia §3.4 del prompt original y sigue vigente.

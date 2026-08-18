@@ -196,7 +196,7 @@ Core ya tenía un pipe bien diseñado para esto (`bloom.ai.execution.*`), pero r
 ### Gobernanza / identidad (contexto para el gap de §3)
 - `docs/GOVERNANCE/GOVERNANCE_OWNERSHIP_SPEC_v1_0.md` — schema canónico de `.ownership.json`, identidad de
   organización (no de dispositivo).
-- `docs/GOVERNANCE/G1-G8_multi-org-switch-design.md` — modelo de switch de organización, single-org-activa.
+- `docs/GOVERNANCE/SWITCH-ORG/ORGANIZATION_SWITCH_ARCHITECTURE.md` — modelo de switch de organización, single-org-activa.
 
 ### Batcave / Synapse (contexto del modelo descartado en §3)
 - `docs/BATCAVE/BATCAVE_ARCHITECTURE.md` — desactualizado en el punto de "Alfred vive dentro del proceso TS

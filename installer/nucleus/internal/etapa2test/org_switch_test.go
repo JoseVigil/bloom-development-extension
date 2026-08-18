@@ -1,6 +1,6 @@
 // internal/etapa2test/org_switch_test.go
 //
-// Test de verificación de Etapa 2 (PROMPT-EJECUCION-synapse-switch-organization.md
+// Test de verificación de Etapa 2 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md
 // §"Criterio de verificación"): "un test que cree dos organizaciones locales
 // de prueba, cambie el contexto activo por el mecanismo elegido, y confirme
 // que tanto una operación de Vault como una operación de Mandates ven la
