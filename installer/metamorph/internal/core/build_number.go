@@ -3,7 +3,9 @@ package core
 import "strconv"
 
 // buildNumber, BuildDate y BuildTime se inyectan en link time via:
-//   -ldflags "-X metamorph/internal/core.buildNumber=N -X metamorph/internal/core.BuildDate=... -X metamorph/internal/core.BuildTime=..."
+//
+//	-ldflags "-X metamorph/internal/core.buildNumber=N -X metamorph/internal/core.BuildDate=... -X metamorph/internal/core.BuildTime=..."
+//
 // desde build-component.bat (Windows) y build-component.sh (macOS/Linux).
 // Si no se inyectan (build local sin script), quedan vacíos y BuildNumber() devuelve 0.
 var (

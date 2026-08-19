@@ -172,6 +172,54 @@ def _ensure_build_number_files(scripts_dir: Path, component: str) -> None:
             log(f"  📄 Creado {rel} (offset inicial: 0)")
 
 
+def _ensure_cortex_meta(meta_path: Path) -> None:
+    """
+    Garantiza que cortex.meta.json existe antes de invocar package.py.
+
+    Está gitignoreado (build state por máquina, mismo criterio que
+    build_number.txt) así que un clon nuevo del repo no lo trae — package.py
+    no tiene lógica de auto-creación y falla duro (fail(f"{META_FILENAME}
+    not found at {meta_path}")) si no existe. Mismo patrón que
+    _ensure_build_number_files(): crear con defaults sensatos si falta.
+    """
+    if meta_path.exists():
+        return
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    default = {
+        "name": "Bloom Cortex",
+        "version": "1.0.0",
+        "build_number": 0,
+        "build_date": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "release_channel": "stable",
+        "min_chrome_version": "120",
+    }
+    meta_path.write_text(json.dumps(default, indent=2), encoding="utf-8")
+    log(f"  📄 Creado {meta_path.relative_to(ROOT)} (build_number inicial: 0)")
+
+
+def _ensure_bootstrap_meta(meta_path: Path) -> None:
+    """
+    Garantiza que bootstrap.meta.json existe antes de invocar version-bootstrap.py.
+    Mismo motivo y mismo patrón que _ensure_cortex_meta().
+    """
+    if meta_path.exists():
+        return
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    default = {
+        "name": "Bloom Bootstrap",
+        "info": "Bootstrap runtime for the Bloom VS Code extension. Loads and "
+                "initializes the extension's Node.js environment inside the "
+                "Nucleus service, acting as the bridge between the VS Code "
+                "plugin and the Bloom backend.",
+        "version": "1.0.0",
+        "build_number": 0,
+        "build_date": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "files": ["bundle.js", "bundle.js.map", "server-bootstrap.js"],
+    }
+    meta_path.write_text(json.dumps(default, indent=2), encoding="utf-8")
+    log(f"  📄 Creado {meta_path.relative_to(ROOT)} (build_number inicial: 0)")
+
+
 def resolve_build_number(component: str) -> int:
     """
     Resuelve el build number efectivo para un componente en la plataforma actual.
@@ -598,8 +646,68 @@ def _stop_running_brain_service() -> None:
     log("  ✅ Brain listo para reconstruirse desde estado limpio")
 
 
+def _ensure_brain_python_deps() -> None:
+    """
+    Garantiza que brain/requirements.txt está instalado en el Python que va
+    a correr brain/build_deploy/update_version.py (invocado por
+    brain.ps1 / build-brain.sh dentro de build_brain()).
+
+    Solo instala si falta algo — no corre pip install en cada build. Usa
+    tomli_w como proxy: es la dependencia que rompió el build en una máquina
+    Windows nueva (ver brain.build.log), y como todas se instalan juntas
+    desde el mismo requirements.txt, si esa falta el resto tampoco están.
+    """
+    requirements = ROOT / "brain" / "requirements.txt"
+    if not requirements.exists():
+        return
+
+    python_exe = shutil.which("python") or shutil.which("python3") or sys.executable
+    check = subprocess.run(
+        [python_exe, "-c", "import tomli_w"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if check.returncode == 0:
+        log("  brain: dependencias Python ya instaladas — skipping pip install")
+        return
+
+    log("  Instalando dependencias de brain/ (pip install -r requirements.txt) ...")
+    code, out = run_streaming(
+        [python_exe, "-m", "pip", "install", "-r", str(requirements)], cwd=ROOT
+    )
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-15:]) if out else "(sin output)"
+        log(f"  ⚠ pip install de brain/requirements.txt falló (RC={code}):\n{tail}")
+        log("  ⚠ El build de Brain probablemente va a fallar por dependencias faltantes.")
+    else:
+        log("  ✅ Dependencias de brain/ instaladas")
+
+    # PyInstaller no está en requirements.txt a propósito: ese archivo se
+    # vendorea a brain/libs/ para el runtime empaquetado (ver
+    # install_python_deps.js), y PyInstaller es una herramienta de build, no
+    # una dependencia del propio Brain. Nadie la instala si falta — build_main.py
+    # asume "python -m PyInstaller" ya disponible y revienta con "No module
+    # named PyInstaller" si no lo está (visto en máquina Windows nueva).
+    check_pyinstaller = subprocess.run(
+        [python_exe, "-c", "import PyInstaller"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if check_pyinstaller.returncode == 0:
+        log("  brain: PyInstaller ya instalado — skipping pip install")
+        return
+
+    log("  Instalando PyInstaller (herramienta de build, no va en requirements.txt) ...")
+    code, out = run_streaming([python_exe, "-m", "pip", "install", "pyinstaller"], cwd=ROOT)
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-15:]) if out else "(sin output)"
+        log(f"  ⚠ pip install pyinstaller falló (RC={code}):\n{tail}")
+        log("  ⚠ El build de Brain probablemente va a fallar por PyInstaller faltante.")
+    else:
+        log("  ✅ PyInstaller instalado")
+
+
 def build_brain() -> StepResult:
     _stop_running_brain_service()
+    _ensure_brain_python_deps()
 
     brain_script = BUILDS["brain"]
     if not brain_script or not brain_script.exists():
@@ -1119,6 +1227,8 @@ def build_cortex() -> StepResult:
             ),
         )
 
+    _ensure_cortex_meta(package_py.parent / "cortex.meta.json")
+
     log(f"Ejecutando python3 {package_py.name} ...")
     _increment_build_number("cortex")
     env = inject_build_number_env("cortex")
@@ -1167,6 +1277,8 @@ def build_bootstrap() -> StepResult:
     if not script_py.exists():
         return StepResult("Bootstrap", False,
                           error=f"version-bootstrap.py no encontrado en: {bootstrap_src_dir}")
+
+    _ensure_bootstrap_meta(bootstrap_src_dir / "bootstrap.meta.json")
 
     # Paso 0: garantizar node_modules en webview/app (Svelte dev server)
     # npm install solo corre si node_modules no existe o package.json es mas nuevo.
@@ -1621,6 +1733,17 @@ def _build_conductor_subproject(name: str, target: Path) -> StepResult:
 
     comp_key = name.lower()  # "setup" o "workspace"
     env = {**os.environ}
+
+    # electron-builder auto-descarga winCodeSign (certs/herramientas de firma
+    # de macOS) por default en CUALQUIER plataforma, incluso para --win puro
+    # que nunca los va a usar. Ese .7z trae symlinks a .dylib de macOS, y
+    # 7-Zip en Windows no puede crearlos sin SeCreateSymbolicLinkPrivilege
+    # (falla con "Cannot create symbolic link: A required privilege is not
+    # held by the client", visto en máquina Windows nueva sin Developer Mode).
+    # No hace falta firmar para Mac en un build de Windows — apagar el
+    # auto-discovery evita la descarga entera, no solo el síntoma.
+    env["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
+
     build_num = resolve_build_number(comp_key) if comp_key in _BUILD_NUMBER_DIRS else None
     if build_num is not None:
         env["BLOOM_BUILD_NUMBER"] = str(build_num)

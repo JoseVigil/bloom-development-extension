@@ -32,14 +32,14 @@ type SystemInfo struct {
 // GetVersionInfo retorna información de versión consolidada
 func GetVersionInfo() VersionInfo {
 	version := ReadVersionFromFile()
-	buildNum := BuildNumber
-	
+	buildNum := BuildNumber()
+
 	info := VersionInfo{
 		Version:     version,
 		BuildNumber: buildNum,
 		FullRelease: getAppName() + " release " + version + " build " + intToString(buildNum),
 	}
-	
+
 	return info
 }
 
@@ -47,11 +47,11 @@ func GetVersionInfo() VersionInfo {
 func GetSystemInfo() SystemInfo {
 	version := ReadVersionFromFile()
 	now := time.Now()
-	
+
 	info := SystemInfo{
 		AppName:        getAppName(),
 		AppRelease:     version,
-		BuildCounter:   BuildNumber,
+		BuildCounter:   BuildNumber(),
 		CompileDate:    BuildDate,
 		CompileTime:    BuildTime,
 		CurrentTime:    now.Format("2006-01-02 15:04:05"),
@@ -60,7 +60,7 @@ func GetSystemInfo() SystemInfo {
 		RuntimeEngine:  "Go",
 		RuntimeRelease: runtime.Version(),
 	}
-	
+
 	return info
 }
 
@@ -77,21 +77,21 @@ func intToString(n int) string {
 	if n == 0 {
 		return "0"
 	}
-	
+
 	negative := n < 0
 	if negative {
 		n = -n
 	}
-	
+
 	var digits []byte
 	for n > 0 {
 		digits = append([]byte{byte('0' + n%10)}, digits...)
 		n /= 10
 	}
-	
+
 	if negative {
 		digits = append([]byte{'-'}, digits...)
 	}
-	
+
 	return string(digits)
 }
