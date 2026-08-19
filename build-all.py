@@ -692,13 +692,22 @@ def _stop_running_nucleus_service() -> None:
         if result.returncode == 0:
             stopped_gracefully = True
     elif IS_WINDOWS:
-        result = subprocess.run(
-            ["nssm", "stop", "com.bloom.nucleus"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            encoding="utf-8", errors="replace",
-        )
-        if result.returncode == 0:
-            stopped_gracefully = True
+        nssm_bin = shutil.which("nssm")
+        if nssm_bin:
+            try:
+                result = subprocess.run(
+                    [nssm_bin, "stop", "com.bloom.nucleus"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    encoding="utf-8", errors="replace",
+                )
+                if result.returncode == 0:
+                    stopped_gracefully = True
+                else:
+                    log("     nssm: com.bloom.nucleus no estaba activo o no existe como servicio (ok)")
+            except OSError as exc:
+                log(f"     nssm: no se pudo ejecutar ({exc}) — se ignora, no es bloqueante")
+        else:
+            log("     'nssm' no está en PATH todavía — probablemente primera instalación, nada que detener")
 
     # Misma race condition que con Brain (ver Sección 0 de
     # brain-troubleshooting.md): el kernel puede tardar en liberar sockets

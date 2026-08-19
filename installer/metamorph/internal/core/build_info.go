@@ -1,7 +1,7 @@
 package core
 
 // Auto-generated during build
-const BuildNumberInt = 4
-const BuildNumber    = BuildNumberInt
-const BuildDate = "2026 -Mon 06-15"
-const BuildTime = "12:19:00"
+const BuildNumberInt = 2
+func BuildNumber() int { return BuildNumberInt }
+const BuildDate = "2026 -Wed 08-19"
+const BuildTime = "10:27:00"

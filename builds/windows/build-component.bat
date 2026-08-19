@@ -116,7 +116,7 @@ for /f "tokens=1-2 delims=:." %%a in ('echo %time: =0%') do set BUILD_TIME=%%a:%
     echo.
     echo // Auto-generated during build
     echo const BuildNumberInt = %NEXT_BUILD%
-    echo const BuildNumber    = BuildNumberInt
+    echo func BuildNumber^(^) int { return BuildNumberInt }
     echo const BuildDate = "%BUILD_DATE%"
     echo const BuildTime = "%BUILD_TIME%"
 ) > "%BUILD_INFO%"
