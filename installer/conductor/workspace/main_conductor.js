@@ -280,7 +280,7 @@ function createWorkspaceWindow(url) {
 // Brain ServerManager (puerto 5678). Cada mensaje que Brain emite vía broadcast
 // llega a _onBrainMessage(), que dispara bridge.emit('message', enriched).
 // El listener reemite ese payload al renderer como 'synapse:raw-event' para
-// que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
+// que el panel SYNAPSE RAW de synapse-simulator.html lo muestre en tiempo real.
 //
 // Requiere que el profileId exista en nucleus.json (master_profile).
 // Idempotente: si el bridge ya existe, no lo recrea.
@@ -684,7 +684,7 @@ app.whenReady().then(async () => {
     registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
     // Inicializar el bridge de synapse para el onboarding.
     // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
-    // para que el panel SYNAPSE RAW de debug.html lo muestre en tiempo real.
+    // para que el panel SYNAPSE RAW de synapse-simulator.html lo muestre en tiempo real.
     // Se inicializa aquí — después de crear la ventana — para que mainWindow
     // esté disponible cuando el bridge intente hacer webContents.send().
     initOnboardingBridge(log);

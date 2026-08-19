@@ -128,7 +128,7 @@ contextBridge.exposeInMainWorld('onboarding', {
   // Solo disponible en builds no empaquetados — el handler en main lo rechaza
   // si app.isPackaged es true.
   //
-  // Uso en debug.html (via postMessage desde onboarding.js):
+  // Uso en synapse-simulator.html (via postMessage desde onboarding.js):
   //   window.onboarding.injectMilestone({ stepId: 'github_auth', data: { username: 'test' } })
   //
   injectMilestone: (params) => ipcRenderer.invoke('synapse-simulator:inject-milestone', params),

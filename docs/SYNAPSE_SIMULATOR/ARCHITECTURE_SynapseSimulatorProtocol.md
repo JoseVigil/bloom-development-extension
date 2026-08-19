@@ -3,7 +3,9 @@
 **Versión:** 1.0  
 **Proyecto:** Bloom Cortex Extension  
 **Estado:** Post-Fase 5 (activo)  
-**Última actualización:** Jun 26 2026
+**Última actualización:** Aug 18 2026
+
+> **Corrección de alcance:** Synapse Simulator es un entorno distribuido con dos superficies coordinadas: Workspace/Electron y Cortex/extensión. Este documento detalla principalmente el contrato de schemas del extremo Cortex; no debe interpretarse como si la página Cortex fuera el componente completo.
 
 ---
 
@@ -17,6 +19,7 @@
 6. [Flujo completo end-to-end](#6-flujo-completo-end-to-end)
 7. [Reglas de diseño — obligatorias para el equipo](#7-reglas-de-diseño--obligatorias-para-el-equipo)
 8. [Deuda técnica pendiente de migración](#8-deuda-técnica-pendiente-de-migración)
+9. [Arquitectura distribuida Workspace–Cortex](#9-arquitectura-distribuida-workspacecortex)
 
 ---
 
@@ -30,7 +33,7 @@ Antes de la migración (Fases 1–4), la extensión Bloom Cortex mantenía la de
 
 Este diseño implicaba que agregar o modificar un campo en un mensaje requería cambios en al menos dos archivos distintos. Los schemas no eran la fuente de verdad — eran decoración.
 
----
+La superficie que consume estos schemas dentro de Cortex es sólo uno de los extremos del Simulator. En Workspace, `installer/conductor/workspace/shared/debug.html` observa e inyecta tráfico mediante SynapseBridge, Control Plane y los bridges del renderer.
 
 ## 2. Nuevo estándar: JSON Schema como Single Source of Truth
 
@@ -352,3 +355,21 @@ Los siguientes elementos siguen usando el sistema anterior y **no se deben borra
 2. Una vez hecho, eliminar `synapse-simulator.synapse.config.js` del bundle y simplificar `ConfigReader.read()` en synapse-simulator.js.
 3. Eliminar los archivos `*Protocol.js` legacy y remover `ProtocolReader.discover()` y `loadScriptOptional` del boot sequence.
 4. Los `*.synapse.config.js` de sesión (discovery/landing) se mantienen hasta que Ignition/Sentinel los reemplace por otro mecanismo de entrega de config de runtime.
+
+---
+
+## 9. Arquitectura distribuida Workspace–Cortex
+
+```text
+Workspace Synapse Simulator
+→ SynapseBridge / Control Plane
+→ Brain gobernado por Nucleus/Sentinel
+→ bloom-host / Native Messaging
+→ Cortex background.js
+→ páginas y schemas de la extensión
+→ retorno por el mismo sistema
+```
+
+El extremo Workspace aporta health, feed categorizado/raw e inyección segura. El extremo Cortex consume los schemas y ejercita el routing web real. Un futuro fixture engine headless puede producir resultados determinísticos, pero no reemplaza la prueba integrada sobre esta autopista.
+
+Para futuros intents cognitivos, el contrato reusable debe recibir las necesidades del consumidor —incluido Mandate Genesis— sin incorporar fases de Genesis a la semántica general del Simulator.

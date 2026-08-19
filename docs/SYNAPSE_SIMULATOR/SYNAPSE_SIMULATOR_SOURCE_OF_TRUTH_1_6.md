@@ -13,8 +13,8 @@
 
 > **v1.4 — resumen del cambio:** el mismo drift corregido en §23 para `discovery.schema.json`
 > existía, en espejo, del lado de **Conductor Workspace** — la app Electron que es la contraparte
-> de SynapseSimulator pero corriendo del lado host/Cortex en vez de dentro de la extensión de Chrome.
-> `debug.html` (hoy vive en `onboarding/`, va a mudarse a `core/`) tenía su propio panel de
+> de SynapseSimulator pero corriendo del lado Workspace/Electron en vez de dentro de la extensión de Chrome.
+> `debug.html` (hoy vive en `installer/conductor/workspace/shared/`) tenía su propio panel de
 > "Simulate" con el mismo par retirado `GITHUB_PAT_DETECTED` / `GITHUB_TOKEN_STORED` hardcodeado en
 > tres lugares (`sim-select`, `EVENT_LEVELS`, `AUTO_EVENTS`), sin ningún rastro del Device Flow. Ver
 > §24 para el detalle completo.
@@ -88,7 +88,7 @@
 
 ### SynapseSimulator
 
-El SynapseSimulator es una **herramienta de observabilidad y simulación del protocolo Synapse**. Existe exclusivamente en builds dev — no se despliega en producción.
+El SynapseSimulator es un **entorno distribuido de observabilidad y simulación segura del protocolo Synapse**. Existe exclusivamente en builds dev — no se despliega en producción. No se reduce a una página: coordina una superficie Workspace/Electron y una superficie Cortex/extensión sobre la autopista real de Synapse.
 
 Sus dos roles son:
 - **Observar** todos los mensajes `chrome.runtime` que fluyen entre la extensión, `background.js` y el host mientras el onboarding corre en Discovery.
@@ -96,7 +96,12 @@ Sus dos roles son:
 
 El SynapseSimulator **no modifica el estado del sistema**. Despacha mensajes como si los hubiera enviado otro componente. `background.js` los recibe y los procesa exactamente igual.
 
-Existe un segundo consumidor del feed `SYNAPSE_SIMULATOR_LOG`: el **Workspace SynapseSimulator** (lado Electron/VSCode), que escucha el mismo formato de mensaje por WebSocket vía nucleus. Ver §18 pregunta #6.
+Sus dos superficies son:
+
+- **Workspace Synapse Simulator** (`installer/conductor/workspace/shared/debug.html`): observa el feed local y crudo, consulta health e inyecta simulaciones por Control Plane/postMessage.
+- **Cortex Synapse Simulator** (`brain/core/profile/web/templates/synapse-simulator/` desplegado dentro de la extensión): consume schemas, interactúa con `background.js` y representa el extremo web del protocolo.
+
+La finalidad conjunta es ejercitar Synapse sin operar sobre sitios externos reales ni comprometer cuentas de usuario. El modo headless futuro puede aportar determinismo, pero no reemplaza la prueba integrada entre ambas superficies.
 
 ### IonPump
 
@@ -154,12 +159,26 @@ Son problemas ortogonales que comparten infraestructura. La superficie compartid
 | **Cortex** | Aloja `synapse-simulator/index.html`. *(actualizado Jun 26 2026)* — Expone los protocolos como JSON schemas en `extension/protocols/` (`discovery.schema.json`, `landing.schema.json`, `synapse-simulator.schema.json`), declarados en `web_accessible_resources`. *(transitorio)* — Los globals `self.*_PROTOCOL_MANIFEST` en archivos `*Protocol.js` siguen presentes como fallback durante la migración. El `content.js` ejecuta comandos DOM de IonPump. |
 | **Metamorph** | Inspecciona y reconcilia `.ion` recipes en filesystem. Es el único escritor de `ionsites/`. No participa del runtime IonPump. |
 | **background.js** | Router central. Único poseedor de `nativePort`. Implementa el buffer `synapseSimulatorLogBuffer` (100 entradas), `forwardToDebugPanel()` (doble destino: POST nucleus + `chrome.runtime.sendMessage` SynapseSimulator), y el handler `SYNAPSE_SIMULATOR_HELLO`/`SYNAPSE_SIMULATOR_REPLAY`. |
+| **Workspace Synapse Simulator** | Superficie Electron hoy implementada en `workspace/shared/debug.html`: feed WebSocket y raw, health e inyección segura de eventos sintéticos. |
+| **SynapseBridge / workspace handlers** | Conecta Workspace con Brain usando framing TCP Big Endian, clasifica el retorno y lo entrega al renderer; no es un motor cognitivo. |
 
 ---
 
 ---
 
-## 4. Arquitectura del SynapseSimulator
+## 4. Arquitectura distribuida del SynapseSimulator
+
+```text
+Workspace Synapse Simulator
+→ SynapseBridge / Control Plane
+→ Brain gobernado por Nucleus/Sentinel
+→ bloom-host / Native Messaging
+→ Cortex background.js
+→ páginas y schemas de la extensión
+→ retorno por el mismo sistema
+```
+
+Las dos superficies son partes coordinadas del mismo entorno. El núcleo headless que se agregue para fixtures cognitivos debe poder ejecutarse aisladamente en pruebas, pero la aceptación integrada exige demostrar el recorrido real anterior.
 
 ### 4.1 Dónde vive
 
@@ -1831,9 +1850,9 @@ documento. Ver §23.*
 
 > **Número de versión de este documento: 1.4**
 
-**Archivo releído para esta corrección:** `debug.html` (1345 líneas), ubicado hoy dentro de
-`onboarding/` en Conductor Workspace, con nota del equipo de que se va a mudar a `core/` más
-adelante.
+**Archivo releído para esta corrección:** `debug.html`, ubicado en
+`installer/conductor/workspace/shared/`. La afirmación anterior que lo ubicaba dentro de
+`onboarding/` estaba desactualizada.
 
 ### Qué es Conductor Workspace y cómo se relaciona con SynapseSimulator
 

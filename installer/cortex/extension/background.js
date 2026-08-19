@@ -19,7 +19,7 @@ const BASE_DELAY = 2000;
 
 // ============================================================================
 // DEBUG PANEL BRIDGE
-// Reenvía eventos del synapse-simulator al feed del debug panel (debug.html / Control Plane).
+// Reenvía eventos del synapse-simulator al feed del debug panel (synapse-simulator.html / Control Plane).
 //
 // Canal: POST http://localhost:48215/api/internal/system-event
 // Envelope: { category, event, data, profile_id, timestamp }

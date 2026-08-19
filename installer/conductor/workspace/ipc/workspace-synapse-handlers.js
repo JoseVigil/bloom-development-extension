@@ -33,7 +33,7 @@
  *     reenvía TODOS los mensajes ('message') al renderer vía
  *     'synapse:raw-event', sin pasar por el MilestoneReactor ni por
  *     ningún filtro. Pensado exclusivamente para el panel de debug
- *     (debug.html / window.onboarding.onSynapseEvent).
+ *     (synapse-simulator.html / window.onboarding.onSynapseEvent).
  */
 
 const { ipcMain, app } = require('electron');

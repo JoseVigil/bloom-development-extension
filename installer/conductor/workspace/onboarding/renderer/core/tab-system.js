@@ -5,7 +5,7 @@
 // de steps — dejarlo en el orquestador (onboarding.js) hubiese ido contra
 // el objetivo de "quede limpio" del entregable original.
 //
-// El iframe #debug-frame se carga con src desde el HTML y está vivo desde
+// El iframe #synapse-simulator-frame se carga con src desde el HTML y está vivo desde
 // DOMContentLoaded. switchTab solo alterna visibilidad CSS.
 import { log } from './ipc-bridge.js';
 
@@ -50,10 +50,10 @@ export function initSynapseSimulatorMessageBridge() {
       (async () => {
         try {
           const data = await (window.onboarding?.health?.() ?? window.electronAPI?.health?.());
-          document.getElementById('debug-frame')?.contentWindow
+          document.getElementById('synapse-simulator-frame')?.contentWindow
             ?.postMessage({ type: 'HEALTH_RESPONSE', data }, '*');
         } catch (e) {
-          document.getElementById('debug-frame')?.contentWindow
+          document.getElementById('synapse-simulator-frame')?.contentWindow
             ?.postMessage({ type: 'HEALTH_RESPONSE', error: e.message }, '*');
         }
       })();

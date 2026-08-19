@@ -90,7 +90,7 @@ function handleStepUpdate(stepId, phase) {
 
 // ── SYNAPSE CATEGORY ────────────────────────────────────────────────────────
 // Mapea el tipo clasificado por SynapseBridge a la categoría que usa el
-// Event Feed de debug.html (filters: synapse, brain, sentinel, nucleus,
+// Event Feed de synapse-simulator.html (filters: synapse, brain, sentinel, nucleus,
 // temporal, health). Sin cambios de lógica respecto al monolito.
 function synapseCategory(data) {
   const t = (data.type || '').toUpperCase();
@@ -168,7 +168,7 @@ export function initIpcBridge({ addNotification, setStepperEstablished, nodeForS
       // el evento crudo al iframe de debug, que es su único propósito real.
 
       // Reenvío al iframe de debug — siempre disponible
-      const frame = document.getElementById('debug-frame');
+      const frame = document.getElementById('synapse-simulator-frame');
       if (frame?.contentWindow) {
         frame.contentWindow.postMessage({ type: 'SYNAPSE_RAW_EVENT', payload: data }, '*');
         frame.contentWindow.postMessage({
@@ -181,7 +181,7 @@ export function initIpcBridge({ addNotification, setStepperEstablished, nodeForS
             timestamp: data._ts || data.timestamp || Date.now(),
           },
         }, '*');
-        log('info', `onSynapseEvent → debug-frame: ${data?.type || data?.event || '?'}`);
+        log('info', `onSynapseEvent → synapse-simulator-frame: ${data?.type || data?.event || '?'}`);
       }
     });
     log('info', 'onSynapseEvent listener registrado — bridge activo desde inicio');
