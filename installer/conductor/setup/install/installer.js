@@ -132,6 +132,19 @@ const {
 // ⚠️ DEPRECADO: deployAllBinaries, deployConductor, deployMetamorph
 // Todas las copias de binarios están ahora en deployAllSystemBinaries()
 
+const RUNTIME_MILESTONES_AFTER_BINARY_CLEANUP = [
+  'brain_service_install',
+  'nucleus_service_install',
+  'ollama_service_install',
+  'opencode_service_install',
+  'sensor_install',
+  'certification',
+  'nucleus_seed',
+  'nucleus_launch',
+  'orchestration_init',
+  'ollama_init',
+];
+
 // ============================================================================
 // STUBS — funciones pendientes de implementar
 // TODO: mover a sus archivos correspondientes cuando estén listos
@@ -693,6 +706,14 @@ async function deployAllSystemBinaries(win) {
     
     // CRÍTICO: Limpieza automática ANTES de copiar binarios
     await preInstallCleanup(logger);
+
+    // La limpieza remueve servicios y mata sus procesos. Un resume puede
+    // conservar esos hitos en `passed`; invalidarlos evita saltar la
+    // reinstalación y esperar inútilmente a Temporal/Brain después.
+    await nucleusManager.resetMilestones(
+      RUNTIME_MILESTONES_AFTER_BINARY_CLEANUP,
+      'Invalidated after binary deployment cleanup'
+    );
     
     const results = {};
     
@@ -1061,7 +1082,7 @@ async function deployAllSystemBinaries(win) {
     } else {
       // Windows
       const workspaceExeName = 'bloom-workspace.exe';
-      const workspaceExeSrc  = path.join(paths.installerDir, 'native', 'bin', 'win64', 'workspace', workspaceExeName);
+      const workspaceExeSrc  = path.join(paths.workspaceSource, workspaceExeName);
       if (await fs.pathExists(workspaceExeSrc)) {
         results.workspace = await copyFileSafe(
           workspaceExeSrc,
@@ -1342,7 +1363,7 @@ async function installOllamaServiceStep(win) {
   try {
     logger.separator('INSTALLING OLLAMA SERVICE');
 
-    logger.info('Installing Ollama LaunchAgent...');
+    logger.info('Installing Ollama platform service...');
     await installOllamaService();
 
     logger.info('Starting Ollama Service...');
@@ -1356,7 +1377,14 @@ async function installOllamaServiceStep(win) {
 
     await nucleusManager.completeMilestone(MILESTONE, {
       service_running: true,
-      verify: { type: 'launchd_service_check', service: OLLAMA_SERVICE_NAME }
+      verify: {
+        type: process.platform === 'darwin'
+          ? 'launchd_service_check'
+          : process.platform === 'win32'
+            ? 'nssm_service_check'
+            : 'systemd_user_service_check',
+        service: OLLAMA_SERVICE_NAME
+      }
     });
 
     return { success: true };
@@ -1715,4 +1743,5 @@ async function installService(win, { onBeforeLaunch } = {}) {
 module.exports = {
   installService,
   runPrivileged,
+  RUNTIME_MILESTONES_AFTER_BINARY_CLEANUP,
 };

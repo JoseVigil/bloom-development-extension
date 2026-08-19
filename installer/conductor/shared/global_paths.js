@@ -138,6 +138,8 @@ const getResourcePath = (resourceName) => {
         return path.join(workspaceRoot, '..', 'native', 'bin', conductorArch, 'conductor', conductorSubdir);
       }
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
+    case 'workspace':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'workspace');
     case 'launcher':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
     case 'sensor':
@@ -175,7 +177,7 @@ const getResourcePath = (resourceName) => {
     case 'sentinel-config':
       return path.join(workspaceRoot, '..', 'native', 'config', 'sentinel-config.json');
     case 'opencode':
-      return path.join(workspaceRoot, '..', 'native', 'opencode', arch, 'opencode');
+      return path.join(workspaceRoot, '..', 'native', 'opencode', arch);
     default:
       return path.join(workspaceRoot, '..', 'resources', resourceName);
   }

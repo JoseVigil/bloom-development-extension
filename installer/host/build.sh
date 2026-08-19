@@ -238,53 +238,29 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         done
     done
     
-    # Buscar y copiar DLLs necesarias de MinGW
-    echo -e "${YELLOW}� Searching for required MinGW DLLs...${NC}"
-    
-    # Ubicaciones posibles para cada DLL
-    DLL_PATHS=(
-        # libwinpthread-1.dll
-        "/usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll"
-        "/usr/lib/gcc/x86_64-w64-mingw32/*/libwinpthread-1.dll"
-        
-        # libgcc_s_seh-1.dll
-        "/usr/lib/gcc/x86_64-w64-mingw32/*/libgcc_s_seh-1.dll"
-        
-        # libstdc++-6.dll
-        "/usr/lib/gcc/x86_64-w64-mingw32/*/libstdc++-6.dll"
-    )
-    
+    # Copiar el runtime resuelto por el MISMO compilador que produjo el EXE.
+    # Buscar globalmente bajo /usr puede mezclar variantes/versiones MinGW y
+    # producir STATUS_ENTRYPOINT_NOT_FOUND en Windows (pthread_cond_timedwait64).
+    echo -e "${YELLOW}� Resolving required DLLs from the active MinGW toolchain...${NC}"
+
     COPIED_COUNT=0
-    
-    # Buscar y copiar libwinpthread-1.dll
-    PTHREAD_DLL=$(find /usr -path "*/x86_64-w64-mingw32/lib/libwinpthread-1.dll" 2>/dev/null | head -1)
-    if [ -n "$PTHREAD_DLL" ] && [ -f "$PTHREAD_DLL" ]; then
-        cp "$PTHREAD_DLL" "$OUT_DIR/win64/host/"
-        echo -e "${GREEN}  ✓ Copied: libwinpthread-1.dll (from $(dirname $PTHREAD_DLL))${NC}"
-        COPIED_COUNT=$((COPIED_COUNT + 1))
-    fi
-    
-    # Buscar y copiar libgcc_s_seh-1.dll (preferir posix sobre win32)
-    GCC_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" 2>/dev/null | grep -E "posix|10-posix" | head -1)
-    if [ -z "$GCC_DLL" ]; then
-        GCC_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" 2>/dev/null | head -1)
-    fi
-    if [ -n "$GCC_DLL" ] && [ -f "$GCC_DLL" ]; then
-        cp "$GCC_DLL" "$OUT_DIR/win64/host/"
-        echo -e "${GREEN}  ✓ Copied: libgcc_s_seh-1.dll (from $(dirname $GCC_DLL))${NC}"
-        COPIED_COUNT=$((COPIED_COUNT + 1))
-    fi
-    
-    # Buscar y copiar libstdc++-6.dll (preferir posix sobre win32)
-    STDCPP_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libstdc++-6.dll" 2>/dev/null | grep -E "posix|10-posix" | head -1)
-    if [ -z "$STDCPP_DLL" ]; then
-        STDCPP_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libstdc++-6.dll" 2>/dev/null | head -1)
-    fi
-    if [ -n "$STDCPP_DLL" ] && [ -f "$STDCPP_DLL" ]; then
-        cp "$STDCPP_DLL" "$OUT_DIR/win64/host/"
-        echo -e "${GREEN}  ✓ Copied: libstdc++-6.dll (from $(dirname $STDCPP_DLL))${NC}"
-        COPIED_COUNT=$((COPIED_COUNT + 1))
-    fi
+    copy_toolchain_dll() {
+        local dll_name="$1"
+        local dll_path
+        dll_path=$(x86_64-w64-mingw32-g++ -print-file-name="$dll_name")
+
+        if [ -n "$dll_path" ] && [ "$dll_path" != "$dll_name" ] && [ -f "$dll_path" ]; then
+            cp "$dll_path" "$OUT_DIR/win64/host/$dll_name"
+            echo -e "${GREEN}  ✓ Copied: $dll_name (from $(dirname "$dll_path"))${NC}"
+            COPIED_COUNT=$((COPIED_COUNT + 1))
+        else
+            echo -e "${RED}  ✗ Active toolchain could not resolve: $dll_name${NC}"
+        fi
+    }
+
+    copy_toolchain_dll "libwinpthread-1.dll"
+    copy_toolchain_dll "libgcc_s_seh-1.dll"
+    copy_toolchain_dll "libstdc++-6.dll"
     
     if [ $COPIED_COUNT -eq 0 ]; then
         echo -e "${RED}✗ No DLLs found${NC}"

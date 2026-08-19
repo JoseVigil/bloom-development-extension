@@ -11,9 +11,8 @@ const OLD_SERVICE_NAME = null; // no había versión previa a migrar
 const OPENCODE_DISPLAY_NAME = 'Bloom OpenCode Service';
 const OPENCODE_DESCRIPTION = 'Bloom OpenCode Service - persistent coding agent server (autonomous service)';
 
-// ASUNCIÓN: puerto y flag por defecto de `opencode serve`. Confirmar con
-// `opencode serve --help` en el binario real — si no es configurable
-// (o el flag/nombre difiere), ajustar OPENCODE_PORT y el AppParameters abajo.
+// Validado contra el binario Windows empaquetado: `opencode serve` acepta
+// `--port` y usa 127.0.0.1 como hostname por defecto.
 const OPENCODE_PORT = process.env.BLOOM_OPENCODE_PORT || '4096';
 
 // ============================================================================
@@ -25,9 +24,6 @@ function runCommand(cmd) {
     exec(cmd, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
       // NSSM puede escribir en stderr aunque funcione
       if (error) {
-        if (stderr.includes('successfully')) {
-          return resolve(stdout || '');
-        }
         return reject(new Error(`Command failed: ${cmd}\nError: ${stderr || error.message}`));
       }
       resolve(stdout || '');
@@ -187,7 +183,6 @@ async function installWindowsService() {
     }
   }
 
-  // ASUNCIÓN: `opencode serve --port <N>`. Ajustar según flags reales del CLI.
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppParameters "serve --port ${OPENCODE_PORT}"`);
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppDirectory "${workDir}"`);
 

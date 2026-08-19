@@ -22,6 +22,7 @@ async function stopAllBloomServices(logger) {
     'BloomNucleusService', 
     'BloomBrain',
     'BloomNucleus',
+    'BloomOllamaService',
     'BloomOpencodeService'
   ];
   
@@ -60,6 +61,7 @@ async function removeAllBloomServices(logger) {
     'BloomNucleusService',
     'BloomBrain', 
     'BloomNucleus',
+    'BloomOllamaService',
     'BloomOpencodeService'
   ];
   

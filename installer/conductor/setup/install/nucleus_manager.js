@@ -4,6 +4,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { paths } = require('../config/paths');
 const { getLogger } = require('../../shared/logger');
 
@@ -44,6 +45,7 @@ const _binariesComponents = _isDarwin
       metamorph: ['metamorph'],
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama'],
+      opencode:  ['opencode'],
       node:      ['node'],
       temporal:  ['temporal'],
       conductor: ['Bloom Nucleus Workspace.app']
@@ -51,13 +53,14 @@ const _binariesComponents = _isDarwin
   : {
       runtime:   ['python.exe', 'Lib', 'python310._pth'],
       brain:     ['brain.exe', '_internal'],
-      host:      ['bloom-host.exe', 'libwinpthread-1.dll'],
+      host:      ['bloom-host.exe', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll'],
       nssm:      ['nssm.exe'],
       nucleus:   ['nucleus.exe', 'nucleus-governance.json', 'help'],
       sentinel:  ['sentinel.exe', 'sentinel-config.json', 'help'],
       metamorph: ['metamorph.exe', 'help', 'metamorph-config.json'],
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama.exe', 'lib'],
+      opencode:  ['opencode.exe'],
       node:      ['node.exe', 'npm.cmd'],
       temporal:  ['temporal.exe'],
       conductor: ['bloom-conductor.exe']
@@ -70,6 +73,77 @@ const _brainServiceVerification = _isDarwin
 const _nucleusServiceVerification = _isDarwin
   ? { method: 'launchd_service_check', service_name: 'com.bloom.nucleus', expected_state: 'running', result: null }
   : { method: 'nssm_service_check',    service_name: 'BloomNucleusService', expected_state: 'SERVICE_RUNNING', result: null };
+
+const _ollamaServiceVerification = _isDarwin
+  ? { method: 'launchd_service_check', service_name: 'com.bloom.ollama', expected_state: 'running', result: null }
+  : _isWin
+    ? { method: 'nssm_service_check', service_name: 'BloomOllamaService', expected_state: 'SERVICE_RUNNING', result: null }
+    : { method: 'systemd_user_service_check', service_name: 'com.bloom.ollama', expected_state: 'active', result: null };
+
+const _opencodeServiceVerification = {
+  method: 'port_health_check',
+  service_name: _isWin ? 'BloomOpencodeService' : 'com.bloom.opencode',
+  host: '127.0.0.1',
+  port: Number(process.env.BLOOM_OPENCODE_PORT || 4096),
+  expected_state: 'listening',
+  result: null,
+};
+
+const _requiredHostArtifacts = _isWin
+  ? ['bloom-host.exe', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll']
+  : ['bloom-host'];
+
+function validateHostArtifacts(hostDir = paths.hostDir) {
+  const missing = _requiredHostArtifacts.filter(name => !fs.existsSync(path.join(hostDir, name)));
+  return {
+    valid: missing.length === 0,
+    host_dir: hostDir,
+    required: [..._requiredHostArtifacts],
+    missing,
+  };
+}
+
+function validateHostRuntime(hostExe = paths.hostBinary) {
+  if (!_isWin) return { valid: true, skipped: true };
+  if (!fs.existsSync(hostExe)) {
+    return { valid: false, executable: hostExe, error: 'bloom-host.exe not found' };
+  }
+
+  const result = spawnSync(hostExe, ['--version'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 10000,
+  });
+  const valid = !result.error && result.status === 0;
+  return {
+    valid,
+    executable: hostExe,
+    exit_code: result.status,
+    error: result.error?.message || (valid ? null : (result.stderr || result.stdout || 'Host failed to load').trim()),
+  };
+}
+
+function validateBinaryArtifacts() {
+  const host = validateHostArtifacts();
+  const missing = host.missing.map(name => `host/${name}`);
+  const hostRuntime = host.valid ? validateHostRuntime() : { valid: false, skipped: true };
+  if (host.valid && !hostRuntime.valid) missing.push('host/runtime-load-check');
+
+  if (_isWin) {
+    if (!fs.existsSync(paths.opencodeExe)) missing.push('opencode/opencode.exe');
+    if (!fs.existsSync(paths.workspaceExe)) missing.push('workspace/bloom-workspace.exe');
+  }
+
+  return {
+    valid: missing.length === 0,
+    host,
+    host_runtime: hostRuntime,
+    required: _isWin
+      ? [...host.required.map(name => `host/${name}`), 'opencode/opencode.exe', 'workspace/bloom-workspace.exe']
+      : host.required.map(name => `host/${name}`),
+    missing,
+  };
+}
 
 const _sensorVerification = _isDarwin
   ? { method: 'launchd_service_check', service_name: 'com.bloom.sensor',  expected_state: 'running', result: null }
@@ -186,8 +260,17 @@ const EMPTY_NUCLEUS = {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: { method: 'launchd_service_check', service_name: 'com.bloom.ollama', expected_state: 'running', result: null },
+      verification: _ollamaServiceVerification,
       error: null
+    },
+
+    opencode_service_install: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: _opencodeServiceVerification,
+      error: null,
+      non_critical: true
     },
 
     sensor_install: {
@@ -415,11 +498,66 @@ class NucleusManager {
         logger.success('✓ nucleus.json creado');
       } else {
         logger.info('nucleus.json existente cargado');
+
+        let stateChanged = false;
+        this.state.milestones ??= {};
+
+        // Migración aditiva: incorporar hitos nuevos sin resetear los que ya
+        // pasaron. Esto evita que una instalación existente falle con
+        // "Hito desconocido" al actualizar el setup.
+        for (const [name, definition] of Object.entries(EMPTY_NUCLEUS.milestones)) {
+          if (!this.state.milestones[name]) {
+            this.state.milestones[name] = JSON.parse(JSON.stringify(definition));
+            stateChanged = true;
+            logger.info(`➕ Milestone agregado por migración: ${name}`);
+          }
+        }
+
+        // Reconciliar el estado persistido con el filesystem real. Un build o
+        // una limpieza manual puede borrar artefactos después de que `binaries`
+        // haya quedado en passed; en ese caso el setup debe redeployar.
+        const binariesMilestone = this.state.milestones?.binaries;
+        if (binariesMilestone?.verification?.components) {
+          binariesMilestone.verification.components.host = [..._requiredHostArtifacts];
+          binariesMilestone.verification.components.opencode = [..._binariesComponents.opencode];
+          if (_isWin) binariesMilestone.verification.components.workspace = ['bloom-workspace.exe'];
+          stateChanged = true;
+        }
+        if (this.state.milestones?.ollama_service_install) {
+          this.state.milestones.ollama_service_install.verification = {
+            ..._ollamaServiceVerification,
+            result: this.state.milestones.ollama_service_install.verification?.result ?? null,
+          };
+          stateChanged = true;
+        }
+        if (this.state.milestones?.opencode_service_install) {
+          this.state.milestones.opencode_service_install.verification = {
+            ..._opencodeServiceVerification,
+            result: this.state.milestones.opencode_service_install.verification?.result ?? null,
+          };
+          stateChanged = true;
+        }
+
+        if (binariesMilestone?.status === 'passed') {
+          const binariesValidation = validateBinaryArtifacts();
+          if (!binariesValidation.valid) {
+            binariesMilestone.status = 'pending';
+            binariesMilestone.completed_at = null;
+            binariesMilestone.error = `Binary deployment incomplete: ${binariesValidation.missing.join(', ')}`;
+            binariesMilestone.verification.result = binariesValidation;
+            this.state.installation.completed = false;
+            this.state.installation.completed_at = null;
+            stateChanged = true;
+            logger.warn(`⚠️ binaries invalidado; faltan artefactos: ${binariesValidation.missing.join(', ')}`);
+          }
+        }
         
         // Verificar si force_reinstall está activado
         if (this.state.installation.force_reinstall) {
           logger.warn('⚠️ FORCE_REINSTALL detectado - Reseteando todos los hitos');
           await this.resetAllMilestones();
+        } else if (stateChanged) {
+          await writeNucleus(this.state);
         }
       }
 
@@ -481,6 +619,13 @@ class NucleusManager {
     if (!this.state?.milestones?.[milestoneName]) {
       logger.warn(`⚠️ Milestone desconocido ignorado: ${milestoneName}`);
       throw new Error(`Hito desconocido: ${milestoneName}`);
+    }
+
+    if (milestoneName === 'binaries') {
+      const binariesValidation = validateBinaryArtifacts();
+      if (!binariesValidation.valid) {
+        throw new Error(`Cannot complete binaries milestone; missing binary artifacts: ${binariesValidation.missing.join(', ')}`);
+      }
     }
 
     this.state.milestones[milestoneName].status = 'passed';
@@ -562,6 +707,28 @@ class NucleusManager {
     await writeNucleus(this.state);
     
     logger.success('✓ Todos los hitos reseteados');
+  }
+
+  /**
+   * Invalida hitos concretos cuando una operación previa destruye sus
+   * artefactos en runtime (por ejemplo, remover servicios antes de redeployar).
+   */
+  async resetMilestones(milestoneNames, reason = null) {
+    for (const name of milestoneNames) {
+      const milestone = this.state?.milestones?.[name];
+      if (!milestone) continue;
+
+      milestone.status = 'pending';
+      milestone.started_at = null;
+      milestone.completed_at = null;
+      milestone.error = reason;
+      if (milestone.verification) milestone.verification.result = null;
+    }
+
+    this.state.installation.completed = false;
+    this.state.installation.completed_at = null;
+    await writeNucleus(this.state);
+    logger.info(`↻ Hitos invalidados: ${milestoneNames.join(', ')}`);
   }
 
   /**
@@ -770,5 +937,8 @@ const nucleusManager = new NucleusManager();
 
 module.exports = {
   nucleusManager,
-  NucleusManager
+  NucleusManager,
+  validateHostArtifacts,
+  validateHostRuntime,
+  validateBinaryArtifacts,
 };

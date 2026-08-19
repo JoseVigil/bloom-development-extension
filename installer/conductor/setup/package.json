@@ -25,6 +25,7 @@
     "dev:darwin": "electron .",
     "dev:linux": "electron . --no-sandbox",
     "dev:no-admin": "electron .",
+    "test:windows-contract": "node tests/windows-setup-contract.test.js",
     "version:bump": "node ../shared/bump-version.js",
     "version:patch": "node ../shared/bump-version.js --patch",
     "version:minor": "node ../shared/bump-version.js --minor",
@@ -76,7 +77,11 @@
         },
         {
           "from": "../../native/bin/linux_x64/host",
-          "to": "native"
+          "to": "host"
+        },
+        {
+          "from": "../shared",
+          "to": "shared"
         },
         {
           "from": "../../native/bin/cortex",
@@ -138,23 +143,31 @@
         },
         {
           "from": "../../native/bin/win64/host",
-          "to": "native"
+          "to": "host"
+        },
+        {
+          "from": "../shared",
+          "to": "shared"
         },
         {
           "from": "../../native/bin/cortex",
           "to": "cortex"
         },
         {
-          "from": "../../native/bin/win64/conductor",
-          "to": "conductor"
+          "from": "../../native/bin/win64/workspace/bloom-workspace.exe",
+          "to": "workspace/bloom-workspace.exe"
         },
         {
           "from": "../../native/nssm/win64",
           "to": "nssm"
         },
         {
-          "from": "../../native/bin/win64/ollama",
+          "from": "../../ollama/windows",
           "to": "ollama"
+        },
+        {
+          "from": "../../native/opencode/win64",
+          "to": "opencode"
         }
       ]
     },
@@ -201,7 +214,11 @@
         },
         {
           "from": "../../native/bin/darwin_${arch}/host",
-          "to": "native"
+          "to": "host"
+        },
+        {
+          "from": "../shared",
+          "to": "shared"
         },
         {
           "from": "../../native/bin/cortex",
