@@ -18,7 +18,7 @@
     "build:linux":        "electron-builder --linux --x64 -c.directories.output=../../native/bin/linux_x64/workspace",
     "build:linux:dist":   "electron-builder --linux --x64 -c.linux.target=AppImage -c.linux.target=deb -c.linux.target=rpm -c.directories.output=../../native/bin/linux_x64/workspace",
 
-    "build:win":          "electron-builder --win --x64",
+    "build:win":          "electron-builder --win --x64 -c.directories.output=../../native/bin/win64/workspace",
 
     "build:darwin":       "npm run build:darwin:x64 && npm run build:darwin:arm",
     "build:darwin:x64":   "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/workspace",
@@ -60,6 +60,8 @@
       "icon": "assets/bloom.ico",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "bloom-workspace.exe",
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false,
       "extraFiles": [
         { "from": "bloom-conductor-version.ps1", "to": "bloom-conductor-version.ps1" }
       ]

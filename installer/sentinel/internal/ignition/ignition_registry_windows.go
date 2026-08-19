@@ -15,6 +15,12 @@ type coreLogger interface {
 	Error(format string, args ...interface{})
 }
 
+// installNativeHostManifest mantiene el mismo contrato que la implementacion
+// Unix. En Windows, instalar el manifest significa registrarlo bajo HKCU.
+func installNativeHostManifest(regKeyPath string, manifestPath string, logger coreLogger) error {
+	return registerNativeHostHKCU(regKeyPath, manifestPath, logger)
+}
+
 func registerNativeHostHKCU(regKeyPath string, manifestPath string, logger coreLogger) error {
 	var (
 		modadvapi32             = windows.NewLazySystemDLL("advapi32.dll")

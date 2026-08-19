@@ -94,24 +94,29 @@ if not exist "%OUTPUT_BASE%" mkdir "%OUTPUT_BASE%"
 if not exist "%HELP_DIR%"    mkdir "%HELP_DIR%"
 
 :: ============================================
-:: INCREMENTAR BUILD NUMBER
+:: BUILD NUMBER
 :: ============================================
 if /i "%COMPONENT%"=="sensor" (
-    set "BUILD_FILE=%PROJECT_ROOT%\installer\sensor\scripts\build_number.txt"
     set "CORE_PKG=bloom-sensor/internal/core"
 ) else (
-    set "BUILD_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scripts\build_number.txt"
     set "CORE_PKG=%COMPONENT%/internal/core"
 )
 
-if not exist "%BUILD_FILE%" echo 0 > "%BUILD_FILE%"
-set /p CURRENT_BUILD=<"%BUILD_FILE%"
-set /a NEXT_BUILD=%CURRENT_BUILD%+1
+:: build-all.py es el unico que incrementa build_number.txt y pasa el valor
+:: efectivo (base + offset de Windows). Para ejecucion manual, usar el effective
+:: persistido; si tampoco existe, compilar con 0 igual que el script Unix.
+set "NEXT_BUILD=%BLOOM_BUILD_NUMBER%"
+if not defined NEXT_BUILD (
+    set "EFFECTIVE_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scripts\build_number.effective.txt"
+    if exist "!EFFECTIVE_FILE!" set /p NEXT_BUILD=<"!EFFECTIVE_FILE!"
+)
+if not defined NEXT_BUILD set "NEXT_BUILD=0"
 
-for /f "tokens=1-3 delims=/-" %%a in ('date /t') do set BUILD_DATE=%%c-%%a-%%b
-for /f "tokens=1-2 delims=:." %%a in ('echo %time: =0%') do set BUILD_TIME=%%a:%%b:00
-
-echo %NEXT_BUILD% > "%BUILD_FILE%"
+:: No parsear DATE/TIME: su formato depende del locale de Windows y puede
+:: incluir el dia de la semana (por ejemplo "Wed 08/19/2026"). Eso introducia
+:: espacios en -ldflags y el linker interpretaba "-Wed" como otra opcion.
+for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "BUILD_DATE=%%I"
+for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format HH:mm:ss"') do set "BUILD_TIME=%%I"
 
 :: ============================================
 :: COMPILACION
