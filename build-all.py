@@ -475,6 +475,36 @@ def run_streaming(
 # `Address already in use` documentado en brain-troubleshooting.md §0.
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _resolve_nssm_exe() -> Path | None:
+    """
+    Resuelve la ruta a nssm.exe en Windows.
+
+    shutil.which("nssm") no sirve en una instalación nueva: nssm nunca se
+    agrega al PATH del sistema, solo se bundlea en el repo y se copia a
+    NUCLEUS_HOME/bin/nssm/ recién durante la instalación (ver nssmExe en
+    installer/conductor/shared/global_paths.js). Antes de eso — el caso
+    exacto de build-all.py corriendo en una máquina Windows recién clonada —
+    solo existe en installer/native/nssm/<arch>/nssm.exe.
+
+    Orden de resolución:
+      1. NUCLEUS_HOME/bin/nssm/nssm.exe          (ya instalado)
+      2. installer/native/nssm/<arch>/nssm.exe   (bundleado en el repo, fuente)
+      3. PATH del sistema                        (por si se instaló a mano)
+    """
+    installed = NUCLEUS_HOME / "bin" / "nssm" / "nssm.exe"
+    if installed.exists():
+        return installed
+
+    arch = os.environ.get("PROCESSOR_ARCHITEW6432") or os.environ.get("PROCESSOR_ARCHITECTURE", "")
+    platform_dir = "win64" if arch.upper() in ("AMD64", "ARM64") else "win32"
+    bundled = ROOT / "installer" / "native" / "nssm" / platform_dir / "nssm.exe"
+    if bundled.exists():
+        return bundled
+
+    found = shutil.which("nssm")
+    return Path(found) if found else None
+
+
 def _stop_running_brain_service() -> None:
     """
     Detiene cualquier instancia de Brain corriendo antes de reconstruir,
@@ -524,16 +554,27 @@ def _stop_running_brain_service() -> None:
     elif IS_WINDOWS:
         # nssm es el gestor de servicios confirmado para Windows en el resto
         # del proyecto (ver nssm_service_check en nucleus_manager.js).
-        result = subprocess.run(
-            ["nssm", "stop", "com.bloom.brain"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            encoding="utf-8", errors="replace",
-        )
-        if result.returncode == 0:
-            log("     nssm: com.bloom.brain detenido")
-            stopped_via_service = True
+        # _resolve_nssm_exe() en vez de shutil.which("nssm"): en una instalación
+        # nueva nssm no está en PATH, y llamar subprocess.run(["nssm", ...]) sin
+        # resolver la ruta primero tira FileNotFoundError (WinError 2) sin
+        # capturar, matando build-all.py entero (visto en máquina Windows nueva).
+        nssm_bin = _resolve_nssm_exe()
+        if nssm_bin:
+            try:
+                result = subprocess.run(
+                    [str(nssm_bin), "stop", "com.bloom.brain"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    encoding="utf-8", errors="replace",
+                )
+                if result.returncode == 0:
+                    log("     nssm: com.bloom.brain detenido")
+                    stopped_via_service = True
+                else:
+                    log("     nssm: com.bloom.brain no estaba activo o no existe como servicio (ok)")
+            except OSError as exc:
+                log(f"     nssm: no se pudo ejecutar ({exc}) — se ignora, no es bloqueante")
         else:
-            log("     nssm: com.bloom.brain no estaba activo o no existe como servicio (ok)")
+            log("     nssm.exe no encontrado (ni instalado ni bundleado en el repo) — nada que detener")
 
     # Red de seguridad adicional para Linux/macOS: si además del servicio
     # gestionado quedó algún proceso suelto (levantado a mano con nohup,
@@ -692,11 +733,11 @@ def _stop_running_nucleus_service() -> None:
         if result.returncode == 0:
             stopped_gracefully = True
     elif IS_WINDOWS:
-        nssm_bin = shutil.which("nssm")
+        nssm_bin = _resolve_nssm_exe()
         if nssm_bin:
             try:
                 result = subprocess.run(
-                    [nssm_bin, "stop", "com.bloom.nucleus"],
+                    [str(nssm_bin), "stop", "com.bloom.nucleus"],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     encoding="utf-8", errors="replace",
                 )
@@ -707,7 +748,7 @@ def _stop_running_nucleus_service() -> None:
             except OSError as exc:
                 log(f"     nssm: no se pudo ejecutar ({exc}) — se ignora, no es bloqueante")
         else:
-            log("     'nssm' no está en PATH todavía — probablemente primera instalación, nada que detener")
+            log("     nssm.exe no encontrado (ni instalado ni bundleado en el repo) — nada que detener")
 
     # Misma race condition que con Brain (ver Sección 0 de
     # brain-troubleshooting.md): el kernel puede tardar en liberar sockets
