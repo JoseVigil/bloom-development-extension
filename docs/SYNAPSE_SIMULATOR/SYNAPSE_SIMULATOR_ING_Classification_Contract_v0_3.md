@@ -1,6 +1,6 @@
 # Synapse Simulator — ING Classification Contract v0.3
 
-**Estado:** contrato de Etapa A para aprobación; no implementado.  
+**Estado:** contrato de Etapa A para aprobación; schemas formales publicados en `CONTRACTS/v1/`; runtime no implementado.  
 **Consumidor inicial:** Mandate Genesis mediante Brain.  
 **Frontera reusable:** `CognitiveCounterpart`, operación `classify_ingestion_material`.
 
@@ -358,4 +358,4 @@ cognitive.request/1.0 classification.turn_1
 → Brain valida y produce .domain_resolution.json
 ```
 
-**No se implementaron schemas ejecutables, engine, fixtures ni integración.** Este documento convierte la devolución del consumidor en un contrato de Etapa A para aprobación.
+Los JSON Schemas formales de request, response, evidence, proposal y fixture están en `docs/SYNAPSE_SIMULATOR/CONTRACTS/v1/`. Son artefactos de diseño; todavía no existen modelos runtime, validators conectados, fixtures, engine ni integración. Este documento convierte la devolución del consumidor en un contrato de Etapa A para aprobación.

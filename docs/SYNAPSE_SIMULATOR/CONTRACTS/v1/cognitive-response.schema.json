@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bloom.local/synapse-simulator/v1/cognitive-response.schema.json",
+  "title": "CognitiveResponse 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "request_id", "logical_inference_id", "correlation_id", "intent", "operation", "response_kind", "outcome", "completion", "output", "human_intervention", "error", "fixture", "produced_at", "response_sha256"],
+  "properties": {
+    "contract_version": { "const": "cognitive.response/1.0" },
+    "request_id": { "type": "string", "format": "uuid" },
+    "logical_inference_id": { "type": "string", "format": "uuid" },
+    "correlation_id": { "type": "string", "format": "uuid" },
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["intent_id", "intent_type", "stage", "turn"],
+      "properties": {
+        "intent_id": { "type": "string", "format": "uuid" },
+        "intent_type": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "stage": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "turn": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "operation": { "const": "classify_ingestion_material" },
+    "response_kind": { "const": "domain_resolution_proposal" },
+    "outcome": { "enum": ["completed", "continue", "human_required", "partial", "retryable_error", "contract_error"] },
+    "completion": {
+      "type": "object", "additionalProperties": false,
+      "required": ["terminal", "retryable"],
+      "properties": { "terminal": { "const": true }, "retryable": { "type": "boolean" } }
+    },
+    "output": { "oneOf": [{ "$ref": "domain-resolution-proposal.schema.json" }, { "type": "null" }] },
+    "human_intervention": { "oneOf": [{ "type": "null" }, { "type": "object" }] },
+    "error": { "oneOf": [{ "type": "null" }, { "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } }] },
+    "fixture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 256 }, "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" } }
+    },
+    "produced_at": { "type": "string", "format": "date-time" },
+    "response_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "allOf": [
+    { "if": { "properties": { "outcome": { "enum": ["completed", "partial"] } } }, "then": { "properties": { "output": { "$ref": "domain-resolution-proposal.schema.json" } } } },
+    { "if": { "properties": { "outcome": { "const": "completed" } } }, "then": { "properties": { "completion": { "properties": { "retryable": { "const": false } } }, "error": { "type": "null" } } } },
+    { "if": { "properties": { "outcome": { "const": "retryable_error" } } }, "then": { "properties": { "completion": { "properties": { "retryable": { "const": true } } }, "output": { "type": "null" } } } }
+  ]
+}

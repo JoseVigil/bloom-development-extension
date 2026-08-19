@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bloom.local/synapse-simulator/v1/cognitive-request.schema.json",
+  "title": "CognitiveRequest 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "request_id", "logical_inference_id", "correlation_id", "attempt", "supersedes_request_id", "intent", "operation", "input", "constraints", "request_manifest", "simulation", "created_at", "metadata"],
+  "properties": {
+    "contract_version": { "const": "cognitive.request/1.0" },
+    "request_id": { "type": "string", "format": "uuid" },
+    "logical_inference_id": { "type": "string", "format": "uuid" },
+    "correlation_id": { "type": "string", "format": "uuid" },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "supersedes_request_id": { "type": ["string", "null"], "format": "uuid" },
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["intent_id", "intent_type", "mandate_id", "stage", "turn"],
+      "properties": {
+        "intent_id": { "type": "string", "format": "uuid" },
+        "intent_type": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "mandate_id": { "type": ["string", "null"], "format": "uuid" },
+        "stage": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "turn": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "operation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "input_contract", "output_contract"],
+      "properties": {
+        "kind": { "const": "classify_ingestion_material" },
+        "input_contract": { "const": "classification-evidence/1.0" },
+        "output_contract": { "const": "domain-resolution-proposal/1.0" }
+      }
+    },
+    "input": { "$ref": "classification-evidence.schema.json" },
+    "constraints": {
+      "type": "object", "additionalProperties": false,
+      "required": ["all_input_files_must_be_accounted_for", "allow_cluster_split", "allow_cluster_merge", "allow_new_domain", "allow_existing_domain", "allow_new_gene", "allow_existing_gene_extension", "allow_cross_domain_gene", "allow_global_domain_restructure"],
+      "properties": {
+        "all_input_files_must_be_accounted_for": { "type": "boolean" },
+        "allow_cluster_split": { "type": "boolean" },
+        "allow_cluster_merge": { "type": "boolean" },
+        "allow_new_domain": { "type": "boolean" },
+        "allow_existing_domain": { "type": "boolean" },
+        "allow_new_gene": { "type": "boolean" },
+        "allow_existing_gene_extension": { "type": "boolean" },
+        "allow_cross_domain_gene": { "type": "boolean" },
+        "allow_global_domain_restructure": { "type": "boolean" }
+      }
+    },
+    "request_manifest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["canonicalization", "hash_algorithm", "payload_sha256", "file_count"],
+      "properties": {
+        "canonicalization": { "const": "RFC8785" },
+        "hash_algorithm": { "const": "sha256" },
+        "payload_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "file_count": { "type": "integer", "minimum": 1, "maximum": 10000 }
+      }
+    },
+    "simulation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scenario_id"],
+      "properties": { "scenario_id": { "type": "string", "minLength": 1, "maxLength": 256 } }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  },
+  "allOf": [
+    { "if": { "properties": { "attempt": { "const": 1 } } }, "then": { "properties": { "supersedes_request_id": { "type": "null" } } } },
+    { "if": { "properties": { "attempt": { "minimum": 2 } } }, "then": { "properties": { "supersedes_request_id": { "type": "string", "format": "uuid" } } } }
+  ]
+}

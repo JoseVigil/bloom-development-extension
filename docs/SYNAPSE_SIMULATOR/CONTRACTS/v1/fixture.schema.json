@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bloom.local/synapse-simulator/v1/fixture.schema.json",
+  "title": "Synapse Simulator Fixture 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fixture_schema_version", "id", "version", "description", "tags", "contracts", "priority", "match", "assertions", "response", "timing", "fault", "expected_consumer_result", "replay", "deprecated"],
+  "properties": {
+    "fixture_schema_version": { "const": "simulator.fixture/1.0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 256 },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "tags": { "type": "array", "uniqueItems": true, "maxItems": 100, "items": { "type": "string", "maxLength": 128 } },
+    "contracts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["request", "response", "input", "output"],
+      "properties": {
+        "request": { "const": "cognitive.request/1.0" },
+        "response": { "const": "cognitive.response/1.0" },
+        "input": { "const": "classification-evidence/1.0" },
+        "output": { "const": "domain-resolution-proposal/1.0" }
+      }
+    },
+    "priority": { "type": "integer", "minimum": -1000, "maximum": 1000 },
+    "match": { "type": "object" },
+    "assertions": { "type": "array", "maxItems": 1000, "items": { "type": "object" } },
+    "response": { "oneOf": [{ "$ref": "cognitive-response.schema.json" }, { "type": "null" }] },
+    "timing": {
+      "type": "object", "additionalProperties": false,
+      "required": ["delay_ms"],
+      "properties": { "delay_ms": { "type": "integer", "minimum": 0, "maximum": 300000 } }
+    },
+    "fault": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "parameters"],
+      "properties": {
+        "kind": { "enum": ["none", "timeout", "disconnect_before_ack", "disconnect_after_ack", "disconnect_during_response", "truncate", "malformed", "duplicate_immediate", "duplicate_late", "wrong_correlation", "late_response", "crash", "restart", "drop_ack", "repeat_ack"] },
+        "parameters": { "type": "object" }
+      }
+    },
+    "expected_consumer_result": { "type": "object" },
+    "replay": { "type": "object", "additionalProperties": false, "required": ["deterministic"], "properties": { "deterministic": { "const": true } } },
+    "deprecated": { "type": "boolean" }
+  }
+}
