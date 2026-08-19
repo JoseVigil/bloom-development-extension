@@ -98,10 +98,10 @@ if not exist "%HELP_DIR%"    mkdir "%HELP_DIR%"
 :: ============================================
 if /i "%COMPONENT%"=="sensor" (
     set "BUILD_FILE=%PROJECT_ROOT%\installer\sensor\scripts\build_number.txt"
-    set "BUILD_INFO=%PROJECT_ROOT%\installer\sensor\internal\core\build_info.go"
+    set "CORE_PKG=bloom-sensor/internal/core"
 ) else (
     set "BUILD_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scripts\build_number.txt"
-    set "BUILD_INFO=%PROJECT_ROOT%\installer\%COMPONENT%\internal\core\build_info.go"
+    set "CORE_PKG=%COMPONENT%/internal/core"
 )
 
 if not exist "%BUILD_FILE%" echo 0 > "%BUILD_FILE%"
@@ -110,16 +110,6 @@ set /a NEXT_BUILD=%CURRENT_BUILD%+1
 
 for /f "tokens=1-3 delims=/-" %%a in ('date /t') do set BUILD_DATE=%%c-%%a-%%b
 for /f "tokens=1-2 delims=:." %%a in ('echo %time: =0%') do set BUILD_TIME=%%a:%%b:00
-
-(
-    echo package core
-    echo.
-    echo // Auto-generated during build
-    echo const BuildNumberInt = %NEXT_BUILD%
-    echo func BuildNumber^(^) int { return BuildNumberInt }
-    echo const BuildDate = "%BUILD_DATE%"
-    echo const BuildTime = "%BUILD_TIME%"
-) > "%BUILD_INFO%"
 
 echo %NEXT_BUILD% > "%BUILD_FILE%"
 
@@ -139,7 +129,7 @@ if /i "%COMPONENT%"=="sensor" (
 )
 
 pushd "!BUILD_DIR!"
-go build -p 1 -ldflags="-s -w" -o "%OUTPUT_FILE%" !BUILD_PKG! >> "%LOG_FILE%" 2>&1
+go build -p 1 -ldflags="-s -w -X !CORE_PKG!.buildNumber=%NEXT_BUILD% -X !CORE_PKG!.BuildDate=%BUILD_DATE% -X !CORE_PKG!.BuildTime=%BUILD_TIME%" -o "%OUTPUT_FILE%" !BUILD_PKG! >> "%LOG_FILE%" 2>&1
 set BUILD_RC=%ERRORLEVEL%
 popd
 

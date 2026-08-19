@@ -105,6 +105,7 @@ hiddenimports = [
     'brain.commands.intent.unlock',
     'brain.commands.intent.update',
     'brain.commands.intent.validate',
+    'brain.commands.intent.validate_contract',
     'brain.commands.ionpump.ionpump',
     'brain.commands.ionpump.ionpump_inspect',
     'brain.commands.ionpump.ionpump_reload',
@@ -199,6 +200,7 @@ hiddenimports = [
     'brain.core.health.native_host_manager',
     'brain.core.health.onboarding_status_manager',
     'brain.core.health.websocket_status_manager',
+    'brain.core.intent.fs_contracts',
     'brain.core.intent.merge_manager',
     'brain.core.intent.recovery_manager',
     'brain.core.intent.response_parser',
@@ -234,13 +236,13 @@ hiddenimports = [
     'brain.core.profile.web',
     'brain.core.profile.web.companion_generator',
     'brain.core.profile.web.discovery_generator',
-    'brain.core.profile.web.synapse_simulator_generator',
     'brain.core.profile.web.landing_generator',
+    'brain.core.profile.web.synapse_simulator_generator',
     'brain.core.profile.web.templates',
     'brain.core.profile.web.templates.companion',
     'brain.core.profile.web.templates.discovery',
-    'brain.core.profile.web.templates.synapse_simulator',
     'brain.core.profile.web.templates.landing',
+    'brain.core.profile.web.templates.synapse-simulator',
     'brain.core.project',
     'brain.core.project.clone_manager',
     'brain.core.project.linker',
@@ -306,8 +308,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
 datas += collect_data_files('chromadb')
