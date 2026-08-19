@@ -111,12 +111,23 @@ set /a NEXT_BUILD=%CURRENT_BUILD%+1
 for /f "tokens=1-3 delims=/-" %%a in ('date /t') do set BUILD_DATE=%%c-%%a-%%b
 for /f "tokens=1-2 delims=:." %%a in ('echo %time: =0%') do set BUILD_TIME=%%a:%%b:00
 
+:: nucleus llama BuildNumber() como funcion (ver internal/core/build_info.go,
+:: gitignoreado, con su propio mecanismo de ldflags -X). sentinel y metamorph
+:: usan BuildNumber como valor bare (const int) en sus struct literals -
+:: generar func() ahi rompe la compilacion con "cannot use ... value of type
+:: func() int as int value". sensor no referencia este archivo, da igual.
+if /i "%COMPONENT%"=="nucleus" (
+    set "BUILDNUMBER_DECL=func BuildNumber^(^) int { return BuildNumberInt }"
+) else (
+    set "BUILDNUMBER_DECL=const BuildNumber    = BuildNumberInt"
+)
+
 (
     echo package core
     echo.
     echo // Auto-generated during build
     echo const BuildNumberInt = %NEXT_BUILD%
-    echo func BuildNumber^(^) int { return BuildNumberInt }
+    echo !BUILDNUMBER_DECL!
     echo const BuildDate = "%BUILD_DATE%"
     echo const BuildTime = "%BUILD_TIME%"
 ) > "%BUILD_INFO%"
