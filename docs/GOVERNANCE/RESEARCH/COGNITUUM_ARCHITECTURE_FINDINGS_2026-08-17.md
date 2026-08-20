@@ -78,6 +78,9 @@ objetivo.
 | CAF-027 | Accounting/Evidence | No existen contratos operativos ni ownership materializado | IMPLEMENTADO | AITAP scaffold y Execution Layer ausente | Auditoría transversal incompleta | Correlation Contract | ABIERTO |
 | CAF-028 | Mandate Genesis | AITAP, OpenCode y `dis` no son dependencias demostradas del primer vertical | IMPLEMENTADO | `docs/MANDATE/Mandate_Genesis_Truth_Matrix_and_Execution_Roadmap_v1.md:132,246`; código citado allí | Riesgo de falso bloqueo | Reparación vertical independiente | CONFIRMADO |
 | CAF-029 | Agenda | La Agenda previa contradice la precedencia ordenada por este Work para Vault/Batcave Auth | CONTRADICCIÓN | `docs/CONTROL/AGENDA_MAESTRA.md:279+`; reglas del Work y Vault spec | Drift de coordinación | Handoff posterior a Agenda | ABIERTO |
+| CAF-030 | Execution Layer | El ownership físico queda fijado en `installer/execution/`, separado de Brain y AITAP, con core neutral y adapters por provider | NORMATIVO | `docs/GOVERNANCE/ARCHITECTURE/COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md` §2 | Cierra ubicación sin afirmar implementación | Scaffold y prueba `runtime-swap-no-brain-change` | CERRADO-DISEÑO |
+| CAF-031 | Execution Providers | OpenCode, Codex CLI y Claude Code CLI comparten contratos `cognituum.execution/v1` y batería EXC-001..EXC-010; ninguna conformidad fue observada aún | NORMATIVO / ABIERTO | `COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md` §§3-6 | Cierra schema; mantiene honesto el gate empírico | Ejecutar matriz y adjuntar Evidence | ABIERTO-EVIDENCIA |
+| CAF-032 | Execution Reconciliation | El primer cierre de contracts no estaba reconciliado campo por campo con el árbol y pipeline reales; se detectó además drift `.raw_output.txt` vs `.raw_output.json` | CONTRADICCIÓN / ABIERTO | `docs/GOVERNANCE/ARCHITECTURE/COGNITUUM_EXECUTION_RECONCILIATION_2026-08-20.md` §§3-5; `tree/bloom/bloom_project_tree.txt`; `brain/core/intent/response_parser.py`; `brain/core/intent/staging_manager.py` | Bloquea promover schemas y correr EXC-001..EXC-010 | Resolver los tres puntos secuenciales del pedido de reconciliación | EN CURSO |
 
 ## 5. Gaps por componente
 
@@ -118,6 +121,8 @@ objetivo.
 - Definir lifecycle y contratos antes del adapter.
 - Probar OpenCode por conformidad, no copiar su API como arquitectura.
 - Definir bridge de grants Nucleus y Evidence verificable.
+- Completar primero el gate CAF-032; los schemas v1 son provisionales y la
+  batería cross-CLI permanece bloqueada.
 
 ### Alfred
 
@@ -250,4 +255,3 @@ documento de Responsibilities/Boundaries y se enlazan desde aquí.
   `OBSERVADO` sin una ejecución verificable.
 - El estado puede cambiar; por eso este documento tiene fecha de corte y no
   reemplaza el código.
-

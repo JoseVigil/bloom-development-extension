@@ -224,7 +224,10 @@ Accounting / Evidence Plane
 | Policy/Grant | Nucleus | Nucleus -> Runner/Execution/Vault | subject, capability, resource scope, constraints, expiry, consent, audit ID/firma | Plan cognitivo | Parcial |
 | Accounting Event | AITAP | AITAP/adapters -> Accounting | consumer, provider/model, tokens, costo, latencia, outcome, correlation ID | Interpretación del contenido | Nuevo |
 
-Los campos son el mínimo conceptual. No constituyen todavía schemas cerrados.
+Los campos de Supply, Credentials, Policy/Grant y Accounting permanecen como
+mínimo conceptual. Los cuatro contratos de Execution quedan cerrados y
+versionados como `cognituum.execution/v1` en
+[`COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md`](./COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md).
 Cada contrato se versiona por su owner y debe permitir idempotencia y
 correlación sin transportar secretos o estado semántico innecesario.
 
@@ -245,14 +248,31 @@ correlación sin transportar secretos o estado semántico innecesario.
 12. OpenCode es un posible Execution Provider.
 13. Repo Ops y Batcave Auth son apps y credenciales separadas.
 14. Accounting y Evidence permanecen separados aunque correlacionados.
+15. Execution Layer vive en `installer/execution/`, físicamente separada de
+    Brain y AITAP; sus adapters viven bajo `providers/` y no son importados por
+    Brain.
+16. OpenCode, Codex CLI y Claude Code CLI se evalúan como Execution Providers
+    alternativos contra los mismos contratos `cognituum.execution/v1`.
 
-## 10. Preguntas abiertas
+## 10. Decisiones experimentales
+
+### 10.1 Cerradas
+
+| Orden de cierre | Pregunta | Resolución | Prueba normativa | Criterio empírico pendiente |
+|---|---|---|---|---|
+| 1 | ¿Dónde vive Execution Layer? | `installer/execution/`, con core neutral, persistencia propia y adapters hermanos fuera de Brain/AITAP | `runtime-swap-no-brain-change` | Matriz cross-provider sin cambio semántico en Brain |
+| 2 | ¿Contrato D o formato nativo de runtime? | Candidato: contratos canónicos `cognituum.execution/v1`; sujeto al gate explícito de reconciliación árbol/código/roles | Reconciliación previa y luego EXC-001 a EXC-010 | Tres corridas consecutivas y recovery determinista por cada par |
+
+Especificación y estado de evidencia:
+[`COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md`](./COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md).
+Gate bloqueante detectado después del primer cierre:
+[`COGNITUUM_EXECUTION_RECONCILIATION_2026-08-20.md`](./COGNITUUM_EXECUTION_RECONCILIATION_2026-08-20.md).
+
+### 10.2 Abiertas
 
 | Pregunta | Decisión que bloquea | Experimento mínimo | Criterio de cierre |
 |---|---|---|---|
 | ¿Todo local inference pasa por AITAP? | Provider Backend común | Adapter Ollama bajo Supply Request sin key | Misma observabilidad y fallback sin acoplar Alfred |
-| ¿Contrato D o formato nativo de runtime? | Forma final de Execution Package | Batería OpenCode con structured output, patch, diff y checksum | Cumplimiento estable y recuperación determinista |
-| ¿Dónde vive Execution Layer? | Ownership físico y distribución | Adapter fuera de AITAP y Brain | Swap de runtime sin cambio semántico en Brain |
 | ¿Cómo gobierna Nucleus tools/filesystem? | Modelo de Policy/Grant | Grant firmado por workspace/tool/tiempo | Denegación previa y Evidence posterior verificables |
 | ¿Quién posee la persistencia de ejecución? | Recovery/reconnect | Restart, cancel y reconexión de sesión | Una única fuente recuperable e idempotente |
 | ¿Cómo se emite identidad de Alfred? | Alfred multi-device y mobile | Alta/revocación de dos dispositivos | Credencial individual, revocable y fuera del renderer |
@@ -299,4 +319,3 @@ implementa aún su vertical documentado; y Metamorph no descubre OpenCode.
 
 La evidencia, impacto y trabajos habilitados se mantienen en
 [`COGNITUUM_ARCHITECTURE_FINDINGS_2026-08-17.md`](../RESEARCH/COGNITUUM_ARCHITECTURE_FINDINGS_2026-08-17.md).
-
