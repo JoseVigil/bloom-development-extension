@@ -1,0 +1,14 @@
+{
+  "policy_version": "genesis-cross-cli-proof/v1",
+  "stages": {
+    "ing": {"target": "codex_cli", "fallback": []},
+    "dis": {"target": "claude_code_cli", "fallback": []},
+    "doc": {"target": "synapse_simulator", "fallback": []},
+    "dev": {
+      "target": "codex_cli",
+      "recovery_target": "claude_code_cli",
+      "durable_checkpoint": "exc-007-cut-1",
+      "fallback": ["synapse_simulator"]
+    }
+  }
+}

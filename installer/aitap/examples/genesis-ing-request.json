@@ -1,0 +1,12 @@
+{
+  "schema_version": "cognituum.routing/v1",
+  "routing_request_id": "rr-genesis-ing-001",
+  "logical_inference_id": "li-genesis-ing-001",
+  "intent_id": "intent-ing-001",
+  "stage": "ing",
+  "turn_id": "turn-001",
+  "target_class": "execution_provider",
+  "required_capabilities": ["filesystem.patch"],
+  "routing_mode": "policy",
+  "policy_version": "genesis-cross-cli-proof/v1"
+}

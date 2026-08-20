@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v1/routing-decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "routing_decision_id", "routing_request_id", "logical_inference_id", "intent_id", "stage", "turn_id", "policy_version", "registry_snapshot_id", "selected_target", "candidates", "fallback", "override", "fingerprint"],
+  "properties": {
+    "schema_version": {"const": "cognituum.routing/v1"},
+    "routing_decision_id": {"type": "string", "minLength": 1},
+    "routing_request_id": {"type": "string", "minLength": 1},
+    "logical_inference_id": {"type": "string", "minLength": 1},
+    "intent_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "minLength": 1},
+    "turn_id": {"type": "string", "minLength": 1},
+    "policy_version": {"type": "string", "minLength": 1},
+    "registry_snapshot_id": {"type": "string", "minLength": 1},
+    "selected_target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["target_id", "target_class"],
+      "properties": {"target_id": {"type": "string"}, "target_class": {"type": "string"}}
+    },
+    "candidates": {"type": "array", "items": {"type": "object"}},
+    "fallback": {"type": "array", "items": {"type": "string"}},
+    "override": {"type": ["object", "null"]},
+    "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

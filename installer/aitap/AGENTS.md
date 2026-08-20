@@ -30,12 +30,21 @@ Confirmado directamente por Jose el 2026-08-12, no derivado por Cowork.
 No es una pregunta abierta a re-evaluar cada vez que aparece OpenCode u
 otro runtime de ejecucion en la conversacion.
 
+Decisión adicional vigente sobre OpenCode:
+`../../docs/AITAP/AITAP_Decision_OpenCode_BSIP_CLIS_v1.md`. OpenCode es un único
+`first_party_runtime`; `opencode_intelligence` y `opencode_execution` están
+prohibidos. El provider/backend y modelo efectivos son dimensiones separadas.
+Seleccionar uno nunca selecciona el otro implícitamente.
+
 ## Lo que AITAP hace — exactamente tres pilares, nada mas
 
-1. **Gateway/Grifo:** decide que modelo/proveedor de IA responde una
-   solicitud de razonamiento (Gemini, Claude, OpenAI, xAI, y eventualmente
-   OpenCode **usado como modelo de razonamiento**, nunca como harness).
-   Gestiona prioridad, failover y circuit breaker entre proveedores.
+1. **Gateway/Grifo:** decide el target abstracto para Intelligence Supply
+   (provider/model) y, desde la decisión v1 del 2026-08-20, para Execution
+   Routing (Execution Provider). Gestiona policy, prioridad, failover y
+   circuit breaker. Elegir un Execution Provider no autoriza a AITAP a
+   invocarlo: Execution Layer/CLIS Integration conserva adapters, procesos,
+   sesiones, cancelación y resultados. Fuente:
+   `../../docs/AITAP/AITAP_Decision_Intelligence_Execution_Routing_v1.md`.
 2. **Vault (referencia, no custodia):** resuelve `key_id` contra Nucleus
    Vault — nunca guarda el secreto real. Ver `README.md` seccion
    "Decisiones ya tomadas".
@@ -65,6 +74,9 @@ estas cosas, pará: estás en el componente equivocado.
   nuevo parece necesitar una categoria de ese tipo, el caso de uso
   pertenece a la "Implementation Layer" (todavia no construida, no vive
   acá), no a AITAP.
+- **Execution Routing no es ejecución.** Se permiten contratos, policies y
+  decisiones abstractas que devuelvan `target_id`. No se permiten comandos,
+  flags, procesos, sesiones ni protocolos nativos de esos targets.
 - **No administrar sesiones headless de OpenCode** (`opencode serve`,
   `session`, `message`, `diff`, `revert`, `fork` de la API de ejecucion).
   Eso es responsabilidad de un componente separado que **consume** a
@@ -94,14 +106,18 @@ estas cosas, pará: estás en el componente equivocado.
 
 ## Si OpenCode aparece en una tarea de AITAP
 
-Preguntate primero: ¿esto es OpenCode-como-modelo (razona y devuelve
-texto/decision, sin tocar filesystem) u OpenCode-como-harness (ejecuta
+Preguntate primero: ¿OpenCode está mediando inteligencia (en cuyo caso hay que
+identificar provider/model efectivos) o usando tools como runtime first-party (ejecuta
 `edit`/`write`/`bash` sobre un repo real)?
 
 - Modelo → entra por el mismo path que Claude/Gemini/OpenAI: un provider
   mas detras del gateway. Corresponde a `installer/aitap`.
-- Harness → no corresponde a este directorio. Señalalo explicitamente en
-  vez de implementarlo aca "por ahora".
+- Harness → AITAP puede seleccionarlo como `execution_provider`, pero su
+  adapter e invocación no corresponden a este directorio.
+
+Si una policy encadena propuesta, verificación o integración entre providers,
+cada paso debe ser una ejecución explícita con su propia decisión y
+correlación. No usar OpenCode como intermediario oculto.
 
 ## Contexto adicional
 

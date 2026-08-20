@@ -9,7 +9,7 @@ class RouteStatusCommand(BaseCommand):
         return CommandMetadata(
             name="status",
             category=CommandCategory.ROUTE,
-            description="Estado del ruteo entre proveedores y del circuit breaker (placeholder)",
+            description="Estado del primer vertical de routing determinístico",
             examples=["aitap route status"],
         )
 
@@ -17,8 +17,7 @@ class RouteStatusCommand(BaseCommand):
         @app.command("status")
         def route_status():
             """
-            Placeholder: aca vivira el estado del circuit breaker inter-proveedor
-            (que proveedor esta activo, cuales estan en cooldown por cuota agotada
-            o errores, y la politica de fallback configurada). No implementado.
+            Informa el alcance materializado. Health dinámico y circuit breaker
+            continúan pendientes; la decisión determinística ya está disponible.
             """
-            typer.echo("aitap route status: no implementado todavia. Motor de ruteo inter-proveedor pendiente.")
+            typer.echo("aitap route: deterministic policy genesis-cross-cli-proof/v1 available; dynamic health/circuit-breaker pending")
