@@ -44,6 +44,10 @@ type component struct {
 	// roll back the already-copied files — the post-deploy step is responsible
 	// for its own idempotency.
 	PostDeployFn func(c *core.Core, repoRoot, dst string, dryRun bool) error
+	// RestoreOnFailure runs PostDeployFn when a copy fails after PreDeployFn
+	// stopped a managed process, so rollout never strands a previously active
+	// service merely because deployment failed.
+	RestoreOnFailure bool
 	// ExtractFn, when non-nil, is called instead of copyFile/copyDir.
 	// src is the source archive path; dstDir is the destination directory.
 	ExtractFn func(src, dstDir string) error
@@ -80,26 +84,17 @@ func nativeBin(r, comp string) string {
 
 var allComponents = []component{
 	{
-		// Brain has no OS-level service unit of its own — confirmed against
-		// internal/supervisor/service.go, not assumed by symmetry with
-		// Nucleus. It is always either a child process spawned by
-		// "nucleus service start" (registered at
-		// <basePath>/run/brain_server.pid, see startBrainServer/
-		// writePidFile) or, if something was already listening on :5678
-		// when the supervisor booted, "adopted" without ever writing a
-		// pidfile. brainPreDeploy handles both: kill by pidfile first (the
-		// scoped, targeted mechanism, not a full "nucleus service stop"),
-		// then confirm the port is actually free — because the adopted case
-		// leaves no pidfile for step one to find, and would otherwise let
-		// this proceed to overwrite the binary under a process that's still
-		// running, reproducing the original bug.
+		// Brain is installed as an independent OS service by Conductor. Its
+		// lifecycle must be controlled through that service manager so NSSM,
+		// systemd or launchd cannot restart it while the binary is replaced.
 		Key: "brain",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "brain")
 		},
-		DestFn:       func(b string) string { return filepath.Join(b, "bin", "brain") },
-		PreDeployFn:  brainPreDeploy,
-		PostDeployFn: brainPostDeploy,
+		DestFn:           func(b string) string { return filepath.Join(b, "bin", "brain") },
+		PreDeployFn:      brainPreDeploy,
+		PostDeployFn:     brainPostDeploy,
+		RestoreOnFailure: true,
 	},
 	{
 		// The nucleus binary itself is the process that the Nucleus OS service
@@ -114,9 +109,10 @@ var allComponents = []component{
 		SourceFn: func(r string) string {
 			return nativeBin(r, "nucleus")
 		},
-		DestFn:       func(b string) string { return filepath.Join(b, "bin", "nucleus") },
-		PreDeployFn:  nucleusPreDeploy,
-		PostDeployFn: nucleusPostDeploy,
+		DestFn:           func(b string) string { return filepath.Join(b, "bin", "nucleus") },
+		PreDeployFn:      nucleusPreDeploy,
+		PostDeployFn:     nucleusPostDeploy,
+		RestoreOnFailure: true,
 	},
 	{
 		Key: "sentinel",
@@ -183,7 +179,10 @@ var allComponents = []component{
 		SourceFn: func(r string) string {
 			return nativeBin(r, "sensor")
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "sensor") },
+		DestFn:           func(b string) string { return filepath.Join(b, "bin", "sensor") },
+		PreDeployFn:      sensorPreDeploy,
+		PostDeployFn:     sensorPostDeploy,
+		RestoreOnFailure: true,
 	},
 	{
 		Key: "cortex",
@@ -487,21 +486,69 @@ func chromePostExtract(dst string) error {
 //   - Linux:   the systemd --user unit name (confirmed against the existing
 //     manual workflow: `systemctl --user stop/start com.bloom.nucleus.service`).
 //
-// The Windows and macOS values are assumptions based on the same naming
-// convention as the confirmed Linux unit; override with
-// BLOOM_NUCLEUS_SERVICE_NAME if the real installer uses something else.
+// These identifiers mirror the services installed by Conductor. Environment
+// overrides remain available for non-standard installations.
+func serviceNameFor(goos, component string) string {
+	services := map[string]map[string]string{
+		"windows": {"nucleus": "BloomNucleusService", "brain": "BloomBrainService"},
+		"linux":   {"nucleus": "com.bloom.nucleus.service", "brain": "com.bloom.brain.service", "sensor": "com.bloom.sensor.service"},
+		"darwin":  {"nucleus": "com.bloom.nucleus", "brain": "com.bloom.brain", "sensor": "com.bloom.sensor"},
+	}
+	return services[goos][component]
+}
+
 func nucleusServiceName() string {
 	if v := strings.TrimSpace(os.Getenv("BLOOM_NUCLEUS_SERVICE_NAME")); v != "" {
 		return v
 	}
 	switch runtime.GOOS {
-	case "windows":
-		return "BloomNucleus"
-	case "darwin":
-		return "com.bloom.nucleus"
-	default: // linux
-		return "com.bloom.nucleus.service"
+	default:
+		return serviceNameFor(runtime.GOOS, "nucleus")
 	}
+}
+
+func brainServiceName() string {
+	if v := strings.TrimSpace(os.Getenv("BLOOM_BRAIN_SERVICE_NAME")); v != "" {
+		return v
+	}
+	return serviceNameFor(runtime.GOOS, "brain")
+}
+
+var rolloutServiceWasActive = map[string]bool{}
+
+func stopManagedService(c *core.Core, component, name string, dryRun bool) error {
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] %s: would stop %q if active and remember its state", component, name)
+		return nil
+	}
+	wasNoop, err := controlService(name, false)
+	if err != nil {
+		return fmt.Errorf("%s: could not stop %s: %w", component, name, err)
+	}
+	rolloutServiceWasActive[component] = !wasNoop
+	if wasNoop {
+		c.Logger.Info("ℹ️  %s was absent or already stopped", name)
+	} else {
+		c.Logger.Success("✓ %s stopped", name)
+	}
+	return nil
+}
+
+func restoreManagedService(c *core.Core, component, name string, dryRun bool) error {
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] %s: would restore %q only if it was active", component, name)
+		return nil
+	}
+	if !rolloutServiceWasActive[component] {
+		c.Logger.Info("ℹ️  %s was not active before rollout; leaving it stopped", name)
+		return nil
+	}
+	_, err := controlService(name, true)
+	if err != nil {
+		return fmt.Errorf("%s: could not restore %s: %w", component, name, err)
+	}
+	c.Logger.Success("✓ %s restored", name)
+	return nil
 }
 
 // bootstrapPreDeploy stops the Nucleus service before bundle.js is
@@ -579,26 +626,28 @@ func bootstrapPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error 
 // macOS/Linux and re-launches under UAC on Windows if needed. Returning an
 // error here aborts the nucleus component before any files are touched.
 func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
-	name := nucleusServiceName()
-
-	if dryRun {
-		c.Logger.Info("🔍 [dry-run] nucleus: would ensure elevation and stop %q before copying the binary", name)
-		return nil
+	if !dryRun {
+		if err := ensureElevated(); err != nil {
+			return err
+		}
 	}
-
-	if err := ensureElevated(); err != nil {
-		return fmt.Errorf("nucleus: elevation required to control %q: %w", name, err)
+	// Stop Brain first: Nucleus must not be allowed to supervise or race it.
+	if err := stopManagedService(c, "nucleus/brain", brainServiceName(), dryRun); err != nil {
+		return err
 	}
-
-	c.Logger.Info("🛑 Stopping %s before updating the nucleus binary...", name)
-	wasNoop, err := controlService(name, false)
-	if err != nil {
-		return fmt.Errorf("nucleus: could not stop %s: %w", name, err)
+	if err := stopManagedService(c, "nucleus/nucleus", nucleusServiceName(), dryRun); err != nil {
+		_ = restoreManagedService(c, "nucleus/brain", brainServiceName(), dryRun)
+		return err
 	}
-	if wasNoop {
-		c.Logger.Info("ℹ️  %s was not running — nothing to stop", name)
-	} else {
-		c.Logger.Success("✓ %s stopped", name)
+	if !dryRun {
+		if err := waitForPortFree(brainPort, 10*time.Second); err != nil {
+			_ = nucleusPostDeploy(c, repoRoot, dst, false)
+			return fmt.Errorf("nucleus: %w", err)
+		}
+		if err := waitForPortFree("48215", 10*time.Second); err != nil {
+			_ = nucleusPostDeploy(c, repoRoot, dst, false)
+			return fmt.Errorf("nucleus: %w", err)
+		}
 	}
 	return nil
 }
@@ -614,37 +663,15 @@ func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 // is something the operator needs to see, not something rollout should mask
 // by reporting failure on an otherwise-successful restart.
 func nucleusPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
-	name := nucleusServiceName()
-
-	if dryRun {
-		c.Logger.Info("🔍 [dry-run] nucleus: would start %q and verify Control Plane health on :48215", name)
-		return nil
+	if err := restoreManagedService(c, "nucleus/nucleus", nucleusServiceName(), dryRun); err != nil {
+		return err
 	}
-
-	c.Logger.Info("🚀 Starting %s with the updated binary...", name)
-	wasNoop, err := controlService(name, true)
-	if err != nil {
-		return fmt.Errorf("nucleus: could not start %s: %w", name, err)
-	}
-	if wasNoop {
-		c.Logger.Info("ℹ️  %s was already running", name)
-	} else {
-		c.Logger.Success("✓ %s started", name)
-	}
-
-	c.Logger.Info("🔎 Waiting for Control Plane to come up on :48215 ...")
-	if err := waitForControlPlane(10 * time.Second); err != nil {
-		c.Logger.Warning("⚠️  nucleus: %v — check logs/nucleus/control_plane/ for details", err)
-		return nil
-	}
-	c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")
-	return nil
+	return restoreManagedService(c, "nucleus/brain", brainServiceName(), dryRun)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// brain pre/post-deploy hooks — scoped stop via the Nucleus supervisor's own
-// pidfile convention, not an OS service unit (there isn't one — see the
-// comment on the "brain" component above).
+// brain pre/post-deploy hooks — lifecycle through Brain's Conductor-installed
+// OS service, coordinated with Nucleus to prevent supervisor races.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const brainPort = "5678"
@@ -674,69 +701,73 @@ func isBrainListening() bool {
 	return true
 }
 
-// brainPreDeploy stops any running Brain process before its binary is
-// overwritten.
-//
-//  1. Kill by pidfile — graceful SIGTERM (taskkill /T on Windows), wait,
-//     SIGKILL fallback. Same sequence as killByPidFile() in
-//     internal/supervisor/service.go. Idempotent: a missing or stale pidfile
-//     is not an error, and is reported as "nothing to stop via PID".
-//  2. Confirm :5678 is actually free afterward. Step 1 can legitimately kill
-//     nothing (Brain was adopted by the supervisor rather than spawned by
-//     it, so no pidfile was ever written for it — confirmed in service.go,
-//     not hypothetical) — if the port is still answering, that is exactly
-//     that case, and this rollout has no safe way to identify or stop
-//     whatever is holding it. Fail loudly rather than copy over it.
+// brainPreDeploy stops Brain and Nucleus, waits for Brain's port to be free,
+// and records exactly which services must be restored after the copy.
 func brainPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
-	pidFile := brainPidFile(dst)
-
-	if dryRun {
-		c.Logger.Info("🔍 [dry-run] brain: would stop any running instance (pidfile %s), then verify :%s is free", pidFile, brainPort)
-		return nil
+	if !dryRun {
+		if err := ensureElevated(); err != nil {
+			return err
+		}
 	}
-
-	pid, killErr := killByPidFilePath(pidFile, 10*time.Second)
-	switch {
-	case killErr != nil:
-		c.Logger.Warning("⚠️  brain: error stopping previous process (pid %d): %v", pid, killErr)
-	case pid != 0:
-		c.Logger.Success("✓ brain: stopped previous process (pid %d)", pid)
-		// Same socket-release race flagged for Nucleus/Bootstrap.
-		time.Sleep(2 * time.Second)
-	default:
-		c.Logger.Info("ℹ️  brain: no pidfile found — nothing to stop via PID")
+	if err := stopManagedService(c, "brain/brain", brainServiceName(), dryRun); err != nil {
+		return err
 	}
-
-	if isBrainListening() {
-		return fmt.Errorf("brain: something is still listening on :%s after stop — likely a Brain instance the supervisor adopted rather than spawned (no pidfile was ever written for it), which this rollout cannot identify or stop safely; stop it manually and retry", brainPort)
+	if err := stopManagedService(c, "brain/nucleus", nucleusServiceName(), dryRun); err != nil {
+		_ = restoreManagedService(c, "brain/brain", brainServiceName(), dryRun)
+		return err
 	}
-
+	if !dryRun {
+		if err := waitForPortFree(brainPort, 10*time.Second); err != nil {
+			_ = brainPostDeploy(c, repoRoot, dst, false)
+			return err
+		}
+	}
 	return nil
 }
 
-// brainPostDeploy deliberately does NOT restart Brain.
-//
-// Restarting it correctly means reproducing startBrainServer's spawn
-// sequence from internal/supervisor/service.go — detached process, log file
-// setup, pidfile write, port-ready polling — including its
-// setSvelteProcAttr-based process-detachment step, which was not in the
-// files reviewed for this change. Guessing at that platform-specific
-// detachment logic risks a spawn that looks successful but is subtly wrong
-// (e.g. dies when this CLI invocation exits, or double-manages the process
-// alongside a future "nucleus service start"). Leaving Brain stopped and
-// telling the operator explicitly is the safer failure mode here — loud and
-// recoverable with one known command, rather than a silent partial fix.
-//
-// If Brain restart-on-rollout is wanted, it belongs here once
-// setSvelteProcAttr (and the log-path/logsDir resolution startBrainServer
-// depends on) is available to mirror against directly.
+// brainPostDeploy restores only the services that were active before rollout.
 func brainPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	if err := restoreManagedService(c, "brain/nucleus", nucleusServiceName(), dryRun); err != nil {
+		return err
+	}
+	return restoreManagedService(c, "brain/brain", brainServiceName(), dryRun)
+}
+
+func waitForPortFree(port string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 250*time.Millisecond)
+		if err != nil {
+			return nil
+		}
+		_ = conn.Close()
+		time.Sleep(250 * time.Millisecond)
+	}
+	return fmt.Errorf("port %s is still in use after services stopped", port)
+}
+
+func sensorPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	wasActive, err := sensorStop(dst, dryRun)
+	if err != nil {
+		return fmt.Errorf("sensor: stop failed: %w", err)
+	}
+	rolloutServiceWasActive["sensor"] = wasActive
 	if dryRun {
-		c.Logger.Info("🔍 [dry-run] brain: would leave the service stopped — restart via `nucleus service start` (or `nucleus service restart`) when ready")
+		c.Logger.Info("🔍 [dry-run] sensor: would stop the platform agent and wait for resource release")
+	}
+	return nil
+}
+
+func sensorPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] sensor: would restore the agent only if previously active")
 		return nil
 	}
-	c.Logger.Info("ℹ️  brain: binary updated, service left stopped — restart it with `nucleus service start` when ready")
-	return nil
+	if !rolloutServiceWasActive["sensor"] {
+		c.Logger.Info("ℹ️  sensor was not active before rollout; leaving it stopped")
+		return nil
+	}
+	return sensorStart(dst)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1246,9 +1277,11 @@ does not update the running Control Plane. --only bootstrap therefore:
   4. Polls http://127.0.0.1:48215/api/docs for up to 10s to confirm the new
      Control Plane build is actually serving traffic
 
-The 'brain' component stops any running Brain process before its binary is
-overwritten (by pidfile, then verifying :5678 is free) and leaves it stopped
-afterward — restart it with 'nucleus service start' when ready.`,
+The 'nucleus' and 'brain' components coordinate both Conductor-installed OS
+services, wait for their ports to be released, copy the binaries, and restore
+only the services that were active before rollout. Sensor follows its real
+platform contract: HKCU user agent process on Windows, systemd --user on
+Linux, and LaunchAgent on macOS.`,
 
 		Annotations: map[string]string{
 			"category": "MAINTENANCE",
@@ -1424,6 +1457,11 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 			c.Logger.Error("❌ %s", msg)
 			result.Errors = append(result.Errors, msg)
 			result.Status = "partial"
+			if comp.RestoreOnFailure && comp.PostDeployFn != nil {
+				if restoreErr := comp.PostDeployFn(c, repoRoot, dst, false); restoreErr != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("%s: restore after failure: %v", comp.Key, restoreErr))
+				}
+			}
 			continue
 		}
 
@@ -1447,6 +1485,11 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 			c.Logger.Error("❌ %s", msg)
 			result.Errors = append(result.Errors, msg)
 			result.Status = "partial"
+			if comp.RestoreOnFailure && comp.PostDeployFn != nil {
+				if restoreErr := comp.PostDeployFn(c, repoRoot, dst, false); restoreErr != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("%s: restore after failure: %v", comp.Key, restoreErr))
+				}
+			}
 			continue
 		}
 
@@ -1497,20 +1540,30 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 // Resolution order:
 //
 //  1. BLOOM_REPO_ROOT env var — explicit CI / local override.
-//  2. nucleus.json installation.origin_path — canonical production source of truth.
-//     origin_path points to installer/native/bin/<platform>/<component>; walking up
-//     5 levels yields the repo root. Mirrors the logic in
-//     internal/supervisor/dev_start.go:getBloomDir().
-//  3. BLOOM_DIR env var — legacy fallback used by dev_start.go.
-//  4. Current working directory — automatic fallback when running from inside
-//     the repo tree (the common developer workflow).
+//  2. Current working directory (or one of its parents) when invoked from a
+//     repository checkout.
+//  3. nucleus.json installation.origin_path, searched upward instead of using
+//     a fixed parent count because Conductor has stored both platform and
+//     component-level paths over time.
+//  4. BLOOM_DIR env var — legacy fallback used by dev_start.go.
 func resolveRepoRoot() (string, error) {
-	// 1. Explicit override — highest priority, no validation needed here.
+	// 1. Explicit override — highest priority, but still validate it so a bad
+	// value cannot silently become C:\installer\... on Windows.
 	if r := strings.TrimSpace(os.Getenv("BLOOM_REPO_ROOT")); r != "" {
-		return filepath.Clean(r), nil
+		if root, ok := findRepoRoot(r); ok {
+			return root, nil
+		}
+		return "", fmt.Errorf("BLOOM_REPO_ROOT %q is not a Bloom repository root", r)
 	}
 
-	// 2. nucleus.json origin_path — walk up 5 levels from the binary location.
+	// 2. Interactive developer workflow: prefer the checkout containing cwd.
+	if cwd, err := os.Getwd(); err == nil {
+		if root, ok := findRepoRoot(cwd); ok {
+			return root, nil
+		}
+	}
+
+	// 3. Installed metadata. Search ancestors rather than assuming depth.
 	nucleusJSON := filepath.Join(core.GetBaseAppDataPath(), "config", "nucleus.json")
 	if data, err := os.ReadFile(nucleusJSON); err == nil {
 		var cfg struct {
@@ -1520,27 +1573,51 @@ func resolveRepoRoot() (string, error) {
 		}
 		if json.Unmarshal(data, &cfg) == nil {
 			if p := strings.TrimSpace(cfg.Installation.OriginPath); p != "" {
-				for i := 0; i < 5; i++ {
-					p = filepath.Dir(p)
-				}
-				if p != "" && p != "." && p != string(filepath.Separator) {
-					return filepath.Clean(p), nil
+				if root, ok := findRepoRoot(p); ok {
+					return root, nil
 				}
 			}
 		}
 	}
 
-	// 3. Legacy BLOOM_DIR env var.
+	// 4. Legacy BLOOM_DIR env var.
 	if r := strings.TrimSpace(os.Getenv("BLOOM_DIR")); r != "" {
-		return filepath.Clean(r), nil
+		if root, ok := findRepoRoot(r); ok {
+			return root, nil
+		}
 	}
 
-	// 4. Current working directory — safe fallback for interactive dev use.
-	if cwd, err := os.Getwd(); err == nil && cwd != "" {
-		return cwd, nil
-	}
+	return "", fmt.Errorf("could not locate a Bloom repository (checked BLOOM_REPO_ROOT, cwd, nucleus.json origin_path, and BLOOM_DIR)")
+}
 
-	return "", fmt.Errorf("all resolution strategies exhausted (BLOOM_REPO_ROOT, nucleus.json, BLOOM_DIR, os.Getwd)")
+func findRepoRoot(start string) (string, bool) {
+	p := filepath.Clean(start)
+	if info, err := os.Stat(p); err == nil && !info.IsDir() {
+		p = filepath.Dir(p)
+	}
+	for {
+		if isRepoRoot(p) {
+			return p, true
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return "", false
+		}
+		p = parent
+	}
+}
+
+func isRepoRoot(path string) bool {
+	markers := []string{
+		filepath.Join(path, "installer", "metamorph", "go.mod"),
+		filepath.Join(path, "installer", "native", "bin"),
+	}
+	for _, marker := range markers {
+		if _, err := os.Stat(marker); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

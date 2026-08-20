@@ -56,6 +56,20 @@ func controlService(name string, start bool) (bool, error) {
 	}
 }
 
+func sensorStop(dst string, dryRun bool) (bool, error) {
+	if dryRun {
+		return false, nil
+	}
+	name := serviceNameFor(runtime.GOOS, "sensor")
+	wasNoop, err := controlService(name, false)
+	return !wasNoop, err
+}
+
+func sensorStart(dst string) error {
+	_, err := controlService(serviceNameFor(runtime.GOOS, "sensor"), true)
+	return err
+}
+
 // systemctlUserControl stops or starts a systemd --user unit on Linux.
 func systemctlUserControl(name string, start bool) (bool, error) {
 	action := "stop"

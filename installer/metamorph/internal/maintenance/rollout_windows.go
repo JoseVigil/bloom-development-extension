@@ -5,7 +5,10 @@ package maintenance
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -47,6 +50,38 @@ func ensureElevated() error {
 	// The elevated process is now running — exit this non-elevated instance.
 	os.Exit(0)
 	return nil
+}
+
+func sensorStop(dst string, dryRun bool) (bool, error) {
+	if dryRun {
+		return false, nil
+	}
+	out, _ := exec.Command("tasklist", "/FI", "IMAGENAME eq bloom-sensor.exe", "/NH").CombinedOutput()
+	wasActive := strings.Contains(strings.ToLower(string(out)), "bloom-sensor.exe")
+	if !wasActive {
+		return false, nil
+	}
+	if out, err := exec.Command("taskkill", "/IM", "bloom-sensor.exe", "/T", "/F").CombinedOutput(); err != nil {
+		return true, fmt.Errorf("taskkill bloom-sensor.exe: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		out, _ := exec.Command("tasklist", "/FI", "IMAGENAME eq bloom-sensor.exe", "/NH").CombinedOutput()
+		if !strings.Contains(strings.ToLower(string(out)), "bloom-sensor.exe") {
+			return true, nil
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return true, fmt.Errorf("bloom-sensor.exe is still running after stop")
+}
+
+func sensorStart(dst string) error {
+	cmd := exec.Command(filepath.Join(dst, "bloom-sensor.exe"), "serve")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS, HideWindow: true}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start bloom-sensor.exe serve: %w", err)
+	}
+	return cmd.Process.Release()
 }
 
 // isElevated returns true if the current process has administrator privileges.
