@@ -366,11 +366,13 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         { windowsHide: true }
       );
 
+      let stdoutOutput = '';
       let allOutput = '';
 
       child.stdout.on('data', d => {
         const line = d.toString().trim();
         if (!line) return;
+        stdoutOutput += line + '\n';
         allOutput += line + '\n';
         event.sender.send('onboarding:init-line', { line, isError: false });
       });
@@ -378,6 +380,8 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       child.stderr.on('data', d => {
         const line = d.toString().trim();
         if (!line) return;
+        allOutput += line + '\n';
+        log.error('[IPC] onboarding:init-nucleus stderr:', line);
         event.sender.send('onboarding:init-line', { line, isError: true });
       });
 
@@ -390,7 +394,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
           // en el JSON de salida. Necesitamos este valor antes de persistir en disco.
           let resolvedOrg = org || null;
           try {
-            const jsonLine = allOutput.split('\n').find(l => l.trim().startsWith('{'));
+            const jsonLine = stdoutOutput.split('\n').find(l => l.trim().startsWith('{'));
             if (jsonLine) {
               const parsed = JSON.parse(jsonLine);
               resolvedOrg = parsed.org || parsed.org_slug || resolvedOrg;

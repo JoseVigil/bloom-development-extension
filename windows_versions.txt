@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — windows
-# Generated: 2026-08-19 16:50:01
+# Generated: 2026-08-19 21:49:30
 
 ---
 brain\__build__.py
@@ -83,6 +83,7 @@ installer\conductor\setup\package.json
     "dev:darwin": "electron .",
     "dev:linux": "electron . --no-sandbox",
     "dev:no-admin": "electron .",
+    "test:windows-contract": "node tests/windows-setup-contract.test.js",
     "version:bump": "node ../shared/bump-version.js",
     "version:patch": "node ../shared/bump-version.js --patch",
     "version:minor": "node ../shared/bump-version.js --minor",
@@ -134,7 +135,11 @@ installer\conductor\setup\package.json
         },
         {
           "from": "../../native/bin/linux_x64/host",
-          "to": "native"
+          "to": "host"
+        },
+        {
+          "from": "../shared",
+          "to": "shared"
         },
         {
           "from": "../../native/bin/cortex",
@@ -196,23 +201,31 @@ installer\conductor\setup\package.json
         },
         {
           "from": "../../native/bin/win64/host",
-          "to": "native"
+          "to": "host"
+        },
+        {
+          "from": "../shared",
+          "to": "shared"
         },
         {
           "from": "../../native/bin/cortex",
           "to": "cortex"
         },
         {
-          "from": "../../native/bin/win64/conductor",
-          "to": "conductor"
+          "from": "../../native/bin/win64/workspace/bloom-workspace.exe",
+          "to": "workspace/bloom-workspace.exe"
         },
         {
           "from": "../../native/nssm/win64",
           "to": "nssm"
         },
         {
-          "from": "../../native/bin/win64/ollama",
+          "from": "../../ollama/windows",
           "to": "ollama"
+        },
+        {
+          "from": "../../native/opencode/win64",
+          "to": "opencode"
         }
       ]
     },
@@ -259,7 +272,11 @@ installer\conductor\setup\package.json
         },
         {
           "from": "../../native/bin/darwin_${arch}/host",
-          "to": "native"
+          "to": "host"
+        },
+        {
+          "from": "../shared",
+          "to": "shared"
         },
         {
           "from": "../../native/bin/cortex",
@@ -376,15 +393,15 @@ installer\cortex\build-cortex\cortex.meta.json
 
 ---
 installer\metamorph\scripts\build_number.effective.txt
-203
+204
 
 ---
 installer\metamorph\scripts\build_number.txt
-19
+20
 
 ---
 installer\nucleus\scripts\build_number.effective.txt
-623
+624
 
 ---
 installer\sensor\scripts\build_number.effective.txt

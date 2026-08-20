@@ -99,12 +99,17 @@ func ResolveBrainPath() (string, error) {
 	// ── 2. Mismo directorio que el ejecutable nucleus en ejecución ────────
 	execPath, err := os.Executable()
 	if err == nil {
-		candidate := filepath.Join(filepath.Dir(execPath), "brain")
+		brainBinary := "brain"
 		if runtime.GOOS == "windows" {
-			candidate += ".exe"
+			brainBinary += ".exe"
 		}
-		if _, statErr := os.Stat(candidate); statErr == nil {
-			return candidate, nil
+		productCandidate := filepath.Clean(filepath.Join(filepath.Dir(execPath), "..", "brain", brainBinary))
+		if _, statErr := os.Stat(productCandidate); statErr == nil {
+			return productCandidate, nil
+		}
+		colocatedCandidate := filepath.Join(filepath.Dir(execPath), brainBinary)
+		if _, statErr := os.Stat(colocatedCandidate); statErr == nil {
+			return colocatedCandidate, nil
 		}
 	}
 
