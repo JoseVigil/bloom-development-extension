@@ -1,6 +1,6 @@
 # AITAP — decisión de Intelligence y Execution Routing
 
-**Estado:** aprobada como norma del branch  
+**Estado:** `SUPERSEDED` por Runtime and Intelligence Routing v2
 **Versión:** 1.0  
 **Fecha:** 2026-08-20
 
@@ -33,6 +33,9 @@ Contratos canónicos del primer corte:
 
 Esta decisión reemplaza únicamente la frase previa que limitaba el routing de
 AITAP a provider/model. Mantiene intactos todos los guardrails negativos.
+
+Migración vigente:
+[`AITAP_Runtime_Intelligence_Routing_v2.md`](./AITAP_Runtime_Intelligence_Routing_v2.md).
 
 La representación única de OpenCode como runtime first-party y la separación de
 su provider/model efectivo se rigen por

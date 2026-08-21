@@ -25,8 +25,8 @@ class RouteDecideCommand(BaseCommand):
             registry: Path | None = typer.Option(None, "--registry", exists=True, readable=True),
         ):
             root = Path(__file__).resolve().parents[4]
-            policy_path = policy or root / "policies" / "genesis-cross-cli-proof-v1.json"
-            registry_path = registry or root / "registry" / "genesis-pilot-v1.json"
+            policy_path = policy or root / "policies" / "genesis-runtime-intelligence-v2.json"
+            registry_path = registry or root / "registry" / "genesis-pilot-v2.json"
             try:
                 engine = RoutingEngine.from_files(policy_path, registry_path)
                 decision = engine.decide(json.loads(request.read_text(encoding="utf-8")))

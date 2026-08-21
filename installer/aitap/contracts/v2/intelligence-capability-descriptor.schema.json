@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v2/intelligence-capability-descriptor",
+  "title": "Intelligence backend and model descriptor owned by AITAP",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["backend_id", "provider", "model", "credential_ref", "capabilities", "privacy", "health", "accounting_ref"],
+  "properties": {
+    "backend_id": {"type": "string", "minLength": 1},
+    "provider": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "credential_ref": {"type": ["string", "null"], "pattern": "^credential-ref://"},
+    "capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "privacy": {"enum": ["local", "approved_cloud", "cloud"]},
+    "health": {"enum": ["healthy", "degraded", "unavailable", "unknown"]},
+    "accounting_ref": {"type": "string", "pattern": "^accounting://"}
+  }
+}

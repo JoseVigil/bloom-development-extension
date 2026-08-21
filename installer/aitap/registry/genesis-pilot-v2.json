@@ -1,0 +1,15 @@
+{
+  "schema_version": "cognituum.routing-registry/v2",
+  "snapshot_id": "genesis-pilot/v2",
+  "snapshot_status": "simulated",
+  "runtimes": [
+    {"runtime_id": "opencode", "runtime_kind": "first_party_runtime", "capabilities": ["filesystem.patch", "test.run", "checkpoint.external", "stream.events", "diff.capture", "cancel"], "supported_backend_ids": ["anthropic_api", "openai_api", "gemini_api"], "health": "unknown", "conformance": "NOT_RUN", "compatibility": "unknown", "publisher": "executor_fixture"},
+    {"runtime_id": "codex_cli", "runtime_kind": "external_runtime", "capabilities": ["filesystem.patch", "test.run", "checkpoint.external"], "supported_backend_ids": ["openai_api"], "health": "unknown", "conformance": "NOT_RUN", "compatibility": "unknown", "publisher": "executor_fixture"},
+    {"runtime_id": "claude_code_cli", "runtime_kind": "external_runtime", "capabilities": ["filesystem.patch", "test.run", "checkpoint.external"], "supported_backend_ids": ["anthropic_api"], "health": "unknown", "conformance": "NOT_RUN", "compatibility": "unknown", "publisher": "executor_fixture"}
+  ],
+  "intelligence_backends": [
+    {"backend_id": "openai_api", "provider": "openai", "model": "gpt-4", "credential_ref": "credential-ref://openai/default", "capabilities": ["text.generate", "structured_output"], "privacy": "approved_cloud", "health": "unknown", "accounting_ref": "accounting://backend/openai_api"},
+    {"backend_id": "anthropic_api", "provider": "anthropic", "model": "claude-sonnet-4-20250514", "credential_ref": "credential-ref://anthropic/default", "capabilities": ["text.generate", "structured_output"], "privacy": "approved_cloud", "health": "unknown", "accounting_ref": "accounting://backend/anthropic_api"},
+    {"backend_id": "gemini_api", "provider": "google", "model": "gemini-2.0-flash-exp", "credential_ref": "credential-ref://gemini/default", "capabilities": ["text.generate", "structured_output"], "privacy": "approved_cloud", "health": "unknown", "accounting_ref": "accounting://backend/gemini_api"}
+  ]
+}

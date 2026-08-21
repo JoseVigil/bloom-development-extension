@@ -1,0 +1,10 @@
+{
+  "schema_version": "cognituum.routing-policy/v2",
+  "policy_version": "genesis-runtime-intelligence/v2",
+  "stages": {
+    "ing": {"runtime_id": "codex_cli", "backend_id": "openai_api", "runtime_fallback": ["opencode"], "intelligence_fallback": []},
+    "dis": {"runtime_id": "claude_code_cli", "backend_id": "anthropic_api", "runtime_fallback": ["opencode"], "intelligence_fallback": []},
+    "doc": {"runtime_id": "opencode", "backend_id": "gemini_api", "runtime_fallback": [], "intelligence_fallback": ["anthropic_api"]},
+    "dev": {"runtime_id": "codex_cli", "backend_id": "openai_api", "recovery_runtime_id": "claude_code_cli", "recovery_backend_id": "anthropic_api", "runtime_fallback": ["opencode"], "intelligence_fallback": []}
+  }
+}

@@ -5,10 +5,13 @@ para todos los clientes del ecosistema Bloom (Brain, Alfred, y los que vengan).
 
 ## Estado
 
-Primer vertical de routing determinístico en desarrollo. Incluye contratos
-v1, registry estático y la policy experimental
-`genesis-cross-cli-proof/v1`. La conexión real a providers, Nucleus Vault y
-los adapters de Execution Layer/CLIS Integration continúa pendiente.
+Primer vertical reconciliado de routing determinístico. Incluye contratos
+v2, registry fixture y la policy experimental
+`genesis-runtime-intelligence/v2`. La conexión real a providers, Nucleus Vault y
+la integración con Executor continúa pendiente.
+
+> **Auditoría completada:** clasificación y estado en
+> `../../docs/AITAP/AITAP_ROUTING_RECONCILIATION_REPORT_2026-08-20.md`.
 
 ## Decisiones ya tomadas (no re-discutir sin evidencia nueva)
 
@@ -87,7 +90,7 @@ aitap system version
 aitap system status
 aitap keys list               # placeholder
 aitap route status
-aitap route decide --request examples/genesis-ing-request.json
+aitap route decide --request examples/genesis-ing-request-v2.json
 
 python scripts/generate_help.py   # regenera installer/aitap/help/aitap_help.{json,txt} (LOCAL, no installer/help/)
 ```
@@ -107,12 +110,12 @@ vocabulario preciso de los tres pilares y quién parsea qué).
 
 ## Routing determinístico materializado
 
-- Contratos JSON Schema bajo `contracts/v1/`.
-- Policy `genesis-cross-cli-proof/v1` bajo `policies/`.
-- Snapshot estático del piloto bajo `registry/`.
+- Contratos vigentes JSON Schema bajo `contracts/v2/`; V1 está supersedido.
+- Policy `genesis-runtime-intelligence/v2` bajo `policies/`.
+- Snapshot simulado del piloto bajo `registry/`; no representa health real.
 - OpenCode se registra una sola vez como `first_party_runtime`. Provider/backend
-  y modelo efectivos se seleccionan y auditan como dimensiones separadas; las
-  identidades `opencode_intelligence` y `opencode_execution` están deprecadas.
+  provider/backend, modelo, Credential Reference y Accounting se seleccionan y
+  auditan como dimensiones separadas. OpenCode nunca es provider.
 - `aitap route decide --request <json>` devuelve una decisión estable y no
   ejecuta el target seleccionado.
 - Las pruebas unitarias no requieren CLIs reales.

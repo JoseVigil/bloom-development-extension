@@ -1,0 +1,14 @@
+{
+  "schema_version": "cognituum.routing/v2",
+  "routing_request_id": "rr-genesis-ing-v2-001",
+  "logical_inference_id": "li-genesis-ing-001",
+  "intent_id": "intent-ing-001",
+  "stage": "ing",
+  "turn_id": "turn-001",
+  "routing_mode": "policy",
+  "policy_version": "genesis-runtime-intelligence/v2",
+  "runtime": {"required_capabilities": ["filesystem.patch"], "forced_runtime_id": null, "previous_runtime_id": null, "excluded_runtime_ids": []},
+  "intelligence": {"required_capabilities": ["text.generate"], "privacy": "approved_cloud", "forced_backend_id": null, "forced_model": null, "previous_backend_id": null, "excluded_backend_ids": []},
+  "sticky_decision_id": null,
+  "override_ref": null
+}

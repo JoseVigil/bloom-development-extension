@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v2/routing-decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "routing_decision_id", "routing_request_id", "logical_inference_id", "intent_id", "stage", "turn_id", "policy_version", "registry_snapshot_id", "runtime", "effective_intelligence", "runtime_candidates", "intelligence_candidates", "fallback", "override_ref", "accounting", "fingerprint"],
+  "properties": {
+    "schema_version": {"const": "cognituum.routing/v2"},
+    "routing_decision_id": {"type": "string", "minLength": 1},
+    "routing_request_id": {"type": "string", "minLength": 1},
+    "logical_inference_id": {"type": "string", "minLength": 1},
+    "intent_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string"}, "turn_id": {"type": "string"},
+    "policy_version": {"type": "string"}, "registry_snapshot_id": {"type": "string"},
+    "runtime": {
+      "type": "object", "additionalProperties": false,
+      "required": ["runtime_id", "runtime_kind", "health"],
+      "properties": {"runtime_id": {"type": "string"}, "runtime_kind": {"enum": ["first_party_runtime", "external_runtime"]}, "health": {"type": "string"}}
+    },
+    "effective_intelligence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["backend_id", "provider", "model", "credential_ref", "health", "accounting_ref"],
+      "properties": {"backend_id": {"type": "string"}, "provider": {"type": "string"}, "model": {"type": "string"}, "credential_ref": {"type": ["string", "null"]}, "health": {"type": "string"}, "accounting_ref": {"type": "string"}}
+    },
+    "runtime_candidates": {"type": "array", "items": {"type": "object"}},
+    "intelligence_candidates": {"type": "array", "items": {"type": "object"}},
+    "fallback": {"type": "object"},
+    "override_ref": {"type": ["string", "null"]},
+    "accounting": {
+      "type": "object", "additionalProperties": false,
+      "required": ["routing_accounting_ref", "inference_accounting_ref", "runtime_id", "provider", "model"],
+      "properties": {"routing_accounting_ref": {"type": "string", "pattern": "^accounting://routing/"}, "inference_accounting_ref": {"type": "string", "pattern": "^accounting://inference/"}, "runtime_id": {"type": "string"}, "provider": {"type": "string"}, "model": {"type": "string"}}
+    },
+    "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

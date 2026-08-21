@@ -20,4 +20,4 @@ class RouteStatusCommand(BaseCommand):
             Informa el alcance materializado. Health dinámico y circuit breaker
             continúan pendientes; la decisión determinística ya está disponible.
             """
-            typer.echo("aitap route: deterministic policy genesis-cross-cli-proof/v1 available; dynamic health/circuit-breaker pending")
+            typer.echo("aitap route: deterministic policy genesis-runtime-intelligence/v2 available; dynamic health/circuit-breaker pending")

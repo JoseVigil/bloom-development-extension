@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v2/runtime-capability-descriptor",
+  "title": "Sanitized runtime descriptor published by Executor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runtime_id", "runtime_kind", "capabilities", "supported_backend_ids", "health", "conformance", "compatibility", "publisher"],
+  "properties": {
+    "runtime_id": {"type": "string", "minLength": 1},
+    "runtime_kind": {"enum": ["first_party_runtime", "external_runtime"]},
+    "capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "supported_backend_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "health": {"enum": ["healthy", "degraded", "unavailable", "unknown"]},
+    "conformance": {"enum": ["CONFORMANT", "PARTIAL", "NON_CONFORMANT", "NOT_RUN"]},
+    "compatibility": {"enum": ["compatible", "incompatible", "unknown"]},
+    "publisher": {"enum": ["executor", "executor_fixture"]}
+  }
+}

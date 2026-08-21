@@ -110,14 +110,27 @@ Preguntate primero: ¿OpenCode está mediando inteligencia (en cuyo caso hay que
 identificar provider/model efectivos) o usando tools como runtime first-party (ejecuta
 `edit`/`write`/`bash` sobre un repo real)?
 
-- Modelo → entra por el mismo path que Claude/Gemini/OpenAI: un provider
-  mas detras del gateway. Corresponde a `installer/aitap`.
-- Harness → AITAP puede seleccionarlo como `execution_provider`, pero su
-  adapter e invocación no corresponden a este directorio.
+- Mediación de inteligencia → AITAP selecciona y audita el provider/backend y
+  modelo efectivos; OpenCode sigue siendo `first_party_runtime`, nunca provider.
+- Uso de tools → AITAP puede seleccionar abstractamente el runtime `opencode`,
+  pero su discovery, adapter e invocación pertenecen a Executor.
 
 Si una policy encadena propuesta, verificación o integración entre providers,
 cada paso debe ser una ejecución explícita con su propia decisión y
 correlación. No usar OpenCode como intermediario oculto.
+
+## Handoff de ownership vigente
+
+Architecture transfirió la implementación de routing al work AITAP mediante
+`../../docs/AITAP/AITAP_ROUTING_OWNERSHIP_HANDOFF_2026-08-20.md`. Antes de
+continuar código, auditar y reconciliar todos los cambios no commiteados de este
+directorio y `docs/AITAP/`. La transferencia no aprueba schemas, registry,
+policies, engine, CLI ni tests actuales.
+
+Toda necesidad de cambiar fronteras, taxonomía runtime/intelligence o contratos
+cross-system vuelve a Architecture. AITAP no absorbe discovery, adapters,
+procesos, workspaces, containment, checkpoints, Evidence o promoción de
+Executor.
 
 ## Contexto adicional
 

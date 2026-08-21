@@ -18,6 +18,6 @@ class StatusCommand(BaseCommand):
         def status():
             """Informa el corte implementado sin afirmar integraciones inexistentes."""
             typer.echo(
-                "aitap: deterministic routing available; providers, dynamic health, "
+                "aitap: deterministic runtime + intelligence routing v2 available; providers, dynamic health, "
                 "Nucleus Vault and CLIS adapters pending"
             )
