@@ -1,22 +1,32 @@
-# AITAP routing para Mandate Genesis y CLIS Integration
+# AITAP routing para Mandate Genesis y Executor
 
 **Estado:** investigación arquitectónica; propuesta pendiente de aprobación  
 **Fecha:** 2026-08-20  
 **No autoriza implementación.**
+**Corrección normativa incorporada:** OpenCode es `first_party_runtime`, no un
+provider externo ni una fuente de inteligencia.
+
+> **Renombre posterior:** CLIS Integration quedó capitalizado como la aplicación
+> first-party `Executor`. Las menciones históricas dentro de findings describen
+> el estado del relevamiento; el diseño target y ownership corresponden a
+> `COGNITUUM_EXECUTOR_APPLICATION_DECISION_v1_0.md`.
 
 ## 1. Conclusión
 
 AITAP puede participar en la selección de un runtime de ejecución sólo mediante
 un **Routing Decision Contract** abstracto. No debe iniciar, pausar, cancelar ni
 reanudar CLIs. Brain/Temporal solicitan y registran la decisión; Execution Layer
-materializa la ejecución mediante adapters de CLIS Integration.
+materializa la ejecución mediante Executor y sus Runtime Adapters internos.
 
 La taxonomía obligatoria es:
 
 - **Intelligence Provider/Model:** produce inferencia cruda. AITAP selecciona y
   hace failover dentro de Intelligence Supply.
-- **Execution Provider/Adapter:** ejecuta tools sobre un workspace (Codex CLI,
-  Claude Code CLI, OpenCode). Execution Layer/CLIS Integration lo materializa.
+- **First-party runtime:** OpenCode, aplicación y servicio administrado por
+  Cognituum. Puede ejecutar tools o mediar Intelligence Supply, pero conserva
+  separado el backend/provider/model efectivo.
+- **External runtime/Adapter:** Codex CLI o Claude Code CLI, integrados por CLIS
+  Integration.
 - **Deterministic Counterpart:** fixture como Synapse Simulator. No es un
   provider de IA ni un CLI; puede participar en el piloto sólo como target de
   prueba explícito.
@@ -45,20 +55,20 @@ autorice cuándo aplicar o reevaluar esa decisión.
 
 ## 3. Findings nuevos
 
-- **CAF-030 — CONTRADICCIÓN:** “AITAP elige executor” excede su contrato
+- **CAF-033 — CONTRADICCIÓN:** “AITAP elige executor” excede su contrato
   vigente. Puede cerrarse aprobando selección abstracta sin lifecycle.
-- **CAF-031 — ABIERTO:** no existe un productor/consumidor integrado para los
+- **CAF-034 — ABIERTO:** no existe un productor/consumidor integrado para los
   contratos Execution v1; los schemas no prueban comportamiento.
-- **CAF-032 — ABIERTO:** CLIS Integration es ownership nominal, todavía sin
+- **CAF-035 — ABIERTO:** CLIS Integration es ownership nominal, todavía sin
   ubicación o puerto implementado independiente de los adapters previstos.
-- **CAF-033 — GAP:** `Execution Package` no incluye `logical_inference_id`,
+- **CAF-036 — GAP:** `Execution Package` no incluye `logical_inference_id`,
   `attempt_id`, `routing_decision_ref` ni `idempotency_key`; son necesarios
   para correlación y swaps reproducibles.
-- **CAF-034 — GAP:** `Execution Event` no expresa `checkpoint_id`, estado
+- **CAF-037 — GAP:** `Execution Event` no expresa `checkpoint_id`, estado
   confirmado del workspace ni causalidad del intento; `checkpoint_ref` solo
   aparece en el siguiente package.
-- **CAF-035 — ABIERTO:** EXC-007 no define todavía el punto durable de corte.
-- **CAF-036 — RIESGO:** consultar health/métricas no determinísticas desde el
+- **CAF-038 — ABIERTO:** EXC-007 no define todavía el punto durable de corte.
+- **CAF-039 — RIESGO:** consultar health/métricas no determinísticas desde el
   código de workflow rompería replay de Temporal; debe hacerse en Activity y
   persistirse la decisión devuelta.
 
@@ -81,10 +91,11 @@ AITAP Policy/Router
 Temporal persiste resultado de Activity y autoriza dispatch
   ▼
 Execution Layer — puerto neutral
-  └─ CLIS Integration adapter seleccionado
+  └─ Executor Runtime Adapter seleccionado
        ├─ Codex CLI
        ├─ Claude Code CLI
-       ├─ OpenCode
+       ├─ OpenCode first-party runtime
+       ├─ Codex/Claude external runtime adapters
        └─ Synapse Simulator (adapter de prueba, si se aprueba)
   │ Events / Result / Evidence
   ▼
@@ -105,9 +116,9 @@ a un adapter local.
 | Policy de routing y evaluación de candidatos | AITAP, si se aprueba CAF-030 | CLIS |
 | Grants/scopes y autoridad para tools/workspace | Nucleus | AITAP |
 | Secretos | Nucleus Vault | Brain/Temporal/AITAP/logs |
-| Capability/health del runtime | Execution Layer/CLIS adapter | Brain |
+| Capability/health del runtime | OpenCode service/Execution Layer para first-party; CLIS adapter para externos | Brain |
 | Lifecycle, `execution_id`, checkpoint y Evidence | Execution Layer | AITAP |
-| Proceso/sesión/stream/cancelación/error nativo | CLIS adapter | AITAP/Brain |
+| Proceso/sesión/stream/cancelación/error nativo | adapter OpenCode first-party o CLIS adapter externo | AITAP/Brain |
 | Métricas de Supply y decisión de routing | AITAP Accounting | Brain |
 | Evidence de efectos técnicos | Execution Layer | AITAP Accounting |
 | Override humano | humano autenticado; Nucleus autoriza; Temporal aplica | AITAP unilateralmente |
@@ -124,7 +135,7 @@ a un adapter local.
   "intent_ref": "intent://...",
   "stage": "cluster",
   "turn_id": "turn-uuid",
-  "target_class": "execution_provider",
+  "target_class": "first_party_runtime",
   "required_capabilities": ["filesystem.patch", "test.run"],
   "constraints": {"privacy": "local_or_approved_cloud", "max_cost": 1.0},
   "routing_mode": "forced|sticky|policy|failover|escalation",
@@ -149,7 +160,7 @@ necesario. AITAP no interpreta contenido semántico libre para inferir el stage.
   "routing_request_id": "rr-uuid",
   "policy_version": "pilot-exc/1",
   "registry_snapshot_id": "cr-uuid",
-  "selected": {"target_id": "codex_cli", "target_class": "execution_provider"},
+  "selected": {"target_id": "codex_cli", "target_class": "external_runtime"},
   "candidates": [
     {"target_id": "codex_cli", "eligible": true, "score": null, "reason_codes": ["FORCED_MATCH"]},
     {"target_id": "claude_code_cli", "eligible": false, "score": null, "reason_codes": ["NOT_FORCED"]}
@@ -182,12 +193,13 @@ credencial efímera/handle sólo cuando corresponde.
 ```json
 {
   "target_id": "codex_cli",
-  "target_class": "execution_provider",
+  "target_class": "external_runtime",
   "adapter_version": "...",
   "runtime_version": "...",
   "capabilities": ["filesystem.patch", "test.run", "checkpoint.external"],
   "transport": {"streaming": true, "cancel": true},
   "context": {"max_bytes": 1000000},
+  "ownership": "external_integrated",
   "locality": "local",
   "credential_requirements": ["credential-ref://codex"],
   "conformance": "NOT_RUN",
@@ -195,7 +207,11 @@ credencial efímera/handle sólo cuando corresponde.
 }
 ```
 
-CLIS publica descriptores; AITAP no inspecciona binarios ni conoce flags.
+OpenCode publica su descriptor como servicio first-party administrado;
+Executor publica los descriptores de runtimes externos. AITAP no
+inspecciona binarios ni conoce flags. Si el runtime media inteligencia, el
+descriptor y los eventos de Accounting incluyen por separado
+`intelligence_provider`, `model` y `credential_ref` efectivos.
 Health expirado vuelve al candidato inelegible o fuerza una Activity de refresh.
 
 ### 6.5 Attempt Result — Execution Layer → Brain/Temporal
@@ -284,7 +300,7 @@ consultar AITAP.
 | Riesgo | Regla |
 |---|---|
 | Doble ejecución por retry | `idempotency_key`, lease/fencing y effect ledger por attempt |
-| CLI muere sin checkpoint | no hay swap recuperable; restaurar último checkpoint confirmado o fallar |
+| Runtime muere sin checkpoint | no hay swap recuperable; restaurar último checkpoint confirmado o fallar |
 | Evento fuera de orden | secuencia monotónica y deduplicación por `(execution_id, sequence)` |
 | Health cambia tras decidir | decisión conserva snapshot; Temporal decide reevaluar antes de dispatch |
 | Credencial expuesta | Vault entrega handle request-scoped directo al adapter; redacción obligatoria |
@@ -305,15 +321,16 @@ diffs y tests. No se fusionan ambos stores; se enlazan por referencias.
 
 ## 11. Contradicciones y aprobaciones requeridas
 
-1. **Aprobar o rechazar CAF-030:** ampliar AITAP desde routing de Supply a
+1. **Aprobar o rechazar CAF-033:** ampliar AITAP desde routing de Supply a
    selector abstracto multi-clase. Recomendación: aprobar con los límites de
    este documento.
-2. **Definir nombre y ownership:** CLIS Integration debería materializarse como
-   adapters de `installer/execution/providers/`, no como cuarta capa paralela,
-   salvo evidencia que justifique otro componente.
+2. **Definir nombre y ownership:** el soporte first-party de OpenCode y los
+   adapters externos de Executor deben vivir detrás del mismo puerto
+   neutral, sin tratarlos como artefactos operacionales equivalentes.
 3. **Versionar Execution contracts:** agregar IDs de routing/intento y fencing
    exige v2 o una reconciliación formal; no alterar v1 silenciosamente.
-4. **Aprobar el corte EXC-007:** paso concreto, criterios intermedios y fixture.
+4. **Aprobar el corte EXC-007:** paso concreto, criterios intermedios y fixture
+   (`CAF-038`).
 5. **Decidir Synapse Simulator:** adapter de prueba de Execution o Cognitive
    Counterpart. No puede ocupar ambos roles implícitamente.
 6. **Definir autoridad de policy:** AITAP evalúa; Nucleus autoriza policy/grant;
@@ -330,11 +347,11 @@ diffs y tests. No se fusionan ambos stores; se enlazan por referencias.
 | 1. Contratos | routing v1, capability descriptor y Execution v2/reconciliado | schemas + fixtures aprobados |
 | 2. Piloto falso | AITAP policy determinística y registry estático; adapters fake | replay/idempotencia sin CLIs |
 | 3. CLIS adapters | Codex y Claude detrás del puerto neutral | EXC-001..006 por adapter |
-| 4. Swap | pausa, fencing, checkpoint y recovery | EXC-007..010, tres corridas |
-| 5. Synapse | mismo caso con segundo target Synapse | igualdad de outputs/checksums |
-| 6. Inteligente | métricas, scoring versionado, circuit breaker y overrides | shadow decisions antes de activar |
+| 4. OpenCode first-party | integrar API/sesiones/stream/diff/cancelación detrás del puerto neutral | lifecycle y backend/model efectivo observables |
+| 5. Swap | pausa, fencing, checkpoint y recovery | EXC-007..010, tres corridas |
+| 6. Synapse | mismo caso con segundo target Synapse | igualdad de outputs/checksums |
+| 7. Inteligente | métricas, scoring versionado, circuit breaker y overrides | shadow decisions antes de activar |
 
 Mandate Genesis consume únicamente una interfaz abstracta de contraparte/
-ejecución. CLIS Integration implementa adapters. AITAP decide elegibilidad y
+ejecución. Executor implementa adapters. AITAP decide elegibilidad y
 preferencia bajo policy; nunca absorbe la orquestación.
-

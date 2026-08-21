@@ -129,7 +129,7 @@ elegirlo como dependencia inmediata.
 | Blandas | vista detallada de progreso, renames desde UI, identidad HTTP para `confirmedBy`, normalización de las dos rutas de creación. |
 | Paralelizables | contrato de eventos/UI y catch-up; implementación de clasificación/Genes; diseño del motor genérico; pruebas de BISP/Contrato D. |
 | Deuda no bloqueante | consolidar `FALLBACK_STEPS` de onboarding; reorganizar IPC; disparador/política de `dis`; migración completa al motor genérico. |
-| Dependencias aparentes refutadas | `dis` no es una fase obligatoria de Genesis; AITAP no ejecuta ni interpreta BISP; Execution/OpenCode no es dependencia demostrada de este flujo. |
+| Dependencias aparentes refutadas | `dis` no es una fase obligatoria de Genesis; AITAP no ejecuta ni interpreta BISP; el puerto neutral de Execution es la frontera y OpenCode, aunque es runtime first-party instalado/administrado, no es un target obligatorio de este flujo. |
 
 ## Contradicciones y fuente que prevalece
 

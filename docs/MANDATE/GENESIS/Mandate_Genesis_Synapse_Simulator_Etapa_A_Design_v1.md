@@ -43,7 +43,10 @@ Los cortes internos comprobados son:
 9. D-18 sobre puerto y framing está confirmado y desaconseja reutilizar el socket legacy;
 10. los eventos emitidos por Go no coinciden plenamente con el contrato consumido por Core.
 
-AITAP, proveedores reales, credenciales, browser automation, OpenCode y `dis/` no son bloqueantes para el primer corte.
+AITAP, proveedores reales, credenciales, browser automation y `dis/` no son
+bloqueantes para el primer corte. OpenCode es una capacidad first-party
+instalada y administrada de Cognituum, pero este vertical no está obligado a
+seleccionarla como runtime.
 
 ## 3. Matriz de verdad
 
@@ -302,7 +305,9 @@ Contrato D permanece separado de la respuesta cognitiva.
 | Crear `request_id` | Brain |
 | Crear/conservar `logical_inference_id` | Brain |
 | Crear/conservar `correlation_id` | Brain |
-| Seleccionar target lógico | Configuración del consumidor/Brain |
+| Declarar requisitos del target | Brain |
+| Seleccionar runtime abstracto y provider/model por separado | AITAP bajo policy aprobada |
+| Autorizar dispatch/transición | Temporal |
 | Seleccionar fixture | Adapter del Simulator |
 | Persistir request | Brain, antes del submit |
 | Persistir raw response | Brain, antes de notificar a Temporal |
@@ -455,7 +460,9 @@ Estas limitaciones de prueba no se presentan como fallos funcionales adicionales
 8. No reutilizar el socket legacy `5678`.
 9. UI Cortex opcional, no dependencia del runtime.
 10. Respuesta cognitiva separada de Contrato D.
-11. `dis`, `doc`, AITAP, OpenCode y materialización final fuera del primer vertical. Esta exclusión es de alcance técnico del primer corte y no determina la semántica del Genesis completo.
+11. `dis`, `doc`, AITAP y materialización final fuera del primer vertical.
+    OpenCode existe como runtime first-party del sistema, pero no es una
+    dependencia obligatoria de este Intent ni queda seleccionado por omisión.
 
 ### 19.1 Entrada de diseño pendiente: alcance semántico del Genesis completo
 
@@ -502,8 +509,13 @@ Esta entrada no amplía la Etapa B aprobable actualmente, no modifica el contrat
 
 Para el piloto EXC-007/008 y para una eventual evolución de Genesis deben resolverse por separado dos decisiones:
 
-1. **Routing/autorización:** por qué se selecciona Codex, Claude, Synapse u otro destino según política, disponibilidad, credenciales y contabilidad. AITAP es candidato a intervenir en esta decisión sólo dentro de sus tres pilares vigentes: Gateway, referencia al Vault y Contabilidad.
-2. **Adaptación/ejecución de CLI:** cómo se invoca cada CLI, se crea y aísla el proceso o sesión, se suministran inputs, se captura streaming/salida, se cancela, se detectan errores y se normaliza el resultado de transporte. Este ownership corresponde al Work separado **CLIS INTEGRATION**.
+1. **Routing/autorización:** selección separada de runtime y de Intelligence
+   Provider/Model según policy, disponibilidad, credenciales y contabilidad.
+   OpenCode participa sólo en la dimensión runtime como `first_party_runtime`;
+   nunca reemplaza la identidad del backend/model efectivo.
+2. **Adaptación/ejecución:** la integración first-party de OpenCode capitaliza
+   su servicio/API/sesiones/stream/diff/cancelación detrás de Execution Layer.
+   **EXECUTOR** posee adapters externos de Codex CLI y Claude Code CLI.
 
 Frontera candidata para investigar:
 
@@ -511,7 +523,7 @@ Frontera candidata para investigar:
 Mandate Genesis / Brain
   declara necesidad cognitiva y capacidades requeridas
     → AITAP autoriza/selecciona un grifo, si su contrato aprobado lo permite
-      → CLIS INTEGRATION adapta e invoca el runtime seleccionado
+      → Executor invoca OpenCode first-party o un runtime externo mediante su adapter
         → Brain persiste y valida el resultado contra el BISP
           → Temporal coordina el avance durable
 ```
@@ -530,9 +542,13 @@ Guardrails que permanecen firmes:
 Contradicciones y ambigüedades que deben resolverse antes de adoptar la hipótesis:
 
 1. El contrato vigente de AITAP sí le permite elegir modelo/proveedor dentro del suministro de inteligencia, pero no le concede selección ni lifecycle de un **executor CLI**. Usar “executor” para ambos conceptos mezcla routing de inteligencia con ejecución técnica.
-2. Codex u OpenCode pueden presentarse como modelo detrás del grifo o como runtime capaz de usar herramientas. Sólo el primer rol encaja hoy directamente en AITAP; el segundo pertenece a CLIS INTEGRATION/Execution Layer.
+2. OpenCode nunca se presenta como provider/model: es el runtime first-party.
+   Codex CLI y Claude Code CLI son runtimes externos. En todos los casos AITAP
+   conserva provider/backend y modelo efectivos como dimensión independiente.
 3. Synapse Simulator es una contraparte determinística reemplazable y no está definido actualmente como provider de AITAP. Su inclusión en una política común de routing requiere una decisión contractual adicional.
-4. Debe definirse quién transforma la selección abstracta autorizada por AITAP en la elección concreta de un adapter sin convertir a AITAP en orquestador. La hipótesis compatible es que AITAP devuelva una decisión/autorización de suministro y que Brain/Temporal solicite al puerto neutral de CLIS INTEGRATION la ejecución correspondiente.
+4. Executor transforma la selección abstracta autorizada por AITAP en la
+   instalación/adapter concreto, sin convertirse en orquestador. Brain/Temporal
+   solicitan la ejecución mediante su puerto neutral.
 5. El punto de corte exacto de EXC-007 sigue sin estar definido por el texto normativo vigente; esta investigación de routing no elimina ese blocker ni autoriza elegir un corte por conveniencia.
 
 Hasta cerrar estas decisiones, el piloto no debe asumir que AITAP posee esta capacidad ni incorporar selección de provider o comandos CLI dentro de Genesis.
@@ -549,7 +565,8 @@ Ese Work definirá la contraparte reusable. Mandate Genesis conservará la respo
 
 **Criterio de aceptación alcanzado:** no.  
 **AITAP necesario:** no.  
-**OpenCode necesario:** no.  
+**OpenCode:** capacidad first-party instalada/administrada; no es runtime
+obligatorio para este primer vertical.
 **`dis/` necesario para el primer vertical técnico:** no.  
 **`dis/` y `doc/` necesarios para la semántica del Genesis completo:** propuesta registrada; decisión pendiente.  
 **Siguiente paso:** recibir y aprobar el contrato del Work de Synapse Simulator; después aprobar la Etapa B de integración Genesis.

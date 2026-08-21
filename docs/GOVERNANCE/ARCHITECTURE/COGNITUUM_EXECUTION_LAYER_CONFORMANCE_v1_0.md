@@ -5,6 +5,8 @@
 **Fecha:** 2026-08-20  
 **Arquitectura madre:**
 [`COGNITUUM_RESPONSIBILITY_BOUNDARIES.md`](./COGNITUUM_RESPONSIBILITY_BOUNDARIES.md)  
+**Norma de implementación vigente:**
+[`COGNITUUM_EXECUTION_RUNTIME_ADAPTERS_NORM_v1_0.md`](./COGNITUUM_EXECUTION_RUNTIME_ADAPTERS_NORM_v1_0.md)
 **Tesis estratégica:**
 [`../SURVIVOR/cognituum_tesis_estrategica.md`](../SURVIVOR/cognituum_tesis_estrategica.md)
 
@@ -14,6 +16,11 @@
 > La reconciliación fue requerida al detectar posibles diferencias entre estos
 > contratos, el árbol canónico y el pipeline implementado; no es una corrección
 > silenciosa.
+>
+> La norma de Runtime Adapters cierra posteriormente servicio persistente,
+> execution roots efímeros, adapters bajo `runtimes/` y promoción exclusiva. En
+> diferencias de topología o taxonomía, esa norma prevalece; los schemas v1
+> siguen provisionales hasta migración versionada.
 
 ## 1. Alcance
 
@@ -21,7 +28,8 @@ Este documento cierra, en orden, dos decisiones de la arquitectura madre:
 
 1. dónde vive físicamente Execution Layer;
 2. cuál es la forma cerrada de sus cuatro contratos y cómo se prueba la misma
-   conformidad con OpenCode, Codex CLI y Claude Code CLI.
+   conformidad funcional con OpenCode first-party y los runtimes externos Codex
+   CLI y Claude Code CLI, sin equiparar su ownership.
 
 No redefine Intent, BISP, Mandate, Intelligence Supply ni Contrato D. Tampoco
 usa `execution_report.json`: ese artefacto pertenece al ciclo de respuesta y
@@ -29,7 +37,9 @@ recuperación de Intelligence Supply y no es estado canónico de Execution.
 
 ## 2. Cierre 1 — ownership físico y distribución
 
-Execution Layer vive en una carpeta propia:
+La forma provisional se materializó en `installer/execution/`. La decisión
+posterior de Executor fija `installer/executor/` como target único; el árbol
+siguiente es histórico/provisional y debe migrarse explícitamente:
 
 ```text
 installer/execution/
@@ -47,7 +57,7 @@ installer/execution/
 │   ├── validation
 │   └── provider_port
 ├── providers/
-│   ├── opencode/
+│   ├── opencode/          # integración del runtime first-party administrado
 │   ├── codex_cli/
 │   └── claude_code_cli/
 └── conformance/
@@ -99,7 +109,8 @@ La prueba `runtime-swap-no-brain-change` usa un fixture único y un mismo
 5. continuar con provider B;
 6. validar `Execution Result`, diff, tests y checksums;
 7. repetir invirtiendo A y B;
-8. ejecutar la matriz OpenCode ↔ Codex CLI ↔ Claude Code CLI.
+8. ejecutar la matriz OpenCode first-party ↔ Codex CLI externo ↔ Claude Code
+   CLI externo.
 
 El gate pasa únicamente si el swap no requiere modificar:
 
@@ -109,8 +120,8 @@ El gate pasa únicamente si el swap no requiere modificar:
 - fixture o criterios de aceptación.
 
 Solo pueden cambiar selección/configuración del provider y código dentro de
-`installer/execution/providers/{provider}`. Con esto queda cerrada la pregunta
-“¿Dónde vive Execution Layer?”.
+`installer/executor/runtimes/{runtime}` después de la migración. La ubicación
+definitiva queda cerrada por `COGNITUUM_EXECUTOR_APPLICATION_DECISION_v1_0.md`.
 
 ## 3. Cierre 2 — contratos Execution v1
 
@@ -225,9 +236,9 @@ su stream, pero debe devolver exclusivamente contratos v1.
 
 | Provider | Entrada nativa | Salida nativa esperable | Responsabilidad exclusiva del adapter |
 |---|---|---|---|
-| OpenCode | sesión/headless | eventos JSON y tool use | traducir eventos y capturar patch/tests |
-| Codex CLI | ejecución local gobernada | eventos/tool results/diff según superficie disponible | proyectar lifecycle y preservar IDs nativos solo como Evidence |
-| Claude Code CLI | ejecución local gobernada | stream/resultados de tools según superficie disponible | proyectar lifecycle y preservar IDs nativos solo como Evidence |
+| OpenCode (`first_party_runtime`) | servicio/API/sesión headless administrados por Cognituum | eventos JSON y tool use | integrar lifecycle first-party, traducir eventos y capturar patch/tests; preservar provider/model efectivo |
+| Codex CLI (`external_runtime`) | ejecución local gobernada vía Executor | eventos/tool results/diff según superficie disponible | proyectar lifecycle y preservar IDs nativos solo como Evidence |
+| Claude Code CLI (`external_runtime`) | ejecución local gobernada vía Executor | stream/resultados de tools según superficie disponible | proyectar lifecycle y preservar IDs nativos solo como Evidence |
 
 Una capacidad nativa ausente no habilita campos vendor-specific. El adapter la
 materializa externamente —por ejemplo, checksum del workspace antes/después— o
@@ -267,7 +278,7 @@ checksums y criterios de aceptación al repetir desde el mismo checkpoint.
 
 | Provider | Disponibilidad observada en esta sesión | Batería v1 | Estado |
 |---|---|---|---|
-| OpenCode | Binario desplegado, ejecución bloqueada por sandbox de la sesión | No ejecutada | `NOT_RUN` |
+| OpenCode first-party | Binario y servicio incorporados por Setup/Installer; rollout/health implementados en Metamorph; adapter neutral no integrado | No ejecutada | `NOT_RUN` |
 | Codex CLI | Binario detectado, ejecución bloqueada por sandbox de la sesión | No ejecutada | `NOT_RUN` |
 | Claude Code CLI | Comando no detectado | No ejecutada | `NOT_RUN` |
 

@@ -14,7 +14,8 @@ provider desde `NOT_RUN` hasta resolver, en este orden:
 
 1. mapeo campo por campo contra `bloom_project_tree.txt` para `dev`, `ing`,
    `dis` y `doc`;
-2. rol real de OpenCode frente a AITAP, Codex CLI y Claude Code CLI;
+2. integración first-party de OpenCode frente a AITAP y a los adapters externos
+   Codex CLI y Claude Code CLI;
 3. flujo `submit → response → staging → merge` implementado actualmente.
 
 Los schemas `cognituum.execution/v1` quedan materializados para revisión, pero
@@ -101,7 +102,7 @@ existe— submit, parse, stage, validate y merge.
 | Orden | Punto | Estado | Condición para cerrarlo |
 |---|---|---|---|
 | 1 | Campos contra árbol real por intent | EN CURSO | Matriz completa Directo/Parcial/No existe, con archivo y campo probado |
-| 2 | Rol OpenCode/AITAP/otros CLI | BLOQUEADO POR 1 | Respuesta binaria basada en caminos reales de input y ejecución |
+| 2 | OpenCode first-party/AITAP/CLIs externos | TAXONOMÍA CERRADA; CONTRATOS BLOQUEADOS POR 1 | Runtime y provider/model separados; Evidence versionada |
 | 3 | Submit actual E2E | BLOQUEADO POR 2 | Secuencia con comandos, handlers, archivos y gaps confirmados |
 
 ## 6. Regla de continuidad entre sesiones
