@@ -24,6 +24,31 @@ Fuentes normativas:
 El plan de traslado físico asociado está en
 [`EXECUTOR_E0_MIGRATION_PLAN_v1_0.md`](./EXECUTOR_E0_MIGRATION_PLAN_v1_0.md).
 
+### 1.1 Resumen ejecutivo
+
+Executor construirá una aplicación/servicio Go first-party que materializa una
+ejecución ya decidida y autorizada dentro de un root efímero, controla runtime y
+process tree, verifica efectos externamente y promueve sólo bajo Grant,
+preconditions y fence. No construirá un orquestador cognitivo, router de
+inteligencia, Vault, workflow Temporal ni parser BISP/BSIP.
+
+Estado real: el target no existe; el staging contiene sólo documentación y
+cuatro schemas v1 provisionales; OpenCode global está instalado parcialmente
+pero es inseguro para ejecución gobernada; core, service, brokers, adapters,
+contracts v2 y conformance permanecen `NOT_RUN`.
+
+Dependencias externas: Brain/Contrato D y cierre `CAF-032`; Temporal dispatch;
+AITAP Routing Decision y Accounting refs; Nucleus Grant; Vault handles; Setup y
+Metamorph; primitives de containment por OS; APIs/protocolos versionados de los
+runtimes. Las decisiones cerradas son identidad, target, ownership, topología,
+separación runtime/inteligencia, root efímero y promoción exclusiva. Las
+decisiones restantes permanecen pendientes de aprobación explícita de José.
+
+Este paquete no define la composición, secuencia ni condiciones de cierre de
+ningún Mandate. Cuando un orquestador aprobado solicite ejecución local,
+Executor consume un contrato neutral y una autorización acotada; no decide el
+workflow, el tipo de Intent ni el significado funcional del resultado.
+
 ## 2. Resultado E0 y clasificación honesta
 
 | Área | Estado al entregar E0 | Resultado de diseño |
@@ -38,7 +63,7 @@ El plan de traslado físico asociado está en
 | State/journal/fencing | `TARGET` | Modelo definido; store no elegido definitivamente |
 | Brokers y engines | `TARGET` | Puertos y responsabilidades definidos |
 | Runtime adapters | `NOT_RUN` | Diseño OpenCode/Codex/Claude, sin procesos reales |
-| Setup/Metamorph | `TARGET` | Work packages definidos |
+| Setup/Metamorph | `TARGET` | Responsabilidades de deployment delimitadas |
 | Containment/conformance | `NOT_RUN` | Threat model, tests y gates definidos |
 
 E0 no declara `IMPLEMENTADO`, `CONFORMANT` ni resuelve `CAF-032` por
@@ -187,7 +212,7 @@ Reglas comunes:
 ### 6.1 Identidades y correlación
 
 ```text
-mandate_id / intent_id / turn_id
+mandate_id / action_id / intent_id / turn_id
 logical_execution_id
 routing_decision_id
 attempt_id
@@ -280,7 +305,7 @@ atomicidad, CAS, fsync/commit semantics y recovery antes de aprobarse.
 - seguridad independiente de la optimización;
 - runtime jamás recibe la ruta canónica.
 
-### 8.2 Sandbox
+### 8.2 Sandbox Broker
 
 Windows primero: identidad no administrativa, restricted token, Job Object
 kill-on-close, ACL por root, HOME/USERPROFILE/TEMP aislados, environment
@@ -295,6 +320,42 @@ Preferencia: token opaco de attempt hacia proxy local con TTL, audience,
 revocación, Accounting, filtrado y rate limits. Fallback sólo si el runtime lo
 exige: materialización en runtime-home con ACL exclusiva, environment mínimo,
 redacción y eliminación/revocación al terminar.
+
+### 8.4 Servicio e IPC
+
+`BloomExecutorService` usa identidad restringida y perfil explícito; nunca
+`LocalSystem`. La API conceptual es transport-neutral:
+
+```text
+submit / get / status / events / pause / cancel / collect
+runtime list / inspect / capabilities / health
+evidence get / checkpoint get
+service liveness / readiness / semantic-health / version
+```
+
+Windows usa named pipe con ACL y caller identity obtenida del token, no de un
+campo libre. Linux/macOS usan Unix domain socket con owner/group/mode. HTTP
+loopback autenticado queda limitado a development, health y tooling; no es el
+transporte productivo por defecto.
+
+Cada request exige correlation ID, request ID e identidad autenticada; las
+mutaciones además idempotency key y autorización por operación. Límites target:
+body finito por operación, streams con frames acotados, deadlines obligatorios,
+bounded queues y cancelación. Backpressure puede pausar lectura/producción o
+terminar con error estable, pero nunca bloquear indefinidamente process trees.
+
+Health se separa en:
+
+- liveness: proceso/loop responde;
+- readiness: config, journal, Evidence, IPC y brokers disponibles;
+- semantic health: smoke tests sin runtime real sobre store/fence/snapshot y
+  promotion-disabled check;
+- runtime health: por installation/version/protocol/backend, nunca inferido de
+  TCP-open solamente.
+
+Brain, Temporal y Nucleus usan principals/audiences diferentes. Autorizar un
+caller para status no lo autoriza para submit, pause, Grant verification o
+promotion. Todo denial produce Error Envelope y evento auditable sin secret.
 
 ## 9. Discovery, trust, drift y compatibility
 
@@ -573,6 +634,12 @@ pipeline de build aprobado; los archivos no se crean en E0.
 | Session memory se vuelve estado | checkpoint autosuficiente | Recovery |
 | JSON contaminado por logs | stdout/stderr separados y parse tests | CLI |
 | Catálogo oculta comando | tree walk + metadata/drift tests | CLI |
+| Prompt injection solicita ampliar scope | projection prescriptiva + Grant + post-snapshot | Runtime/Promotion |
+| Named pipe/socket spoofing | ACL/mode, caller identity, nonce/channel auth | IPC |
+| Evidence alterada | content addressing, hashes y manifest verificado | Evidence |
+| Carrera durante promoción | lock/preconditions/fence/transacción | Promotion |
+| Replay malicioso de idempotency key | subject+operation+payload fingerprint | Lifecycle |
+| Flood de eventos/stdout | límites, bounded buffers, rate control y cancelación | IPC/Runtime |
 
 ## 17. Plan de pruebas
 
@@ -625,7 +692,7 @@ estables descriptivos. No renombra normas vigentes sin aprobación:
 | ID E0 | Gate | Evidencia de salida |
 |---|---|---|
 | `EXEC-G0-DESIGN` | E0 aprobado | este paquete + plan de migración aceptados |
-| `EXEC-G1-DEPLOYMENT` | Setup/Metamorph | work packages aceptados |
+| `EXEC-G1-DEPLOYMENT` | Setup/Metamorph | responsabilidades y entregables aceptados |
 | `EXEC-G2-CONTRACTS` | v2 + Runtime Port | schemas, DTOs, goldens y fake port |
 | `EXEC-G3-CONTAINMENT` | aislamiento | escape/process/network/secret tests |
 | `EXEC-G4-PROMOTION` | escritura canónica | fence/preconditions/atomicidad/rollback |
@@ -663,7 +730,7 @@ E0 queda aceptable si Architecture/José confirma:
 - state, idempotency, leases y fencing;
 - brokers, engines y Promotion ownership;
 - CLI BTIPS, catálogo y generación desde Cobra;
-- work packages Setup/Metamorph;
+- responsabilidades y entregables de Setup/Metamorph;
 - threat model, tests y gates;
 - resolución o aceptación explícita de los abiertos de §19.
 

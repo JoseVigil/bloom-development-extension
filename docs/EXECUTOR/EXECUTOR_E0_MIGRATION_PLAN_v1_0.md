@@ -52,22 +52,28 @@ deben clasificarse antes del traslado.
 
 ## 4. Mapa archivo por archivo
 
-| Origen | Destino propuesto | Tratamiento |
-|---|---|---|
-| `installer/execution/AGENTS.md` | `installer/executor/AGENTS.md` | Reescribir como guardrails vigentes de Executor; conservar atribución histórica en Git |
-| `installer/execution/README.md` | `installer/executor/README.md` | Convertir en índice source; enlazar `docs/EXECUTOR/` |
-| `contracts/v1/evidence.schema.json` | `installer/executor/contracts/v1/evidence.schema.json` | `git mv`; conservar `$id` v1 y estado provisional/histórico |
-| `contracts/v1/execution-event.schema.json` | `installer/executor/contracts/v1/execution-event.schema.json` | `git mv`; no corregir campos in-place |
-| `contracts/v1/execution-package.schema.json` | `installer/executor/contracts/v1/execution-package.schema.json` | `git mv`; v2 será hermano nuevo |
-| `contracts/v1/execution-result.schema.json` | `installer/executor/contracts/v1/execution-result.schema.json` | `git mv`; no promover a implementado |
-| `pedido_reconciliacion_execution_layer.md` | `installer/executor/history/pedido_reconciliacion_execution_layer.md` | Histórico vigente para `CAF-032`; actualizar enlace canónico |
-| `CLIS_INTEGRATION_IMPLEMENTATION_HANDOFF_2026-08-20.md` | `installer/executor/history/CLIS_INTEGRATION_IMPLEMENTATION_HANDOFF_2026-08-20.md` | Histórico supersedido; no borrar/reescribir contenido |
-| `EXECUTOR_IMPLEMENTATION_HANDOFF_2026-08-20.md` | `installer/executor/history/EXECUTOR_IMPLEMENTATION_HANDOFF_2026-08-20.md` | Compatibilidad histórica; handoff vigente permanece en `docs/EXECUTOR/` |
+| Origen | Destino propuesto | Acción | Tratamiento |
+|---|---|---|---|
+| `installer/execution/AGENTS.md` | `installer/executor/AGENTS.md` | mover + transformar | Guardrails vigentes de Executor; conservar atribución histórica en Git |
+| `installer/execution/README.md` | `installer/executor/README.md` | mover + transformar | Convertir en índice source; enlazar `docs/EXECUTOR/` |
+| `contracts/v1/evidence.schema.json` | `installer/executor/contracts/v1/evidence.schema.json` | mover + conservar versión | `git mv`; conservar `$id` v1 y estado provisional/histórico |
+| `contracts/v1/execution-event.schema.json` | `installer/executor/contracts/v1/execution-event.schema.json` | mover + conservar versión | no corregir campos in-place |
+| `contracts/v1/execution-package.schema.json` | `installer/executor/contracts/v1/execution-package.schema.json` | mover + conservar versión | v2 será hermano nuevo |
+| `contracts/v1/execution-result.schema.json` | `installer/executor/contracts/v1/execution-result.schema.json` | mover + conservar versión | no promover a implementado |
+| `pedido_reconciliacion_execution_layer.md` | `installer/executor/history/pedido_reconciliacion_execution_layer.md` | mover + conservar | Histórico vigente para `CAF-032`; actualizar enlace canónico |
+| `CLIS_INTEGRATION_IMPLEMENTATION_HANDOFF_2026-08-20.md` | `installer/executor/history/CLIS_INTEGRATION_IMPLEMENTATION_HANDOFF_2026-08-20.md` | mover + conservar | Histórico supersedido; no borrar/reescribir contenido |
+| `EXECUTOR_IMPLEMENTATION_HANDOFF_2026-08-20.md` | `installer/executor/history/EXECUTOR_IMPLEMENTATION_HANDOFF_2026-08-20.md` | mover + conservar | Compatibilidad histórica; handoff vigente permanece en `docs/EXECUTOR/` |
+| `installer/execution/` | ninguno | retirar | eliminar directorio vacío sólo tras M3 y cero referencias vigentes |
 
 No se crea `installer/execution/README.md` de redirect permanente. Tras actualizar
 referencias y validar, el directorio viejo debe desaparecer. Si tooling externo
 requiere transición, Architecture debe aprobar un redirect documental temporal
 con fecha de retiro; nunca código ejecutable.
+
+El criterio de eliminación final es simultáneo: todos los archivos de §4
+movidos, validaciones M3 verdes, cero consumers productivos del path viejo,
+referencias históricas etiquetadas, commit dedicado revisado y rollback por
+revert demostrado. Si una condición falla, el staging no se retira.
 
 ## 5. Clasificación de referencias
 
