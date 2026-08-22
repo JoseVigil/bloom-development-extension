@@ -1,9 +1,24 @@
 bloom-development-extension/
 └── docs/
+    ├── AGENTIC/
+    │   ├── BTIPS_Mandates_Agenticos_Addendum_Sesion.md
+    │   └── BTIPS_Mandates_Agenticos_Propuesta.md
     ├── AITAP/
-    │   └── AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md
+    │   ├── AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md
+    │   ├── AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md
+    │   ├── AITAP_Decision_Intelligence_Execution_Routing_v1.md
+    │   ├── AITAP_Decision_OpenCode_BSIP_CLIS_v1.md
+    │   ├── AITAP_EXECUTOR_BOUNDARY_PACKAGE_E0_v1_0.md
+    │   ├── AITAP_GENESIS_REAL_INTEGRATION_HANDOFF_2026-08-21.md
+    │   ├── AITAP_MANDATE_GENESIS_COMPOSITION_CHANNEL_DECISION_2026-08-21.md
+    │   ├── AITAP_ROUTING_OWNERSHIP_HANDOFF_2026-08-20.md
+    │   ├── AITAP_ROUTING_RECONCILIATION_REPORT_2026-08-20.md
+    │   ├── AITAP_Runtime_Intelligence_Routing_v2.md
+    │   ├── Alfred_Integracion_AITAP_Disparo2_v1_0.md
+    │   └── BSIP_Response_Spec_PoC_Disparo1_v1_0.md
     ├── ALFRED/
-    │   └── AGENTIC_SYNAPSE_SIMULATOR_OVERVIEW.md
+    │   ├── AGENTIC_HARNESS_OVERVIEW.md
+    │   └── ALFRED_STATUS_2026-08-14.md
     ├── ANA/
     │   └── # BTips Ana.md
     ├── BATCAVE/
@@ -23,26 +38,23 @@ bloom-development-extension/
     │   ├── BLOOM_BISP_Fuente_de_Verdad_v1_0.md
     │   ├── BLOOM_BISP_Session_Decisions_v1_1.md
     │   ├── BLOOM_Intent_Types_Gap_Analysis_v1_0.md
+    │   ├── SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline_v0_1.md
     │   └── TYPES/
     │       ├── DEV_Intent_Spec_v1_0.md
     │       ├── DIS_Intent_Spec_v1_0.md
     │       ├── DOC_Intent_Spec_v1_0.md
+    │       ├── EXP_Intent_Spec_v1_0.md
     │       └── ING_Intent_Spec_v1_1.md
     ├── BTIPS/
     │   └── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
     ├── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
     ├── BTIP_resumen_ecosistema_1.0.md
     ├── BUILD/
-    │   └── BUILD_ALL_Documentacion_v1_0.md
+    │   ├── BUILD_ALL_Documentacion_v1_0.md
+    │   └── dependencias-binarios-instalador.md
     ├── COGNITTUUM_MANIFEST_v0_1.md
     ├── COMPILE_RUN_COMMANDS.txt
     ├── CONDUCTOR/
-    │   ├── INSTALLER/
-    │   │   ├── DARWIN_CONDUCTOR_INSTALLATION_PROMPT_MAESTRO_BLOOM.md
-    │   │   ├── NUCLEUS_SUPERVISOR_BOOT_LOGGING_TELEMETRY.md
-    │   │   ├── WINDOWS_BLOOM_NUCLEUS_INSTALLER_TECHNICAL_REFERENCE.md
-    │   │   ├── WINDOWS_CONDUCTOR_INSTALLATION_PROMPT_MAESTRO_BLOOM.md
-    │   │   └── conductor-setup-asset-map.md
     │   ├── ONBOARDING/
     │   │   ├── BTIPS-ONBOARDING-ARCHITECTURE-SPEC-v4_0.md
     │   │   ├── Backup/
@@ -54,12 +66,21 @@ bloom-development-extension/
     │   │   │   └── auditoria-stepper-workspace.md
     │   │   ├── Fase-A-Relevamiento-Mandate-Genesis-v1.md
     │   │   └── Guia-Maestra-Stepper-Onboarding-v2_2.md
+    │   ├── SETUP/
+    │   │   ├── BLOOM_WORKSPACE_SETUP_MANIFEST_v1.0.md
+    │   │   ├── SETUP_NUCLEUS_RUNTIME_TELEMETRY.md
+    │   │   └── windows-technical-reference.md
     │   └── WORKSPACE/
     │       ├── BACKUP/
     │       │   └── btips_workspace_v3.html
     │       ├── BLOOM_CORE_GENESIS_MANDATE_PRELUDIO_v0_1.md
+    │       ├── Bloom_Conductor_Core_UI_Contexto_para_Codex.md
     │       ├── Bloom_Conductor_Workspace_Core_UI_01.md
     │       └── bloom-conductor-genesis-v1_1.html
+    ├── CONTEXT/
+    │   └── Claude Web Context Awareness - Context Limit Preflight Test.md
+    ├── CONTROL/
+    │   └── AGENDA_MAESTRA.md
     ├── CONTROL_PLANE/
     │   └── CONTROL_PLANE_DEBUG_PANEL_STATUS.md
     ├── CORTEX/
@@ -67,10 +88,30 @@ bloom-development-extension/
     │   ├── BTIPS-CORTEX-REFERENCE-v1.2.md
     │   ├── COMPANION/
     │   │   └── Cognituum_Companion_Implementation_Guide_v1_2.md
-    │   └── HANDOFF-github-app-batcave-synapse.md
+    │   ├── HANDOFF-github-app-batcave-synapse.md
+    │   ├── OLD/
+    │   │   └── REMEDIACION-TECNICA-v1.md
+    │   ├── PROVIDER-EXECUTION-SPEC.md
+    │   └── VAULT-STORAGE-SPEC.md
     ├── DESIGN/
     │   ├── # BTIPS Foundational UX-UI Design Doctrine Prompt v0.1.md
     │   └── FUNCTIONAL_DESIGN_GUIDE_BTIPS.docx
+    ├── EXECUTOR/
+    │   ├── AGENTS.md
+    │   ├── EXECUTOR_ARCHITECTURE_v1_0.md
+    │   ├── EXECUTOR_E0_ARCHITECTURE_DECISION_PACKAGE_v1_0.md
+    │   ├── EXECUTOR_E0_CLI_CATALOG_v1_0.md
+    │   ├── EXECUTOR_E0_CONTRACTS_DTOS_v1_0.md
+    │   ├── EXECUTOR_E0_DESIGN_PACKAGE_v1_0.md
+    │   ├── EXECUTOR_E0_METAMORPH_WORK_PACKAGE_v1_0.md
+    │   ├── EXECUTOR_E0_MIGRATION_PLAN_v1_0.md
+    │   ├── EXECUTOR_E0_PACKAGE_MAP_v1_0.md
+    │   ├── EXECUTOR_E0_SETUP_WORK_PACKAGE_v1_0.md
+    │   ├── EXECUTOR_GENESIS_DEV_INTEGRATION_HANDOFF_2026-08-21.md
+    │   ├── EXECUTOR_IMPLEMENTATION_HANDOFF_2026-08-20.md
+    │   ├── EXECUTOR_IMPLEMENTATION_SPEC_v1_0.md
+    │   ├── OPENCODE_RUNTIME_STATUS.md
+    │   └── README.md
     ├── GENES/
     │   └── BTIPS_GENES_CONCEPT_v2_0.md
     ├── GENESIS/
@@ -80,25 +121,28 @@ bloom-development-extension/
     ├── GIT/
     │   └── GIT_BLOOM_GIT_FILTERS.md
     ├── GOVERNANCE/
+    │   ├── ARCHITECTURE/
+    │   │   ├── COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md
+    │   │   ├── COGNITUUM_EXECUTION_RECONCILIATION_2026-08-20.md
+    │   │   ├── COGNITUUM_EXECUTION_RUNTIME_ADAPTERS_NORM_v1_0.md
+    │   │   ├── COGNITUUM_EXECUTOR_APPLICATION_DECISION_v1_0.md
+    │   │   ├── COGNITUUM_RESPONSIBILITY_BOUNDARIES.md
+    │   │   ├── EXECUTOR_E0_ARCHITECTURE_REVIEW_2026-08-20.md
+    │   │   └── OPENCODE_FIRST_PARTY_RUNTIME_STATUS_2026-08-20.md
     │   ├── GOVERNANCE_OWNERSHIP_SPEC_v1_0.md
+    │   ├── RESEARCH/
+    │   │   ├── AITAP_ROUTING_MANDATE_GENESIS_CLIS_2026-08-20.md
+    │   │   └── COGNITUUM_ARCHITECTURE_FINDINGS_2026-08-17.md
+    │   ├── SURVIVOR/
+    │   │   ├── cognituum_enterprise_fundamentos.md
+    │   │   ├── cognituum_estrategia_de_venta.md
+    │   │   ├── cognituum_refutaciones.md
+    │   │   └── cognituum_tesis_estrategica.md
     │   └── SWITCH-ORG/
     │       ├── ORGANIZATION_SWITCH_ARCHITECTURE.md
     │       ├── ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md
     │       ├── ORGANIZATION_SWITCH_PROTOCOL.md
     │       └── README.md
-    ├── SYNAPSE_SIMULATOR/
-    │   ├── ARCHITECTURE_SynapseSimulatorProtocol.md
-    │   ├── BACKUP/
-    │   │   ├── BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md
-    │   │   ├── SYNAPSE_SIMULATOR_Manual_Onboarding_Debug.md
-    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator_v2.md
-    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_SynapseSimulator_v2.md
-    │   │   ├── IMPL_PROMPT_METAMORPH_IonRecipes.md
-    │   │   ├── INVESTIGACION_SynapseSimulator_Protocol_Autodiscovery.md
-    │   │   └── IONPUMP_IMPLEMENTATION_PROMPT_v2.md
-    │   ├── SYNAPSE_SIMULATOR_Cortex_Manual_Uso_y_Debug_Synapse.md
-    │   ├── SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH_1_6.md
-    │   └── SYNAPSE_SIMULATOR_Workspace_Manual.md
     ├── HOOKS/
     │   └── nucleus_hook_system.md
     ├── HOST/
@@ -117,17 +161,23 @@ bloom-development-extension/
     ├── LANDING/
     │   └── BLOOM_LANDING_VAULT_SPEC_v1_0.md
     ├── MANDATE/
+    │   ├── BLOOM_Estado_Consolidado_Takeaway_v1.md
     │   ├── BLOOM_Mandate_CLI_Command_Surface_v0_2_0.md
     │   ├── BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md
     │   ├── BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md
     │   ├── BLOOM_Mandate_Universal_Schema_v1_0_0.md
     │   ├── Core_Mandate_No_Aparece_Auditoria_v1.md
+    │   ├── GENESIS/
+    │   │   ├── Mandate_Genesis_Implementation_Plan_v1.md
+    │   │   └── Mandate_Genesis_Synapse_Simulator_Etapa_A_Design_v1.md
     │   ├── MARKETPLACE/
     │   │   ├── BLOOM_Cognitive_Evidence_Model_v1_0_0.md
     │   │   ├── BLOOM_Mandate_Package_Spec_v1_0_0.md
     │   │   └── CUUM_cognituum-tokenomics.md
     │   ├── Mandate_Domain_Spec_v1.0.0.md
     │   ├── Mandate_Event_Mechanism_Auditoria_v1.md
+    │   ├── Mandate_Genesis_Completion_Plan_v1.md
+    │   ├── Mandate_Genesis_Truth_Matrix_and_Execution_Roadmap_v1.md
     │   └── bloom-mandate-arquitectura-genesis-conductor.md
     ├── MEDIA.txt
     ├── METAMORPH/
@@ -147,13 +197,14 @@ bloom-development-extension/
     │   └── # 🎨 Bloom Color Palette.md
     ├── PROMPTS/
     │   ├── DISCIPLINA_DE_ENTREGA.md
+    │   ├── INSTRUCCIÓN CRÍTICA PARA CLAUDE.md
+    │   ├── REGLAS ABSOLUTAS PARA CLAUDE.md
     │   ├── SYNAPSE_SIMULATOR-IONPUMP/
     │   │   ├── IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator.md
     │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_SynapseSimulator.md
     │   │   └── IMPL_PROMPT_METAMORPH_IonRecipes.md
-    │   ├── INSTRUCCIÓN CRÍTICA PARA CLAUDE.md
-    │   ├── REGLAS ABSOLUTAS PARA CLAUDE.md
     │   └── TRIGGER_RESPUESTA_DIRECTA.md
+    ├── RELEASE_DISTRIBUTION/
     ├── REVISE_ME/
     │   ├── BTIPS-MODULE-METAMORPH.md
     │   ├── BTIPS-MODULE-ROADMAP.md
@@ -178,6 +229,31 @@ bloom-development-extension/
     │   ├── PROTOCOLO-synapse-homologacion-v3.md
     │   ├── SYNAPSE_BRIDGE_ELECTRON_IMPLEMENTATION.md
     │   └── SYNAPSE_PROTOCOL_MASTER_v3.md
+    ├── SYNAPSE_SIMULATOR/
+    │   ├── ARCHITECTURE_SynapseSimulatorProtocol.md
+    │   ├── BACKUP/
+    │   │   ├── BLOOM_SYNAPSE_SIMULATOR_IONPUMP_INTEGRATION_MASTER.md
+    │   │   ├── IMPL_PROMPT_BRAIN_IonPump_SynapseSimulator_v2.md
+    │   │   ├── IMPL_PROMPT_CORTEX_SENTINEL_SynapseSimulator_v2.md
+    │   │   ├── IMPL_PROMPT_METAMORPH_IonRecipes.md
+    │   │   ├── INVESTIGACION_SynapseSimulator_Protocol_Autodiscovery.md
+    │   │   ├── IONPUMP_IMPLEMENTATION_PROMPT_v2.md
+    │   │   ├── SYNAPSE_SIMULATOR_Cognitive_Counterpart_Design_v0_1.md
+    │   │   ├── SYNAPSE_SIMULATOR_Cortex_Manual_Uso_y_Debug_Synapse.md
+    │   │   ├── SYNAPSE_SIMULATOR_Manual_Onboarding_Debug.md
+    │   │   └── SYNAPSE_SIMULATOR_Workspace_Manual.md
+    │   ├── CONTRACTS/
+    │   │   └── v1/
+    │   │       ├── README.md
+    │   │       ├── classification-evidence.schema.json
+    │   │       ├── cognitive-request.schema.json
+    │   │       ├── cognitive-response.schema.json
+    │   │       ├── domain-resolution-proposal.schema.json
+    │   │       └── fixture.schema.json
+    │   ├── SYNAPSE_SIMULATOR_Cognitive_Counterpart_Design_v0_2.md
+    │   ├── SYNAPSE_SIMULATOR_ING_Classification_Contract_v0_3.md
+    │   ├── SYNAPSE_SIMULATOR_Production_Deployment_Audit_2026-08-19.md
+    │   └── SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH_1_6.md
     ├── TELEMETRY/
     │   └── BLOOM_NUCLEUS_LOGGING_SPEC.md
     ├── VAULT/
@@ -246,6 +322,8 @@ bloom-development-extension/
     │       ├── Desvincular Nucleus (Unlink Nucleus).md
     │       ├── bloom_unified_spec.md
     │       └── git-orchestration-impl.md
+    ├── VOICE/
+    │   └── BTIPS_Whisper_Kokoro_Integration_Research.md
     ├── VSCODE/
     │   └── BTIPS_VSCODE_PLUGIN.md
     ├── resources.txt

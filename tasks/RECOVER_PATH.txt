@@ -1,0 +1,31 @@
+Claude y Code Agents
+/home/jose/repos/bloom-development-extension/CLAUDE.md
+/home/jose/repos/bloom-development-extension/AGENTS.md
+
+Genesis Fixes
+"C:\repos\bloom-development-extension\docs\MANDATE\GENESIS\Mandate_Genesis_ActionGraph_v1_0.md"
+
+
+Mi lectura de los cuatro frentes —sujeta a tu corrección— es:
+
+1. exp dentro de Genesis
+
+   La necesidad exploratoria es válida, pero falta definir el uso exacto del Intent exp. Las subcategorías inventadas y su secuencia no están autorizadas.
+   
+2. Composición completa de Genesis
+
+   ing, dis, doc, dev y posiblemente exp existen como capacidades, pero su secuencia, condiciones y cierre todavía no están definitivamente diseñados.
+   
+3. Papel estructural de OpenCode
+
+   OpenCode viene instalado en background y es un pilar de BTIPS. No debe aparecer simplemente como un runtime equivalente a Codex y Claude; falta recuperar y documentar correctamente su papel, particularmente ante web, API y Synapse.
+   
+4. API cognitiva del pipeline de Brain
+
+   El pipeline interno que prepara, procesa y hace avanzar los ciclos cognitivos fue pensado para operar mediante una API —inicialmente Gemini— contando con que el onboarding ya dejó las credenciales disponibles bajo la gobernanza de Vault. Esa API también debe atravesar AITAP para suministro, routing, credenciales referenciadas y contabilidad. Este actor desapareció del razonamiento reciente, alterando toda la arquitectura resultante.
+
+
+
+
+Core UI Migration.
+/home/jose/repos/bloom-development-extension/docs/SESSIONS/2026-08-21_Cowork_Cierre_Mandate_Genesis.md

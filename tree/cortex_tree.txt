@@ -1,6 +1,5 @@
 bloom-development-extension/
 └── cortex/
-    ├── .DS_Store
     ├── build-cortex/
     │   ├── VERSION
     │   ├── build_number.darwin.txt
@@ -8,9 +7,9 @@ bloom-development-extension/
     │   ├── build_number.linux.txt
     │   ├── build_number.txt
     │   ├── build_number.windows.txt
+    │   ├── cortex.meta.json
     │   └── package.py
     ├── extension/
-    │   ├── .DS_Store
     │   ├── assets/
     │   │   ├── 128x128.png
     │   │   ├── icon128.png
@@ -23,8 +22,8 @@ bloom-development-extension/
     │   └── protocols/
     │       ├── companion.schema.json
     │       ├── discovery.schema.json
-    │       ├── synapse-simulator.schema.json
-    │       └── landing.schema.json
+    │       ├── landing.schema.json
+    │       └── synapse-simulator.schema.json
     └── legacy-crypto/
         ├── crx/
         │   ├── id.json

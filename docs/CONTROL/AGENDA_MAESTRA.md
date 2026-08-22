@@ -52,7 +52,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 | # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
 |---|---|---|---|---|
-| 1 | Mandate Genesis | Etapa A del vertical con Synapse Simulator cerrada; implementación en gate | Aprobar contrato del Simulator y luego cerrar diseño de integración Genesis | Synapse Simulator contractual; Brain/Temporal/Core locales |
+| 1 | Mandate Genesis | Composición funcional cerrada; primer vertical reencuadrado a CLI + AITAP + Executor | Consolidar action graph y contratos durables para iniciar el vertical | Brain; Temporal; AITAP; Executor; Nucleus/Core |
 | 2 | Core UI Redesign | Sidebar y Profiles cerrados | Definir/armar panel derecho, Home y Wisdom tras diagnóstico | Switch de organización; Alfred; contrato de Mandate |
 | 3 | BSIP Response | Validador aislado listo; formato de patch con evidencia inicial | Ejecutar batería de adherencia antes de cerrar schema | Modelos de frontera; OpenCode; canal API/web |
 | 4 | AITAP | Frontera arquitectónica cerrada; scaffold incompleto | Resolver integración real de Contrato D y alta de dispositivos | BSIP Response; Nucleus; Alfred |
@@ -69,11 +69,19 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 El paso de Onboarding a Core para Genesis avanzó: D-22 y D-23 están implementados, pero todavía no recibieron QA manual end-to-end. El mecanismo de eventos y la presentación en Core fueron trabajados; sin embargo, el mandate real permanece bloqueado por el watcher y el registro de activities necesarias para completar el workflow.
 
-Se abrió el Work **MANDATE GENESIS — SYNAPSE SIMULATOR END-TO-END** para priorizar un primer corte vertical determinístico antes de depender de AITAP, credenciales, browser o modelos reales. Su Etapa A de relevamiento y diseño está completa y la implementación permanece detenida en gate de aprobación. El diseño reconstruyó el flujo consumidor, los blockers internos, los contratos que necesita consumir, ownership, idempotencia, recuperación y la continuidad Brain/Temporal/Core.
+La composición funcional canónica de un Genesis completo queda fijada así:
 
-En paralelo se abrió el Work **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES**, todavía en investigación y diseño. Es dueño de definir una contraparte cognitiva determinística, reusable, agnóstica y headless: envelopes request/response, correlación, idempotencia, fixtures versionados, failure modes, retry/replay/recovery y observabilidad. No implementará hasta entregar su informe y recibir aprobación explícita.
+```text
+ing → dis → doc → exp/evaluación → [dev condicional] → exp/reevaluación → completed
+```
 
-La división de ownership queda fijada: Genesis consume la frontera y conserva el workflow, Brain/intents, continuidad de Temporal y proyección a Core; Synapse Simulator provee la contraparte determinística genérica. El Simulator no conoce fases de Genesis, Domains, Genes, Temporal ni estado canónico de Mandates. La futura migración al motor genérico Mandate → Actions → Intents permanece como dirección arquitectónica, pero no bloquea este vertical.
+`ing/`, `dis/`, `doc/` y la evaluación técnica mediante `exp/` son obligaciones semánticas. `dis/` admite el fast-path `no_changes_required`. `dev/` se dispara únicamente cuando `exp/` devuelve `remediation_required` con findings estructurados y, después de cualquier `dev/`, una nueva evaluación `exp/` es obligatoria. Genesis solo puede quedar `completed` cuando `ing == completed`, `dis in [completed, no_changes_required]`, `doc == completed` y `latest_exp.result == ready`.
+
+El Work existente debe continuar, sin duplicarse, bajo el nombre **MANDATE GENESIS — CLI + AITAP + EXECUTOR END-TO-END**. Su Etapa A previa sigue siendo insumo válido, pero el canal prioritario del primer vertical cambia: ya no depende de Synapse ni de Synapse Simulator. La ruta primaria es CLI → Nucleus/Temporal → Brain → AITAP para suministro cognitivo → Executor cuando exista actuación local autorizada → persistencia Brain/Nucleus → continuidad Temporal → observación durable en Core. La CLI es superficie de control, observación y recovery; no es dueña del workflow.
+
+El Work independiente **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES** continúa con su investigación y diseño, pero deja de ser precondición de Genesis. Synapse queda como canal alternativo posterior sobre los mismos contratos.
+
+El ownership general queda fijado: Nucleus gobierna y autoriza; Temporal orquesta Actions durablemente; Brain conserva el ciclo de vida, identidad, persistencia e interpretación de Intents; AITAP conserva Gateway, referencias de Vault y Contabilidad sin ejecutar código ni tocar filesystem; Executor implementa la Execution Layer sobre trabajo definido y autorizado, sin decidir si Genesis necesita `dev`; Core proyecta el estado durable.
 
 **Fuentes de verdad**
 
@@ -84,27 +92,29 @@ La división de ownership queda fijada: Genesis consume la frontera y conserva e
 
 **Próximo paso concreto**
 
-1. Recibir y aprobar el informe contractual de **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES**.
-2. Entregar ese contrato al Work **MANDATE GENESIS — SYNAPSE SIMULATOR END-TO-END** para cerrar su integración propuesta sin asumir detalles de la contraparte.
-3. Aprobar explícitamente la Etapa B de cada Work antes de implementar.
-4. Mantener QA de D-22/D-23 y los blockers internos comprobados dentro del plan de ejecución del vertical, sin sustituirlos por eventos o estados simulados.
+1. Compartir esta composición y el canal prioritario con los Works **MANDATE GENESIS**, **AITAP** y **EXECUTOR**.
+2. Consolidar la representación exacta del action graph y la transición durable Mandate ↔ Action ↔ Intent.
+3. Definir schemas de output de `doc/` y `exp/`, incluidos `remediation_required`, findings estructurados y `ready`.
+4. Cerrar autorización Nucleus → Executor y observabilidad en Core.
+5. Elegir motor Temporal específico o genérico sin reabrir la composición funcional, y recién entonces aprobar la implementación del vertical.
 
 **Entorno recomendado**
 
-Works de investigación separados hasta superar sus gates; después, Codex o Claude Code para cambios verificables sobre Brain, Go/Temporal, Core y el Simulator. Esta sesión conserva las devoluciones y coordina dependencias, sin retener el análisis detallado de ambos Works en contexto activo.
+Coordinación entre los Works de Genesis, AITAP y Executor hasta cerrar sus contratos; después, Codex o Claude Code para cambios verificables sobre Brain, Go/Temporal, Nucleus, Executor y Core. Synapse Simulator continúa como investigación paralela no bloqueante.
 
 **Dependencias cruzadas**
 
-- Synapse Simulator: contrato genérico aprobado antes de fijar detalles de integración del consumidor Genesis.
+- Tema 4 / AITAP: suministro cognitivo, routing efectivo y contabilidad, sin absorber orquestación.
+- Executor: actuación local autorizada y contrato con Nucleus; no decide la necesidad de `dev`.
 - Tema 2: D-25 define la forma final de la tab y dónde integra Genesis en Core.
 - Tema 3: el motor genérico de intents y la respuesta estructurada condicionan la evolución posterior.
 - Tema 6: el flujo de Core comparte superficie con Alfred, pero no debe mezclar scopes.
-- AITAP, OpenCode, credenciales, proveedores reales y `dis/` no son bloqueantes para el primer corte.
+- Synapse y Synapse Simulator son canales posteriores y no bloquean el primer vertical.
 
 **Decisiones/riesgos abiertos**
 
-- Ambos Works están en gate de diseño: no interpretar su apertura ni el cierre de Etapa A como implementación iniciada.
-- Genesis no debe inventar el contrato del Simulator; el Simulator no debe incorporar lógica de Genesis.
+- Permanecen abiertos el action graph, motor Temporal, schemas `doc`/`exp`, transición durable, autorización Nucleus → Executor, findings que habilitan `dev` y representación en Core.
+- Estas decisiones precisan la implementación, pero no pueden alterar la composición funcional sin volver a AGENDA FOLLOWUP.
 - Elevar a esta agenda solamente blockers transversales reales encontrados por cualquiera de los dos Works.
 - D-25: confirmar si hace falta separar `GenesisTab` de `StandardMandateTab` o unificar en un `MandateTab` orientado por estado.
 - D-27: el step `mandate_genesis` está triplicado y es vulnerable a drift.
@@ -397,8 +407,8 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
 |---|---|---|---|
-| Alta | 1 / Synapse Simulator | Aprobar diseño contractual de `SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES` | Informe de Etapa A del Simulator; implementación detenida en gate |
-| Alta | 1 | Cerrar integración propuesta de `MANDATE GENESIS — SYNAPSE SIMULATOR END-TO-END` | Contrato del Simulator aprobado; implementación Genesis detenida en gate |
+| Alta | 1 + 4 + Executor | Consolidar `MANDATE GENESIS — CLI + AITAP + EXECUTOR END-TO-END`: action graph, outputs `doc`/`exp`, transiciones durables y autorización | Composición funcional cerrada; coordinación entre los tres Works |
+| Media | Synapse Simulator | Continuar `SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES` como canal alternativo posterior | Sin dependencia sobre el primer vertical Genesis |
 | Alta | 5 | Certificación operativa de instalación/servicio OpenCode en Windows, macOS y Linux | Acceso a los tres sistemas; confirmar comando real de `serve` |
 | Alta | 3 + 5 | Batería de adherencia API/web y OpenCode para decidir formato de patch, checksum y scope usando `validate-contract` | Prompt de ejecución pendiente de preparar; acceso a modelos, OpenCode y comando local |
 | Alta | 7 | Corregir §2.2 de Vault Storage y migrar referencias desde la remediación anterior | GitHub App + Device Flow confirmado; mapear referencias a migrar |
@@ -418,3 +428,4 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | 2026-08-19 | 1, 4, 5, 7 | Inspección de despliegue productivo BloomNucleus y workspace `eias-repos`. | Lectura directa autorizada de configuración, telemetría y logs locales | Se agregó la fotografía operativa: OpenCode escuchando sin password, Vault bloqueado en runtime, salud/Temporal a triage y divergencia entre Conductor y `.bloom`. |
 | 2026-08-17 | 7, 8 | Split documental de la remediación CORTEX y corrección de alcance de automatización DOM. | Actualización del usuario sobre fuentes y alcance | Se retiró la remediación previa como fuente activa; se condicionó la promoción de Vault Storage a corregir Batcave Auth como segunda GitHub App + Device Flow. |
 | 2026-08-18 | 1 / Synapse Simulator | Se separó el vertical Genesis en dos Works coordinados con gates independientes. | AGENDA FOLLOWUP, reportado por el usuario | Genesis cerró Etapa A y espera el contrato del Simulator; el Simulator inició investigación contractual. Ninguno comenzó implementación. |
+| 2026-08-21 | 1, 4, Executor | Se cerró la composición funcional de Genesis y se cambió el canal prioritario del primer vertical a CLI + AITAP + Executor. | AGENDA FOLLOWUP, decisión del usuario | El Work Genesis se renombra sin duplicarse; Synapse Simulator deja de ser precondición y continúa como línea posterior. |
