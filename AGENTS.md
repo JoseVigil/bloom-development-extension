@@ -1,13 +1,52 @@
 # bloom-development-extension — contexto raiz para agentes
 
-Este archivo es el punto de entrada. OpenCode lo lee automaticamente al
-trabajar en cualquier parte de este repo. Claude Code no lee `AGENTS.md`
+Este archivo es el punto de entrada. OpenCode y Codex lo leen automaticamente
+al trabajar en cualquier parte de este repo. Claude Code no lee `AGENTS.md`
 nativamente todavia (confirmado agosto 2026) — usa `CLAUDE.md` al lado,
 que importa este archivo con `@AGENTS.md`.
 
 Estilo de este documento y de los que referencia: **son punteros a fuentes
 reales, no resumenes que puedan quedar desactualizados.** Si un dato de acá
 contradice el codigo, el codigo gana — actualizá este archivo, no al revés.
+
+## Autoridad y permisos de escritura
+
+José Vigil es la única autoridad de diseño, decisión, nombres y alcance en
+este repo. Ningún agente (Claude Code, Codex, OpenCode u otro) decide por su
+cuenta qué se construye, cómo se llama, ni cuánto abarca un cambio.
+
+**Por defecto, todo es modo lectura/propuesta.** Leer código, docs, config,
+árboles, logs y `git status`; investigar; reconstruir hechos verificables;
+armar hipótesis; proponer planes o alternativas — nada de eso necesita
+permiso, hacelo con confianza y todas las veces que haga falta.
+
+**Escribir sí necesita permiso explícito, cambio por cambio.** Esto incluye
+crear, editar, borrar o renombrar cualquier archivo — código, tests, docs,
+config, schemas — y cualquier operación de `git` (`add`, `commit`, `push`,
+branches) o de pipelines/CI. No importa si el pedido original sonaba amplio
+("mejorá esto", "dejalo prolijo", "avanzá con la migración"): antes de tocar
+un archivo, decí exactamente cuáles vas a tocar y esperá el OK sobre esa
+lista puntual.
+
+Reglas concretas:
+
+- Una aprobación conceptual ("me gusta esa idea", "dale, esa dirección") no
+  autoriza a escribir nada — autoriza a armar el plan. El plan enumera
+  archivos y cambios exactos; recién con luz verde sobre esa lista se
+  ejecuta.
+- Ejecutá solo lo que está en la lista aprobada. Si en el camino aparece la
+  necesidad de tocar un archivo que no estaba, parate y preguntá — no lo
+  sumes silenciosamente al alcance.
+- No inventes nombres, carpetas, subsistemas, arquitectura ni alcance que
+  José no haya pedido explícitamente.
+- Ante cualquier ambigüedad sobre qué está autorizado, parate y consultá. No
+  asumas la interpretación más productiva y avances sobre esa base.
+- `git` y el estado durable del repo (staging, commits, push, config de CI)
+  se tocan solo cuando José lo pide para esa acción puntual — nunca como
+  efecto colateral de "dejar todo prolijo" o de un plan más grande.
+
+Esto no es para frenar el trabajo — es para que lo que se construya sea
+exactamente lo que José decidió, ni más ni menos.
 
 ## Mapa de sistemas (de arriba hacia abajo)
 
@@ -73,4 +112,5 @@ proposito, ver `installer/aitap/README.md`.
 
 Si vas a trabajar en una carpeta que no tiene su propio `AGENTS.md`/
 `CLAUDE.md` todavia y el trabajo es no trivial, consideralo una señal para
-crear uno en vez de asumir convenciones.
+proponerle a José crear uno — no crearlo por tu cuenta (ver "Autoridad y
+permisos de escritura" arriba).
