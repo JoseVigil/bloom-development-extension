@@ -706,7 +706,6 @@ def _ensure_brain_python_deps() -> None:
 
 
 def build_brain() -> StepResult:
-    _stop_running_brain_service()
     _ensure_brain_python_deps()
 
     brain_script = BUILDS["brain"]
@@ -882,12 +881,6 @@ def build_go_component(component: str) -> StepResult:
     build-component.bat/.sh y lo appendea al log central de build-all.py,
     de modo que todos los logs queden en el directorio de logs centralizado.
     """
-    if component == "nucleus":
-        # Control 1 (build): sin esto, el Nucleus Service viejo sigue vivo
-        # en memoria mientras el binario nuevo ya está en disco — mismo
-        # problema que build_brain() tenía antes del fix anterior.
-        _stop_running_nucleus_service()
-
     script_path = BUILDS[component]
     if not script_path or not script_path.exists():
         return StepResult(
@@ -1072,17 +1065,31 @@ def rollout_component(component: str) -> StepResult:
     Copia _DEV_BIN_BASE/<component>/ → NUCLEUS_HOME/bin/<component>/.
     Reemplaza archivos existentes (dirs_exist_ok=True).
     """
-    # Control 2 (rollout): red de seguridad independiente del Control 1 en
-    # build_brain()/build_go_component('nucleus'). Idempotente — si el
-    # servicio ya fue detenido en el paso de build, esto no hace nada nuevo
-    # (los helpers ya toleran "no había nada corriendo" como caso normal).
-    # Cubre el caso en que rollout_component() se invoque sin pasar por el
-    # build de este mismo script (por ejemplo, un flujo futuro de Metamorph
-    # que rollee binarios ya compilados).
-    if component == "brain":
-        _stop_running_brain_service()
-    elif component == "nucleus":
-        _stop_running_nucleus_service()
+    # Metamorph es el dueño del lifecycle productivo. Estos componentes no
+    # deben duplicar aquí nombres de servicios, esperas ni reglas de restart.
+    if component in {"nucleus", "brain", "sensor"}:
+        metamorph_name = "metamorph.exe" if IS_WINDOWS else "metamorph"
+        candidates = [
+            NUCLEUS_HOME / "bin" / "metamorph" / metamorph_name,
+            _DEV_BIN_BASE / "metamorph" / metamorph_name,
+        ]
+        metamorph_bin = next((path for path in candidates if path.exists()), None)
+        if metamorph_bin is None:
+            return StepResult(
+                f"Rollout:{component}", False,
+                error="Metamorph no está disponible para ejecutar el rollout administrado.",
+            )
+        env = os.environ.copy()
+        env["BLOOM_REPO_ROOT"] = str(ROOT)
+        log(f"Delegando rollout de {component} a Metamorph ...")
+        code, out = run_streaming(
+            [str(metamorph_bin), "rollout", "--only", component],
+            cwd=ROOT,
+            env=env,
+        )
+        if code != 0:
+            return StepResult(f"Rollout:{component}", False, error=out)
+        return StepResult(f"Rollout:{component}", True, output=out)
 
     src = _DEV_BIN_BASE / component
     dst = NUCLEUS_HOME / "bin" / component
@@ -1123,7 +1130,7 @@ def rollout_component(component: str) -> StepResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PATH — ~/.zshrc y ~/.zshenv
+# PATH — registro de usuario en Windows, archivos de shell en macOS/Linux
 # ─────────────────────────────────────────────────────────────────────────────
 
 _PATH_COMPONENTS    = ("metamorph", "brain", "nucleus", "sentinel")
@@ -1167,9 +1174,88 @@ def _write_path_block(target_file: Path) -> None:
         log(f"  ⚠ No se pudo escribir {target_file.name}: {exc}")
 
 
-def ensure_path_in_zshrc() -> None:
-    if IS_WINDOWS:
+def _normalized_path_entry(value: str) -> str:
+    """Normaliza una entrada de PATH para comparaciones idempotentes."""
+    expanded = os.path.expandvars(value.strip().strip('"'))
+    return os.path.normcase(os.path.normpath(expanded))
+
+
+def _ensure_path_windows() -> None:
+    """
+    Registra los directorios de los CLI en el PATH del usuario de Windows.
+
+    También actualiza el proceso actual para que los pasos posteriores de este
+    mismo build puedan invocar los comandos sin abrir otra terminal.
+    """
+    import ctypes
+    import winreg
+
+    component_dirs = [str(NUCLEUS_HOME / "bin" / comp) for comp in _PATH_COMPONENTS]
+
+    try:
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER,
+            "Environment",
+            0,
+            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE,
+        ) as key:
+            try:
+                current_user_path, value_type = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current_user_path, value_type = "", winreg.REG_EXPAND_SZ
+
+            existing = [entry for entry in current_user_path.split(os.pathsep) if entry.strip()]
+            managed = {_normalized_path_entry(entry) for entry in component_dirs}
+            unmanaged = [
+                entry for entry in existing
+                if _normalized_path_entry(entry) not in managed
+            ]
+            updated_user_path = os.pathsep.join(component_dirs + unmanaged)
+
+            if updated_user_path != current_user_path:
+                if value_type not in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
+                    value_type = winreg.REG_EXPAND_SZ
+                winreg.SetValueEx(key, "Path", 0, value_type, updated_user_path)
+                log("  ✅ PATH de usuario actualizado en Windows")
+            else:
+                log("  ✅ PATH de usuario ya estaba actualizado en Windows")
+    except OSError as exc:
+        log(f"  ⚠ No se pudo actualizar el PATH de usuario en Windows: {exc}")
         return
+
+    # El registro solo afecta procesos nuevos. Actualizar este proceso permite
+    # que el resto de build-all.py use inmediatamente los binarios desplegados.
+    process_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry.strip()]
+    managed = {_normalized_path_entry(entry) for entry in component_dirs}
+    process_unmanaged = [
+        entry for entry in process_entries
+        if _normalized_path_entry(entry) not in managed
+    ]
+    os.environ["PATH"] = os.pathsep.join(component_dirs + process_unmanaged)
+
+    # Notificar a Explorer y otras aplicaciones que escuchan cambios de entorno.
+    # Las terminales que ya estaban abiertas conservan su entorno anterior.
+    try:
+        result = ctypes.c_size_t()
+        ctypes.windll.user32.SendMessageTimeoutW(
+            0xFFFF,       # HWND_BROADCAST
+            0x001A,       # WM_SETTINGCHANGE
+            0,
+            "Environment",
+            0x0002,       # SMTO_ABORTIFHUNG
+            5000,
+            ctypes.byref(result),
+        )
+    except (AttributeError, OSError) as exc:
+        log(f"  ⚠ PATH guardado, pero Windows no pudo recibir la notificación: {exc}")
+
+    log("  📋 Entradas registradas:")
+    for component_dir in component_dirs:
+        log(f"     {component_dir}")
+    log("  💡 Abrí una terminal nueva para usar los comandos fuera de este build.")
+
+
+def _ensure_path_unix() -> None:
     path_lines = [
         f'export PATH="{NUCLEUS_HOME / "bin" / comp}:$PATH"'
         for comp in _PATH_COMPONENTS
@@ -1189,6 +1275,13 @@ def ensure_path_in_zshrc() -> None:
     for p in path_lines:
         log(f"     {p}")
     log(f"  💡 Abrí una terminal nueva — los comandos estarán disponibles.")
+
+
+def ensure_components_in_path() -> None:
+    if IS_WINDOWS:
+        _ensure_path_windows()
+    else:
+        _ensure_path_unix()
 
 
 def build_cortex() -> StepResult:
@@ -2105,9 +2198,9 @@ def main() -> None:
 
     log("")
     log(_sep())
-    log("Registrando PATH en ~/.zshrc y ~/.zshenv ...")
+    log("Registrando los CLI de BloomNucleus en PATH ...")
     log(_sep())
-    ensure_path_in_zshrc()
+    ensure_components_in_path()
 
     # ── Registrar streams de telemetría que dependen de nucleus en PATH ──
     # brain_build no puede auto-registrarse durante su build porque nucleus

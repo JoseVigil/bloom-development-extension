@@ -43,7 +43,10 @@ Los cortes internos comprobados son:
 9. D-18 sobre puerto y framing está confirmado y desaconseja reutilizar el socket legacy;
 10. los eventos emitidos por Go no coinciden plenamente con el contrato consumido por Core.
 
-AITAP, proveedores reales, credenciales, browser automation, OpenCode y `dis/` no son bloqueantes para el primer corte.
+AITAP, proveedores reales, credenciales, browser automation y `dis/` no son
+bloqueantes para el primer corte. OpenCode es una capacidad first-party
+instalada y administrada de Cognituum, pero este vertical no está obligado a
+seleccionarla como runtime.
 
 ## 3. Matriz de verdad
 
@@ -302,7 +305,9 @@ Contrato D permanece separado de la respuesta cognitiva.
 | Crear `request_id` | Brain |
 | Crear/conservar `logical_inference_id` | Brain |
 | Crear/conservar `correlation_id` | Brain |
-| Seleccionar target lógico | Configuración del consumidor/Brain |
+| Declarar requisitos del target | Brain |
+| Seleccionar runtime abstracto y provider/model por separado | AITAP bajo policy aprobada |
+| Autorizar dispatch/transición | Temporal |
 | Seleccionar fixture | Adapter del Simulator |
 | Persistir request | Brain, antes del submit |
 | Persistir raw response | Brain, antes de notificar a Temporal |
@@ -455,7 +460,98 @@ Estas limitaciones de prueba no se presentan como fallos funcionales adicionales
 8. No reutilizar el socket legacy `5678`.
 9. UI Cortex opcional, no dependencia del runtime.
 10. Respuesta cognitiva separada de Contrato D.
-11. `dis`, AITAP, OpenCode y materialización final fuera del primer vertical salvo nueva evidencia.
+11. `dis`, `doc`, AITAP y materialización final fuera del primer vertical.
+    OpenCode existe como runtime first-party del sistema, pero no es una
+    dependencia obligatoria de este Intent ni queda seleccionado por omisión.
+
+### 19.1 Entrada de diseño pendiente: alcance semántico del Genesis completo
+
+**Estado:** razonamiento registrado para discusión; no aprobado para implementación.
+
+La afirmación de que `dis` no es bloqueante continúa siendo válida para el primer vertical técnico `ing → consolidation/Human Sync`. No debe generalizarse al cierre semántico de un Mandate Genesis completo.
+
+Si Genesis garantiza que un proyecto queda comprendido y documentado, la necesidad propuesta del consumidor es:
+
+- `ing` como obligación semántica para clasificar y consolidar Domains, Genes y asignación de archivos;
+- `dis` como obligación semántica para analizar en profundidad responsabilidades, arquitectura, dependencias, riesgos y elementos unresolved;
+- `doc` como obligación semántica para materializar el conocimiento validado de `ing` y `dis` en documentación canónica durable;
+- evaluación de cambios siempre obligatoria al finalizar el conocimiento del proyecto;
+- creación y ejecución de `dev` únicamente cuando exista una modificación real, un alcance definido y autorización explícita;
+- persistencia durable de `no_change_required` cuando la evaluación no determine cambios, sin crear un Intent `dev` vacío.
+
+La secuencia candidata para el Genesis completo queda registrada así:
+
+```text
+ing consolidado
+  → plan determinístico de discovery
+  → uno o varios dis
+  → doc integrador de Genesis
+  → evaluación de cambios
+  → dev autorizado, sólo si corresponde
+  → cierre del Mandate
+```
+
+Decisiones todavía pendientes:
+
+1. contrato durable del plan determinístico que selecciona y ordena los `dis`;
+2. cardinalidad, dependencias y criterio de cierre de múltiples Intents `dis`;
+3. contrato de entrada y aceptación del `doc` integrador;
+4. ubicación y schema del resultado `no_change_required`;
+5. autoridad que aprueba la creación de `dev` y cómo se registra dicha autorización;
+6. condiciones exactas de cierre del Mandate después de `doc` y de la evaluación de cambios;
+7. impacto de esta secuencia sobre los workflows Temporal posteriores al primer vertical.
+
+Esta entrada no amplía la Etapa B aprobable actualmente, no modifica el contrato del primer intercambio cognitivo en `ing/classification` y no autoriza implementación.
+
+### 19.2 Investigación pendiente: routing de inteligencia versus adaptación de CLI
+
+**Estado:** hipótesis de coordinación registrada; ownership no aprobado y sin implementación autorizada.
+
+Para el piloto EXC-007/008 y para una eventual evolución de Genesis deben resolverse por separado dos decisiones:
+
+1. **Routing/autorización:** selección separada de runtime y de Intelligence
+   Provider/Model según policy, disponibilidad, credenciales y contabilidad.
+   OpenCode participa sólo en la dimensión runtime como `first_party_runtime`;
+   nunca reemplaza la identidad del backend/model efectivo.
+2. **Adaptación/ejecución:** la integración first-party de OpenCode capitaliza
+   su servicio/API/sesiones/stream/diff/cancelación detrás de Execution Layer.
+   **EXECUTOR** posee adapters externos de Codex CLI y Claude Code CLI.
+
+Frontera candidata para investigar:
+
+```text
+Mandate Genesis / Brain
+  declara necesidad cognitiva y capacidades requeridas
+    → AITAP autoriza/selecciona un grifo, si su contrato aprobado lo permite
+      → Executor invoca OpenCode first-party o un runtime externo mediante su adapter
+        → Brain persiste y valida el resultado contra el BISP
+          → Temporal coordina el avance durable
+```
+
+Guardrails que permanecen firmes:
+
+- AITAP no gobierna Intents, turns, checkpoints ni transiciones de fase;
+- AITAP no ejecuta código, no administra procesos CLI, no toca filesystem y no parsea el resultado canónico;
+- Brain conserva BISP, identidad única del Intent, estado `pending`, historial, persistencia y validación;
+- Temporal conserva coordinación durable y autorización de transiciones;
+- los detalles y comandos específicos de Codex, Claude u otra CLI no ingresan en Genesis;
+- los identificadores privados de sesión de una CLI pueden ser Evidence, pero nunca fuente canónica de continuidad;
+- EXC-007/008 debe poder recuperarse exclusivamente desde BISP, checkpoint y artefactos durables administrados por Brain;
+- el futuro experimento con Synapse continúa fuera de la autorización vigente.
+
+Contradicciones y ambigüedades que deben resolverse antes de adoptar la hipótesis:
+
+1. El contrato vigente de AITAP sí le permite elegir modelo/proveedor dentro del suministro de inteligencia, pero no le concede selección ni lifecycle de un **executor CLI**. Usar “executor” para ambos conceptos mezcla routing de inteligencia con ejecución técnica.
+2. OpenCode nunca se presenta como provider/model: es el runtime first-party.
+   Codex CLI y Claude Code CLI son runtimes externos. En todos los casos AITAP
+   conserva provider/backend y modelo efectivos como dimensión independiente.
+3. Synapse Simulator es una contraparte determinística reemplazable y no está definido actualmente como provider de AITAP. Su inclusión en una política común de routing requiere una decisión contractual adicional.
+4. Executor transforma la selección abstracta autorizada por AITAP en la
+   instalación/adapter concreto, sin convertirse en orquestador. Brain/Temporal
+   solicitan la ejecución mediante su puerto neutral.
+5. El punto de corte exacto de EXC-007 sigue sin estar definido por el texto normativo vigente; esta investigación de routing no elimina ese blocker ni autoriza elegir un corte por conveniencia.
+
+Hasta cerrar estas decisiones, el piloto no debe asumir que AITAP posee esta capacidad ni incorporar selección de provider o comandos CLI dentro de Genesis.
 
 ## 20. Gate y estado final de Etapa A
 
@@ -469,8 +565,10 @@ Ese Work definirá la contraparte reusable. Mandate Genesis conservará la respo
 
 **Criterio de aceptación alcanzado:** no.  
 **AITAP necesario:** no.  
-**OpenCode necesario:** no.  
-**`dis/` necesario:** no.  
+**OpenCode:** capacidad first-party instalada/administrada; no es runtime
+obligatorio para este primer vertical.
+**`dis/` necesario para el primer vertical técnico:** no.  
+**`dis/` y `doc/` necesarios para la semántica del Genesis completo:** propuesta registrada; decisión pendiente.  
 **Siguiente paso:** recibir y aprobar el contrato del Work de Synapse Simulator; después aprobar la Etapa B de integración Genesis.
 
 No actualizar `docs/CONTROL/AGENDA_MAESTRA.md` desde este Work.

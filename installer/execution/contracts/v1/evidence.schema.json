@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.execution/v1/evidence",
+  "title": "Cognituum Execution Evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_id", "execution_id", "actor", "runtime", "started_at", "ended_at", "hashes", "tool_events", "tests", "diff", "outputs"],
+  "properties": {
+    "schema_version": { "const": "cognituum.execution/v1" },
+    "evidence_id": { "type": "string", "minLength": 1 },
+    "execution_id": { "type": "string", "minLength": 1 },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject_ref", "adapter"],
+      "properties": {
+        "subject_ref": { "type": "string", "pattern": "^identity://" },
+        "adapter": { "enum": ["opencode", "codex_cli", "claude_code_cli"] }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "version"],
+      "properties": {
+        "provider": { "enum": ["opencode", "codex_cli", "claude_code_cli"] },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": ["string", "null"], "format": "date-time" },
+    "hashes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "before", "after"],
+        "properties": {
+          "ref": { "type": "string", "minLength": 1 },
+          "before": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+          "after": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+        }
+      }
+    },
+    "tool_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence", "tool_class", "outcome"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 0 },
+          "tool_class": { "type": "string", "minLength": 1 },
+          "outcome": { "enum": ["succeeded", "failed", "denied", "cancelled"] }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "exit_code", "stdout_ref", "stderr_ref"],
+        "properties": {
+          "command": { "type": "string" },
+          "exit_code": { "type": ["integer", "null"] },
+          "stdout_ref": { "type": ["string", "null"] },
+          "stderr_ref": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "diff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "ref", "sha256"],
+      "properties": {
+        "format": { "const": "unified" },
+        "ref": { "type": ["string", "null"] },
+        "sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "sha256"],
+        "properties": {
+          "ref": { "type": "string", "minLength": 1 },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

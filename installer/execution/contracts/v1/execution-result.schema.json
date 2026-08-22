@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.execution/v1/execution-result",
+  "title": "Cognituum Execution Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "execution_id", "status", "outputs", "changed_paths", "tests", "diff_ref", "evidence_refs", "accounting_refs", "error", "cancel_reason"],
+  "properties": {
+    "schema_version": { "const": "cognituum.execution/v1" },
+    "execution_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["completed", "failed", "cancelled", "paused"] },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "sha256"],
+        "properties": {
+          "ref": { "type": "string", "minLength": 1 },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "changed_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command_ref", "status"],
+        "properties": {
+          "command_ref": { "type": "string", "pattern": "^evidence://" },
+          "status": { "enum": ["passed", "failed", "not_run"] }
+        }
+      }
+    },
+    "diff_ref": { "type": ["string", "null"], "pattern": "^evidence://" },
+    "evidence_refs": { "type": "array", "items": { "type": "string", "pattern": "^evidence://" } },
+    "accounting_refs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "error": { "type": ["string", "null"] },
+    "cancel_reason": { "type": ["string", "null"] }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

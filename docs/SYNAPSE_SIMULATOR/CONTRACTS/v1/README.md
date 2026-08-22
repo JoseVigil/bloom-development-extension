@@ -52,6 +52,8 @@ La integración posterior debe envolver la **misma** interfaz y los mismos envel
 
 **Gate B — aceptación del Simulator distribuido:** requiere recorrido real Workspace–Synapse–Cortex–retorno, con al menos happy path, wrong correlation, timeout, duplicate y late response. Gate A verde no implica Gate B verde.
 
+La auditoría del despliegue real (`SYNAPSE_SIMULATOR_Production_Deployment_Audit_2026-08-19.md`) confirma que hoy esta capacidad está registrada como `STUB`. Gate B exige reemplazar ese estado por `capabilities()` verificables y evidencia correlacionada; la mera presencia de la página Cortex o del stream de logs no satisface el gate.
+
 La entrega completa no puede declararse terminada hasta Gate B.
 
 ## Matriz de conformidad mínima
@@ -67,6 +69,8 @@ La entrega completa no puede declararse terminada hasta Gate B.
 | Duplicate/late response | Obligatorio | Obligatorio |
 | Persistencia/restart | Obligatorio | Obligatorio |
 | UI Workspace/Cortex opcional para unit tests | Sí | No: ambas superficies participan |
+| ACK cognitivo separado de `REGISTER_ACK` | Obligatorio en contrato | Obligatorio en wire/logs |
+| Build/runtime identity en `capabilities()` | Obligatorio | Obligatorio |
 
 ## Solicitud formal de aceptación a Brain
 

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v2/capability-registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "snapshot_status", "runtimes", "intelligence_backends"],
+  "properties": {
+    "schema_version": {"const": "cognituum.routing-registry/v2"},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "snapshot_status": {"enum": ["observed", "simulated"]},
+    "runtimes": {"type": "array", "items": {"$ref": "runtime-capability-descriptor.schema.json"}},
+    "intelligence_backends": {"type": "array", "items": {"$ref": "intelligence-capability-descriptor.schema.json"}}
+  }
+}

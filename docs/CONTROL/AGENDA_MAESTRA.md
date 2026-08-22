@@ -36,6 +36,18 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | Synapse / DOM | `docs/CORTEX/PROVIDER-EXECUTION-SPEC.md` + `docs/CORTEX/AUTHORITY_BOUNDARY.md` | Se preserva automatización first-party del Cognituum Runner; se excluye permanentemente DOM de proveedores externos. |
 | Governance | `docs/BATCAVE/BATCAVE_ARCHITECTURE.md` + handoff de GitHub App | Batcave autoriza y enruta; Nucleus firma/ejecuta; la segunda GitHub App permanece separada de Repo Ops. |
 
+## Fotografía operativa productiva — 2026-08-19
+
+**Fuentes inspeccionadas:** despliegue local `C:\Users\josev\AppData\Local\BloomNucleus`, su configuración/telemetría/logs y el workspace `C:\repos\eias-repos`.
+
+- El árbol productivo contiene los binarios de Brain, Nucleus, Sentinel, Host, Cortex, Metamorph, Sensor, Temporal, Workspace y `bin\opencode\opencode.exe`, entre otros. `nucleus.json` marca `opencode_service_install` como `passed`.
+- El log de OpenCode confirma que el servidor escucha en `http://127.0.0.1:4096`; esto es evidencia positiva de arranque Windows, no certificación limpia/reinstalación ni cobertura multiplataforma. El mismo log advierte que `OPENCODE_SERVER_PASSWORD` no está configurado: el server local está sin protección.
+- La telemetría registra streams activos para OpenCode, Nucleus Worker, Brain, Sentinel y Temporal. Sin embargo, el worker repite `system_health` en `FAILED`, reporta el Vault en estado `LOCKED`, y el log de Temporal contiene timeouts. No inferir causalidad ni cerrar diagnóstico desde esta fotografía: requiere triage en una sesión operativa separada.
+- La configuración de Conductor marca onboarding completado, organización activa `eias-repos` y `sample_project` como proyecto activo. En contraste, `.bloom\.nucleus-eias-repos\.core\.nucleus-config.json` aún marca onboarding incompleto, no lista `sample_project`, no tiene intents ni entradas en el índice semántico y conserva otros dos proyectos. Es una divergencia de estado entre capas que debe explicarse antes de usar ambas como una misma fuente de verdad.
+- Metamorph registra 9 binarios gestionados, con 7 saludables y 2 faltantes (Conductor y Setup); OpenCode no figura aún en esa lista de binarios gestionados. Esto es evidencia de despliegue/servicio local, pero no de gestión de ciclo de vida completa por Metamorph.
+
+**Uso de esta fotografía:** alimenta la Resolución Arquitectónica Transversal (Supply, Identity, Synapse/DOM y Governance) y la certificación del tema 5. No modifica por sí sola el alcance ni el orden crítico de Mandate Genesis.
+
 ## Tabla compacta de control
 
 | # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
@@ -224,6 +236,8 @@ La instalación y distribución inicial están implementadas en el instalador El
 
 Metamorph incorpora `rollout_opencode.go`, que hace el deploy básico por `copyFile` desde `installer/opencode/{platformDir}/opencode`; se corrigió el segmento de ruta erróneo `native/bin` y el rollout recompiló para Linux, Darwin arm64 y Windows. Este cierre cubre código de instalación/distribución, no certificación real sobre los tres sistemas ni gestión del servicio desde Metamorph. En este checkout aún no son visibles algunos de los artefactos reportados (`service-installer-opencode*`, `rollout_opencode.go` y el documento REQ), por lo que corresponde verificar su sincronización antes de una auditoría local.
 
+La inspección productiva del 2026-08-19 añade evidencia Windows: `opencode.exe` está desplegado y su servicio escucha en `127.0.0.1:4096`. Pero el log advierte que `OPENCODE_SERVER_PASSWORD` no está definido, y la configuración de Metamorph aún no lista OpenCode entre sus binarios gestionados. Ambas condiciones quedan dentro de la certificación y hardening pendientes.
+
 **Fuentes de verdad**
 
 - `docs/AITAP/AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`
@@ -255,6 +269,8 @@ Claude Code o Codex con acceso a cada sistema destino para pruebas de instalaci�
 - Instalación limpia, reinstalación, arranque headless y readiness no están certificados end-to-end en los tres sistemas.
 - Flag exacto de `opencode serve --port`: no validado todavía.
 - Metamorph aún no gestiona el servicio; solo despliega el binario.
+- Seguridad local: el despliegue observado inicia OpenCode sin `OPENCODE_SERVER_PASSWORD`; definir y verificar su provisioning antes de tratar el servicio como certificado.
+- Metamorph no lista aún OpenCode entre sus binarios gestionados en el estado productivo observado.
 - Versionado, pinning, detección de versión instalada y política de actualización incremental: sin definir.
 - Contabilidad/Vault: los datos de tokens y costo de OpenCode fueron observados, pero no pasaron por AITAP en la prueba standalone.
 - No elegir aún entre patch nativo y unified diff posterior como representación de Contrato D.
@@ -307,6 +323,8 @@ La remediación anterior fue dividida por responsabilidad y ciclo de vida. `VAUL
 La frontera de automatización queda corregida: se preserva la automatización first-party dentro de las superficies propias del Cognituum Runner, incluido parseo de BTIP y orquestación interna. Está permanentemente fuera de alcance automatizar el DOM de proveedores externos (`claude.ai`, `chatgpt.com`, `grok.com`, `aistudio.google.com` y equivalentes), sin importar el sandbox.
 
 `VAULT-STORAGE-SPEC.md` no puede promoverse todavía como fuente vigente: su §2.2 reintroduce erróneamente una OAuth App clásica para Batcave Auth. La decisión cerrada sigue siendo una segunda GitHub App con Device Flow, separada de Repo Ops.
+
+La fotografía productiva muestra otra distinción que la spec debe modelar con precisión: `nucleus.json` informa `vault_initialized: true`, mientras el worker operativo reporta `vault_state LOCKED` con el profile master activo. “Inicializado” no equivale a “disponible/desbloqueado”; el comportamiento y las transiciones entre ambos estados requieren evidencia antes de alterar la arquitectura.
 
 **Fuentes de verdad**
 
@@ -397,5 +415,6 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | 2026-08-16 | 3, 5 | Se integró y verificó el validador aislado de Contrato D; se decidió probar adherencia de modelos antes de diseñar el adapter de OpenCode. | Sesión externa de ejecución, reportada por el usuario | Se cerró el traslado del validador; se registraron como abiertos el productor, el consumidor y el adapter. |
 | 2026-08-16 | 3, 5 | Primera prueba headless de OpenCode v1.18.18 con salida JSON parseable y edición/verificación reales. | Sesión externa de investigación, reportada por el usuario | Se agregó evidencia para el formato de patch; no se cerró el schema ni se inició el adapter. |
 | 2026-08-17 | 5 | Se implementaron instalación Electron y rollout básico de Metamorph para OpenCode en tres plataformas. | Sesión externa de implementación, reportada por el usuario | Se cerró distribución inicial; se abrió certificación operativa, gestión de servicio en Metamorph, versionado y autenticación. |
+| 2026-08-19 | 1, 4, 5, 7 | Inspección de despliegue productivo BloomNucleus y workspace `eias-repos`. | Lectura directa autorizada de configuración, telemetría y logs locales | Se agregó la fotografía operativa: OpenCode escuchando sin password, Vault bloqueado en runtime, salud/Temporal a triage y divergencia entre Conductor y `.bloom`. |
 | 2026-08-17 | 7, 8 | Split documental de la remediación CORTEX y corrección de alcance de automatización DOM. | Actualización del usuario sobre fuentes y alcance | Se retiró la remediación previa como fuente activa; se condicionó la promoción de Vault Storage a corregir Batcave Auth como segunda GitHub App + Device Flow. |
 | 2026-08-18 | 1 / Synapse Simulator | Se separó el vertical Genesis en dos Works coordinados con gates independientes. | AGENDA FOLLOWUP, reportado por el usuario | Genesis cerró Etapa A y espera el contrato del Simulator; el Simulator inició investigación contractual. Ninguno comenzó implementación. |

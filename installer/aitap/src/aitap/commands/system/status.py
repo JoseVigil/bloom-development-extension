@@ -9,15 +9,15 @@ class StatusCommand(BaseCommand):
         return CommandMetadata(
             name="status",
             category=CommandCategory.SYSTEM,
-            description="Estado del servicio AITap (placeholder — todavia no conectado a nucleus health)",
+            description="Estado de AITAP y sus integraciones pendientes",
             examples=["aitap system status"],
         )
 
     def register(self, app: typer.Typer):
         @app.command("status")
         def status():
-            """Placeholder: confirma que el scaffold corre, sin logica de ruteo/vault todavia."""
+            """Informa el corte implementado sin afirmar integraciones inexistentes."""
             typer.echo(
-                "aitap: scaffold OK. Sin motor de ruteo ni conexion a Nucleus Vault todavia — "
-                "pendiente cuando encaremos el primer intent real."
+                "aitap: deterministic runtime + intelligence routing v2 available; providers, dynamic health, "
+                "Nucleus Vault and CLIS adapters pending"
             )

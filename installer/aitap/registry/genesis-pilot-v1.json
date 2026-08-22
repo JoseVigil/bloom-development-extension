@@ -1,0 +1,9 @@
+{
+  "snapshot_id": "genesis-pilot/v1",
+  "targets": [
+    {"target_id": "opencode", "target_class": "first_party_runtime", "managed_by": ["setup_installer", "metamorph"], "capabilities": ["intelligence.mediate", "filesystem.patch", "test.run", "checkpoint.external", "stream.events", "diff.capture", "cancel"], "health": "healthy", "conformance": "NOT_RUN", "effective_intelligence_required": true},
+    {"target_id": "codex_cli", "target_class": "external_runtime", "managed_by": ["clis_integration"], "capabilities": ["filesystem.patch", "test.run", "checkpoint.external"], "health": "healthy", "conformance": "NOT_RUN", "effective_intelligence_required": true},
+    {"target_id": "claude_code_cli", "target_class": "external_runtime", "managed_by": ["clis_integration"], "capabilities": ["filesystem.patch", "test.run", "checkpoint.external"], "health": "healthy", "conformance": "NOT_RUN", "effective_intelligence_required": true},
+    {"target_id": "synapse_simulator", "target_class": "deterministic_counterpart", "capabilities": ["filesystem.patch", "test.run", "checkpoint.external"], "health": "healthy", "conformance": "NOT_RUN"}
+  ]
+}

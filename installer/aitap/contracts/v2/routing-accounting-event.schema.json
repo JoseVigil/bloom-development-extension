@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v2/routing-accounting-event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "routing_accounting_ref", "routing_decision_id", "consumer_id", "runtime_id", "provider", "model", "credential_ref", "outcome", "latency_ms", "inference_usage_ref"],
+  "properties": {
+    "schema_version": {"const": "cognituum.routing-accounting/v2"},
+    "routing_accounting_ref": {"type": "string", "pattern": "^accounting://routing/"},
+    "routing_decision_id": {"type": "string", "minLength": 1},
+    "consumer_id": {"type": "string", "minLength": 1},
+    "runtime_id": {"type": "string", "minLength": 1},
+    "provider": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "credential_ref": {"type": ["string", "null"], "pattern": "^credential-ref://"},
+    "outcome": {"enum": ["selected", "rejected", "failed", "completed"]},
+    "latency_ms": {"type": ["integer", "null"], "minimum": 0},
+    "inference_usage_ref": {"type": ["string", "null"]}
+  }
+}

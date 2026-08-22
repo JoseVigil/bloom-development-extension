@@ -121,8 +121,16 @@ conservan ownership y semántica diferentes.
 - **Provider Backend:** adapter que consume un SDK/API oficial o endpoint local.
 - **Execution Layer:** capacidad abstracta que administra ejecuciones
   prolongadas, sesiones, eventos, cancelación, resultado y Evidence.
-- **Execution Provider:** runtime concreto conforme al contrato de Execution
-  Layer, por ejemplo OpenCode.
+- **Executor:** aplicación y servicio first-party en Go que implementa Execution
+  Layer; posee lifecycle técnico, aislamiento, discovery, Evidence y promoción.
+- **First-party runtime:** servicio distribuido que Cognituum instala,
+  configura, descubre, supervisa y actualiza. OpenCode pertenece a esta clase;
+  no es un Intelligence Provider y no oculta el provider/model que usa.
+- **External execution runtime:** CLI o runtime de terceros descubierto e
+  integrado mediante un adapter interno de Executor, por ejemplo Codex CLI o
+  Claude Code CLI.
+- **Execution target:** runtime concreto —first-party o externo— conforme al
+  puerto neutral de Execution Layer.
 - **Execution Package:** instrucción portable de ejecución con objetivo, estado,
   restricciones, inputs, criterios y capacidades solicitadas.
 - **Accounting:** registro de tokens, costo, latencia, provider/model, consumidor
@@ -177,7 +185,7 @@ Accounting / Evidence Plane
 | Componente | Es dueño de | Decide | Ejecuta | Recibe | Devuelve | No debe hacer |
 |---|---|---|---|---|---|---|
 | Brain | Semántica y lifecycle BISP | Plan, contexto e inferencia vs ejecución | Orquestación y comandos internos | Intent, contexto y resultados | BISP y resultados validados | Custodiar secretos o acoplarse a un provider/runtime |
-| AITAP | Supply y Accounting | Provider/model, disponibilidad y failover permitido | Llamada de inferencia por adapters | Supply Request y referencias | Supply Result crudo normalizado | Parsear BISP, tocar filesystem o gobernar |
+| AITAP | Supply, routing y Accounting | Runtime abstracto y, separadamente, provider/model; disponibilidad y failover permitido | Llamada de inferencia por adapters | Supply/Routing Request y referencias | decisión de routing y Supply Result crudo normalizado con provider/model efectivo | Parsear BISP, tocar filesystem, gobernar o atribuir inteligencia a OpenCode |
 | Nucleus | Ownership y autoridad | Policy, scopes, grants, firma y denegación | Actos de governance | Solicitudes de capacidad | Grant, denial y auditoría | Planificar Intents o elegir provider/runtime |
 | Vault | Secretos | Acceso, rotación, revocación y borrado según grant | Cifrado/descifrado efímero | Identity y Credential Reference | Handle/secreto request-scoped | Routing o scheduling |
 | Runner | Runtime propio | Orden local permitido por paquete y policy | DOM first-party, parseo y empaquetado | BTIP, contexto y grants | Eventos y paquetes | Actuar en DOM de providers IA |
@@ -186,7 +194,8 @@ Accounting / Evidence Plane
 | IonPump | Interpretación de recipes | Próximo paso declarado | Comandos Runner first-party | Recipe `.ion` | Comandos Synapse | Ejecutar recipes sobre providers IA externos |
 | Provider Backend | Inferencia concreta | Retry técnico autorizado | SDK/API/endpoint local | Provider Execution Request | Provider Execution Result | Cambiar Intent o hacer fallback sin consentimiento |
 | Execution Layer | Lifecycle de ejecución | Execution Provider conforme a requisitos/grants | Sesiones, coordinación de tools y cancelación | Execution Package y Grant | Events, Result y Evidence | Razonar el Intent o custodiar keys |
-| OpenCode | Ejecución concreta | Decisiones locales autorizadas | Read/edit/bash/test/diff | Package adaptado | Resultado nativo | Definir la arquitectura Cognituum |
+| Executor | Implementación first-party de Execution Layer | Instalación física compatible del runtime ya seleccionado | Workspace/sandbox/process tree/snapshot/evidence/checkpoint/promotion | Package, routing decision y Grant | Eventos, Result y Evidence neutrales | Seleccionar runtime/provider, interpretar BISP o autoautorizarse |
+| OpenCode | Runtime first-party administrado | Decisiones locales autorizadas dentro del package/grant | Servicio headless, sesiones, streaming, read/edit/bash/test/diff | Package adaptado y configuración gobernada | Resultado nativo y telemetría de runtime | Presentarse como provider/model, ocultar su backend efectivo o definir la arquitectura Cognituum |
 | Alfred | Orquestación conversacional | Qué consulta emitir y cómo mantener la sesión | Conversación y composición de contexto | Mensaje/contexto | Respuesta conversacional/BISP | Firmar, enrutar providers o guardar keys target |
 | Batcave | Acceso remoto gobernado | Validación de sesión y autoridad remota | Auth, BlindJudge y relay | Instrucción estructurada | Resultado relay | Interpretar lenguaje, suministrar IA o ejecutar localmente |
 | Installer/Metamorph | Distribución y salud | Compatibilidad y versión | Instalar, inspeccionar y actualizar | Manifiestos | Estado de instalación | Elegir runtime para un Intent |
@@ -202,7 +211,8 @@ Accounting / Evidence Plane
 6. Cortex no consume inferencia ni persiste secretos.
 7. Runner e IonPump no automatizan UIs de proveedores IA externos.
 8. Execution Layer no redefine el Intent ni absorbe Intelligence Supply.
-9. OpenCode no es la Execution Layer; es un posible provider.
+9. OpenCode no es la Execution Layer ni un Intelligence Provider: es el runtime
+   first-party administrado que puede operar detrás de su puerto neutral.
 10. Alfred no firma y su renderer no recibe credenciales.
 11. Batcave no interpreta lenguaje natural y no reemplaza AITAP o Alfred.
 12. Installer/Metamorph no selecciona el runtime para una tarea.
@@ -224,7 +234,10 @@ Accounting / Evidence Plane
 | Policy/Grant | Nucleus | Nucleus -> Runner/Execution/Vault | subject, capability, resource scope, constraints, expiry, consent, audit ID/firma | Plan cognitivo | Parcial |
 | Accounting Event | AITAP | AITAP/adapters -> Accounting | consumer, provider/model, tokens, costo, latencia, outcome, correlation ID | Interpretación del contenido | Nuevo |
 
-Los campos son el mínimo conceptual. No constituyen todavía schemas cerrados.
+Los campos de Supply, Credentials, Policy/Grant y Accounting permanecen como
+mínimo conceptual. Los cuatro contratos de Execution quedan cerrados y
+versionados como `cognituum.execution/v1` en
+[`COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md`](./COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md).
 Cada contrato se versiona por su owner y debe permitir idempotencia y
 correlación sin transportar secretos o estado semántico innecesario.
 
@@ -242,17 +255,58 @@ correlación sin transportar secretos o estado semántico innecesario.
 9. DOM de proveedores IA externos queda fuera de alcance.
 10. Cortex captura y transporta.
 11. Execution Layer es abstracta y reemplazable.
-12. OpenCode es un posible Execution Provider.
+12. OpenCode es el runtime first-party administrado de Cognituum y un target de
+    Execution Layer; Codex CLI y Claude Code CLI son runtimes externos.
 13. Repo Ops y Batcave Auth son apps y credenciales separadas.
 14. Accounting y Evidence permanecen separados aunque correlacionados.
+15. Execution Layer se materializa mediante Executor, con target físico único
+    `installer/executor/`, separado de Brain y AITAP. `installer/execution/` es
+    staging provisional hasta migración; sus adapters no son importados por Brain.
+16. OpenCode, Codex CLI y Claude Code CLI se evalúan contra los mismos contratos
+    neutrales de Execution, sin equiparar su ownership: OpenCode es first-party;
+    Codex CLI y Claude Code CLI son integraciones externas.
+17. La selección de runtime y la selección de Intelligence Provider/Model son
+    decisiones separadas. Si OpenCode media inteligencia, AITAP registra el
+    backend/provider/model efectivo y nunca usa `OpenCode` como sustituto.
+18. Installer/Setup instala y descubre OpenCode; Metamorph administra rollout,
+    actualización y compatibilidad; Cognituum controla health, configuración y
+    lifecycle del servicio distribuido.
+19. Execution Layer es un servicio first-party persistente; cada attempt corre
+    en un execution root efímero y ningún runtime toca el workspace canónico.
+20. Promotion Engine es el único escritor del workspace canónico, bajo Grant,
+    preconditions y fence vigente.
+21. Runtime Adapters viven dentro de Execution Layer y los runtimes siempre en
+    procesos separados. Su norma detallada es
+    `COGNITUUM_EXECUTION_RUNTIME_ADAPTERS_NORM_v1_0.md`.
+22. Executor, en Go y con binario/servicio/CLI propios, es la única aplicación
+    first-party que implementa Execution Layer. El work anterior CLIS
+    INTEGRATION queda renombrado EXECUTOR.
+23. AITAP posee la implementación de routing: schemas, registry, policies,
+    engine, CLI y tests. Architecture sólo gobierna fronteras/taxonomía y
+    contratos cross-system; no aprueba por transferencia el estado actual.
+24. Executor publica capabilities/health/conformance sanitizados; AITAP decide
+    runtime abstracto y provider/model efectivo sin recibir paths ni detalles
+    de proceso.
 
-## 10. Preguntas abiertas
+## 10. Decisiones experimentales
+
+### 10.1 Cerradas
+
+| Orden de cierre | Pregunta | Resolución | Prueba normativa | Criterio empírico pendiente |
+|---|---|---|---|---|
+| 1 | ¿Dónde vive Execution Layer? | Executor en `installer/executor/`; `installer/execution/` sólo staging de migración | `runtime-swap-no-brain-change` | Matriz cross-runtime sin cambio semántico en Brain |
+| 2 | ¿Contrato D o formato nativo de runtime? | Candidato: contratos canónicos `cognituum.execution/v1`; sujeto al gate explícito de reconciliación árbol/código/roles | Reconciliación previa y luego EXC-001 a EXC-010 | Tres corridas consecutivas y recovery determinista por cada par |
+
+Especificación y estado de evidencia:
+[`COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md`](./COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md).
+Gate bloqueante detectado después del primer cierre:
+[`COGNITUUM_EXECUTION_RECONCILIATION_2026-08-20.md`](./COGNITUUM_EXECUTION_RECONCILIATION_2026-08-20.md).
+
+### 10.2 Abiertas
 
 | Pregunta | Decisión que bloquea | Experimento mínimo | Criterio de cierre |
 |---|---|---|---|
 | ¿Todo local inference pasa por AITAP? | Provider Backend común | Adapter Ollama bajo Supply Request sin key | Misma observabilidad y fallback sin acoplar Alfred |
-| ¿Contrato D o formato nativo de runtime? | Forma final de Execution Package | Batería OpenCode con structured output, patch, diff y checksum | Cumplimiento estable y recuperación determinista |
-| ¿Dónde vive Execution Layer? | Ownership físico y distribución | Adapter fuera de AITAP y Brain | Swap de runtime sin cambio semántico en Brain |
 | ¿Cómo gobierna Nucleus tools/filesystem? | Modelo de Policy/Grant | Grant firmado por workspace/tool/tiempo | Denegación previa y Evidence posterior verificables |
 | ¿Quién posee la persistencia de ejecución? | Recovery/reconnect | Restart, cancel y reconexión de sesión | Una única fuente recuperable e idempotente |
 | ¿Cómo se emite identidad de Alfred? | Alfred multi-device y mobile | Alta/revocación de dos dispositivos | Credencial individual, revocable y fuera del renderer |
@@ -264,8 +318,9 @@ correlación sin transportar secretos o estado semántico innecesario.
   Execution Request/Result; no cambia Brain ni la semántica del BISP.
 - **Nuevo endpoint local:** usa el mismo contrato de backend sin Credential
   Reference, con health y pausa/reanudación explícitos.
-- **Nuevo Execution Provider:** implementa Package/Event/Result/Evidence; no
-  agrega campos vendor-specific al Intent.
+- **Nuevo execution target:** declara `runtime_kind` (`first_party_runtime` o
+  `external_runtime`) e implementa Package/Event/Result/Evidence; no agrega
+  campos vendor-specific al Intent.
 - **Nueva superficie first-party:** se registra en una allowlist gobernada de
   Runner; no amplía por defecto permisos de Cortex.
 - **Nueva identidad de dispositivo:** recibe un Identity Reference único,
@@ -276,7 +331,8 @@ correlación sin transportar secretos o estado semántico innecesario.
 
 La arquitectura es válida únicamente si se cumplen todas estas pruebas:
 
-1. Si OpenCode desaparece, el Intent conserva significado.
+1. Si el servicio first-party OpenCode no está disponible, el Intent conserva
+   significado y puede usar otro runtime autorizado.
 2. Si cambia el modelo, el Intent conserva significado.
 3. Si cambia el provider, el Intent conserva significado.
 4. Si cambia el runtime, Execution Package sigue siendo interpretable.
@@ -290,13 +346,16 @@ La arquitectura es válida únicamente si se cumplen todas estas pruebas:
 
 ## 13. Relación con el estado actual
 
-A la fecha de este documento, Brain todavía concentra accesos directos a
+A la fecha de esta corrección, Brain todavía concentra accesos directos a
 providers y credenciales; AITAP es un scaffold; Vault no implementa el modelo
 user-scoped objetivo; IonPump conserva capacidades DOM no delimitadas por una
-policy first-party; Execution Layer no existe como componente; OpenCode no está
-integrado; Alfred usa paths/providers directos transicionales; Batcave no
-implementa aún su vertical documentado; y Metamorph no descubre OpenCode.
+policy first-party; Execution Layer sólo materializó contratos provisionales,
+sin core ni adapters. OpenCode sí está incorporado como binario y servicio
+first-party en Setup/Installer y tiene rollout, reinstalación y health de puerto
+en Metamorph; su adapter neutral de Execution y la separación observable del
+provider/model efectivo todavía no están implementados. Alfred usa
+paths/providers directos transicionales y Batcave no implementa aún su vertical
+documentado.
 
 La evidencia, impacto y trabajos habilitados se mantienen en
 [`COGNITUUM_ARCHITECTURE_FINDINGS_2026-08-17.md`](../RESEARCH/COGNITUUM_ARCHITECTURE_FINDINGS_2026-08-17.md).
-

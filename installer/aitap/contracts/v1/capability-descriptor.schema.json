@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v1/capability-descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target_id", "target_class", "capabilities", "health", "conformance"],
+  "properties": {
+    "target_id": {"type": "string", "minLength": 1},
+    "target_class": {"enum": ["intelligence_provider", "first_party_runtime", "external_runtime", "deterministic_counterpart"]},
+    "managed_by": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "effective_intelligence_required": {"type": "boolean"},
+    "capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "health": {"enum": ["healthy", "degraded", "unavailable"]},
+    "conformance": {"enum": ["CONFORMANT", "PARTIAL", "NON_CONFORMANT", "NOT_RUN"]}
+  }
+}

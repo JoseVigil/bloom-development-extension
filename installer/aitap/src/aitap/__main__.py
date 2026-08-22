@@ -6,9 +6,8 @@ Sigue el mismo patron de brain/__main__.py: typer + CommandRegistry + BaseComman
 ecosistema Bloom de que todo servicio expone su propio --help y una variante
 JSON capturable por scripts de build hacia installer/help/.
 
-AITap NO es dueno del vault — Nucleus lo es. Este CLI todavia no implementa
-logica de ruteo ni llamadas reales a Nucleus Vault; es scaffold (ver
-aitap system status / aitap keys list / aitap route status).
+AITap NO es dueno del vault — Nucleus lo es. El primer corte implementa
+routing determinístico abstracto; no invoca providers, CLIs ni Vault.
 """
 import sys
 
@@ -21,7 +20,7 @@ json_mode = "--json" in sys.argv
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="AITap - Router centralizado de acceso a proveedores de IA para el ecosistema Bloom",
+    help="AITap - Grifo de Intelligence y Execution Routing para el ecosistema Bloom",
     add_completion=False,
 )
 
@@ -32,7 +31,7 @@ def main_config(
     json_output: bool = typer.Option(False, "--json", help="Output en formato JSON"),
     verbose: bool = typer.Option(False, "--verbose", help="Logging detallado"),
 ):
-    """AITap CLI - capa de ruteo multi-provider (Gemini/Claude/OpenAI/xAI)."""
+    """AITap CLI - routing abstracto de Intelligence y Execution Providers."""
     ctx.obj = GlobalContext(json_mode=json_output, verbose=verbose)
 
 

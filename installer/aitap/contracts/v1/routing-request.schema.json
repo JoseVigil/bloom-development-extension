@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v1/routing-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "routing_request_id", "logical_inference_id", "intent_id", "stage", "turn_id", "target_class", "required_capabilities", "routing_mode", "policy_version"],
+  "properties": {
+    "schema_version": {"const": "cognituum.routing/v1"},
+    "routing_request_id": {"type": "string", "minLength": 1},
+    "logical_inference_id": {"type": "string", "minLength": 1},
+    "intent_id": {"type": "string", "minLength": 1},
+    "stage": {"enum": ["ing", "dis", "doc", "dev"]},
+    "turn_id": {"type": "string", "minLength": 1},
+    "target_class": {"enum": ["intelligence_provider", "first_party_runtime", "external_runtime", "deterministic_counterpart"]},
+    "required_capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "routing_mode": {"enum": ["policy", "sticky", "forced", "failover", "escalation", "recovery"]},
+    "policy_version": {"type": "string", "minLength": 1},
+    "forced_target_id": {"type": ["string", "null"]},
+    "sticky_decision_id": {"type": ["string", "null"]},
+    "previous_target_id": {"type": ["string", "null"]},
+    "excluded_targets": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "override": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["override_id", "target_id", "authorized_by", "reason"],
+      "properties": {
+        "override_id": {"type": "string", "minLength": 1},
+        "target_id": {"type": "string", "minLength": 1},
+        "authorized_by": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

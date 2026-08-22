@@ -5,9 +5,13 @@ para todos los clientes del ecosistema Bloom (Brain, Alfred, y los que vengan).
 
 ## Estado
 
-Scaffold v0.1. Sin motor de ruteo ni conexion real a Nucleus Vault todavia.
-Los comandos (`aitap keys list`, `aitap route status`) son placeholders que
-lo dejan explicito. Se implementa cuando encaremos el primer intent real.
+Primer vertical reconciliado de routing determinístico. Incluye contratos
+v2, registry fixture y la policy experimental
+`genesis-runtime-intelligence/v2`. La conexión real a providers, Nucleus Vault y
+la integración con Executor continúa pendiente.
+
+> **Auditoría completada:** clasificación y estado en
+> `../../docs/AITAP/AITAP_ROUTING_RECONCILIATION_REPORT_2026-08-20.md`.
 
 ## Decisiones ya tomadas (no re-discutir sin evidencia nueva)
 
@@ -29,10 +33,9 @@ Ver la investigacion **"Vault - AiTap"** (sesion previa) para el mapeo completo
 de vaults existentes en el repo y por que esta es la unica arquitectura que no
 duplica la fuente de verdad de credenciales.
 
-**Gap real que AITap resuelve (y que hoy no existe en ningun lado):** ruteo
-*entre* proveedores. Hoy la rotacion (`GeminiKeyManager`) solo pasa dentro de
-un proveedor. Si Gemini se queda sin cuota, nada hace fallback automatico a
-Claude. Ese es el motivo de existir de AITap, no solo envolver el vault.
+**Gap real que AITap resuelve:** decisión de grifo reproducible. Incluye
+ruteo entre providers de Intelligence y selección abstracta de Execution
+Provider. La invocación concreta sigue fuera de AITAP.
 
 ## Norma de CLI del ecosistema (por que esta estructura)
 
@@ -86,7 +89,8 @@ aitap --json-help            # referencia completa en JSON (AI-native)
 aitap system version
 aitap system status
 aitap keys list               # placeholder
-aitap route status            # placeholder
+aitap route status
+aitap route decide --request examples/genesis-ing-request-v2.json
 
 python scripts/generate_help.py   # regenera installer/aitap/help/aitap_help.{json,txt} (LOCAL, no installer/help/)
 ```
@@ -104,11 +108,23 @@ explícitos), `../../docs/AITAP/AITAP_Decision_Arquitectonica_Gateway_vs_Ejecuci
 `../../docs/AITAP/AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md` (v1.1,
 vocabulario preciso de los tres pilares y quién parsea qué).
 
-## Pendiente (no implementado en este scaffold)
+## Routing determinístico materializado
+
+- Contratos vigentes JSON Schema bajo `contracts/v2/`; V1 está supersedido.
+- Policy `genesis-runtime-intelligence/v2` bajo `policies/`.
+- Snapshot simulado del piloto bajo `registry/`; no representa health real.
+- OpenCode se registra una sola vez como `first_party_runtime`. Provider/backend
+  provider/backend, modelo, Credential Reference y Accounting se seleccionan y
+  auditan como dimensiones separadas. OpenCode nunca es provider.
+- `aitap route decide --request <json>` devuelve una decisión estable y no
+  ejecuta el target seleccionado.
+- Las pruebas unitarias no requieren CLIs reales.
+
+## Pendiente
 
 - Conexion real a Nucleus Vault (`VaultClient`, subprocess `nucleus vault`)
   para `aitap keys add/list/delete`.
-- Motor de ruteo inter-proveedor con circuit breaker anticipatorio (leer
+- Health dinámico y circuit breaker anticipatorio (leer
   cuota restante antes de fallar, no solo reaccionar a 3 errores consecutivos
   como hace `GeminiKeyManager` hoy).
 - Normalizacion de request/response entre las 4 APIs de proveedores.

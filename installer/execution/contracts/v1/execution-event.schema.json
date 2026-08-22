@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.execution/v1/execution-event",
+  "title": "Cognituum Execution Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "execution_id", "session_id", "sequence", "type", "timestamp", "summary", "evidence_refs"],
+  "properties": {
+    "schema_version": { "const": "cognituum.execution/v1" },
+    "execution_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "type": { "enum": ["accepted", "started", "tool_started", "tool_finished", "checkpoint", "paused", "resumed", "completed", "failed", "cancelled"] },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "summary": { "type": "string" },
+    "evidence_refs": { "type": "array", "items": { "type": "string", "pattern": "^evidence://" } }
+  }
+}

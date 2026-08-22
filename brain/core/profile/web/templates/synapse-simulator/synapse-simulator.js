@@ -657,7 +657,7 @@ const ConfigReader = {
       ? { ...self.SYNAPSE_CONFIG }
       : (window.SYNAPSE_CONFIG || null);
 
-    return { synapse-simulator: this.synapseSimulatorConfig, synapse: this.synapseConfig };
+    return { 'synapse-simulator': this.synapseSimulatorConfig, synapse: this.synapseConfig };
   },
 
   render() {

@@ -61,7 +61,7 @@ exactamente lo que José decidió, ni más ni menos.
   `payload.json / index.json / response/{...}` esta documentado en
   `agentic-harness/CLAUDE.md` seccion "Logging en forma BISP".
 - **AITAP** (`installer/aitap/`) — tres pilares, nada mas: Gateway
-  (routing a Claude/Gemini/OpenAI/xAI/OpenCode-como-modelo), Vault
+  (routing de runtime y, por separado, de provider/model efectivo), Vault
   (referencia `key_id` contra Nucleus, nunca el secreto) y Contabilidad
   (tokens/costo/latencia/auditoria por consumidor). **No ejecuta codigo ni
   toca filesystem. No es el orquestador** — Brain (`IntentExecutor`) y
@@ -75,16 +75,18 @@ exactamente lo que José decidió, ni más ni menos.
   `BSIP-Response`, ciclo completo con OpenCode):
   `docs/AITAP/AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md`.
   Guardrail operativo: `installer/aitap/AGENTS.md`.
-- **Implementation Layer** (OpenCode-como-implementador) — componente
-  **todavia no construido ni ubicado**. Traduce decisiones ya tomadas por
-  un frontier en cambios reales sobre un codebase (edit/write/bash/diff),
-  via sesiones headless de OpenCode (`opencode serve`). Consume a AITAP
-  como cliente para razonar; no vive dentro de AITAP. No asumir una
-  ubicacion en el repo hasta que se decida explicitamente.
+- **Execution Layer / Executor** — Execution Layer es el plano abstracto;
+  **Executor** es la aplicación first-party Go aprobada que lo implementará,
+  con binario `executor.exe`, servicio/CLI propios y target source único
+  `installer/executor/`. El staging actual vive en `installer/execution/` hasta
+  migración explícita. OpenCode es runtime first-party; Codex/Claude CLI son
+  runtimes externos descubiertos. Norma:
+  Aplicación: `docs/EXECUTOR/README.md`. Decisión superior:
+  `docs/GOVERNANCE/ARCHITECTURE/COGNITUUM_EXECUTOR_APPLICATION_DECISION_v1_0.md`.
 - **Nucleus** (`installer/nucleus/`, Go) — capa de gobernanza. Dueño del
   vault de credenciales (`internal/vault/vault.go`, respaldado por el
   Keyring del SO). Tambien el dominio que deberia autorizar cambios reales
-  de codigo que proponga la Implementation Layer — ese bridge especifico
+  de codigo que proponga Executor — ese bridge especifico
   todavia no esta definido, no asumir que es el mismo `nucleus vault`.
 - **Brain** (`brain/`, Python) — ejecuta comandos, vectoriza contexto,
   administra credenciales por proveedor hoy (`brain/shared/credentials/`).
@@ -108,6 +110,7 @@ proposito, ver `installer/aitap/README.md`.
 ## Contexto scoped por directorio (mas especifico gana)
 
 - `installer/aitap/AGENTS.md` + `installer/aitap/README.md`
+- `docs/EXECUTOR/AGENTS.md` + `docs/EXECUTOR/README.md`
 - `agentic-harness/CLAUDE.md`
 
 Si vas a trabajar en una carpeta que no tiene su propio `AGENTS.md`/

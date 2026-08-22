@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.routing/v2/routing-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "routing_request_id", "logical_inference_id", "intent_id", "stage", "turn_id", "routing_mode", "policy_version", "runtime", "intelligence"],
+  "properties": {
+    "schema_version": {"const": "cognituum.routing/v2"},
+    "routing_request_id": {"type": "string", "minLength": 1},
+    "logical_inference_id": {"type": "string", "minLength": 1},
+    "intent_id": {"type": "string", "minLength": 1},
+    "stage": {"enum": ["ing", "dis", "doc", "dev"]},
+    "turn_id": {"type": "string", "minLength": 1},
+    "routing_mode": {"enum": ["policy", "sticky", "forced", "failover", "escalation", "recovery"]},
+    "policy_version": {"type": "string", "minLength": 1},
+    "runtime": {
+      "type": "object", "additionalProperties": false,
+      "required": ["required_capabilities", "forced_runtime_id", "previous_runtime_id", "excluded_runtime_ids"],
+      "properties": {
+        "required_capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "forced_runtime_id": {"type": ["string", "null"]},
+        "previous_runtime_id": {"type": ["string", "null"]},
+        "excluded_runtime_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "intelligence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["required_capabilities", "privacy", "forced_backend_id", "forced_model", "previous_backend_id", "excluded_backend_ids"],
+      "properties": {
+        "required_capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "privacy": {"enum": ["local", "approved_cloud", "cloud", "any"]},
+        "forced_backend_id": {"type": ["string", "null"]},
+        "forced_model": {"type": ["string", "null"]},
+        "previous_backend_id": {"type": ["string", "null"]},
+        "excluded_backend_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "sticky_decision_id": {"type": ["string", "null"]},
+    "override_ref": {"type": ["string", "null"], "pattern": "^override://"}
+  }
+}
