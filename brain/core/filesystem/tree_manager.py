@@ -85,6 +85,7 @@ class TreeManager:
         dir_hashes = {} if use_hash else None
         final_output = ""
         warnings = []
+        counts = {"files": 0, "dirs": 0}  # NEW: always-on counters, independent of --hash
 
         root_name = os.path.basename(self.root)
         
@@ -102,6 +103,7 @@ class TreeManager:
                 base_path=self.root,
                 skip_name=True,  # NEW: Skip printing the name again
                 use_dates=use_dates,
+                counts=counts,
             )
         else:
             # Procesando targets específicos, mostrar root y luego targets
@@ -122,6 +124,7 @@ class TreeManager:
                     use_hash=use_hash, file_hashes=file_hashes, 
                     base_path=self.root,
                     use_dates=use_dates,
+                    counts=counts,
                 )
 
         # Calculate hashes and add header
@@ -181,8 +184,9 @@ class TreeManager:
             "project_hash": project_hash,
             "timestamp": datetime.now().isoformat(),
             "statistics": {
-                "total_files": len(file_hashes) if file_hashes else 0,
-                "total_directories": len(dir_hashes) if dir_hashes else 0
+                # NEW: use always-on counters so stats are correct with or without --hash
+                "total_files": counts["files"],
+                "total_directories": counts["dirs"]
             },
             "output_written": True,
             "warnings": warnings
@@ -272,6 +276,7 @@ class TreeManager:
         base_path: str = "",
         skip_name: bool = False,  # NEW: Skip printing directory name
         use_dates: bool = False,  # NEW: Append last-modified date to each entry
+        counts: Optional[Dict[str, int]] = None,  # NEW: always-on file/dir counters
     ) -> str:
         """
         Recursively build tree structure string.
@@ -326,6 +331,10 @@ class TreeManager:
                     mtime = self._get_mtime(path)
                     if mtime:
                         tree_str += f"  [{mtime}]"
+
+                # NEW: always-on directory counter (independent of --hash)
+                if counts is not None:
+                    counts["dirs"] += 1
             else:
                 # --- file entry ---
                 suffix_parts = []
@@ -343,6 +352,10 @@ class TreeManager:
                         suffix_parts.append(f"  [{mtime}]")
 
                 tree_str += "".join(suffix_parts)
+
+                # NEW: always-on file counter (independent of --hash)
+                if counts is not None:
+                    counts["files"] += 1
             
             tree_str += "\n"
 
@@ -371,6 +384,7 @@ class TreeManager:
                 full, new_prefix, is_last_entry, 
                 use_hash, file_hashes, base_path,
                 use_dates=use_dates,
+                counts=counts,
             )
 
         return tree_str
