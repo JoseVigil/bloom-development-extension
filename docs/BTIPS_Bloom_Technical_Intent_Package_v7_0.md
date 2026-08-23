@@ -51,6 +51,11 @@ Sigue siendo simple, pero ahora **explica la pirámide**.
 
 ```mermaid
 flowchart LR
+    %% ─── Taxonomía de Intents v7.1 ───
+    %% cor -> Nucleus Engine, ejecución local exclusiva vía CLI / Pass-Through Terminal (desacoplado de Alfred/Mobile)
+    %% dev -> Execution Layer (Executor / Project Runners), local o remoto vía Alfred/Mobile
+    %% mrg -> Merge & Integration, Alfred/Mobile -> Execution Layer
+    %% tst -> Test Runner & Gate, Alfred/Mobile -> Execution Layer
     subgraph DevPC["💻 Developer PC"]
         User["👨‍💻 Usuario
         Developer"]
@@ -73,6 +78,9 @@ flowchart LR
         NucleusExe[⚖️ Nucleus
         Gobernanza]
 
+        PassThroughTerminal[⌨️ CLI / Pass-Through Terminal
+        Ejecución local directa]
+
         Metamorph[🔄 Metamorph
         State Reconciler]
 
@@ -86,7 +94,8 @@ flowchart LR
         AITAP[AITAP]
 
         subgraph Runtime["⚙️ Runtime"]
-            Executor[Executor]
+            Executor[Executor
+            Project Runners]
             OpenCode[OpenCode]
         end
 
@@ -171,7 +180,7 @@ flowchart LR
 
         NucleusExe --levanta--> Bootstrap
         Bootstrap --> VS
-        VS --> Brain
+        VS --"dev"--> Brain
         VS <--> ConductorWorkspace
         VS <--> ProjectFolder
 
@@ -188,7 +197,12 @@ flowchart LR
         NucleusExe -.crea y firma.-> MandatesFolder
 
         ConductorWorkspace <--> ProjectFolder
-        ConductorWorkspace <--> NucleusFolder        
+        ConductorWorkspace <--> NucleusFolder
+
+        %% cor — Coordination: exclusivamente local, vía CLI/Pass-Through Terminal, sin pasar por Alfred/Mobile
+        NucleusExe <--> PassThroughTerminal
+        PassThroughTerminal --"cor · Coordination
+        (local-only)"--> Core
 
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
@@ -204,7 +218,7 @@ flowchart LR
 
         Brain <--> AITAP
         NucleusExe <--> AITAP
-        AITAP --> Executor
+        AITAP --"dev · mrg · tst"--> Executor
         Executor <--> OpenCode
         Executor <--> CodexCLI
         Executor <--> ClaudeCodeCLI
@@ -227,16 +241,24 @@ flowchart LR
         Marketplace["🌐 Mandate Marketplace\nEcosistema inter-org"]
         GeminiAPI["🔷 Gemini API
         Google"]
-        AlfredMobile --"WebSocket\nQR + nonce"--> BlindJudge
+        AlfredMobile --"WebSocket
+        QR + nonce"--> BlindJudge
         BloomUpdateServer --"manifests firmados\nion recipes"--> Batcave
     end
 
     ExternalAIAPI <--> GeminiAPI
 
-    RelayEngine <--"Sovereign Link\nWebSocket full-duplex"--> NucleusExe
+    RelayEngine <--"Sovereign Link
+    WebSocket full-duplex"--> NucleusExe
     NucleusExe -.publica/consume via Batcave.-> Marketplace
     NucleusExe --"valida y descarga\nartefactos"--> BloomUpdateServer
-    AlfredRuntime <--> AITAP
+
+    %% mrg / tst — Merge & Integration / Test Runner & Gate: se originan en Alfred/Mobile
+    %% y se resuelven en la capa de ejecución local (Executor / Project Runners)
+    AlfredRuntime <--"dev · mrg · tst
+    (remoto)"--> AITAP
+    AlfredMobile -."mrg / tst
+    solicitud remota".-> AlfredRuntime
 ```
 
 ## 2. ARQUITECTURA DE BLOOM

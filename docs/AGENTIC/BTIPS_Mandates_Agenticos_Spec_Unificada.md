@@ -1,3 +1,22 @@
+## 0️⃣ Encuadre CORPO / Enterprise Context
+
+> Esta sección no es boilerplate legal ni introducción de cortesía. Fija el marco bajo el cual todo lo que sigue debe leerse, implementarse y — más importante — auditarse cuando algo no encaje.
+
+**Qué es este documento, y qué no es.** Lo que sigue es una especificación técnica de gobierno sobre loops agénticos: cómo Nucleus firma intents individuales incluso cuando quien los propone es un agente autónomo, no un humano turno a turno. No es una feature aislada de producto ni un experimento de conveniencia de ingeniería. Es la capa de gobierno que hace posible que Cognituum siga siendo la misma promesa organizacional a medida que la ejecución de código se vuelve más autónoma — sin que esa autonomía diluya a quién le pertenece la decisión.
+
+**Por qué esto le importa a una organización, no solo a un equipo de ingeniería.** Cognituum sostiene una tesis de diez años: que el criterio técnico de una organización —la decisión y su razón, no el código que produjo— le pertenece a la organización, no al modelo o al proveedor que participó en su construcción. Esa tesis se sostiene sobre **dos pilares independientes, no uno**:
+
+1. **Persistencia a través de proveedores.** Que un Intent sobreviva el cambio de motor de IA — de Codex a Claude, de Claude a lo que exista dentro de cinco años — sin perder autoridad, estado ni evidencia. Este pilar está definido con precisión (batería EXC-001..EXC-010) y **su validación empírica sigue en curso**; este documento no la avanza ni la reemplaza.
+2. **Gobierno de la autonomía.** Que la autoridad humana no se diluya a medida que la ejecución se vuelve más autónoma y más rápida — que un agente pueda proponer cientos de turnos sin que eso signifique cientos de renuncias silenciosas de control. **Este documento es el diseño de ese segundo pilar.**
+
+Ninguno de los dos pilares sustituye al otro. Un sistema que resuelve portabilidad entre proveedores pero pierde el control cuando la ejecución se vuelve autónoma no es defendible a diez años. Tampoco lo es un sistema que gobierna la autonomía perfectamente pero queda atrapado dentro de un solo proveedor. Este documento existe porque el segundo pilar, hasta esta especificación, era una preocupación nombrada sin mecanismo — la Sección 8 de la tesis estratégica de Cognituum advertía explícitamente que *"la gobernanza puede volverse otra burocracia"* si el costo de mantener control humano crece más rápido que el valor de conservarlo. Lo que sigue es la respuesta de diseño a esa advertencia, no una promesa nueva sin sustento.
+
+**Por qué esto es infraestructura institucional y no una herramienta.** Toda decisión de diseño en este documento —firma individual de cada intent sin excepción, opacidad total sobre las reglas de gobierno (`cor`), límites infranqueables a la auto-extensión de un Mandate delegado, clasificación verificada contra la forma física del cambio y no contra lo que el agente declara— responde a una sola pregunta, y ninguna otra: **¿quién es responsable, de forma verificable, cuando algo sale mal?** Esa pregunta no la hace un desarrollador evaluando una herramienta para su flujo de trabajo. La hace un CTO, un equipo de seguridad, o un auditor externo evaluando si una organización puede delegar ejecución de código a un sistema autónomo sin perder trazabilidad legal y operativa sobre lo que ese sistema hizo. Ese es el estándar bajo el que este documento fue escrito, y es el estándar bajo el que debe seguir revisándose.
+
+**Disciplina de lectura para todo lo que sigue.** Cada mecanismo de esta especificación debe poder responder, sin ambigüedad, a: ¿esto reduce la autoridad humana real, o solo reduce la fricción de ejercerla? Si la respuesta no es clara, el diseño no está listo para producción, sin importar cuán elegante sea el resto de la arquitectura.
+
+---
+
 ## 8️⃣ Mandates Agénticos — Gobernanza Formal sobre Agent Loops
 
 ### 📝 Registro de cambios
@@ -39,6 +58,18 @@ Nivel 2 — Mandate         execution_mode: "declarative" | "agentic"
 Nivel 3 — Action          En modo agéntico, generada dinámicamente turno a turno
 Nivel 4 — Intent          exp / cor / dev / doc / tst / mrg — idéntico en ambos modos
 ```
+
+---
+
+### 8.1.1 Nota Técnica de Arquitectura: Asimetría de Gobernanza e Invariantes Orbitales (`cor`, `mrg`, `tst`)
+
+La evolución del protocolo BTIPS en su versión v6.1 responde directamente a la implementación del modelo de **Gobernanza Orbital**. Los intents `cor`, `mrg` y `tst` formalizan la separación absoluta entre la trayectoria del agente y las leyes del sistema:
+
+- **`cor` (Core/Governance) — Las Leyes del Campo Gravitatorio:** Representa el Plano de Control de Nucleus. Se rige bajo la política **Zero-Read / Zero-Write para Agent Loops**. Un agente no solo tiene prohibido modificar `cor`, sino que la política misma es opaca a la lectura del LLM para eliminar el vector de ataque por reconocimiento. Es un canal exclusivo para el operador humano o decisiones de sistema de Nucleus.
+- **`mrg` (Merge & Integration) — Control de Convergencia:** Sustituye la antigua semántica operativa de `cor` v6.0. Gobierna la fusión de múltiples fuentes de cambio mediante clasificación determinista (`source_refs >= 2`). Impide que un agente camufle integraciones complejas como modificaciones simples (`dev`).
+- **`tst` (Validation & Test Runner) — Telemetría Determinista de Cierre:** Resuelve el problema de la falta de confianza epistémica en la autodeclaración del LLM. `tst` es la **única fuente de verdad objetiva** capaz de validar si la trayectoria orbital alcanzó el objetivo. Como invariante física, cualquier `mrg` exitoso invalida retroactivamente las ejecuciones previas de `tst`, exigiendo un nuevo `tst pass` para permitir la transición del Mandate a estado `completed`.
+
+> ⚠️ **Marca de ratificación pendiente — no eliminar hasta decisión explícita.** La frase original de este bloque describía a `mrg` "aplicando reglas físicas en dos fases (*dry-run* y límites de colisión) antes de alterar la trayectoria principal". Ese mecanismo de dry-run (firma condicional → ejecución de prueba en el Runner → rechazo post-ejecución si se excede `max_conflict_files`, vía `reason_code: MERGE_CONFLICT_BUDGET_EXCEEDED`) **no forma parte de esta spec unificada** — es una propuesta de extensión hecha al formalizar BSIP-010, todavía sin firma. Se omitió esa frase de este bloque a propósito. Si se ratifica, esta nota se reemplaza por el texto original completo; si no, el mecanismo de validación de `max_conflict_files` queda abierto como pregunta de diseño, igual que el origen de los `source_refs` múltiples (§10).
 
 ---
 

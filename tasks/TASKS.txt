@@ -802,8 +802,9 @@ https://claude.ai/chat/e7cfbcd9-f7e9-41bc-beb4-3be2cd601947
 Claude for Chrome Extension Internals
 https://gist.github.com/sshh12/e352c053627ccbe1636781f73d6d715b
 
-
 jose gmail 
 Cognituum: el corte
+https://claude.ai/chat/e46a017f-f2a0-4028-b13a-83ad5ad56af3
+corpo 
 https://claude.ai/chat/e46a017f-f2a0-4028-b13a-83ad5ad56af3
 
