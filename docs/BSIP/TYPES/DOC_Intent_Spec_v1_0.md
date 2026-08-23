@@ -242,6 +242,12 @@ práctica para este tipo de intent: `submit_intent()` tal como está escrito no 
   reusar `CodeCompressor`?
 - [ ] Mismos pendientes de gobierno que `dev/`: campo de cierre de turno, precondición de `finalize`,
   normalización de schema de identidad, mirror completo de `.pipeline/.curation/`.
+- [ ] Incorporar como postcondición obligatoria de `finalize_intent()` la invocación del servicio
+  permanente de visualización de proyectos. Antes de alcanzar `completed`, todo Intent `doc` deberá
+  solicitar al servicio que analice si los cambios documentales afectan la representación visual vigente
+  del proyecto. La invocación será obligatoria; la modificación de la visualización será condicional al
+  análisis. El resultado deberá quedar trazado como uno de estos estados: visualización actualizada,
+  actualización no requerida con justificación, o revisión humana requerida.
 
 ---
 

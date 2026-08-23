@@ -1,6 +1,15 @@
 # Session Progress Manifesto
 ## Bloom Conductor — Workspace Core UI
-### v0.3 · 29 de junio de 2026 · Principio de Segregación de Entropía Cognitiva
+### v0.4 · 23 de agosto de 2026 · Visualización Permanente por Proyecto
+
+---
+
+## REGISTRO DE CAMBIOS v0.3 → v0.4
+
+**F-10 agregado.** Cognituum incorpora como capacidad transversal un servicio permanente de
+visualización para todos los proyectos. Core será la superficie donde el usuario consulte y navegue la
+representación vigente de cada proyecto. Todo Intent `doc` deberá invocar obligatoriamente este servicio
+antes de finalizar para evaluar si corresponde actualizarla.
 
 ---
 
@@ -123,6 +132,23 @@ Conductor puede emitir STORE_BRIEF de confirmación
 
 La dirección del flujo es siempre: Conductor informa al Companion → Companion absorbe el proceso → Conductor ejecuta la decisión. Nunca al revés en términos de autoridad de ejecución.
 
+### F-10 — Servicio permanente de visualización por proyecto *(nuevo v0.4)*
+
+Cognituum proveerá un servicio permanente de visualización disponible para todos los proyectos. Cada
+proyecto tendrá una representación visual vigente de sus componentes, relaciones, responsabilidades y
+flujos, mantenida como parte de su evolución documental. El beneficio obtenido del Mermaid central de
+BTIPS —comprender el sistema completo mediante una fotografía compartible con personas y AI— debe poder
+reproducirse de manera automática y sostenida en cualquier proyecto gobernado por Cognituum.
+
+Core será la superficie de consulta y navegación de estas visualizaciones, con alcance por proyecto. El
+servicio es la capacidad permanente; Mermaid podrá ser su formato inicial de representación, pero la
+definición no queda atada a un renderizador ni al Mermaid central de BTIPS.
+
+Todo Intent `doc` deberá invocar obligatoriamente el servicio antes de alcanzar el estado `completed`. El
+servicio analizará si los cambios documentales afectan la visualización vigente y registrará uno de tres
+resultados trazables: visualización actualizada, actualización no requerida con justificación, o revisión
+humana requerida. La invocación es obligatoria; la modificación de la visualización depende del análisis.
+
 ---
 
 ## DEUDA TÉCNICA ACTIVA *(sin cambios)*
@@ -147,6 +173,7 @@ La dirección del flujo es siempre: Conductor informa al Companion → Companion
 | P-04 | ¿Cuándo se crea el Genesis Mandate — durante onboarding o como primer acto de Core? | Pantalla inicial al cargar Core |
 | P-05 | ¿Qué protocolo de sincronización existe entre Conductor y Companion Panel? | Coordinación de estado entre superficies |
 | P-06 | ¿`STORE_BRIEF` / `INJECT_BRIEF` son eventos de Sentinel o un canal propio de Cortex? | Arquitectura del bridge entre Companion y Conductor |
+| P-07 | ¿Cuál es el contrato entre el Intent `doc`, el servicio de visualización y Core — ubicación del artefacto, historial, estados y mecanismo de exposición? | Implementación y gobernanza de la visualización permanente por proyecto |
 
 ---
 
@@ -158,4 +185,4 @@ La dirección del flujo es siempre: Conductor informa al Companion → Companion
 
 ---
 
-*Documento vivo. v0.3 — Principio de Segregación de Entropía Cognitiva integrado. Próxima actualización: sesión de diseño de `building/validate` y coordinación Conductor ↔ Companion.*
+*Documento vivo. v0.4 — Servicio permanente de visualización por proyecto incorporado. Próxima actualización: definición del contrato Intent `doc` ↔ servicio de visualización ↔ Core.*
