@@ -1,6 +1,6 @@
-### 📦 BTIPS (Bloom Technical Intent Package) — v6.0
+### 📦 BTIPS (Bloom Technical Intent Package) — v7.0
 
-BTIP convierte la interacción con inteligencia artificial en un proceso de ingeniería reproducible, donde cada intención técnica queda formalizada, versionada y gobernada por contexto real.
+BTIPS convierte la interacción con inteligencia artificial en un proceso de ingeniería reproducible, donde cada intención técnica queda formalizada, versionada y gobernada por contexto real. Este documento describe el funcionamiento integral del ecosistema Bloom y las responsabilidades de sus aplicaciones, protocolos y artefactos.
 
 ---
 
@@ -9,17 +9,18 @@ BTIP convierte la interacción con inteligencia artificial en un proceso de inge
 | Versión | Cambios |
 |---|---|
 | v4.0 | Línea base: Bloom Runtime (Sentinel, Synapse, Nucleus), Bloom Cortex (Discovery/Landing/SynapseSimulator), Bloom Conductor, VS Code Plugin, Brain/IonPump, Bloom Sensor, Metamorph, Nucleus, Intents, Mandates, Batcave, Alfred, App Mobile. |
-| **v6.0** | **Nuevo:** Bloom Companion incorporado como **cuarto activo nativo de Cortex** (§2.3), junto a Discovery/Landing/SynapseSimulator. A diferencia de SynapseSimulator (dev-only), Companion es un activo de **producción** orientado al ingeniero final: panel lateral de segunda opinión cognitiva embebido en el navegador, con su propio `COMPANION_PROTOCOL_MANIFEST` y schema de validación de payload. Su gating de activación depende de `linked_accounts` **y** del handshake Synapse de 3 fases (§2.3, subsección Companion). Fuente: `Cognituum_Companion_Implementation_Guide_v1_2.md`. Ver también `AUTHORITY_BOUNDARY.md` para el límite de autoridad sobre credenciales de terceros, que este feature respeta sin excepción (no automatiza login/registro de ningún proveedor). |
+| **v6.0** | Arquitectura integral de Bloom: Cortex y Companion, AITAP, Execution Layer, Executor, runtimes de procesamiento, Temporal, Cognituum Runner y los intents `ing` y `dis`. |
+| **v7.0** | Consolidación de la arquitectura integral y de su mapa visual: AITAP como grifo, Execution Layer implementada por Executor, OpenCode y CLIs externos como runtimes de procesamiento, y separación entre runtime y proveedor/modelo efectivo. |
 
 ---
 
-## 🧭 Contexto de Uso — Por qué existe BTIP
+## 🧭 Contexto de Uso — Por qué existe BTIPS
 
-BTIP nace de un problema concreto: los modelos de IA trabajan rápido, pero **pierden contexto**, **no dejan rastro estructurado** y **no escalan cognitivamente** cuando un proyecto crece o involucra múltiples personas, herramientas y decisiones.
+BTIPS nace de un problema concreto: los modelos de IA trabajan rápido, pero **pierden contexto**, **no dejan rastro estructurado** y **no escalan cognitivamente** cuando un proyecto crece o involucra múltiples personas, herramientas y decisiones.
 
-La arquitectura BTIP introduce una **unidad mínima de trabajo persistente** donde cada acción técnica queda registrada como un intent, junto con su contexto, entradas, salidas y efectos en el sistema. De esta forma, el conocimiento no vive en prompts efímeros ni en la memoria del modelo, sino en **Bloom Technical Intent Package**.
+La arquitectura BTIPS introduce una **unidad mínima de trabajo persistente** donde cada acción técnica queda registrada como un intent, junto con su contexto, entradas, salidas y efectos en el sistema. De esta forma, el conocimiento no vive en prompts efímeros ni en la memoria del modelo, sino en **Bloom Technical Intent Package**.
 
-BTIP convierte la interacción con IA en un **proceso de ingeniería**, no en una conversación. Esto permite que una organización mantenga coherencia técnica, acelere iteraciones y transfiera conocimiento entre humanos y modelos sin degradación ni ambigüedad.
+BTIPS convierte la interacción con IA en un **proceso de ingeniería**, no en una conversación. Esto permite que una organización mantenga coherencia técnica, acelere iteraciones y transfiera conocimiento entre humanos, aplicaciones y modelos sin degradación ni ambigüedad.
 
 ---
 
@@ -56,12 +57,18 @@ flowchart LR
         
         subgraph VS["🧩 VS Code Plugin"]
             VSSocket[🔌 Socket Server]
+        end
+
+        subgraph Bootstrap["🚀 Bootstrap Server"]
             VSHttp[🖥️ HTTP Server]
             VSSwagger[📜 Swagger / API Contract]
         end
 
-        Workspace[🎛️ Bloom Conductor
-        Sovereign Intent Interface]
+        subgraph ConductorWorkspace["🎛️ Conductor Workspace"]
+            Setup["🛠️ Setup"]
+            Onboarding["🚪 Onboarding"]
+            Core["🧭 Core"]
+        end
 
         NucleusExe[⚖️ Nucleus
         Gobernanza]
@@ -76,6 +83,18 @@ flowchart LR
         Python Engine + IonPump]
         Host[⚙️ Host Service\nC++]
 
+        AITAP[AITAP]
+
+        subgraph Runtime["⚙️ Runtime"]
+            Executor[Executor]
+            OpenCode[OpenCode]
+        end
+
+        subgraph ExternalCLIs["External CLIs"]
+            CodexCLI[Codex CLI]
+            ClaudeCodeCLI[Claude Code CLI]
+        end
+
         BloomSensor[🌱 Bloom Sensor
         Human Presence Runtime / Session 1]
 
@@ -84,6 +103,28 @@ flowchart LR
             Chrome Extension Runtime
             ────────────────────────
             UI + Synapse Client"]
+
+            subgraph SynapsePages["🌐 Synapse Pages"]
+                Discovery["📊 Discovery Page
+                Dashboard"]
+                Landing["🔧 Landing Page
+                Tool"]
+                SynapseSimulator["🔬 SynapseSimulator
+                Debug UI (dev only)"]
+            end
+
+            subgraph AIWebSites["🌐 AI Web Sites"]
+                ChatGPTSite["🟢 ChatGPT
+                OpenAI"]
+                ClaudeSite["🟠 Claude
+                Anthropic"]
+                GrokSite["⚡ Grok
+                xAI"]
+                CompanionSite["🪞 Companion
+                Side Panel (Gemini webview)"]
+                GeminiWebSite["🔷 Gemini Web
+                google.com · sesión propia"]
+            end
         end
 
         subgraph LocalFS["📂 Disco Local"]
@@ -102,31 +143,9 @@ flowchart LR
             (AppData)"]
         end
 
-        subgraph SynapsePages["🌐 Synapse Pages"]
-            Discovery["📊 Discovery Page
-            Dashboard"]
-            Landing["🔧 Landing Page
-            Tool"]
-            SynapseSimulator["🔬 SynapseSimulator
-            Debug UI (dev only)"]
-        end
-
-        subgraph AIWebSites["🌐 AI Web Sites"]
-            ChatGPTSite["🟢 ChatGPT
-            OpenAI"]
-            ClaudeSite["🟠 Claude
-            Anthropic"]
-            GrokSite["⚡ Grok
-            xAI"]
-            CompanionSite["🪞 Companion
-            Side Panel (Gemini webview)"]
-            GeminiWebSite["🔷 Gemini Web
-            google.com · sesión propia"]
-        end
-
         subgraph AIProviders["🤖 AI Providers"]
-            GeminiAPI["🔷 Gemini API
-            Google"]
+            LocalLLM["🧠 Local LLM"]
+            ExternalAIAPI["🌐 External AI API"]
         end
 
         Ext --> Discovery
@@ -134,12 +153,12 @@ flowchart LR
         Ext --> SynapseSimulator
 
         User --> VS
-        User <--> Workspace
+        User <--> ConductorWorkspace
         User <--> Discovery
         User <--> Landing
 
-        Workspace <--> Sentinel
-        Workspace <--> NucleusExe
+        ConductorWorkspace <--> Sentinel
+        ConductorWorkspace <--> NucleusExe
         Sentinel <--> NucleusExe
         Sentinel <--> Brain
 
@@ -147,11 +166,13 @@ flowchart LR
         Metamorph -.actualiza.-> Brain
         Metamorph -.actualiza.-> Host
         Metamorph -.actualiza.-> Sentinel
-        Metamorph -.actualiza.-> Workspace
+        Metamorph -.actualiza.-> ConductorWorkspace
         Metamorph -.actualiza.-> IonSites
 
+        NucleusExe --levanta--> Bootstrap
+        Bootstrap --> VS
         VS --> Brain
-        VS <--> Workspace
+        VS <--> ConductorWorkspace
         VS <--> ProjectFolder
 
         BloomSensor --presence events--> Sentinel
@@ -166,8 +187,8 @@ flowchart LR
 
         NucleusExe -.crea y firma.-> MandatesFolder
 
-        Workspace <--> ProjectFolder
-        Workspace <--> NucleusFolder        
+        ConductorWorkspace <--> ProjectFolder
+        ConductorWorkspace <--> NucleusFolder        
 
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
@@ -179,7 +200,18 @@ flowchart LR
         CompanionSite -.contexto BISP.-> ClaudeSite
         CompanionSite -.contexto BISP.-> GrokSite
 
-        Brain <--> GeminiAPI
+        Brain <--> ExternalAIAPI
+
+        Brain <--> AITAP
+        NucleusExe <--> AITAP
+        AITAP --> Executor
+        Executor <--> OpenCode
+        Executor <--> CodexCLI
+        Executor <--> ClaudeCodeCLI
+        OpenCode --> AIProviders
+        OpenCode --> LocalLLM
+        AITAP --> AIProviders
+        AITAP --> LocalLLM
     end
 
     subgraph Internet["🌐 Internet"]
@@ -193,35 +225,44 @@ flowchart LR
         AlfredMobile["📱 Alfred Mobile\nApp · WebSocket + GitHub OAuth"]
         BloomUpdateServer["📦 Bloom Update Server\nManifests firmados · Ion Recipes"]
         Marketplace["🌐 Mandate Marketplace\nEcosistema inter-org"]
+        GeminiAPI["🔷 Gemini API
+        Google"]
         AlfredMobile --"WebSocket\nQR + nonce"--> BlindJudge
         BloomUpdateServer --"manifests firmados\nion recipes"--> Batcave
     end
 
+    ExternalAIAPI <--> GeminiAPI
+
     RelayEngine <--"Sovereign Link\nWebSocket full-duplex"--> NucleusExe
     NucleusExe -.publica/consume via Batcave.-> Marketplace
     NucleusExe --"valida y descarga\nartefactos"--> BloomUpdateServer
+    AlfredRuntime <--> AITAP
 ```
 
 ## 2. ARQUITECTURA DE BLOOM
 
 ### 2.1️⃣ Bloom Runtime Infrastructure
 
-La ejecución de BTIPS se apoya en una infraestructura de **Sidecar** que independiza la lógica organizacional de la interfaz visual.
+La operación de BTIPS se apoya en servicios persistentes que independizan la lógica organizacional, el suministro de inteligencia y la ejecución técnica de las interfaces visuales.
 
-*   **Sentinel Sidecar:** Proceso *daemon* que actúa como orquestador persistente. Mantiene el Event Bus activo y garantiza que la ejecución técnica no se interrumpa si el Workspace se cierre.
+*   **Sentinel Sidecar:** Proceso *daemon* que mantiene el Event Bus activo, transporta eventos entre componentes y permite que las interfaces se desconecten sin perder observabilidad.
 *   **Synapse Protocol:** Handshake de 3 fases (Extension ↔ Host ↔ Brain) que valida la integridad del canal antes de procesar intents.
 *   **Data Persistence & Stateless UI:** El Workspace (Conductor) opera como una **Stateless UI**. No depende de estados volátiles en memoria, sino que reconstruye su realidad escaneando los archivos de intents en el Filesystem (`.bloom/intents/`) y sincronizando eventos perdidos mediante *polling* histórico al Sidecar.
+*   **Temporal:** Mantiene workflows durables, su dispatch, pausa, reanudación, retry y continuidad temporal.
+*   **AITAP:** Suministra inteligencia y decide, por separado, el runtime y el proveedor/modelo efectivos.
+*   **Executor:** Materializa la ejecución técnica mediante el runtime seleccionado, sin interpretar la intención.
 
 ---
 
 ### 2.2️⃣ Nucleus Governance Layer
 
-Nucleus es la autoridad de mando y el árbitro de identidad del sistema. Actúa como el puente entre la voluntad del propietario y la ejecución técnica.
+Nucleus es la autoridad de gobierno, identidad y firma del sistema. Actúa como el puente entre la voluntad del propietario y las capacidades del ecosistema, sin convertirse en motor cognitivo, scheduler ni ejecutor técnico.
 
 *   **Identity & Role Management:** Gestiona la jerarquía de poder (Master/Architect/Specialist), validando quién tiene permiso para ejecutar acciones sensibles.
-*   **Vault Authority:** Es el único componente capaz de autorizar el flujo de llaves (API Keys/OAuth) desde el almacenamiento seguro de Chrome hacia el motor de ejecución.
+*   **Vault Authority:** Es el dueño del ciclo de vida de las credenciales. Las almacena mediante el mecanismo seguro del sistema operativo y entrega referencias o accesos efímeros a los consumidores correspondientes sin exponerlas como estado persistente fuera del Vault.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
 *   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Batcave.
+*   **Mandates y autoridad organizacional:** Crea, valida y firma Mandates y conserva la autoridad organizacional sobre sus Actions e Intents, mientras Brain aporta semántica y Temporal conserva el workflow durable.
 
 ---
 
@@ -237,7 +278,7 @@ El runtime de Cortex incluye tres páginas web locales que operan sobre el mismo
 * **Discovery** — Onboarding del usuario. Guía el flujo desde la instalación hasta tener GitHub auth, API key y cuenta registrada en Nucleus.
 * **Landing** — Dashboard del perfil activo. Estado de sesión, cuentas vinculadas, stats de uso y acciones rápidas post-onboarding.
 * **SynapseSimulator** — Herramienta de debug y observabilidad del protocolo. Existe **únicamente en builds dev** — no se despliega en producción.
-* **Companion** *(v6.0)* — Panel lateral de segunda opinión cognitiva. A diferencia de SynapseSimulator, **sí es un activo de producción**: vive permanentemente disponible para el ingeniero, gateado por onboarding completo + handshake Synapse confirmado. Ver subsección dedicada más abajo.
+* **Companion** — Panel lateral de segunda opinión cognitiva. A diferencia de SynapseSimulator, es un activo de uso continuo: vive permanentemente disponible para el ingeniero, condicionado por onboarding completo + handshake Synapse confirmado. Ver subsección dedicada más abajo.
 
 Cortex es deliberadamente **stateless**, delegando autoridad, versionado y despliegue a Sentinel, y razonamiento profundo a Brain.
 
@@ -267,7 +308,7 @@ Sus cuatro paneles:
 
 ---
 
-#### Companion — Segunda Opinión Cognitiva *(nuevo v6.0)*
+#### Companion — Segunda Opinión Cognitiva
 
 El Companion es el **cuarto activo Synapse**, y el primero de los cuatro pensado para uso continuo en producción por el ingeniero (no solo por developers de Bloom). Es un panel lateral (`chrome.sidePanel`) que embebe la web de Gemini (`<webview>` nativo, sesión propia del usuario, costo $0 para el sistema) para dar una segunda opinión técnica sin interrumpir ni "ensuciar" la sesión principal que el ingeniero mantiene con la AI web de turno (Claude, ChatGPT, Grok).
 
@@ -284,9 +325,9 @@ El botón de activación vive en Landing (`isCompanionAvailable()`), nunca en Di
 
 **BISP como contexto nativo:** cuando Brain termina de procesar un intent, `context.js` emite `STORE_BISP` con un resumen estructurado (`intentType`, `summary`, `openDecision`, `findingsSummary`, `domainTags`). Si el ingeniero navega a una AI web con el handshake confirmado, `background.js` inyecta ese BISP en el Companion en segundo plano (`INJECT_BISP`, validado contra `companion.schema.json` antes de tocar el webview). El Companion queda así "al tanto" de la sesión sin que el ingeniero tenga que explicárselo — estado `SILENT_MONITORING` en el statusbar.
 
-**Nota de diseño abierta:** la inyección silenciosa (`autoSend: true` para el contexto BISP) y el forzado de user-agent móvil para obtener la UI colapsada de Gemini son decisiones de UX ya tomadas en la guía de implementación (v1.2). Vale dejarlas explícitas acá porque son la clase de detalle que un ToS de un proveedor de terceros puede tratar de forma distinta a una extensión que solo lee `tabs.onUpdated` — el Kickoff Intent (ver `.bloom/.intents/.dev/`) incluye un ítem de revisión de esa superficie antes de merge a producción, no como bloqueo sino como checklist de higiene.
+**Interacción con terceros:** la inyección silenciosa (`autoSend: true` para el contexto BISP) y el uso de una interfaz compacta de Gemini respetan los límites de autoridad y las condiciones aplicables al servicio externo. Companion no automatiza el login ni el registro del proveedor.
 
-**Companion no depende de SynapseSimulator — y no debe llegar a depender.** Son activos ortogonales: SynapseSimulator es dev-only (§16 restricción #4 de `SYNAPSE_SIMULATOR_SOURCE_OF_TRUTH_1_2.md`: *"El SynapseSimulator NO existe en prod"*), Companion es de producción continua. Companion tiene su propio manifiesto (`COMPANION_PROTOCOL_MANIFEST`) y su propio mecanismo de inyección (`executeScript()`/`insertCSS()` directo sobre su `<webview>`) — en ningún punto invoca `ION_EXECUTE_FLOW`, comandos DOM de IonPump, ni nada de `content.js`/`synapseSimulatorProtocol.js`. Salvedad a tener presente: lo que está gateado a `--dev` en `synapse_simulator_generator.py` es solo la UI (`synapse-simulator/index.html`); el routing de esos comandos en `background.js`/`content.js` no está condicionado al mismo flag y existe en todo build. Companion no debe, bajo ningún diseño futuro, invocar esa vía — mantenerlo así es lo que preserva la separación limpia entre "activo de producción" y "herramienta de debug".
+**Companion no depende de SynapseSimulator.** Son activos ortogonales: SynapseSimulator es una herramienta de desarrollo y Companion es una superficie de uso continuo. Companion tiene su propio manifiesto (`COMPANION_PROTOCOL_MANIFEST`) y su propio mecanismo de inyección (`executeScript()`/`insertCSS()` directo sobre su `<webview>`). No invoca `ION_EXECUTE_FLOW`, comandos DOM de IonPump ni el canal de automatización de `content.js`/`synapseSimulatorProtocol.js`.
 
 ---
 
@@ -312,7 +353,7 @@ El Conductor no es "otra interfaz más". Es el **órgano de gobernanza conscient
 
 El Conductor NO se comunica con Sentinel. Se conecta directamente con **Nucleus** vía HTTP/WebSocket, elevando el nivel de abstracción. Esto permite que el desarrollador opere a nivel de "intención organizacional" sin preocuparse por detalles de ejecución de bajo nivel.
 
-Cuando el usuario forja un intent en el Conductor, este se serializa como un archivo `.json` en `.bloom/.intents/`, y Nucleus se encarga de orquestar su ejecución mediante Temporal workflows. El Conductor simplemente observa el progreso vía eventos y presenta resultados cuando están listos.
+Cuando el usuario forja un intent en el Conductor, este se serializa como un archivo `.json` en `.bloom/.intents/`. Nucleus valida y firma lo que corresponde a la autoridad organizacional; Brain interpreta el intent y construye su BISP; Temporal mantiene el workflow durable; AITAP suministra la inteligencia y selecciona los targets; Executor materializa las acciones técnicas mediante el runtime elegido. El Conductor observa el progreso vía eventos y presenta los resultados.
 
 #### El Merge Cognitivo
 
@@ -443,14 +484,15 @@ Ambas interfaces leen el mismo filesystem. Un intent creado en el plugin aparece
 
 ### 2.6️⃣ Brain (Python Engine)
 
-**Brain** es el motor de ejecución Python que materializa las intenciones técnicas en acciones concretas. Opera como un servidor TCP persistente que acepta comandos del Event Bus (Sentinel) y ejecuta pipelines declarativos en el contexto de Projects y Nucleus.
+**Brain** es el motor cognitivo Python y el dueño de la semántica y del ciclo de vida de los Intents/BISP. Opera como un servicio persistente que recibe comandos del Event Bus, construye contexto verificable, coordina las fases cognitivas y transforma respuestas de inteligencia en resultados estructurados.
 
 #### Responsabilidades Principales
 
-* **Pipeline Execution:** Ejecuta secuencias de acciones definidas en archivos `.json` (intents)
+* **Intent/BISP Lifecycle:** Interpreta los intents y administra sus fases, contexto, decisiones, findings, estado y outputs.
 * **Context Management:** Mantiene el estado de cada intent (inputs, outputs, errores, progreso)
-* **AI Provider Integration:** Se comunica con modelos de IA (Gemini, Claude, GPT) para razonamiento asistido
-* **File System Operations:** Lee, escribe y transforma archivos siguiendo las instrucciones de cada intent
+* **Intelligence Consumption:** Construye el `BSIP-Payload`, solicita inteligencia a AITAP y recibe la respuesta cruda del modelo.
+* **Response Interpretation:** Persiste la respuesta cruda, la parsea y la valida contra el contrato correspondiente para incorporarla al BISP.
+* **Execution Packaging:** Cuando un resultado requiere actuación técnica, produce una descripción neutral del trabajo para Execution Layer, sin acoplarla a un runtime particular.
 * **Event Broadcasting:** Publica eventos de progreso al Event Bus para observabilidad en tiempo real
 
 #### Arquitectura Interna
@@ -459,12 +501,13 @@ Brain opera con un diseño modular:
 
 ```
 Brain
-├── Pipeline Engine (ejecuta intents)
+├── Intent/BISP Engine (ciclo cognitivo de intents)
 ├── IonPump Runtime (automatización web via .ion recipes)
-├── Provider Adapters (Gemini, Claude, GPT)
-├── File System Manager (operaciones seguras)
+├── AITAP Client (suministro de inteligencia)
+├── Response Parser (validación BSIP-Response)
+├── Execution Packager (trabajo neutral)
 ├── Event Publisher (broadcast al Event Bus)
-└── Vault Client (obtiene credenciales de Nucleus)
+└── Context and State Managers (persistencia BISP)
 ```
 
 #### IonPump — Runtime de Automatización Web
@@ -516,16 +559,18 @@ ionsites/
 6. **Finalización:** Emite `INTENT_COMPLETED` o `INTENT_FAILED`
 7. **Persistencia:** Guarda outputs y actualiza el filesystem
 
-#### Integración con AI Providers
+#### Integración con el suministro de inteligencia
 
-Brain no mantiene llaves de API en memoria ni en disco. Cuando necesita comunicarse con un provider:
+Brain no se acopla directamente a Gemini, Claude, GPT, xAI, Ollama ni a otro proveedor. Cuando una fase necesita razonamiento:
 
-1. Solicita la llave a Nucleus vía `VAULT_GET_KEY`
-2. Nucleus valida la autorización (rol del usuario, scope del intent)
-3. Si aprueba, descifra la llave del Chrome Storage y la envía a Brain
-4. Brain usa la llave temporalmente y la descarta al finalizar
+1. Brain construye el `BSIP-Payload` con el objetivo y el contexto de la fase.
+2. AITAP selecciona el proveedor/backend y el modelo efectivos.
+3. AITAP resuelve por referencia las credenciales necesarias contra Nucleus Vault.
+4. AITAP consulta al modelo, registra tokens, costo, latencia y consumidor, y devuelve la respuesta cruda.
+5. Brain persiste la respuesta cruda, la parsea y la valida contra el schema del `BSIP-Response`.
+6. Brain incorpora el resultado validado al BISP y decide la siguiente transición del intent.
 
-Este modelo garantiza que las credenciales nunca persistan fuera del vault controlado por Nucleus.
+AITAP no interpreta el contenido y Nucleus Vault conserva la custodia de los secretos.
 
 #### Event Bus Protocol
 
@@ -541,7 +586,6 @@ Cada mensaje tiene:
 
 **Sentinel → Brain**:
 * `EXECUTE_INTENT`: Ejecuta un intent específico
-* `VAULT_GET_KEY`: Solicita una llave del vault
 * `POLL_EVENTS`: Pide eventos perdidos desde timestamp X
 
 **Brain → Sentinel**:
@@ -549,7 +593,6 @@ Cada mensaje tiene:
 * `INTENT_PROGRESS`: Actualización de progreso (0.0 a 1.0)
 * `INTENT_COMPLETED`: Intent terminó exitosamente
 * `INTENT_FAILED`: Intent falló con error
-* `VAULT_KEY_RECEIVED`: Llave obtenida del vault
 
 ##### Resiliencia: Reconexión Automática
 
@@ -572,12 +615,74 @@ Sabe que perdió los eventos 43 y 44, y puede solicitarlos explícitamente a Bra
 
 ---
 
-### 2.6️⃣ Bloom Sensor (Human Presence Runtime)
+### 2.7️⃣ AITAP — Intelligence Gateway, Vault Reference y Contabilidad
+
+AITAP es el grifo de inteligencia y routing del ecosistema. Es consumido por los orquestadores cuando necesitan seleccionar una capacidad de procesamiento o consultar un modelo, pero no administra el ciclo de vida de los Intents y no ejecuta acciones sobre el filesystem.
+
+AITAP tiene exactamente tres pilares:
+
+* **Gateway / Grifo:** selecciona el runtime abstracto y, por separado, el proveedor/backend y el modelo efectivos. Aplica prioridades, disponibilidad, failover y circuit breaker sin confundir routing con ejecución.
+* **Vault por referencia:** resuelve `key_id` contra Nucleus Vault. Nucleus conserva la custodia del secreto; AITAP nunca lo almacena como credencial propia.
+* **Contabilidad:** registra tokens de entrada y salida, costo, latencia, resultado y consumidor de cada consulta.
+
+En el suministro de inteligencia, AITAP recibe un `BSIP-Payload`, consulta al modelo seleccionado, registra la métrica y devuelve la respuesta cruda. Brain o Alfred, según quién haya iniciado la consulta, persisten, parsean y validan esa respuesta. AITAP no produce ni valida el `BSIP-Response`.
+
+En el routing de ejecución, AITAP selecciona un target abstracto entre los runtimes disponibles. Executor recibe esa decisión y se ocupa de la integración técnica. AITAP no crea procesos, no administra sesiones de runtime y no aplica cambios.
+
+---
+
+### 2.8️⃣ Temporal — Workflow Durable
+
+Temporal conserva la continuidad operativa de Intents, Actions y Mandates a través del tiempo. Mantiene el estado durable del workflow y coordina dispatch, pausa, reanudación, retry y recuperación frente a interrupciones.
+
+Temporal no interpreta el BISP, no selecciona inteligencia, no gobierna la organización y no ejecuta herramientas. Recibe transiciones ya definidas por los componentes responsables y garantiza que ocurran en el orden y con la persistencia correspondientes.
+
+---
+
+### 2.9️⃣ Execution Layer y Executor
+
+**Execution Layer** es el plano abstracto que convierte trabajo técnico neutral en una ejecución observable. **Executor** es la aplicación first-party en Go que implementa ese plano mediante su propio binario, servicio y CLI.
+
+Executor recibe el trabajo neutral producido por Brain y la decisión de routing emitida por AITAP. A partir de esas entradas:
+
+* crea un espacio de trabajo aislado para la ejecución;
+* administra el lifecycle técnico, los procesos y las sesiones;
+* descubre y verifica runtimes compatibles;
+* adapta el trabajo al protocolo nativo del runtime seleccionado;
+* captura eventos, outputs, snapshots, hashes, tests y diferencias;
+* conserva checkpoints y Evidence;
+* devuelve un Result neutral al ecosistema.
+
+Executor no interpreta el Intent ni el BISP, no decide el workflow, no selecciona el proveedor/modelo y no custodia secretos. Los detalles nativos de cada runtime quedan encapsulados dentro de sus Runtime Adapters.
+
+---
+
+### 2.10️⃣ Runtimes de Procesamiento
+
+Los runtimes son las capacidades concretas que realizan el trabajo técnico bajo la coordinación de Executor. El runtime y la inteligencia efectiva son dimensiones independientes: elegir OpenCode, Codex CLI o Claude Code CLI no determina por sí mismo qué proveedor/backend o modelo procesa una consulta.
+
+* **OpenCode:** runtime first-party distribuido y administrado por Bloom. Opera como servicio headless y expone sesiones, streaming, herramientas, diff y cancelación mediante su adapter interno en Executor. OpenCode no es un proveedor de inteligencia.
+* **Codex CLI:** runtime externo descubierto y verificado por Executor. Su instalación pertenece al usuario o al entorno externo; Bloom integra sus capacidades mediante un adapter dedicado.
+* **Claude Code CLI:** runtime externo descubierto y verificado por Executor bajo el mismo contrato neutral y mediante un adapter dedicado.
+
+Los tres reciben una proyección equivalente del trabajo y devuelven resultados normalizados, sin transferir sus comandos, identificadores de sesión ni formatos privados al resto de la arquitectura.
+
+---
+
+### 2.11️⃣ Cognituum Runner — Automatización First-Party
+
+Cognituum Runner es el runtime propio de automatización controlada. IonPump interpreta recipes `.ion` y determina el siguiente comando declarado; Synapse transporta ese comando; Runner ejecuta la automatización first-party y devuelve eventos y paquetes observables.
+
+Runner no actúa sobre las interfaces DOM de proveedores de inteligencia externos. Cortex conserva la captura de contexto del navegador, mientras IonPump conserva la interpretación de recipes y Synapse el transporte. Esta separación evita confundir automatización propia, transporte e interacción con servicios externos.
+
+---
+
+### 2.12️⃣ Bloom Sensor (Human Presence Runtime)
 
 **Bloom Sensor** (`bloom-sensor.exe`) es el daemon de presencia humana del ecosistema Bloom. Corre en **Session 1** como proceso persistente, iniciándose automáticamente al login del usuario. Reemplaza a `bloom-launcher` tanto en su punto de arranque (`HKCU\Run`) como en su rol dentro del ecosistema: donde Launcher era un puente técnico de sesión para lanzar Chrome desde Session 0, Sensor es la capa fisiológica del sistema — transforma presencia humana en señal cognitiva utilizable.
 
 ```
-Sensor mide. Nucleus decide. Brain ejecuta.
+Sensor mide. Nucleus gobierna. Brain interpreta. Executor ejecuta.
 ```
 
 #### Responsabilidades Principales
@@ -602,7 +707,7 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Run
 
 ---
 
-### 2.7️⃣ Metamorph (Declarative State Reconciler)
+### 2.13️⃣ Metamorph (Declarative State Reconciler)
 
 **Metamorph** es el reconciliador declarativo de estado que gobierna las actualizaciones del sistema Bloom. A diferencia de updaters tradicionales que ejecutan comandos imperativos, Metamorph opera mediante **reconciliación continua**: compara el estado actual del sistema con el estado deseado (declarado en manifests) y converge atómicamente hacia él.
 
@@ -808,7 +913,7 @@ claude.ai     v1.2.0    5 flows   12.1 KB   ✓ Healthy
 Total: 2 sites, 8 flows
 ```
 
-La reconciliación completa (download + swap automático desde Batcave) requiere que Batcave esté desplegado. Hasta entonces, la copia de recipes es manual y Metamorph cubre la inspección.
+La reconciliación completa descarga artefactos validados desde Batcave y realiza su reemplazo atómico mediante Metamorph.
 
 #### Filosofía de Diseño
 
@@ -854,6 +959,8 @@ Representa el **nivel más alto de la pirámide cognitiva**.
 ✔️ **`inf` — Information**
 ✔️ **`cor` — Coordination (organizacional)**
 ✔️ **`doc` — Documentation estratégica**
+✔️ **`ing` — Ingestion bajo Mandate**
+✔️ **`dis` — Discovery bajo Mandate**
 
 ❌ `dev` **NO es el foco**
 (Solo en tooling interno del Nucleus, nunca en productos)
@@ -897,6 +1004,8 @@ Basado en tu árbol real:
   * ejecutar `dev`
   * ejecutar `doc`
   * ejecutar `exp` local
+  * recibir material mediante `ing` dentro de un Mandate
+  * curar su topología mediante `dis` dentro de un Mandate
 * El **Nucleus**:
 
   * define **cómo** se hacen las cosas
@@ -949,6 +1058,33 @@ Se usa para merges cognitivos, orden de trabajo y control de impacto.
 Se ejecuta **en Nucleus o en Projects complejos**, como autoridad.
 
 ---
+
+### `ing` — Ingestion Intent
+
+Incorpora **material raw o código nuevo** al ecosistema y siembra el linaje de los Genes resultantes. Se usa tanto durante el Mandate Genesis como al anexar posteriormente un subsistema, repositorio o módulo.
+
+Opera en tres fases propias:
+
+1. **Reception:** recibe, inventaría y extrae el material de entrada.
+2. **Classification:** resuelve en dos pasadas la relación Raw → Dominio → Gene y produce una propuesta.
+3. **Consolidation:** permite revisar y confirmar la incorporación antes de persistirla.
+
+`ing` siempre pertenece a un Mandate. Puede crear Genes y sembrar su primera relación con un Dominio, pero no reorganiza Dominios existentes. La vectorización asiste el proceso sin convertirse en una fase obligatoria: si no está disponible, el intent continúa mediante resolución humana.
+
+---
+
+### `dis` — Discovery Intent
+
+Mantiene la **topología completa de Dominios y Genes** a partir del conocimiento ya incorporado por uno o más intents `ing`. Detecta Dominios que deben fusionarse, dividirse o renombrarse y Genes cuya función atraviesa múltiples Dominios.
+
+Opera en tres fases propias:
+
+1. **Discovery:** observa la totalidad de los Genes y el mapa semántico dentro del alcance del Mandate.
+2. **Mapping:** propone altas, bajas y transformaciones de relaciones Domain↔Gene.
+3. **Ratification:** presenta el mapa para aprobación o edición humana y consolida la topología confirmada.
+
+`dis` siempre pertenece a un Mandate. No ingiere material raw, no crea Genes y no modifica su linaje: trabaja exclusivamente sobre las relaciones de la topología semántica. Al igual que `ing`, degrada a resolución humana cuando la capa vectorial no está disponible.
+
 ---
 
 ## 7️⃣ Mandates — Contratos Estratégicos y Modelo de Negocio
@@ -957,10 +1093,10 @@ Se ejecuta **en Nucleus o en Projects complejos**, como autoridad.
 
 Un **Mandate** es la unidad de ejecución estratégica más alta del sistema Bloom. Donde los intents operan de forma acotada y determinista, los Mandates **agrupan, secuencian y persisten** múltiples intents bajo una intención firmada y gobernada, permitiendo que objetivos complejos se ejecuten con estado, trazabilidad y control a lo largo del tiempo.
 
-Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objetivo organizacional y lo descompone en una secuencia de **Actions**. Cada Action se materializa en un intent concreto (`exp`, `cor`, `dev`, `doc`) que Nucleus instancia y ejecuta. El Mandate nunca ejecuta lógica directamente: **solo orquesta, siempre a través de Nucleus**, usando Temporal como motor de persistencia.
+Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objetivo organizacional y lo descompone en una secuencia de **Actions**. Cada Action se materializa en un intent concreto (`dev`, `doc`, `exp`, `inf`, `cor`, `ing` o `dis`). El Mandate nunca ejecuta lógica directamente: Nucleus conserva su autoridad y firma, Brain interpreta sus Intents y Temporal mantiene su workflow durable.
 
 > **Definición formal:**
-> Un Mandate es un contrato estratégico firmado por Nucleus que declara un objetivo organizacional descompuesto en acciones secuenciales, cada una resuelta como un intent gobernado, orquestado persistentemente vía Temporal bajo autoridad exclusiva de Nucleus.
+> Un Mandate es un contrato estratégico firmado por Nucleus que declara un objetivo organizacional descompuesto en Actions, cada una resuelta como un Intent/BISP y coordinada mediante un workflow durable de Temporal bajo la autoridad organizacional de Nucleus.
 
 ### La Jerarquía
 
@@ -968,13 +1104,13 @@ Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objet
 Mandate → Action(s) → Intent(s)
 ```
 
-El Mandate no habla directamente con intents. Habla con **Actions**, que son la unidad semántica dentro del Mandate. Cada Action se resuelve como un intent concreto que Nucleus instancia y controla. Esto garantiza que toda la cadena de ejecución permanezca gobernada.
+El Mandate no habla directamente con intents. Habla con **Actions**, que son la unidad semántica dentro del Mandate. Cada Action se resuelve como un intent concreto: Nucleus conserva la autoridad del contrato, Brain gobierna su semántica y Temporal coordina su continuidad. Esto mantiene separadas autoridad, cognición y workflow.
 
 La jerarquía completa del sistema queda así:
 
 ```
 Nivel 1 — Nucleus
-         Autoridad, gobernanza, routing, firma
+         Autoridad, gobernanza y firma
 
 Nivel 2 — Mandate
          Entidad estratégica firmada, versionada
@@ -983,7 +1119,7 @@ Nivel 3 — Action
          Unidad semántica dentro del Mandate
 
 Nivel 4 — Intent
-         Unidad ejecutable concreta (exp / cor / dev / doc)
+         Unidad de intención concreta (dev / doc / exp / inf / cor / ing / dis)
 ```
 
 ### Qué es y qué NO es un Mandate
@@ -993,13 +1129,13 @@ Nivel 4 — Intent
 | Un tipo especial de intent | Un contrato estratégico firmado |
 | Un reemplazo de intents | Una capa superior que los orquesta |
 | Un runtime paralelo | Un Workflow de Temporal en el mismo runtime |
-| Ejecutor de lógica de negocio | Orquestador vía Nucleus exclusivamente |
+| Ejecutor de lógica de negocio | Contrato coordinado por Actions e Intents |
 | Escritor directo en `.intents/` | Solicitante a Nucleus para crear intents |
 | Mutable post-creación | Inmutable — el contrato original nunca se altera |
 
 ### Capacidades Operativas
 
-Un Mandate puede representar, por ejemplo, *"Estabilizar la capa de autenticación"*, descompuesto en: explorar módulos sin uso (`exp`) → eliminar los identificados (`dev`) → actualizar la documentación resultante (`doc`). Cada paso es un intent gobernado; el Mandate es el contrato que los une bajo un objetivo común.
+Un Mandate puede representar, por ejemplo, *"Estabilizar la capa de autenticación"*, descompuesto en: explorar módulos sin uso (`exp`) → eliminar los identificados (`dev`) → actualizar la documentación resultante (`doc`). También puede representar el nacimiento estructural de un proyecto mediante el **Mandate Genesis**: incorporar material (`ing`) → consolidar Genes (`ing`) → curar la topología de Dominios (`dis`) → producir documentación inicial (`doc`). Cada paso es un intent gobernado; el Mandate es el contrato que los une bajo un objetivo común.
 
 Los Mandates soportan control de ciclo de vida completo:
 
@@ -1011,7 +1147,7 @@ nucleus mandate resume {mandateId}            # Reanuda desde donde pausó
 nucleus mandate status {mandateId}            # Estado actual de ejecución
 ```
 
-En caso de crash, el workflow retoma automáticamente desde el último intent completado — sin repetir trabajo ya realizado. La separación entre `mandate.json` (definición firmada, inmutable) y `mandate_state.json` (estado mutable de ejecución) garantiza que el contrato original nunca se altere mientras el progreso se registra con trazabilidad completa.
+Temporal conserva el workflow y permite retomarlo desde el último punto durable sin repetir trabajo ya completado. La separación entre `mandate.json` (definición firmada, inmutable) y `mandate_state.json` (estado mutable de ejecución) garantiza que el contrato original nunca se altere mientras el progreso se registra con trazabilidad completa.
 
 ---
 
@@ -1190,11 +1326,13 @@ Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Ma
 
 | Acción | Tipo de instrucción | Efecto en el sistema local |
 |---|---|---|
-| Explorar una alternativa técnica | Intent `exp` | Nucleus instancia el intent, Brain lo ejecuta |
-| Coordinar un merge cognitivo | Intent `cor` | Nucleus orquesta la resolución entre intents conflictivos |
-| Desarrollar una feature | Intent `dev` | Nucleus delega al Project correspondiente |
-| Documentar una decisión | Intent `doc` | Nucleus persiste el conocimiento en el filesystem |
-| Ejecutar un proceso complejo de múltiples pasos | Mandate | Nucleus firma el contrato y lo persiste vía Temporal |
+| Explorar una alternativa técnica | Intent `exp` | Brain interpreta el intent y conserva sus resultados en el BISP |
+| Coordinar un merge cognitivo | Intent `cor` | Brain coordina la resolución semántica y Executor materializa las acciones técnicas necesarias |
+| Desarrollar una feature | Intent `dev` | Brain construye el trabajo y Executor lo opera mediante el runtime seleccionado |
+| Documentar una decisión | Intent `doc` | Brain construye el resultado documental y el flujo técnico persiste sus efectos |
+| Incorporar material o código | Intent `ing` | Brain recibe, clasifica y consolida el material dentro del Mandate correspondiente |
+| Curar Dominios y Genes | Intent `dis` | Brain propone el mapa y consolida la ratificación humana |
+| Ejecutar un proceso complejo de múltiples pasos | Mandate | Nucleus firma el contrato y Temporal conserva su workflow durable |
 
 Alfred no ejecuta estos pasos directamente. **Traduce la instrucción del usuario en el intent o Mandate correcto**, lo envía al Nucleus local a través del túnel de Batcave, y devuelve el resultado al usuario en tiempo real vía streaming WebSocket.
 
@@ -1218,10 +1356,13 @@ RelayEngine (src/core/relay-engine.ts)
     │  enruta hacia el túnel soberano local
     ▼
 Nucleus (sistema local)
-    │  valida, firma y ejecuta el intent/Mandate
+    │  valida y firma el intent/Mandate
     ▼
-Brain / Temporal (sistema local)
-    │  ejecución concreta
+Brain → AITAP → Temporal (sistema local)
+    │  semántica, inteligencia y workflow durable
+    ▼
+Executor → OpenCode / Codex CLI / Claude Code CLI
+    │  ejecución técnica y resultados observables
     ▼
 Resultado → RelayEngine → Alfred → WebSocket stream → app mobile
 ```
@@ -1239,7 +1380,7 @@ Alfred solo acepta sesiones que pasen por el protocolo completo de Batcave:
 
 ### 9.6 Qué puede hacer Alfred que ningún otro componente puede
 
-Alfred es el **único punto del ecosistema Bloom que permite operar el sistema desde el exterior** sin estar físicamente en la máquina local. Todos los demás componentes (Conductor, Sentinel, Brain) requieren presencia local. Alfred rompe esa restricción de forma soberana: el acceso es remoto, pero **la autoridad sigue siendo local**. Nucleus sigue siendo quien firma y valida. Brain sigue siendo quien ejecuta. Alfred es el canal gobernado que los conecta con el usuario móvil.
+Alfred es el **único punto del ecosistema Bloom que permite operar el sistema desde el exterior** sin estar físicamente en la máquina local. Todos los demás componentes (Conductor, Sentinel, Brain) requieren presencia local. Alfred rompe esa restricción de forma soberana: el acceso es remoto, pero **la autoridad sigue siendo local**. Nucleus firma y valida; Brain interpreta; Temporal coordina; Executor materializa la ejecución. Alfred es el canal gobernado que los conecta con el usuario móvil.
 
 Esto lo convierte en el mecanismo central para:
 
@@ -1326,7 +1467,9 @@ La app mobile expone las capacidades de Alfred organizadas en tres superficies:
 ┌─────────────────────────────────────────────────────────┐
 │                    SISTEMA LOCAL                         │
 │                                                          │
-│   Nucleus ──→ Brain ──→ Temporal                        │
+│   Nucleus ──→ Brain ──→ AITAP ──→ Temporal              │
+│                              │                           │
+│                           Executor ──→ Runtime                 │
 │      │                                                   │
 │   (firma y valida todos los intents                      │
 │    creados por Alfred remotamente)                       │
@@ -1350,7 +1493,13 @@ BlindJudge (valida autoridad del usuario)
     ↓
 Nucleus local (firma el intent)  ← AUTORIDAD SIEMPRE LOCAL
     ↓
-Brain (ejecuta)
+Brain (interpreta el Intent/BISP)
+    ↓
+AITAP (selecciona inteligencia y runtime)
+    ↓
+Temporal (coordina el workflow)
+    ↓
+Executor + runtime (ejecutan técnicamente)
     ↓
 Resultado → Alfred → mobile (streaming)
 ```

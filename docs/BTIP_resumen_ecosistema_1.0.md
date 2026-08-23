@@ -1,8 +1,8 @@
-# BTIP — Resumen del ecosistema
+# BTIPS — Resumen del ecosistema
 
 ## Contexto
 
-BTIP convierte la interacción con IA en un proceso de ingeniería reproducible.
+BTIPS convierte la interacción con IA en un proceso de ingeniería reproducible.
 En vez de que el conocimiento viva en prompts que se pierden, cada acción técnica
 queda registrada como un **intent**: contexto, entradas, salidas y efectos,
 todo guardado en el filesystem (`.bloom/`), no en la memoria del modelo.
@@ -17,18 +17,61 @@ La idea de fondo:
 ## Componentes — qué hace cada uno
 
 ### 🧠 Nucleus
-El árbitro del sistema. Un solo Nucleus por organización. No escribe código de
-producto: **firma, valida y decide** quién puede hacer qué. Es la autoridad
-final sobre identidad, credenciales y estado organizacional.
+La autoridad de gobierno del sistema. Existe un solo Nucleus por organización.
+Conserva identidad, firma, Vault y estado organizacional. No interpreta Intents,
+no selecciona runtimes o modelos y no realiza la ejecución técnica.
 
 ### 🛡️ Sentinel
 Daemon que mantiene el Event Bus vivo. Es el sistema nervioso: transporta
 eventos entre todos los componentes aunque el usuario cierre la interfaz.
 
 ### 🧠 Brain
-Motor Python que ejecuta el trabajo concreto: corre pipelines, habla con los
-proveedores de IA (Gemini, Claude, GPT) y lee/escribe archivos según lo que
-diga cada intent.
+Motor cognitivo Python y dueño de los Intents/BISP. Construye contexto y
+`BSIP-Payload`, consume inteligencia mediante AITAP, persiste y valida la
+respuesta del modelo y produce trabajo técnico neutral cuando una acción debe
+ser materializada.
+
+### 🚰 AITAP
+El grifo del ecosistema. Tiene exactamente tres pilares:
+
+- **Gateway / Grifo** — selecciona por separado el runtime y el
+  proveedor/backend + modelo efectivos.
+- **Vault por referencia** — resuelve `key_id` contra Nucleus Vault sin
+  custodiar el secreto.
+- **Contabilidad** — registra tokens, costo, latencia y consumo por consumidor.
+
+Brain y Alfred consumen AITAP cuando necesitan inteligencia. AITAP devuelve la
+respuesta cruda; cada consumidor la interpreta. AITAP decide routing, pero no
+ejecuta código ni administra runtimes.
+
+### ⏳ Temporal
+Mantiene workflows durables de Intents, Actions y Mandates. Coordina dispatch,
+pausa, reanudación, retry y recuperación. No interpreta el BISP ni ejecuta
+herramientas.
+
+### ⚙️ Execution Layer y Executor
+**Execution Layer** es el plano abstracto de ejecución. **Executor** es la
+aplicación first-party Go que lo implementa. Recibe trabajo neutral de Brain y
+la decisión de runtime de AITAP; prepara el entorno aislado, administra procesos
+y sesiones, integra el runtime mediante adapters y devuelve Events, Result y
+Evidence.
+
+Executor no interpreta Intents/BISP ni selecciona runtime, proveedor o modelo.
+
+### 🖥️ Runtimes de procesamiento
+
+- **OpenCode** — runtime first-party administrado por Bloom.
+- **Codex CLI** — runtime externo descubierto y operado mediante Executor.
+- **Claude Code CLI** — runtime externo descubierto y operado mediante Executor.
+
+El runtime y la inteligencia efectiva son dimensiones separadas. OpenCode no
+es un proveedor de inteligencia, y elegir un CLI no determina por sí mismo el
+proveedor/backend o modelo.
+
+### 🤖 Cognituum Runner
+Runtime propio de automatización controlada. IonPump interpreta recipes `.ion`,
+Synapse transporta los comandos y Runner ejecuta la automatización first-party.
+Cortex conserva la captura de contexto del navegador.
 
 ### ⚙️ Host
 Puente en C++ entre Brain y el navegador (Cortex). Bajo nivel, poco visible,
@@ -61,7 +104,7 @@ Extensión de Chrome que conecta al usuario con las webs de IA. Vive en 4 págin
 - **Discovery** — onboarding inicial
 - **Landing** — dashboard del perfil activo
 - **SynapseSimulator** — debug, solo existe en builds de desarrollo
-- **Companion** *(nuevo v6.0)* — panel lateral con Gemini que da una "segunda
+- **Companion** — panel lateral con Gemini que da una "segunda
   opinión" sin ensuciar la sesión principal de IA del ingeniero
 
 ### 🌱 Bloom Sensor
@@ -77,39 +120,44 @@ rollback automático si algo falla).
 
 Esta es la distinción que más importa entender bien:
 
-- **Un Intent es la unidad ejecutable concreta.** Un solo trabajo, acotado y
+- **Un Intent es la unidad de intención concreta.** Un solo trabajo, acotado y
   determinista: modificar código, generar documentación, explorar una
-  alternativa, etc.
+  alternativa, incorporar material o curar su topología semántica.
 - **Un Mandate es un contrato estratégico firmado por Nucleus que agrupa,
   secuencia y persiste múltiples intents** bajo un objetivo organizacional
-  común. El Mandate **nunca ejecuta lógica directamente** — solo orquesta,
-  siempre a través de Nucleus, usando Temporal para persistir el progreso.
+  común. El Mandate **nunca ejecuta lógica directamente**: Nucleus conserva
+  su autoridad y firma, Brain interpreta los Intents y Temporal mantiene el
+  workflow durable.
 
 La jerarquía completa tiene 4 niveles:
 
 ```
-Nivel 1 — Nucleus     Autoridad, gobernanza, routing, firma
+Nivel 1 — Nucleus     Autoridad, gobernanza y firma
 Nivel 2 — Mandate     Entidad estratégica firmada, versionada
 Nivel 3 — Action      Unidad semántica dentro del Mandate
-Nivel 4 — Intent      Unidad ejecutable concreta (exp / cor / dev / doc)
+Nivel 4 — Intent      Unidad de intención (dev/doc/exp/inf/cor/ing/dis)
 ```
 
 El Mandate no le habla directamente a los intents: le habla a sus **Actions**,
-y cada Action se resuelve como un intent concreto que Nucleus instancia y
-controla. Ejemplo: un Mandate *"Estabilizar la capa de autenticación"* se
+y cada Action se resuelve como un intent concreto. Ejemplo: un Mandate
+*"Estabilizar la capa de autenticación"* se
 descompone en explorar módulos sin uso (`exp`) → eliminarlos (`dev`) →
 actualizar la documentación (`doc`). Cada uno de esos pasos es un intent
 gobernado; el Mandate es el contrato que los une.
+
+El **Mandate Genesis** estructura un proyecto mediante el flujo resumido:
+incorporar material (`ing`) → consolidar Genes (`ing`) → curar la topología
+de Dominios (`dis`) → producir documentación inicial (`doc`).
 
 | Un Mandate NO es / NO hace | Un Mandate SÍ es / SÍ hace |
 |---|---|
 | Un tipo especial de intent | Un contrato estratégico firmado |
 | Un reemplazo de intents | Una capa superior que los orquesta |
-| Ejecutor de lógica de negocio | Orquestador vía Nucleus exclusivamente |
+| Ejecutor de lógica de negocio | Contrato coordinado mediante Actions e Intents |
 | Escritor directo en `.intents/` | Solicitante a Nucleus para crear intents |
 | Mutable post-creación | Inmutable — el contrato original nunca se altera |
 
-#### 🧪 Los 5 tipos de Intent
+#### 🧪 Los 7 tipos de Intent
 | Tipo | Para qué sirve |
 |---|---|
 | `dev` | Modificar código |
@@ -117,6 +165,8 @@ gobernado; el Mandate es el contrato que los une.
 | `exp` | Explorar alternativas |
 | `inf` | Recolectar información |
 | `cor` | Coordinar cambios en conflicto |
+| `ing` | Incorporar material y sembrar el linaje de Genes |
+| `dis` | Curar la topología entre Dominios y Genes |
 
 #### 🏛️ Mandates — además, el producto del ecosistema
 Por ser contratos firmados, versionados y autocontenidos, los Mandates son
@@ -147,5 +197,6 @@ Nucleus local — el celular solo es el canal de entrada de la intención.
 > **El acceso puede ser remoto. La autoridad siempre es local.**
 
 No importa si la instrucción nace en el Conductor, el VS Code Plugin o el
-celular vía Alfred: quien firma, valida y ejecuta siempre es el Nucleus y el
-Brain locales.
+celular vía Alfred: Nucleus conserva la autoridad, Brain interpreta el
+Intent/BISP, Temporal coordina el workflow, AITAP selecciona inteligencia y
+runtime, y Executor materializa el trabajo mediante OpenCode o un CLI externo.
