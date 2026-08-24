@@ -67,8 +67,8 @@ deterministic startup order.`,
 			// SynapseSimulator sea usable antes del registro de GitHub (fase de onboarding).
 			if !enableSynapseSimulatorOnboarding {
 				if err := governance.RequireMaster(c); err != nil {
-					c.Logger.Printf("[ERROR] ⛔ dev-start requires Master role: %v", err)
-					return
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
 				}
 			} else {
 				c.Logger.Printf("[INFO] 🛠  --enable-synapse-simulator-onboarding: skipping Master role check")

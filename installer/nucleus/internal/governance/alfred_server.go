@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
 	"sync"
+	"syscall"
 	"time"
 
-	"nucleus/internal/core"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
+	"nucleus/internal/core"
 )
 
 // AlfredServer maneja REST y WebSocket
@@ -37,8 +37,8 @@ type WSMessage struct {
 // NewAlfredServer crea nuevo servidor
 func NewAlfredServer(alfred *Alfred) *AlfredServer {
 	server := &AlfredServer{
-		alfred:   alfred,
-		router:   mux.NewRouter(),
+		alfred: alfred,
+		router: mux.NewRouter(),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true // En producción, validar origen
@@ -58,7 +58,7 @@ func (s *AlfredServer) setupRoutes() {
 	s.router.HandleFunc("/alfred/status", s.handleStatus).Methods("GET")
 	s.router.HandleFunc("/alfred/verify", s.handleVerify).Methods("POST")
 	s.router.HandleFunc("/alfred/integrity", s.handleIntegrity).Methods("GET")
-	
+
 	// WebSocket
 	s.router.HandleFunc("/alfred/ws", s.handleWebSocket)
 }
@@ -66,7 +66,7 @@ func (s *AlfredServer) setupRoutes() {
 // handleStatus - GET /alfred/status
 func (s *AlfredServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	status := s.alfred.GetStatus()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
@@ -77,14 +77,14 @@ func (s *AlfredServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 // handleVerify - POST /alfred/verify
 func (s *AlfredServer) handleVerify(w http.ResponseWriter, r *http.Request) {
 	var intent Intent
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&intent); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	result := s.alfred.VerifyIntent(intent)
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
@@ -95,7 +95,7 @@ func (s *AlfredServer) handleVerify(w http.ResponseWriter, r *http.Request) {
 // handleIntegrity - GET /alfred/integrity
 func (s *AlfredServer) handleIntegrity(w http.ResponseWriter, r *http.Request) {
 	report := s.alfred.CheckIntegrity()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
@@ -227,7 +227,7 @@ func (s *AlfredServer) Start() error {
 	fmt.Println("Starting Alfred Authority Server...")
 	fmt.Println("REST API listening on :48216")
 	fmt.Println("WebSocket endpoint: ws://localhost:48216/alfred/ws")
-	
+
 	return http.ListenAndServe(":48216", s.router)
 }
 
@@ -248,7 +248,7 @@ func (s *AlfredServer) EmitSecurityBreach(details string) {
 		},
 		Timestamp: time.Now().Unix(),
 	}
-	
+
 	s.broadcast <- msg
 }
 
@@ -274,9 +274,9 @@ func alfredStartCmd(c *core.Core) *cobra.Command {
 			}
 			defer logger.Close()
 
-			// Verificación de autoridad
-			if err := RequireAtLeast(c, "architect"); err != nil {
-				logger.Error("Acceso Denegado: Este comando requiere rol mínimo Architect")
+			// Política provisional AUTHORIZATION: Alfred requiere Master.
+			if err := RequireMaster(c); err != nil {
+				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
 			}
 
@@ -324,14 +324,16 @@ func alfredStartCmd(c *core.Core) *cobra.Command {
 	return cmd
 }
 
-// RequireAtLeast verifica si el usuario tiene el nivel de permiso necesario
+// RequireAtLeast aplica la política provisional Master-only. No existe una
+// jerarquía Architect aprobada en el modelo vigente.
 func RequireAtLeast(c *core.Core, role string) error {
-	// Por ahora stub - aquí iría validación de jerarquía: Master > Architect > Specialist
-	return nil
+	return RequireMaster(c)
 }
 
 // RequireMaster verifica permiso de Master
 func RequireMaster(c *core.Core) error {
-	// Por ahora stub - aquí iría validación de rol Master
+	if core.GetUserRole() != core.RoleMaster {
+		return fmt.Errorf("requires master role")
+	}
 	return nil
 }

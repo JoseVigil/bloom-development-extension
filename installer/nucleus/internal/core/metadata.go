@@ -12,28 +12,28 @@ import (
 
 // SystemInfo contiene información completa del sistema
 type SystemInfo struct {
-	AppName           string `json:"app_name"`
-	AppRelease        string `json:"app_release"`
-	BuildCounter      int    `json:"build_counter"`
-	CompileDate       string `json:"compile_date"`
-	CompileTime       string `json:"compile_time"`
-	CurrentTime       string `json:"current_time"`
-	PlatformArch      string `json:"platform_arch"`
-	PlatformOS        string `json:"platform_os"`
-	RuntimeEngine     string `json:"runtime_engine"`
-	RuntimeRelease    string `json:"runtime_release"`
-	UserRole          string `json:"user_role"`
-	ActiveCollaborators int  `json:"active_collaborators"`
-	StateHash         string `json:"state_hash"`
+	AppName             string `json:"app_name"`
+	AppRelease          string `json:"app_release"`
+	BuildCounter        int    `json:"build_counter"`
+	CompileDate         string `json:"compile_date"`
+	CompileTime         string `json:"compile_time"`
+	CurrentTime         string `json:"current_time"`
+	PlatformArch        string `json:"platform_arch"`
+	PlatformOS          string `json:"platform_os"`
+	RuntimeEngine       string `json:"runtime_engine"`
+	RuntimeRelease      string `json:"runtime_release"`
+	UserRole            string `json:"user_role"`
+	ActiveCollaborators int    `json:"active_collaborators"`
+	StateHash           string `json:"state_hash"`
 }
 
 // Role representa el nivel de autoridad en Nucleus
 type Role int
 
 const (
-	RoleUnknown Role = iota
-	RoleMaster       // Owner - Control total
-	RoleSpecialist   // Team member - Ejecución limitada
+	RoleUnknown    Role = iota
+	RoleMaster          // Owner - Control total
+	RoleSpecialist      // Team member - Ejecución limitada
 )
 
 // GetSystemInfo recopila información completa del sistema
@@ -92,8 +92,8 @@ func detectUserRole() Role {
 		return RoleSpecialist
 	}
 
-	// Por defecto, el primer usuario que inicializa es Master
-	return RoleMaster
+	// Fail closed: la ausencia de un marcador de rol no demuestra autoridad.
+	return RoleUnknown
 }
 
 // roleToString convierte Role a string

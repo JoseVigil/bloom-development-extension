@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"nucleus/internal/core"
+	"nucleus/internal/governance"
 	"nucleus/internal/supervisor"
 
 	"github.com/google/uuid"
@@ -76,6 +77,12 @@ func createStandardMandateSubcommand(c *core.Core) *cobra.Command {
 		Example: `  nucleus mandate create --project my-app
   nucleus mandate create --project my-app --docs ./README.md --docs ./docs/architecture.md
   nucleus --json mandate create --project my-app`,
+		PreRun: func(cmd *cobra.Command, args []string) {
+			if err := requireMandateMaster(c); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+		},
 
 		Run: func(cmd *cobra.Command, args []string) {
 			result, err := createStandardMandate(project, docs)
@@ -277,6 +284,12 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 		Example: `  nucleus mandate genesis --project my-app --source cli
   nucleus mandate genesis --project my-app --source cli --docs ./README.md --docs ./docs/architecture.md
   nucleus --json mandate genesis --project my-app --source cli`,
+		PreRun: func(cmd *cobra.Command, args []string) {
+			if err := requireMandateMaster(c); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+		},
 
 		Run: func(cmd *cobra.Command, args []string) {
 			result, err := createGenesisMandate(project, source, baseGenesisID, docs)
@@ -486,4 +499,8 @@ func mandateStatusSubcommand(c *core.Core) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&mandateID, "id", "", "ID del mandate (requerido)")
 	return cmd
+}
+
+func requireMandateMaster(c *core.Core) error {
+	return governance.RequireMaster(c)
 }
