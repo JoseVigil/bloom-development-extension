@@ -14,9 +14,15 @@ import (
 // del workspace y organización del usuario.
 type NucleusConfig struct {
 	Onboarding struct {
-		WorkspacePath string `json:"workspace_path"`
-		WorkspaceOrg  string `json:"workspace_org"`
+		ActiveOrgSlug string `json:"active_org_slug"`
+		Organizations []struct {
+			OrgSlug       string `json:"org_slug"`
+			WorkspacePath string `json:"workspace_path"`
+		} `json:"organizations"`
 	} `json:"onboarding"`
+
+	workspacePath string
+	workspaceOrg  string
 }
 
 // resolveBloomBase resuelve el directorio base de instalación de BloomNucleus.
@@ -56,10 +62,34 @@ func loadNucleusConfig(bloomBase string) (*NucleusConfig, error) {
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return nil, fmt.Errorf("nucleus.json inválido en %s: %w", configPath, err)
 	}
-	if cfg.Onboarding.WorkspaceOrg == "" {
-		return nil, fmt.Errorf("nucleus.json en %s no tiene onboarding.workspace_org", configPath)
+	if cfg.Onboarding.ActiveOrgSlug == "" {
+		return nil, fmt.Errorf(
+			"nucleus.json en %s no tiene onboarding.active_org_slug",
+			configPath,
+		)
 	}
-	return &cfg, nil
+
+	for _, org := range cfg.Onboarding.Organizations {
+		if org.OrgSlug != cfg.Onboarding.ActiveOrgSlug {
+			continue
+		}
+		if org.WorkspacePath == "" {
+			return nil, fmt.Errorf(
+				"organización activa %q en %s no tiene workspace_path",
+				org.OrgSlug,
+				configPath,
+			)
+		}
+		cfg.workspaceOrg = org.OrgSlug
+		cfg.workspacePath = org.WorkspacePath
+		return &cfg, nil
+	}
+
+	return nil, fmt.Errorf(
+		"onboarding.active_org_slug=%q no existe en onboarding.organizations de %s",
+		cfg.Onboarding.ActiveOrgSlug,
+		configPath,
+	)
 }
 
 // LoadMachineNucleusConfig es el entrypoint público de la versión LEGACY:
@@ -90,9 +120,9 @@ func LoadMachineNucleusConfig() (*NucleusConfig, error) {
 // gen_state.json quedó deprecado — ver mandate_watcher.go).
 func (cfg *NucleusConfig) MandatesRoot() string {
 	return filepath.Join(
-		cfg.Onboarding.WorkspacePath,
+		cfg.workspacePath,
 		".bloom",
-		".nucleus-"+cfg.Onboarding.WorkspaceOrg,
+		".nucleus-"+cfg.workspaceOrg,
 		".mandates",
 	)
 }

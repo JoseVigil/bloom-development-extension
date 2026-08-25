@@ -24,6 +24,7 @@ import (
 
 func init() {
 	core.RegisterCommand("MAINTENANCE", createRolloutCommand)
+	core.RegisterCommand("MAINTENANCE", createMetamorphRelayCommand)
 }
 
 type component struct {
@@ -640,6 +641,15 @@ func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 		return err
 	}
 	if !dryRun {
+		// SERVICE_STOPPED only proves that the SCM-managed NSSM generation is
+		// down. A previous Nucleus generation can still own a Control Plane
+		// child whose pidfile has since been overwritten. Remove such a process
+		// only after the platform implementation verifies that it belongs to
+		// this Bloom installation.
+		if err := stopOwnedNucleusProcesses(nucleusBasePath(dst)); err != nil {
+			_ = nucleusPostDeploy(c, repoRoot, dst, false)
+			return fmt.Errorf("nucleus: managed-process shutdown: %w", err)
+		}
 		if err := waitForPortFree(brainPort, 10*time.Second); err != nil {
 			_ = nucleusPostDeploy(c, repoRoot, dst, false)
 			return fmt.Errorf("nucleus: %w", err)
@@ -657,16 +667,32 @@ func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 // bootstrapPostDeploy does, so the operator gets immediate confirmation the
 // new binary is actually up rather than just "the copy succeeded".
 //
-// A failed health check is logged as a warning, not a fatal error: the
-// service was restarted successfully as far as the OS is concerned, and a
-// slow-starting Control Plane (or a genuine startup bug in the new binary)
-// is something the operator needs to see, not something rollout should mask
-// by reporting failure on an otherwise-successful restart.
+// Health is mandatory when Nucleus was active before rollout. A successful
+// SCM transition alone does not prove that the newly deployed generation owns
+// the Control Plane listener, so failure to reach /api/docs is returned to the
+// rollout result instead of being reduced to a warning.
 func nucleusPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	wasNucleusActive := rolloutServiceWasActive["nucleus/nucleus"]
 	if err := restoreManagedService(c, "nucleus/nucleus", nucleusServiceName(), dryRun); err != nil {
 		return err
 	}
-	return restoreManagedService(c, "nucleus/brain", brainServiceName(), dryRun)
+	if err := restoreManagedService(c, "nucleus/brain", brainServiceName(), dryRun); err != nil {
+		return err
+	}
+	if !dryRun && wasNucleusActive {
+		if err := waitForControlPlane(10 * time.Second); err != nil {
+			return fmt.Errorf("nucleus: restored service but Control Plane health check failed: %w", err)
+		}
+		c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")
+	}
+	return nil
+}
+
+// nucleusBasePath reverses the nucleus component's DestFn shape:
+// <base>/bin/nucleus -> <base>. Keeping this in one helper makes the ownership
+// paths used by the Windows cleanup explicit and independently testable.
+func nucleusBasePath(dst string) string {
+	return filepath.Dir(filepath.Dir(filepath.Clean(dst)))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1347,13 +1373,58 @@ type deployedEntry struct {
 }
 
 type rolloutResult struct {
-	Status   string          `json:"status"`
-	DryRun   bool            `json:"dry_run"`
-	Only     string          `json:"only"`
-	RepoRoot string          `json:"repo_root"`
-	Deployed []deployedEntry `json:"deployed"`
-	Skipped  []string        `json:"skipped"`
-	Errors   []string        `json:"errors"`
+	Status   string           `json:"status"`
+	DryRun   bool             `json:"dry_run"`
+	Only     string           `json:"only"`
+	RepoRoot string           `json:"repo_root"`
+	Deployed []deployedEntry  `json:"deployed"`
+	Skipped  []string         `json:"skipped"`
+	Errors   []string         `json:"errors"`
+	Pending  []rolloutHandoff `json:"pending,omitempty"`
+}
+
+// rolloutHandoff describes a deployment that cannot finish while the current
+// process remains alive. On Windows, Metamorph uses it for its own executable:
+// the current process prepares and starts a relay, then exits so Windows
+// releases the installed metamorph.exe.
+type rolloutHandoff struct {
+	Component   string `json:"component"`
+	RolloutID   string `json:"rollout_id"`
+	Status      string `json:"status"`
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	ReceiptPath string `json:"receipt_path"`
+}
+
+// metamorphRelayRequest is persisted before the relay starts. The Windows
+// implementation revalidates every path, PID and hash before using it.
+type metamorphRelayRequest struct {
+	RolloutID      string `json:"rollout_id"`
+	ParentPID      int    `json:"parent_pid"`
+	ParentHandle   uint64 `json:"parent_handle"`
+	ParentExe      string `json:"parent_exe"`
+	RepoRoot       string `json:"repo_root"`
+	SourceDir      string `json:"source_dir"`
+	SourceExe      string `json:"source_exe"`
+	SourceSHA256   string `json:"source_sha256"`
+	DestinationDir string `json:"destination_dir"`
+	DestinationExe string `json:"destination_exe"`
+	StageDir       string `json:"stage_dir"`
+	BackupDir      string `json:"backup_dir"`
+	ReceiptPath    string `json:"receipt_path"`
+	RelayLogPath   string `json:"relay_log_path"`
+}
+
+type metamorphRelayReceipt struct {
+	RolloutID         string `json:"rollout_id"`
+	Component         string `json:"component"`
+	Status            string `json:"status"`
+	SourceSHA256      string `json:"source_sha256,omitempty"`
+	InstalledSHA256   string `json:"installed_sha256,omitempty"`
+	Destination       string `json:"destination"`
+	Error             string `json:"error,omitempty"`
+	RollbackPerformed bool   `json:"rollback_performed"`
+	CompletedAt       string `json:"completed_at,omitempty"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1399,6 +1470,13 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 		}
 	}
 
+	// A Windows self-rollout must be terminal: after scheduling the relay,
+	// this process exits to release its own executable. Put Metamorph last
+	// during a full rollout so every preceding component finishes first.
+	if runtime.GOOS == "windows" && len(comps) > 1 {
+		comps = moveComponentToEnd(comps, "metamorph")
+	}
+
 	result := rolloutResult{
 		Status:   "success",
 		DryRun:   dryRun,
@@ -1407,6 +1485,7 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 		Deployed: []deployedEntry{},
 		Skipped:  []string{},
 		Errors:   []string{},
+		Pending:  []rolloutHandoff{},
 	}
 
 	for _, comp := range comps {
@@ -1450,6 +1529,46 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 				}
 			}
 			continue
+		}
+
+		// Windows cannot replace the executable mapped by this process.
+		// scheduleMetamorphSelfRollout returns nil on Unix, where the generic
+		// rename-over-running-inode path remains valid.
+		if comp.Key == "metamorph" {
+			handoff, handoffErr := scheduleMetamorphSelfRollout(
+				c,
+				repoRoot,
+				src,
+				dst,
+			)
+			if handoffErr != nil {
+				msg := fmt.Sprintf("metamorph: self-rollout handoff failed: %v", handoffErr)
+				c.Logger.Error("❌ %s", msg)
+				result.Errors = append(result.Errors, msg)
+				result.Status = "partial"
+				continue
+			}
+			if handoff != nil {
+				result.Status = "pending"
+				result.Pending = append(result.Pending, *handoff)
+
+				if c.Config.OutputJSON {
+					c.OutputJSON(result)
+				} else {
+					fmt.Printf(
+						"\nMetamorph rollout handoff accepted\n"+
+							"Rollout ID: %s\n"+
+							"Final receipt: %s\n"+
+							"Status: pending\n",
+						handoff.RolloutID,
+						handoff.ReceiptPath,
+					)
+				}
+
+				// The relay already has a handle to this process and a fully
+				// staged candidate. Returning releases installed metamorph.exe.
+				return nil
+			}
 		}
 
 		if err := os.MkdirAll(dst, 0o755); err != nil {
@@ -1526,6 +1645,54 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 			len(result.Deployed), len(result.Skipped), len(result.Errors))
 	}
 	return nil
+}
+
+// moveComponentToEnd preserves the relative order of every other component.
+func moveComponentToEnd(comps []component, key string) []component {
+	result := make([]component, 0, len(comps))
+	var selected *component
+
+	for i := range comps {
+		if comps[i].Key == key {
+			value := comps[i]
+			selected = &value
+			continue
+		}
+		result = append(result, comps[i])
+	}
+
+	if selected != nil {
+		result = append(result, *selected)
+	}
+	return result
+}
+
+// createMetamorphRelayCommand registers an internal command executed only by
+// the staged Windows candidate. Hidden keeps it out of human/JSON help.
+func createMetamorphRelayCommand(c *core.Core) *cobra.Command {
+	var requestPath string
+
+	cmd := &cobra.Command{
+		Use:          "__rollout-relay",
+		Hidden:       true,
+		SilenceUsage: true,
+		Args:         cobra.NoArgs,
+		Annotations: map[string]string{
+			"category": "MAINTENANCE",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runMetamorphRelay(c, requestPath)
+		},
+	}
+
+	cmd.Flags().StringVar(
+		&requestPath,
+		"request",
+		"",
+		"Internal self-rollout request",
+	)
+	_ = cmd.MarkFlagRequired("request")
+	return cmd
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

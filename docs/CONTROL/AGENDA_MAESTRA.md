@@ -60,6 +60,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 6 | Alfred | Backend/pipe avanzados; UI y recepción pendientes | Diseñar alta de dispositivo y construir UI de chat | AITAP; Contrato D; Core UI |
 | 7 | CORTEX / IonPump | Ownership documental dividido; Vault spec pendiente de corrección | Corregir §2.2 de Vault y migrar referencias antes de retirar la spec previa | GitHub App + Device Flow; Batcave; specs nuevas |
 | 8 | Batcave | Arquitectura multi-org definida; decisión GitHub App vigente | Corregir regresión de Batcave Auth en Vault spec y actualizar referencias | CORTEX; Nucleus; Alfred remoto |
+| 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
 
 ---
 
@@ -83,6 +84,8 @@ El Work independiente **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MOD
 
 El ownership general queda fijado: Nucleus gobierna y autoriza; Temporal orquesta Actions durablemente; Brain conserva el ciclo de vida, identidad, persistencia e interpretación de Intents; AITAP conserva Gateway, referencias de Vault y Contabilidad sin ejecutar código ni tocar filesystem; Executor implementa la Execution Layer sobre trabajo definido y autorizado, sin decidir si Genesis necesita `dev`; Core proyecta el estado durable.
 
+La verificación de contrato con AUTHORIZATION quedó completada para el canal CLI: Specialist y Unknown son rechazados sin estado parcial ni dispatch a Temporal; Master pasa por un único punto de entrada (`requireMandateMaster → governance.RequireMaster`) y crea `mandate_state.json`. El flujo Master no inicia todavía Temporal porque el watcher no resuelve el workspace Nucleus activo: falta `onboarding.workspace_org` en `nucleus.json` y el fallback por filesystem falla desde la ruta del servicio. Es un blocker de infraestructura/configuración transversal a cualquier tipo de Mandate, no una falla de Authorization ni de la lógica funcional de Genesis.
+
 **Fuentes de verdad**
 
 - `docs/MANDATE/BLOOM_Estado_Consolidado_Takeaway_v1.md`
@@ -92,7 +95,7 @@ El ownership general queda fijado: Nucleus gobierna y autoriza; Temporal orquest
 
 **Próximo paso concreto**
 
-1. Compartir esta composición y el canal prioritario con los Works **MANDATE GENESIS**, **AITAP** y **EXECUTOR**.
+1. Resolver el workspace Nucleus activo para el watcher de Mandates y verificar que Master pueda iniciar Temporal; este item es infraestructura/configuración, separado de Authorization.
 2. Consolidar la representación exacta del action graph y la transición durable Mandate ↔ Action ↔ Intent.
 3. Definir schemas de output de `doc/` y `exp/`, incluidos `remediation_required`, findings estructurados y `ready`.
 4. Cerrar autorización Nucleus → Executor y observabilidad en Core.
@@ -109,11 +112,13 @@ Coordinación entre los Works de Genesis, AITAP y Executor hasta cerrar sus cont
 - Tema 2: D-25 define la forma final de la tab y dónde integra Genesis en Core.
 - Tema 3: el motor genérico de intents y la respuesta estructurada condicionan la evolución posterior.
 - Tema 6: el flujo de Core comparte superficie con Alfred, pero no debe mezclar scopes.
+- Tema 9: el gate CLI de creación ya está verificado; el handler API Node/TypeScript y el boundary Go→Node siguen pendientes y no deben asumirse cubiertos.
 - Synapse y Synapse Simulator son canales posteriores y no bloquean el primer vertical.
 
 **Decisiones/riesgos abiertos**
 
 - Permanecen abiertos el action graph, motor Temporal, schemas `doc`/`exp`, transición durable, autorización Nucleus → Executor, findings que habilitan `dev` y representación en Core.
+- No aceptar como válido un E2E API de creación real de Mandates hasta que el handler Node/TypeScript y el boundary Go→Node de AUTH-FIX-02 estén cerrados. El E2E CLI Master permanece bloqueado actualmente por la resolución de workspace del watcher, no por autorización.
 - Estas decisiones precisan la implementación, pero no pueden alterar la composición funcional sin volver a AGENDA FOLLOWUP.
 - Elevar a esta agenda solamente blockers transversales reales encontrados por cualquiera de los dos Works.
 - D-25: confirmar si hace falta separar `GenesisTab` de `StandardMandateTab` o unificar en un `MandateTab` orientado por estado.
@@ -403,6 +408,44 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 
 ---
 
+## 9. AUTHORIZATION
+
+**Estado actual**
+
+El enforcement de roles quedó cerrado para el canal CLI: `AUTH-FIX-01` implementó fail-closed; el tramo CLI de `AUTH-FIX-02` agrega el gate de creación; Alfred quedó Master-only; y se homologaron mensajes y exit codes, incluido el fix de `dev-start` de exit `0 → 1`. El cambio está en `main` y `go test ./...` está en verde.
+
+Este cierre no alcanza todavía al handler API Node/TypeScript ni al boundary Go→Node de `AUTH-FIX-02`; ambos siguen pendientes y sin Work asignado. `AUTH-MODULE-01` permanece bloqueante para promoción, materialización y finalización productiva. `AUTH-OWNERSHIP-01` queda como P2 paralelo: no bloquea iniciar Genesis, pero es necesario para cerrar el modelo definitivo si incorpora el rol Architect.
+
+**Fuentes de control y verificación**
+
+- Estado reportado por el usuario el 2026-08-24; implementación pusheada a `main` y `go test ./...` en verde.
+- `.nucleus-governance.json` — declara `min_role_for_cor_merge: Architect`.
+- ownership v0.3, `MRG_Intent_Spec` y código actual — deben contrastarse antes de normalizar el rol Architect.
+
+**Próximo paso concreto**
+
+1. Correr en la próxima instalación completa el preflight sobre instalaciones existentes sin marcador `.master`/`.specialist`, junto con la verificación del fix de `dev-start`, para confirmar que el cambio fail-closed no bloquee perfiles legítimos.
+2. Asignar y ejecutar el tramo pendiente de `AUTH-FIX-02`: gate del handler API Node/TypeScript y boundary Go→Node.
+3. Después, abordar `AUTH-MODULE-01` para promoción/materialización/finalización productiva.
+
+**Entorno recomendado**
+
+Claude Code o Codex con acceso al código Go y Node/TypeScript, más una instalación real para el preflight. La investigación sobre Architect y ownership debe preceder cualquier normalización de roles.
+
+**Dependencias cruzadas**
+
+- Tema 1: la creación CLI está autorizada; el watcher de Genesis sigue bloqueado por resolución de workspace, no por Authorization. No aceptar un E2E API de creación real hasta cerrar el tramo API de `AUTH-FIX-02`.
+- Nucleus identity/ownership: fuente de roles y condiciones de preflight.
+- Tema 5 / Executor: `AUTH-MODULE-01` es prerequisito antes de promoción, materialización o finalización productiva.
+
+**Decisiones/riesgos abiertos**
+
+- `.nucleus-governance.json` declara `min_role_for_cor_merge: Architect`, en contradicción con ownership v0.3, `MRG_Intent_Spec` y el código actual; se registra para resolverlo, sin incorporarlo al fix urgente.
+- La implementación previa de `Alfred.VerifyIntent` que confiaba en `RequesterRole` aportado por el request no constituye un punto de autorización confiable; cualquier revisión posterior debe derivar la identidad desde una fuente autoritativa.
+- Quedan pendientes de limpieza, sin autorización de borrado: Mandate de prueba `b15bcdf4...` y su carpeta temporal asociada.
+
+---
+
 ## Cola de prompts para sesiones externas
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
@@ -413,6 +456,12 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | Alta | 3 + 5 | Batería de adherencia API/web y OpenCode para decidir formato de patch, checksum y scope usando `validate-contract` | Prompt de ejecución pendiente de preparar; acceso a modelos, OpenCode y comando local |
 | Alta | 7 | Corregir §2.2 de Vault Storage y migrar referencias desde la remediación anterior | GitHub App + Device Flow confirmado; mapear referencias a migrar |
 | Alta | 8 | Migración de arquitectura/auth de Batcave a GitHub App + Device Flow | Corregir primero la regresión de Vault Storage y confirmar scopes mínimos |
+| Alta | 1 | Resolver workspace Nucleus activo para el watcher de Mandates y verificar inicio de Temporal con Master | `onboarding.workspace_org` ausente y fallback por filesystem falla desde el servicio |
+| Alta | 9 | Preflight fail-closed sobre instalaciones existentes y verificación de `dev-start` | Próxima instalación completa; no borrar artefactos de prueba todavía |
+| P0 | 9 | `AUTH-FIX-02`: completar gate del handler API Node/TypeScript y boundary Go→Node; el tramo CLI ya está cerrado | Asignar Work; no aceptar E2E API de creación real antes del cierre |
+| P1 | 9 | `AUTH-MODULE-01` para promoción/materialización/finalización productiva | Cierre de `AUTH-FIX-02` completo |
+| P2 paralelo | 9 | `AUTH-OWNERSHIP-01`: resolver el modelo definitivo si incluye Architect | No bloquea el inicio de Genesis |
+| Pendiente de autorización | 9 | Limpieza del Mandate de prueba `b15bcdf4...` y carpeta temporal asociada | Autorización explícita de borrado |
 | Media | 4 + 6 | Diseño de identidad y alta de dispositivos AITAP/Alfred | Definir caso mobile sin Nucleus local |
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
@@ -429,3 +478,4 @@ Cowork o Claude Web para revisar contrato de autenticación remota, scopes y lí
 | 2026-08-17 | 7, 8 | Split documental de la remediación CORTEX y corrección de alcance de automatización DOM. | Actualización del usuario sobre fuentes y alcance | Se retiró la remediación previa como fuente activa; se condicionó la promoción de Vault Storage a corregir Batcave Auth como segunda GitHub App + Device Flow. |
 | 2026-08-18 | 1 / Synapse Simulator | Se separó el vertical Genesis en dos Works coordinados con gates independientes. | AGENDA FOLLOWUP, reportado por el usuario | Genesis cerró Etapa A y espera el contrato del Simulator; el Simulator inició investigación contractual. Ninguno comenzó implementación. |
 | 2026-08-21 | 1, 4, Executor | Se cerró la composición funcional de Genesis y se cambió el canal prioritario del primer vertical a CLI + AITAP + Executor. | AGENDA FOLLOWUP, decisión del usuario | El Work Genesis se renombra sin duplicarse; Synapse Simulator deja de ser precondición y continúa como línea posterior. |
+| 2026-08-24 | 1, 9 | Se cerraron fail-closed, gate CLI, Alfred Master-only y homologación de mensajes/exit codes; Genesis verificó el contrato de Authorization. | Actualización del usuario; cambios en `main`, `go test ./...` en verde | Se distinguió el tramo CLI cerrado del gate API/boundary Go→Node pendiente; Genesis quedó bloqueado por resolución de workspace del watcher, no por Authorization. |

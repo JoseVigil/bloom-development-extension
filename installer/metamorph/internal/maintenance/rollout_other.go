@@ -9,7 +9,22 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"metamorph/internal/core"
 )
+
+// Unix can rename a directory entry while its executable remains mapped.
+// Returning nil leaves the existing synchronous copyDir path authoritative.
+func scheduleMetamorphSelfRollout(
+	c *core.Core,
+	repoRoot, src, dst string,
+) (*rolloutHandoff, error) {
+	return nil, nil
+}
+
+func runMetamorphRelay(c *core.Core, requestPath string) error {
+	return fmt.Errorf("Metamorph self-rollout relay is Windows-only")
+}
 
 // ensureElevated is a no-op on Darwin and Linux.
 // Those platforms do not require elevation to run rollout; individual
@@ -54,6 +69,14 @@ func controlService(name string, start bool) (bool, error) {
 	default:
 		return false, fmt.Errorf("controlService: unsupported OS %s", runtime.GOOS)
 	}
+}
+
+// stopOwnedNucleusProcesses is intentionally a no-op on macOS/Linux. The
+// demonstrated orphan belongs to the Windows NSSM/SCM lifecycle. systemd and
+// launchd retain their existing service-stop semantics; broadening process
+// discovery on Unix without equivalent evidence would weaken ownership safety.
+func stopOwnedNucleusProcesses(basePath string) error {
+	return nil
 }
 
 func sensorStop(dst string, dryRun bool) (bool, error) {

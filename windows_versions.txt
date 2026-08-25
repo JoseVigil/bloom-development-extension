@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — windows
-# Generated: 2026-08-24 20:20:33
+# Generated: 2026-08-25 01:17:46
 
 ---
 brain\__build__.py
@@ -393,15 +393,15 @@ installer\cortex\build-cortex\cortex.meta.json
 
 ---
 installer\metamorph\scripts\build_number.effective.txt
-204
+208
 
 ---
 installer\metamorph\scripts\build_number.txt
-20
+24
 
 ---
 installer\nucleus\scripts\build_number.effective.txt
-626
+628
 
 ---
 installer\sensor\scripts\build_number.effective.txt
