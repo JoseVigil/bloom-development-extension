@@ -1,4 +1,4 @@
-### 📦 BTIPS (Bloom Technical Intent Package) — v7.0
+### 📦 BTIPS (Bloom Technical Intent Package) — v7.1
 
 BTIPS convierte la interacción con inteligencia artificial en un proceso de ingeniería reproducible, donde cada intención técnica queda formalizada, versionada y gobernada por contexto real. Este documento describe el funcionamiento integral del ecosistema Bloom y las responsabilidades de sus aplicaciones, protocolos y artefactos.
 
@@ -11,6 +11,7 @@ BTIPS convierte la interacción con inteligencia artificial en un proceso de ing
 | v4.0 | Línea base: Bloom Runtime (Sentinel, Synapse, Nucleus), Bloom Cortex (Discovery/Landing/SynapseSimulator), Bloom Conductor, VS Code Plugin, Brain/IonPump, Bloom Sensor, Metamorph, Nucleus, Intents, Mandates, Batcave, Alfred, App Mobile. |
 | **v6.0** | Arquitectura integral de Bloom: Cortex y Companion, AITAP, Execution Layer, Executor, runtimes de procesamiento, Temporal, Cognituum Runner y los intents `ing` y `dis`. |
 | **v7.0** | Consolidación de la arquitectura integral y de su mapa visual: AITAP como grifo, Execution Layer implementada por Executor, OpenCode y CLIs externos como runtimes de procesamiento, y separación entre runtime y proveedor/modelo efectivo. |
+| **v7.1** | Se documenta el vínculo de producto entre esta arquitectura y la partición PALADIN/SOVEREIGN (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`). Se agregan notas de producto en 2.4️⃣ (Conductor) y 2.5️⃣ (Plugin). No se modifica arquitectura, componentes, puertos ni el diagrama de la sección 2️⃣, que continúa representando la superficie Sovereign. |
 
 ---
 
@@ -388,6 +389,8 @@ Una de las capacidades más poderosas del Conductor es facilitar **merges cognit
 
 Esto convierte conflictos técnicos en **decisiones asistidas por IA**, no en batallas manuales de texto.
 
+> **Nota de producto (no arquitectónica):** el trabajo de fundación de SOVEREIGN identifica esta interfaz como la superficie donde una organización ejerce gobierno institucional —roles, políticas, coordinación y Mandates organizacionales— sobre la misma arquitectura Cognituum. Esta nota documenta una relación de producto; no renombra el Conductor, no redefine su arquitectura y no cierra las decisiones de composición, identidad o distribución que ese documento deja abiertas (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`).
+
 ---
 
 ### 2.5️⃣ Bloom VS Code Plugin — Developer Intent Interface
@@ -501,6 +504,8 @@ El plugin nunca opera como autoridad. Lee el filesystem, genera artefactos, disp
 | Operar sin abrir el editor de código | ✅ | — |
 
 Ambas interfaces leen el mismo filesystem. Un intent creado en el plugin aparece inmediatamente en el Conductor, y viceversa. No hay sincronización — comparten la fuente de verdad.
+
+> **Nota de producto (no arquitectónica):** el trabajo de fundación de PALADIN identifica esta interfaz —junto con Alfred y la creación local de Mandates— como el núcleo de la experiencia que PALADIN ofrece al ingeniero individual. Esta nota documenta una relación de producto; no renombra el Plugin, no redefine su arquitectura y no cierra las decisiones de composición, identidad o distribución que ese documento deja abiertas (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`).
 
 ---
 
