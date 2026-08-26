@@ -1,6 +1,6 @@
 # BTIPS / Cognituum — Agenda Maestra
 
-**Propósito:** fuente única de control y coordinación de los ocho frentes activos. Esta agenda no sustituye las fuentes técnicas de cada tema: registra su estado consolidado, dependencias, próximos pasos y decisiones vigentes.
+**Propósito:** fuente única de control y coordinación de los frentes activos. Esta agenda no sustituye las fuentes técnicas de cada tema: registra su estado consolidado, dependencias, próximos pasos y decisiones vigentes.
 
 **Fecha de creación:** 2026-08-15  
 **Canal de actualización:** únicamente esta sesión de control.
@@ -23,6 +23,7 @@
 | OpenCode es la capa de implementación | Cerrada | OpenCode opera en una Implementation Layer separada de AITAP; Nucleus gobierna la aplicación de cambios. |
 | Alfred es multi-instancia | Cerrada | Existe un Alfred por dispositivo y cada instancia consume AITAP directamente; el renderer de Electron no recibe credenciales. |
 | GitHub App + Device Flow | Cerrada | Es el patrón para Cortex y para la segunda app de Batcave. Las referencias a OAuth clásico son deuda documental/técnica a corregir, no alternativas vigentes. |
+| PALADIN es el producto Cognituum para ingenieros | Cerrada | El Work de distribución para el sujeto individual adopta el nombre PALADIN. No implica un fork de Cognituum ni define todavía el nombre del producto o composición organizacional. |
 | Agenda maestra | Cerrada | Solo se actualiza en esta sesión mediante reportes del usuario. |
 
 ## Material para Resolución Arquitectónica Transversal
@@ -61,6 +62,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 7 | CORTEX / IonPump | Ownership documental dividido; Vault spec pendiente de corrección | Corregir §2.2 de Vault y migrar referencias antes de retirar la spec previa | GitHub App + Device Flow; Batcave; specs nuevas |
 | 8 | Batcave | Arquitectura multi-org definida; decisión GitHub App vigente | Corregir regresión de Batcave Auth en Vault spec y actualizar referencias | CORTEX; Nucleus; Alfred remoto |
 | 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
+| 10 | PALADIN / Distribución por composición | PALADIN confirmado como producto Cognituum para ingenieros; principio de una plataforma con composición individual u organizacional bajo análisis | Resolver gobernanza, contrato de composición, bootstrap y transiciones antes de diseñar la implementación | Nucleus; Metamorph; Installer/Setup; AUTHORIZATION; Batcave; Core; propiedad de Mandates y Wisdom |
 
 ---
 
@@ -446,6 +448,57 @@ Claude Code o Codex con acceso al código Go y Node/TypeScript, más una instala
 
 ---
 
+## 10. PALADIN / Distribución por composición
+
+**Estado actual**
+
+El Work dedicado a la forma de distribución de Cognituum para desarrolladores e ingenieros externos adopta el nombre **PALADIN**. PALADIN es el nombre del producto para ingenieros y no un nombre alternativo para Metamorph.
+
+El principio de producto presentado establece una sola plataforma Cognituum con distintas formas de habitarla. El sujeto individual conserva capacidades reales de Mandates y Wisdom dentro de su identidad personal; la organización agrega gobierno institucional, miembros, roles, coordinación, auditoría y administración del conocimiento organizacional.
+
+La dirección arquitectónica candidata mantiene las fronteras existentes: Nucleus determina identidad, políticas y capacidades autorizadas; Metamorph materializa la composición local mediante instalación, actualización, retiro, verificación de salud y rollback. Metamorph no decide si el sujeto pertenece a una organización ni concede capacidades.
+
+PALADIN no debe implementarse como un fork ni como una lista rígida de binarios seleccionada unilateralmente por Metamorph. La separación entre composición instalada y autorización efectiva permanece obligatoria: Metamorph controla qué componentes están presentes; Nucleus controla qué acciones están permitidas.
+
+**Fuentes de verdad**
+
+- Manifiesto de la Sabiduría Técnica de Cognituum, compartido por el usuario en AGENDA FOLLOWUP.
+- Principio de Distribución de Cognituum — Una plataforma. Dos formas de habitarla, compartido por el usuario en AGENDA FOLLOWUP.
+- `docs/GOVERNANCE/ARCHITECTURE/COGNITUUM_RESPONSIBILITY_BOUNDARIES.md`
+
+**Próximo paso concreto**
+
+Cerrar la gobernanza antes de diseñar o implementar:
+
+1. Identidad autoritativa del sujeto individual y organizacional.
+2. Contrato y cadena de confianza de la composición deseada.
+3. Sustrato mínimo de bootstrap con Nucleus y Metamorph.
+4. Componentes físicamente separables frente a capacidades protegidas en runtime.
+5. Comportamiento offline, expiración, revocación y rollback.
+6. Transiciones PALADIN → organización, organización → PALADIN y organización A → B.
+7. Propiedad, transferencia, conservación y retiro de Mandates, Wisdom y datos institucionales.
+
+**Dependencias cruzadas**
+
+- Nucleus: identidad, políticas, autorización y fuente local de decisión.
+- Metamorph: reconciliación de la composición, lifecycle, salud y rollback.
+- Installer/Setup: instalación del sustrato neutral previo al onboarding.
+- Tema 9 / AUTHORIZATION: enforcement efectivo independiente de la presencia física de componentes.
+- Tema 8 / Batcave: posible origen remoto de políticas organizacionales; la cadena de autoridad todavía debe cerrarse.
+- Tema 2 / Core: onboarding y representación del sujeto y la composición activa.
+- Mandates y Wisdom: propiedad personal e institucional durante adopción, salida o revocación.
+
+**Decisiones/riesgos abiertos**
+
+- PALADIN queda confirmado como nombre del producto para ingenieros.
+- No está definido todavía el nombre del producto o composición para organizaciones.
+- No está cerrado quién produce, autoriza y firma la composición que recibe Metamorph.
+- No está cerrado qué capacidades requieren componentes distintos y cuáles permanecen en binarios compartidos con gates de Nucleus.
+- El cambio de composición no puede borrar ni transferir conocimiento como efecto secundario.
+- La arquitectura no debe reducirse a dos modos hardcodeados ni usar la ausencia de archivos como sustituto de autorización.
+
+---
+
 ## Cola de prompts para sesiones externas
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
@@ -465,6 +518,7 @@ Claude Code o Codex con acceso al código Go y Node/TypeScript, más una instala
 | Media | 4 + 6 | Diseño de identidad y alta de dispositivos AITAP/Alfred | Definir caso mobile sin Nucleus local |
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
+| Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
 
 ## Registro cronológico de avances
 
@@ -479,3 +533,4 @@ Claude Code o Codex con acceso al código Go y Node/TypeScript, más una instala
 | 2026-08-18 | 1 / Synapse Simulator | Se separó el vertical Genesis en dos Works coordinados con gates independientes. | AGENDA FOLLOWUP, reportado por el usuario | Genesis cerró Etapa A y espera el contrato del Simulator; el Simulator inició investigación contractual. Ninguno comenzó implementación. |
 | 2026-08-21 | 1, 4, Executor | Se cerró la composición funcional de Genesis y se cambió el canal prioritario del primer vertical a CLI + AITAP + Executor. | AGENDA FOLLOWUP, decisión del usuario | El Work Genesis se renombra sin duplicarse; Synapse Simulator deja de ser precondición y continúa como línea posterior. |
 | 2026-08-24 | 1, 9 | Se cerraron fail-closed, gate CLI, Alfred Master-only y homologación de mensajes/exit codes; Genesis verificó el contrato de Authorization. | Actualización del usuario; cambios en `main`, `go test ./...` en verde | Se distinguió el tramo CLI cerrado del gate API/boundary Go→Node pendiente; Genesis quedó bloqueado por resolución de workspace del watcher, no por Authorization. |
+| 2026-08-26 | 10 / PALADIN | El Work de distribución para desarrolladores e ingenieros externos fue renombrado PALADIN, nombre del producto Cognituum para ingenieros. Se presentó el principio de una plataforma con composición individual u organizacional. | AGENDA FOLLOWUP, decisión y material compartidos por el usuario | Se registró PALADIN como nombre cerrado; la composición, su cadena de autoridad, bootstrap, transiciones y propiedad del conocimiento permanecen pendientes de gobernanza. |
