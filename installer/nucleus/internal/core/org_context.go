@@ -2,6 +2,8 @@
 package core
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +23,80 @@ const (
 	BloomDirName  = ".bloom"
 	NucleusPrefix = ".nucleus-"
 )
+
+// ActiveOrgContext is the active organization persisted by the installed
+// Nucleus in config/nucleus.json.
+type ActiveOrgContext struct {
+	OrgSlug       string
+	WorkspacePath string
+	NucleusRoot   string
+}
+
+type machineNucleusConfig struct {
+	Onboarding struct {
+		ActiveOrgSlug string `json:"active_org_slug"`
+		Organizations []struct {
+			OrgSlug       string `json:"org_slug"`
+			WorkspacePath string `json:"workspace_path"`
+		} `json:"organizations"`
+	} `json:"onboarding"`
+}
+
+// ResolveActiveOrgContext reads the installed machine configuration. It is
+// independent from the process CWD and fails closed on inconsistent data.
+func ResolveActiveOrgContext() (*ActiveOrgContext, error) {
+	configPath := filepath.Join(ResolveAppDataDir(), "config", "nucleus.json")
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("no pude leer nucleus.json en %s: %w", configPath, err)
+	}
+
+	var cfg machineNucleusConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return nil, fmt.Errorf("nucleus.json inválido en %s: %w", configPath, err)
+	}
+	if cfg.Onboarding.ActiveOrgSlug == "" {
+		return nil, fmt.Errorf("nucleus.json en %s no tiene onboarding.active_org_slug", configPath)
+	}
+
+	for _, org := range cfg.Onboarding.Organizations {
+		if org.OrgSlug != cfg.Onboarding.ActiveOrgSlug {
+			continue
+		}
+		if org.WorkspacePath == "" {
+			return nil, fmt.Errorf(
+				"organización activa %q en %s no tiene workspace_path",
+				org.OrgSlug,
+				configPath,
+			)
+		}
+
+		nucleusRoot := filepath.Join(
+			org.WorkspacePath,
+			BloomDirName,
+			NucleusPrefix+org.OrgSlug,
+		)
+		nucleusConfig := filepath.Join(nucleusRoot, ".core", ".nucleus-config.json")
+		if info, statErr := os.Stat(nucleusConfig); statErr != nil || info.IsDir() {
+			if statErr != nil {
+				return nil, fmt.Errorf("Nucleus activo inválido: no pude leer %s: %w", nucleusConfig, statErr)
+			}
+			return nil, fmt.Errorf("Nucleus activo inválido: %s no es un archivo", nucleusConfig)
+		}
+
+		return &ActiveOrgContext{
+			OrgSlug:       org.OrgSlug,
+			WorkspacePath: filepath.Clean(org.WorkspacePath),
+			NucleusRoot:   filepath.Clean(nucleusRoot),
+		}, nil
+	}
+
+	return nil, fmt.Errorf(
+		"onboarding.active_org_slug=%q no existe en onboarding.organizations de %s",
+		cfg.Onboarding.ActiveOrgSlug,
+		configPath,
+	)
+}
 
 // ResolveNucleusRoot devuelve la ruta absoluta a la carpeta de datos de la
 // organización activa: ~/.bloom/.nucleus-{org}/
@@ -79,7 +155,18 @@ func ResolveNucleusRoot(orgSlug string) (string, error) {
 		return filepath.Join(homeDir, ".bloom", fmt.Sprintf(".nucleus-%s", orgSlug)), nil
 	}
 
-	// 3. Auto-descubrimiento por filesystem-scan — el mecanismo que
+	// 3. Installed machine configuration — canonical path for nucleus.exe
+	//    invoked from PATH, independent from the caller's CWD.
+	activeContext, configErr := ResolveActiveOrgContext()
+	if configErr == nil {
+		return activeContext.NucleusRoot, nil
+	}
+	if !errors.Is(configErr, os.ErrNotExist) {
+		return "", configErr
+	}
+
+	// 4. Auto-descubrimiento por filesystem-scan — fallback for development
+	//    environments without an installed machine configuration. El mecanismo que
 	//    realmente funciona hoy en uso normal (mismo que Mandates). Sube
 	//    desde CWD (o BLOOM_NUCLEUS_PATH para procesos de background) hasta
 	//    encontrar .bloom/.nucleus-{slug}/.

@@ -166,7 +166,7 @@ class IntentManager:
             # y es idempotente (mkdir(..., exist_ok=True) en todos los
             # subdirs) frente al directorio de la primera fase que
             # create() ya dejó armado.
-            intents_base = project_root / ".bloom" / ".intents"
+            intents_base = self._intents_base(project_root)
             intent_path = intents_base / f".{intent_type}" / folder_name
 
             state_mgr = IntentStateManager.create(
@@ -586,6 +586,12 @@ class IntentManager:
         
         return text if text else "unnamed"
     
+    def _intents_base(self, root: Path) -> Path:
+        """Resolve the intents directory for a Project or a Nucleus root."""
+        if root.name.startswith(".nucleus-") and root.parent.name == ".bloom":
+            return root / ".intents"
+        return root / ".bloom" / ".intents"
+
     def _find_bloom_project(self, explicit_path: Optional[Path] = None) -> Path:
         """
         Find the Bloom project root by looking for .bloom directory.
@@ -600,9 +606,18 @@ class IntentManager:
             FileNotFoundError: If no valid Bloom project found
         """
         if explicit_path:
+            explicit_path = explicit_path.resolve()
+            nucleus_config = explicit_path / ".core" / ".nucleus-config.json"
+            if (
+                explicit_path.name.startswith(".nucleus-")
+                and explicit_path.parent.name == ".bloom"
+                and nucleus_config.is_file()
+            ):
+                return explicit_path
+
             bloom_dir = explicit_path / ".bloom"
             if bloom_dir.exists() and bloom_dir.is_dir():
-                return explicit_path.resolve()
+                return explicit_path
             raise FileNotFoundError(
                 f"No valid Bloom project found at {explicit_path}"
             )
@@ -690,7 +705,7 @@ class IntentManager:
         Returns:
             Path to the created intent directory
         """
-        intents_base = project_root / ".bloom" / ".intents"
+        intents_base = self._intents_base(project_root)
         intents_base.mkdir(parents=True, exist_ok=True)
         
         type_dir = intents_base / f".{intent_type}"
@@ -1075,7 +1090,7 @@ class IntentManager:
         Raises:
             ValueError: If intent not found or multiple matches
         """
-        intents_base = project_root / ".bloom" / ".intents"
+        intents_base = self._intents_base(project_root)
         
         if not intents_base.exists():
             raise ValueError("No intents directory found in project")
@@ -1162,7 +1177,7 @@ class IntentManager:
             FileNotFoundError: If project not found
         """
         project_root = self._find_bloom_project(nucleus_path)
-        intents_base = project_root / ".bloom" / ".intents"
+        intents_base = self._intents_base(project_root)
        
         if not intents_base.exists():
             return {

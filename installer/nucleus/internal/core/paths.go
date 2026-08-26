@@ -19,6 +19,32 @@ type Paths struct {
 	NucleusBin   string // Ruta absoluta a nucleus.exe — escritor único de telemetry.json
 }
 
+// ResolveAppDataDir returns the machine installation data directory without
+// depending on the process CWD or creating any directory.
+func ResolveAppDataDir() string {
+	if appDataDir := os.Getenv("BLOOM_APPDATA_DIR"); appDataDir != "" {
+		return appDataDir
+	}
+
+	home, _ := os.UserHomeDir()
+	switch runtime.GOOS {
+	case "windows":
+		localAppData := os.Getenv("LOCALAPPDATA")
+		if localAppData == "" {
+			localAppData = filepath.Join(home, "AppData", "Local")
+		}
+		return filepath.Join(localAppData, "BloomNucleus")
+	case "darwin":
+		return filepath.Join(home, "Library", "BloomNucleus")
+	default:
+		xdgDataHome := os.Getenv("XDG_DATA_HOME")
+		if xdgDataHome == "" {
+			xdgDataHome = filepath.Join(home, ".local", "share")
+		}
+		return filepath.Join(xdgDataHome, "BloomNucleus")
+	}
+}
+
 func InitPaths() (*Paths, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -30,31 +56,8 @@ func InitPaths() (*Paths, error) {
 	sentinelDir := filepath.Dir(exe)
 	binDir := filepath.Dir(sentinelDir)
 
-	// Resolve appDataDir cross-platform: BLOOM_APPDATA_DIR overrides everything.
-	// On Windows use LOCALAPPDATA; on macOS use ~/Library/BloomNucleus;
-	// on Linux use ~/.local/share/BloomNucleus (XDG Base Directory spec).
-	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
-	if appDataDir == "" {
-		home, _ := os.UserHomeDir()
-		switch runtime.GOOS {
-		case "windows":
-			localAppData := os.Getenv("LOCALAPPDATA")
-			if localAppData == "" {
-				localAppData = filepath.Join(home, "AppData", "Local")
-			}
-			appDataDir = filepath.Join(localAppData, "BloomNucleus")
-		case "darwin":
-			appDataDir = filepath.Join(home, "Library", "BloomNucleus")
-		default:
-			// Linux — XDG Base Directory spec: $XDG_DATA_HOME/BloomNucleus
-			// Falls back to ~/.local/share/BloomNucleus if XDG_DATA_HOME is not set.
-			xdgDataHome := os.Getenv("XDG_DATA_HOME")
-			if xdgDataHome == "" {
-				xdgDataHome = filepath.Join(home, ".local", "share")
-			}
-			appDataDir = filepath.Join(xdgDataHome, "BloomNucleus")
-		}
-	}
+	// Resolve appDataDir cross-platform without depending on the process CWD.
+	appDataDir := ResolveAppDataDir()
 
 	// Resolve nucleus binary: try without extension first (macOS/Linux), then .exe (Windows).
 	nucleusBin := filepath.Join(binDir, "nucleus", "nucleus")

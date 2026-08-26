@@ -3,6 +3,7 @@ package supervisor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -75,6 +76,20 @@ type Config struct {
 //  4. Leer .core/.nucleus-config.json bajo esa carpeta para validar que es
 //     un Nucleus real (no solo una carpeta con el nombre correcto).
 func LoadNucleusConfig() (*Config, error) {
+	activeContext, configErr := core.ResolveActiveOrgContext()
+	if configErr == nil {
+		return loadNucleusConfigAt(
+			activeContext.WorkspacePath,
+			activeContext.OrgSlug,
+			activeContext.NucleusRoot,
+		)
+	}
+	if !errors.Is(configErr, os.ErrNotExist) {
+		return nil, configErr
+	}
+
+	// Development fallback for environments without an installed
+	// config/nucleus.json. Product CLI resolution must not depend on CWD.
 	// Etapa 2 (ORGANIZATION_SWITCH_IMPLEMENTATION_STATUS.md): el escaneo
 	// en sí (antes duplicado acá como findBloomDir+findNucleusDir, con el
 	// override BLOOM_NUCLEUS_PATH manejado en esta misma función) ahora vive

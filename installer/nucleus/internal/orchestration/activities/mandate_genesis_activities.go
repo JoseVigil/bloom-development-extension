@@ -334,11 +334,10 @@ func publishMandateEvent(event string, data map[string]interface{}) {
 //
 // --nucleus-path se pasa SIEMPRE explícito. Sin esto, brain
 // (_find_bloom_project) busca un ".bloom/" subiendo desde el cwd del
-// proceso de nucleus, que no tiene por qué coincidir con el proyecto del
-// mandate. Se deriva subiendo 3 niveles desde MandatesRoot
-// (.mandates -> .nucleus-{org} -> .bloom -> workspace) — es la resolución
-// inversa de supervisor.Config.MandatesRoot() / resolveMandatesRootForActiveOrg()
-// (governance/org_switch_guard.go, Etapa 4), no una tercera fuente de verdad.
+// proceso de nucleus, que no tiene por qué coincidir con el Nucleus activo
+// del mandate. MandatesRoot ya vive en
+// <workspace>/.bloom/.nucleus-{org}/.mandates, por lo que su padre directo
+// es la raíz Nucleus que debe contener .intents/.
 // ─────────────────────────────────────────────────────────────────────────
 
 type IngestReceptionInput struct {
@@ -352,6 +351,10 @@ type IngestReceptionResult struct {
 	IntentID   string
 	FolderName string
 	FilesCount int
+}
+
+func resolveNucleusRootFromMandatesRoot(mandatesRoot string) string {
+	return filepath.Dir(filepath.Clean(mandatesRoot))
 }
 
 // brainCLIResult — shape mínimo compartido por la salida --json de brain
@@ -385,10 +388,10 @@ func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult,
 		)
 	}
 
-	// workspaceRoot: deshace los 3 segmentos fijos que agrega
-	// supervisor.Config.MandatesRoot() / resolveMandatesRootForActiveOrg()
-	// (".bloom/.nucleus-{org}/.mandates") sobre WorkspacePath.
-	workspaceRoot := filepath.Dir(filepath.Dir(filepath.Dir(input.MandatesRoot)))
+	// nucleusRoot conserva la organización activa resuelta por el watcher:
+	// <workspace>/.bloom/.nucleus-{org}/.mandates ->
+	// <workspace>/.bloom/.nucleus-{org}.
+	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
 
 	docsDir := filepath.Join(input.MandatesRoot, input.MandateID, "docs")
 	var docFiles []string
@@ -415,7 +418,7 @@ func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult,
 		"--name", input.Project,
 		"--mandate-id", input.MandateID,
 		"--domain-baseline", domainBaseline,
-		"--nucleus-path", workspaceRoot,
+		"--nucleus-path", nucleusRoot,
 	}
 	createOut, err := runBrainIntentJSON(brainPath, createArgs)
 	if err != nil {
@@ -432,7 +435,7 @@ func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult,
 	hydrateArgs := []string{
 		"--json", "intent", "hydrate",
 		"--id", intentID,
-		"--nucleus-path", workspaceRoot,
+		"--nucleus-path", nucleusRoot,
 	}
 	if len(docFiles) > 0 {
 		hydrateArgs = append(hydrateArgs, "--files", strings.Join(docFiles, ","))

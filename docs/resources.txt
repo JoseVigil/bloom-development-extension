@@ -1,15 +1,23 @@
 Chrommium 
 En windows y darwin onbutve los .zip no se de donde, en linux de aca.
 https://ungoogled-software.github.io/ungoogled-chromium-binaries/
+Instalado primero 146.0.7680.177
+
+Windows decarguq el ultimo 151.0.7922.137-1 y lo ubique en "C:\repos\bloom-development-extension\installer\chrome\chrome-win.zip". 
+
+
 
 Temoral 
 https://github.com/temporalio/cli/releases/tag/v1.5.1
+temporal_cli_1.5.1_windows_amd64.zip
 
 node v2.11 (windows-darwin) y 2.22.3 linux
 https://nodejs.org/en/download
 
 ollama
 https://ollama.com/download
+Windows 
+https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip
 
 
 Python Build Standalone (Astral) — macOS Runtime para Bloom
@@ -22,6 +30,12 @@ https://github.com/astral-sh/python-build-standalone/releases/download/20260414/
 Para Linux ARM64:
 https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.10.20+20260414-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz
 
+OpenCode
+https://github.com/opencode-ai/opencode/releases
+
+Windows 
+https://github.com/anomalyco/opencode/releases/download/v1.17.12/opencode-windows-x64.zip
+
 
 ⚠️ Nota importante para Linux que no aplica a macOS: existen variantes gnu (glibc) y musl. La gnu es la correcta para distros estándar (Ubuntu, Debian, Fedora, etc.) — usá musl solo si vas a correr sobre Alpine. También hay variantes con sufijo de CPU microarquitectura (-v2, -v3, -v4 para AVX) pero la base sin sufijo es la más compatible y la recomendada para distribución general.
 Misma estructura que macOS al descomprimir: carpeta python/bin/python3.10, python/lib/, etc. — mapea igual a installer/resources/runtime-linux/x86_64/.
@@ -33,5 +47,4 @@ https://claude.ai/chat/2894c85a-4e31-4ef3-bd00-6915b24335a2
 Synergy
 https://github.com/DEAKSoftware/Synergy-Binaries/releases/tag/1.14.6.19-stable
 
-OpenCode
-https://github.com/opencode-ai/opencode/releases
+
