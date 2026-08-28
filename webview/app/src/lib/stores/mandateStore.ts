@@ -40,7 +40,9 @@ export interface MandateData {
 	mandateType: MandateType;
 	domainBaseline: DomainBaseline;
 	phase: MandatePhase;
-	status: MandateStatus;
+	currentStatus: MandateStatus;
+	stateVersion?: number;
+	updatedAt?: string;
 }
 
 interface MandateStoreState {
@@ -54,13 +56,18 @@ interface ListedMandate {
 	project?: string;
 	name?: string;
 	status?: string;
+	currentStatus?: string;
 	currentPhase?: string;
+	stateVersion?: number;
+	updatedAt?: string;
 }
 
 let counter = 0;
 
-function createMandateStore() {
+export function createMandateStore() {
 	const { subscribe, update } = writable<MandateStoreState>({ byId: {} });
+	const eventSequenceByMandate: Record<string, number> = {};
+	let reconcileRequester: (() => void) | null = null;
 
 	/**
 	 * Crea un mandate placeholder local y lo registra en el store. No pega
@@ -82,7 +89,7 @@ function createMandateStore() {
 			mandateType: input.mandateType,
 			domainBaseline: input.domainBaseline,
 			phase: 'ingest',
-			status: 'building'
+			currentStatus: 'building'
 		};
 		update((s) => ({ byId: { ...s.byId, [mandateId]: mandate } }));
 		return mandate;
@@ -97,13 +104,27 @@ function createMandateStore() {
 	function upsert(mandateId: string, patch: Partial<Omit<MandateData, 'mandateId'>>): void {
 		update((s) => {
 			const existing = s.byId[mandateId];
+			if (
+				existing?.stateVersion !== undefined &&
+				patch.stateVersion !== undefined &&
+				patch.stateVersion < existing.stateVersion
+			) {
+				console.warn('[mandateStore] actualización stale descartada:', {
+					mandateId,
+					incomingStateVersion: patch.stateVersion,
+					currentStateVersion: existing.stateVersion
+				});
+				return s;
+			}
 			const merged: MandateData = {
 				mandateId,
 				title: patch.title ?? existing?.title ?? mandateId,
 				mandateType: patch.mandateType ?? existing?.mandateType ?? 'genesis',
 				domainBaseline: patch.domainBaseline ?? existing?.domainBaseline ?? 'empty',
 				phase: patch.phase ?? existing?.phase ?? 'ingest',
-				status: patch.status ?? existing?.status ?? 'building'
+				currentStatus: patch.currentStatus ?? existing?.currentStatus ?? 'building',
+				stateVersion: patch.stateVersion ?? existing?.stateVersion,
+				updatedAt: patch.updatedAt ?? existing?.updatedAt
 			};
 			return { byId: { ...s.byId, [mandateId]: merged } };
 		});
@@ -116,14 +137,36 @@ function createMandateStore() {
 	 * este método solo asegura que el store tenga la data disponible para
 	 * cuando se abra el tab.
 	 */
-	function hydrateFromList(items: ListedMandate[]): void {
+	function captureWatermark(): Record<string, number> {
+		return { ...eventSequenceByMandate };
+	}
+
+	function hydrateFromList(items: ListedMandate[], watermark: Record<string, number> = {}): void {
 		for (const item of items) {
+			const eventArrivedDuringRequest =
+				(eventSequenceByMandate[item.mandateId] ?? 0) > (watermark[item.mandateId] ?? 0);
+			if (eventArrivedDuringRequest) {
+				let existingVersion: number | undefined;
+				const unsubscribe = subscribe((s) => {
+					existingVersion = s.byId[item.mandateId]?.stateVersion;
+				});
+				unsubscribe();
+				const snapshotIsAuthoritativelyNewer =
+					item.stateVersion !== undefined &&
+					existingVersion !== undefined &&
+					item.stateVersion > existingVersion;
+				if (!snapshotIsAuthoritativelyNewer) {
+					continue;
+				}
+			}
 			upsert(item.mandateId, {
 				title: item.name || item.project || item.mandateId,
 				mandateType: (item.mandateType as MandateType) || 'genesis',
 				domainBaseline: 'empty',
 				phase: (item.currentPhase as MandatePhase) || 'ingest',
-				status: (item.status as MandateStatus) || 'building'
+				currentStatus: ((item.currentStatus ?? item.status) as MandateStatus) || 'building',
+				stateVersion: item.stateVersion,
+				updatedAt: item.updatedAt
 			});
 		}
 	}
@@ -144,6 +187,12 @@ function createMandateStore() {
 			console.warn('[mandateStore] evento mandate:* sin mandateId, se ignora:', event, data);
 			return;
 		}
+		eventSequenceByMandate[mandateId] = (eventSequenceByMandate[mandateId] ?? 0) + 1;
+		const incomingStatus = (data?.currentStatus ?? data?.status) as MandateStatus | undefined;
+		const revision = {
+			stateVersion: typeof data?.stateVersion === 'number' ? data.stateVersion : undefined,
+			updatedAt: typeof data?.updatedAt === 'string' ? data.updatedAt : undefined
+		};
 
 		switch (event) {
 			case 'mandate:genesis:initiated':
@@ -151,7 +200,8 @@ function createMandateStore() {
 					title: data.projectName || mandateId,
 					mandateType: 'genesis',
 					phase: 'ingest',
-					status: 'building'
+					currentStatus: incomingStatus ?? 'building',
+					...revision
 				});
 				break;
 
@@ -159,57 +209,101 @@ function createMandateStore() {
 				upsert(mandateId, {
 					title: data.projectName || mandateId,
 					mandateType: (data.mandateType as MandateType) || 'standard',
-					status: 'draft'
+					currentStatus: incomingStatus ?? 'draft',
+					...revision
 				});
 				break;
 
 			case 'mandate:genesis:ingest_progress':
-				upsert(mandateId, { phase: 'ingest', status: 'building' });
+				upsert(mandateId, { phase: 'ingest', currentStatus: incomingStatus ?? 'building', ...revision });
 				break;
 
 			case 'mandate:genesis:ingest_complete':
-				upsert(mandateId, { phase: 'cluster', status: 'building' });
+				upsert(mandateId, { phase: 'cluster', currentStatus: incomingStatus ?? 'building', ...revision });
 				break;
 
 			case 'mandate:genesis:domains_proposed':
 				// Fase 3 — punto de sincronización humana, esperando confirmación.
-				upsert(mandateId, { phase: 'validate', status: 'waiting' });
+				upsert(mandateId, { phase: 'validate', currentStatus: incomingStatus ?? 'waiting', ...revision });
 				break;
 
 			case 'mandate:genesis:signed':
 				// mandate.json firmado. mandate_state.json pasa building → pending
 				// (ver ws-events.ts) — todavía no arrancó el scaffold en sí.
-				upsert(mandateId, { phase: 'scaffold', status: 'pending' });
+				upsert(mandateId, { phase: 'scaffold', currentStatus: incomingStatus ?? 'pending', ...revision });
 				break;
 
 			case 'mandate:genesis:error':
-				upsert(mandateId, { status: 'failed' });
+				upsert(mandateId, { currentStatus: incomingStatus ?? 'failed', ...revision });
 				break;
 
 			case 'mandate:action:started':
-				upsert(mandateId, { phase: 'scaffold', status: 'running' });
+				upsert(mandateId, { phase: 'scaffold', currentStatus: incomingStatus ?? 'running', ...revision });
 				break;
 
 			case 'mandate:action:completed':
 				// Un dominio individual completó — no todos. No se toca el status
 				// del mandate acá; mandate:action:all_complete es quien decide eso.
+				upsert(mandateId, revision);
 				break;
 
 			case 'mandate:action:failed':
-				upsert(mandateId, { status: 'failed' });
+				upsert(mandateId, { currentStatus: incomingStatus ?? 'failed', ...revision });
 				break;
 
 			case 'mandate:action:all_complete':
-				upsert(mandateId, { status: 'completed' });
+				upsert(mandateId, { currentStatus: incomingStatus ?? 'completed', ...revision });
 				break;
 
 			default:
-				// Evento mandate:* desconocido (futuro o no mapeado) — no-op.
+				console.warn('[mandateStore] evento mandate:* desconocido; se solicita reconciliación:', {
+					event,
+					mandateId,
+					stateVersion: revision.stateVersion,
+					payloadKeys: Object.keys(data ?? {})
+				});
+				reconcileRequester?.();
 				break;
 		}
 	}
 
-	return { subscribe, createMandate, hydrateFromList, applyMandateEvent };
+	function onReconcileRequested(callback: () => void): void {
+		reconcileRequester = callback;
+	}
+
+	return { subscribe, createMandate, captureWatermark, hydrateFromList, applyMandateEvent, onReconcileRequested };
+}
+
+export function createReconciliationCoordinator<T extends ListedMandate>(
+	store: ReturnType<typeof createMandateStore>,
+	fetchMandates: () => Promise<{ mandates: T[] }>,
+	onHydrated?: (items: T[]) => void
+) {
+	let inFlight: Promise<void> | null = null;
+	let reconcileAgain = false;
+
+	async function run(): Promise<void> {
+		do {
+			reconcileAgain = false;
+			const watermark = store.captureWatermark();
+			const { mandates } = await fetchMandates();
+			store.hydrateFromList(mandates, watermark);
+			onHydrated?.(mandates);
+		} while (reconcileAgain);
+	}
+
+	function request(): Promise<void> {
+		if (inFlight) {
+			reconcileAgain = true;
+			return inFlight;
+		}
+		inFlight = run().finally(() => {
+			inFlight = null;
+		});
+		return inFlight;
+	}
+
+	return { request };
 }
 
 export const mandateStore = createMandateStore();

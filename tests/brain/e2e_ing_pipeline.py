@@ -6,8 +6,9 @@ Ejecuta el ciclo completo de un intent 'ing' contra el Core real:
     create -> hydrate (.reception/, acto único, avanza sola a
     .classification/) -> add_turn en .classification/ con
     close_phase=True (fuerza advance_after_proposal -> .consolidation/)
-    -> add_turn en .consolidation/ con close_phase=True (cierra el
-    commit, avanza a fase terminal) -> finalize_intent() -> freeze_to_mandate()
+    -> add_turn en .consolidation/ con close_phase=True (solicita commit
+    y crea ledger) -> verificar efectos -> commit -> advance
+    -> finalize_intent() -> freeze_to_mandate()
 
 y verifica en disco que mandate.json fue escrito.
 
@@ -70,9 +71,8 @@ assert turn1["phase_active"] == "consolidation", (
     f"Se esperaba phase_active='consolidation', llegó '{turn1['phase_active']}'"
 )
 
-# 4. ADD_TURN en .consolidation/ (fase de commit, commit_field != None).
-#    close_phase=True setea el commit_field en true y cierra el turno,
-#    avanzando a la fase terminal.
+# 4. ADD_TURN en .consolidation/: persiste la solicitud y el ledger,
+#    sin avanzar phase_active.
 turn2 = step("4. ADD_TURN (consolidation, close_phase=True)", lambda: manager.add_turn(
     intent_id=intent_id,
     actor="user",
@@ -80,7 +80,35 @@ turn2 = step("4. ADD_TURN (consolidation, close_phase=True)", lambda: manager.ad
     proposal=[{"change_id": "c1", "human_decision": "approved", "content": {}}],
     close_phase=True,
 ))
-assert turn2["is_terminated"] is True, "El intent debería estar en fase terminal tras el commit"
+assert turn2["commit_requested"] is True
+assert turn2["phase_active"] == "consolidation"
+
+# 4b. El aplicador externo materializa cada obligación y entrega evidencia.
+from brain.core.intent.effect_ledger import EffectLedgerManager
+ledger = EffectLedgerManager(Path(turn2["turn_path"]))
+for effect in ledger.load()["effects"]:
+    manager.mark_bsip_effect_applied(
+        intent_id=intent_id,
+        phase_name="consolidation",
+        turn_number=turn2["turn_number"],
+        effect_id=effect["effect_id"],
+        evidence={"e2e_verified": effect["obligation"]},
+    )
+
+# 4c. Control final y avance son checkpoints independientes.
+committed = step("4c. COMMIT CONTROL", lambda: manager.commit_bsip_turn(
+    intent_id=intent_id,
+    phase_name="consolidation",
+    turn_number=turn2["turn_number"],
+))
+assert committed["phase_active"] == "consolidation"
+
+advanced = step("4d. ADVANCE STATE", lambda: manager.advance_bsip_turn(
+    intent_id=intent_id,
+    phase_name="consolidation",
+    turn_number=turn2["turn_number"],
+))
+assert advanced["is_terminated"] is True
 
 # 5. FINALIZE — exige phase_active == terminal (ya lo confirmamos arriba).
 finalized = step("5. FINALIZE", lambda: manager.finalize_intent(intent_id=intent_id))
@@ -110,4 +138,4 @@ mandate_file_override = Path(frozen_override["mandate_path"])
 assert mandate_file_override.exists(), "mandate.json (override) no fue escrito a disco"
 print(f"✅ mandate.json (override) confirmado en disco: {mandate_file_override}")
 
-print("\n� Ciclo E2E completo: create -> hydrate -> add_turn x2 -> finalize -> freeze OK")
+print("\n✅ Ciclo E2E desacoplado completo: create -> hydrate -> ledger -> commit -> advance -> finalize -> freeze OK")

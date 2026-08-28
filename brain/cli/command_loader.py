@@ -323,10 +323,22 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load AddTurnCommand: {e}")
     
     try:
+        from brain.commands.intent.advance_turn import AdvanceTurnCommand
+        registry.register(AdvanceTurnCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load AdvanceTurnCommand: {e}")
+    
+    try:
         from brain.commands.intent.build_payload import BuildPayloadCommand
         registry.register(BuildPayloadCommand())
     except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load BuildPayloadCommand: {e}")
+    
+    try:
+        from brain.commands.intent.commit_turn import CommitTurnCommand
+        registry.register(CommitTurnCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load CommitTurnCommand: {e}")
     
     try:
         from brain.commands.intent.create import CreateCommand
@@ -381,6 +393,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         registry.register(LockCommand())
     except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load LockCommand: {e}")
+    
+    try:
+        from brain.commands.intent.mark_effect_applied import MarkEffectAppliedCommand
+        registry.register(MarkEffectAppliedCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load MarkEffectAppliedCommand: {e}")
     
     try:
         from brain.commands.intent.merge import MergeCommand
@@ -853,7 +871,9 @@ def get_hiddenimports_list():
         'brain.commands.health.onboarding_status',
         'brain.commands.health.websocket_status',
         'brain.commands.intent.add_turn',
+        'brain.commands.intent.advance_turn',
         'brain.commands.intent.build_payload',
+        'brain.commands.intent.commit_turn',
         'brain.commands.intent.create',
         'brain.commands.intent.delete',
         'brain.commands.intent.download',
@@ -863,6 +883,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.hydrate',
         'brain.commands.intent.list',
         'brain.commands.intent.lock',
+        'brain.commands.intent.mark_effect_applied',
         'brain.commands.intent.merge',
         'brain.commands.intent.parse',
         'brain.commands.intent.plan',

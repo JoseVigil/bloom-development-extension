@@ -367,9 +367,7 @@ class IntentStateManager:
         turn: TurnHandle,
         control_payload: dict[str, Any],
     ) -> bool:
-        """Escribe el JSON de control del turno (`.turn.json` /
-        `.consolidation.json` / `.ratification.json`) y, si
-        corresponde, avanza `phase_active`.
+        """Persist the turn control without advancing ``phase_active``.
 
         `control_payload` debe ser el contenido completo tal como lo
         definen las specs (p.ej. `.consolidation.json` de ING §5, o
@@ -378,30 +376,66 @@ class IntentStateManager:
         solo lee el campo de commit declarado en PhaseSpec.commit_field
         para decidir la transición.
 
-        Devuelve True si la fase avanzó como resultado de este cierre,
-        False si el turno quedó abierto (`committed: false`, o la fase
-        no tiene noción de commit — p.ej. `classification`/`mapping`,
-        que solo proponen — ver ING §4 y DIS §4)."""
-        if turn.phase_name != self.phase_active:
+        Phase advancement is deliberately separate and recoverable through
+        :meth:`advance_after_committed_turn`.  The return value reports only
+        whether the persisted control declares the phase commit field true.
+        """
+        return self.persist_turn_control(
+            phase_name=turn.phase_name,
+            turn_number=turn.turn_number,
+            control_payload=control_payload,
+        )
+
+    def persist_turn_control(
+        self,
+        *,
+        phase_name: str,
+        turn_number: int,
+        control_payload: dict[str, Any],
+    ) -> bool:
+        """Atomically persist a control reconstructed solely from disk identity."""
+        if phase_name != self.phase_active:
             raise PhaseNotActiveError(
-                f"Fase '{turn.phase_name}' ya no es la activa (activa: "
+                f"Fase '{phase_name}' ya no es la activa (activa: "
                 f"'{self.phase_active}') — ¿turno obsoleto?"
             )
-        phase = self.spec.phase_spec(turn.phase_name)
-        _atomic_write_json(turn.control_file, control_payload)
+        phase = self.spec.phase_spec(phase_name)
+        if not phase.has_turns:
+            raise InvalidTransitionError(f"'{phase_name}' no acepta controles de turno")
+        if turn_number < 1:
+            raise InvalidTransitionError("turn_number debe ser >= 1")
+        turn_dir = self.intent_root / f".{phase_name}" / f".turn_{turn_number}"
+        if not turn_dir.is_dir():
+            raise InvalidTransitionError(f"No existe el turno persistido '{turn_dir}'")
+        control_filename = _CONTROL_FILENAME_BY_PHASE.get(phase_name, ".turn.json")
+        _atomic_write_json(turn_dir / control_filename, control_payload)
 
         if phase.commit_field is None:
-            # Fase propositiva (classification/mapping): nunca avanza
-            # por sí sola — el commit real ocurre en la fase siguiente
-            # (consolidation/ratification). Ver ING §4 "es la
-            # PROPUESTA; la confirmación humana ocurre en .consolidation/".
             return False
+        return bool(control_payload.get(phase.commit_field, False))
 
-        committed = bool(control_payload.get(phase.commit_field, False))
-        if committed:
-            self._advance()
-            return True
-        return False
+    def advance_after_committed_turn(self, *, phase_name: str, turn_number: int) -> None:
+        """Advance after re-reading a committed control from persistent state."""
+        if phase_name != self.phase_active:
+            raise PhaseNotActiveError(
+                f"Fase '{phase_name}' no es la activa (activa: '{self.phase_active}')"
+            )
+        phase = self.spec.phase_spec(phase_name)
+        if phase.commit_field is None:
+            raise InvalidTransitionError(f"'{phase_name}' no es una fase de commit")
+        control_filename = _CONTROL_FILENAME_BY_PHASE.get(phase_name, ".turn.json")
+        control_file = self.intent_root / f".{phase_name}" / f".turn_{turn_number}" / control_filename
+        try:
+            control = json.loads(control_file.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise InvalidTransitionError(f"No existe control persistido '{control_file}'") from exc
+        except json.JSONDecodeError as exc:
+            raise InvalidTransitionError(f"Control inválido '{control_file}': {exc}") from exc
+        if not bool(control.get(phase.commit_field, False)):
+            raise InvalidTransitionError(
+                f"El turno {turn_number} de '{phase_name}' no tiene '{phase.commit_field}: true'"
+            )
+        self._advance()
 
     def advance_after_proposal(self) -> None:
         """Fuerza el avance de una fase propositiva (`classification` /

@@ -90,10 +90,10 @@
         {#each PHASES as phase (phase.id)}
           {@const state = phaseState(phase.id, $mandate.phase)}
           <li class="phase-item" class:done={state === 'done'} class:current={state === 'current'}>
-            <span class="phase-dot" class:running={state === 'current' && $mandate.status !== 'failed'} class:failed={state === 'current' && $mandate.status === 'failed'} />
+            <span class="phase-dot" class:running={state === 'current' && $mandate.currentStatus !== 'failed'} class:failed={state === 'current' && $mandate.currentStatus === 'failed'} />
             <span class="phase-label">{phase.label}</span>
             {#if state === 'current'}
-              <span class="phase-badge status-{$mandate.status}">{$mandate.status}</span>
+              <span class="phase-badge status-{$mandate.currentStatus}">{$mandate.currentStatus}</span>
             {/if}
           </li>
         {/each}

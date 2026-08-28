@@ -82,6 +82,7 @@ export async function createMandateHandler(
       project: body.project,
       name: body.name,
       objective: body.objective,
+      status: 'draft' as const,
       currentStatus: 'draft' as const,
       createdAt: new Date().toISOString(),
     };
@@ -95,7 +96,7 @@ export async function createMandateHandler(
       mandateType: 'standard',
     });
 
-    return reply.code(202).send({ mandateId, status: 'draft' });
+    return reply.code(202).send({ mandateId, status: 'draft', currentStatus: 'draft' });
   }
 
   // --- RAMA GENESIS / DOMAIN_EXPANSION ---
@@ -108,6 +109,7 @@ export async function createMandateHandler(
     });
   }
 
+  const now = new Date().toISOString();
   const mandateState = {
     // AGREGADO: el watcher de Nucleus (Go) necesita estos campos embebidos
     // para armar GenesisBuildInput — el shape original ({status,
@@ -120,7 +122,23 @@ export async function createMandateHandler(
     source: (body as any).source,
     baseGenesisId: (body as any).baseGenesis,
     status: 'building' as const,
+    currentStatus: 'building' as const,
     currentPhase: 'ingest' as const,
+    stateVersion: 1,
+    updatedAt: now,
+    signature: {
+      status: 'not_ready' as const,
+      intentId: null,
+      artifacts: {
+        reception: null,
+        domainProposal: null,
+        humanSyncPersisted: false,
+      },
+      pendingAt: null,
+      signedAt: null,
+      failedAt: null,
+      failure: null,
+    },
     phases: {
       ingest: { status: 'pending' as const },
       cluster: { status: 'pending' as const },
@@ -150,8 +168,8 @@ export async function createMandateHandler(
     mandateId,
     projectName: body.project,
     source: (body as any).source, // 'source' existe en genesis/domain_expansion
-    initiatedAt: new Date().toISOString(),
+    initiatedAt: now,
   });
 
-  return reply.code(202).send({ mandateId, status: 'building' });
+  return reply.code(202).send({ mandateId, status: 'building', currentStatus: 'building' });
 }

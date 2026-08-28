@@ -23,6 +23,22 @@ type Client struct {
 	client client.Client
 }
 
+// WorkflowExecutionState es la vista enriquecida y read-only que usa la
+// reconciliación de Mandates. IsWorkflowRunning conserva su contrato separado
+// para la clasificación vivo/histórico y WorkflowIDReusePolicy.
+type WorkflowExecutionState string
+
+const (
+	WorkflowExecutionRunning    WorkflowExecutionState = "running"
+	WorkflowExecutionCompleted  WorkflowExecutionState = "completed"
+	WorkflowExecutionFailed     WorkflowExecutionState = "failed"
+	WorkflowExecutionCanceled   WorkflowExecutionState = "canceled"
+	WorkflowExecutionTerminated WorkflowExecutionState = "terminated"
+	WorkflowExecutionTimedOut   WorkflowExecutionState = "timed_out"
+	WorkflowExecutionNotFound   WorkflowExecutionState = "not_found"
+	WorkflowExecutionUnknown    WorkflowExecutionState = "unknown"
+)
+
 // NewClient crea un nuevo cliente Temporal
 func NewClient(ctx context.Context, paths *core.Paths, jsonMode bool) (*Client, error) {
 	// Crear logger específico para Temporal
@@ -315,8 +331,9 @@ func (c *Client) GetProfileStatus(ctx context.Context, profileID string) (*types
 // limpiamente con "routed"; el workflow completa por su cuenta en background.
 //
 // Flujo post-retorno:
-//   OnboardingWorkflow (Temporal) → sentinel.SendOnboardingNavigate activity
-//     → SentinelClient TCP → Brain → bloom-host → background.js → discovery.js
+//
+//	OnboardingWorkflow (Temporal) → sentinel.SendOnboardingNavigate activity
+//	  → SentinelClient TCP → Brain → bloom-host → background.js → discovery.js
 //
 // El requestID sigue el formato BTIPS: onb_nav_{timestamp_unix}_{prefix_3chars}
 // El workflowID sigue la convención: onboarding_{profile_id}_{timestamp_unix_nano}
@@ -412,11 +429,18 @@ func (c *Client) StartMandateGenesisBuildWorkflow(
 	workflowID := fmt.Sprintf("mandate_genesis_%s", mandateID)
 
 	options := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: "mandate-orchestration",
+		ID:                                       workflowID,
+		TaskQueue:                                "mandate-orchestration",
+		WorkflowIDReusePolicy:                    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDConflictPolicy:                 enums.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowExecutionErrorWhenAlreadyStarted: true,
 	}
 
-	return c.client.ExecuteWorkflow(ctx, options, "MandateGenesisBuildWorkflow", input)
+	run, err := c.client.ExecuteWorkflow(ctx, options, "MandateGenesisBuildWorkflow", input)
+	if err != nil {
+		return nil, fmt.Errorf("no pude iniciar %s con REJECT_DUPLICATE: %w", workflowID, err)
+	}
+	return run, nil
 }
 
 // IsAlreadyStarted distingue "ya estaba corriendo" (esperado en restarts o
@@ -424,6 +448,48 @@ func (c *Client) StartMandateGenesisBuildWorkflow(
 func IsAlreadyStarted(err error) bool {
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	return errors.As(err, &alreadyStarted)
+}
+
+// IsWorkflowRunning consulta el estado durable de Temporal. El watcher lo
+// usa después de WorkflowExecutionAlreadyStarted para distinguir un dispatch
+// duplicado contra un Run vivo de un rechazo histórico impuesto por
+// REJECT_DUPLICATE.
+func (c *Client) IsWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
+	return c.isWorkflowRunning(ctx, workflowID)
+}
+
+// GetWorkflowExecutionState consulta Temporal sin mutar el Workflow. Es una
+// función nueva y deliberadamente no reemplaza IsWorkflowRunning, cuyo bool
+// sostiene la clasificación de duplicados protegida por REJECT_DUPLICATE.
+func (c *Client) GetWorkflowExecutionState(ctx context.Context, workflowID string) (WorkflowExecutionState, error) {
+	resp, err := c.client.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return WorkflowExecutionNotFound, nil
+		}
+		return WorkflowExecutionUnknown, err
+	}
+	return classifyWorkflowExecutionStatus(resp.GetWorkflowExecutionInfo().GetStatus()), nil
+}
+
+func classifyWorkflowExecutionStatus(status enums.WorkflowExecutionStatus) WorkflowExecutionState {
+	switch status {
+	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return WorkflowExecutionRunning
+	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		return WorkflowExecutionCompleted
+	case enums.WORKFLOW_EXECUTION_STATUS_FAILED:
+		return WorkflowExecutionFailed
+	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
+		return WorkflowExecutionCanceled
+	case enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+		return WorkflowExecutionTerminated
+	case enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return WorkflowExecutionTimedOut
+	default:
+		return WorkflowExecutionUnknown
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────

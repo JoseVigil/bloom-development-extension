@@ -3,6 +3,7 @@ package workflows
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -59,8 +60,8 @@ type DomainConfirmation struct {
 
 // GenesisValidateSignal es el payload de la señal "mandate:genesis:validate".
 type GenesisValidateSignal struct {
-	Approved bool                  `json:"approved"`
-	Domains  []DomainConfirmation  `json:"domains,omitempty"`
+	Approved bool                 `json:"approved"`
+	Domains  []DomainConfirmation `json:"domains,omitempty"`
 }
 
 // GenesisBuildInput es el único dueño de este shape — temporal_client.go y
@@ -199,6 +200,14 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	}
 
 	// ── Persistir Human Sync en mandate_state.json (unifica CLI + señal) ──
+	var humanSyncResult activities.PersistHumanSyncResult
+	mandateDir := filepath.Join(input.MandatesRoot, input.MandateID)
+	bloomRoot := filepath.Dir(filepath.Dir(input.MandatesRoot))
+	receptionPath := filepath.Join(bloomRoot, ".intents", ".ing", receptionResult.FolderName, ".reception")
+	receptionRef, relErr := filepath.Rel(mandateDir, receptionPath)
+	if relErr != nil || filepath.IsAbs(receptionRef) {
+		return fmt.Errorf("no pude construir artifact reception relativo para intent %s: %v", receptionResult.IntentID, relErr)
+	}
 	if err := workflow.ExecuteActivity(ctx, activities.PersistHumanSyncActivity, activities.PersistHumanSyncInput{
 		MandatesRoot:       input.MandatesRoot,
 		MandateID:          input.MandateID,
@@ -207,8 +216,11 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		// ConfirmedBy vacío por este path — ver nota D-9 en
 		// PersistHumanSyncInput (mandate_genesis_sign_activity.go). No se
 		// inventa un valor acá.
-		ConfirmedBy: "",
-	}).Get(ctx, nil); err != nil {
+		ConfirmedBy:       "",
+		IntentID:          receptionResult.IntentID,
+		ReceptionRef:      filepath.ToSlash(receptionRef),
+		DomainProposalRef: scaffoldResult.ResultRef,
+	}).Get(ctx, &humanSyncResult); err != nil {
 		return fmt.Errorf("fase validate, persistir human sync: %w", err)
 	}
 
@@ -217,8 +229,31 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	if err := workflow.ExecuteActivity(ctx, activities.SignMandateActivity,
 		input.MandatesRoot, input.MandateID,
 	).Get(ctx, &signResult); err != nil {
+		var failureResult activities.PersistSignatureFailureResult
+		failureErr := workflow.ExecuteActivity(ctx, activities.PersistSignatureFailureActivity,
+			activities.PersistSignatureFailureInput{
+				MandatesRoot: input.MandatesRoot,
+				MandateID:    input.MandateID,
+				Message:      err.Error(),
+				FailureType:  "SignMandateActivity",
+			},
+		).Get(ctx, &failureResult)
+		if failureErr != nil {
+			return fmt.Errorf("fase sign agotó reintentos (%v) y no pudo persistir signature=failed: %w", err, failureErr)
+		}
+		if publishErr := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
+			"mandate:genesis:error", map[string]interface{}{
+				"mandateId": input.MandateID,
+				"phase":     "sign",
+				"error":     err.Error(),
+				"resumable": true,
+			},
+		).Get(ctx, nil); publishErr != nil {
+			return fmt.Errorf("fase sign falló (%v); signature=failed durable pero no pude publicar evento: %w", err, publishErr)
+		}
 		return fmt.Errorf("fase sign: %w", err)
 	}
+	_ = humanSyncResult
 
 	// Traducir Action[] (mandate.json, dependsOn en actionIds) a
 	// []DomainAction (input del child, dependsOn en domainNames) — mismo
@@ -264,11 +299,25 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	childCtx := workflow.WithChildOptions(ctx, childOpts)
 
 	var execResult MandateExecutionResult
-	err := workflow.ExecuteChildWorkflow(childCtx, MandateExecutionWorkflow, MandateExecutionInput{
+	childFuture := workflow.ExecuteChildWorkflow(childCtx, MandateExecutionWorkflow, MandateExecutionInput{
 		MandateID: input.MandateID,
 		Project:   input.Project,
 		Domains:   domains,
-	}).Get(ctx, &execResult)
+	})
+
+	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
+		"mandate:genesis:signed", map[string]interface{}{
+			"mandateId":        input.MandateID,
+			"domainsConfirmed": len(confirmedIDs),
+			"actionsCreated":   signResult.ActionsCreated,
+			"signedAt":         signResult.SignedAt,
+			"workflowId":       childOpts.WorkflowID,
+		},
+	).Get(ctx, nil); err != nil {
+		return fmt.Errorf("firma durable, publicar evento signed: %w", err)
+	}
+
+	err := childFuture.Get(ctx, &execResult)
 	if err != nil {
 		return fmt.Errorf("fase execute: %w", err)
 	}

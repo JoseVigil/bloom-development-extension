@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"go.temporal.io/sdk/client"
 
 	"nucleus/internal/core"
 	"nucleus/internal/orchestration/temporal"
@@ -36,7 +38,17 @@ type MandateState struct {
 	Project       string `json:"project"`
 	Status        string `json:"status"`
 	CurrentPhase  string `json:"currentPhase"`
-	Phases        struct {
+	StateVersion  int64  `json:"stateVersion"`
+	UpdatedAt     string `json:"updatedAt"`
+	Signature     struct {
+		Status    string `json:"status"`
+		PendingAt string `json:"pendingAt,omitempty"`
+	} `json:"signature"`
+	Reconciliation struct {
+		Status string `json:"status,omitempty"`
+		Reason string `json:"reason,omitempty"`
+	} `json:"reconciliation,omitempty"`
+	Phases struct {
 		Ingest  PhaseRecord `json:"ingest"`
 		Cluster PhaseRecord `json:"cluster"`
 	} `json:"phases"`
@@ -100,10 +112,52 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 
 type MandateWatcher struct {
 	mandatesRoot string
-	tc           *temporal.Client
+	tc           genesisTemporalClient
 	watcher      *fsnotify.Watcher
 	progress     *mandateProgress
 	logger       *core.Logger
+}
+
+type genesisTemporalClient interface {
+	StartMandateGenesisBuildWorkflow(context.Context, string, workflows.GenesisBuildInput) (client.WorkflowRun, error)
+	IsWorkflowRunning(context.Context, string) (bool, error)
+	GetWorkflowExecutionState(context.Context, string) (temporal.WorkflowExecutionState, error)
+}
+
+// unsignedMandateGracePeriod evita confundir un dispatch reciente con un
+// huérfano. Se cuenta desde pendingAt cuando existe y, para el estado inicial,
+// desde updatedAt de stateVersion=1. Es constante nombrada para poder ajustar
+// la política sin reabrir el diseño.
+const unsignedMandateGracePeriod = 15 * time.Minute
+
+const reconciliationScanInterval = unsignedMandateGracePeriod / 3
+
+type reconciliationAction string
+
+const (
+	reconciliationNoop     reconciliationAction = ""
+	reconciliationUnknown  reconciliationAction = "unknown"
+	reconciliationRequired reconciliationAction = "required"
+	reconciliationFailed   reconciliationAction = "failed"
+	reconciliationClear    reconciliationAction = "clear"
+)
+
+type genesisDuplicateDisposition string
+
+const (
+	genesisDuplicateActive       genesisDuplicateDisposition = "active"
+	genesisDuplicateHistorical   genesisDuplicateDisposition = "historical"
+	genesisDuplicateUnclassified genesisDuplicateDisposition = "unclassified"
+)
+
+func classifyGenesisDuplicate(running bool, statusErr error) genesisDuplicateDisposition {
+	if statusErr != nil {
+		return genesisDuplicateUnclassified
+	}
+	if running {
+		return genesisDuplicateActive
+	}
+	return genesisDuplicateHistorical
 }
 
 // NewMandateWatcher construye el watcher e inicializa su logger propio
@@ -149,6 +203,11 @@ func (w *MandateWatcher) Start(ctx context.Context) error {
 	}
 
 	w.logger.Info("[mandate_watcher] vigilando %s", w.mandatesRoot)
+	if err := w.reconcileUnsignedMandates(ctx, time.Now()); err != nil {
+		w.logger.Warning("[mandate_watcher] reconciliación inicial incompleta: %v", err)
+	}
+	ticker := time.NewTicker(reconciliationScanInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -166,6 +225,10 @@ func (w *MandateWatcher) Start(ctx context.Context) error {
 				return nil
 			}
 			w.logger.Error("[mandate_watcher] error fsnotify: %v", err)
+		case now := <-ticker.C:
+			if err := w.reconcileUnsignedMandates(ctx, now); err != nil {
+				w.logger.Warning("[mandate_watcher] reconciliación periódica incompleta: %v", err)
+			}
 		}
 	}
 }
@@ -263,6 +326,12 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		return
 	}
 
+	// Rama aditiva: observa estados pre-firma, pero no reemplaza ni altera la
+	// clasificación de dispatch duplicado que vive en startGenesisWorkflow.
+	if err := w.reconcileUnsignedMandate(ctx, path, ms, time.Now()); err != nil {
+		w.logger.Warning("[mandate_watcher] no pude reconciliar %s: %v", ms.MandateID, err)
+	}
+
 	if !w.progress.markIfChanged(ms) {
 		return // ya procesamos este mismo fingerprint, evita duplicados
 	}
@@ -281,6 +350,157 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		// este watcher ni por mandate_state.json como intermediario para
 		// ese paso puntual.
 	}
+}
+
+func (w *MandateWatcher) reconcileUnsignedMandates(ctx context.Context, now time.Time) error {
+	entries, err := os.ReadDir(w.mandatesRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(w.mandatesRoot, entry.Name(), "mandate_state.json")
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			w.logger.Warning("[mandate_watcher] no pude leer %s durante reconciliación: %v", path, err)
+			continue
+		}
+		var ms MandateState
+		if err := json.Unmarshal(raw, &ms); err != nil {
+			w.logger.Warning("[mandate_watcher] estado inválido durante reconciliación en %s: %v", path, err)
+			continue
+		}
+		if ms.MandateID == "" {
+			ms.MandateID = entry.Name()
+		}
+		if err := w.reconcileUnsignedMandate(ctx, path, ms, now); err != nil {
+			w.logger.Warning("[mandate_watcher] no pude reconciliar %s: %v", ms.MandateID, err)
+		}
+	}
+	return nil
+}
+
+func (w *MandateWatcher) reconcileUnsignedMandate(ctx context.Context, path string, ms MandateState, now time.Time) error {
+	if ms.MandateType != "genesis" && ms.MandateType != "domain_expansion" {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "mandate.json")); err == nil || ms.Signature.Status == "signed" {
+		if ms.Reconciliation.Status != "" {
+			return persistReconciliation(path, reconciliationClear, "", now)
+		}
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	workflowID := fmt.Sprintf("mandate_genesis_%s", ms.MandateID)
+	workflowState, queryErr := w.tc.GetWorkflowExecutionState(ctx, workflowID)
+	action, reason := evaluateUnsignedMandate(ms, workflowState, queryErr, now)
+	if action == reconciliationNoop ||
+		(action == reconciliationUnknown && ms.Reconciliation.Status == "unknown") ||
+		(action == reconciliationRequired && ms.Reconciliation.Status == "required" && ms.Reconciliation.Reason == reason) ||
+		(action == reconciliationFailed && ms.Signature.Status == "failed" && ms.Reconciliation.Status == "required") {
+		return nil
+	}
+	return persistReconciliation(path, action, reason, now)
+}
+
+func evaluateUnsignedMandate(ms MandateState, workflowState temporal.WorkflowExecutionState, queryErr error, now time.Time) (reconciliationAction, string) {
+	if queryErr != nil || workflowState == temporal.WorkflowExecutionUnknown {
+		return reconciliationUnknown, "temporal_unavailable"
+	}
+	if workflowState == temporal.WorkflowExecutionRunning {
+		if ms.Reconciliation.Status == "unknown" {
+			return reconciliationClear, ""
+		}
+		return reconciliationNoop, ""
+	}
+	if workflowState == temporal.WorkflowExecutionFailed || workflowState == temporal.WorkflowExecutionCanceled ||
+		workflowState == temporal.WorkflowExecutionTerminated || workflowState == temporal.WorkflowExecutionTimedOut ||
+		workflowState == temporal.WorkflowExecutionCompleted {
+		return reconciliationFailed, "unsigned_after_terminal_workflow"
+	}
+	if workflowState == temporal.WorkflowExecutionNotFound && gracePeriodElapsed(ms, now) {
+		return reconciliationRequired, "unsigned_without_active_workflow"
+	}
+	return reconciliationNoop, ""
+}
+
+func gracePeriodElapsed(ms MandateState, now time.Time) bool {
+	base := ms.Signature.PendingAt
+	if base == "" && ms.StateVersion >= 1 {
+		base = ms.UpdatedAt
+	}
+	if base == "" {
+		return false
+	}
+	startedAt, err := time.Parse(time.RFC3339, base)
+	if err != nil {
+		return false
+	}
+	return !now.Before(startedAt.Add(unsignedMandateGracePeriod))
+}
+
+func persistReconciliation(path string, action reconciliationAction, reason string, now time.Time) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var state map[string]interface{}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return err
+	}
+	if action == reconciliationClear {
+		delete(state, "reconciliation")
+	} else {
+		status := string(action)
+		if action == reconciliationFailed {
+			status = "required"
+		}
+		state["reconciliation"] = map[string]interface{}{
+			"status":     status,
+			"reason":     reason,
+			"detectedAt": now.UTC().Format(time.RFC3339),
+		}
+	}
+	if action == reconciliationFailed {
+		signature, _ := state["signature"].(map[string]interface{})
+		if signature == nil {
+			signature = map[string]interface{}{}
+		}
+		signature["status"] = "failed"
+		signature["failedAt"] = now.UTC().Format(time.RFC3339)
+		signature["failure"] = map[string]interface{}{"code": "SIGNATURE_FAILED", "message": reason}
+		state["signature"] = signature
+	}
+	version, _ := state["stateVersion"].(float64)
+	state["stateVersion"] = int64(version) + 1
+	state["updatedAt"] = now.UTC().Format(time.RFC3339)
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // startGenesisWorkflow arranca MandateGenesisBuildWorkflow. El Workflow ID
@@ -307,8 +527,19 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 	})
 	if err != nil {
 		if temporal.IsAlreadyStarted(err) {
-			w.logger.Info("[mandate_watcher] workflow ya corría para %s, ignorando", ms.MandateID)
-			return
+			workflowID := fmt.Sprintf("mandate_genesis_%s", ms.MandateID)
+			running, statusErr := w.tc.IsWorkflowRunning(ctx, workflowID)
+			switch classifyGenesisDuplicate(running, statusErr) {
+			case genesisDuplicateUnclassified:
+				w.logger.Error("[mandate_watcher] Temporal rechazó el dispatch duplicado de %s y no se pudo clasificar el Run: %v", ms.MandateID, statusErr)
+				return
+			case genesisDuplicateActive:
+				w.logger.Info("[mandate_watcher] workflow ya está vivo para %s, redispatch ignorado", ms.MandateID)
+				return
+			case genesisDuplicateHistorical:
+				w.logger.Error("[mandate_watcher] Temporal rechazó un nuevo Run para %s: Workflow ID histórico protegido por REJECT_DUPLICATE", ms.MandateID)
+				return
+			}
 		}
 		w.logger.Error("[mandate_watcher] error al arrancar MandateGenesisBuildWorkflow para %s: %v", ms.MandateID, err)
 		return

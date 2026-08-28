@@ -468,7 +468,10 @@ export interface MandateSummary {
   name?: string;
   source?: string;
   status?: string;
+  currentStatus?: string;
   currentPhase?: string;
+  stateVersion?: number;
+  updatedAt?: string;
   createdAt?: string;
   /** 'state' = leído de mandate_state.json (genesis/domain_expansion en curso). 'draft' = mandate_draft.json (standard sin confirmar). */
   fileKind?: 'state' | 'draft';
@@ -496,6 +499,7 @@ export interface CreateMandateParams {
 export interface CreateMandateResponse {
   mandateId: string;
   status: string;
+  currentStatus: string;
 }
 
 export async function createMandate(params: CreateMandateParams): Promise<CreateMandateResponse> {

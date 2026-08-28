@@ -17,18 +17,42 @@ package temporal
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
+	"nucleus/internal/orchestration/temporal/workflows"
 )
 
 const testTaskQueue = "etapa3-verification-queue"
+
+func TestClassifyWorkflowExecutionStatus(t *testing.T) {
+	tests := []struct {
+		status enums.WorkflowExecutionStatus
+		want   WorkflowExecutionState
+	}{
+		{enums.WORKFLOW_EXECUTION_STATUS_RUNNING, WorkflowExecutionRunning},
+		{enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, WorkflowExecutionCompleted},
+		{enums.WORKFLOW_EXECUTION_STATUS_FAILED, WorkflowExecutionFailed},
+		{enums.WORKFLOW_EXECUTION_STATUS_CANCELED, WorkflowExecutionCanceled},
+		{enums.WORKFLOW_EXECUTION_STATUS_TERMINATED, WorkflowExecutionTerminated},
+		{enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, WorkflowExecutionTimedOut},
+		{enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, WorkflowExecutionUnknown},
+	}
+	for _, tt := range tests {
+		if got := classifyWorkflowExecutionStatus(tt.status); got != tt.want {
+			t.Errorf("classifyWorkflowExecutionStatus(%v) = %q, want %q", tt.status, got, tt.want)
+		}
+	}
+}
 
 // dummyLongRunningWorkflow se queda esperando la señal "finish" antes de
 // terminar — es el único comportamiento que este test necesita: darle a
@@ -48,6 +72,79 @@ func dummyLongRunningWorkflow(ctx workflow.Context) error {
 		sel.Select(ctx)
 	}
 	return nil
+}
+
+func TestStartMandateGenesisRejectsDuplicateWhileRunning(t *testing.T) {
+	requireLocalTemporal(t)
+	ctx := context.Background()
+	rawClient, err := client.Dial(client.Options{HostPort: "localhost:7233", Namespace: "default"})
+	if err != nil {
+		t.Fatalf("client.Dial() error: %v", err)
+	}
+	defer rawClient.Close()
+
+	mandateID := fmt.Sprintf("policy-running-%d", time.Now().UnixNano())
+	workflowID := "mandate_genesis_" + mandateID
+	taskQueue := "mandate-genesis-policy-test"
+	w := worker.New(rawClient, taskQueue, worker.Options{})
+	w.RegisterWorkflow(dummyLongRunningWorkflow)
+	if err := w.Start(); err != nil {
+		t.Fatalf("worker.Start() error: %v", err)
+	}
+	defer w.Stop()
+
+	run, err := rawClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: workflowID, TaskQueue: taskQueue}, dummyLongRunningWorkflow)
+	if err != nil {
+		t.Fatalf("initial ExecuteWorkflow() error: %v", err)
+	}
+	tc := &Client{client: rawClient}
+	_, err = tc.StartMandateGenesisBuildWorkflow(ctx, mandateID, workflows.GenesisBuildInput{MandateID: mandateID})
+	if err == nil || !IsAlreadyStarted(err) {
+		t.Fatalf("duplicate error = %v, want wrapped WorkflowExecutionAlreadyStarted", err)
+	}
+	if err := rawClient.SignalWorkflow(ctx, workflowID, run.GetRunID(), "finish", nil); err != nil {
+		t.Fatalf("SignalWorkflow() error: %v", err)
+	}
+	if err := run.Get(ctx, nil); err != nil {
+		t.Fatalf("initial workflow completion error: %v", err)
+	}
+}
+
+func TestStartMandateGenesisRejectsDuplicateAfterCompletion(t *testing.T) {
+	requireLocalTemporal(t)
+	ctx := context.Background()
+	rawClient, err := client.Dial(client.Options{HostPort: "localhost:7233", Namespace: "default"})
+	if err != nil {
+		t.Fatalf("client.Dial() error: %v", err)
+	}
+	defer rawClient.Close()
+
+	mandateID := fmt.Sprintf("policy-closed-%d", time.Now().UnixNano())
+	workflowID := "mandate_genesis_" + mandateID
+	taskQueue := "mandate-genesis-policy-test"
+	w := worker.New(rawClient, taskQueue, worker.Options{})
+	w.RegisterWorkflow(dummyLongRunningWorkflow)
+	if err := w.Start(); err != nil {
+		t.Fatalf("worker.Start() error: %v", err)
+	}
+	defer w.Stop()
+
+	run, err := rawClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: workflowID, TaskQueue: taskQueue}, dummyLongRunningWorkflow)
+	if err != nil {
+		t.Fatalf("initial ExecuteWorkflow() error: %v", err)
+	}
+	if err := rawClient.SignalWorkflow(ctx, workflowID, run.GetRunID(), "finish", nil); err != nil {
+		t.Fatalf("SignalWorkflow() error: %v", err)
+	}
+	if err := run.Get(ctx, nil); err != nil {
+		t.Fatalf("initial workflow completion error: %v", err)
+	}
+
+	tc := &Client{client: rawClient}
+	_, err = tc.StartMandateGenesisBuildWorkflow(ctx, mandateID, workflows.GenesisBuildInput{MandateID: mandateID})
+	if err == nil || !IsAlreadyStarted(err) {
+		t.Fatalf("historical duplicate error = %v, want wrapped WorkflowExecutionAlreadyStarted", err)
+	}
 }
 
 // requireLocalTemporal salta el test si no hay un Temporal Server real

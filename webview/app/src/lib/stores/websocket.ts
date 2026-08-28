@@ -25,8 +25,11 @@ const initialState: WebSocketState = {
   chunks: []
 };
 
-function createWebSocketStore() {
+export function createWebSocketStore() {
   const { subscribe, set, update } = writable<WebSocketState>(initialState);
+  const reconnectCallbacks: (() => void)[] = [];
+  let hasConnectedOnce = false;
+  let disconnectedAfterOpen = false;
 
   function connect(url: string = 'ws://localhost:4124') {
     if (ws && ws.readyState === WebSocket.OPEN) return;
@@ -43,6 +46,10 @@ function createWebSocketStore() {
           clearTimeout(reconnectTimeout);
           reconnectTimeout = null;
         }
+        const isReconnect = hasConnectedOnce && disconnectedAfterOpen;
+        hasConnectedOnce = true;
+        disconnectedAfterOpen = false;
+        if (isReconnect) reconnectCallbacks.forEach((callback) => callback());
       };
 
       ws.onmessage = (event) => {
@@ -60,6 +67,7 @@ function createWebSocketStore() {
 
       ws.onclose = () => {
         console.log('[WS] Disconnected');
+        if (hasConnectedOnce) disconnectedAfterOpen = true;
         update(state => ({ ...state, connected: false, reconnecting: false }));
         ws = null;
         scheduleReconnect(url);
@@ -205,6 +213,10 @@ function createWebSocketStore() {
     eventCallbacks.get(event)!.push(callback);
   }
 
+  function onReconnect(callback: () => void) {
+    reconnectCallbacks.push(callback);
+  }
+
   function clearChunks() {
     update(state => ({ ...state, chunks: [] }));
   }
@@ -217,6 +229,7 @@ function createWebSocketStore() {
     sendAIPrompt,
     onUpdate,
     on,
+    onReconnect,
     clearChunks
   };
 }

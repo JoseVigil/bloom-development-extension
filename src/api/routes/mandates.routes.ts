@@ -53,7 +53,10 @@ export function registerMandateRoutes(fastify: FastifyInstance, deps: RegisterMa
                     name: { type: 'string' },
                     source: { type: 'string' },
                     status: { type: 'string' },
+                    currentStatus: { type: 'string' },
                     currentPhase: { type: 'string' },
+                    stateVersion: { type: 'number' },
+                    updatedAt: { type: 'string' },
                     createdAt: { type: 'string' },
                     fileKind: { type: 'string' },
                   },
@@ -87,6 +90,7 @@ export function registerMandateRoutes(fastify: FastifyInstance, deps: RegisterMa
             properties: {
               mandateId: { type: 'string' },
               status: { type: 'string', enum: ['draft', 'building'] },
+              currentStatus: { type: 'string', enum: ['draft', 'building'] },
             },
           },
           409: {

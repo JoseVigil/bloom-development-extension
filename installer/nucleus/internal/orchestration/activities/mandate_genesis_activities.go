@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -257,8 +258,8 @@ func scaffoldReal(input ScaffoldDomainInput) (string, error) {
 	}
 
 	marker := map[string]interface{}{
-		"domainName": input.DomainName,
-		"files":      input.Files,
+		"domainName":   input.DomainName,
+		"files":        input.Files,
 		"scaffoldedAt": time.Now().Format(time.RFC3339),
 		"note": "contenido real de .gen.json/.semantic_scaffold.json/etc. no implementado — " +
 			"schema no confirmado contra código, ver comentario de scaffoldReal",
@@ -363,9 +364,90 @@ func resolveNucleusRootFromMandatesRoot(mandatesRoot string) string {
 // "..."} en fallo). Solo modela los campos que esta activity necesita, no
 // el contrato completo de brain.
 type brainCLIResult struct {
-	Status  string                 `json:"status"`
-	Message string                 `json:"message"`
-	Data    map[string]interface{} `json:"data"`
+	Status    string                 `json:"status"`
+	Operation string                 `json:"operation"`
+	Message   string                 `json:"message"`
+	Data      map[string]interface{} `json:"data"`
+	Error     *brainCLIErrorEnvelope `json:"error,omitempty"`
+	ExitCode  *int                   `json:"exit_code,omitempty"`
+}
+
+type brainCLIErrorEnvelope struct {
+	Code      string                 `json:"code"`
+	Message   string                 `json:"message"`
+	Retryable bool                   `json:"retryable"`
+	Details   map[string]interface{} `json:"details"`
+}
+
+// BrainCLIError preserva el contrato machine-readable de los comandos de
+// efectos. Un exit code 2 no determina por sí solo si el error es Typer o
+// protocolo: RunBrainIntentJSON intenta decodificar stdout primero.
+type BrainCLIError struct {
+	Command   string
+	ExitCode  int
+	Code      string
+	Message   string
+	Retryable bool
+	Details   map[string]interface{}
+	Stdout    string
+	Stderr    string
+}
+
+func (e *BrainCLIError) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("brain %s falló (exit=%d, code=%s): %s", e.Command, e.ExitCode, e.Code, e.Message)
+	}
+	return fmt.Sprintf("brain %s falló (exit=%d): %s", e.Command, e.ExitCode, e.Message)
+}
+
+type brainCommandRunner func(brainPath string, args []string) (stdout, stderr []byte, exitCode int, runErr error)
+
+func execBrainCommand(brainPath string, args []string) ([]byte, []byte, int, error) {
+	cmd := exec.Command(brainPath, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		exitCode = -1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+	return stdout.Bytes(), stderr.Bytes(), exitCode, err
+}
+
+type BSIPTurnRef struct {
+	NucleusPath string
+	IntentID    string
+	IntentType  string
+	Stage       string
+	TurnID      string
+}
+
+type MarkBSIPEffectAppliedInput struct {
+	BSIPTurnRef
+	EffectID string
+	Evidence map[string]interface{}
+}
+
+type BSIPTurnCommandResult struct {
+	IntentID         string
+	IntentType       string
+	Stage            string
+	TurnID           string
+	EffectID         string
+	Obligation       string
+	EffectStatus     string
+	LedgerState      string
+	LedgerPath       string
+	EffectsDigest    string
+	Committed        bool
+	AlreadyCommitted bool
+	PhaseActive      string
+	AlreadyAdvanced  bool
+	StateAdvanced    bool
 }
 
 // IngestReceptionActivity hidrata .reception/ de un intent 'ing' recién
@@ -443,7 +525,6 @@ func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult,
 	if _, err := runBrainIntentJSON(brainPath, hydrateArgs); err != nil {
 		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: brain intent hydrate falló (intent %s, mandate %s): %w", intentID, input.MandateID, err)
 	}
-
 	return IngestReceptionResult{
 		IntentID:   intentID,
 		FolderName: folderName,
@@ -456,31 +537,210 @@ func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult,
 // runBrainCreate, que los deja fluir directo) porque el caller necesita
 // leer "data" de la respuesta, no solo reenviarla.
 func runBrainIntentJSON(brainPath string, args []string) (*brainCLIResult, error) {
-	cmd := exec.Command(brainPath, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	return runBrainIntentJSONWithRunner(brainPath, args, execBrainCommand)
+}
 
-	runErr := cmd.Run()
-
+func runBrainIntentJSONWithRunner(brainPath string, args []string, runner brainCommandRunner) (*brainCLIResult, error) {
+	stdout, stderr, processExitCode, runErr := runner(brainPath, args)
 	var parsed brainCLIResult
-	if jsonErr := json.Unmarshal(stdout.Bytes(), &parsed); jsonErr != nil {
-		// No hay JSON parseable en stdout — el error útil es lo que haya en
-		// stderr (típicamente un fallo de Python antes de llegar al output
-		// dual de brain), no el error de parseo en sí.
+	jsonErr := json.Unmarshal(stdout, &parsed)
+	command := strings.Join(args, " ")
+	trimmedStdout := strings.TrimSpace(string(stdout))
+	trimmedStderr := strings.TrimSpace(string(stderr))
+	if jsonErr != nil || parsed.Status == "" {
 		if runErr != nil {
-			return nil, fmt.Errorf("%v — stderr: %s", runErr, strings.TrimSpace(stderr.String()))
+			message := trimmedStderr
+			if message == "" {
+				message = runErr.Error()
+			}
+			return nil, &BrainCLIError{
+				Command: command, ExitCode: processExitCode, Code: "UNSTRUCTURED_CLI_ERROR",
+				Message: message, Retryable: false, Stdout: trimmedStdout, Stderr: trimmedStderr,
+			}
 		}
-		return nil, fmt.Errorf("no pude parsear stdout de brain como JSON: %w — stdout: %s", jsonErr, strings.TrimSpace(stdout.String()))
+		return nil, &BrainCLIError{
+			Command: command, ExitCode: processExitCode, Code: "INVALID_JSON_RESPONSE",
+			Message:   fmt.Sprintf("no pude parsear stdout de brain como JSON: %v", jsonErr),
+			Retryable: false, Stdout: trimmedStdout, Stderr: trimmedStderr,
+		}
+	}
+
+	if parsed.Status == "error" && parsed.Error != nil && parsed.Error.Code != "" && parsed.ExitCode != nil {
+		if processExitCode != *parsed.ExitCode {
+			return &parsed, &BrainCLIError{
+				Command: command, ExitCode: processExitCode, Code: "PROTOCOL_EXIT_CODE_MISMATCH",
+				Message:   fmt.Sprintf("process exit code %d differs from envelope exit_code %d", processExitCode, *parsed.ExitCode),
+				Retryable: false, Details: parsed.Error.Details, Stdout: trimmedStdout, Stderr: trimmedStderr,
+			}
+		}
+		return &parsed, &BrainCLIError{
+			Command: command, ExitCode: *parsed.ExitCode, Code: parsed.Error.Code,
+			Message: parsed.Error.Message, Retryable: parsed.Error.Retryable,
+			Details: parsed.Error.Details, Stdout: trimmedStdout, Stderr: trimmedStderr,
+		}
+	}
+
+	if runErr != nil {
+		return &parsed, &BrainCLIError{
+			Command: command, ExitCode: processExitCode, Code: "PROTOCOL_STATUS_MISMATCH",
+			Message:   "process failed but stdout did not contain a structured error envelope",
+			Retryable: false, Stdout: trimmedStdout, Stderr: trimmedStderr,
+		}
 	}
 
 	if parsed.Status != "success" {
 		msg := parsed.Message
 		if msg == "" {
-			msg = strings.TrimSpace(stderr.String())
+			msg = trimmedStderr
 		}
-		return &parsed, fmt.Errorf("brain devolvió status=%q: %s", parsed.Status, msg)
+		return &parsed, &BrainCLIError{
+			Command: command, ExitCode: processExitCode, Code: "INVALID_PROTOCOL_STATUS",
+			Message:   fmt.Sprintf("brain devolvió status=%q: %s", parsed.Status, msg),
+			Retryable: false, Stdout: trimmedStdout, Stderr: trimmedStderr,
+		}
 	}
 
 	return &parsed, nil
+}
+
+func validateBSIPTurnRef(ref BSIPTurnRef) error {
+	if strings.TrimSpace(ref.NucleusPath) == "" || strings.TrimSpace(ref.IntentID) == "" ||
+		strings.TrimSpace(ref.IntentType) == "" || strings.TrimSpace(ref.Stage) == "" || strings.TrimSpace(ref.TurnID) == "" {
+		return fmt.Errorf("nucleus_path, intent_id, intent_type, stage y turn_id son obligatorios")
+	}
+	if ref.IntentType != "ing" && ref.IntentType != "dis" {
+		return fmt.Errorf("intent_type %q inválido: esperaba ing o dis", ref.IntentType)
+	}
+	if ref.Stage != "consolidation" && ref.Stage != "ratification" {
+		return fmt.Errorf("stage %q inválido: esperaba consolidation o ratification", ref.Stage)
+	}
+	turn, err := strconv.Atoi(ref.TurnID)
+	if err != nil || turn < 1 {
+		return fmt.Errorf("turn_id %q inválido: debe ser un entero positivo", ref.TurnID)
+	}
+	return nil
+}
+
+func effectCommandArgs(command string, ref BSIPTurnRef) []string {
+	return []string{
+		"--json", "intent", command,
+		"--nucleus-path", ref.NucleusPath,
+		"--intent-id", ref.IntentID,
+		"--stage", ref.Stage,
+		"--turn-id", ref.TurnID,
+	}
+}
+
+func decodeBSIPTurnCommandResult(parsed *brainCLIResult, expected BSIPTurnRef) (BSIPTurnCommandResult, error) {
+	getString := func(key string) string {
+		value, _ := parsed.Data[key].(string)
+		return value
+	}
+	result := BSIPTurnCommandResult{
+		IntentID: getString("intent_id"), IntentType: getString("intent_type"),
+		Stage: getString("stage"), TurnID: getString("turn_id"),
+		EffectID: getString("effect_id"), Obligation: getString("obligation"),
+		EffectStatus: getString("effect_status"), LedgerState: getString("ledger_state"),
+		LedgerPath: getString("ledger_path"), EffectsDigest: getString("effects_digest"),
+		PhaseActive: getString("phase_active"),
+	}
+	result.Committed, _ = parsed.Data["committed"].(bool)
+	result.AlreadyCommitted, _ = parsed.Data["already_committed"].(bool)
+	result.AlreadyAdvanced, _ = parsed.Data["already_advanced"].(bool)
+	result.StateAdvanced, _ = parsed.Data["state_advanced"].(bool)
+	if result.IntentID != expected.IntentID || result.IntentType != expected.IntentType ||
+		result.Stage != expected.Stage || result.TurnID != expected.TurnID {
+		return BSIPTurnCommandResult{}, fmt.Errorf(
+			"correlación Brain inválida: esperado intent_id=%q intent_type=%q stage=%q turn_id=%q; recibido intent_id=%q intent_type=%q stage=%q turn_id=%q",
+			expected.IntentID, expected.IntentType, expected.Stage, expected.TurnID,
+			result.IntentID, result.IntentType, result.Stage, result.TurnID,
+		)
+	}
+	return result, nil
+}
+
+func resolveBrainEffectCommandPath() string {
+	brainPath, err := core.ResolveBrainPath()
+	if err != nil {
+		return "brain"
+	}
+	return brainPath
+}
+
+func MarkBSIPEffectApplied(input MarkBSIPEffectAppliedInput) (BSIPTurnCommandResult, error) {
+	return markBSIPEffectAppliedWithRunner(resolveBrainEffectCommandPath(), input, execBrainCommand)
+}
+
+func markBSIPEffectAppliedWithRunner(brainPath string, input MarkBSIPEffectAppliedInput, runner brainCommandRunner) (BSIPTurnCommandResult, error) {
+	if err := validateBSIPTurnRef(input.BSIPTurnRef); err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	if strings.TrimSpace(input.EffectID) == "" {
+		return BSIPTurnCommandResult{}, fmt.Errorf("effect_id es obligatorio")
+	}
+	if len(input.Evidence) == 0 {
+		return BSIPTurnCommandResult{}, fmt.Errorf("evidence debe ser un objeto JSON no vacío producido por el verificador")
+	}
+	evidenceJSON, err := json.Marshal(input.Evidence)
+	if err != nil {
+		return BSIPTurnCommandResult{}, fmt.Errorf("no pude serializar evidence: %w", err)
+	}
+	args := append(effectCommandArgs("mark-effect-applied", input.BSIPTurnRef),
+		"--effect-id", input.EffectID, "--evidence-json", string(evidenceJSON))
+	parsed, err := runBrainIntentJSONWithRunner(brainPath, args, runner)
+	if err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	result, err := decodeBSIPTurnCommandResult(parsed, input.BSIPTurnRef)
+	if err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	if result.EffectID != input.EffectID || result.EffectStatus != "applied" {
+		return BSIPTurnCommandResult{}, fmt.Errorf("respuesta mark-effect-applied inválida: effect_id=%q effect_status=%q", result.EffectID, result.EffectStatus)
+	}
+	return result, nil
+}
+
+func CommitBSIPTurn(ref BSIPTurnRef) (BSIPTurnCommandResult, error) {
+	return commitBSIPTurnWithRunner(resolveBrainEffectCommandPath(), ref, execBrainCommand)
+}
+
+func commitBSIPTurnWithRunner(brainPath string, ref BSIPTurnRef, runner brainCommandRunner) (BSIPTurnCommandResult, error) {
+	if err := validateBSIPTurnRef(ref); err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	parsed, err := runBrainIntentJSONWithRunner(brainPath, effectCommandArgs("commit-turn", ref), runner)
+	if err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	result, err := decodeBSIPTurnCommandResult(parsed, ref)
+	if err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	if !result.Committed {
+		return BSIPTurnCommandResult{}, fmt.Errorf("respuesta commit-turn inválida: committed=false")
+	}
+	return result, nil
+}
+
+func AdvanceBSIPTurn(ref BSIPTurnRef) (BSIPTurnCommandResult, error) {
+	return advanceBSIPTurnWithRunner(resolveBrainEffectCommandPath(), ref, execBrainCommand)
+}
+
+func advanceBSIPTurnWithRunner(brainPath string, ref BSIPTurnRef, runner brainCommandRunner) (BSIPTurnCommandResult, error) {
+	if err := validateBSIPTurnRef(ref); err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	parsed, err := runBrainIntentJSONWithRunner(brainPath, effectCommandArgs("advance-turn", ref), runner)
+	if err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	result, err := decodeBSIPTurnCommandResult(parsed, ref)
+	if err != nil {
+		return BSIPTurnCommandResult{}, err
+	}
+	if !result.StateAdvanced {
+		return BSIPTurnCommandResult{}, fmt.Errorf("respuesta advance-turn inválida: state_advanced=false")
+	}
+	return result, nil
 }

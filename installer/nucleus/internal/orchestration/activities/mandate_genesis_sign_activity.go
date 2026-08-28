@@ -14,7 +14,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
+
+	"github.com/google/uuid"
+
+	"nucleus/internal/orchestration/mandatestate"
 )
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -87,6 +92,10 @@ type mandateGenesisState struct {
 	Phases       struct {
 		Validate validatePhaseState `json:"validate"`
 	} `json:"phases"`
+	Signature struct {
+		Status   string `json:"status"`
+		SignedAt string `json:"signedAt"`
+	} `json:"signature"`
 }
 
 // ActionPayload — forma confirmada en el contrato §3.1.
@@ -156,13 +165,24 @@ type SignMandateResult struct {
 	// sin releer mandate.json. Antes de este cambio SignMandateActivity
 	// estaba huérfana (nadie la llamaba) — ahora que sí se llama desde
 	// MandateGenesisBuildWorkflow, este campo es lo que cierra el loop.
-	Actions []Action `json:"actions"`
+	Actions      []Action `json:"actions"`
+	StateVersion uint64   `json:"stateVersion"`
 }
 
-// actionIDFor arma el actionId con el formato confirmado en ws-events.ts
-// (MandateActionStartedPayload) — "gen-action-{domainName}".
-func actionIDFor(domainName string) string {
-	return "gen-action-" + domainName
+// actionIDFor deriva la identidad reproducible de una Action Genesis.
+// Fórmula exacta (UUIDv5/SHA-1):
+//
+//	UUIDv5(namespace=uuid.NameSpaceURL,
+//	       name="urn:bloom:mandate-action:" + mandateID + ":" + logicalActionKey)
+//
+// Brain y cualquier consumidor pueden recalcularla sin estado en memoria.
+func actionIDFor(mandateID, logicalActionKey string) string {
+	name := "urn:bloom:mandate-action:" + mandateID + ":" + logicalActionKey
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(name)).String()
+}
+
+func logicalActionKeyFor(candidate DomainCandidateState) string {
+	return "gen/scaffold/domain/" + candidate.DomainID
 }
 
 // SignMandateActivity es la Local Activity descrita en Backend Design §6.2
@@ -230,14 +250,14 @@ func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, err
 			if !ok {
 				continue
 			}
-			dependsOn = append(dependsOn, actionIDFor(depCand.Name))
+			dependsOn = append(dependsOn, actionIDFor(mandateID, logicalActionKeyFor(depCand)))
 		}
 		if len(dependsOn) > 0 {
 			anyDependency = true
 		}
 
 		actions = append(actions, Action{
-			ActionID:   actionIDFor(cand.Name),
+			ActionID:   actionIDFor(mandateID, logicalActionKeyFor(cand)),
 			Type:       "run_intent",
 			IntentType: "gen",
 			Payload: ActionPayload{
@@ -271,7 +291,10 @@ func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, err
 		workflowType = "dependent" // ver nota en OperationalBlock.Workflow.Type
 	}
 
-	signedAt := time.Now().Format(time.RFC3339)
+	signedAt := state.Signature.SignedAt
+	if signedAt == "" {
+		signedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
 
 	mandateJSON := MandateJSON{
 		MandateID:   state.MandateID,
@@ -287,8 +310,18 @@ func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, err
 	if err != nil {
 		return SignMandateResult{}, fmt.Errorf("no pude serializar mandate.json de %s: %w", mandateID, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "mandate.json"), data, 0644); err != nil {
-		return SignMandateResult{}, fmt.Errorf("no pude escribir mandate.json de %s: %w", mandateID, err)
+	mandatePath := filepath.Join(dir, "mandate.json")
+	if state.Signature.Status != "signed" {
+		if err := os.WriteFile(mandatePath, data, 0644); err != nil {
+			return SignMandateResult{}, fmt.Errorf("no pude escribir mandate.json de %s: %w", mandateID, err)
+		}
+	} else if _, err := os.Stat(mandatePath); err != nil {
+		return SignMandateResult{}, fmt.Errorf("signature=signed pero mandate.json no es durable para %s: %w", mandateID, err)
+	}
+
+	stateVersion, err := persistSignatureSigned(filepath.Join(dir, "mandate_state.json"), signedAt)
+	if err != nil {
+		return SignMandateResult{}, fmt.Errorf("mandate.json fue escrito pero no pude persistir signature=signed para %s: %w", mandateID, err)
 	}
 
 	return SignMandateResult{
@@ -297,6 +330,7 @@ func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, err
 		WorkflowType:   workflowType,
 		SignedAt:       signedAt,
 		Actions:        actions,
+		StateVersion:   stateVersion,
 	}, nil
 }
 
@@ -334,23 +368,27 @@ type PersistHumanSyncInput struct {
 	// el mismo gap ya documentado (falta mecanismo de identidad real),
 	// solo que ahora es más visible porque el camino que sí lo tenía
 	// (CLI) dejó de ser el que efectivamente firma mandates.
-	ConfirmedBy string
+	ConfirmedBy       string
+	IntentID          string
+	ReceptionRef      string
+	DomainProposalRef string
+}
+
+type PersistHumanSyncResult struct {
+	StateVersion uint64 `json:"stateVersion"`
 }
 
 // PersistHumanSyncActivity escribe phases.validate.humanSync en
 // mandate_state.json, preservando el resto del documento.
-func PersistHumanSyncActivity(input PersistHumanSyncInput) error {
+func PersistHumanSyncActivity(input PersistHumanSyncInput) (PersistHumanSyncResult, error) {
 	dir := filepath.Join(input.MandatesRoot, input.MandateID)
 	path := filepath.Join(dir, "mandate_state.json")
 
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("no pude leer mandate_state.json de %s: %w", input.MandateID, err)
+	if input.IntentID == "" || input.ReceptionRef == "" || input.DomainProposalRef == "" {
+		return PersistHumanSyncResult{}, fmt.Errorf("intentId y referencias relativas de artifacts son obligatorios")
 	}
-
-	var rawMap map[string]interface{}
-	if err := json.Unmarshal(raw, &rawMap); err != nil {
-		return fmt.Errorf("mandate_state.json inválido para %s: %w", input.MandateID, err)
+	if filepath.IsAbs(input.ReceptionRef) || filepath.IsAbs(input.DomainProposalRef) {
+		return PersistHumanSyncResult{}, fmt.Errorf("artifacts de signature deben ser rutas relativas al directorio del Mandate")
 	}
 
 	humanSync := HumanSyncState{
@@ -361,31 +399,115 @@ func PersistHumanSyncActivity(input PersistHumanSyncInput) error {
 	}
 	humanSyncBytes, err := json.Marshal(humanSync)
 	if err != nil {
-		return fmt.Errorf("no pude serializar humanSync: %w", err)
+		return PersistHumanSyncResult{}, fmt.Errorf("no pude serializar humanSync: %w", err)
 	}
 	var humanSyncMap map[string]interface{}
 	if err := json.Unmarshal(humanSyncBytes, &humanSyncMap); err != nil {
-		return err
+		return PersistHumanSyncResult{}, err
 	}
-
-	phases, ok := rawMap["phases"].(map[string]interface{})
-	if !ok {
-		phases = map[string]interface{}{}
-	}
-	validate, ok := phases["validate"].(map[string]interface{})
-	if !ok {
-		validate = map[string]interface{}{}
-	}
-	validate["humanSync"] = humanSyncMap
-	phases["validate"] = validate
-	rawMap["phases"] = phases
-
-	data, err := json.MarshalIndent(rawMap, "", "  ")
+	pendingAt := time.Now().UTC().Format(time.RFC3339Nano)
+	version, err := mandatestate.Mutate(path, func(rawMap map[string]interface{}) (bool, error) {
+		phases, _ := rawMap["phases"].(map[string]interface{})
+		if phases == nil {
+			phases = map[string]interface{}{}
+		}
+		validate, _ := phases["validate"].(map[string]interface{})
+		if validate == nil {
+			validate = map[string]interface{}{}
+		}
+		signature, _ := rawMap["signature"].(map[string]interface{})
+		if signature == nil {
+			signature = map[string]interface{}{}
+		}
+		artifacts := map[string]interface{}{
+			"reception":          filepath.ToSlash(filepath.Clean(input.ReceptionRef)),
+			"domainProposal":     filepath.ToSlash(filepath.Clean(input.DomainProposalRef)),
+			"humanSyncPersisted": true,
+		}
+		if signature["status"] == "pending" && signature["intentId"] == input.IntentID &&
+			reflect.DeepEqual(signature["artifacts"], artifacts) {
+			return false, nil
+		}
+		if status, _ := signature["status"].(string); status != "" && status != "not_ready" && status != "pending" {
+			return false, fmt.Errorf("transición signature %s → pending inválida", status)
+		}
+		validate["humanSync"] = humanSyncMap
+		phases["validate"] = validate
+		rawMap["phases"] = phases
+		signature["status"] = "pending"
+		signature["intentId"] = input.IntentID
+		signature["artifacts"] = artifacts
+		signature["pendingAt"] = pendingAt
+		signature["signedAt"] = nil
+		signature["failedAt"] = nil
+		signature["failure"] = nil
+		rawMap["signature"] = signature
+		return true, nil
+	})
 	if err != nil {
-		return fmt.Errorf("no pude serializar mandate_state.json: %w", err)
+		return PersistHumanSyncResult{}, fmt.Errorf("no pude escribir mandate_state.json de %s: %w", input.MandateID, err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("no pude escribir mandate_state.json de %s: %w", input.MandateID, err)
+	return PersistHumanSyncResult{StateVersion: version}, nil
+}
+
+func persistSignatureSigned(path, signedAt string) (uint64, error) {
+	return mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		signature, _ := state["signature"].(map[string]interface{})
+		if signature == nil {
+			return false, fmt.Errorf("signature ausente")
+		}
+		if signature["status"] == "signed" {
+			if signature["signedAt"] != signedAt {
+				return false, fmt.Errorf("signedAt conflictivo")
+			}
+			return false, nil
+		}
+		if signature["status"] != "pending" {
+			return false, fmt.Errorf("transición signature %v → signed inválida", signature["status"])
+		}
+		signature["status"] = "signed"
+		signature["signedAt"] = signedAt
+		signature["failedAt"] = nil
+		signature["failure"] = nil
+		state["signature"] = signature
+		return true, nil
+	})
+}
+
+type PersistSignatureFailureInput struct {
+	MandatesRoot string
+	MandateID    string
+	Message      string
+	FailureType  string
+}
+
+type PersistSignatureFailureResult struct {
+	StateVersion uint64 `json:"stateVersion"`
+}
+
+func PersistSignatureFailureActivity(input PersistSignatureFailureInput) (PersistSignatureFailureResult, error) {
+	path := filepath.Join(input.MandatesRoot, input.MandateID, "mandate_state.json")
+	failedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		signature, _ := state["signature"].(map[string]interface{})
+		if signature == nil {
+			return false, fmt.Errorf("signature ausente")
+		}
+		failure := map[string]interface{}{"message": input.Message, "type": input.FailureType}
+		if signature["status"] == "failed" && reflect.DeepEqual(signature["failure"], failure) {
+			return false, nil
+		}
+		if signature["status"] != "pending" {
+			return false, fmt.Errorf("transición signature %v → failed inválida", signature["status"])
+		}
+		signature["status"] = "failed"
+		signature["failedAt"] = failedAt
+		signature["failure"] = failure
+		state["signature"] = signature
+		return true, nil
+	})
+	if err != nil {
+		return PersistSignatureFailureResult{}, err
 	}
-	return nil
+	return PersistSignatureFailureResult{StateVersion: version}, nil
 }

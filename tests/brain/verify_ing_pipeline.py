@@ -5,7 +5,8 @@ inspección directa (no por el enunciado del prompt).
 
 Ciclo: create -> hydrate (.reception/, phaseless) -> add_turn en
 .classification/ con close_phase=True (fuerza advance_after_proposal)
--> add_turn en .consolidation/ con close_phase=True (cierra el commit)
+-> add_turn en .consolidation/ con close_phase=True (crea ledger)
+-> verificar efectos -> commit -> advance
 -> freeze_to_mandate() -> mandate.json en disco.
 """
 from pathlib import Path
@@ -43,9 +44,8 @@ print(
     "| advanced_by_proposal_close:", turn1["advanced_by_proposal_close"],
 )
 
-# 4. ADD_TURN en .consolidation/ (fase de commit, commit_field != None).
-#    close_phase=True setea el commit_field en true y cierra el turno,
-#    avanzando a la fase terminal.
+# 4. ADD_TURN en .consolidation/: solicita el commit y crea el ledger,
+#    pero no avanza la fase.
 turn2 = manager.add_turn(
     intent_id=intent_id,
     actor="user",
@@ -58,6 +58,31 @@ print(
     "phase_active:", turn2["phase_active"],
     "| is_terminated:", turn2["is_terminated"],
 )
+
+from brain.core.intent.effect_ledger import EffectLedgerManager
+ledger = EffectLedgerManager(Path(turn2["turn_path"]))
+for effect in ledger.load()["effects"]:
+    manager.mark_bsip_effect_applied(
+        intent_id=intent_id,
+        phase_name="consolidation",
+        turn_number=turn2["turn_number"],
+        effect_id=effect["effect_id"],
+        evidence={"manual_verification": effect["obligation"]},
+    )
+
+committed = manager.commit_bsip_turn(
+    intent_id=intent_id,
+    phase_name="consolidation",
+    turn_number=turn2["turn_number"],
+)
+print("COMMIT ->", committed["committed"], committed["phase_active"])
+
+advanced = manager.advance_bsip_turn(
+    intent_id=intent_id,
+    phase_name="consolidation",
+    turn_number=turn2["turn_number"],
+)
+print("ADVANCE ->", advanced["phase_active"], advanced["state_advanced"])
 
 # 5. FREEZE — sin output_path: el Core decide la ruta
 #    (.bloom/.mandates/<mandate_id>/mandate.json), no se pasa por argumento.

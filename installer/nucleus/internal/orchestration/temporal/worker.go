@@ -17,12 +17,12 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/spf13/cobra"
 	"nucleus/internal/core"
 	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/activities"
 	"nucleus/internal/orchestration/temporal/bootstrap"
 	temporalworkflows "nucleus/internal/orchestration/temporal/workflows"
-	"github.com/spf13/cobra"
 )
 
 // Worker envuelve el worker de Temporal
@@ -44,6 +44,18 @@ func (w *Worker) RegisterWorkflow(workflow interface{}) {
 // RegisterActivity registra una activity
 func (w *Worker) RegisterActivity(activity interface{}) {
 	w.worker.RegisterActivity(activity)
+}
+
+type activityRegistrar interface {
+	RegisterActivity(interface{})
+}
+
+// registerMandateGenesisSignatureActivities mantiene agrupado el wiring
+// productivo exclusivo de Human Sync y firma. No registra adaptadores BSIP.
+func registerMandateGenesisSignatureActivities(registrar activityRegistrar) {
+	registrar.RegisterActivity(activities.PersistHumanSyncActivity)
+	registrar.RegisterActivity(activities.SignMandateActivity)
+	registrar.RegisterActivity(activities.PersistSignatureFailureActivity)
 }
 
 // RegisterActivityWithOptions registra una activity con opciones personalizadas
@@ -303,8 +315,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Registrando activities...")
 
 			// Construir paths usando PathConfig disponible
-			logsDir     := c.Paths.LogsDir
-			nucleusExe  := filepath.Join(c.Paths.BinDir, "nucleus", exeName("nucleus"))
+			logsDir := c.Paths.LogsDir
+			nucleusExe := filepath.Join(c.Paths.BinDir, "nucleus", exeName("nucleus"))
 			sentinelExe := filepath.Join(c.Paths.BinDir, "sentinel", exeName("sentinel"))
 
 			// Verificar que sentinel existe
@@ -382,6 +394,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// cambio, señalado y no tocado porque queda fuera del alcance de
 			// Fase 1.
 			mandateWorker.RegisterActivity(activities.IngestReceptionActivity)
+			// Excepción acotada Blocker 1/2-UI: wiring exclusivo de Human Sync
+			// y firma. No registra ni activa los adaptadores BSIP.
+			registerMandateGenesisSignatureActivities(mandateWorker)
 
 			if err := mandateWorker.Start(); err != nil {
 				logger.Error("Fallo al iniciar mandate worker: %v", err)

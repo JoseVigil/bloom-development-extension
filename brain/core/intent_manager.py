@@ -21,6 +21,7 @@ from brain.core.intent_state_manager import (
     IntentAlreadyTerminatedError,
 )
 from brain.core.intent_types import get_intent_type_spec
+from brain.core.intent.effect_ledger import EffectLedgerManager
 
 
 # Tipos que corren sobre el motor genérico BSIP (IntentStateManager +
@@ -1546,12 +1547,10 @@ class IntentManager:
         la lógica de directorios a mano, como hacía la versión anterior
         (rota: llamaba a `_add_turn_ing`, que nunca estuvo definida).
 
-        Cubre las cuatro fases-con-turnos de ambos intents:
-        classification/mapping (proponen, `commit_field=None` — nunca
-        avanzan por sí solas vía `close_turn()`; `close_phase=True` fuerza
-        el avance vía `advance_after_proposal()`) y consolidation/
-        ratification (comitean, `close_phase=True` setea el commit_field
-        de la spec y `close_turn()` avanza — ING §5 / DIS §5).
+        Cubre las cuatro fases-con-turnos de ambos intents. Las fases
+        propositivas avanzan mediante `advance_after_proposal()`. En las
+        fases de commit, `close_phase=True` persiste la solicitud y crea el
+        ledger; commit final y avance son operaciones Core independientes.
         """
         mgr = IntentStateManager.load(intent_path)
 
@@ -1585,9 +1584,30 @@ class IntentManager:
         # así que no se agrega el campo (mgr.close_turn lo interpreta como
         # "fase propositiva", nunca avanza — ver docstring de close_turn).
         if phase_spec.commit_field is not None:
-            control_payload[phase_spec.commit_field] = bool(close_phase)
+            # Commit phases persist the human request first.  Canonical effects,
+            # final committed=true, and phase advancement are independent
+            # durable operations (Blocker 0).
+            control_payload["commit_requested"] = bool(close_phase)
+            control_payload[phase_spec.commit_field] = False
 
-        advanced = mgr.close_turn(turn, control_payload)
+        mgr.close_turn(turn, control_payload)
+        advanced = False
+
+        ledger_path = None
+        effects_digest = None
+        if close_phase and phase_spec.commit_field is not None:
+            ledger = EffectLedgerManager.create(
+                turn_dir=turn.turn_dir,
+                intent_id=mgr.intent_id,
+                intent_type=mgr.spec.intent_type.value,
+                stage=turn.phase_name,
+                turn_id=str(turn.turn_number),
+                control_ref=turn.control_file.name,
+                effect_payload=control_payload["proposal"],
+            )
+            ledger_data = ledger.load()
+            ledger_path = str(ledger.path)
+            effects_digest = ledger_data["effects_digest"]
 
         advanced_by_proposal_close = False
         if not advanced and close_phase and phase_spec.commit_field is None:
@@ -1615,8 +1635,185 @@ class IntentManager:
             "control_file": str(turn.control_file),
             "advanced_phase": advanced,
             "advanced_by_proposal_close": advanced_by_proposal_close,
+            "commit_requested": bool(
+                close_phase and phase_spec.commit_field is not None
+            ),
+            "ledger_path": ledger_path,
+            "effects_digest": effects_digest,
             "phase_active": mgr.phase_active,
             "is_terminated": mgr.is_terminated,
+        }
+
+    def mark_bsip_effect_applied(
+        self,
+        *,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        phase_name: str,
+        turn_number: int,
+        effect_id: str,
+        evidence: Dict[str, Any],
+        nucleus_path: Optional[Path] = None,
+    ) -> Dict[str, Any]:
+        """Persist verifier evidence for one effect without advancing state."""
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, _ = self._locate_intent(project_root, intent_id, folder_name)
+        if _itype(state_data) not in _BSIP_ENGINE_TYPES:
+            raise ValueError("effect ledgers only apply to ing/dis intents")
+        turn_dir = intent_path / f".{phase_name}" / f".turn_{turn_number}"
+        ledger = EffectLedgerManager(turn_dir)
+        ledger.assert_identity(
+            intent_id=_uid(state_data),
+            intent_type=_itype(state_data),
+            stage=phase_name,
+            turn_id=str(turn_number),
+        )
+        document = ledger.mark_effect_applied(effect_id, evidence)
+        effect = next(item for item in document["effects"] if item["effect_id"] == effect_id)
+        return {
+            "intent_id": _uid(state_data),
+            "intent_type": _itype(state_data),
+            "stage": phase_name,
+            "turn_id": str(turn_number),
+            "effect_id": effect_id,
+            "obligation": effect["obligation"],
+            "effect_status": effect["status"],
+            "ledger_state": document["state"],
+            "ledger_path": str(turn_dir / ".effect_ledger.json"),
+            "effects_digest": document["effects_digest"],
+        }
+
+    def commit_bsip_turn(
+        self,
+        *,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        phase_name: str,
+        turn_number: int,
+        nucleus_path: Optional[Path] = None,
+    ) -> Dict[str, Any]:
+        """Persist committed=true after every ledger obligation is verified."""
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, _ = self._locate_intent(project_root, intent_id, folder_name)
+        mgr = IntentStateManager.load(intent_path)
+        turn_dir = intent_path / f".{phase_name}" / f".turn_{turn_number}"
+        ledger = EffectLedgerManager(turn_dir)
+        ledger.assert_identity(
+            intent_id=mgr.intent_id,
+            intent_type=mgr.spec.intent_type.value,
+            stage=phase_name,
+            turn_id=str(turn_number),
+        )
+        ledger_data = ledger.assert_all_applied()
+        control_filename = (
+            ".consolidation.json" if phase_name == "consolidation"
+            else ".ratification.json" if phase_name == "ratification"
+            else ".turn.json"
+        )
+        control_file = turn_dir / control_filename
+        try:
+            control = json.loads(control_file.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            raise ValueError(f"cannot load persisted turn control '{control_file}': {exc}") from exc
+        ledger_ref = ".effect_ledger.json"
+        effects_digest = ledger_data["effects_digest"]
+        already_committed = bool(control.get("committed", False))
+        if already_committed:
+            if control.get("ledger_ref") != ledger_ref:
+                raise ValueError("ledger_ref mismatch on already committed turn")
+            if control.get("effects_digest") != effects_digest:
+                raise ValueError("effects_digest mismatch on already committed turn")
+        else:
+            if not control.get("commit_requested", False):
+                raise ValueError("turn control does not declare commit_requested=true")
+            if mgr.phase_active != phase_name:
+                raise ValueError(
+                    f"phase conflict: uncommitted turn stage='{phase_name}', "
+                    f"phase_active='{mgr.phase_active}'"
+                )
+            control.update({
+                "committed": True,
+                "ledger_ref": ledger_ref,
+                "effects_digest": effects_digest,
+            })
+            mgr.persist_turn_control(
+                phase_name=phase_name,
+                turn_number=turn_number,
+                control_payload=control,
+            )
+        return {
+            "intent_id": mgr.intent_id,
+            "intent_type": mgr.spec.intent_type.value,
+            "stage": phase_name,
+            "turn_id": str(turn_number),
+            "committed": True,
+            "already_committed": already_committed,
+            "phase_active": mgr.phase_active,
+            "ledger_path": str(ledger.path),
+            "ledger_ref": ledger_ref,
+            "effects_digest": effects_digest,
+        }
+
+    def advance_bsip_turn(
+        self,
+        *,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        phase_name: str,
+        turn_number: int,
+        nucleus_path: Optional[Path] = None,
+    ) -> Dict[str, Any]:
+        """Advance a committed turn and checkpoint the ledger, recoverably."""
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, _ = self._locate_intent(project_root, intent_id, folder_name)
+        mgr = IntentStateManager.load(intent_path)
+        ledger = EffectLedgerManager(intent_path / f".{phase_name}" / f".turn_{turn_number}")
+        ledger.assert_identity(
+            intent_id=mgr.intent_id,
+            intent_type=mgr.spec.intent_type.value,
+            stage=phase_name,
+            turn_id=str(turn_number),
+        )
+        ledger_data = ledger.assert_all_applied()
+        control_filename = (
+            ".consolidation.json" if phase_name == "consolidation"
+            else ".ratification.json" if phase_name == "ratification"
+            else ".turn.json"
+        )
+        control_file = ledger.turn_dir / control_filename
+        try:
+            control = json.loads(control_file.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            raise ValueError(f"cannot load persisted turn control '{control_file}': {exc}") from exc
+        if not bool(control.get("committed", False)):
+            raise ValueError("turn control is not committed")
+        if control.get("ledger_ref") != ".effect_ledger.json":
+            raise ValueError("ledger_ref mismatch on committed turn")
+        if control.get("effects_digest") != ledger_data["effects_digest"]:
+            raise ValueError("effects_digest mismatch on committed turn")
+        expected_next = mgr.spec.next_phase_name(phase_name)
+        previous_phase = phase_name
+        already_advanced = mgr.phase_active == expected_next
+        if mgr.phase_active == phase_name:
+            mgr.advance_after_committed_turn(phase_name=phase_name, turn_number=turn_number)
+        elif mgr.phase_active != expected_next:
+            raise ValueError(
+                f"cannot reconcile phase advance: ledger stage='{phase_name}', "
+                f"phase_active='{mgr.phase_active}', expected='{expected_next}'"
+            )
+        ledger_data = ledger.mark_state_advanced()
+        return {
+            "intent_id": _uid(state_data),
+            "intent_type": _itype(state_data),
+            "stage": phase_name,
+            "turn_id": str(turn_number),
+            "previous_phase": previous_phase,
+            "phase_active": mgr.phase_active,
+            "is_terminated": mgr.is_terminated,
+            "already_advanced": already_advanced,
+            "ledger_path": str(ledger.path),
+            "ledger_state": ledger_data["state"],
+            "state_advanced": True,
         }
 
     def finalize_intent(

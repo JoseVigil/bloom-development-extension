@@ -87,6 +87,23 @@ export interface GenState {
 
   status: GenStatus;
   currentPhase: GenPhase;
+  /** Versión monotónica de mandate_state.json; cambia en la misma escritura que updatedAt. */
+  stateVersion: number;
+  updatedAt: string;
+  signature: {
+    status: 'not_ready' | 'pending' | 'signed' | 'failed';
+    intentId: string | null;
+    artifacts: {
+      /** Rutas relativas al directorio del propio Mandate. */
+      reception: string | null;
+      domainProposal: string | null;
+      humanSyncPersisted: boolean;
+    };
+    pendingAt: string | null;
+    signedAt: string | null;
+    failedAt: string | null;
+    failure: { message: string; type?: string } | null;
+  };
 
   phases: {
     ingest: PhaseRecord;

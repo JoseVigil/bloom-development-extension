@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"nucleus/internal/core"
+	"nucleus/internal/orchestration/mandatestate"
 	"nucleus/internal/orchestration/temporal"
 	"nucleus/internal/orchestration/temporal/workflows"
 	"nucleus/internal/supervisor"
@@ -321,38 +323,48 @@ func readMandateState(mandateID string) (mandateStateDoc, map[string]interface{}
 // del documento crudo ya leído, preservando todo lo demás tal cual estaba
 // (ingest/cluster, mandateType, source, etc. — este comando no es dueño de
 // esos campos).
-func writeMandateStateValidate(mandateID string, rawMap map[string]interface{}, validate validatePhaseJSON) error {
+func writeMandateStateValidate(mandateID string, _ map[string]interface{}, validate validatePhaseJSON) error {
 	cfg, err := supervisor.LoadNucleusConfig()
 	if err != nil {
 		return fmt.Errorf("no pude leer nucleus.json: %w", err)
 	}
 
-	validateBytes, err := json.Marshal(validate)
-	if err != nil {
-		return fmt.Errorf("no pude serializar phases.validate: %w", err)
-	}
-	var validateMap map[string]interface{}
-	if err := json.Unmarshal(validateBytes, &validateMap); err != nil {
-		return err
-	}
-
-	phases, ok := rawMap["phases"].(map[string]interface{})
-	if !ok {
-		phases = map[string]interface{}{}
-	}
-	phases["validate"] = validateMap
-	rawMap["phases"] = phases
-
-	data, err := json.MarshalIndent(rawMap, "", "  ")
-	if err != nil {
-		return fmt.Errorf("no pude serializar mandate_state.json: %w", err)
-	}
-
 	path := filepath.Join(cfg.MandatesRoot(), mandateID, "mandate_state.json")
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	_, err = mutateMandateStateValidate(path, validate)
+	if err != nil {
 		return fmt.Errorf("no pude escribir mandate_state.json de %s: %w", mandateID, err)
 	}
 	return nil
+}
+
+func mutateMandateStateValidate(path string, validate validatePhaseJSON) (uint64, error) {
+	validateBytes, err := json.Marshal(validate)
+	if err != nil {
+		return 0, fmt.Errorf("no pude serializar phases.validate: %w", err)
+	}
+	var validateMap map[string]interface{}
+	if err := json.Unmarshal(validateBytes, &validateMap); err != nil {
+		return 0, err
+	}
+
+	return mandatestate.Mutate(path, func(rawMap map[string]interface{}) (bool, error) {
+		phases, ok := rawMap["phases"].(map[string]interface{})
+		if !ok {
+			phases = map[string]interface{}{}
+		}
+		current, _ := phases["validate"].(map[string]interface{})
+		if current == nil {
+			current = map[string]interface{}{}
+		}
+		desiredHumanSync := validateMap["humanSync"]
+		if reflect.DeepEqual(current["humanSync"], desiredHumanSync) {
+			return false, nil
+		}
+		current["humanSync"] = desiredHumanSync
+		phases["validate"] = current
+		rawMap["phases"] = phases
+		return true, nil
+	})
 }
 
 func fail(c *core.Core, err error) {

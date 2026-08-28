@@ -384,25 +384,8 @@ func createGenesisMandate(project, source, baseGenesisID string, docs []string) 
 		mandateType = "domain_expansion"
 	}
 
-	mandateState := map[string]interface{}{
-		"mandateId":     mandateID,
-		"mandateType":   mandateType,
-		"project":       project,
-		"source":        source,
-		"baseGenesisId": baseGenesisID,
-		"status":        "building",
-		"currentPhase":  "ingest",
-		"phases": map[string]interface{}{
-			"ingest":  map[string]interface{}{"status": "pending"},
-			"cluster": map[string]interface{}{"status": "pending"},
-			"validate": map[string]interface{}{
-				"status":    "pending",
-				"humanSync": map[string]interface{}{"candidateDomains": []string{}},
-			},
-		},
-		"createdAt":    time.Now().Format(time.RFC3339),
-		"docsProvided": docsProvided, // CAMPO NUEVO esta sesión — [] si no se pasó --docs
-	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	mandateState := initialGenesisMandateState(mandateID, mandateType, project, source, baseGenesisID, docsProvided, now)
 	data, _ := json.MarshalIndent(mandateState, "", "  ")
 
 	// 'wx' equivalente en Go: O_CREATE|O_EXCL falla si el archivo ya existe.
@@ -429,6 +412,43 @@ func createGenesisMandate(project, source, baseGenesisID string, docs []string) 
 		Status:     "building",
 		Project:    project,
 	}, nil
+}
+
+func initialGenesisMandateState(mandateID, mandateType, project, source, baseGenesisID string, docsProvided []string, now string) map[string]interface{} {
+	return map[string]interface{}{
+		"mandateId":     mandateID,
+		"mandateType":   mandateType,
+		"project":       project,
+		"source":        source,
+		"baseGenesisId": baseGenesisID,
+		"status":        "building",
+		"currentPhase":  "ingest",
+		"phases": map[string]interface{}{
+			"ingest":  map[string]interface{}{"status": "pending"},
+			"cluster": map[string]interface{}{"status": "pending"},
+			"validate": map[string]interface{}{
+				"status":    "pending",
+				"humanSync": map[string]interface{}{"candidateDomains": []string{}},
+			},
+		},
+		"createdAt":    now,
+		"stateVersion": 1,
+		"updatedAt":    now,
+		"signature": map[string]interface{}{
+			"status":   "not_ready",
+			"intentId": nil,
+			"artifacts": map[string]interface{}{
+				"reception":          nil,
+				"domainProposal":     nil,
+				"humanSyncPersisted": false,
+			},
+			"pendingAt": nil,
+			"signedAt":  nil,
+			"failedAt":  nil,
+			"failure":   nil,
+		},
+		"docsProvided": docsProvided, // CAMPO NUEVO esta sesión — [] si no se pasó --docs
+	}
 }
 
 // ── mandate status ───────────────────────────────────────────────────────

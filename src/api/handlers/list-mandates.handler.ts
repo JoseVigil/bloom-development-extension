@@ -12,10 +12,48 @@ export interface MandateListItem {
   name?: string;
   source?: string;
   status?: string;
+  currentStatus?: string;
   currentPhase?: string;
+  stateVersion?: number;
+  updatedAt?: string;
   createdAt?: string;
   /** 'state' = leído de mandate_state.json. 'draft' = mandate_draft.json (standard sin confirmar). */
   fileKind: 'state' | 'draft';
+}
+
+function normalizeStatus(
+  parsed: Record<string, unknown>,
+  mandateId: string,
+  request: FastifyRequest,
+): { status?: string; currentStatus?: string } {
+  const legacyStatus = typeof parsed.status === 'string' ? parsed.status : undefined;
+  const canonicalStatus =
+    typeof parsed.currentStatus === 'string' ? parsed.currentStatus : undefined;
+
+  if (canonicalStatus && legacyStatus && canonicalStatus !== legacyStatus) {
+    request.log.warn(
+      { mandateId, status: legacyStatus, currentStatus: canonicalStatus },
+      'GET /mandates — status y currentStatus difieren; prevalece currentStatus',
+    );
+  }
+
+  const resolvedStatus = canonicalStatus ?? legacyStatus;
+  if (!resolvedStatus) {
+    request.log.warn(
+      { mandateId, status: legacyStatus, currentStatus: canonicalStatus },
+      'GET /mandates — mandate sin status ni currentStatus',
+    );
+    return {};
+  }
+
+  return { status: resolvedStatus, currentStatus: resolvedStatus };
+}
+
+function projectRevision(parsed: Record<string, unknown>): { stateVersion?: number; updatedAt?: string } {
+  return {
+    ...(typeof parsed.stateVersion === 'number' ? { stateVersion: parsed.stateVersion } : {}),
+    ...(typeof parsed.updatedAt === 'string' ? { updatedAt: parsed.updatedAt } : {}),
+  };
 }
 
 /**
@@ -95,13 +133,16 @@ export async function listMandatesHandler(
     try {
       const raw = await readFile(path.join(dir, 'mandate_state.json'), 'utf-8');
       const parsed = JSON.parse(raw);
+      const normalizedStatus = normalizeStatus(parsed, mandateId, request);
+      const revision = projectRevision(parsed);
       mandates.push({
         mandateId: parsed.mandateId || mandateId,
         mandateType: parsed.mandateType,
         project: parsed.project,
         source: parsed.source,
-        status: parsed.status,
+        ...normalizedStatus,
         currentPhase: parsed.currentPhase,
+        ...revision,
         createdAt: parsed.createdAt,
         fileKind: 'state',
       });
@@ -118,12 +159,15 @@ export async function listMandatesHandler(
     try {
       const raw = await readFile(path.join(dir, 'mandate_draft.json'), 'utf-8');
       const parsed = JSON.parse(raw);
+      const normalizedStatus = normalizeStatus(parsed, mandateId, request);
+      const revision = projectRevision(parsed);
       mandates.push({
         mandateId: parsed.mandateId || mandateId,
         mandateType: parsed.mandateType,
         project: parsed.project,
         name: parsed.name,
-        status: parsed.currentStatus,
+        ...normalizedStatus,
+        ...revision,
         createdAt: parsed.createdAt,
         fileKind: 'draft',
       });

@@ -70,8 +70,9 @@ class AddTurnCommand(BaseCommand):
                 help=(
                     "Only meaningful for 'ing'/'dis' intents. Effect depends on "
                     "the active phase: in a commit phase (.consolidation/ or "
-                    ".ratification/) closes the turn with the spec's commit "
-                    "field set to true and advances phase_active; in a "
+                    ".ratification/) durably records commit_requested=true and "
+                    "creates a pending effect ledger; verified effects, final "
+                    "commit, and phase advancement are separate Core operations. In a "
                     "proposal phase (.classification/ or .mapping/, which "
                     "have no commit concept) forces the explicit advance to "
                     "the closing phase via advance_after_proposal(). Ignored "
@@ -207,6 +208,10 @@ class AddTurnCommand(BaseCommand):
                     f"➡️  Advanced to: {turn_data.get('phase_active', 'N/A')} "
                     f"({reason})"
                 )
+
+            if turn_data.get("commit_requested"):
+                typer.echo("🧾 Commit requested; canonical effects remain pending verification")
+                typer.echo(f"📒 Effect ledger: {turn_data.get('ledger_path', 'N/A')}")
 
             if turn_data.get("is_terminated"):
                 typer.echo(f"🏁 Intent reached terminal phase — ready for finalize/freeze")
