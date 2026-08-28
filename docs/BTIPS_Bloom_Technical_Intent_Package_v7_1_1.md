@@ -12,6 +12,7 @@ BTIPS convierte la interacción con inteligencia artificial en un proceso de ing
 | **v6.0** | Arquitectura integral de Bloom: Cortex y Companion, AITAP, Execution Layer, Executor, runtimes de procesamiento, Temporal, Cognituum Runner y los intents `ing` y `dis`. |
 | **v7.0** | Consolidación de la arquitectura integral y de su mapa visual: AITAP como grifo, Execution Layer implementada por Executor, OpenCode y CLIs externos como runtimes de procesamiento, y separación entre runtime y proveedor/modelo efectivo. |
 | **v7.1** | Se documenta el vínculo de producto entre esta arquitectura y la partición PALADIN/SOVEREIGN (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`). Se agregan notas de producto en 2.4️⃣ (Conductor) y 2.5️⃣ (Plugin). No se modifica arquitectura, componentes, puertos ni el diagrama de la sección 2️⃣, que continúa representando la superficie Sovereign. |
+| **v7.1.1** | **Deprecación de conformidad, no revisión de diseño.** Todas las menciones de `cor` bajo su semántica v6.0 (*Coordination* — merges cognitivos, orden de trabajo, control de impacto) quedan marcadas como deprecadas. `BSIP-009`/`COR_Intent_Spec_v1_0.md` redefinen `cor` como **Core/Governance**, bajo política Zero-Read/Zero-Write, inalcanzable por cualquier Agent Loop y canal exclusivo humano/Nucleus — ver nota consolidada más abajo. La funcionalidad de merge cognitivo migra por completo al intent `mrg` (`BSIP-010`). Ningún componente, puerto ni diagrama arquitectónico de v7.1 cambia; solo la semántica textual asociada a `cor`. |
 
 ---
 
@@ -22,6 +23,16 @@ BTIPS nace de un problema concreto: los modelos de IA trabajan rápido, pero **p
 La arquitectura BTIPS introduce una **unidad mínima de trabajo persistente** donde cada acción técnica queda registrada como un intent, junto con su contexto, entradas, salidas y efectos en el sistema. De esta forma, el conocimiento no vive en prompts efímeros ni en la memoria del modelo, sino en **Bloom Technical Intent Package**.
 
 BTIPS convierte la interacción con IA en un **proceso de ingeniería**, no en una conversación. Esto permite que una organización mantenga coherencia técnica, acelere iteraciones y transfiera conocimiento entre humanos, aplicaciones y modelos sin degradación ni ambigüedad.
+
+---
+
+> ### ⚠️ Nota de deprecación consolidada — `cor` (v7.1.1)
+>
+> Este documento describe, en varios puntos, un intent `cor` bajo la semántica **v6.0** (*Coordination*): merges cognitivos, orden de trabajo, control de impacto organizacional. Esa semántica quedó **superada por completo** —no parcheada— por `BSIP-009`/`COR_Intent_Spec_v1_0.md`, que redefine `cor` como **Core/Governance**: la superficie constitucional del sistema (reglas de negocio, invariantes, políticas de orquestación de Nucleus), bajo una política sin precedente en el resto de la taxonomía —**Zero-Read/Zero-Write** para cualquier Agent Loop— y proponible exclusivamente por un operador humano vía canal privilegiado de Nucleus, o por Nucleus mismo por decisión de sistema.
+>
+> La funcionalidad de **merge cognitivo** que este documento atribuye a `cor` en v6.0 migra íntegramente al intent `mrg` (`BSIP-010`). Toda mención puntual de `cor` a partir de aquí queda marcada con **[deprecado — ver BSIP-009]** y, donde corresponde a la función de merge, corregida a `mrg`. Ningún otro componente, puerto o diagrama arquitectónico de v7.1 se ve afectado por esta nota — es exclusivamente terminológica sobre `cor`.
+>
+> Fuente autoritativa vigente: `COR_Intent_Spec_v1_0.md`.
 
 ---
 
@@ -53,7 +64,8 @@ Sigue siendo simple, pero ahora **explica la pirámide**.
 ```mermaid
 flowchart LR
     %% ─── Taxonomía de Intents v7.1 ───
-    %% cor -> Nucleus Engine, ejecución local exclusiva vía CLI / Pass-Through Terminal (desacoplado de Alfred/Mobile)
+    %% cor [deprecado v6.0 - ver BSIP-009]: ahora Core/Governance, Zero-Read/Zero-Write, canal exclusivo humano/Nucleus
+    %% mrg -> Merge & Integration, sucesor de la funcionalidad de merge cognitivo descrita en v6.0 para cor
     %% dev -> Execution Layer (Executor / Project Runners), local o remoto vía Alfred/Mobile
     %% mrg -> Merge & Integration, Alfred/Mobile -> Execution Layer
     %% tst -> Test Runner & Gate, Alfred/Mobile -> Execution Layer
@@ -200,10 +212,10 @@ flowchart LR
         ConductorWorkspace <--> ProjectFolder
         ConductorWorkspace <--> NucleusFolder
 
-        %% cor — Coordination: exclusivamente local, vía CLI/Pass-Through Terminal, sin pasar por Alfred/Mobile
+        %% [deprecado v6.0 - ver BSIP-009] cor ya no es "Coordination"; es Core/Governance, canal exclusivo humano/Nucleus
         NucleusExe <--> PassThroughTerminal
-        PassThroughTerminal --"cor · Coordination
-        (local-only)"--> Core
+        PassThroughTerminal --"cor · Core/Governance
+        (BSIP-009, human-only)"--> Core
 
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
@@ -367,7 +379,7 @@ El Conductor no es "otra interfaz más". Es el **órgano de gobernanza conscient
 #### Capacidades Principales
 
 * **Event Bus Visualization**: Observa en tiempo real cada evento que fluye por el sistema (intents ejecutándose, resultados llegando, errores detectados)
-* **Intent Editor Avanzado**: Crea, edita e integra intents con sintaxis asistida, especialmente los de tipo `cor` (coordinación) para merges cognitivos
+* **Intent Editor Avanzado**: Crea, edita e integra intents con sintaxis asistida, especialmente los de tipo `mrg` [sucesor, ver nota de deprecación de `cor`] para merges cognitivos
 * **Vault Shield**: Visualiza de forma transparente cuando el sistema accede a credenciales cifradas, eliminando la opacidad de las operaciones de seguridad
 * **Project Switcher**: Navega entre Nucleus y Projects sin perder contexto
 * **Rehydration Automática**: Al abrirse, reconstruye su estado escaneando `.bloom/` y sincronizando eventos perdidos del Sidecar
@@ -380,7 +392,9 @@ Cuando el usuario forja un intent en el Conductor, este se serializa como un arc
 
 #### El Merge Cognitivo
 
-Una de las capacidades más poderosas del Conductor es facilitar **merges cognitivos** que superan las limitaciones de herramientas tradicionales como Git. Cuando dos intents `dev` modifican el mismo archivo de formas incompatibles, el Conductor permite crear un intent `cor` (coordinación) que:
+> **[deprecado v6.0 — ver BSIP-009]** Esta sección describía originalmente esta capacidad bajo el intent `cor`. `cor` fue redefinido por `BSIP-009` como **Core/Governance** (Zero-Read/Zero-Write, canal exclusivo humano/Nucleus) y ya no tiene relación alguna con merges de código. La funcionalidad descrita a continuación es correcta y sigue vigente; el intent que la materializa es `mrg` (`BSIP-010`), no `cor`.
+
+Una de las capacidades más poderosas del Conductor es facilitar **merges cognitivos** que superan las limitaciones de herramientas tradicionales como Git. Cuando dos intents `dev` modifican el mismo archivo de formas incompatibles, el Conductor permite crear un intent `mrg` que:
 
 1. Analiza ambas modificaciones
 2. Consulta al modelo de IA sobre la mejor forma de integrarlas
@@ -497,7 +511,8 @@ El plugin nunca opera como autoridad. Lee el filesystem, genera artefactos, disp
 | Crear un intent con contexto de código activo | — | ✅ |
 | Crear un Mandate estratégico multi-proyecto | ✅ | — |
 | Observar el Event Bus en tiempo real | ✅ | Parcial (webview) |
-| Gestionar intents `exp` y `cor` organizacionales | ✅ | — |
+| Gestionar intents `exp` organizacionales | ✅ | — |
+| Actuar como canal humano privilegiado de `cor` [redefinido — ver BSIP-009, ya no es "gestión" de coordinación sino canal exclusivo de Core/Governance] | ✅ | — |
 | Trabajar dentro de un intent `dev` o `doc` | ✅ | ✅ |
 | Navegar el filesystem de intents del workspace | — | ✅ |
 | Gestionar perfiles Chrome y cuentas AI | — | ✅ |
@@ -984,7 +999,7 @@ Representa el **nivel más alto de la pirámide cognitiva**.
 
 ✔️ **`exp` — Exploration (principal)**
 ✔️ **`inf` — Information**
-✔️ **`cor` — Coordination (organizacional)**
+⚠️ **`cor` [deprecado v6.0 — ver BSIP-009]** — ya no es un intent operativo de esta lista: es la política constitucional contra la cual se evalúan los demás, Zero-Read/Zero-Write, canal exclusivo humano/Nucleus. No pertenece a "intents permitidos" en el mismo sentido que el resto.
 ✔️ **`doc` — Documentation estratégica**
 ✔️ **`ing` — Ingestion bajo Mandate**
 ✔️ **`dis` — Discovery bajo Mandate**
@@ -1078,11 +1093,18 @@ Se ejecuta **en Projects o Nucleus**, como input pasivo.
 
 ---
 
-### `cor` — Coordination Intent
+### `cor` — Core / Governance Intent [redefinido — v6.0 deprecada]
 
-Coordina y gobierna **acciones humanas y sistémicas**.
-Se usa para merges cognitivos, orden de trabajo y control de impacto.
-Se ejecuta **en Nucleus o en Projects complejos**, como autoridad.
+> **[deprecado v6.0 — ver BSIP-009]** Esta sección describía `cor` como *"Coordination"* — merges cognitivos, orden de trabajo, control de impacto. Esa semántica fue reemplazada por completo por `BSIP-009`/`COR_Intent_Spec_v1_0.md`, fuente autoritativa vigente. La funcionalidad de merge migró a `mrg` (`BSIP-010`).
+>
+> Bajo la semántica vigente, `cor` es la superficie **Core/Governance**: reglas de negocio, invariantes y políticas de orquestación de Nucleus — la "constitución" del sistema, no una unidad de trabajo que se ejecute. Trae consigo una política sin precedente en el resto de la taxonomía:
+>
+> - **Zero-Read/Zero-Write** para cualquier Agent Loop — ni lectura ni escritura, sin excepción configurable por seam ni por Mandate.
+> - **Invariante de proponente:** si `proposer_type === "agent"`, Nucleus rechaza en `validate_and_sign`, antes de evaluar cualquier otro campo del draft.
+> - **Canal de ejecución exclusivo:** solo un operador humano vía canal privilegiado de Nucleus, o Nucleus mismo por decisión de sistema. Nunca a través de un Mandate agéntico, ni de una Action generada indirectamente por un Agent Loop.
+> - **No cristaliza a Mandate:** no es una unidad de trabajo secuenciable con `dependsOn`/`onSuccess`/`onFailure` como `dev`, `doc` o `mrg`.
+>
+> Ver `COR_Intent_Spec_v1_0.md` para la especificación completa.
 
 ---
 
@@ -1120,7 +1142,7 @@ Opera en tres fases propias:
 
 Un **Mandate** es la unidad de ejecución estratégica más alta del sistema Bloom. Donde los intents operan de forma acotada y determinista, los Mandates **agrupan, secuencian y persisten** múltiples intents bajo una intención firmada y gobernada, permitiendo que objetivos complejos se ejecuten con estado, trazabilidad y control a lo largo del tiempo.
 
-Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objetivo organizacional y lo descompone en una secuencia de **Actions**. Cada Action se materializa en un intent concreto (`dev`, `doc`, `exp`, `inf`, `cor`, `ing` o `dis`). El Mandate nunca ejecuta lógica directamente: Nucleus conserva su autoridad y firma, Brain interpreta sus Intents y Temporal mantiene su workflow durable.
+Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objetivo organizacional y lo descompone en una secuencia de **Actions**. Cada Action se materializa en un intent concreto (`dev`, `doc`, `exp`, `inf`, `mrg`, `ing` o `dis`). `cor` [deprecado v6.0 — ver BSIP-009] **nunca** se materializa como Action de un Mandate: no cristaliza a Mandate bajo ninguna circunstancia. El Mandate nunca ejecuta lógica directamente: Nucleus conserva su autoridad y firma, Brain interpreta sus Intents y Temporal mantiene su workflow durable.
 
 > **Definición formal:**
 > Un Mandate es un contrato estratégico firmado por Nucleus que declara un objetivo organizacional descompuesto en Actions, cada una resuelta como un Intent/BISP y coordinada mediante un workflow durable de Temporal bajo la autoridad organizacional de Nucleus.
@@ -1146,7 +1168,8 @@ Nivel 3 — Action
          Unidad semántica dentro del Mandate
 
 Nivel 4 — Intent
-         Unidad de intención concreta (dev / doc / exp / inf / cor / ing / dis)
+         Unidad de intención concreta (dev / doc / exp / inf / mrg / ing / dis)
+         cor NO pertenece a este nivel — es política de Nivel 1 (ver BSIP-009)
 ```
 
 ### Qué es y qué NO es un Mandate
@@ -1354,7 +1377,7 @@ Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Ma
 | Acción | Tipo de instrucción | Efecto en el sistema local |
 |---|---|---|
 | Explorar una alternativa técnica | Intent `exp` | Brain interpreta el intent y conserva sus resultados en el BISP |
-| Coordinar un merge cognitivo | Intent `cor` | Brain coordina la resolución semántica y Executor materializa las acciones técnicas necesarias |
+| Coordinar un merge cognitivo | Intent `mrg` [antes descrito como `cor` — ver nota de deprecación, BSIP-009] | Brain coordina la resolución semántica y Executor materializa las acciones técnicas necesarias |
 | Desarrollar una feature | Intent `dev` | Brain construye el trabajo y Executor lo opera mediante el runtime seleccionado |
 | Documentar una decisión | Intent `doc` | Brain construye el resultado documental y el flujo técnico persiste sus efectos |
 | Incorporar material o código | Intent `ing` | Brain recibe, clasifica y consolida el material dentro del Mandate correspondiente |
@@ -1412,7 +1435,7 @@ Alfred es el **único punto del ecosistema Bloom que permite operar el sistema d
 Esto lo convierte en el mecanismo central para:
 
 - **Supervisión remota**: consultar el estado de un Mandate en curso desde el teléfono mientras el sistema corre en la máquina de desarrollo.
-- **Aprobación de acciones**: recibir una notificación de que un intent `cor` requiere decisión humana y resolverlo desde la app.
+- **Aprobación de acciones**: recibir una notificación de que un `cor` (Core/Governance, `BSIP-009`) requiere decisión humana y resolverlo desde la app — este es, de hecho, el canal privilegiado humano que `BSIP-009` exige para `cor`; nunca una resolución automática ni delegable a un Agent Loop.
 - **Instrucción asíncrona**: iniciar un `exp` intent antes de llegar a la oficina para que Brain ya tenga resultados cuando el usuario se siente.
 - **Reporting bajo demanda**: pedirle a Alfred que genere y envíe el reporte de estado del Nucleus sin necesidad de abrir el Conductor.
 
@@ -1449,7 +1472,7 @@ La app mobile expone las capacidades de Alfred organizadas en tres superficies:
 
 **Comando activo**
 - Emitir instrucciones en lenguaje natural a Alfred
-- Crear intents (`exp`, `doc`, `inf`, `cor`) de forma estructurada
+- Crear intents (`exp`, `doc`, `inf`) de forma estructurada; resolver notificaciones de `cor` [Core/Governance, BSIP-009] pendientes de decisión humana — nunca "crearlos" en el sentido operativo del resto
 - Iniciar y monitorear Mandates
 - Aprobar o rechazar acciones que requieren decisión humana
 
