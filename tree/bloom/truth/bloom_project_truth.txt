@@ -1,0 +1,299 @@
+# BLOOM PROJECT TRUTH — FUENTE DE VERDAD VIGENTE Y ROADMAP ESTRUCTURAL
+#
+# Homologado por AGENDA FOLLOWUP con devoluciones read-only de MANDATE GENESIS,
+# AUTHORIZATION y Brain. Deriva de la maqueta histórica
+# `tree/bloom/bloom_project_tree.txt`, que ya no es fuente de verdad.
+#
+# LEYENDA OBLIGATORIA
+# [IMPLEMENTADO]                 existe en el software vigente.
+# [DECIDIDO — NO IMPLEMENTADO]  contrato aprobado aún no materializado.
+# [PENDIENTE]                    trabajo identificado que todavía no existe.
+# [PLACEHOLDER]                  preparación de código fuera del flujo real.
+# [HISTÓRICO/NO VERIFICADO]      heredado de la maqueta, no afirmación vigente.
+# [DESALINEACIÓN]                comportamiento material inconsistente conocido.
+#
+# ALCANCE HOMOLOGADO
+# - Brain implementa intents project-scoped bajo <project>/.bloom/.intents/.
+# - Mandate Genesis no usa hoy esta raíz para su primer ing: pasa a Brain el
+#   Nucleus activo y lo materializa bajo .nucleus-{organization}/.intents/.ing/.
+# - La forma estructural de ing/dis aquí representada es válida para Brain; no
+#   prueba por sí sola que Genesis tenga conectadas todas sus fases.
+# - Las ramas dev/doc y otros nodos heredados que no fueron objeto de esta ronda
+#   conservan valor de roadmap, pero son [HISTÓRICO/NO VERIFICADO].
+#
+
+# BASE HISTÓRICA: bloom_project_tree.txt
+# Reemplaza a bloom_project_tree_gen.txt — renombrado porque el tipo de intent
+# `.gen/` fue reemplazado por `.ing/` (ver docs/intents/ING_Intent_Spec_v1_1.md,
+# "Rationale del cambio de estrategia: gen/ → ing/").
+#
+# HISTÓRICO: esta maqueta incorporó `.intents/.dis/` como séptimo tipo de intent.
+# La composición canónica posterior de Genesis sí incluye dis. Brain implementa
+# su estructura y motor; el wiring de Genesis permanece pendiente. Ver:
+#   - docs/intents/ING_Intent_Spec_v1_1.md (reemplaza a ING_Intent_Spec_v1_0.md
+#     referenciada en versiones previas de este árbol — v1.1 saca el campo
+#     `domain` de `gen.json`, ver su Changelog v1.0 → v1.1)
+#   - docs/intents/DIS_Intent_Spec_v1_0.md (nueva, spec del intent `dis/`)
+#   - BLOOM_Mandate_Genesis_Roadmap_Maestro_v3.md §8 (pedido de esta actualización)
+#
+# Único otro cambio de esta revisión: se agrega `.ai_bot.dis.intent.bl` en
+# `.project/`, por simetría con `.ai_bot.{dev,doc,ing}.intent.bl` — inferencia
+# editorial, ningún spec de intent toca `.project/` explícitamente; revisar si
+# no corresponde. `.dev/`, `.ing/` y `.doc/` quedan idénticos a la revisión
+# anterior, sin cambios de forma.
+#
+# NOTA — fuera de alcance de este árbol: `gen.json`, `.history/.delta_N/`, y
+# `.cache/.semantic-index.json` (ver docs/intents/ING_Intent_Spec_v1_1.md §7,
+# docs/intents/DIS_Intent_Spec_v1_0.md §7.2) viven a nivel Nucleus, no a nivel
+# de este proyecto — su árbol real está en `bloom_nucleus_tree.txt`, que no
+# forma parte de esta sesión. No se inventa su ubicación acá. Esto incluye a
+# `dis/`: aunque `.ratification/` es quien en última instancia aplica cambios
+# sobre `.cache/.semantic-index.json`, ese archivo en sí sigue siendo Nucleus-
+# level — lo que este árbol sí documenta son sus copias/deltas *locales* al
+# intent (`.domain_graph_snapshot.json`, `.domain_graph_delta.json`).
+
+.project-{name}/
+│
+└── .bloom/
+    │
+    ├── .core/                              ← [HISTÓRICO/NO VERIFICADO en esta ronda]
+    │   ├── .doc.instructions.bl
+    │   ├── .dev.instructions.bl
+    │   ├── .dev.rules.bl
+    │   ├── .doc.rules.bl
+    │   ├── .ai_bot.genesis.bl
+    │   ├── .ai_bot.bootstrap.bl
+    │   └── .core.meta.json
+    │
+    ├── .intents/
+    │   ├── .dev/                           ← [HISTÓRICO/NO VERIFICADO en esta ronda]
+    │   │   └── .{intent-name-uuid3}/
+    │   │       ├── .dev_state.json         ← incluye mandate_id y gene_id activo
+    │   │       ├── .briefing/
+    │   │       │   ├── .briefing.json
+    │   │       │   ├── .context_dev_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .codebase.json
+    │   │       │       ├── .codebase_index.json
+    │   │       │       ├── .docbase.json
+    │   │       │       ├── .docbase_index.json
+    │   │       │       └── [optional files]
+    │   │       ├── .execution/
+    │   │       │   ├── .answers.json
+    │   │       │   ├── .context_dev_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .codebase.json
+    │   │       │       ├── .codebase_index.json
+    │   │       │       ├── .docbase.json
+    │   │       │       ├── .docbase_index.json
+    │   │       │       └── [optional files]
+    │   │       ├── .refinement/
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_dev_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .codebase.json
+    │   │       │           ├── .codebase_index.json
+    │   │       │           ├── .docbase.json
+    │   │       │           ├── .docbase_index.json
+    │   │       │           └── [optional files]
+    │   │       └── .pipeline/
+    │   │           ├── .briefing/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .execution/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           └── .refinement/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   │
+    │   ├── .ing/                            ← [IMPLEMENTADO por Brain] project-scoped
+    │   │   └── .{intent-name-uuid}/
+    │   │       │
+    │   │       ├── .ing_state.json          ← phase_active: reception|classification|consolidation|done
+    │   │       │
+    │   │       ├── .reception/              ← [IMPLEMENTADO]
+    │   │       │   ├── .files/              ← copias hidratadas opcionales
+    │   │       │   ├── .rawbase.json        ← inventario; hijo directo de .reception
+    │   │       │   └── .rawbase_index.json  ← índice; hijo directo de .reception
+    │   │       │
+    │   │       ├── .classification/         ← [IMPLEMENTADO por Brain; PENDIENTE en Genesis]
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_ing_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .domain_resolution.json   ← contrato estructural; Genesis no lo produce hoy
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       ├── .consolidation/          ← [IMPLEMENTADO por Brain; wiring Genesis PENDIENTE]
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .consolidation.json
+    │   │       │       │   └── commit_requested | committed | ledger_ref | effects_digest
+    │   │       │       ├── .effect_ledger.json           ← [IMPLEMENTADO] schema 1.0; 4 obligaciones ING
+    │   │       │       │   └── state: pending | applied | state_advanced
+    │   │       │       │       mandate_state_integration.status: not_wired
+    │   │       │       ├── .context_ing_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .docbase.json
+    │   │       │           ├── .docbase_index.json
+    │   │       │           └── [optional: .codebase.json, .codebase_index.json]
+    │   │       │
+    │   │       └── .pipeline/               ← contrato BISP idéntico, por fase
+    │   │           ├── .reception/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .classification/
+    │   │           │   └── .turn_X/
+    │   │           │       ├── .payload.json
+    │   │           │       ├── .index.json
+    │   │           │       └── .response/
+    │   │           │           ├── .raw_output.txt
+    │   │           │           ├── .report.json
+    │   │           │           └── .staging/
+    │   │           └── .consolidation/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   │
+    │   ├── .dis/                            ← [IMPLEMENTADO por Brain] project-scoped; wiring Genesis PENDIENTE
+    │   │   └── .{intent-name-uuid}/
+    │   │       │
+    │   │       ├── .dis_state.json          ← phase_active: discovery|mapping|ratification|done
+    │   │       │
+    │   │       ├── .discovery/              ← sin turnos, igual que .reception/ (ing) y .context/ (doc)
+    │   │       │   ├── .discovery.json
+    │   │       │   ├── .context_dis_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .genebase.json             ← snapshot de linaje de Genes del scope, sin domain
+    │   │       │       ├── .genebase_index.json
+    │   │       │       ├── .domain_graph_snapshot.json ← copia local de .semantic-index.json (Nucleus) al
+    │   │       │       │                                  arrancar la corrida — NO es la fuente de verdad
+    │   │       │       └── [optional files]
+    │   │       │
+    │   │       ├── .mapping/                ← con turnos, igual que .classification/ (ing)
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_dis_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .mapping_proposal.json  ← altas/bajas de arista, fusión, split, rename
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       ├── .ratification/           ← [IMPLEMENTADO por Brain; wiring Genesis PENDIENTE]
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .ratification.json
+    │   │       │       │   └── commit_requested | committed | ledger_ref | effects_digest
+    │   │       │       ├── .effect_ledger.json         ← [IMPLEMENTADO] schema 1.0; 2 obligaciones DIS
+    │   │       │       │   └── state: pending | applied | state_advanced
+    │   │       │       │       mandate_state_integration.status: not_wired
+    │   │       │       ├── .context_dis_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .domain_graph_delta.json ← qué cambió vs .domain_graph_snapshot.json
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       └── .pipeline/               ← contrato BISP idéntico, por fase
+    │   │           ├── .discovery/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .mapping/
+    │   │           │   └── .turn_X/
+    │   │           │       ├── .payload.json
+    │   │           │       ├── .index.json
+    │   │           │       └── .response/
+    │   │           │           ├── .raw_output.txt
+    │   │           │           ├── .report.json
+    │   │           │           └── .staging/
+    │   │           └── .ratification/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   │
+    │   └── .doc/                            ← [HISTÓRICO/NO VERIFICADO en esta ronda]
+    │       └── .{intent-name-uuid3}/
+    │           ├── .doc_state.json
+    │           ├── .context/
+    │           │   ├── .doc.json
+    │           │   ├── .context_doc_plan.json
+    │           │   └── .files/
+    │           │       ├── .docbase.json
+    │           │       ├── .docbase_index.json
+    │           │       └── [optional files]
+    │           ├── .curation/
+    │           │   └── .turn_X/
+    │           │       ├── .doc.json
+    │           │       ├── .context_doc_plan.json
+    │           │       └── .files/
+    │           │           ├── .docbase.json
+    │           │           ├── .docbase_index.json
+    │           │           └── [optional files]
+    │           └── .pipeline/
+    │               ├── .context/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               └── .curation/
+    │                   └── .turn_X/
+    │                       ├── .payload.json
+    │                       ├── .index.json
+    │                       └── .response/
+    │                           ├── .raw_output.txt
+    │                           ├── .report.json
+    │                           └── .staging/
+    │
+    ├── .mandates/                           ← [PENDIENTE] fallback local de Brain, NO MandatesRoot canónico
+    │   └── {mandate_id}/
+    │       └── mandate.json                 ← salida local de freeze_to_mandate()
+    │
+    └── .project/                            ← [HISTÓRICO/NO VERIFICADO en esta ronda]
+        ├── .tree.bl
+        ├── .dev.strategy.standards.bl
+        ├── .dev.strategy.context.bl
+        ├── .doc.app.architecture.bl
+        ├── .doc.app.workflow.bl
+        ├── .doc.app.implementation.bl
+        ├── .ai_bot.dev.intent.bl
+        ├── .ai_bot.doc.intent.bl
+        ├── .ai_bot.ing.intent.bl           ← renombrado de .ai_bot.gen.intent.bl
+        ├── .ai_bot.dis.intent.bl           ← nuevo, por simetría — sin mandato explícito en los specs,
+        │                                      ver nota de cabecera; revisar si no corresponde
+        └── .project.meta.json
+
+# INVARIANTES TRANSACCIONALES HOMOLOGADAS
+# - committed=true no avanza phase_active.
+# - commit-turn y advance-turn son checkpoints independientes y reintentables.
+# - El effect ledger pertenece al turno del Intent; no es mandate_state.json.
+# - mandate_state_integration continúa not_wired.
+# - domain_proposal.json de Genesis vive en el directorio operativo del Mandate
+#   en Nucleus y no equivale a .classification/.../.domain_resolution.json.

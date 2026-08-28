@@ -1,0 +1,293 @@
+# BLOOM NUCLEUS TRUTH — FUENTE DE VERDAD VIGENTE Y ROADMAP ESTRUCTURAL
+#
+# Homologado por AGENDA FOLLOWUP con devoluciones read-only de MANDATE GENESIS,
+# AUTHORIZATION y Brain. Deriva de la maqueta histórica
+# `tree/bloom/bloom_nucleus_tree.txt`, que ya no es fuente de verdad.
+#
+# LEYENDA OBLIGATORIA
+# [IMPLEMENTADO]                 existe en el software vigente.
+# [DECIDIDO — NO IMPLEMENTADO]  contrato aprobado aún no materializado.
+# [PENDIENTE]                    trabajo identificado que todavía no existe.
+# [PLACEHOLDER]                  preparación de código fuera del flujo real.
+# [HISTÓRICO/NO VERIFICADO]      heredado de la maqueta, no afirmación vigente.
+# [DESALINEACIÓN]                comportamiento material inconsistente conocido.
+#
+
+.bloom/
+│
+└── .nucleus-{organization}/
+    │
+    ├── .master                              ← [IMPLEMENTADO] marcador RoleMaster
+    ├── .specialist                          ← [IMPLEMENTADO] marcador RoleSpecialist
+    │                                          ausencia/no reconocido = RoleUnknown (fail-closed)
+    │                                          Architect y Grant no existen en el modelo vigente
+    │
+    ├── .core/
+    │   ├── .nucleus-config.json             ← [IMPLEMENTADO] nombre real; dotfile
+    │   ├── .rules.bl
+    │   ├── .standards.bl
+    │   ├── .policies.bl
+	│   ├── .ai_bot.sovereign.bl
+	│   ├── .ai_bot.governance.bl              ← [HISTÓRICO/NO VERIFICADO por scaffold actual]
+	│   ├── .ai_bot.plane.bl                   ← [HISTÓRICO/NO VERIFICADO por scaffold actual]
+    │   └── .meta.json
+    │
+    ├── .governance/                         ← [HISTÓRICO/NO VERIFICADO en esta ronda]
+    │   ├── architecture/
+    │   │   ├── .principles.bl
+    │   │   ├── .patterns.bl
+    │   │   └── .decisions/
+    │   │       └── .adr-{uuid}.json
+    │   ├── security/
+    │   │   ├── .security-standards.bl
+    │   │   └── .compliance-requirements.bl
+    │   └── quality/
+    │       ├── .code-standards.bl
+    │       └── .testing-requirements.bl
+    │
+    ├── .intents/
+    │   │
+    │   ├── .ing/                            ← [IMPLEMENTADO] ubicación usada por Genesis operativo
+    │   │   └── .{intent-name-uuid}/
+    │   │       ├── .ing_state.json
+    │   │       ├── .reception/              ← [IMPLEMENTADO y conectado por Genesis]
+    │   │       │   ├── .files/              ← documentos hidratados
+    │   │       │   ├── .rawbase.json        ← hijo directo de .reception
+    │   │       │   └── .rawbase_index.json  ← hijo directo de .reception
+    │   │       ├── .classification/         ← [IMPLEMENTADO por Brain; PENDIENTE en Genesis]
+    │   │       └── .consolidation/          ← [IMPLEMENTADO por Brain; wiring Genesis PENDIENTE]
+    │   │           └── .turn_X/
+    │   │               ├── .consolidation.json
+    │   │               └── .effect_ledger.json ← schema 1.0; mandate_state_integration: not_wired
+    │   │
+    │   ├── .dis/                            ← [IMPLEMENTADO por Brain; wiring Genesis PENDIENTE]
+    │   │   └── .{intent-name-uuid}/
+    │   │       ├── .dis_state.json
+    │   │       └── .ratification/
+    │   │           └── .turn_X/
+    │   │               ├── .ratification.json
+    │   │               └── .effect_ledger.json ← schema 1.0; mandate_state_integration: not_wired
+    │   │
+    │   ├── .exp/                            ← [IMPLEMENTADO] sólo la raíz creada por scaffold
+    │   │   │                                   Interior: [DECIDIDO — NO IMPLEMENTADO]
+    │   │   └── .{intent-name-uuid}/
+    │   │       ├── .exp_state.json
+    │   │       │
+    │   │       ├── .inquiry/
+    │   │       │   ├── .inquiry.json
+    │   │       │   ├── .context_exp_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .expbase.json
+    │   │       │       ├── .expbase_index.json
+    │   │       │       └── [optional files]
+    │   │       │
+    │   │       ├── .discovery/
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_exp_plan.json
+    │   │       │       ├── .exp_result.json         ← [DECIDIDO — NO IMPLEMENTADO]
+    │   │       │       │   └── ready | remediation_required | not_evaluable
+    │   │       │       └── .files/
+    │   │       │           ├── .expbase.json
+    │   │       │           ├── .expbase_index.json
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       ├── .findings/               ← exportación visible; schema final pendiente
+    │   │       │   ├── report.md
+    │   │       │   └── data.json
+    │   │       │
+    │   │       └── .pipeline/
+    │   │           ├── .inquiry/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       └── .report.json
+    │   │           └── .discovery/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       └── .report.json
+    │   │
+    │   └── .cor/                            ← [HISTÓRICO/NO VERIFICADO]; no creado por scaffold actual
+    │       └── .{intent-name-uuid}/
+    │           ├── .cor_state.json
+    │           │
+    │           ├── .freeze_snapshot/
+    │           │   ├── .snapshot.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .left_tree.json
+    │           │       ├── .right_tree.json
+    │           │       ├── .left_hashes.json
+    │           │       └── .right_hashes.json
+    │           │
+    │           ├── .structural_analysis/
+    │           │   ├── .analysis.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .shared.json
+    │           │       ├── .divergent.json
+    │           │       ├── .conflicts.json
+    │           │       └── .orphans.json
+    │           │
+    │           ├── .semantic_interpretation/
+    │           │   ├── .interpretation.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .intent_deltas.json
+    │           │       ├── .semantic_conflicts.json
+    │           │       └── .compatible_changes.json
+    │           │
+    │           ├── .dual_path_synthesis/
+    │           │   ├── .synthesis.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .dev_path.json
+    │           │       ├── .doc_path.json
+    │           │       └── .cross_references.json
+    │           │
+    │           ├── .proposal_assembly/
+    │           │   ├── .proposal.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .merge_plan.json
+    │           │       ├── .risk_matrix.json
+    │           │       └── .impact_summary.json
+    │           │
+    │           ├── .governed_submission/
+    │           │   ├── .submission.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .generated_dev_intents.json
+    │           │       ├── .generated_doc_intents.json
+    │           │       └── .approval_log.json
+    │           │
+    │           └── .pipeline/
+    │               ├── .freeze_snapshot/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .structural_analysis/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .semantic_interpretation/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .dual_path_synthesis/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .proposal_assembly/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               └── .governed_submission/
+    │                   ├── .payload.json
+    │                   ├── .index.json
+    │                   └── .response/
+    │                       ├── .raw_output.txt
+    │                       ├── .report.json
+    │                       └── .staging/
+	│
+	├── .mandates/                           ← [IMPLEMENTADO] MandatesRoot de Nucleus
+    │   └── {mandate-id-uuid}/               ← UUID plano, sin punto
+    │       ├── mandate_state.json           ← [IMPLEMENTADO] operativo desde creación
+    │       │   ├── stateVersion             ← monotónica por mutación efectiva
+    │       │   ├── updatedAt                ← misma sustitución atómica
+    │       │   ├── signature                ← not_ready | pending | signed | failed
+    │       │   │   └── intentId | artifacts | timestamps | failure
+    │       │   └── reconciliation           ← diagnóstico watcher; Temporal indisponible = unknown
+    │       ├── docs/                        ← [IMPLEMENTADO, opcional] material inicial durable
+    │       ├── domain_proposal.json         ← [IMPLEMENTADO] staging sintético, NO mapa canónico
+    │       ├── mandate.json                 ← [IMPLEMENTADO] aparece sólo después de firma exitosa
+    │       ├── scaffold/                    ← [PLACEHOLDER] writer disponible, no ejecución real
+    │       │   └── domain_{name}/
+    │       │       └── _INCOMPLETE_SCAFFOLD.json
+    │       └── .genes/                      ← [DECIDIDO — NO IMPLEMENTADO por Genesis]
+    │           └── .{gen-id-uuid}/
+    │               ├── gen.json            ← identidad, función semántica, embedding_ref
+    │               ├── gen_state.json      ← scope vivo: archivos actuales con md5
+    │               └── .history/
+    │                   └── .delta_{N}/
+    │                       ├── delta.json      ← qué cambió, cuándo, bajo qué intent
+    │                       └── snapshot.json   ← estado completo del scope en ese momento
+    │
+    ├── .cache/
+    │   ├── .projects-snapshot.json          ← [IMPLEMENTADO por scaffold]
+    │   ├── .semantic-index.json             ← [IMPLEMENTADO vacío]; efectos DIS no conectados por Genesis
+    │   ├── .dependency-graph.json           ← [HISTÓRICO/NO VERIFICADO por scaffold actual]
+    │   ├── .last-sync.json                  ← [IMPLEMENTADO por scaffold]
+    │   └── chroma/                          ← [HISTÓRICO/NO VERIFICADO por scaffold actual]
+    │       ├── {collection-per-project}/   ← intents vectorizados por proyecto
+    │       └── {nucleus-genes}/            ← funciones de genes vectorizadas (cross-mandate)
+    │
+    ├── .relations/
+    │   ├── .project-links.json              ← [IMPLEMENTADO por scaffold]
+    │   └── .dependency-map.json             ← [HISTÓRICO/NO VERIFICADO en esta ronda]
+    │
+	├── .ownership.json                      ← [IMPLEMENTADO por Nucleus Go]
+	│                                           contrato interno PENDIENTE de AUTH-OWNERSHIP-01
+	│                                           no representa ni autoriza Architect
+	│
+    ├── findings/                            ← raíz/README [IMPLEMENTADO]; salidas EXP [DECIDIDO — NO IMPLEMENTADO]
+    │   ├── README.md
+    │   └── {intent-name}/
+    │       ├── report.pdf
+    │       ├── report.md
+    │       └── data.json
+    │
+    └── reports/                             ← contenido heredado parcialmente [HISTÓRICO/NO VERIFICADO]
+        ├── health-dashboard.json           ← incluye genes huérfanos y deltas recientes
+        ├── statistics.json
+        └── exports/
+            └── {timestamp}-report.pdf
+
+# VERDAD OPERATIVA DE AUTORIZACIÓN
+# - Detección fail-closed: Master, Specialist o Unknown.
+# - Gates CLI vigentes para creación/Genesis de Mandates: Master-only.
+# - Alfred y dev-start conservan los guards homologados por AUTHORIZATION.
+# - AUTH-FIX-02 API/Go→Node, AUTH-OWNERSHIP-01 y AUTH-MODULE-01 siguen pendientes;
+#   no están representados como componentes materiales.
+#
+# FRONTERAS DURABLES
+# - mandate_state.json = estado operativo mutable y versionado de Nucleus.
+# - mandate.json = materialización canónica firmada.
+# - .effect_ledger.json = checkpoint del turno de Brain; no es estado del Mandate.
+# - Temporal conserva historia durable fuera de este filesystem graph.
+# - Vault pertenece a Nucleus, pero los secretos viven en el keyring del SO;
+#   no existen archivos de credenciales que deban aparecer en este graph.
+# - La reconciliación no modifica Brain, Human Sync, domain_proposal ni el ledger,
+#   y no ejecuta rollback.
+#
+# [DESALINEACIÓN] REFERENCIA DE RECEPCIÓN
+# IngestReceptionActivity crea el Intent en:
+#   .nucleus-{organization}/.intents/.ing/
+# MandateGenesisBuildWorkflow calcula hoy signature.artifacts.reception desde:
+#   <workspace>/.bloom/.intents/.ing/
+# La ubicación real del Intent está confirmada, pero esa referencia relativa no
+# debe considerarse homologada hasta que MANDATE GENESIS confirme o corrija el cálculo.
