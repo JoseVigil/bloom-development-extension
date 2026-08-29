@@ -1,8 +1,8 @@
 # Backend en Cloudflare — Distribución, Cuentas y Mandates
 
 **Tipo:** Recomendación de arquitectura (asesoría), no implementación
-**Estado:** Borrador v0.2 — decisiones confirmadas por Jose entre []; el resto es propuesta a validar
-**Fecha:** 2026-08-29 (v0.1 inicial) — actualizado el mismo día tras confirmación de la Opción A (§6)
+**Estado:** Borrador v0.3 — decisiones confirmadas por Jose entre []; el resto es propuesta a validar
+**Fecha:** 2026-08-29 (v0.1 inicial) — actualizado el mismo día tras confirmación de la Opción A (§6) y de nuevo con los primeros pasos concretos (§9)
 **Contexto:** conversación en la que se pidió asesoría para migrar sitios de Vercel a Cloudflare y construir, en el mismo repo (`bloom-nucleus-installer`), una aplicación backend nueva para: (1) distribuir binarios pesados del ecosistema Bloom, (2) registrar cuentas de usuario, (3) alojar una base de datos de Mandates para el futuro marketplace inter-organizacional.
 **Fuentes revisadas para este documento:** `BTIPS_Bloom_Technical_Intent_Package_v7_1_1.md`, `BATCAVE_ARCHITECTURE.md`, `metamorph-ionpump-reference.md`, `METAMORPH_COMANDOS.md` (los cuatro del repo local), más inspección directa de la estructura del repo (`package.json`, `installer/`, `workers/`, `contracts/`, `build-all.py`).
 
@@ -214,7 +214,7 @@ Decíme las rutas de los dos proyectos cuando quieras y reviso el `package.json`
 
 ## 8. Pendientes antes de pasar a implementación
 
-1. **Medir el volumen real de binarios**: pedí acceso a `/home/jose/.local/share/BloomNucleus` y el diálogo se cerró sin respuesta — retomar cuando quieras (`du -sh bin/*` alcanza) para dimensionar si R2 Standard alcanza o conviene Infrequent Access para versiones viejas retenidas para rollback.
+1. ~~Medir el volumen real de binarios~~ — **resuelto**: `~/.local/share/BloomNucleus/bin` pesa 2.2 GB (4.1 GB el árbol completo). R2 Standard alcanza sobrado incluso reteniendo varias versiones para rollback; no hace falta Infrequent Access todavía. El componente más pesado es `chrome-linux` (697 MB, un Chrome embebido) — vale confirmar si eso necesita viajar por el manifest o es prescindible.
 2. **Confirmar rutas de los dos proyectos Vercel** para decidir Pages vs Workers por sitio.
 3. **Cerrar las 5 decisiones de `Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md` §11** (confianza inicial en la clave pública, targeting por-device, reglas de revocación, TTL de credencial, WebSocket vs. SSE) antes de implementar el canal push. El pull autoritativo (§6 de este documento) no depende de esas decisiones y se puede construir antes.
 4. **Roles en la base de datos** (§0, §4 `orgMembers.role`): queda como está hasta que compartas la información pendiente.
@@ -222,4 +222,63 @@ Decíme las rutas de los dos proyectos cuando quieras y reviso el `package.json`
 
 ---
 
-*Fin del borrador v0.2. Este documento es asesoría de arquitectura — no implementa código.*
+## 9. Primeros pasos concretos — cómo arrancamos
+
+### 9.1 Servidor local en `workers/`
+
+Con el stack ya elegido (Hono + D1 + Drizzle), la secuencia concreta para tener algo corriendo en tu máquina, en orden:
+
+1. **Scaffold del proyecto**, en la carpeta ya reservada del repo:
+   ```bash
+   cd workers
+   npm create cloudflare@latest -- . --type=simple --lang=ts --deploy=false
+   ```
+   (`--deploy=false` para no disparar un deploy real todavía; podés correrlo interactivo si preferís elegir las opciones a mano — plantilla "Hello World", tipo "Worker only", TypeScript.)
+
+2. **Crear la base D1** y dejar que Wrangler te dé el binding:
+   ```bash
+   npx wrangler d1 create bloom-backend
+   ```
+   Esto imprime el bloque de config (`d1_databases`) para pegar en `wrangler.jsonc` (formato vigente hoy; `wrangler.toml` sigue soportado si preferís ese formato) — ahí van el `binding`, `database_name` y `database_id`.
+
+3. **Agregar Drizzle** encima del binding, no en lugar de Wrangler:
+   ```bash
+   npm install drizzle-orm
+   npm install -D drizzle-kit
+   ```
+   Definís el esquema de §4 en `contracts/marketplace-schema.ts`, generás la migración SQL con `drizzle-kit generate`, y la aplicás **local** (nunca toca la nube en este paso):
+   ```bash
+   npx wrangler d1 migrations apply bloom-backend --local
+   ```
+
+4. **Levantar el server local**:
+   ```bash
+   npx wrangler dev
+   ```
+   Esto corre el Worker contra la D1 local (un SQLite real bajo `.wrangler/state/`, tal como se explica en §5) en `localhost:8787` — nada de esto toca Cloudflare todavía, es 100% local.
+
+5. **Seed de prueba**: un script chico (`seed.sql` o un endpoint temporal) que cree una organización y un usuario de prueba, para poder probar `GET /v1/manifest` de punta a punta sin depender de datos reales.
+
+6. Recién en este punto conviene volver a `build-all.py` para sumar el flag `--only backend` (§2) — es un paso de integración con el resto del repo, no bloquea nada de lo anterior.
+
+No hace falta tocar el canal push (`Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md`) para este primer arranque — el pull autoritativo (`GET /v1/manifest`, §6) es lo único que hace falta para tener un servidor local útil.
+
+### 9.2 Migración de los sitios de Vercel
+
+Acá seguimos bloqueados en el mismo punto de siempre: **necesito las rutas locales de los dos proyectos** para poder mirar su `package.json`/framework real en vez de asumir. Mientras tanto, así es como conviene auditarlos apenas los tenga:
+
+1. Leer `package.json` (framework, scripts `build`/`dev`) y cualquier `next.config.js`/`vercel.json` existente — ahí aparece si usan algo Vercel-specific sin equivalente directo en Cloudflare (Edge Functions con APIs propias de Vercel, ISR, Image Optimization con su servicio propio, Vercel Cron) que necesite adaptación, no solo un cambio de hosting.
+2. **Si son estáticos/exportables**: Cloudflare Pages directo, conectando el repo — mismo modelo de deploy por git que ya usás en Vercel.
+3. **Si son Next.js con SSR/API routes**: instalar el adaptador y construir con él en vez del build de Next a secas —
+   ```bash
+   npm install @opennextjs/cloudflare
+   npx @opennextjs/cloudflare
+   wrangler deploy
+   ```
+   Un requisito real a chequear antes de migrar: el adaptador necesita que las rutas corran en **Node.js runtime**, no en Edge runtime — si alguna ruta del proyecto está forzada a `edge`, hay que revisarla primero. Límite a tener presente: Workers tiene un tope de tamaño de 10 MiB comprimido en el plan pago (3 MiB en Free) — un bundle de Next.js grande puede pegar contra ese límite y requerir revisar qué se está empaquetando de más.
+4. Migrar variables de entorno/secrets de Vercel a Cloudflare (`wrangler secret put` por variable, o Pages secrets si terminó en Pages).
+5. Cutover de DNS al final, no antes: dejar el deploy de Cloudflare corriendo en paralelo (con su URL de preview) hasta confirmar paridad real contra el sitio en Vercel, y recién ahí mover el dominio.
+
+---
+
+*Fin del borrador v0.3. Este documento es asesoría de arquitectura — no implementa código; §9 son los pasos que se ejecutarían si decidís avanzar.*
