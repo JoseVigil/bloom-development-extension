@@ -162,9 +162,11 @@ Esto confirma la ventaja que mencionaste: es el escenario más portable de los t
 
 ---
 
-## 6. Batcave sondea al backend — decisión confirmada (Opción A)
+## 6. Batcave habla con el backend — decisión confirmada (Opción A), mecanismo evolucionado a modelo híbrido
 
-Confirmaste explícitamente la Opción A del borrador anterior, con un detalle operativo adicional: el propio servidor de Batcave en GitHub Codespaces va a **sondear (poll) el backend central todos los días o cada X horas**, y ahí necesitamos un mecanismo que informe **qué cambió y qué debería descargarse**, para que Metamorph lo aplique localmente.
+> **Actualización (2026-08-29):** el mecanismo de este §6 evolucionó de "solo polling" a un **modelo híbrido** (push liviano + pull autoritativo + polling de respaldo con jitter), a pedido tuyo explícito. El diseño completo de identidad, enrolamiento, credenciales, targeting, revocación y replay/recovery para ese modelo vive en un documento aparte — `Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md` (mismo directorio) — para no mezclar el diseño de identidad con esta arquitectura general. Lo que sigue en este §6 describe el pull autoritativo, que no cambió y sigue siendo la única fuente que Batcave trata como verdad.
+
+Confirmaste la Opción A del borrador anterior: el propio servidor de Batcave en GitHub Codespaces es quien habla con el backend central (nunca Metamorph), y ahí necesitamos un mecanismo que informe **qué cambió y qué debería descargarse**, para que Metamorph lo aplique localmente.
 
 `BTIPS §2.13` sigue intacto como invariante — Metamorph **jamás se conecta a internet**, y `metamorph-ionpump-reference.md` no expone ningún cliente HTTP saliente en `IonPumpClient` (solo `QuiesceSite`/`ReloadSite`, contra Brain local). Con la Opción A confirmada, esto queda así, sin tocar ninguna garantía de seguridad documentada:
 
@@ -214,7 +216,7 @@ Decíme las rutas de los dos proyectos cuando quieras y reviso el `package.json`
 
 1. **Medir el volumen real de binarios**: pedí acceso a `/home/jose/.local/share/BloomNucleus` y el diálogo se cerró sin respuesta — retomar cuando quieras (`du -sh bin/*` alcanza) para dimensionar si R2 Standard alcanza o conviene Infrequent Access para versiones viejas retenidas para rollback.
 2. **Confirmar rutas de los dos proyectos Vercel** para decidir Pages vs Workers por sitio.
-3. **Decidir la cadencia de sondeo de Batcave** (global vs. por-organización, §6) y dónde persiste el `ETag`/estado del último poll (recomendado: en el propio Batcave).
+3. **Cerrar las 5 decisiones de `Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md` §11** (confianza inicial en la clave pública, targeting por-device, reglas de revocación, TTL de credencial, WebSocket vs. SSE) antes de implementar el canal push. El pull autoritativo (§6 de este documento) no depende de esas decisiones y se puede construir antes.
 4. **Roles en la base de datos** (§0, §4 `orgMembers.role`): queda como está hasta que compartas la información pendiente.
 5. Definir el formato exacto del `mandate.json` firmado que se sube a R2 — este documento asume que ya existe un formato (Nucleus lo firma), pero no vi todavía un schema consolidado de Mandate en el repo — puede ser el mismo trabajo pendiente que señalan los documentos de Gravity/Nucleus API ya en este proyecto, y que retoma en detalle la investigación de Wisdom (`BLOOM_Wisdom_Handshake_Investigacion_v0_1.md`, `docs/MANDATE/MARKETPLACE/`).
 
