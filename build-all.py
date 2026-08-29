@@ -2076,6 +2076,50 @@ def sync_metamorph_manifest() -> None:
             log(f"     {result.stdout.strip()[:300]}")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAVITY PREFLIGHT — verifica el parser Go+TypeScript antes de tocar Nucleus
+# ─────────────────────────────────────────────────────────────────────────────
+
+def verify_gravity_parser() -> StepResult:
+    """
+    Verifica las suites focalizadas del parser de Gravity (Go + TypeScript)
+    ANTES de compilar o desplegar Nucleus. Corre sobre fuentes ya generadas y
+    commiteadas — no invoca scripts/generate-gravity-parser.ps1, no requiere
+    Java ni ANTLR_JAR, y no modifica ninguna fuente ni artefacto productivo.
+
+    NO es de solo lectura en sentido estricto: `npm run test:gravity-parser`
+    compila un .tmp temporal (.tmp/gravity-parser-test/) para poder ejecutar
+    el test TS. Ese directorio es descartable entre corridas y no forma parte
+    de ningún artefacto de build ni de deployment.
+
+    Es preflight, no un step del loop principal: si falla, main() debe
+    terminar con exit code 1 antes de construir o desplegar CUALQUIER
+    componente — Nucleus va primero en all_steps precisamente porque otros
+    pasos dependen de él (PATH, `nucleus telemetry register`), así que no es
+    seguro dejar que el build siga usando un Nucleus previamente instalado.
+    """
+    log("Preflight: verificando parser de Gravity (Go + TypeScript) ...")
+
+    # Go: installer/nucleus/internal/gravity
+    go_dir = ROOT / "installer/nucleus"
+    code_go, out_go, _ = run(
+        ["go", "test", "-vet=off", "./internal/gravity"],
+        cwd=go_dir,
+    )
+    if code_go != 0:
+        tail = "\n".join(out_go.splitlines()[-20:]) if out_go else "(sin output)"
+        return StepResult("Gravity", False, error=f"go test ./internal/gravity falló:\n{tail}")
+
+    # TypeScript: contracts/gravity/parser.test.ts vía el script existente en package.json
+    code_ts, out_ts = run_streaming([_NPM, "run", "test:gravity-parser"], cwd=ROOT)
+    if code_ts != 0:
+        tail = "\n".join(out_ts.splitlines()[-20:]) if out_ts else "(sin output)"
+        return StepResult("Gravity", False, error=f"npm run test:gravity-parser falló:\n{tail}")
+
+    log("  ✅ Gravity: Go y TypeScript OK")
+    return StepResult("Gravity", True, output=f"{out_go}\n{out_ts}")
+
+
 def main() -> None:
     args = _parse_args()
     _setup_logger()
@@ -2169,9 +2213,27 @@ def main() -> None:
         log("⚠️  No hay pasos que ejecutar con los filtros indicados.")
         sys.exit(0)
 
+    results: list[StepResult] = []
+
+    # ── Preflight de Gravity — solo si Nucleus entra en este build ──
+    # Fail-fast: si falla, no se construye ni se despliega NADA en esta
+    # corrida, aunque haya otros componentes independientes en `steps`.
+    # Nucleus es el primer paso de all_steps porque pasos posteriores
+    # dependen de él (PATH, telemetry register); dejar que el build siga
+    # arriesgaría usar el Nucleus ya instalado en vez de detectar el problema.
+    if any(key == "nucleus" for key, _, _ in steps):
+        _header("Preflight: Gravity (Go + TypeScript)")
+        gravity_result = verify_gravity_parser()
+        _print_result(gravity_result)
+        results.append(gravity_result)
+        if not gravity_result.ok:
+            log("")
+            log("⛔ Preflight de Gravity falló. Build abortado antes de compilar Nucleus.")
+            _print_summary(results)
+            sys.exit(1)
+
     _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel")
 
-    results: list[StepResult] = []
     total = len(steps)
 
     for i, (key, name, fn) in enumerate(steps, start=1):
