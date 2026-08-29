@@ -4,7 +4,7 @@
 **Estado:** Borrador v0.3 — decisiones confirmadas por Jose entre []; el resto es propuesta a validar
 **Fecha:** 2026-08-29 (v0.1 inicial) — actualizado el mismo día tras confirmación de la Opción A (§6) y de nuevo con los primeros pasos concretos (§9)
 **Contexto:** conversación en la que se pidió asesoría para migrar sitios de Vercel a Cloudflare y construir, en el mismo repo (`bloom-nucleus-installer`), una aplicación backend nueva para: (1) distribuir binarios pesados del ecosistema Bloom, (2) registrar cuentas de usuario, (3) alojar una base de datos de Mandates para el futuro marketplace inter-organizacional.
-**Fuentes revisadas para este documento:** `BTIPS_Bloom_Technical_Intent_Package_v7_1_1.md`, `BATCAVE_ARCHITECTURE.md`, `metamorph-ionpump-reference.md`, `METAMORPH_COMANDOS.md` (los cuatro del repo local), más inspección directa de la estructura del repo (`package.json`, `installer/`, `workers/`, `contracts/`, `build-all.py`).
+**Fuentes revisadas para este documento:** `BTIPS_Bloom_Technical_Intent_Package_v7_1_1.md`, `BATCAVE_ARCHITECTURE.md`, `metamorph-ionpump-reference.md`, `METAMORPH_COMANDOS.md` (los cuatro del repo local), más inspección directa de la estructura del repo (`package.json`, `installer/`, `backend/`, `contracts/`, `build-all.py`).
 
 ---
 
@@ -38,7 +38,7 @@ Metamorph (reconciliador local — nunca toca internet)
 
 Y por el lado de negocio, `BTIPS §7️⃣` ya describe el **Marketplace de Mandates** como "el producto central del ecosistema Bloom" — un ecosistema horizontal donde cualquier organización puede publicar y adoptar Mandates — pero tampoco tiene todavía ningún backend que lo materialice.
 
-**Conclusión:** lo que estás pidiendo no es una pieza nueva conceptualmente — es construir el `Bloom Update Server` + el backend del Marketplace de Mandates, que el propio diagrama ya reserva un lugar para ellos. Por eso la ubicación en el repo también ya está reservada: existe una carpeta `workers/` en la raíz del repo, creada el 10 de junio, **vacía**. Es el lugar obvio para esta app nueva.
+**Conclusión:** lo que estás pidiendo no es una pieza nueva conceptualmente — es construir el `Bloom Update Server` + el backend del Marketplace de Mandates, que el propio diagrama ya reserva un lugar para ellos. Por eso la ubicación en el repo también ya está reservada: existe una carpeta `backend/` en la raíz del repo, creada el 10 de junio, **vacía**. Es el lugar obvio para esta app nueva.
 
 ---
 
@@ -46,18 +46,15 @@ Y por el lado de negocio, `BTIPS §7️⃣` ya describe el **Marketplace de Mand
 
 El repo (`bloom-nucleus-installer`) no es un monorepo con `workspaces` de npm/pnpm — es un único paquete que orquesta subcarpetas independientes bajo `installer/` (`batcave/`, `conductor/`, `metamorph/`, `nucleus/`, `sentinel/`, etc.), cada una con su propio `package.json`, construidas por un orquestador Python (`build-all.py`, ya usado hoy con `--only batcave`).
 
-Dos alternativas de ubicación:
+**Actualización (2026-08-29):** la carpeta se llama `backend/`, no `workers/` — decisión de Jose por consistencia con el resto del repo. `installer/`, `contracts/` se nombran por *rol*, no por tecnología; `workers/` rompía esa convención y además quedaría desactualizado si el día de mañana este servicio dejara de correr sobre Cloudflare Workers. La carpeta vacía que existía en la raíz desde el 10 de junio se renombró de `workers/` a `backend/` — se conserva el mismo slot reservado, solo cambia el nombre.
 
-1. **`workers/`** (recomendado) — ya existe, ya está vacía, ya tiene un nombre que evoca exactamente Cloudflare Workers. La uso como raíz del proyecto Wrangler.
-2. `installer/backend/` — seguiría el patrón exacto de `installer/batcave/`, `installer/metamorph/`, etc. como componente más del instalador.
-
-Dado que esta app no se instala en la máquina del usuario (no es parte del `BloomNucleus/` que Metamorph gestiona) sino que es un servicio que **Jose** despliega una sola vez en Cloudflare, `workers/` es semánticamente más correcto: no es un artefacto del instalador, es infraestructura propia. Se integra a `build-all.py` con un flag nuevo (`--only backend`) siguiendo la misma convención que ya usa Batcave, y su deploy es `wrangler deploy` (o vía CI), no `metamorph rollout`.
+Dado que esta app no se instala en la máquina del usuario (no es parte del `BloomNucleus/` que Metamorph gestiona) sino que es un servicio que **Jose** despliega una sola vez en Cloudflare, vive en la raíz del repo (`backend/`) y no dentro de `installer/` — no es un artefacto del instalador, es infraestructura propia. Se integra a `build-all.py` con un flag nuevo (`--only backend`) siguiendo la misma convención que ya usa Batcave, y su deploy es `wrangler deploy` (o vía CI), no `metamorph rollout`.
 
 `contracts/` (con `types.ts`, `errors.ts`, `state-machines.ts`, `websocket-protocol.ts`) ya es el lugar donde el repo comparte tipos TypeScript entre componentes (Batcave, Conductor, etc.). Los tipos de `Mandate`, `User`, `Organization`, `Release` que defina el backend nuevo deberían vivir ahí también, para que Batcave y Nucleus los importen sin duplicar definiciones — mismo patrón que ya usan `OwnershipSchema`/`BatcaveConfigSchema` con Zod en `batcave/`.
 
 ---
 
-## 3. Stack recomendado para `workers/`
+## 3. Stack recomendado para `backend/`
 
 | Pieza | Elección | Por qué |
 |---|---|---|
@@ -146,7 +143,11 @@ downloadRules {                  // reglas de descarga/actualización por organi
 }
 ```
 
-`releases` + `downloadRules` son, literalmente, la fuente de la que se computa el mismo `artifacts[]`/`ion_recipes[]` que Metamorph ya sabe consumir (`METAMORPH_ARCHITECTURE §Formato de Manifest`, `metamorph-ionpump-reference.md §2` `IonRecipeUpdate`). No hace falta inventar un formato nuevo — el backend nuevo simplemente **produce** el manifest que Batcave ya espera recibir del "servidor de origen", y es sobre estas dos tablas que se resuelve el mecanismo de sondeo confirmado en §6.
+**Corrección (2026-08-29), tras revisar el código real de Metamorph, no solo la documentación:** la primera versión de este documento afirmaba que el formato existente era `artifacts[]`/`ion_recipes[]`, citando el ejemplo de manifest de `BTIPS` y el README de `installer/metamorph`. Codex revisó el consumidor real (Go) y encontró que **`metamorph generate-manifest` es un stub sin implementar** (`internal/inspection/generate_manifest.go` devuelve literalmente `"status": "not_implemented"`) y que **`metamorph reconcile` solo existe dentro de `internal/ionpump/`** — no hay ningún comando ni struct real en el repo que parsee `artifacts[]`/`manifest_version`/`system_version`. Ese formato, tal como aparece en el README de Metamorph, es una descripción aspiracional, nunca construida.
+
+Lo único real y funcionando hoy es el manifest de **ion recipes** que consume `internal/ionpump/manifest.go`: `{"schema_version": "...", "generated_at": "...", "ions": []}`. Confirmado también por grep directo sobre el código: cero resultados para `manifest_version`/`system_version`/`ManifestVersion` en todo `installer/metamorph/**/*.go`.
+
+**Implicancia para el backend:** `releases`+`downloadRules` (§4) siguen siendo la fuente correcta de datos, pero el manifest que el backend produzca para **ion recipes** (`component: "ionrecipe:github.com"`) debe seguir el contrato real `{schema_version, generated_at, ions[]}` — no un `artifacts[]` inventado. Para los **componentes binarios** (`brain`, `host`, `sentinel`, etc.) no hay hoy ningún consumidor real del lado de Metamorph — construir ese formato de manifest sería inventar un contrato para algo que Metamorph todavía no sabe leer. El schema D1 no cambia (ya modela ambos como filas de `releases`), pero el endpoint solo puede servir de punta a punta, hoy, el manifest de ion recipes; la distribución de binarios queda con el dato guardado en R2/D1 pero sin un consumidor real confirmado del otro lado hasta que `generate-manifest`/`reconcile` de binarios se construya (o Jose confirme otro mecanismo).
 
 ---
 
@@ -189,7 +190,7 @@ Backend (workers/) resuelve `releases` + `downloadRules` para esa org/canal
 Esto queda resuelto de una vez, sin trabajo adicional, porque ya estaba en el esquema de §4:
 
 - **"Qué se actualiza"** = filas de `releases` con `publishedAt` más reciente que el último manifest que Batcave vio.
-- **"Qué debería descargarse"** = el `r2Key`/`sha256` de esas filas, ya presente en el esquema — el backend no inventa un formato nuevo, arma el mismo `artifacts[]` que Metamorph ya sabe interpretar (§4).
+- **"Qué debería descargarse"** = el `r2Key`/`sha256` de esas filas, ya presente en el esquema — para ion recipes, el backend arma el contrato real `{schema_version, generated_at, ions[]}` que `internal/ionpump` ya sabe interpretar (ver corrección en §4); para componentes binarios, ver la limitación señalada en esa misma corrección.
 - El **ETag** (hash del manifest resuelto para esa org/canal) es el mecanismo nativo de HTTP/Cloudflare Workers para no recomputar ni retransmitir nada cuando no cambió nada — barato en cómputo y en egress, y evita que Batcave tenga que descargar y comparar el manifest completo en cada sondeo.
 
 Dos puntos quedan abiertos, y son decisión tuya, no técnica:
@@ -218,19 +219,20 @@ Decíme las rutas de los dos proyectos cuando quieras y reviso el `package.json`
 2. **Confirmar rutas de los dos proyectos Vercel** para decidir Pages vs Workers por sitio.
 3. **Cerrar las 5 decisiones de `Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md` §11** (confianza inicial en la clave pública, targeting por-device, reglas de revocación, TTL de credencial, WebSocket vs. SSE) antes de implementar el canal push. El pull autoritativo (§6 de este documento) no depende de esas decisiones y se puede construir antes.
 4. **Roles en la base de datos** (§0, §4 `orgMembers.role`): queda como está hasta que compartas la información pendiente.
-5. Definir el formato exacto del `mandate.json` firmado que se sube a R2 — este documento asume que ya existe un formato (Nucleus lo firma), pero no vi todavía un schema consolidado de Mandate en el repo — puede ser el mismo trabajo pendiente que señalan los documentos de Gravity/Nucleus API ya en este proyecto, y que retoma en detalle la investigación de Wisdom (`BLOOM_Wisdom_Handshake_Investigacion_v0_1.md`, `docs/MANDATE/MARKETPLACE/`).
+5. Definir el formato exacto del `mandate.json` firmado que se sube a R2 — este documento asume que ya existe un formato (Nucleus lo firma), pero no vi todavía un schema consolidado de Mandate en el repo — puede ser el mismo trabajo pendiente que señalan los documentos de Gravity/Nucleus API ya en este proyecto, y que retoma en detalle la investigación de Wisdom (`BLOOM_Wisdom_Handshake_Investigacion_v0_1.md`, `docs/WISDOM/`).
+6. **Confirmar el plan para distribución de binarios** (§4/§6): hoy solo el manifest de ion recipes tiene un consumidor real en Metamorph. Antes de invertir en el endpoint de manifest para componentes binarios (`brain`/`host`/`sentinel`/etc.), confirmar si `generate-manifest`/`reconcile` de binarios está en el roadmap de Metamorph, o si hay otro mecanismo previsto que no está en los documentos revisados.
 
 ---
 
 ## 9. Primeros pasos concretos — cómo arrancamos
 
-### 9.1 Servidor local en `workers/`
+### 9.1 Servidor local en `backend/`
 
 Con el stack ya elegido (Hono + D1 + Drizzle), la secuencia concreta para tener algo corriendo en tu máquina, en orden:
 
 1. **Scaffold del proyecto**, en la carpeta ya reservada del repo:
    ```bash
-   cd workers
+   cd backend
    npm create cloudflare@latest -- . --type=simple --lang=ts --deploy=false
    ```
    (`--deploy=false` para no disparar un deploy real todavía; podés correrlo interactivo si preferís elegir las opciones a mano — plantilla "Hello World", tipo "Worker only", TypeScript.)
