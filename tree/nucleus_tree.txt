@@ -20,15 +20,18 @@ bloom-development-extension/
     │   ├── client/
     │   │   └── api_client.go
     │   ├── core/
-    │   │   ├── build_info.go
+    │   │   ├── build_number.go
     │   │   ├── core.go
     │   │   ├── logger.go
     │   │   ├── metadata.go
+    │   │   ├── org_context.go
     │   │   ├── paths.go
     │   │   ├── registry.go
     │   │   ├── settings.go
     │   │   ├── telemetry.go
     │   │   └── version.go
+    │   ├── etapa2test/
+    │   │   └── org_switch_test.go
     │   ├── governance/
     │   │   ├── alfred.go
     │   │   ├── alfred_server.go
@@ -36,7 +39,17 @@ bloom-development-extension/
     │   │   ├── blueprint.go
     │   │   ├── create.go
     │   │   ├── ollama_client.go
+    │   │   ├── org_switch_guard.go
+    │   │   ├── org_switch_guard_test.go
     │   │   └── ownership.go
+    │   ├── gravity/
+    │   │   ├── masa.go
+    │   │   ├── masa_test.go
+    │   │   ├── model.go
+    │   │   ├── resolver.go
+    │   │   ├── resolver_test.go
+    │   │   ├── store.go
+    │   │   └── store_test.go
     │   ├── mandates/
     │   │   ├── mandate_activities.go
     │   │   ├── mandate_hooks_cmd.go
@@ -48,14 +61,26 @@ bloom-development-extension/
     │   │   ├── activities/
     │   │   │   ├── brain_poller.go
     │   │   │   ├── mandate_genesis_activities.go
+    │   │   │   ├── mandate_genesis_activities_test.go
     │   │   │   ├── mandate_genesis_sign_activity.go
+    │   │   │   ├── mandate_genesis_sign_activity_test.go
+    │   │   │   ├── resolve_active_gravity_activity.go
+    │   │   │   ├── resolve_active_gravity_activity_test.go
     │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
     │   │   │   ├── mandate.go
     │   │   │   ├── mandate_genesis_domains_cmd.go
+    │   │   │   ├── mandate_genesis_domains_cmd_test.go
+    │   │   │   ├── mandate_test.go
     │   │   │   ├── synapse.go
     │   │   │   ├── sysproc_other.go
     │   │   │   └── sysproc_windows.go
+    │   │   ├── genesisgraph/
+    │   │   ├── mandatestate/
+    │   │   │   ├── lock_other.go
+    │   │   │   ├── lock_windows.go
+    │   │   │   ├── store.go
+    │   │   │   └── store_test.go
     │   │   ├── queries/
     │   │   │   └── status.go
     │   │   ├── signals/
@@ -80,10 +105,13 @@ bloom-development-extension/
     │   │   │   │   ├── schedule_bootstrap.go
     │   │   │   │   └── temporal_health.go
     │   │   │   ├── temporal_client.go
+    │   │   │   ├── temporal_client_test.go
     │   │   │   ├── worker.go
+    │   │   │   ├── worker_test.go
     │   │   │   └── workflows/
     │   │   │       ├── mandate_execution_workflow.go
     │   │   │       ├── mandate_genesis_build_workflow.go
+    │   │   │       ├── mandate_genesis_build_workflow_test.go
     │   │   │       ├── onboarding_workflow.go
     │   │   │       ├── profile_lifecycle.go
     │   │   │       ├── system_health_workflow.go
@@ -91,7 +119,8 @@ bloom-development-extension/
     │   │   ├── types/
     │   │   │   └── orchestration.go
     │   │   ├── watchers/
-    │   │   │   └── mandate_watcher.go
+    │   │   │   ├── mandate_watcher.go
+    │   │   │   └── mandate_watcher_test.go
     │   │   └── workflows/
     │   │       ├── recovery_flow.go
     │   │       └── system_gate.go
@@ -116,6 +145,7 @@ bloom-development-extension/
     │       └── vault_test.go
     ├── main.go
     ├── nucleus-governance.json
+    ├── nucleus.exe
     └── scripts/
         ├── build-darwin.sh
         ├── build-linux.sh

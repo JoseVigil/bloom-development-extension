@@ -50,12 +50,22 @@ type activityRegistrar interface {
 	RegisterActivity(interface{})
 }
 
+type namedActivityRegistrar interface {
+	RegisterActivityWithOptions(interface{}, activity.RegisterOptions)
+}
+
 // registerMandateGenesisSignatureActivities mantiene agrupado el wiring
 // productivo exclusivo de Human Sync y firma. No registra adaptadores BSIP.
 func registerMandateGenesisSignatureActivities(registrar activityRegistrar) {
 	registrar.RegisterActivity(activities.PersistHumanSyncActivity)
 	registrar.RegisterActivity(activities.SignMandateActivity)
 	registrar.RegisterActivity(activities.PersistSignatureFailureActivity)
+}
+
+func registerGravityActivities(registrar namedActivityRegistrar) {
+	registrar.RegisterActivityWithOptions(activities.ResolveActiveGravityActivity, activity.RegisterOptions{
+		Name: "resolveActiveGravityActivity",
+	})
 }
 
 // RegisterActivityWithOptions registra una activity con opciones personalizadas
@@ -397,6 +407,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Excepción acotada Blocker 1/2-UI: wiring exclusivo de Human Sync
 			// y firma. No registra ni activa los adaptadores BSIP.
 			registerMandateGenesisSignatureActivities(mandateWorker)
+			registerGravityActivities(mandateWorker)
 
 			if err := mandateWorker.Start(); err != nil {
 				logger.Error("Fallo al iniciar mandate worker: %v", err)
@@ -476,6 +487,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"RunProfileDisconnectedHooksActivity",
 					"ScaffoldDomainActivity",
 					"PublishMandateEventActivity",
+					"resolveActiveGravityActivity",
 				},
 			)
 
