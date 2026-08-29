@@ -29,6 +29,7 @@
     "backups/**",
     ".vscode-test",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "contracts/marketplace-schema.ts"
   ]
 }
