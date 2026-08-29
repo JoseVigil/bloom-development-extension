@@ -158,41 +158,37 @@ ACTIVITY resolveActiveGravityActivity(mandate_id, session_id, current_turn_inten
 
     path ← spine + [session_node]                          # orden NUCLEUS primero, SESSION último — Impl §2.1
 
-    # Paso 3 — invalidación selectiva por nodo de la espina (ver §3.3)
+    # Paso 3 — lectura de contenido: siempre fresca, nunca cacheada entre turnos (ver §3.2)
     collected ← []
     for node_ref in path:
-        IF node_ref != session_node AND cache.spine_node_versions[node_ref.nodeId] == read_version(node_ref.nodeId):
-            node ← cache.node_content[node_ref.nodeId]      # reusa contenido cacheado, sin releer gravityRules[]
-        ELSE:
-            node ← read_node(node_ref.nodeId)                # relectura completa — sólo si cambió
-            cache.node_content[node_ref.nodeId] ← node
-            cache.spine_node_versions[node_ref.nodeId] ← node.nodeVersion   # ver §7, extensión de schema
+        node ← read_node(node_ref.nodeId)     # lectura local pequeña — nunca servida desde cache entre turnos
 
         for posture in node.gravityRules where posture.status == "active":
             if posture.appliesTo matches current_turn_intent_type:
                 collected.append(posture tagged with node.nodeType, node.nodeId)
 
-    return collected, cache   # el resultado Y la caché actualizada se devuelven — ver §3.4
+    return collected, cache   # cache solo actualiza/preserva cache.spine — ver §3.4
 ```
 
 Este es el mismo contrato conceptual de `Impl §2.1` (mismo orden de recorrido, mismo criterio de filtrado por `appliesTo`), extendido únicamente con la mecánica de caché necesaria para que miles de turnos por Mandate no impliquen miles de recorridos completos del Grafo de Gravedad.
 
 ### 3.2 Qué se cachea, y qué deliberadamente no
 
+> **Nota de corrección (2026-08-29):** la versión inicial de este documento proponía cachear también el *contenido* de `gravityRules[]` de cada nodo de la espina, con invalidación por versión. La implementación (ver §3.3) encontró que esa capa no tenía dónde persistir de forma coherente con §3.4.4 sin duplicar posturas dentro de `orbital_agentic_state.json` — exactamente la segunda fuente de verdad que `Orb §15` ya cita como error a evitar. Se retira esa capa de caché; el contenido se lee siempre fresco, y la justificación de por qué eso no tiene costo real queda en la fila siguiente.
+
 | Elemento | ¿Se cachea entre turnos del mismo Mandate? | Motivo |
 |---|---|---|
-| **Espina estructural** (lista ordenada de `nodeId` desde `NUCLEUS` hasta `MANDATE`, incluyendo Estructura C si el Mandate es un sub-Mandate) | **Sí — una sola vez por Mandate** | La cadena de ancestros de un Mandate es fija durante toda su ejecución: un Mandate no cambia de Project padre, un Project no cambia de Organization, en ningún punto de `Mandate v1.0.0`–`v1.2.0` ni de `Impl`. Recalcularla en cada turno sería trabajo repetido sin ningún cambio posible de resultado. |
-| **Contenido de `gravityRules[]` de cada nodo de la espina** (`ORGANIZATION`, `PROJECT`, `MANDATE`, sub-Mandates) | **Sí, con invalidación por versión (§3.3)** | Postular, firmar o promover una postura en estos niveles es un acto humano deliberado y explícito (`Orb` Principio XI) — nunca ocurre en el mismo turno agéntico que lo consulta, y es infrecuente frente al volumen de turnos. |
-| **Contenido de `gravityRules[]` del nodo `SESSION`** | **Nunca — siempre lectura fresca** | Session Gravity se captura en vivo, durante la conversación, sin firma formal previa (`Impl §1.3`, `Paladin-UX §1.3`) — es, por diseño, el único nivel donde una nueva postura puede aparecer en cualquier turno sin ningún evento de mutación formal que dispare una invalidación. Cachearlo introduciría exactamente el riesgo que ninguna otra capa tiene: servir Gravity de sesión obsoleta al agente en el mismo turno en que el ingeniero acaba de postular algo nuevo. El costo de no cachearlo es mínimo — es un único archivo pequeño, sin ancestros que recorrer. |
+| **Espina estructural** (lista ordenada de `nodeId` desde `NUCLEUS` hasta `MANDATE`, incluyendo Estructura C si el Mandate es un sub-Mandate) | **Sí — una sola vez por Mandate, sin invalidación** | La cadena de ancestros de un Mandate es fija durante toda su ejecución: un Mandate no cambia de Project padre, un Project no cambia de Organization, en ningún punto de `Mandate v1.0.0`–`v1.2.0` ni de `Impl`. No es una caché que pueda quedar obsoleta — es un hecho estructural que no cambia mientras el Mandate existe. Recalcularla en cada turno sería trabajo repetido sin ningún cambio posible de resultado. |
+| **Contenido de `gravityRules[]` de cada nodo de la espina** (`ORGANIZATION`, `PROJECT`, `MANDATE`, sub-Mandates) | **No — se relee siempre, ver §3.3** | La lectura es de un archivo local pequeño (§2.3 ya justifica la elección de filesystem exactamente por esto: sin motor de grafo dedicado ni red de por medio, leer 4–6 archivos `node.json` por turno es órdenes de magnitud más barato que la propia llamada al modelo dentro de `propose_next_action`). Cachear este contenido exigiría persistirlo en algún artefacto para sobrevivir un replay (§3.4.4) — y persistirlo en `orbital_agentic_state.json` crearía una copia de las posturas paralela a `.bloom/.gravity/`, la segunda fuente de verdad que el propio sistema ya prohíbe (`Orb §15`, regla de ejemplo *"no introducir segunda fuente de verdad"*). El costo de no cachearlo es, en la práctica, nulo; el costo de cachearlo mal sería una inconsistencia real. |
+| **Contenido de `gravityRules[]` del nodo `SESSION`** | **Nunca — siempre lectura fresca** | Session Gravity se captura en vivo, durante la conversación, sin firma formal previa (`Impl §1.3`, `Paladin-UX §1.3`) — es, por diseño, el único nivel donde una nueva postura puede aparecer en cualquier turno sin ningún evento de mutación formal que dispare una invalidación. Mismo tratamiento que el resto del contenido (fila anterior), reforzado acá porque cachear Session Gravity sí sería un error activo, no solo una optimización innecesaria: serviría Gravity de sesión obsoleta al agente en el mismo turno en que el ingeniero acaba de postular algo nuevo. |
 
-### 3.3 Invalidación de caché
+### 3.3 Por qué `nodeVersion` no gatilla una relectura selectiva — y para qué sirve en cambio
 
-La invalidación es por versión, no por tiempo ni por sondeo (polling) del contenido completo:
+Con la corrección de §3.2, `nodeVersion` (extensión de schema, §7) deja de ser el mecanismo de invalidación de una caché de contenido que ya no existe. Su función en este diseño se acota a lo que realmente necesita, sin sobre-especificar un mecanismo que el patrón de acceso no justifica:
 
-1. `GravityNode` gana un campo `nodeVersion` (entero monotónico — ver extensión de schema, §7), incrementado por Nucleus en cada escritura efectiva a `gravityRules[]` o a `status` de ese nodo — mismo patrón que `stateVersion` de `mandate_state.json` real (`Audit` Hallazgo #2).
-2. La comprobación de invalidación (`cache.spine_node_versions[nodeId] == read_version(nodeId)`) es una lectura barata: no requiere parsear ni comparar el contenido completo de `gravityRules[]`, solo el campo `nodeVersion`. Esto mantiene el costo por turno bajo incluso cuando la caché se valida en cada uno.
-3. **La invalidación es push-driven, no de sondeo ciego**: el único código que puede incrementar `nodeVersion` es el mismo código que ejecuta una postulación confirmada, una firma de nodo, una promoción (arista de promoción, §5) o una supersesión — todos actos ya mediados por Nucleus como único escritor (§2.4). No existe ninguna ruta donde `gravityRules[]` cambie sin que `nodeVersion` cambie en la misma operación atómica.
-4. Si la comprobación de versión detecta un cambio, solo ese nodo se relee — el resto de la espina cacheada permanece válida. No hay invalidación en cascada: un cambio en `PROJECT` no invalida lo ya cacheado de `ORGANIZATION` ni de `NUCLEUS`.
+1. **Concurrencia segura en escritura, no invalidación en lectura.** `nodeVersion` sigue existiendo como entero monotónico, incrementado por Nucleus en cada escritura efectiva a `gravityRules[]` o a `status` — mismo patrón que `stateVersion` de `mandate_state.json` real (`Audit` Hallazgo #2). Su uso es en la escritura: Nucleus, como único escritor de cualquier `node.json` (§2.4), puede leer-verificar-escribir (`compare-and-swap` sobre `nodeVersion`) para detectar una colisión si dos operaciones de escritura sobre el mismo nodo (p. ej. una promoción y una supersesión) se solapan — no para decidir si el lector de un turno agéntico debe o no releer contenido, porque ese lector siempre relee (§3.2).
+2. **La espina, en cambio, nunca necesita comprobación de versión** — no porque se verifique y coincida, sino porque no hay nada que verificar: la identidad de los nodos ancestros (§3.2, fila 1) no es información que pueda quedar desactualizada durante la vida del Mandate.
+3. Esto simplifica también la garantía de replay (§3.4): lo único que la caché persistida necesita conservar entre turnos es la espina (una lista de `nodeId`, inmutable por diseño), no un contenido que podría requerir reconciliación en cada recuperación tras un crash.
 
 ### 3.4 Garantía de replay determinista de Temporal
 
@@ -227,17 +223,17 @@ Tres artefactos de persistencia distintos participan en la inyección de Gravity
   "turns": [ /* ... sin cambios, Impl §2.3 / BTIPS §8.5 ... */ ],
   "budget_consumed": { /* ... sin cambios ... */ },
 
-  // NUEVO — extensión de este documento, no existía en BTIPS §8.5 ni en Mandate v1.2.0 §3
+  // NUEVO — extensión de este documento, no existía en BTIPS §8.5 ni en Mandate v1.2.0 §3.
+  // Contiene únicamente la espina (lista de nodeId, §3.2) — nunca contenido de gravityRules[],
+  // ver nota de corrección en §3.2 sobre por qué esa segunda capa de caché se retiró.
   "gravity_resolution_cache": {
     "spine": ["nucleus_root", "org_9a1", "proj_44c", "mnd_8f2a1c"],
-    "spine_node_versions": { "nucleus_root": 1, "org_9a1": 4, "proj_44c": 2, "mnd_8f2a1c": 7 },
-    "cached_at_turn": 1,
-    "last_validated_turn": 431
+    "cached_at_turn": 1
   }
 }
 ```
 
-Este campo es una **aceleración, no una fuente de verdad**: si se pierde o se descarta, `resolveActiveGravityActivity` simplemente reconstruye la espina desde `.bloom/.gravity/` en la siguiente invocación (mismo costo que el primer turno). Nunca se lee como si fuera autoritativo sobre el estado real de ningún `GravityNode` — es exactamente el mismo estatus que `Paladin_Client_Object_Model_v0_1.md` ya define para las proyecciones read-only del lado de cliente: una copia que acelera, nunca una segunda fuente de verdad que compita con el Grafo de Gravedad real.
+Este campo es una **aceleración, no una fuente de verdad**: si se pierde o se descarta, `resolveActiveGravityActivity` simplemente reconstruye la espina desde `.bloom/.gravity/` en la siguiente invocación (mismo costo que el primer turno). Nunca se lee como si fuera autoritativo sobre el estado real de ningún `GravityNode` — es exactamente el mismo estatus que `Paladin_Client_Object_Model_v0_1.md` ya define para las proyecciones read-only del lado de cliente: una copia que acelera, nunca una segunda fuente de verdad que compita con el Grafo de Gravedad real. A diferencia de la versión inicial de este documento, este campo no necesita ningún mecanismo de invalidación: una vez escrito, permanece válido durante toda la vida del Mandate (§3.2, §3.3).
 
 **Por qué vive acá y no en `mandate_state.json`:** la pregunta que resuelve (§3.2, "qué se cachea entre turnos de un mismo Mandate") es, por construcción, una pregunta sobre la ejecución turno a turno del modo agéntico — el mismo dominio que ya justifica que `turns[]` y `budget_consumed` vivan en `orbital_agentic_state.json` y no en el estado operacional real. Agregarlo a `mandate_state.json` mezclaría un campo de aceleración de ejecución agéntica dentro de un artefacto orientado a firma y reconciliación (`Audit` Hallazgo #2) — exactamente la mezcla que la separación de artefactos ya aprobada existe para evitar.
 
@@ -358,7 +354,7 @@ Toda extensión sobre el schema ya fijado en `Impl §1.2` se señala aquí expl�
 
 | Campo nuevo | Dónde | Por qué `Impl §1.2` no alcanzaba |
 |---|---|---|
-| `nodeVersion: integer` | Nivel raíz de `GravityNode` | `Impl §1.2` no tenía ningún campo de versión monotónica. Sin él, la invalidación de caché de §3.3 exigiría releer y comparar el contenido completo de `gravityRules[]` en cada turno para saber si algo cambió — exactamente el costo que la caché existe para evitar. |
+| `nodeVersion: integer` | Nivel raíz de `GravityNode` | `Impl §1.2` no tenía ningún campo de versión monotónica. Sin él, Nucleus no tiene forma de detectar una colisión de escritura concurrente sobre el mismo nodo (p. ej. una promoción y una supersesión solapadas) antes de aplicar una sustitución atómica — mismo propósito de concurrencia segura que ya cumple `stateVersion` en `mandate_state.json` real (`Audit` Hallazgo #2). No gatilla ninguna invalidación de caché de lectura — esa capa se evaluó y se descartó, ver §3.2–§3.3. |
 | `signedBy` — de `string` a objeto `{actorId, role, roleBasis}` | Nivel raíz de `GravityNode` | El `string` plano de `Impl §1.2` no puede expresar bajo qué rol se firmó un nodo ni si ese rol es definitivo o interino para ese nivel — exactamente la distinción que la resolución de `AUTH-OWNERSHIP-01` sobre `PROJECT` (§6) necesita para no bloquear el diseño a la espera de que Architect se formalice. |
 | `promotedFrom: {fromRuleId, fromNodeId, promotedVia, occurredAt} \| null` | Cada elemento de `gravityRules[]` (dentro de cada `GravityNode`, no en la raíz) | `Impl §1.4–§1.5` modela la promoción exclusivamente como arista externa (`PROMOTED_FROM`). Calcular el tercer factor de Masa (`Paladin-UX §4.2`) contra una arista externa exige, en el caso ingenuo, recorrer el conjunto completo de aristas de promoción del sistema en cada turno — la denormalización en la propia postura reduce ese costo a una lectura de campo ya cargada (§5). |
 
