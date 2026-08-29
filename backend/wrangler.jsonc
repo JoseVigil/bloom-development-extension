@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bloom-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-29",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bloom-backend",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "RELEASES",
+      "bucket_name": "bloom-releases"
+    }
+  ]
+}
+

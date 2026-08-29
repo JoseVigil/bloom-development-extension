@@ -125,6 +125,7 @@ webview/package-lock.json
 .env.local
 .cache/
 libs/
+/.tmp/
 
 # ============================================================================
 # Versioning
