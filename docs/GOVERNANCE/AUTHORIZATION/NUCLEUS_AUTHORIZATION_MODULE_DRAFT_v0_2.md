@@ -13,8 +13,8 @@ Todo lo marcado como "candidato" en este documento es **inferencia por naming co
 **Origen de cada pieza:**
 - `proposer_type` y el punto de enforcement (`validate_and_sign`, previo a firma) → `COR_Intent_Spec_v1_0.md`
   §1, §1.1, §3.1.
-- Niveles de rol (Master/Architect/Specialist) → nombrados en `BTIPS v7.0` §9.5, formalizados por primera
-  vez en este documento — diseño nuevo, no extracción.
+- Niveles de rol Master/Specialist → nombrados en `BTIPS v7.0` §9.5. `Architect` es una propuesta de
+  diseño de este documento, sin respaldo en esa fuente ni en ninguna otra fuente confirmada hasta ahora.
 - Doble naturaleza de Nucleus (autoridad + proyecto propio) → inferencia estructural de
   `bloom_nucleus_tree.txt` (§0 de esta sección), aportada por José.
 - Necesidad de mecanismo de verificación en el boundary de Executor → gap identificado en la limpieza del
@@ -62,7 +62,7 @@ como fila al registro de este módulo, nunca como mecanismo local.
 | Eje | Pregunta | Fuente | Estado | Candidato en filesystem |
 |---|---|---|---|---|
 | **A — Proponente** | ¿Humano, sistema, o agente originó esto? | `COR_Intent_Spec_v1_0.md` §3.1 | Formalizado | `.core/.ai_bot.sovereign.bl` / `.governance.bl` / `.plane.bl` (tres niveles de abstracción del mismo eje — relación exacta entre ellos sin confirmar) |
-| **B — Rol** | Dado un humano, ¿qué nivel jerárquico tiene? | `BTIPS v7.0` §9.5 | Formalizado por primera vez acá | `.core/.ownership.json` (único archivo, posición de raíz — candidato fuerte) |
+| **B — Rol** | Dado un humano, ¿qué nivel jerárquico tiene? | `BTIPS v7.0` §9.5 (solo Master/Specialist) + diseño propio de este documento (`Architect`, sin fuente externa confirmada) | Formalizado por primera vez acá | `.core/.ownership.json` (único archivo, posición de raíz — candidato fuerte) |
 
 **Asimetría observada, sin resolver:** el Eje A tiene tres archivos dedicados a nivel Nucleus; el Eje B
 tiene uno solo. No está claro todavía si eso refleja que el Eje A necesita más granularidad real, o si es

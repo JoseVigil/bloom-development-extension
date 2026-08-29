@@ -44,7 +44,7 @@ Ninguno de los 4 documentos de origen del catálogo cruza esto explícitamente, 
 
 ---
 
-## Hallazgo mayor #2 — `mandate_state.json` real y `mandate_state.json` ilustrativo de la spec agéntica son dos schemas distintos bajo el mismo nombre de archivo
+## Hallazgo mayor #2 — resolución: `mandate_state.json` real y Orbital Agentic State son artefactos separados
 
 Esto es el hallazgo más concreto y más urgente de resolver antes de tomar cualquier decisión de implementación.
 
@@ -58,7 +58,7 @@ mandate_state.json
 └── reconciliation     ← diagnóstico watcher; Temporal indisponible = unknown
 ```
 
-**Lo que mi catálogo (§2.5) describe como "registro de turno persistido en `mandate_state.json`"**, citando `BTIPS §8.5`:
+**Lo que mi catálogo (§2.5) describía como registro de turno agéntico**, citando `BTIPS §8.5`, queda denominado `orbital_agentic_state.json` (Orbital Agentic State):
 ```jsonc
 {
   "mandate_id": "mnd_8f2a1c",
@@ -69,14 +69,14 @@ mandate_state.json
 }
 ```
 
-**No hay ningún campo en común entre las dos estructuras.** No hay `turns[]`, ni `turn_count`, ni `budget_consumed`, ni `status: running` en el `mandate_state.json` real — y no hay `signature`, ni `reconciliation`, ni `stateVersion` en el ejemplo de la spec agéntica. Son dos diseños completamente distintos que compiten por el mismo nombre de archivo:
+**No hay ningún campo en común entre las dos estructuras.** No hay `turns[]`, ni `turn_count`, ni `budget_consumed`, ni `status: running` en el `mandate_state.json` real — y no hay `signature`, ni `reconciliation`, ni `stateVersion` en el Orbital Agentic State. La resolución aprobada elimina la colisión mediante dos artefactos independientes:
 
 - El **real** es el estado de un Mandate **declarativo** tal como lo produce hoy el único flujo que existe (`MandateGenesisBuildWorkflow` — nombrado explícitamente en la nota `[DESALINEACIÓN]` del propio truth) — está orientado a rastrear **la firma** (`signature.status`), no la ejecución turno a turno.
-- El **ilustrativo** es un diseño de `BTIPS §8.5` para el modo `agentic`, que **todavía no tiene ninguna implementación** — ni siquiera el intent `tst` que lo cerraría existe como directorio en ningún truth (ver Hallazgo #4).
+- `orbital_agentic_state.json` es el contrato documental de `BTIPS §8.5` para el modo `agentic`, que **todavía no tiene ninguna implementación** — ni siquiera el intent `tst` que lo cerraría existe como directorio en ningún truth (ver Hallazgo #4).
 
-Mi catálogo ya distinguía, en su §2.5, "decisión síncrona" vs. "registro de turno persistido" — pero esa distinción asumía que ambos eran variantes del mismo objeto real. No lo son: uno es real y hoy no tiene nada que ver con Mandates agénticos; el otro es enteramente de diseño y no tiene ninguna implementación que lo respalde. Esta es una laguna real de mi catálogo, no una imprecisión de los 4 documentos de origen — ellos nunca afirmaron que su ejemplo de `mandate_state.json` fuera el archivo ya implementado, pero mi consolidación tampoco marcó la distinción con la fuerza que ahora sabemos que necesita.
+Mi catálogo ya distinguía, en su §2.5, "decisión síncrona" vs. "registro de turno persistido", pero asumía incorrectamente que el registro agéntico era una variante del objeto real. La resolución final fija que no lo es: `mandate_state.json` conserva el estado operacional real de Nucleus y `orbital_agentic_state.json` conserva, como contrato documental separado, la ejecución turno a turno del modo agéntico. Se correlacionan por `mandate_id`; no comparten archivo, schema ni ciclo de vida.
 
-**Recomendación concreta para la decisión que tenés que tomar:** cuando se implemente `execution_mode: "agentic"`, `mandate_state.json` real va a tener que **extenderse** (agregar `turns[]`/`budget_consumed`/`gravity_context_injected` sin romper `signature`/`reconciliation`/`stateVersion` que ya están en producción) — no reemplazarse. Cualquier diseño que asuma que puede definir `mandate_state.json` desde cero (como hace, implícitamente, la spec agéntica) choca contra un archivo que ya tiene consumidores reales (`MandateGenesisBuildWorkflow`, el watcher de reconciliación).
+**Resolución final aprobada:** se descarta extender el `mandate_state.json` real. Cuando se implemente `execution_mode: "agentic"`, `turns[]`, `budget_consumed` y `gravity_context_injected` pertenecerán a `orbital_agentic_state.json`. El archivo operacional real conserva `signature`, `reconciliation` y `stateVersion` para sus consumidores actuales (`MandateGenesisBuildWorkflow` y el watcher de reconciliación).
 
 ---
 
@@ -141,7 +141,7 @@ Esto **no contradice** el catálogo — es una confirmación útil: `COR_Intent_
 | Bloque del catálogo | Veredicto | Motivo |
 |---|---|---|
 | 1. `IntentDraft` (exp/dev/mrg/tst + cor) | **Válido como diseño; sin correlato real para `mrg`/`tst`** | Hallazgo #4. Las variantes `exp`/`dev` sí tocan intents con algo de scaffold real; `mrg`/`tst` no tienen nada. |
-| 2. Respuesta de `validate_and_sign` + `gravity_context_injected` | **Válido como diseño; su contenedor de persistencia (`mandate_state.json`) colisiona de nombre con algo real y distinto** | Hallazgo #2 — el más urgente de resolver antes de implementar. |
+| 2. Respuesta de `validate_and_sign` + `gravity_context_injected` | **Válido como diseño; su contenedor documental es `orbital_agentic_state.json`, separado del `mandate_state.json` real** | Hallazgo #2 resuelto por separación de artefactos; sin implementación en código todavía. |
 | 3. Consulta de Gravity activa (grafo completo vs. resuelto) | **La decisión de diseño (nunca exponer el grafo completo) sigue siendo válida y bien fundada; pero "el grafo" que describe no tiene ningún correlato real, y coexiste sin relación declarada con el único grafo que sí existe (Dominios/Genes)** | Hallazgos #1 y #3 (firma de nivel `PROJECT` sin autoridad real). |
 | 4. `ArbitrationEvent` + notificación | **Válido como diseño; cero correlato real, consistente con que Gravity en su totalidad no tiene persistencia hoy** | Hallazgo #1. |
 | 5. Versionado de API | **No afectado por estos hallazgos** — sigue siendo una propuesta nueva, desacoplada de estos truth, que no reclama ningún correlato real | — |

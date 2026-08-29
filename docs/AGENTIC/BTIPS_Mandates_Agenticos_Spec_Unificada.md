@@ -49,7 +49,7 @@ Recuperando el consenso previo: un intent es determinista y atómico; un Mandate
 | Quién decide el próximo paso | El autor humano, de antemano | El agente (IA), en runtime, dentro de un scope firmado |
 | Qué firma Nucleus | El Mandate completo (la secuencia entera) | El **scope** del Mandate al crearlo, y **cada intent propuesto** individualmente en cada turno |
 | Runtime | Workflow de Temporal ejecutando pasos fijos | El mismo Workflow de Temporal, pero con una Activity de tipo `agent_turn` que llama al loop antes de cada paso |
-| Mutabilidad | El contrato nunca cambia post-firma | El contrato (`mandate.json`) tampoco cambia — lo que crece es `mandate_state.json`, turno a turno |
+| Mutabilidad | El contrato nunca cambia post-firma | El contrato (`mandate.json`) tampoco cambia — lo que crece es el Orbital Agentic State (`orbital_agentic_state.json`), turno a turno |
 
 Esto es clave: **no se crea un nuevo nivel en la jerarquía**. Sigue siendo `Nucleus → Mandate → Action → Intent`. Lo que se agrega es un campo `execution_mode` en el Mandate, y una nueva Activity de Temporal (`propose_next_action`) que reemplaza la lectura secuencial de una lista fija por una invocación al agente. Cómo se secuencia la construcción de ambas Activities entre fases queda fijado en §9.2.1.
 
@@ -120,7 +120,7 @@ Puntos de diseño importantes:
 * **`scope_paths` / `forbidden_paths`** no son una sugerencia para el agente — son una precondición que **Nucleus verifica contra el diff real del intent antes de firmarlo**, no contra lo que el agente dice que va a tocar. Esta verificación aplica **exclusivamente al diff propuesto por el agente o por el humano**: nunca restringe la escritura interna de Nucleus/Executor como bookkeeping de infraestructura (por ejemplo, la persistencia interna bajo `.bloom/.intents/.tst/` o `.bloom/.intents/.mrg/`, ver §8.4 y §8.2.3). `forbidden_paths` es una cláusula contra el contenido que el agente intenta modificar, no un perímetro que el propio sistema deba respetar al llevar sus registros.
 * El seam se firma **una sola vez, al crear el Mandate**, igual que hoy se firma `mandate.json`. Lo que varía turno a turno es solo *qué Action concreta se propone dentro de ese seam ya inmutable* — el seam mismo nunca se amplía en runtime sin una nueva firma humana. Esta misma regla es la que sostiene los límites de delegación de sub-Mandates descritos en §8.2.3.
 * **`on_intent_misclassified: "reject_and_wait_for_resubmission"`** — Nucleus rechaza el draft mal clasificado y **no lo corrige**. El agente recibe el `reason_code` estructurado (`INTENT_MISCLASSIFIED`), reclasifica por su cuenta y vuelve a proponer el intent en el turno siguiente. Ningún turno se "corrige" automáticamente por Nucleus — ver el flujo completo en el ejemplo de §8.5.
-* **Modelo de presupuesto de tokens: dual, no binario.** `mandate_state.json` lleva un ledger inmutable de consumo propio (`budget_consumed`, ver §8.5) que sirve para auditoría y portabilidad del Mandate en el Marketplace, **y en paralelo** ese mismo consumo debita contra la cuota organizacional del Tenant en Nucleus, que es la que alimenta el modelo de pricing (§9.3, Fase 4). Los dos registros no son excluyentes ni alternativos — coexisten porque responden a necesidades distintas: el ledger local es del Mandate y viaja con él; la cuota del Tenant es de la organización y es lo que Nucleus factura.
+* **Modelo de presupuesto de tokens: dual, no binario.** `orbital_agentic_state.json` lleva un ledger inmutable de consumo propio (`budget_consumed`, ver §8.5) que sirve para auditoría y portabilidad del Mandate en el Marketplace, **y en paralelo** ese mismo consumo debita contra la cuota organizacional del Tenant en Nucleus, que es la que alimenta el modelo de pricing (§9.3, Fase 4). Los dos registros no son excluyentes ni alternativos — coexisten porque responden a necesidades distintas: el ledger local es del Mandate y viaja con él; la cuota del Tenant es de la organización y es lo que Nucleus factura.
 
 #### 8.2.1 Clasificación determinista — `dev` vs `mrg`
 
@@ -158,7 +158,7 @@ Esto cierra la ambigüedad de clasificación **en el punto de firma**, no en la 
 | Patrón (inspiración `dsh`) | Condición aprobada |
 |---|---|
 | **1. Inyección dinámica de herramientas vía seam (schema filtering)** | Aprobado sin reservas, con aclaración: es optimización de UX/prompt para reducir alucinaciones — mostrarle al LLM solo el subconjunto de intents/paths relevantes al seam vigente — **nunca** reemplazo de la validación estructural real en Nucleus (§8.2, §8.2.1). Un intent fuera de seam se rechaza igual aunque nunca se le haya mostrado su schema al LLM. |
-| **2. Re-compresión de contexto (turn compression)** | Aprobado con condición dura: `mandate_state.json` conserva **siempre** el log crudo, sin comprimir (ver §8.5). La ventana de contexto que efectivamente recibe el LLM en cada turno usa el esquema **"3 últimos turnos crudos + resumen comprimido del resto"** — nunca un reemplazo total por resumen, para no perder memoria de corto plazo del loop ni capacidad forense de auditoría sobre el historial completo. |
+| **2. Re-compresión de contexto (turn compression)** | Aprobado con condición dura: `orbital_agentic_state.json` conserva **siempre** el log crudo, sin comprimir (ver §8.5). La ventana de contexto que efectivamente recibe el LLM en cada turno usa el esquema **"3 últimos turnos crudos + resumen comprimido del resto"** — nunca un reemplazo total por resumen, para no perder memoria de corto plazo del loop ni capacidad forense de auditoría sobre el historial completo. |
 | **3. Sub-Mandates delegados (hijos de `orbital`)** | Aprobado con tres condiciones **innegociables**: (a) presupuesto del hijo **descontado del remanente del padre**, nunca asignado fresco; (b) sub-seam validado por Nucleus como **subconjunto estricto** contra el seam del padre (`padre ⊇ hijo`), verificado estructuralmente igual que la clasificación `dev`/`mrg` de §8.2.1 — nunca aceptado solo porque el loop lo declara; (c) `max_depth: 2` como límite infranqueable. Sin estas tres condiciones, un Orbital firmado una sola vez podría multiplicar su capacidad total sin una segunda firma humana en ningún punto — rompiendo directamente el principio rector de §8.0. |
 | **4. Sandboxing de ejecución en Project Runners** | Aprobado, con la misma lógica que el patrón 1: es defensa en profundidad, no reemplazo de la firma de Nucleus. Condición: la validación de `forbidden_paths` (§8.2) se evalúa **siempre en el host de Nucleus**, nunca contra la vista del contenedor del Runner — para que un sandboxing mal configurado no le oculte a Nucleus una ruta que debería bloquear. |
 
@@ -175,7 +175,7 @@ sequenceDiagram
     participant Temporal as Mandate Workflow (Temporal)
     participant Exec as Intent Executor (Brain)
 
-    Temporal->>Agent: propose_next_action(mandate_state, seam, last_result)
+    Temporal->>Agent: propose_next_action(orbital_agentic_state, seam, last_result)
     Agent-->>Temporal: intent_draft (type, target, payload)
     Temporal->>Nucleus: validate_and_sign(intent_draft, capability_seam)
 
@@ -189,14 +189,14 @@ sequenceDiagram
         Temporal->>Agent: turn_result con rejection (NO se ejecuta nada)
     end
 
-    Note over Temporal: Cada turno se persiste en mandate_state.json<br/>antes de continuar — recovery point granular
+    Note over Temporal: Cada turno se persiste en orbital_agentic_state.json<br/>antes de continuar — recovery point granular
 ```
 
 Detalles operativos:
 
 1. **El agente nunca ejecuta nada directamente.** Solo produce un *intent draft* — la misma forma de datos que un desarrollador humano produciría al crear un intent desde el Conductor o el plugin VS Code. No hay diferencia de formato entre "intent propuesto por humano" e "intent propuesto por agente"; la única diferencia es el `proposer_type` en los metadatos, que queda en el log de auditoría.
 2. **El rechazo es información, no un error crudo.** Cuando Nucleus rechaza un draft (por tocar `forbidden_paths`, exceder `max_dev_intents`, presentar un `mrg` mal formado, o violar una regla de negocio), el agente recibe un `reason_code` estructurado (`SCOPE_VIOLATION`, `BUDGET_EXCEEDED`, `PATH_FORBIDDEN`, `INTENT_MISCLASSIFIED`) en vez de un stack trace de shell. Esto es lo que permite que el propio loop razone y se autocorrija — vía `reject_and_wait_for_resubmission` (§8.2) — sin necesitar acceso a nada fuera del contrato.
-3. **Persistencia por turno, no por Mandate completo.** Cada turno (propuesta → firma/rechazo → ejecución → resultado) es un punto de recovery de Temporal. Si el proceso crashea a mitad de un Mandate agéntico de 25 turnos, se retoma en el turno N sin repetir trabajo — exactamente la misma garantía que ya está documentada para Mandates declarativos, solo que ahora el "próximo paso" no estaba escrito de antemano, sino que se vuelve a pedir al agente con el `mandate_state` reconstruido.
+3. **Persistencia por turno, no por Mandate completo.** Cada turno (propuesta → firma/rechazo → ejecución → resultado) es un punto de recovery de Temporal. Si el proceso crashea a mitad de un Mandate agéntico de 25 turnos, se retoma en el turno N sin repetir trabajo — exactamente la misma garantía que ya está documentada para Mandates declarativos, solo que ahora el "próximo paso" no estaba escrito de antemano, sino que se vuelve a pedir al agente con el `orbital_agentic_state` reconstruido.
 4. **Nucleus sigue siendo el único firmante.** El Agent Loop corre dentro de Brain (o como Activity de Temporal invocando un provider de IA), pero no tiene ni necesita credenciales de ejecución. Solo Nucleus tiene la vault authority y la potestad de firma — el agente "sabe programar" pero no "puede tocar nada" sin pasar por el mismo checkpoint que cualquier otro intent en el sistema.
 
 ---
@@ -212,15 +212,15 @@ Detalles operativos:
 Reglas de diseño:
 
 * **`tst` no modifica el repositorio.** Ejecuta la suite de pruebas (o un subconjunto acotado por el seam) y produce un resultado determinista: `pass` / `fail` + payload estructurado (qué falló, dónde).
-* **Es el único intent tipo que puede llevar el `mandate_state.status` a `completed`.** Ningún `dev` puede cerrar un Mandate por sí mismo — el contrato exige que la última Action exitosa antes del cierre sea un `tst` en estado `pass`, si `requires_tst_before_close: true` (ver §8.2).
+* **Es el único intent tipo que puede llevar el `orbital_agentic_state.status` a `completed`.** Ningún `dev` puede cerrar un Mandate por sí mismo — el contrato exige que la última Action exitosa antes del cierre sea un `tst` en estado `pass`, si `requires_tst_before_close: true` (ver §8.2).
 * **Self-healing acotado**: si `tst` falla, el resultado (no el error crudo, sino el resumen estructurado) vuelve al agente como contexto del próximo turno, quien puede proponer un nuevo `dev` correctivo. Esto se repite hasta `pass` o hasta agotar `max_turns` / `max_dev_intents` — lo que ocurra primero. Esta capacidad de self-healing es **exclusiva del loop agéntico**: la Activity base de Fase 1/Genesis no la implementa (ver §9.2.2).
 * La persistencia interna de `tst` (y, en Fase 3, de `mrg`) bajo `.bloom/.intents/.tst/` y `.bloom/.intents/.mrg/` es bookkeeping de infraestructura de Nucleus/Executor, no del diff propuesto por el agente — por eso no cae bajo `forbidden_paths` aunque ese path pudiera coincidir con un prefijo bloqueado para el agente (ver aclaración en §8.2).
 * **Criterios de parada del Mandate Agéntico** (cualquiera dispara cierre, éxito o no):
 
 | Condición | Resultado |
 |---|---|
-| `tst` en `pass` tras un `dev` dentro del seam, **sin `mrg` posterior** | `mandate_state.status = "completed"` |
-| `mrg` ejecutado con éxito, seguido de un nuevo `tst` en `pass` | `mandate_state.status = "completed"` |
+| `tst` en `pass` tras un `dev` dentro del seam, **sin `mrg` posterior** | `orbital_agentic_state.status = "completed"` |
+| `mrg` ejecutado con éxito, seguido de un nuevo `tst` en `pass` | `orbital_agentic_state.status = "completed"` |
 | `mrg` ejecutado con éxito, **sin** `tst` posterior en `pass` | Mandate permanece `running` — cualquier `tst` anterior al `mrg` queda invalidado, no cuenta para el cierre |
 | `max_turns` alcanzado sin `tst pass` vigente | `status = "exhausted"`, escalación humana |
 | Intent propuesto viola `capability_seam` de forma repetida (umbral configurable), incluyendo rechazos por `INTENT_MISCLASSIFIED` | `status = "aborted"`, escalación humana inmediata |
@@ -228,9 +228,11 @@ Reglas de diseño:
 
 ---
 
-### 8.5 `mandate_state.json` — trazabilidad turno a turno
+### 8.5 Orbital Agentic State (`orbital_agentic_state.json`) — trazabilidad turno a turno
 
-Extiende el `mandate_state.json` que ya se documenta (estado mutable, separado del contrato inmutable) con el historial de turnos, incluyendo los rechazos — que son tan auditables como las ejecuciones exitosas.
+`orbital_agentic_state.json` es el contrato independiente de estado para la ejecución agéntica Orbital. Conserva el historial de turnos, incluyendo los rechazos — que son tan auditables como las ejecuciones exitosas—, el consumo acumulado y el contexto Gravity inyectado.
+
+No extiende ni reemplaza el `mandate_state.json` operacional de Nucleus. Ambos artefactos se correlacionan exclusivamente por `mandate_id`; no comparten archivo, schema ni ciclo de vida. `mandate_state.json` continúa perteneciendo al workflow operacional real de Nucleus, mientras el Orbital Agentic State describe el loop agéntico documentado en esta sección.
 
 **Invariante de conteo:** `turn_count` incrementa en **todo** turno, firmado o rechazado, sin excepción. Es la defensa real contra un loop roto que reintenta indefinidamente sin costo — si solo contaran los turnos firmados, un agente atascado rechazando repetidamente nunca gatillaría `max_turns` ni escalación.
 
@@ -331,7 +333,7 @@ Sobre el borrador v6.1 se detectaron, en la sesión de revisión del 22 de agost
 | 1 | Reclasificación de intent mal etiquetado | Renombrado `reject_and_reclassify` → `reject_and_wait_for_resubmission` (§8.2). Nucleus rechaza, el agente reclasifica y vuelve a proponer en el turno siguiente — ver ejemplo en §8.5. |
 | 2 | `forbidden_paths` vs. escritura interna de `tst`/`mrg` | Aplica exclusivamente al diff propuesto por el agente/humano; nunca restringe el bookkeeping interno de Nucleus/Executor (§8.2, §8.4). |
 | 3 | Origen de los `source_refs` múltiples que necesita `mrg` | **Sin resolución concreta — aprobado como pendiente de diseño antes de que `mrg` sea observable en Fase 3.** Ver §10. |
-| 4 | Modelo de presupuesto de tokens | Modelo dual: ledger propio en `mandate_state.json` + débito paralelo contra la cuota del Tenant en Nucleus. No son excluyentes (§8.2, §8.5). |
+| 4 | Modelo de presupuesto de tokens | Modelo dual: ledger propio en `orbital_agentic_state.json` + débito paralelo contra la cuota del Tenant en Nucleus. No son excluyentes (§8.2, §8.5). |
 | 5 | ¿Los turnos rechazados cuentan para `max_turns`? | Sí — `turn_count` incrementa en todo turno, firmado o rechazado (§8.5). |
 
 ---
@@ -384,7 +386,7 @@ Estos puntos quedan explícitamente sin resolución concreta — no se fuerza un
 
 * **Origen de `source_refs` múltiples para `mrg`** (grieta #3, §8.7). No está definido qué mecanismo crea la segunda rama local candidata a mergear, dado que `dev` solo produce diffs de un único origen. Hipótesis sobre la mesa, ninguna confirmada: ¿otro Mandate corriendo en paralelo sobre el mismo repo? ¿una rama pre-existente dejada por el humano antes de firmar el seam? **Aprobado como pendiente de diseño a resolver antes de que `mrg` sea observable en Fase 3** (§9.3).
 * **Filesystem definitivo de `.mrg/`.** Definir si sigue el patrón de `.tst/` — probablemente `.bloom/.intents/.mrg/` — a confirmar al iniciar Fase 3. Relacionado con la aclaración de §8.4 sobre bookkeeping interno no sujeto a `forbidden_paths`.
-* **Integración de telemetría de tokens con billing (Fase 4).** El modelo dual de presupuesto (§8.2, §8.5) ya está resuelto conceptualmente; lo que falta es el diseño concreto de cómo el ledger local de `mandate_state.json` se sincroniza operativamente con el motor de billing y cuota del Tenant en Nucleus — no es un problema de modelo, es un problema de implementación de esa sincronización.
+* **Integración de telemetría de tokens con billing (Fase 4).** El modelo dual de presupuesto (§8.2, §8.5) ya está resuelto conceptualmente; lo que falta es el diseño concreto de cómo el ledger local de `orbital_agentic_state.json` se sincroniza operativamente con el motor de billing y cuota del Tenant en Nucleus — no es un problema de modelo, es un problema de implementación de esa sincronización.
 * **`mandate.json` de ejemplo, Fase 1 declarativo, de punta a punta.** Pendiente para validar que el contrato de tipos (`mandate.types.ts`) cierra sin huecos antes de escribir el `mandate.json` real de referencia.
 * **Migración de Mandates v6.0** — mecanismo concreto para detectar y migrar Mandates ya publicados en el Marketplace que usan `cor` con semántica de coordinación (v6.0), antes de que Orbital salga a producción. Incorporado como entregable de Fase 1 en el roadmap (§9.3) — no puede quedar como tarea ad-hoc post-lanzamiento, pero el mecanismo de detección en sí todavía no está diseñado.
 * **Diseño de `propose_next_action` (Fase 2)** — ahora con la interfaz de extensión ya fijada (`ResolveNextActionInput`/`Output` en `mandate.types.ts`, §9.2.1), queda como el siguiente bloque de trabajo formal de la próxima sesión.

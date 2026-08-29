@@ -22,7 +22,7 @@
 | Versión | Cambios |
 |---|---|
 | v1.0.0 – v1.1.0 | Ver addenda previos. |
-| **v1.2.0** | **Extensión.** Herencia de `gravityRules[]` en sub-Mandates: bloque `inheritedGravityRules[]` de solo lectura, invariante de no-contradicción (R-17/R-18), etiquetado `origin: "own" \| "inherited"` en la traza de `mandate_state.json`, y nota cruzada formal para `BTIPS_Mandates_Agenticos_Spec_Unificada.md` §8. |
+| **v1.2.0** | **Extensión.** Herencia de `gravityRules[]` en sub-Mandates: bloque `inheritedGravityRules[]` de solo lectura, invariante de no-contradicción (R-17/R-18), etiquetado `origin: "own" \| "inherited"` en la traza del Orbital Agentic State (`orbital_agentic_state.json`), y nota cruzada formal para `BTIPS_Mandates_Agenticos_Spec_Unificada.md` §8. |
 
 ---
 
@@ -77,7 +77,9 @@ Extensión del BLOQUE 3 (§2 de `v1.1.0`):
 
 ---
 
-## 3. Trazabilidad — etiquetado `origin` en `mandate_state.json`
+## 3. Trazabilidad — etiquetado `origin` en Orbital Agentic State
+
+Esta traza pertenece a `orbital_agentic_state.json`, contrato documental de ejecución agéntica todavía sin implementación en código. No modifica el contrato ni el ciclo de vida del `mandate_state.json` operacional de Nucleus. Los dos artefactos permanecen separados y su relación opcional se establece únicamente mediante el mismo `mandate_id`.
 
 Cada entrada de `gravity_context_injected` en un turno (ver `v1.1.0` §5) debe indicar el origen de cada regla aplicada:
 

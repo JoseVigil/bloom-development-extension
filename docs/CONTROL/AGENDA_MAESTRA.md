@@ -63,6 +63,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 8 | Batcave | Arquitectura multi-org definida; decisión GitHub App vigente | Corregir regresión de Batcave Auth en Vault spec y actualizar referencias | CORTEX; Nucleus; Alfred remoto |
 | 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
 | 10 | PALADIN / Distribución por composición | PALADIN confirmado como producto Cognituum para ingenieros; principio de una plataforma con composición individual u organizacional bajo análisis | Resolver gobernanza, contrato de composición, bootstrap y transiciones antes de diseñar la implementación | Nucleus; Metamorph; Installer/Setup; AUTHORIZATION; Batcave; Core; propiedad de Mandates y Wisdom |
+| 11 | Gravity / Orbital Agentic State / Posture | 4 coworks completos (Rosetta, UX, API/DTOs, Objetos Paladin) + 3 investigaciones Codex cerradas (colisión mandate_state.json, no-eliminación de COR_Intent_Spec, AUTH-OWNERSHIP-01) + saneamiento documental de nombre y atribución ya ejecutado | Iniciar cowork de Persistencia del Grafo Gravity (Eje 1) | AUTHORIZATION (Tema 9, para Architect); PALADIN (Tema 10, para Postura/UX) |
 
 ---
 
@@ -422,7 +423,7 @@ Este cierre no alcanza todavía al handler API Node/TypeScript ni al boundary Go
 
 - Estado reportado por el usuario el 2026-08-24; implementación pusheada a `main` y `go test ./...` en verde.
 - `.nucleus-governance.json` — declara `min_role_for_cor_merge: Architect`.
-- ownership v0.3, `MRG_Intent_Spec` y código actual — deben contrastarse antes de normalizar el rol Architect.
+- `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md`, `MRG_Intent_Spec` y código actual — deben contrastarse antes de normalizar el rol Architect. `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md` todavía no fue contrastado contra `.nucleus-governance.json`.
 
 **Próximo paso concreto**
 
@@ -442,7 +443,7 @@ Claude Code o Codex con acceso al código Go y Node/TypeScript, más una instala
 
 **Decisiones/riesgos abiertos**
 
-- `.nucleus-governance.json` declara `min_role_for_cor_merge: Architect`, en contradicción con ownership v0.3, `MRG_Intent_Spec` y el código actual; se registra para resolverlo, sin incorporarlo al fix urgente.
+- `.nucleus-governance.json` declara `min_role_for_cor_merge: Architect`, en contradicción con `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md`, `MRG_Intent_Spec` y el código actual; se registra para resolverlo, sin incorporarlo al fix urgente. `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md` todavía no fue contrastado contra `.nucleus-governance.json`.
 - La implementación previa de `Alfred.VerifyIntent` que confiaba en `RequesterRole` aportado por el request no constituye un punto de autorización confiable; cualquier revisión posterior debe derivar la identidad desde una fuente autoritativa.
 - Quedan pendientes de limpieza, sin autorización de borrado: Mandate de prueba `b15bcdf4...` y su carpeta temporal asociada.
 
@@ -499,6 +500,46 @@ Cerrar la gobernanza antes de diseñar o implementar:
 
 ---
 
+## 11. Gravity / Orbital Agentic State / Posture
+
+**Estado actual**
+
+Investigación de diseño consolidada sobre el ecosistema Gravity/Orbital, con cuatro coworks completos: Rosetta Stone (traducción de marcos multidisciplinarios), especificación de UX de Postura/Gravity/Masa para Paladin, catálogo de contratos de API/DTOs de Nucleus (con auditoría propia contra el código real), y modelo de objetos de cliente de Paladin. Sobre esa base, tres investigaciones diagnósticas ejecutadas por Codex, todas cerradas sin modificar código: (1) la colisión de nombre entre el `mandate_state.json` real de Nucleus y el diseño agéntico de BTIPS quedó resuelta por separación de artefactos — el registro durable de ejecución agéntica se llama **Orbital Agentic State** (`orbital_agentic_state.json`); (2) la eliminación de `COR_Intent_Spec_v1_0.md` no está autorizada por ninguna fuente real y no tiene sucesor — se mantiene vigente; (3) `AUTH-OWNERSHIP-01` confirmó que el rol `Architect` no bloquea la firma del nivel `PROJECT` de Gravity (existe camino interino vía Master) y que la atribución de esa jerarquía de roles a `BTIPS §9.5` era parcialmente incorrecta (esa fuente solo respalda Master/Specialist).
+
+Ya se ejecutó el saneamiento documental derivado de esas tres investigaciones: renombre completo a `orbital_agentic_state.json` en los cuatro documentos de diseño de Gravity/Mandates agénticos, y corrección de la atribución de `Architect` en `NUCLEUS_AUTHORIZATION_MODULE_DRAFT_v0_2.md` (línea 16). Ningún cambio tocó código. La referencia a `ownership v0.3` en el Tema 9 fue corregida en esta Agenda a `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md`, con la salvedad de que ese documento todavía no fue contrastado contra `.nucleus-governance.json`.
+
+Todo lo anterior es diseño e investigación — **ninguna pieza de Gravity tiene todavía persistencia, endpoint ni implementación real**; esto está confirmado por la auditoría del propio catálogo de API contra el código real, no es una suposición.
+
+**Fuentes de control y verificación**
+
+- Coworks: `Rosetta_Stone_Investigacion_Marcos_Externos_v0_1.md`, `Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md`, `NUCLEUS_API_Contracts_Consolidado_v0_1.md`, `NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md`, `Paladin_Client_Object_Model_v0_1.md`.
+- Investigaciones Codex (diagnóstico, modo lectura, sin cambios): resultado de la colisión `mandate_state.json`/Orbital Agentic State; resultado de la investigación sobre eliminación de `COR_Intent_Spec_v1_0.md`; resultado de `AUTH-OWNERSHIP-01`.
+- Saneamiento documental ejecutado por Codex en: `docs/AGENTIC/BTIPS_Mandates_Agenticos_Spec_Unificada.md`, `docs/MANDATE/BLOOM_Mandate_Universal_Schema_v1_2_0.md`, `docs/ANAYSIS/GRAVITY/API/NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md`, `docs/ANAYSIS/GRAVITY/API/NUCLEUS_API_Contracts_Consolidado_v0_1.md`, `docs/GOVERNANCE/AUTHORIZATION/NUCLEUS_AUTHORIZATION_MODULE_DRAFT_v0_2.md`.
+
+**Próximo paso concreto**
+
+1. Iniciar el cowork de Persistencia del Grafo Gravity (Eje 1), que ahora incorpora desde el diseño el hallazgo de que "el grafo" son hoy tres estructuras sin relación declarada, y la métrica de masa ya cerrada por el cowork de UX.
+2. `docs/MANDATE/MARKETPLACE/BLOOM_Mandate_Package_Spec_v1_0_0.md` (línea 61) quedó revisado y **cerrado sin cambios**: su referencia a `mandate_state.json` es correcta tal como está — el documento excluye deliberadamente el estado operacional del Nucleus vendedor de lo que viaja en un Mandate empaquetado. Queda anotado para una revisión futura, no urgente: ese mismo documento debería excluir también el `orbital_agentic_state.json` crudo, dejando claro que lo transferible nunca es el log completo, sino una proyección sanitizada o Wisdom ya promovida.
+3. `docs/MANDATE/MARKETPLACE/BLOOM_Cognitive_Evidence_Model_v1_0_0.md` (línea 292) queda como **pendiente de diseño real**, no de nombre: su “evidencia local directa” es ambigua entre el estado operacional de Nucleus, el historial crudo de Orbital, o una proyección derivada de ambos — no se renombra ni se corrige hasta resolver esa ambigüedad.
+4. Se identifica una **investigación futura candidata**, todavía no abierta ni asignada: `mandate_state.json + orbital_agentic_state.json → evidencia derivada → Gravity reusable → Wisdom`. Debe definir qué se deriva, qué se sanitiza, qué se promueve, qué es transferible entre organizaciones (Marketplace) y quién conserva ownership en cada paso — siguiendo la progresión ya fijada en Orbital: Experience → Gravity → Repeated Application → Evidence → Reusable Gravity → Wisdom. Wisdom no es otro nombre para el historial de ejecución.
+
+**Entorno recomendado**
+
+Claude Web/Cowork para diseño e investigación de Gravity; Codex con acceso al repo para cualquier diagnóstico o edición documental de bajo riesgo. Ninguna tarea de este tema requiere todavía acceso a una instalación real — no hay implementación que probar.
+
+**Dependencias cruzadas**
+
+- Tema 9 (AUTHORIZATION): `AUTH-OWNERSHIP-01` es diagnóstico compartido; la normalización de roles que decida si `Architect` existe formalmente afecta directamente a quién firma `PROJECT` en Gravity.
+- Tema 10 (PALADIN): la especificación de UX de Postura/Gravity/Masa y el modelo de objetos de cliente son, en los hechos, parte del diseño de producto de PALADIN — se manejan acá por su origen en la investigación de Gravity, pero cualquier decisión de UI final de PALADIN debe coordinarse con ese tema.
+
+**Decisiones/riesgos abiertos**
+
+- Ninguna pieza de Gravity (grafo, arbitraje, detección de colisiones) tiene implementación real — toda decisión de este tema es diseño, no debe leerse como estado de producción.
+- `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` tiene una ambigüedad de diseño real (no terminológica) sin resolver sobre qué es “evidencia local directa”.
+- `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md` todavía debe contrastarse contra `.nucleus-governance.json` antes de usarlo para normalizar el rol Architect.
+
+---
+
 ## Cola de prompts para sesiones externas
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
@@ -519,6 +560,8 @@ Cerrar la gobernanza antes de diseñar o implementar:
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
+| Alta | 11 | Cowork `PERSISTENCIA DEL GRAFO GRAVITY — Eje 1`, incorporando el hallazgo de los tres grafos sin relación declarada y la métrica de masa ya cerrada | Saneamiento documental de nombre (`Orbital Agentic State`) ya ejecutado |
+| Media | 11 | Evaluar si `BLOOM_Mandate_Package_Spec_v1_0_0.md` y `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` requieren investigación propia o se relacionan con Wisdom | Ninguna — solo decidir si se abre |
 
 ## Registro cronológico de avances
 
@@ -532,5 +575,6 @@ Cerrar la gobernanza antes de diseñar o implementar:
 | 2026-08-17 | 7, 8 | Split documental de la remediación CORTEX y corrección de alcance de automatización DOM. | Actualización del usuario sobre fuentes y alcance | Se retiró la remediación previa como fuente activa; se condicionó la promoción de Vault Storage a corregir Batcave Auth como segunda GitHub App + Device Flow. |
 | 2026-08-18 | 1 / Synapse Simulator | Se separó el vertical Genesis en dos Works coordinados con gates independientes. | AGENDA FOLLOWUP, reportado por el usuario | Genesis cerró Etapa A y espera el contrato del Simulator; el Simulator inició investigación contractual. Ninguno comenzó implementación. |
 | 2026-08-21 | 1, 4, Executor | Se cerró la composición funcional de Genesis y se cambió el canal prioritario del primer vertical a CLI + AITAP + Executor. | AGENDA FOLLOWUP, decisión del usuario | El Work Genesis se renombra sin duplicarse; Synapse Simulator deja de ser precondición y continúa como línea posterior. |
+| 2026-08-29 | 11 (nuevo) | Se completaron los cuatro coworks de investigación de Gravity/Orbital/Posture y las tres investigaciones diagnósticas de Codex derivadas (colisión de nombre, eliminación de COR, AUTH-OWNERSHIP-01). Se ejecutó el saneamiento documental resultante: renombre a Orbital Agentic State en cuatro documentos y corrección de atribución de Architect en el borrador de AUTHORIZATION. | Sesión externa de investigación (Claude Web) + Codex para diagnóstico y edición documental, reportado por el usuario | Se abre el Tema 11 con su estado consolidado, fuentes, próximos pasos y dependencias cruzadas con Temas 9 y 10. |
 | 2026-08-24 | 1, 9 | Se cerraron fail-closed, gate CLI, Alfred Master-only y homologación de mensajes/exit codes; Genesis verificó el contrato de Authorization. | Actualización del usuario; cambios en `main`, `go test ./...` en verde | Se distinguió el tramo CLI cerrado del gate API/boundary Go→Node pendiente; Genesis quedó bloqueado por resolución de workspace del watcher, no por Authorization. |
 | 2026-08-26 | 10 / PALADIN | El Work de distribución para desarrolladores e ingenieros externos fue renombrado PALADIN, nombre del producto Cognituum para ingenieros. Se presentó el principio de una plataforma con composición individual u organizacional. | AGENDA FOLLOWUP, decisión y material compartidos por el usuario | Se registró PALADIN como nombre cerrado; la composición, su cadena de autoridad, bootstrap, transiciones y propiedad del conocimiento permanecen pendientes de gobernanza. |
