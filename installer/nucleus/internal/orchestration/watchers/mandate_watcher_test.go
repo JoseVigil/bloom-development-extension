@@ -11,7 +11,6 @@ import (
 
 	"go.temporal.io/sdk/client"
 
-	"nucleus/internal/orchestration/temporal"
 	"nucleus/internal/orchestration/temporal/workflows"
 )
 
@@ -34,7 +33,7 @@ func TestMandateGenesisDispatchPreservesClassificationFailure(t *testing.T) {
 }
 
 type syntheticGenesisTemporalClient struct {
-	state temporal.WorkflowExecutionState
+	state WorkflowExecutionState
 	err   error
 }
 
@@ -42,9 +41,9 @@ func (f *syntheticGenesisTemporalClient) StartMandateGenesisBuildWorkflow(contex
 	return nil, nil
 }
 func (f *syntheticGenesisTemporalClient) IsWorkflowRunning(context.Context, string) (bool, error) {
-	return f.state == temporal.WorkflowExecutionRunning, f.err
+	return f.state == WorkflowExecutionRunning, f.err
 }
-func (f *syntheticGenesisTemporalClient) GetWorkflowExecutionState(context.Context, string) (temporal.WorkflowExecutionState, error) {
+func (f *syntheticGenesisTemporalClient) GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error) {
 	return f.state, f.err
 }
 
@@ -97,7 +96,7 @@ func TestUnsignedMandateGracePeriodIsFifteenMinutes(t *testing.T) {
 func TestReconcileMarksMissingWorkflowRequiredAfterGraceAndPreservesFields(t *testing.T) {
 	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	path := syntheticMandateState(t, t.TempDir(), now.Add(-unsignedMandateGracePeriod))
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: temporal.WorkflowExecutionNotFound}}
+	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionNotFound}}
 	var ms MandateState
 	raw, _ := os.ReadFile(path)
 	_ = json.Unmarshal(raw, &ms)
@@ -117,7 +116,7 @@ func TestReconcileMarksMissingWorkflowRequiredAfterGraceAndPreservesFields(t *te
 func TestReconcileTemporalUnavailableIsUnknownNeverFailed(t *testing.T) {
 	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	path := syntheticMandateState(t, t.TempDir(), now.Add(-time.Hour))
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: temporal.WorkflowExecutionUnknown, err: errors.New("unavailable")}}
+	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionUnknown, err: errors.New("unavailable")}}
 	var ms MandateState
 	raw, _ := os.ReadFile(path)
 	_ = json.Unmarshal(raw, &ms)
@@ -136,7 +135,7 @@ func TestReconcileTemporalUnavailableIsUnknownNeverFailed(t *testing.T) {
 func TestReconcileTerminalWorkflowMarksFailedIdempotently(t *testing.T) {
 	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	path := syntheticMandateState(t, t.TempDir(), now)
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: temporal.WorkflowExecutionFailed}}
+	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionFailed}}
 	var ms MandateState
 	raw, _ := os.ReadFile(path)
 	_ = json.Unmarshal(raw, &ms)
@@ -170,7 +169,7 @@ func TestReconcileSignedMandateDoesNotTouchState(t *testing.T) {
 	if err := json.Unmarshal(before, &ms); err != nil {
 		t.Fatal(err)
 	}
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: temporal.WorkflowExecutionFailed}}
+	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionFailed}}
 	if err := w.reconcileUnsignedMandate(context.Background(), path, ms, now); err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +193,7 @@ func TestReconcileRunningWorkflowDoesNotMarkMissingOrFailed(t *testing.T) {
 	if err := json.Unmarshal(before, &ms); err != nil {
 		t.Fatal(err)
 	}
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: temporal.WorkflowExecutionRunning}}
+	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionRunning}}
 	if err := w.reconcileUnsignedMandate(context.Background(), path, ms, now); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +251,7 @@ func TestReconcileNeverMutatesBrainIntentProposalOrHumanSync(t *testing.T) {
 	if err := json.Unmarshal(raw, &ms); err != nil {
 		t.Fatal(err)
 	}
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: temporal.WorkflowExecutionNotFound}}
+	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionNotFound}}
 	if err := w.reconcileUnsignedMandate(context.Background(), path, ms, now); err != nil {
 		t.Fatal(err)
 	}

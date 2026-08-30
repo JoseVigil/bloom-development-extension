@@ -23,11 +23,35 @@ import (
 	"nucleus/internal/orchestration/activities"
 	"nucleus/internal/orchestration/temporal/bootstrap"
 	temporalworkflows "nucleus/internal/orchestration/temporal/workflows"
+	"nucleus/internal/orchestration/watchers"
 )
 
 // Worker envuelve el worker de Temporal
 type Worker struct {
 	worker worker.Worker
+}
+
+type mandateWatcherTemporalClient struct {
+	client *Client
+}
+
+var _ watchers.GenesisTemporalClient = mandateWatcherTemporalClient{}
+
+func (a mandateWatcherTemporalClient) StartMandateGenesisBuildWorkflow(ctx context.Context, mandateID string, input temporalworkflows.GenesisBuildInput) (client.WorkflowRun, error) {
+	return a.client.StartMandateGenesisBuildWorkflow(ctx, mandateID, input)
+}
+
+func (a mandateWatcherTemporalClient) IsWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
+	return a.client.IsWorkflowRunning(ctx, workflowID)
+}
+
+func (a mandateWatcherTemporalClient) GetWorkflowExecutionState(ctx context.Context, workflowID string) (watchers.WorkflowExecutionState, error) {
+	state, err := a.client.GetWorkflowExecutionState(ctx, workflowID)
+	return watchers.WorkflowExecutionState(state), err
+}
+
+func mandatesRootForWorker(nucleusRoot string) string {
+	return filepath.Join(nucleusRoot, ".mandates")
 }
 
 // NewWorker crea un nuevo worker
@@ -415,6 +439,32 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			}
 			logger.Success("✅ Mandate worker iniciado (task queue: mandate-orchestration)")
 			// ── fin worker mandate-orchestration ──────────────────────────────
+
+			// worker start is the shared persistent host used by dev-start and
+			// service start. Owning the watcher here guarantees one filesystem
+			// dispatcher regardless of which boot entry point launched the worker.
+			nucleusRoot, nucleusRootErr := core.ResolveNucleusRoot("")
+			if nucleusRootErr != nil {
+				logger.Warning("⚠️  Mandate watcher no arrancó — no encontré workspace: %v", nucleusRootErr)
+			} else {
+				mandatesRoot := mandatesRootForWorker(nucleusRoot)
+				mandateWatcher, mandateWatcherErr := watchers.NewMandateWatcher(
+					mandatesRoot,
+					mandateWatcherTemporalClient{client: temporalClient},
+					&c.Paths,
+					c.IsJSON,
+				)
+				if mandateWatcherErr != nil {
+					logger.Warning("⚠️  Mandate watcher no arrancó — logger: %v", mandateWatcherErr)
+				} else {
+					go func() {
+						if err := mandateWatcher.Start(ctx); err != nil && ctx.Err() == nil {
+							logger.Warning("⚠️  Mandate watcher terminó con error: %v", err)
+						}
+					}()
+					logger.Success("✅ Mandate watcher iniciado — vigilando %s", mandatesRoot)
+				}
+			}
 
 			// Iniciar worker
 			logger.Info("Iniciando worker...")

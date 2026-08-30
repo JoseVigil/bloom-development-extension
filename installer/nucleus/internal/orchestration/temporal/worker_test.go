@@ -1,12 +1,20 @@
 package temporal
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"go.temporal.io/sdk/activity"
 	"nucleus/internal/orchestration/activities"
 )
+
+func TestMandatesRootForWorker(t *testing.T) {
+	nucleusRoot := filepath.Join("workspace", ".bloom", ".nucleus-example")
+	if got, want := mandatesRootForWorker(nucleusRoot), filepath.Join(nucleusRoot, ".mandates"); got != want {
+		t.Fatalf("mandatesRootForWorker() = %q, want %q", got, want)
+	}
+}
 
 type capturingActivityRegistrar struct {
 	registered []interface{}

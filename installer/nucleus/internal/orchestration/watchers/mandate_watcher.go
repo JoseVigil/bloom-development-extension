@@ -4,6 +4,7 @@ package watchers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,10 +13,10 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
 	"nucleus/internal/core"
-	"nucleus/internal/orchestration/temporal"
 	"nucleus/internal/orchestration/temporal/workflows"
 )
 
@@ -112,17 +113,32 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 
 type MandateWatcher struct {
 	mandatesRoot string
-	tc           genesisTemporalClient
+	tc           GenesisTemporalClient
 	watcher      *fsnotify.Watcher
 	progress     *mandateProgress
 	logger       *core.Logger
 }
 
-type genesisTemporalClient interface {
+// GenesisTemporalClient is the narrow Temporal contract needed by the watcher.
+// Keeping it here lets worker start own both components without an import cycle.
+type GenesisTemporalClient interface {
 	StartMandateGenesisBuildWorkflow(context.Context, string, workflows.GenesisBuildInput) (client.WorkflowRun, error)
 	IsWorkflowRunning(context.Context, string) (bool, error)
-	GetWorkflowExecutionState(context.Context, string) (temporal.WorkflowExecutionState, error)
+	GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error)
 }
+
+type WorkflowExecutionState string
+
+const (
+	WorkflowExecutionRunning    WorkflowExecutionState = "running"
+	WorkflowExecutionCompleted  WorkflowExecutionState = "completed"
+	WorkflowExecutionFailed     WorkflowExecutionState = "failed"
+	WorkflowExecutionCanceled   WorkflowExecutionState = "canceled"
+	WorkflowExecutionTerminated WorkflowExecutionState = "terminated"
+	WorkflowExecutionTimedOut   WorkflowExecutionState = "timed_out"
+	WorkflowExecutionNotFound   WorkflowExecutionState = "not_found"
+	WorkflowExecutionUnknown    WorkflowExecutionState = "unknown"
+)
 
 // unsignedMandateGracePeriod evita confundir un dispatch reciente con un
 // huérfano. Se cuenta desde pendingAt cuando existe y, para el estado inicial,
@@ -166,7 +182,7 @@ func classifyGenesisDuplicate(running bool, statusErr error) genesisDuplicateDis
 // también persista en logs/nucleus/mandate/nucleus_mandate_YYYYMMDD.log
 // y quede registrado en telemetry.json — InitLogger hace ambas cosas en
 // una sola llamada, no hace falta invocar telemetry register aparte.
-func NewMandateWatcher(mandatesRoot string, tc *temporal.Client, paths *core.Paths, jsonMode bool) (*MandateWatcher, error) {
+func NewMandateWatcher(mandatesRoot string, tc GenesisTemporalClient, paths *core.Paths, jsonMode bool) (*MandateWatcher, error) {
 	logger, err := core.InitLogger(paths, "MANDATE", jsonMode)
 	if err != nil {
 		return nil, fmt.Errorf("no pude inicializar logger de mandate: %w", err)
@@ -332,6 +348,32 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		w.logger.Warning("[mandate_watcher] no pude reconciliar %s: %v", ms.MandateID, err)
 	}
 
+	// La reconciliación puede haber detectado que el Workflow ya terminó y
+	// persistido signature.status=failed + unsigned_after_terminal_workflow.
+	// Releer antes de decidir el dispatch evita continuar con la copia stale
+	// que se deserializó al entrar a este handler y arrancar otro Run en el
+	// mismo ciclo. En reinicios posteriores el mismo guard también excluye el
+	// estado terminal ya durable, aunque Temporal haya perdido su historial.
+	if reconciledRaw, readErr := os.ReadFile(path); readErr != nil {
+		w.logger.Warning("[mandate_watcher] no pude releer %s después de reconciliar: %v", ms.MandateID, readErr)
+		return
+	} else {
+		var reconciled MandateState
+		if unmarshalErr := json.Unmarshal(reconciledRaw, &reconciled); unmarshalErr != nil {
+			w.logger.Warning("[mandate_watcher] estado inválido después de reconciliar %s: %v", ms.MandateID, unmarshalErr)
+			return
+		}
+		if reconciled.MandateID == "" {
+			reconciled.MandateID = ms.MandateID
+		}
+		ms = reconciled
+	}
+
+	if ms.Signature.Status == "failed" && ms.Reconciliation.Reason == "unsigned_after_terminal_workflow" {
+		w.logger.Info("[mandate_watcher] workflow terminal ya reconciliado para %s, dispatch omitido", ms.MandateID)
+		return
+	}
+
 	if !w.progress.markIfChanged(ms) {
 		return // ya procesamos este mismo fingerprint, evita duplicados
 	}
@@ -413,22 +455,22 @@ func (w *MandateWatcher) reconcileUnsignedMandate(ctx context.Context, path stri
 	return persistReconciliation(path, action, reason, now)
 }
 
-func evaluateUnsignedMandate(ms MandateState, workflowState temporal.WorkflowExecutionState, queryErr error, now time.Time) (reconciliationAction, string) {
-	if queryErr != nil || workflowState == temporal.WorkflowExecutionUnknown {
+func evaluateUnsignedMandate(ms MandateState, workflowState WorkflowExecutionState, queryErr error, now time.Time) (reconciliationAction, string) {
+	if queryErr != nil || workflowState == WorkflowExecutionUnknown {
 		return reconciliationUnknown, "temporal_unavailable"
 	}
-	if workflowState == temporal.WorkflowExecutionRunning {
+	if workflowState == WorkflowExecutionRunning {
 		if ms.Reconciliation.Status == "unknown" {
 			return reconciliationClear, ""
 		}
 		return reconciliationNoop, ""
 	}
-	if workflowState == temporal.WorkflowExecutionFailed || workflowState == temporal.WorkflowExecutionCanceled ||
-		workflowState == temporal.WorkflowExecutionTerminated || workflowState == temporal.WorkflowExecutionTimedOut ||
-		workflowState == temporal.WorkflowExecutionCompleted {
+	if workflowState == WorkflowExecutionFailed || workflowState == WorkflowExecutionCanceled ||
+		workflowState == WorkflowExecutionTerminated || workflowState == WorkflowExecutionTimedOut ||
+		workflowState == WorkflowExecutionCompleted {
 		return reconciliationFailed, "unsigned_after_terminal_workflow"
 	}
-	if workflowState == temporal.WorkflowExecutionNotFound && gracePeriodElapsed(ms, now) {
+	if workflowState == WorkflowExecutionNotFound && gracePeriodElapsed(ms, now) {
 		return reconciliationRequired, "unsigned_without_active_workflow"
 	}
 	return reconciliationNoop, ""
@@ -526,7 +568,8 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 		MandatesRoot: w.mandatesRoot,
 	})
 	if err != nil {
-		if temporal.IsAlreadyStarted(err) {
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyStarted) {
 			workflowID := fmt.Sprintf("mandate_genesis_%s", ms.MandateID)
 			running, statusErr := w.tc.IsWorkflowRunning(ctx, workflowID)
 			switch classifyGenesisDuplicate(running, statusErr) {
