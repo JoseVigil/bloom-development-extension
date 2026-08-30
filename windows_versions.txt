@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — windows
-# Generated: 2026-08-30 01:37:13
+# Generated: 2026-08-30 11:20:13
 
 ---
 brain\__build__.py
@@ -401,7 +401,7 @@ installer\metamorph\scripts\build_number.txt
 
 ---
 installer\nucleus\scripts\build_number.effective.txt
-636
+638
 
 ---
 installer\sensor\scripts\build_number.effective.txt

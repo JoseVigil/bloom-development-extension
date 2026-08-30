@@ -17,82 +17,126 @@ import (
 // ============================================================================
 
 type Logger struct {
-	file       *os.File
-	logger     *log.Logger
-	isJSONMode bool
-	silentMode bool
-	mu         sync.Mutex
-	category   string
+	file        *os.File
+	logger      *log.Logger
+	isJSONMode  bool
+	silentMode  bool
+	mu          sync.Mutex
+	category    string
+	paths       *Paths
+	targetDir   string
+	filePrefix  string
+	currentDay  string
+	streamID    string
+	streamLabel string
+	priority    int
+	categories  []string
+	description string
+	source      string
 }
+
+var loggerNow = func() time.Time { return time.Now().UTC() }
 
 // InitLogger crea un logger que escribe a archivo y consola.
 // extraCategories permite registrar el stream en categorías adicionales
 // (e.g. "synapse" para nucleus_synapse, que pertenece a ["nucleus", "synapse"]).
 func InitLogger(paths *Paths, category string, jsonMode bool, extraCategories ...string) (*Logger, error) {
 	targetDir := filepath.Join(paths.LogsDir, "nucleus")
+	icon := getNucleusIcon(category)
+	categories := append([]string{"nucleus"}, extraCategories...)
+	return initManagedLogger(paths, targetDir, "nucleus_"+strings.ToLower(category), category,
+		"nucleus_"+strings.ToLower(category), icon+" "+category, 2, categories,
+		getNucleusStreamDescription(category), "nucleus", jsonMode)
+}
+
+func initManagedLogger(paths *Paths, targetDir, filePrefix, category, streamID, streamLabel string,
+	priority int, categories []string, description, source string, jsonMode bool) (*Logger, error) {
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
+	l := &Logger{paths: paths, targetDir: targetDir, filePrefix: filePrefix,
+		isJSONMode: jsonMode, category: category, streamID: streamID,
+		streamLabel: streamLabel, priority: priority, categories: categories,
+		description: description, source: source}
+	if err := l.rolloverLocked(loggerNow()); err != nil {
+		return nil, err
+	}
+	banner := fmt.Sprintf("======================================== [%s] Logging session started ========================================", category)
+	if err := l.writeRawLocked(banner, jsonMode); err != nil {
+		_ = l.file.Close()
+		return nil, err
+	}
+	return l, nil
+}
 
-	now := time.Now()
-	logFileName := fmt.Sprintf("nucleus_%s_%s.log", strings.ToLower(category), now.Format("20060102"))
-	logPath := filepath.Join(targetDir, logFileName)
-
+func (l *Logger) rolloverLocked(now time.Time) error {
+	now = now.UTC()
+	day := now.Format("20060102")
+	if l.file != nil && l.currentDay == day {
+		return nil
+	}
+	oldFile := l.file
+	oldDay := l.currentDay
+	if oldFile != nil {
+		if err := oldFile.Sync(); err != nil {
+			return err
+		}
+		if err := oldFile.Close(); err != nil {
+			return err
+		}
+	}
+	logPath := filepath.Join(l.targetDir, fmt.Sprintf("%s_%s.log", l.filePrefix, day))
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error al abrir log %s: %w", logPath, err)
+		if oldFile != nil {
+			oldPath := filepath.Join(l.targetDir, fmt.Sprintf("%s_%s.log", l.filePrefix, oldDay))
+			l.file, _ = os.OpenFile(oldPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+		}
+		return fmt.Errorf("error al abrir log %s: %w", logPath, err)
 	}
-
-	if file == nil {
-		return nil, fmt.Errorf("file handle es nil después de OpenFile")
+	l.file = file
+	l.currentDay = day
+	l.reconfigure()
+	tm := GetTelemetryManager(l.paths.LogsDir, l.paths.LogsDir)
+	if err := tm.RegisterStream(l.streamID, l.streamLabel, l.priority, l.categories,
+		l.description, l.source, filepath.ToSlash(logPath)); err != nil {
+		_ = file.Close()
+		l.file = nil
+		return fmt.Errorf("register telemetry stream %s: %w", l.streamID, err)
 	}
+	return nil
+}
 
-	// ✅ DECISIÓN ÚNICA DE ROUTING
-	var consoleWriter io.Writer
-	if jsonMode {
-		// Modo JSON: logs van a stderr para no contaminar stdout
-		consoleWriter = os.Stderr
+func (l *Logger) writeRawLocked(message string, fileOnly bool) error {
+	now := loggerNow().UTC()
+	if err := l.rolloverLocked(now); err != nil {
+		return err
+	}
+	line := fmt.Sprintf("%s %s\n", now.Format("2006/01/02 15:04:05"), message)
+	if fileOnly {
+		_, _ = io.WriteString(l.file, line)
 	} else {
-		// Modo normal: logs van a stdout
-		consoleWriter = os.Stdout
+		l.logger.Print(strings.TrimSuffix(line, "\n"))
 	}
+	return l.file.Sync()
+}
 
-	dest := io.MultiWriter(consoleWriter, file)
-	l := log.New(dest, "", log.Ldate|log.Ltime)
-
-	icon := getNucleusIcon(category)
-
-	logger := &Logger{
-		file:       file,
-		logger:     l,
-		isJSONMode: jsonMode,
-		silentMode: false,
-		category:   category,
+func (l *Logger) write(level, format string, values ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.logger == nil {
+		return
 	}
-
-	// Banners de sesión son metadata del archivo de log, no output del proceso.
-	// En modo JSON se escriben SOLO al archivo para no contaminar ningún fd de consola
-	// (ni stdout ni stderr). En modo interactivo se emiten normalmente via MultiWriter.
-	banner := fmt.Sprintf("======================================== [%s] Logging session started ========================================", category)
-	if jsonMode {
-		fmt.Fprintf(file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), banner)
-		file.Sync()
-	} else {
-		logger.logger.Printf("%s", banner)
-		logger.Flush()
+	now := loggerNow().UTC()
+	if err := l.rolloverLocked(now); err != nil {
+		fmt.Fprintf(os.Stderr, "[logger] rollover failed for %s: %v\n", l.streamID, err)
+		return
 	}
-
-	// Construir slice de categorías: siempre incluye "nucleus" + extras
-	categories := append([]string{"nucleus"}, extraCategories...)
-
-	// Registrar stream en telemetry
-	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
-	streamID := "nucleus_" + strings.ToLower(category)
-	streamLabel := icon + " " + category
-	description := getNucleusStreamDescription(category)
-	tm.RegisterStream(streamID, streamLabel, 2, categories, description, "nucleus", filepath.ToSlash(logPath))
-
-	return logger, nil
+	message := fmt.Sprintf(format, values...)
+	l.logger.Printf("%s [%s] %s", now.Format("2006/01/02 15:04:05"), level, message)
+	if level == "ERROR" || level == "WARNING" {
+		_ = l.file.Sync()
+	}
 }
 
 func getNucleusIcon(category string) string {
@@ -194,7 +238,9 @@ func (l *Logger) reconfigure() {
 		dest = io.MultiWriter(consoleWriter, l.file)
 	}
 
-	if l.logger != nil {
+	if l.logger == nil {
+		l.logger = log.New(dest, "", 0)
+	} else {
 		l.logger.SetOutput(dest)
 	}
 }
@@ -211,41 +257,23 @@ func (l *Logger) Flush() error {
 }
 
 func (l *Logger) Info(f string, v ...any) {
-	if l.logger == nil {
-		return
-	}
-	l.logger.Printf("[INFO] "+f, v...)
+	l.write("INFO", f, v...)
 }
 
 func (l *Logger) Error(f string, v ...any) {
-	if l.logger == nil {
-		return
-	}
-	l.logger.Printf("[ERROR] "+f, v...)
-	l.Flush() // Errores se escriben inmediatamente
+	l.write("ERROR", f, v...)
 }
 
 func (l *Logger) Warning(f string, v ...any) {
-	if l.logger == nil {
-		return
-	}
-	l.logger.Printf("[WARNING] "+f, v...)
-	l.Flush()
+	l.write("WARNING", f, v...)
 }
 
 func (l *Logger) Success(f string, v ...any) {
-	if l.logger == nil {
-		return
-	}
-	l.logger.Printf("[SUCCESS] "+f, v...)
-	l.Flush()
+	l.write("SUCCESS", f, v...)
 }
 
 func (l *Logger) Debug(f string, v ...any) {
-	if l.logger == nil {
-		return
-	}
-	l.logger.Printf("[DEBUG] "+f, v...)
+	l.write("DEBUG", f, v...)
 }
 
 func (l *Logger) Close() error {
@@ -254,17 +282,19 @@ func (l *Logger) Close() error {
 
 	if l.file != nil {
 		banner := fmt.Sprintf("======================================== [%s] Logging session ended ========================================", l.category)
-		if l.isJSONMode {
-			fmt.Fprintf(l.file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), banner)
-		} else {
-			l.logger.Printf("%s", banner)
+		if err := l.writeRawLocked(banner, l.isJSONMode); err != nil {
+			return err
 		}
-		l.file.Sync()
+		logPath := l.file.Name()
 
 		err := l.file.Close()
 		l.file = nil
 		l.logger = nil
-		return err
+		if err != nil {
+			return err
+		}
+		tm := GetTelemetryManager(l.paths.LogsDir, l.paths.LogsDir)
+		return tm.CloseStreamFile(l.streamID, filepath.ToSlash(logPath))
 	}
 	return nil
 }
@@ -304,58 +334,10 @@ func (l *Logger) OutputResult(jsonData interface{}, interactiveMessage string) e
 // Escribe en logs/nucleus/service/nucleus_service_YYYYMMDD.log (rotación diaria).
 func InitServiceLogger(paths *Paths, jsonMode bool) (*Logger, error) {
 	targetDir := filepath.Join(paths.LogsDir, "nucleus", "service")
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
-	}
-
-	now := time.Now()
-	logFileName := fmt.Sprintf("nucleus_service_%s.log", now.Format("20060102"))
-	logPath := filepath.Join(targetDir, logFileName)
-
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, fmt.Errorf("error al abrir log %s: %w", logPath, err)
-	}
-
-	var consoleWriter io.Writer
-	if jsonMode {
-		consoleWriter = os.Stderr
-	} else {
-		consoleWriter = os.Stdout
-	}
-
-	dest := io.MultiWriter(consoleWriter, file)
-	l := log.New(dest, "", log.Ldate|log.Ltime)
-
-	logger := &Logger{
-		file:       file,
-		logger:     l,
-		isJSONMode: jsonMode,
-		silentMode: false,
-		category:   "SERVICE",
-	}
-
-	serviceBanner := "======================================== [SERVICE] Logging session started ========================================"
-	if jsonMode {
-		fmt.Fprintf(file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), serviceBanner)
-		file.Sync()
-	} else {
-		logger.logger.Printf("%s", serviceBanner)
-		logger.Flush()
-	}
-
-	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
-	tm.RegisterStream(
-		"nucleus_service",
-		"⚙️ NUCLEUS SERVICE",
-		2,
-		[]string{"nucleus"},
+	return initManagedLogger(paths, targetDir, "nucleus_service", "SERVICE", "nucleus_service",
+		"⚙️ NUCLEUS SERVICE", 2, []string{"nucleus"},
 		"Nucleus background service log — captures service lifecycle, health checks and daemon events",
-		"nucleus",
-		filepath.ToSlash(logPath),
-	)
-
-	return logger, nil
+		"nucleus", jsonMode)
 }
 
 // ============================================================================
@@ -366,59 +348,10 @@ func InitServiceLogger(paths *Paths, jsonMode bool) (*Logger, error) {
 // Escribe en logs/nucleus/worker/nucleus_worker_manager_YYYYMMDD.log.
 func InitWorkerManagerLogger(paths *Paths, jsonMode bool) (*Logger, error) {
 	targetDir := filepath.Join(paths.LogsDir, "nucleus", "worker")
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
-	}
-
-	now := time.Now()
-	// ✅ Fix Issue #2: prefijo nucleus_ requerido por spec (executable_module_timestamp.log)
-	logFileName := fmt.Sprintf("nucleus_worker_manager_%s.log", now.Format("20060102"))
-	logPath := filepath.Join(targetDir, logFileName)
-
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, fmt.Errorf("error al abrir log %s: %w", logPath, err)
-	}
-
-	var consoleWriter io.Writer
-	if jsonMode {
-		consoleWriter = os.Stderr
-	} else {
-		consoleWriter = os.Stdout
-	}
-
-	dest := io.MultiWriter(consoleWriter, file)
-	l := log.New(dest, "", log.Ldate|log.Ltime)
-
-	logger := &Logger{
-		file:       file,
-		logger:     l,
-		isJSONMode: jsonMode,
-		silentMode: false,
-		category:   "WORKER",
-	}
-
-	workerBanner := "======================================== [WORKER MANAGER] Logging session started ========================================"
-	if jsonMode {
-		fmt.Fprintf(file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), workerBanner)
-		file.Sync()
-	} else {
-		logger.logger.Printf("%s", workerBanner)
-		logger.Flush()
-	}
-
-	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
-	tm.RegisterStream(
-		"nucleus_worker_manager",
-		"👷 WORKER MANAGER",
-		2,
-		[]string{"nucleus"},
+	return initManagedLogger(paths, targetDir, "nucleus_worker_manager", "WORKER",
+		"nucleus_worker_manager", "👷 WORKER MANAGER", 2, []string{"nucleus"},
 		"Nucleus worker manager log — tracks worker pool lifecycle, task assignment and completion",
-		"nucleus",
-		filepath.ToSlash(logPath),
-	)
-
-	return logger, nil
+		"nucleus", jsonMode)
 }
 
 // ============================================================================

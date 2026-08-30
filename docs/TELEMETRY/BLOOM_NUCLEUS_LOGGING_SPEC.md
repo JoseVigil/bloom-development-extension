@@ -129,14 +129,14 @@ logs/brain/<subfolder>/        # ✅ logs/brain/chrome/
 ```python
 import subprocess
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class MiManager:
 
     def _get_log_path(self, base_logs_dir: Path) -> Path:
         """Determina la ruta del log file para hoy."""
-        date_str = datetime.now().strftime("%Y%m%d")
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
         log_dir = base_logs_dir / "brain" / "mi_modulo"
         log_dir.mkdir(parents=True, exist_ok=True)
         return log_dir / f"brain_mi_modulo_{date_str}.log"
@@ -164,7 +164,8 @@ class MiManager:
         self._register_log_stream(log_path)
         
         with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.utcnow().isoformat()}Z] INFO: Operación iniciada\n")
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            f.write(f"[{timestamp}] INFO: Operación iniciada\n")
         
         # ... resto de la lógica
 ```
@@ -185,24 +186,49 @@ data = manager.ejecutar(
 
 ---
 
-### Campo `path`: string simple o array
+### Campo `paths`: inventario de archivos administrados
 
-El campo `path` acepta un string o un array de strings. El JSON se adapta automáticamente:
+`paths` es el contrato autoritativo para los archivos locales pertenecientes a un
+mismo stream lógico. No es un array de strings: cada elemento conserva su ciclo
+de vida y metadata individual.
 
 ```json
-// String simple — un solo archivo (caso más común)
-"path": "C:/logs/brain/core/brain_core_20260224.log"
-
-// Array — múltiples archivos asociados al mismo stream
-"path": [
-  "C:/logs/brain/core/brain_core_20260224.log",
-  "C:/logs/brain/core/brain_core_20260223.log"
+"paths": [
+  {
+    "path": "C:/logs/nucleus/nucleus_temporal_20260829.log",
+    "state": "closed",
+    "created_at": "2026-08-29T00:00:00Z",
+    "last_write_at": "2026-08-29T23:59:58Z",
+    "closed_at": "2026-08-30T00:00:00Z",
+    "size_bytes": 193325775
+  },
+  {
+    "path": "C:/logs/nucleus/nucleus_temporal_20260830.log",
+    "state": "active",
+    "created_at": "2026-08-30T00:00:00Z",
+    "last_write_at": "2026-08-30T12:00:00Z",
+    "size_bytes": 154262393
+  }
 ]
 ```
 
-**Cuándo usar array**: cuando un stream lógico tiene múltiples archivos físicos (ej: rotación diaria que querés mantener asociada, o un proceso que escribe en dos destinos simultáneamente).
+Invariantes:
 
-**Cómo registrar múltiples paths via CLI**:
+- Dentro de un stream existe como máximo un elemento `active`.
+- El rollover cierra el elemento anterior y agrega el nuevo `active` dentro de
+  una única escritura atómica de telemetría.
+- Al cerrar un archivo se actualizan `last_write_at`, `closed_at` y `size_bytes`.
+- `last_update` pertenece al registro del stream; `paths[].last_write_at`
+  pertenece al archivo individual.
+- No se reescribe `telemetry.json` por cada línea. La metadata cambia en eventos
+  de creación, rollover y cierre, o mediante observaciones periódicas acotadas.
+
+**Compatibilidad migratoria**: los lectores nuevos aceptan `paths`, el antiguo
+`path` string y el antiguo `path` array. Los writers nuevos emiten `paths` y,
+temporalmente, una vista `path` del archivo activo para no romper consumidores
+legacy. `path` sólo se retirará cuando todos los consumidores hayan migrado.
+
+**Cómo registrar múltiples archivos via CLI**:
 ```bash
 # Pasar --path una vez por cada archivo
 nucleus telemetry register \
@@ -216,16 +242,16 @@ nucleus telemetry register \
   --description "Brain core log — múltiples días"
 ```
 
-**Cómo leer el path en código Go** (usa `.Primary()` para compatibilidad):
+El último `--path` se considera activo; los anteriores quedan cerrados.
+
+**Cómo leer los archivos en código Go**:
 ```go
 stream := tf.ActiveStreams["brain_core"]
 
-// Leer el path principal (backwards compatible)
-mainPath := stream.Path.Primary()
-
-// Iterar todos los paths
-for _, p := range stream.Path {
-    // procesar cada archivo
+for _, file := range stream.Paths {
+    if file.State == ManagedFileActive {
+        // file.Path es el archivo activo
+    }
 }
 ```
 
@@ -245,7 +271,8 @@ for p in log_paths:
 subprocess.run(cmd, check=True)
 ```
 
-⚠️ **Importante**: cuando un stream tiene un solo path, el JSON lo serializa como string simple para mantener compatibilidad con el JSON existente. Solo se serializa como array cuando hay 2 o más paths.
+⚠️ **Importante**: `paths` siempre es una colección de objetos. La forma
+string/array sólo pertenece al campo legacy `path` durante la migración.
 
 ---
 
@@ -291,7 +318,22 @@ El archivo `telemetry.json.lock` que aparece en disco es creado por `supervisor.
 
 Si ves este archivo en disco: no lo borres manualmente mientras nucleus esté corriendo. Es seguro borrarlo cuando el servicio no está activo.
 
-El supervisor escribe en `telemetry.json` directamente (sin pasar por `nucleus telemetry register`) para registrar el estado del Temporal Server. Eso está siendo migrado para usar la API tipada.
+Nucleus posee una única primitiva interna de persistencia: lock, lectura y merge,
+escritura temporal, rename atómico y verificación posterior. Tanto
+`nucleus telemetry register` como los loggers internos usan esa primitiva. El CLI
+continúa siendo la única entrada normativa para aplicaciones externas; Nucleus
+no se invoca a sí mismo como subproceso.
+
+### UTC y rollover diario real
+
+- La fecha del filename se calcula siempre en UTC.
+- Los timestamps de líneas y banners se escriben siempre en UTC.
+- Un proceso que cruza medianoche UTC debe cerrar el archivo anterior y abrir el
+  archivo del nuevo día sin requerir reinicio.
+- El cierre anterior y la incorporación del nuevo archivo activo se publican
+  como una sola transición atómica del stream lógico.
+- La rotación por tamaño, compresión, backup, retención y catálogo de archivos
+  respaldados se especifican por separado; no forman parte de este contrato.
 
 ---
 
@@ -334,5 +376,5 @@ Insertar al final de las secciones **CLI Layer** y **Core Layer** existentes:
 - [ ] Priority level apropiado (1/2/3)
 - [ ] NO modificar telemetry.json directamente
 - [ ] NO pasar last_update manualmente
-- [ ] Timestamps en UTC (time.Now().UTC() en Go, datetime.utcnow() en Python)
+- [ ] Timestamps en UTC (time.Now().UTC() en Go, datetime.now(timezone.utc) en Python)
 ```

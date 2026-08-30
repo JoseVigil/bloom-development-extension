@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,11 +14,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// StreamPaths represents a log path that can be a single string or a list.
+// StreamPaths represents the legacy path contract (a string or list of strings).
 // JSON: "path": "single.log"  OR  "path": ["a.log", "b.log"]
 // When reading, always use Paths() to iterate. When a single string is
 // registered it is stored as a one-element slice internally.
 type StreamPaths []string
+
+const (
+	ManagedFileActive = "active"
+	ManagedFileClosed = "closed"
+)
+
+// ManagedLogFile is one local file owned by a logical telemetry stream.
+// Lifecycle timestamps are UTC RFC3339 values.
+type ManagedLogFile struct {
+	Path        string `json:"path"`
+	State       string `json:"state"`
+	CreatedAt   string `json:"created_at"`
+	LastWriteAt string `json:"last_write_at"`
+	ClosedAt    string `json:"closed_at,omitempty"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
 
 func (sp StreamPaths) MarshalJSON() ([]byte, error) {
 	if len(sp) == 1 {
@@ -60,15 +74,19 @@ func (sp StreamPaths) Primary() string {
 // Path supports a single string or an array — see StreamPaths.
 // Source is optional — identifies which application/binary writes this stream.
 type StreamInfo struct {
-	Label       string      `json:"label"`
-	Path        StreamPaths `json:"path"`
-	Priority    int         `json:"priority"`
-	Categories  []string    `json:"categories"`
-	Description string      `json:"description"`
-	Source      string      `json:"source,omitempty"`
-	FirstSeen   string      `json:"first_seen"`
-	LastUpdate  string      `json:"last_update"`
-	Active      bool        `json:"active"`
+	Label string `json:"label"`
+	// Path is retained in memory as a compatibility view. New writers persist
+	// Paths as the authoritative inventory and also emit legacy path during the
+	// migration window so older consumers continue to work.
+	Path        StreamPaths      `json:"-"`
+	Paths       []ManagedLogFile `json:"-"`
+	Priority    int              `json:"priority"`
+	Categories  []string         `json:"categories"`
+	Description string           `json:"description"`
+	Source      string           `json:"source,omitempty"`
+	FirstSeen   string           `json:"first_seen"`
+	LastUpdate  string           `json:"last_update"`
+	Active      bool             `json:"active"`
 }
 
 // TelemetryData is the root object written to telemetry.json.
@@ -82,9 +100,8 @@ type TelemetryManager struct {
 	mu           sync.RWMutex
 	data         TelemetryData
 	path         string
-	dirty        bool
-	tlog         *Logger // structured log for all telemetry operations — nil until InitTelemetryLogger is called
-	lastModTime  time.Time // last known mtime of telemetry.json — used to detect external writes
+	tlog         *Logger           // structured log for all telemetry operations — nil until InitTelemetryLogger is called
+	lastModTime  time.Time         // last known mtime of telemetry.json — used to detect external writes
 	lastSnapshot map[string]string // streamID → lastUpdate — used to detect new/updated streams from CLI path
 }
 
@@ -202,12 +219,10 @@ func (tm *TelemetryManager) detectExternalChanges() bool {
 		}
 	}
 
-	// Merge external changes into in-process data so the in-process view stays consistent.
-	// We only add/update — we never delete streams based on external state.
+	// Replace/add external entries so the in-process view stays consistent with
+	// the verified atomic file. We never delete streams based on external state.
 	for id, s := range fresh.Streams {
-		if _, exists := tm.data.Streams[id]; !exists {
-			tm.data.Streams[id] = s
-		}
+		tm.data.Streams[id] = s
 	}
 
 	tm.mu.Unlock()
@@ -260,44 +275,28 @@ func injectLaunchIDCategory(streamID string, categories []string) []string {
 // RegisterStream registers or updates a stream from within the nucleus process.
 // categories is a slice like []string{"nucleus", "synapse"}.
 // paths accepts one or more file paths — stored as StreamPaths (string or array in JSON).
-func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categories []string, description, source string, paths ...string) {
+func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categories []string, description, source string, paths ...string) error {
+	if err := registerStreamAtomic(tm.path, id, label, paths, description, source, priority, categories, false, false); err != nil {
+		tm.tlogf("ERROR", "RegisterStream failed: id=%s err=%v", id, err)
+		return err
+	}
+	// Refresh the singleton view from the file produced by the atomic writer.
+	tm.load()
 	tm.mu.Lock()
-	// NOTE: no defer — we unlock manually before calling tlogf to avoid deadlock
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	firstSeen := now
-	if existing, exists := tm.data.Streams[id]; exists {
-		firstSeen = existing.FirstSeen
+	if stream, ok := tm.data.Streams[id]; ok {
+		tm.lastSnapshot[id] = stream.LastUpdate
 	}
-
-	normalizedPaths := make(StreamPaths, len(paths))
-	for i, p := range paths {
-		normalizedPaths[i] = filepath.ToSlash(p)
-	}
-
-	// Enrich cortex/host streams with their launch_id as an explicit category
-	// so consumers can filter by launch_id without string-matching the stream ID.
-	categories = injectLaunchIDCategory(id, categories)
-
-	tm.data.Streams[id] = StreamInfo{
-		Label:       label,
-		Path:        normalizedPaths,
-		Priority:    priority,
-		Categories:  categories,
-		Description: description,
-		Source:      source,
-		FirstSeen:   firstSeen,
-		LastUpdate:  now,
-		Active:      true,
-	}
-	tm.dirty = true
-	// Update snapshot so detectExternalChanges doesn't double-log in-process registrations
-	tm.lastSnapshot[id] = now
-	// Capture for logging after lock release — tlogf acquires RLock, cannot call under Lock
-	logMsg := fmt.Sprintf("RegisterStream id=%s label=%q categories=%v source=%q paths=%v",
-		id, label, categories, source, normalizedPaths)
 	tm.mu.Unlock()
-	tm.tlogf("INFO", "%s", logMsg)
+	return nil
+}
+
+// CloseStreamFile finalizes one managed file without creating a replacement.
+func (tm *TelemetryManager) CloseStreamFile(id, path string) error {
+	if err := registerStreamAtomic(tm.path, id, "", []string{path}, "", "", 0, nil, false, true); err != nil {
+		return err
+	}
+	tm.load()
+	return nil
 }
 
 // InitTelemetryLogger wires a dedicated Logger into the TelemetryManager.
@@ -317,58 +316,20 @@ func (tm *TelemetryManager) InitTelemetryLogger(paths *Paths, jsonMode bool) {
 	// jsonMode is forced to true here regardless of the caller's value.
 
 	targetDir := filepath.Join(paths.LogsDir, "nucleus", "telemetry")
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not create telemetry log dir: %v\n", err)
-		return
-	}
-
-	now := time.Now()
-	logFileName := fmt.Sprintf("nucleus_telemetry_%s.log", now.Format("20060102"))
-	logPath := filepath.Join(targetDir, logFileName)
-
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	logger, err := initManagedLogger(paths, targetDir, "nucleus_telemetry", "TELEMETRY",
+		"nucleus_telemetry", "📡 TELEMETRY", 2, []string{"nucleus"},
+		"Nucleus telemetry log — captures all reads, writes, errors, parse failures and lock issues related to telemetry.json",
+		"nucleus", true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not open telemetry log file %s: %v\n", logPath, err)
+		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not initialize telemetry logger: %v\n", err)
 		return
 	}
-
-	// Always stderr — never stdout. jsonMode forced true.
-	dest := io.MultiWriter(os.Stderr, file)
-	l := log.New(dest, "", log.Ldate|log.Ltime)
-
-	logger := &Logger{
-		file:       file,
-		logger:     l,
-		isJSONMode: true, // forced — never contaminates stdout
-		silentMode: false,
-		category:   "TELEMETRY",
-	}
-
-	logger.logger.Printf("======================================== [TELEMETRY] Logging session started ========================================")
-	logger.Flush()
 
 	tm.mu.Lock()
 	tm.tlog = logger
 	tm.mu.Unlock()
 
-	// Register the stream — lock already released above, safe to call RegisterStream
-	tm.RegisterStream(
-		"nucleus_telemetry",
-		"📡 TELEMETRY",
-		2,
-		[]string{"nucleus"},
-		"Nucleus telemetry log — captures all reads, writes, errors, parse failures and lock issues related to telemetry.json",
-		"nucleus",
-		filepath.ToSlash(logPath),
-	)
-
-	// Force immediate save so nucleus_telemetry appears in telemetry.json before
-	// any external registerStreamCLI process reads and overwrites the file.
-	// Without this, the 3-second autoSaveLoop tick arrives after the first
-	// external write, which reads the old file and loses nucleus_telemetry.
-	tm.save()
-
-	// Record the file mtime after our initial save so detectExternalChanges
+	// Record the file mtime after the atomic registration so detectExternalChanges
 	// has a correct baseline and won't re-log our own write as an external change.
 	if fi, err := os.Stat(tm.path); err == nil {
 		tm.mu.Lock()
@@ -429,7 +390,6 @@ func (tm *TelemetryManager) GetStreamsByCategory(category string) map[string]Str
 }
 
 // autoSaveLoop runs every 3 seconds:
-//   - saves in-process dirty state to disk
 //   - detects and logs streams registered externally via registerStreamCLI
 //   - emits a heartbeat every 60 seconds to confirm the daemon is alive
 func (tm *TelemetryManager) autoSaveLoop() {
@@ -438,13 +398,10 @@ func (tm *TelemetryManager) autoSaveLoop() {
 	const heartbeatEvery = 20 // 20 × 3s = 60s
 
 	for range ticker.C {
-		// 1. Flush in-process dirty state
-		tm.save()
-
-		// 2. Detect external changes (CLI path: Brain, Conductor, Sentinel)
+		// Detect external changes (CLI path: Brain, Conductor, Sentinel)
 		tm.detectExternalChanges()
 
-		// 3. Heartbeat — confirms daemon is alive even during idle periods
+		// Heartbeat — confirms daemon is alive even during idle periods
 		heartbeatTicks++
 		if heartbeatTicks >= heartbeatEvery {
 			heartbeatTicks = 0
@@ -454,52 +411,6 @@ func (tm *TelemetryManager) autoSaveLoop() {
 			tm.tlogf("DEBUG", "autoSaveLoop heartbeat — daemon alive, %d streams tracked", streamCount)
 		}
 	}
-}
-
-func (tm *TelemetryManager) save() {
-	tm.mu.Lock()
-
-	// Merge desde disco SIEMPRE — captura streams escritos por procesos CLI
-	// que corrieron entre el último save y ahora.
-	if raw, err := os.ReadFile(tm.path); err == nil {
-		var onDisk TelemetryData
-		if json.Unmarshal(raw, &onDisk) == nil && onDisk.Streams != nil {
-			for id, stream := range onDisk.Streams {
-				if _, exists := tm.data.Streams[id]; !exists {
-					tm.data.Streams[id] = stream
-					tm.dirty = true // hay algo nuevo — forzar write
-				}
-			}
-		}
-	}
-
-	if !tm.dirty {
-		tm.mu.Unlock()
-		return
-	}
-
-	data, marshalErr := json.MarshalIndent(tm.data, "", "  ")
-	if marshalErr != nil {
-		tm.mu.Unlock()
-		tm.tlogf("ERROR", "save: json.MarshalIndent failed — %v", marshalErr)
-		return
-	}
-	streamCount := len(tm.data.Streams)
-	tm.dirty = false
-	tm.mu.Unlock()
-
-	if writeErr := os.WriteFile(tm.path, data, 0644); writeErr != nil {
-		tm.tlogf("ERROR", "save: WriteFile(%s) failed — %v", tm.path, writeErr)
-		return
-	}
-
-	if fi, err := os.Stat(tm.path); err == nil {
-		tm.mu.Lock()
-		tm.lastModTime = fi.ModTime()
-		tm.mu.Unlock()
-	}
-
-	tm.tlogf("DEBUG", "save: telemetry.json written — %d streams (%d bytes)", streamCount, len(data))
 }
 
 // ============================================================================
@@ -529,7 +440,7 @@ func newTelemetryRegisterCommand(c *Core) *cobra.Command {
 	var (
 		streamID    string
 		label       string
-		logPath     string
+		logPaths    []string
 		priority    int
 		categories  []string
 		description string
@@ -634,7 +545,7 @@ NOTES
 
 			telemetryPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
 
-			if err := registerStreamCLI(telemetryPath, streamID, label, logPath, description, source, priority, categories); err != nil {
+			if err := registerStreamAtomic(telemetryPath, streamID, label, logPaths, description, source, priority, categories, true, false); err != nil {
 				return fmt.Errorf("failed to register stream: %w", err)
 			}
 
@@ -654,7 +565,7 @@ NOTES
 
 	cmd.Flags().StringVar(&streamID, "stream", "", "Stream identifier — lowercase snake_case (required)")
 	cmd.Flags().StringVar(&label, "label", "", "Display label with emoji (required)")
-	cmd.Flags().StringVar(&logPath, "path", "", "Absolute path to log file (required)")
+	cmd.Flags().StringArrayVar(&logPaths, "path", nil, "Absolute log file path (required, repeatable; last path is active)")
 	cmd.Flags().IntVar(&priority, "priority", 2, "Priority: 1=critical 2=important 3=informational")
 	cmd.Flags().StringArrayVar(&categories, "category", []string{}, "Subsystem category (repeatable): brain|build|conductor|launcher|nucleus|sentinel|synapse")
 	cmd.Flags().StringVar(&description, "description", "", "Who writes this log and what it captures (required)")
@@ -785,8 +696,11 @@ func acquireLock(telemetryPath string) (*flock.Flock, func(), error) {
 //  4. Write telemetry.json.tmp
 //  5. Rename .tmp → telemetry.json
 //  6. Release lock
-func registerStreamCLI(telemetryPath, streamID, label, logPath, description, source string, priority int, categories []string) error {
+func registerStreamAtomic(telemetryPath, streamID, label string, logPaths []string, description, source string, priority int, categories []string, emitLog, closeOnly bool) error {
 	logEvent := func(level, f string, v ...any) {
+		if !emitLog {
+			return
+		}
 		msg := fmt.Sprintf(f, v...)
 		if telemetryInstance != nil {
 			telemetryInstance.mu.RLock()
@@ -846,32 +760,47 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 				}
 			}
 
-			// Merge — preserva todos los streams existentes
+			// Merge — preserva todos los streams existentes.
 			now := time.Now().UTC().Format(time.RFC3339)
 			firstSeen := now
 			existingAction := "new"
-			if existing, exists := telemetry.Streams[streamID]; exists {
+			var managed []ManagedLogFile
+			existing, exists := telemetry.Streams[streamID]
+			if exists {
 				firstSeen = existing.FirstSeen
 				existingAction = "update"
+				managed = append(managed, existing.Paths...)
+			}
+			if closeOnly {
+				if !exists {
+					return fmt.Errorf("cannot close unknown telemetry stream %q", streamID)
+				}
+				managed = closeManagedFile(managed, logPaths[0], now)
+				existing.Paths = managed
+				existing.Path = nil
+				existing.LastUpdate = now
+				telemetry.Streams[streamID] = existing
+			} else {
+
+				// Enrich cortex/host streams with their launch_id as an explicit category.
+				categories = injectLaunchIDCategory(streamID, categories)
+
+				managed = reconcileManagedFiles(managed, logPaths, now)
+				telemetry.Streams[streamID] = StreamInfo{
+					Label:       label,
+					Paths:       managed,
+					Priority:    priority,
+					Categories:  categories,
+					Description: description,
+					Source:      source,
+					FirstSeen:   firstSeen,
+					LastUpdate:  now,
+					Active:      true,
+				}
 			}
 
-			// Enrich cortex/host streams with their launch_id as an explicit category.
-			categories = injectLaunchIDCategory(streamID, categories)
-
-			telemetry.Streams[streamID] = StreamInfo{
-				Label:       label,
-				Path:        StreamPaths{filepath.ToSlash(logPath)},
-				Priority:    priority,
-				Categories:  categories,
-				Description: description,
-				Source:      source,
-				FirstSeen:   firstSeen,
-				LastUpdate:  now,
-				Active:      true,
-			}
-
-			logEvent("INFO", "registerStreamCLI [%s]: id=%s label=%q categories=%v source=%q path=%s",
-				existingAction, streamID, label, categories, source, logPath)
+			logEvent("INFO", "registerStreamCLI [%s]: id=%s label=%q categories=%v source=%q paths=%v",
+				existingAction, streamID, label, categories, source, logPaths)
 
 			output, err := json.MarshalIndent(telemetry, "", "  ")
 			if err != nil {
@@ -924,4 +853,174 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 	}
 
 	return fmt.Errorf("registerStreamCLI: all %d attempts failed for id=%s — last error: %w", maxRetries, streamID, lastErr)
+}
+
+func closeManagedFile(existing []ManagedLogFile, path, now string) []ManagedLogFile {
+	path = filepath.ToSlash(path)
+	for i := range existing {
+		if existing[i].Path != path {
+			continue
+		}
+		existing[i].State = ManagedFileClosed
+		existing[i].ClosedAt = now
+		refreshManagedFile(&existing[i], now)
+	}
+	return existing
+}
+
+func reconcileManagedFiles(existing []ManagedLogFile, logPaths []string, now string) []ManagedLogFile {
+	if len(logPaths) == 0 {
+		return existing
+	}
+	normalized := make([]string, 0, len(logPaths))
+	seen := make(map[string]struct{}, len(logPaths))
+	for _, p := range logPaths {
+		p = filepath.ToSlash(p)
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		normalized = append(normalized, p)
+	}
+	if len(normalized) == 0 {
+		return existing
+	}
+	activePath := normalized[len(normalized)-1]
+
+	index := make(map[string]int, len(existing))
+	for i := range existing {
+		existing[i].Path = filepath.ToSlash(existing[i].Path)
+		index[existing[i].Path] = i
+		if existing[i].State == ManagedFileActive && existing[i].Path != activePath {
+			existing[i].State = ManagedFileClosed
+			existing[i].ClosedAt = now
+			refreshManagedFile(&existing[i], now)
+		}
+	}
+	for i, p := range normalized {
+		state := ManagedFileClosed
+		if i == len(normalized)-1 {
+			state = ManagedFileActive
+		}
+		if pos, ok := index[p]; ok {
+			existing[pos].State = state
+			if state == ManagedFileActive {
+				existing[pos].ClosedAt = ""
+			}
+			refreshManagedFile(&existing[pos], now)
+			continue
+		}
+		entry := ManagedLogFile{Path: p, State: state, CreatedAt: now, LastWriteAt: now}
+		if state == ManagedFileClosed {
+			entry.ClosedAt = now
+		}
+		refreshManagedFile(&entry, now)
+		index[p] = len(existing)
+		existing = append(existing, entry)
+	}
+	return existing
+}
+
+func refreshManagedFile(entry *ManagedLogFile, fallbackTimestamp string) {
+	info, err := os.Stat(filepath.FromSlash(entry.Path))
+	if err != nil {
+		if entry.LastWriteAt == "" {
+			entry.LastWriteAt = fallbackTimestamp
+		}
+		return
+	}
+	entry.SizeBytes = info.Size()
+	entry.LastWriteAt = info.ModTime().UTC().Format(time.RFC3339)
+	if entry.CreatedAt == "" {
+		entry.CreatedAt = fallbackTimestamp
+	}
+}
+
+// MarshalJSON emits the authoritative paths inventory plus the deprecated path
+// compatibility view. path points at the active file when one exists.
+func (s StreamInfo) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Label       string           `json:"label"`
+		Path        any              `json:"path,omitempty"`
+		Paths       []ManagedLogFile `json:"paths"`
+		Priority    int              `json:"priority"`
+		Categories  []string         `json:"categories"`
+		Description string           `json:"description"`
+		Source      string           `json:"source,omitempty"`
+		FirstSeen   string           `json:"first_seen"`
+		LastUpdate  string           `json:"last_update"`
+		Active      bool             `json:"active"`
+	}
+	legacy := StreamPaths(s.legacyPaths())
+	var legacyWire any
+	if len(legacy) == 1 {
+		legacyWire = legacy[0]
+	} else if len(legacy) > 1 {
+		legacyWire = []string(legacy)
+	}
+	return json.Marshal(wire{s.Label, legacyWire, s.Paths, s.Priority, s.Categories,
+		s.Description, s.Source, s.FirstSeen, s.LastUpdate, s.Active})
+}
+
+// UnmarshalJSON accepts path (string or array), paths, or both. When only the
+// legacy contract is present, managed entries are synthesized during migration.
+func (s *StreamInfo) UnmarshalJSON(data []byte) error {
+	type wire struct {
+		Label       string           `json:"label"`
+		Path        json.RawMessage  `json:"path"`
+		Paths       []ManagedLogFile `json:"paths"`
+		Priority    int              `json:"priority"`
+		Categories  []string         `json:"categories"`
+		Description string           `json:"description"`
+		Source      string           `json:"source"`
+		FirstSeen   string           `json:"first_seen"`
+		LastUpdate  string           `json:"last_update"`
+		Active      bool             `json:"active"`
+	}
+	var w wire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	var legacy StreamPaths
+	if len(w.Path) > 0 && string(w.Path) != "null" {
+		if err := legacy.UnmarshalJSON(w.Path); err != nil {
+			return err
+		}
+	}
+	paths := w.Paths
+	if len(paths) == 0 {
+		for i, p := range legacy {
+			state := ManagedFileClosed
+			// Legacy StreamPaths.Primary() defined the first entry as primary.
+			if i == 0 {
+				state = ManagedFileActive
+			}
+			paths = append(paths, ManagedLogFile{Path: filepath.ToSlash(p), State: state,
+				CreatedAt: w.FirstSeen, LastWriteAt: w.LastUpdate})
+		}
+	}
+	*s = StreamInfo{Label: w.Label, Path: legacy, Paths: paths, Priority: w.Priority,
+		Categories: w.Categories, Description: w.Description, Source: w.Source,
+		FirstSeen: w.FirstSeen, LastUpdate: w.LastUpdate, Active: w.Active}
+	if len(s.Path) == 0 {
+		s.Path = StreamPaths(s.legacyPaths())
+	}
+	return nil
+}
+
+func (s StreamInfo) legacyPaths() []string {
+	if len(s.Paths) == 0 {
+		return []string(s.Path)
+	}
+	result := make([]string, 0, len(s.Paths))
+	for _, f := range s.Paths {
+		if f.State == ManagedFileActive {
+			return []string{f.Path}
+		}
+		result = append(result, f.Path)
+	}
+	return result
 }
