@@ -1268,6 +1268,7 @@ func componentKeysDetailed() string {
 		}
 		lines = append(lines, entry)
 	}
+	lines = append(lines, "batcave [explicit only; requires --workspace and --org]")
 	return strings.Join(lines, ", ")
 }
 
@@ -1278,15 +1279,25 @@ func componentKeysDetailed() string {
 func createRolloutCommand(c *core.Core) *cobra.Command {
 	var dryRun bool
 	var only string
+	var workspace string
+	var organization string
 
 	cmd := &cobra.Command{
-		Use:   "rollout [--only <component>] [--dry-run]",
-		Short: "Deploy built binaries from repo to AppData",
+		Use:   "rollout",
+		Short: "Deploy built components to their managed destinations",
+		Args:  cobra.NoArgs,
 		Long: `Copies compiled binaries from the repository build output into the
 BloomNucleus AppData directory so the running system picks them up.
 
 Use --dry-run to preview what would be copied without making changes.
 Use --only to deploy a single component instead of everything.
+
+Batcave is an explicit organizational rollout and is excluded from a general
+rollout. It requires --only batcave, an absolute --workspace path, and --org.
+Only <workspace>/.bloom/.nucleus-<org>/.batcave/app is replaced; config,
+.data, .logs, .env.<org>, and unknown legacy files are preserved. --dry-run
+validates paths, organizational identity, the managed Node runtime, and the
+artifact without writing to the filesystem.
 
 The 'ionpump' component is special: after copying the bundled ZIPs and manifest,
 it automatically runs the full deploy pipeline:
@@ -1312,14 +1323,18 @@ Linux, and LaunchAgent on macOS.`,
 		Annotations: map[string]string{
 			"category": "MAINTENANCE",
 			"json_response": `{
-  "status": "success",
+  "status": "success_with_warnings",
   "dry_run": false,
-  "only": "",
+  "only": "batcave",
   "repo_root": "...",
+  "workspace": "C:\\repos\\eias-repos",
+  "organization": "eias-repos",
   "deployed": [
-    {"component": "Brain",   "source": "...", "destination": "...", "files_copied": 1},
-    {"component": "Nucleus", "source": "...", "destination": "...", "files_copied": 1}
+    {"component": "Batcave", "source": "...", "destination": "...\\.batcave\\app", "staging": "...\\.batcave\\.app.rollout-<id>", "files_copied": 3, "version": "1.0.0", "build": 3}
   ],
+  "legacy_layout": {"detected": true, "action": "preserved", "paths": ["main.ts", "README.md"]},
+  "cleanup_pending": false,
+  "warnings": ["legacy Batcave root layout was preserved because file ownership cannot be verified"],
   "skipped": [],
   "errors": []
 }`,
@@ -1348,15 +1363,20 @@ Linux, and LaunchAgent on macOS.`,
   metamorph rollout --only runtime
   metamorph rollout --only chrome
   metamorph rollout --only ionpump --dry-run
-  metamorph --json rollout --only nucleus`,
+  metamorph --json rollout --only nucleus
+  metamorph rollout --only batcave --workspace <absolute-path> --org <slug> --dry-run
+  metamorph rollout --only batcave --workspace <absolute-path> --org <slug>
+  metamorph --json rollout --only batcave --workspace <absolute-path> --org <slug>`,
 
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRollout(c, dryRun, only)
+			return runRollout(c, dryRun, only, workspace, organization)
 		},
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would be copied without making changes")
 	cmd.Flags().StringVar(&only, "only", "", "Deploy a single component instead of all. Valid values: "+componentKeysDetailed())
+	cmd.Flags().StringVar(&workspace, "workspace", "", "Absolute organizational workspace path (valid only with --only batcave)")
+	cmd.Flags().StringVar(&organization, "org", "", "Organizational slug (valid only with --only batcave)")
 
 	return cmd
 }
@@ -1370,17 +1390,25 @@ type deployedEntry struct {
 	Source      string `json:"source"`
 	Destination string `json:"destination"`
 	FilesCopied int    `json:"files_copied"`
+	Staging     string `json:"staging,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Build       int    `json:"build,omitempty"`
 }
 
 type rolloutResult struct {
-	Status   string           `json:"status"`
-	DryRun   bool             `json:"dry_run"`
-	Only     string           `json:"only"`
-	RepoRoot string           `json:"repo_root"`
-	Deployed []deployedEntry  `json:"deployed"`
-	Skipped  []string         `json:"skipped"`
-	Errors   []string         `json:"errors"`
-	Pending  []rolloutHandoff `json:"pending,omitempty"`
+	Status         string               `json:"status"`
+	DryRun         bool                 `json:"dry_run"`
+	Only           string               `json:"only"`
+	RepoRoot       string               `json:"repo_root"`
+	Deployed       []deployedEntry      `json:"deployed"`
+	Skipped        []string             `json:"skipped"`
+	Errors         []string             `json:"errors"`
+	Pending        []rolloutHandoff     `json:"pending,omitempty"`
+	Workspace      string               `json:"workspace,omitempty"`
+	Organization   string               `json:"organization,omitempty"`
+	LegacyLayout   *batcaveLegacyLayout `json:"legacy_layout,omitempty"`
+	CleanupPending bool                 `json:"cleanup_pending"`
+	Warnings       []string             `json:"warnings"`
 }
 
 // rolloutHandoff describes a deployment that cannot finish while the current
@@ -1431,7 +1459,13 @@ type metamorphRelayReceipt struct {
 // Core rollout logic
 // ─────────────────────────────────────────────────────────────────────────────
 
-func runRollout(c *core.Core, dryRun bool, only string) error {
+func runRollout(c *core.Core, dryRun bool, only, workspace, organization string) error {
+	if only == "batcave" {
+		return runBatcaveRollout(c, dryRun, workspace, organization)
+	}
+	if strings.TrimSpace(workspace) != "" || strings.TrimSpace(organization) != "" {
+		return fmt.Errorf("--workspace and --org are valid only with --only batcave")
+	}
 	basePath := core.GetBaseAppDataPath()
 
 	repoRoot, err := resolveRepoRoot()
@@ -1486,6 +1520,7 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 		Skipped:  []string{},
 		Errors:   []string{},
 		Pending:  []rolloutHandoff{},
+		Warnings: []string{},
 	}
 
 	for _, comp := range comps {

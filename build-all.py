@@ -2084,19 +2084,18 @@ def verify_gravity_parser() -> StepResult:
     """
     Verifica las suites focalizadas del parser de Gravity (Go + TypeScript)
     ANTES de compilar o desplegar Nucleus. Corre sobre fuentes ya generadas y
-    commiteadas — no invoca scripts/generate-gravity-parser.ps1, no requiere
+    commiteadas — NO invoca scripts/generate-gravity-parser.ps1, NO requiere
     Java ni ANTLR_JAR, y no modifica ninguna fuente ni artefacto productivo.
+
+    Esta es la función que usa el gate de Nucleus (ver _GRAVITY_DEPENDENT_COMPONENTS
+    en main()) y queda sin cambios: el build normal de Nucleus sigue sin
+    depender de Java. La regeneración explícita vive en
+    regenerate_and_verify_gravity_parser(), usada solo por `--only parser`.
 
     NO es de solo lectura en sentido estricto: `npm run test:gravity-parser`
     compila un .tmp temporal (.tmp/gravity-parser-test/) para poder ejecutar
     el test TS. Ese directorio es descartable entre corridas y no forma parte
     de ningún artefacto de build ni de deployment.
-
-    Es preflight, no un step del loop principal: si falla, main() debe
-    terminar con exit code 1 antes de construir o desplegar CUALQUIER
-    componente — Nucleus va primero en all_steps precisamente porque otros
-    pasos dependen de él (PATH, `nucleus telemetry register`), así que no es
-    seguro dejar que el build siga usando un Nucleus previamente instalado.
     """
     log("Preflight: verificando parser de Gravity (Go + TypeScript) ...")
 
@@ -2118,6 +2117,95 @@ def verify_gravity_parser() -> StepResult:
 
     log("  ✅ Gravity: Go y TypeScript OK")
     return StepResult("Gravity", True, output=f"{out_go}\n{out_ts}")
+
+
+def regenerate_and_verify_gravity_parser() -> StepResult:
+    """
+    SOLO para `--only parser`. A diferencia de verify_gravity_parser() (que
+    usa el gate de Nucleus y NO cambia), esta función:
+
+      1. Regenera el parser Go + TypeScript desde
+         contracts/gravity/GravityExpression.g4, invocando
+         scripts/generate-gravity-parser.ps1 (el mismo script manual de
+         siempre, ahora llamado automáticamente por este comando puntual).
+      2. Si la regeneración fue exitosa, corre las mismas suites de
+         verify_gravity_parser() sobre lo recién generado.
+
+    Esto SÍ modifica archivos del repositorio (sobreescribe
+    installer/nucleus/internal/gravity/ y contracts/gravity/generated/) y SÍ
+    requiere Java en PATH — exactamente los mismos requisitos que ya tenía
+    correr el .ps1 a mano.
+
+    Resolución del JAR de ANTLR (sin auto-descarga, sin .cache/tools/antlr/):
+      1. Si la variable de entorno ANTLR_JAR está seteada, se usa tal cual
+         como override explícito (se respeta cualquier ruta que apunte).
+      2. Si no está seteada, se usa la ruta predeterminada del repo:
+         installer/antlr/antlr-4.13.2-complete.jar (relativa a ROOT).
+      3. Si la ruta resultante (de 1 o 2) no existe en disco, se aborta ANTES
+         de invocar el script — no se regenera nada — con un error que
+         indica la ruta exacta esperada y el enlace oficial de descarga.
+
+    Nucleus no depende de esta función en ningún punto: su gate sigue usando
+    verify_gravity_parser(), sin regenerar y sin requerir Java.
+    """
+    if not IS_WINDOWS:
+        return StepResult(
+            "Gravity",
+            False,
+            error=(
+                "La regeneración de Gravity (--only parser) requiere Windows: "
+                "scripts/generate-gravity-parser.ps1 necesita PowerShell. No hay "
+                "un equivalente .sh autorizado."
+            ),
+        )
+
+    script_path = ROOT / "scripts" / "generate-gravity-parser.ps1"
+    if not script_path.exists():
+        return StepResult("Gravity", False, error=f"No se encontró {script_path}")
+
+    _DEFAULT_ANTLR_JAR = ROOT / "installer" / "antlr" / "antlr-4.13.2-complete.jar"
+    _ANTLR_DOWNLOAD_URL = "https://www.antlr.org/download/antlr-4.13.2-complete.jar"
+
+    antlr_jar_override = os.environ.get("ANTLR_JAR")
+    if antlr_jar_override:
+        antlr_jar_path = Path(antlr_jar_override)
+        antlr_jar_source = "override explícito vía $env:ANTLR_JAR"
+    else:
+        antlr_jar_path = _DEFAULT_ANTLR_JAR
+        antlr_jar_source = "ruta predeterminada del repo"
+
+    if not antlr_jar_path.exists():
+        return StepResult(
+            "Gravity",
+            False,
+            error=(
+                f"No se encontró el JAR de ANTLR ({antlr_jar_source}):\n"
+                f"  {antlr_jar_path}\n"
+                f"Colocá antlr-4.13.2-complete.jar en esa ruta exacta, o seteá "
+                f"$env:ANTLR_JAR apuntando a otra ubicación antes de correr "
+                f"--only parser.\n"
+                f"Descarga oficial: {_ANTLR_DOWNLOAD_URL}"
+            ),
+        )
+
+    log("Regenerando parser de Gravity desde GravityExpression.g4 ...")
+    log(f"  Script:    {script_path}")
+    log(f"  ANTLR_JAR: {antlr_jar_path}  ({antlr_jar_source})")
+
+    cmd = [
+        "powershell", "-ExecutionPolicy", "Bypass", "-NonInteractive",
+        "-File", str(script_path), "-AntlrJar", str(antlr_jar_path),
+    ]
+    code_gen, out_gen = run_streaming(cmd, cwd=script_path.parent)
+    if code_gen != 0:
+        tail = "\n".join(out_gen.splitlines()[-20:]) if out_gen else "(sin output)"
+        return StepResult("Gravity", False, error=f"generate-gravity-parser.ps1 falló:\n{tail}")
+
+    log("  ✅ Parser regenerado (Go + TypeScript) desde GravityExpression.g4")
+
+    # Reutiliza exactamente la misma verificación que corre el gate de Nucleus,
+    # para confirmar que lo recién generado compila y pasa las suites.
+    return verify_gravity_parser()
 
 
 def main() -> None:
@@ -2179,6 +2267,11 @@ def main() -> None:
     # Brain y Host usan sus propios builders.
     # Los 4 Go components usan build_go_component().
     all_steps: list[tuple[str, str, Callable[[], StepResult]]] = [
+        # parser: regenera desde GravityExpression.g4 y verifica (Go + TypeScript),
+        # invocable en solitario con `--only parser`. A diferencia del gate de
+        # Nucleus, esta ruta SÍ requiere Java/ANTLR_JAR y SÍ escribe archivos
+        # generados del repositorio — ver regenerate_and_verify_gravity_parser().
+        ("parser",    "Gravity Parser", regenerate_and_verify_gravity_parser),
         # nucleus va primero: su rollout deja el binario en PATH antes de que
         # cualquier otro componente intente llamar `nucleus telemetry register`.
         ("nucleus",   "Nucleus",   lambda: build_go_component("nucleus")),
@@ -2215,22 +2308,39 @@ def main() -> None:
 
     results: list[StepResult] = []
 
-    # ── Preflight de Gravity — solo si Nucleus entra en este build ──
+    # ── Gate de Gravity — si Nucleus y/o "parser" entran en este build ──
     # Fail-fast: si falla, no se construye ni se despliega NADA en esta
     # corrida, aunque haya otros componentes independientes en `steps`.
     # Nucleus es el primer paso de all_steps porque pasos posteriores
     # dependen de él (PATH, telemetry register); dejar que el build siga
     # arriesgaría usar el Nucleus ya instalado en vez de detectar el problema.
-    if any(key == "nucleus" for key, _, _ in steps):
-        _header("Preflight: Gravity (Go + TypeScript)")
-        gravity_result = verify_gravity_parser()
+    #
+    # "parser" usa una función distinta: regenerate_and_verify_gravity_parser()
+    # regenera desde GravityExpression.g4 (requiere Java/ANTLR_JAR, escribe
+    # archivos generados) y luego corre las mismas suites. Nucleus NO pasa por
+    # ahí — su rama sigue siendo verify_gravity_parser(), sin Java y sin tocar
+    # el repo, sin cambios respecto a antes.
+    _GRAVITY_DEPENDENT_COMPONENTS = ("nucleus", "parser")
+
+    if any(key in _GRAVITY_DEPENDENT_COMPONENTS for key, _, _ in steps):
+        parser_requested = any(key == "parser" for key, _, _ in steps)
+        if parser_requested:
+            _header("Gravity: regeneración (.g4) + verificación — --only parser")
+            gravity_result = regenerate_and_verify_gravity_parser()
+        else:
+            _header("Preflight: Gravity (Go + TypeScript)")
+            gravity_result = verify_gravity_parser()
         _print_result(gravity_result)
         results.append(gravity_result)
         if not gravity_result.ok:
             log("")
-            log("⛔ Preflight de Gravity falló. Build abortado antes de compilar Nucleus.")
+            log("⛔ Gravity falló. Build abortado antes de compilar Nucleus.")
             _print_summary(results)
             sys.exit(1)
+        # Ya se ejecutó arriba: si "parser" fue pedido explícitamente
+        # (--only parser), sacarlo de `steps` para que el loop de abajo no lo
+        # vuelva a correr (y no regenere una segunda vez).
+        steps = [(k, n, f) for k, n, f in steps if k != "parser"]
 
     _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel")
 
