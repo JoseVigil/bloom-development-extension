@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "component": "batcave",
+  "version": "1.0.0",
+  "build": 7,
+  "node_target": "node24",
+  "module_format": "esm",
+  "primary_entrypoint": "main",
+  "entrypoints": {
+    "main": "main.js"
+  },
+  "files": {
+    "main.js": {
+      "sha256": "fd1f471cdb9057910791091df7b5fcce6d53845334bb250fb3db2f3197c0460b",
+      "size": 129266
+    },
+    "main.js.map": {
+      "sha256": "4af4fe1c1b33ab9584bd507ace7e692b40eb667de289eaab418965a99c8ca521",
+      "size": 257855
+    }
+  }
+}

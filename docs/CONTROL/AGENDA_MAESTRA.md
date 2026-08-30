@@ -63,7 +63,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 8 | Batcave | Arquitectura multi-org definida; decisión GitHub App vigente | Corregir regresión de Batcave Auth en Vault spec y actualizar referencias | CORTEX; Nucleus; Alfred remoto |
 | 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
 | 10 | PALADIN / Distribución por composición | PALADIN confirmado como producto Cognituum para ingenieros; principio de una plataforma con composición individual u organizacional bajo análisis | Resolver gobernanza, contrato de composición, bootstrap y transiciones antes de diseñar la implementación | Nucleus; Metamorph; Installer/Setup; AUTHORIZATION; Batcave; Core; propiedad de Mandates y Wisdom |
-| 11 | Gravity / Orbital Agentic State / Posture | 4 coworks completos (Rosetta, UX, API/DTOs, Objetos Paladin) + 3 investigaciones Codex cerradas (colisión mandate_state.json, no-eliminación de COR_Intent_Spec, AUTH-OWNERSHIP-01) + saneamiento documental de nombre y atribución ya ejecutado | Iniciar cowork de Persistencia del Grafo Gravity (Eje 1) | AUTHORIZATION (Tema 9, para Architect); PALADIN (Tema 10, para Postura/UX) |
+| 11 | Gravity / Orbital Agentic State / Posture | Persistencia, resolución, masa y gramática formal dual implementadas y probadas; integración productiva pendiente | Integrar resolución/parser en Nucleus, Temporal y Conductor Workspace Core | AUTHORIZATION (Tema 9, para Architect); PALADIN (Tema 10, para Postura/UX); Nucleus; Temporal; Core |
 
 ---
 
@@ -71,7 +71,13 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 **Estado actual**
 
-El paso de Onboarding a Core para Genesis avanzó: D-22 y D-23 están implementados, pero todavía no recibieron QA manual end-to-end. El mecanismo de eventos y la presentación en Core fueron trabajados; sin embargo, el mandate real permanece bloqueado por el watcher y el registro de activities necesarias para completar el workflow.
+El bloqueador de resolución de workspace del watcher, activo hasta el 25 de agosto, está corregido y verificado en el binario desplegado — no solo en diseño. La causa real no era un campo faltante en `nucleus.json`: fue una regresión de esquema — el watcher buscaba los campos planos obsoletos (`onboarding.workspace_org`/`workspace_path`), mientras el onboarding ya escribía el esquema multi-organización vigente (`active_org_slug` + `organizations[].workspace_path`). El fallback por filesystem tampoco podía resolverlo porque el servicio arranca desde el directorio del binario (`AppData\...\bin\nucleus`), sin ancestro común con el workspace real.
+
+Corrección ya desplegada: `LoadMachineNucleusConfig()` lee correctamente el esquema anidado (`mandate_config.go`), deriva `MandatesRoot` sin depender del CWD, y usa el scan por filesystem únicamente como fallback de desarrollo (`service.go`). Confirmado con logs reales de producción de cuatro días distintos (25, 26, 27 y 29 de agosto), incluyendo el despacho efectivo de `MandateGenesisBuildWorkflow` — no solo la resolución del path.
+
+Se detectó y corrigió, en el mismo trabajo, una regresión equivalente en `dev-start` (mismo campo plano obsoleto). El alcance actual de esta resolución de workspace es más amplio de lo que se creía — comparten el mismo mecanismo centralizado (`ResolveActiveOrgContext()`/`ResolveNucleusRoot()`) los comandos de Mandates, Vault, Ownership, Blueprint, Alfred y metadata de Nucleus. Sin evidencia de fallo en ninguno de ellos hoy.
+
+Riesgo residual, no bloqueante: instalaciones legacy que conserven únicamente el esquema plano podrían fallar si el servicio arranca antes de que Conductor las migre. No amerita acción ahora — queda como endurecimiento futuro opcional si se confirma que existen instalaciones en ese estado.
 
 La composición funcional canónica de un Genesis completo queda fijada así:
 
@@ -87,7 +93,7 @@ El Work independiente **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MOD
 
 El ownership general queda fijado: Nucleus gobierna y autoriza; Temporal orquesta Actions durablemente; Brain conserva el ciclo de vida, identidad, persistencia e interpretación de Intents; AITAP conserva Gateway, referencias de Vault y Contabilidad sin ejecutar código ni tocar filesystem; Executor implementa la Execution Layer sobre trabajo definido y autorizado, sin decidir si Genesis necesita `dev`; Core proyecta el estado durable.
 
-La verificación de contrato con AUTHORIZATION quedó completada para el canal CLI: Specialist y Unknown son rechazados sin estado parcial ni dispatch a Temporal; Master pasa por un único punto de entrada (`requireMandateMaster → governance.RequireMaster`) y crea `mandate_state.json`. El flujo Master no inicia todavía Temporal porque el watcher no resuelve el workspace Nucleus activo: falta `onboarding.workspace_org` en `nucleus.json` y el fallback por filesystem falla desde la ruta del servicio. Es un blocker de infraestructura/configuración transversal a cualquier tipo de Mandate, no una falla de Authorization ni de la lógica funcional de Genesis.
+La verificación de contrato con AUTHORIZATION quedó completada para el canal CLI: Specialist y Unknown son rechazados sin estado parcial ni dispatch a Temporal; Master pasa por un único punto de entrada (`requireMandateMaster → governance.RequireMaster`) y crea `mandate_state.json`. AUTHORIZATION, roles y gates no fueron modificados por la corrección del watcher; el despacho de `MandateGenesisBuildWorkflow` desde el `MandatesRoot` correcto quedó confirmado en producción.
 
 **Fuentes de verdad**
 
@@ -98,11 +104,10 @@ La verificación de contrato con AUTHORIZATION quedó completada para el canal C
 
 **Próximo paso concreto**
 
-1. Resolver el workspace Nucleus activo para el watcher de Mandates y verificar que Master pueda iniciar Temporal; este item es infraestructura/configuración, separado de Authorization.
-2. Consolidar la representación exacta del action graph y la transición durable Mandate ↔ Action ↔ Intent.
-3. Definir schemas de output de `doc/` y `exp/`, incluidos `remediation_required`, findings estructurados y `ready`.
-4. Cerrar autorización Nucleus → Executor y observabilidad en Core.
-5. Elegir motor Temporal específico o genérico sin reabrir la composición funcional, y recién entonces aprobar la implementación del vertical.
+1. Consolidar la representación exacta del action graph y la transición durable Mandate ↔ Action ↔ Intent.
+2. Definir schemas de output de `doc/` y `exp/`, incluidos `remediation_required`, findings estructurados y `ready`.
+3. Cerrar autorización Nucleus → Executor y observabilidad en Core.
+4. Elegir motor Temporal específico o genérico sin reabrir la composición funcional, y recién entonces aprobar la implementación del vertical.
 
 **Entorno recomendado**
 
@@ -121,7 +126,7 @@ Coordinación entre los Works de Genesis, AITAP y Executor hasta cerrar sus cont
 **Decisiones/riesgos abiertos**
 
 - Permanecen abiertos el action graph, motor Temporal, schemas `doc`/`exp`, transición durable, autorización Nucleus → Executor, findings que habilitan `dev` y representación en Core.
-- No aceptar como válido un E2E API de creación real de Mandates hasta que el handler Node/TypeScript y el boundary Go→Node de AUTH-FIX-02 estén cerrados. El E2E CLI Master permanece bloqueado actualmente por la resolución de workspace del watcher, no por autorización.
+- El bloqueador de resolución de workspace del watcher está resuelto y verificado en producción (ver Estado actual). El E2E CLI Master ya no está bloqueado por esta causa — sigue pendiente de QA manual end-to-end formal, no de infraestructura. El E2E API de creación de Mandates sigue sin aceptarse como válido hasta que el handler Node/TypeScript y el boundary Go→Node de AUTH-FIX-02 estén cerrados (sin cambios respecto a lo ya registrado en Tema 9).
 - Estas decisiones precisan la implementación, pero no pueden alterar la composición funcional sin volver a AGENDA FOLLOWUP.
 - Elevar a esta agenda solamente blockers transversales reales encontrados por cualquiera de los dos Works.
 - D-25: confirmar si hace falta separar `GenesisTab` de `StandardMandateTab` o unificar en un `MandateTab` orientado por estado.
@@ -508,24 +513,31 @@ Investigación de diseño consolidada sobre el ecosistema Gravity/Orbital, con c
 
 Ya se ejecutó el saneamiento documental derivado de esas tres investigaciones: renombre completo a `orbital_agentic_state.json` en los cuatro documentos de diseño de Gravity/Mandates agénticos, y corrección de la atribución de `Architect` en `NUCLEUS_AUTHORIZATION_MODULE_DRAFT_v0_2.md` (línea 16). Ningún cambio tocó código. La referencia a `ownership v0.3` en el Tema 9 fue corregida en esta Agenda a `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md`, con la salvedad de que ese documento todavía no fue contrastado contra `.nucleus-governance.json`.
 
-Todo lo anterior es diseño e investigación — **ninguna pieza de Gravity tiene todavía persistencia, endpoint ni implementación real**; esto está confirmado por la auditoría del propio catálogo de API contra el código real, no es una suposición.
+La primera etapa de implementación real de Gravity dentro del Work Génesis quedó completada. El Grafo de Gravedad persiste bajo `.bloom/.gravity/` mediante archivos JSON por entidad, raíz gobernada y sustitución atómica. `GravityNode` incorpora `nodeVersion` para compare-and-swap de concurrencia, no como caché. `Store.CreateNode` es fail-closed para `ORGANIZATION` y `NUCLEUS`; `PROJECT`, `MANDATE` y `SESSION` mantienen el comportamiento existente.
+
+También se implementaron `ResolveActive`, la Activity de Temporal `resolveActiveGravityActivity` y el cálculo puro de masa. La resolución reutiliza solo la espina estructural del Mandate y relee fresco en cada turno el contenido de sus nodos, incluido siempre `SESSION`; no persiste una segunda copia de `gravityRules[]`. La Activity ya está registrada en el worker, pero aún no está conectada a `MandateExecutionWorkflow`.
+
+La gramática canónica ANTLR4 `contracts/gravity/GravityExpression.g4` genera parsers equivalentes para Go (validación autoritativa en Nucleus) y TypeScript (validación advisory en Conductor Workspace Core). Reconoce `constraint`, `threshold`, `evidence`, `priority`, `escalation` y `exception`; ambos parsers derivan de forma fija `predicateComputable`, validan WF-1 a WF-5 y producen AST serializable con errores de sintaxis posicionados y rechazos semánticos separados. La etapa incluyó casos válidos de las seis primitivas, `grv_2b91` reexpresado y casos inválidos por regla.
+
+Esta etapa no crea un componente desplegable llamado parser: el parser Go forma parte de `nucleus.exe` y el parser TypeScript deberá incorporarse más adelante a `bloom-workspace`. Java/ANTLR 4.13.2 se usan solo en la regeneración explícita mediante `scripts/generate-gravity-parser.ps1`; el build normal verifica fuentes generadas versionadas y no las regenera. El preflight de `build-all.py` falla antes de compilar Nucleus si falla la suite Go o TypeScript de Gravity.
 
 **Fuentes de control y verificación**
 
 - Coworks: `Rosetta_Stone_Investigacion_Marcos_Externos_v0_1.md`, `Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md`, `NUCLEUS_API_Contracts_Consolidado_v0_1.md`, `NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md`, `Paladin_Client_Object_Model_v0_1.md`.
 - Investigaciones Codex (diagnóstico, modo lectura, sin cambios): resultado de la colisión `mandate_state.json`/Orbital Agentic State; resultado de la investigación sobre eliminación de `COR_Intent_Spec_v1_0.md`; resultado de `AUTH-OWNERSHIP-01`.
 - Saneamiento documental ejecutado por Codex en: `docs/AGENTIC/BTIPS_Mandates_Agenticos_Spec_Unificada.md`, `docs/MANDATE/BLOOM_Mandate_Universal_Schema_v1_2_0.md`, `docs/ANAYSIS/GRAVITY/API/NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md`, `docs/ANAYSIS/GRAVITY/API/NUCLEUS_API_Contracts_Consolidado_v0_1.md`, `docs/GOVERNANCE/AUTHORIZATION/NUCLEUS_AUTHORIZATION_MODULE_DRAFT_v0_2.md`.
+- Implementación y contrato: `.bloom/.gravity/`, `contracts/gravity/GravityExpression.g4`, `installer/nucleus/internal/gravity`, `contracts/gravity`, `scripts/generate-gravity-parser.ps1` y `build-all.py`.
 
 **Próximo paso concreto**
 
-1. Iniciar el cowork de Persistencia del Grafo Gravity (Eje 1), que ahora incorpora desde el diseño el hallazgo de que "el grafo" son hoy tres estructuras sin relación declarada, y la métrica de masa ya cerrada por el cowork de UX.
+1. Integrar productivamente la etapa cerrada: conectar `resolveActiveGravityActivity` a `MandateExecutionWorkflow`; invocar el parser autoritativo de Nucleus antes de persistir o firmar reglas; e importar/empaquetar el parser TypeScript en Conductor Workspace Core.
 2. `docs/MANDATE/MARKETPLACE/BLOOM_Mandate_Package_Spec_v1_0_0.md` (línea 61) quedó revisado y **cerrado sin cambios**: su referencia a `mandate_state.json` es correcta tal como está — el documento excluye deliberadamente el estado operacional del Nucleus vendedor de lo que viaja en un Mandate empaquetado. Queda anotado para una revisión futura, no urgente: ese mismo documento debería excluir también el `orbital_agentic_state.json` crudo, dejando claro que lo transferible nunca es el log completo, sino una proyección sanitizada o Wisdom ya promovida.
 3. `docs/MANDATE/MARKETPLACE/BLOOM_Cognitive_Evidence_Model_v1_0_0.md` (línea 292) queda como **pendiente de diseño real**, no de nombre: su “evidencia local directa” es ambigua entre el estado operacional de Nucleus, el historial crudo de Orbital, o una proyección derivada de ambos — no se renombra ni se corrige hasta resolver esa ambigüedad.
 4. Se identifica una **investigación futura candidata**, todavía no abierta ni asignada: `mandate_state.json + orbital_agentic_state.json → evidencia derivada → Gravity reusable → Wisdom`. Debe definir qué se deriva, qué se sanitiza, qué se promueve, qué es transferible entre organizaciones (Marketplace) y quién conserva ownership en cada paso — siguiendo la progresión ya fijada en Orbital: Experience → Gravity → Repeated Application → Evidence → Reusable Gravity → Wisdom. Wisdom no es otro nombre para el historial de ejecución.
 
 **Entorno recomendado**
 
-Claude Web/Cowork para diseño e investigación de Gravity; Codex con acceso al repo para cualquier diagnóstico o edición documental de bajo riesgo. Ninguna tarea de este tema requiere todavía acceso a una instalación real — no hay implementación que probar.
+Claude Web/Cowork para las decisiones restantes de diseño; Codex o Claude Code con acceso al repo para integrar Nucleus, Temporal y Conductor Workspace Core. La integración productiva y cualquier rollout requieren verificación posterior en los artefactos ordinarios de Nucleus y Workspace, no un componente parser independiente.
 
 **Dependencias cruzadas**
 
@@ -534,7 +546,10 @@ Claude Web/Cowork para diseño e investigación de Gravity; Codex con acceso al 
 
 **Decisiones/riesgos abiertos**
 
-- Ninguna pieza de Gravity (grafo, arbitraje, detección de colisiones) tiene implementación real — toda decisión de este tema es diseño, no debe leerse como estado de producción.
+- Persistencia, resolución, masa y parseo están implementados y probados, pero todavía no cambian el comportamiento de ejecución de Mandates: falta conectar la Activity al workflow y usar el parser antes de persistir o firmar reglas.
+- No existe aún comando Cobra que exponga `gravity.Parse()`, evaluador real ni consumidores de arbitraje.
+- No se realizó rollout productivo de esta etapa; el parser Go viajará con `nucleus.exe` y el TypeScript con `bloom-workspace` cuando se integre.
+- “Paladin” queda solo como nombre de fuentes históricas de Gravity; el consumidor cliente actual es Conductor Workspace Core.
 - `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` tiene una ambigüedad de diseño real (no terminológica) sin resolver sobre qué es “evidencia local directa”.
 - `GOVERNANCE_OWNERSHIP_SPEC_v1_0.md` todavía debe contrastarse contra `.nucleus-governance.json` antes de usarlo para normalizar el rol Architect.
 
@@ -560,7 +575,7 @@ Claude Web/Cowork para diseño e investigación de Gravity; Codex con acceso al 
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
-| Alta | 11 | Cowork `PERSISTENCIA DEL GRAFO GRAVITY — Eje 1`, incorporando el hallazgo de los tres grafos sin relación declarada y la métrica de masa ya cerrada | Saneamiento documental de nombre (`Orbital Agentic State`) ya ejecutado |
+| Alta | 11 | Integración productiva de Gravity: workflow Temporal, validación autoritativa Nucleus y empaquetado en Conductor Workspace Core | Persistencia, resolución, masa y parser dual implementados; no crear componente parser independiente |
 | Media | 11 | Evaluar si `BLOOM_Mandate_Package_Spec_v1_0_0.md` y `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` requieren investigación propia o se relacionan con Wisdom | Ninguna — solo decidir si se abre |
 
 ## Registro cronológico de avances
@@ -578,3 +593,5 @@ Claude Web/Cowork para diseño e investigación de Gravity; Codex con acceso al 
 | 2026-08-29 | 11 (nuevo) | Se completaron los cuatro coworks de investigación de Gravity/Orbital/Posture y las tres investigaciones diagnósticas de Codex derivadas (colisión de nombre, eliminación de COR, AUTH-OWNERSHIP-01). Se ejecutó el saneamiento documental resultante: renombre a Orbital Agentic State en cuatro documentos y corrección de atribución de Architect en el borrador de AUTHORIZATION. | Sesión externa de investigación (Claude Web) + Codex para diagnóstico y edición documental, reportado por el usuario | Se abre el Tema 11 con su estado consolidado, fuentes, próximos pasos y dependencias cruzadas con Temas 9 y 10. |
 | 2026-08-24 | 1, 9 | Se cerraron fail-closed, gate CLI, Alfred Master-only y homologación de mensajes/exit codes; Genesis verificó el contrato de Authorization. | Actualización del usuario; cambios en `main`, `go test ./...` en verde | Se distinguió el tramo CLI cerrado del gate API/boundary Go→Node pendiente; Genesis quedó bloqueado por resolución de workspace del watcher, no por Authorization. |
 | 2026-08-26 | 10 / PALADIN | El Work de distribución para desarrolladores e ingenieros externos fue renombrado PALADIN, nombre del producto Cognituum para ingenieros. Se presentó el principio de una plataforma con composición individual u organizacional. | AGENDA FOLLOWUP, decisión y material compartidos por el usuario | Se registró PALADIN como nombre cerrado; la composición, su cadena de autoridad, bootstrap, transiciones y propiedad del conocimiento permanecen pendientes de gobernanza. |
+| 2026-08-29 | 11 / Gravity | Se completó la primera etapa de implementación real: persistencia `.bloom/.gravity/`, resolución activa, cálculo de masa, gramática ANTLR4 dual, parsers Go/TypeScript y preflight de build. | Work Génesis, reportado por el usuario | Se cerró el contrato de parseo y sus pruebas; integración con workflow, persistencia/firma autoritativa, Core y rollout quedan pendientes. |
+| 2026-08-29 | 1 | Se confirmó, con logs de producción de cuatro días distintos, que el bloqueador de resolución de workspace del watcher de Mandates está corregido y desplegado — no es un blocker activo. Causa real: regresión de esquema (campos planos obsoletos vs. esquema multi-organización), corregida también en `dev-start`. Se identificó el alcance ampliado del mecanismo compartido de resolución (Vault, Ownership, Blueprint, Alfred, metadata) sin evidencia de fallo. | Codex, reportado por el usuario | Se actualiza el estado del Tema 1: el bloqueador de infraestructura queda cerrado; el roadmap avanza al paso 2 (action graph). |

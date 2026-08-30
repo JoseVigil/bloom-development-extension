@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
+    "build:artifact": "node scripts/build_batcave.mjs",
+    "test:artifact": "node --test scripts/build_batcave_test.mjs",
     "start": "node dist/main.js",
     "test": "vitest"
   },
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
+    "esbuild": "^0.24.0",
     "tsx": "^4.7.1",
     "typescript": "^5.4.3",
     "vitest": "^1.4.0"
