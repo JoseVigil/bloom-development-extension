@@ -62,6 +62,11 @@ Para probar fuentes ya generadas:
 - Go y las dependencias de `installer/nucleus/go.mod`;
 - Node.js/npm y las dependencias del `package.json` raíz.
 
+Antes de la suite TypeScript, `build-all.py` verifica con `npm ls` que `antlr4`
+y `typescript` estén realmente instalados. Si el checkout tiene un
+`node_modules` ausente o desactualizado, ejecuta `npm install` en la raíz y
+vuelve a validar ambas dependencias antes de continuar.
+
 Java no es dependencia de ejecución ni de deployment. Solo se necesita al
 modificar la gramática y regenerar código. La generación vigente usa Java 21 y
 `antlr-4.13.2-complete.jar`, cuya ruta se pasa mediante `-AntlrJar` o la
@@ -107,7 +112,8 @@ go test -vet=off ./internal/gravity
 
 `build-all.py` ejecuta las pruebas focalizadas Go y TypeScript como preflight
 fail-fast cuando Nucleus entra en el build. El preflight no regenera fuentes y
-no requiere Java. La prueba TypeScript escribe temporales descartables en
+no requiere Java. También prepara las dependencias Node raíz cuando sea
+necesario. La prueba TypeScript escribe temporales descartables en
 `.tmp/gravity-parser-test/`.
 
 ## 6. Build y deployment

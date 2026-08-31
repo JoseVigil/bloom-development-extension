@@ -2081,6 +2081,56 @@ def sync_metamorph_manifest() -> None:
 # GRAVITY PREFLIGHT — verifica el parser Go+TypeScript antes de tocar Nucleus
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _ensure_gravity_parser_node_dependencies() -> StepResult | None:
+    """
+    Garantiza que el runtime antlr4 y el compilador TypeScript declarados por
+    el package.json raiz esten realmente instalados antes de ejecutar la suite.
+
+    Un checkout puede tener node_modules preexistente pero desactualizado (por
+    ejemplo, despues de traer un package-lock.json nuevo desde otra plataforma).
+    `npm ls` valida el arbol instalado sin acceder a la red. Solo si falta una
+    dependencia o su version no satisface el manifiesto se ejecuta npm install.
+
+    Retorna un StepResult fallido cuando no se pudieron preparar las
+    dependencias; retorna None cuando la verificacion puede continuar.
+    """
+    code_check, _, _ = run(
+        [_NPM, "ls", "--depth=0", "antlr4", "typescript"],
+        cwd=ROOT,
+    )
+    if code_check == 0:
+        log("  Dependencias Node de Gravity disponibles (antlr4 + typescript)")
+        return None
+
+    log("  Dependencias Node de Gravity ausentes o desactualizadas; ejecutando npm install ...")
+    code_install, out_install = run_streaming([_NPM, "install"], cwd=ROOT)
+    if code_install != 0:
+        tail = "\n".join(out_install.splitlines()[-20:]) if out_install else "(sin output)"
+        return StepResult(
+            "Gravity",
+            False,
+            error=f"npm install en la raiz fallo al preparar Gravity:\n{tail}",
+        )
+
+    code_recheck, out_recheck, _ = run(
+        [_NPM, "ls", "--depth=0", "antlr4", "typescript"],
+        cwd=ROOT,
+    )
+    if code_recheck != 0:
+        tail = "\n".join(out_recheck.splitlines()[-20:]) if out_recheck else "(sin output)"
+        return StepResult(
+            "Gravity",
+            False,
+            error=(
+                "npm install termino, pero antlr4/typescript siguen sin estar "
+                f"disponibles:\n{tail}"
+            ),
+        )
+
+    log("  Dependencias Node de Gravity instaladas (antlr4 + typescript)")
+    return None
+
+
 def verify_gravity_parser() -> StepResult:
     """
     Verifica las suites focalizadas del parser de Gravity (Go + TypeScript)
@@ -2109,6 +2159,10 @@ def verify_gravity_parser() -> StepResult:
     if code_go != 0:
         tail = "\n".join(out_go.splitlines()[-20:]) if out_go else "(sin output)"
         return StepResult("Gravity", False, error=f"go test ./internal/gravity falló:\n{tail}")
+
+    dependency_error = _ensure_gravity_parser_node_dependencies()
+    if dependency_error is not None:
+        return dependency_error
 
     # TypeScript: contracts/gravity/parser.test.ts vía el script existente en package.json
     code_ts, out_ts = run_streaming([_NPM, "run", "test:gravity-parser"], cwd=ROOT)
