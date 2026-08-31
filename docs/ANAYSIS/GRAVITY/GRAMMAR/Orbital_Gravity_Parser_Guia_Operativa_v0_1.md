@@ -77,11 +77,17 @@ $env:ANTLR_JAR = "C:\Tools\antlr\antlr-4.13.2-complete.jar"
 .\scripts\generate-gravity-parser.ps1
 ```
 
-El script genera Go y TypeScript y elimina metadatos transitorios de ANTLR. La
+En Linux o macOS:
+
+```bash
+cd ~/repos/bloom-development-extension
+export ANTLR_JAR="/ruta/a/antlr-4.13.2-complete.jar"
+bash scripts/generate-gravity-parser.sh
+```
+
+Ambos scripts generan Go y TypeScript y eliminan metadatos transitorios de ANTLR. La
 regeneración no forma parte del build normal: los fuentes generados se revisan
 y versionan antes de construir productos.
-
-No existe actualmente un generador `.sh` homologado para macOS/Linux.
 
 ## 5. Verificación
 

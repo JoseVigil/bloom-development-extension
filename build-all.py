@@ -394,7 +394,7 @@ _log_file_path: Path | None = None
 
 
 def _resolve_log_dir() -> Path:
-    """
+    r"""
     Retorna el directorio de logs bajo NUCLEUS_HOME, consistente en todas las
     plataformas con el resto de la aplicación:
       Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
@@ -405,7 +405,7 @@ def _resolve_log_dir() -> Path:
 
 
 def _setup_logger() -> None:
-    """
+    r"""
     Configura el logger dual: StreamHandler (consola) + FileHandler (disco).
     El archivo se crea en el directorio de logs de la plataforma con timestamp en el nombre:
       Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
@@ -1771,7 +1771,7 @@ def _print_summary(results: list[StepResult]) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 ALL_STEP_NAMES = [
-    "brain", "host", "nucleus", "sentinel", "metamorph",
+    "parser", "brain", "host", "nucleus", "sentinel", "metamorph",
     "sensor", "setup", "workspace", "cortex", "bootstrap", "vsix",
 ]
 
@@ -1785,6 +1785,7 @@ def _parse_args() -> argparse.Namespace:
 
             Ejemplos:
               python3 build-all.py
+              python3 build-all.py --only parser
               python3 build-all.py --only nucleus
               python3 build-all.py --only workspace
               python3 build-all.py --only nucleus sentinel
@@ -2126,8 +2127,8 @@ def regenerate_and_verify_gravity_parser() -> StepResult:
 
       1. Regenera el parser Go + TypeScript desde
          contracts/gravity/GravityExpression.g4, invocando
-         scripts/generate-gravity-parser.ps1 (el mismo script manual de
-         siempre, ahora llamado automáticamente por este comando puntual).
+         scripts/generate-gravity-parser.ps1 en Windows o
+         scripts/generate-gravity-parser.sh en Linux/Darwin.
       2. Si la regeneración fue exitosa, corre las mismas suites de
          verify_gravity_parser() sobre lo recién generado.
 
@@ -2148,18 +2149,8 @@ def regenerate_and_verify_gravity_parser() -> StepResult:
     Nucleus no depende de esta función en ningún punto: su gate sigue usando
     verify_gravity_parser(), sin regenerar y sin requerir Java.
     """
-    if not IS_WINDOWS:
-        return StepResult(
-            "Gravity",
-            False,
-            error=(
-                "La regeneración de Gravity (--only parser) requiere Windows: "
-                "scripts/generate-gravity-parser.ps1 necesita PowerShell. No hay "
-                "un equivalente .sh autorizado."
-            ),
-        )
-
-    script_path = ROOT / "scripts" / "generate-gravity-parser.ps1"
+    script_name = "generate-gravity-parser.ps1" if IS_WINDOWS else "generate-gravity-parser.sh"
+    script_path = ROOT / "scripts" / script_name
     if not script_path.exists():
         return StepResult("Gravity", False, error=f"No se encontró {script_path}")
 
@@ -2169,7 +2160,7 @@ def regenerate_and_verify_gravity_parser() -> StepResult:
     antlr_jar_override = os.environ.get("ANTLR_JAR")
     if antlr_jar_override:
         antlr_jar_path = Path(antlr_jar_override)
-        antlr_jar_source = "override explícito vía $env:ANTLR_JAR"
+        antlr_jar_source = "override explícito vía ANTLR_JAR"
     else:
         antlr_jar_path = _DEFAULT_ANTLR_JAR
         antlr_jar_source = "ruta predeterminada del repo"
@@ -2182,7 +2173,7 @@ def regenerate_and_verify_gravity_parser() -> StepResult:
                 f"No se encontró el JAR de ANTLR ({antlr_jar_source}):\n"
                 f"  {antlr_jar_path}\n"
                 f"Colocá antlr-4.13.2-complete.jar en esa ruta exacta, o seteá "
-                f"$env:ANTLR_JAR apuntando a otra ubicación antes de correr "
+                f"ANTLR_JAR apuntando a otra ubicación antes de correr "
                 f"--only parser.\n"
                 f"Descarga oficial: {_ANTLR_DOWNLOAD_URL}"
             ),
@@ -2192,14 +2183,18 @@ def regenerate_and_verify_gravity_parser() -> StepResult:
     log(f"  Script:    {script_path}")
     log(f"  ANTLR_JAR: {antlr_jar_path}  ({antlr_jar_source})")
 
-    cmd = [
-        "powershell", "-ExecutionPolicy", "Bypass", "-NonInteractive",
-        "-File", str(script_path), "-AntlrJar", str(antlr_jar_path),
-    ]
+    if IS_WINDOWS:
+        cmd = [
+            "powershell", "-ExecutionPolicy", "Bypass", "-NonInteractive",
+            "-File", str(script_path), "-AntlrJar", str(antlr_jar_path),
+        ]
+    else:
+        cmd = ["bash", str(script_path), str(antlr_jar_path)]
+
     code_gen, out_gen = run_streaming(cmd, cwd=script_path.parent)
     if code_gen != 0:
         tail = "\n".join(out_gen.splitlines()[-20:]) if out_gen else "(sin output)"
-        return StepResult("Gravity", False, error=f"generate-gravity-parser.ps1 falló:\n{tail}")
+        return StepResult("Gravity", False, error=f"{script_name} falló:\n{tail}")
 
     log("  ✅ Parser regenerado (Go + TypeScript) desde GravityExpression.g4")
 
