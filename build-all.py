@@ -2094,15 +2094,25 @@ def _ensure_gravity_parser_node_dependencies() -> StepResult | None:
     Retorna un StepResult fallido cuando no se pudieron preparar las
     dependencias; retorna None cuando la verificacion puede continuar.
     """
-    code_check, _, _ = run(
-        [_NPM, "ls", "--depth=0", "antlr4", "typescript"],
-        cwd=ROOT,
-    )
-    if code_check == 0:
+    required_dependencies = ("antlr4", "typescript")
+    missing_dependencies: list[str] = []
+    for dependency in required_dependencies:
+        code_check, _, _ = run(
+            [_NPM, "ls", "--depth=0", dependency],
+            cwd=ROOT,
+        )
+        if code_check != 0:
+            missing_dependencies.append(dependency)
+
+    if not missing_dependencies:
         log("  Dependencias Node de Gravity disponibles (antlr4 + typescript)")
         return None
 
-    log("  Dependencias Node de Gravity ausentes o desactualizadas; ejecutando npm install ...")
+    missing_display = ", ".join(missing_dependencies)
+    log(
+        "  Dependencias Node de Gravity ausentes o desactualizadas "
+        f"({missing_display}); ejecutando npm install ..."
+    )
     code_install, out_install = run_streaming([_NPM, "install"], cwd=ROOT)
     if code_install != 0:
         tail = "\n".join(out_install.splitlines()[-20:]) if out_install else "(sin output)"
@@ -2112,18 +2122,28 @@ def _ensure_gravity_parser_node_dependencies() -> StepResult | None:
             error=f"npm install en la raiz fallo al preparar Gravity:\n{tail}",
         )
 
-    code_recheck, out_recheck, _ = run(
-        [_NPM, "ls", "--depth=0", "antlr4", "typescript"],
-        cwd=ROOT,
-    )
-    if code_recheck != 0:
-        tail = "\n".join(out_recheck.splitlines()[-20:]) if out_recheck else "(sin output)"
+    unresolved_dependencies: list[str] = []
+    recheck_outputs: list[str] = []
+    for dependency in required_dependencies:
+        code_recheck, out_recheck, _ = run(
+            [_NPM, "ls", "--depth=0", dependency],
+            cwd=ROOT,
+        )
+        if code_recheck != 0:
+            unresolved_dependencies.append(dependency)
+            if out_recheck:
+                recheck_outputs.append(out_recheck)
+
+    if unresolved_dependencies:
+        combined_output = "\n".join(recheck_outputs)
+        tail = "\n".join(combined_output.splitlines()[-20:]) if combined_output else "(sin output)"
+        unresolved_display = ", ".join(unresolved_dependencies)
         return StepResult(
             "Gravity",
             False,
             error=(
-                "npm install termino, pero antlr4/typescript siguen sin estar "
-                f"disponibles:\n{tail}"
+                "npm install termino, pero estas dependencias siguen sin estar "
+                f"disponibles: {unresolved_display}\n{tail}"
             ),
         )
 
