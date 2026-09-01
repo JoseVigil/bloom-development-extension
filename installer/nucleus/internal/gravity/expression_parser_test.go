@@ -62,7 +62,7 @@ func TestParseProducesCanonicalFields(t *testing.T) {
 
 func TestParseRejectsWF1ThroughWF5AsSyntax(t *testing.T) {
 	tests := []struct{ name, expression string }{
-		{"WF-1 malformed RULE_REF", "exception of grv-bad :: justification"},
+		{"WF-1 malformed POSTURE_REF", "exception of grv-bad :: justification"},
 		{"WF-2 empty criterion", "threshold coverage_pct >= 80 ::   "},
 		{"WF-3 required criterion absent", "constraint on contrato_publico"},
 		{"WF-4 reserved IDENT", "threshold priority >= 1"},
@@ -87,7 +87,7 @@ func TestParseRejectsWF1ThroughWF5AsSyntax(t *testing.T) {
 
 func TestSemanticErrorContractIsDistinctFromParserErrors(t *testing.T) {
 	err := NewSemanticGravityExpressionError("exception target is not inherited", "exception_target_not_inherited", "grv_9999")
-	if err.ErrorClass != "semantic" || err.ReasonCode != "GRAVITY_EXPRESSION_SEMANTIC_ERROR" || err.Position != nil || err.ViolatedRule != "exception_target_not_inherited" || err.RuleRef != "grv_9999" {
+	if err.ErrorClass != "semantic" || err.ReasonCode != "GRAVITY_EXPRESSION_SEMANTIC_ERROR" || err.Position != nil || err.ViolatedRule != "exception_target_not_inherited" || err.PostureRef != "grv_9999" {
 		t.Fatalf("unexpected semantic error: %+v", err)
 	}
 }

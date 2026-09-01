@@ -133,7 +133,7 @@ Cor línea 19 fija la lista completa de factores de los que la masa "podrá depe
 | Si la regla es verificable | `verifiable` (Impl §3.3.1: *"Si existe y es `verifiable`, se aplica automáticamente"*) | evidencia |
 | Historial de promoción | arista `PROMOTED_FROM` (Impl §1.4–§1.5): presencia de al menos una arista que registre que esta regla se originó como postulación en un nivel inferior | precedencia / persistencia |
 
-Los otros cuatro factores de Cor (autoridad, alcance, persistencia más allá de la promoción, contexto) no tienen todavía un campo computable equivalente en Impl — Impl §5 lo deja explícito como pendiente ("la gramática formal de `gravityRules[].expression` sigue sin fijarse"). Esta especificación no los estima ni los aproxima: el ícono de masa solo refleja lo que hoy es calculable a partir de datos ya definidos.
+Los otros cuatro factores de Cor (autoridad, alcance, persistencia más allá de la promoción, contexto) no tienen todavía un campo computable equivalente en Impl — Impl §5 lo deja explícito como pendiente ("la gramática formal de `gravityPostures[].expression` sigue sin fijarse"). Esta especificación no los estima ni los aproxima: el ícono de masa solo refleja lo que hoy es calculable a partir de datos ya definidos.
 
 ### 4.2 Cálculo (determinista, en tres niveles)
 
@@ -145,14 +145,14 @@ nivel_base(origin):
 
 masa = nivel_base(origin)
 masa = min(masa + 1, 3)  si rule.verifiable == true
-masa = min(masa + 1, 3)  si existe arista PROMOTED_FROM con toRuleId == rule.ruleId
+masa = min(masa + 1, 3)  si existe arista PROMOTED_FROM con toPostureId == rule.postureId
 ```
 
 Una regla de sesión (`origin: session`) que es `verifiable` y que ya fue promovida una vez puede alcanzar masa 3 aunque su nivel de origen sea el más bajo — reflejando exactamente lo que Cor señala: la jerarquía es un factor entre varios, no el único determinante de influencia efectiva.
 
 ### 4.3 Ícono
 
-Peso/plomada con relleno de 1 a 3 segmentos (⚖ con 1, 2 o 3 marcas), mostrado junto a cada `ruleId` en el breadcrumb expandido (2.3) y junto a la regla citada en cualquiera de las seis señales de conflicto (3.2). Al pasar el cursor, un tooltip desglosa los tres factores con su estado (✓/—): origen, verificable, promovida — nunca un número sin explicación, porque el objetivo (Impl, en espíritu de trazabilidad) es que el ingeniero entienda *por qué* pesa lo que pesa, no solo cuánto.
+Peso/plomada con relleno de 1 a 3 segmentos (⚖ con 1, 2 o 3 marcas), mostrado junto a cada `postureId` en el breadcrumb expandido (2.3) y junto a la regla citada en cualquiera de las seis señales de conflicto (3.2). Al pasar el cursor, un tooltip desglosa los tres factores con su estado (✓/—): origen, verificable, promovida — nunca un número sin explicación, porque el objetivo (Impl, en espíritu de trazabilidad) es que el ingeniero entienda *por qué* pesa lo que pesa, no solo cuánto.
 
 ---
 

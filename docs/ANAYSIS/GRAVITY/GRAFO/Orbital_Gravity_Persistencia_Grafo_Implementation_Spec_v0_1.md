@@ -19,7 +19,7 @@
 
 `Impl` fijó el modelo de datos del Grafo de Gravedad (tipos de nodo, tipos de arista, promoción, algoritmo de resolución) pero dejó explícitamente sin decidir, en su §5: *"la tecnología concreta de persistencia del grafo (...) no se decide aquí — este documento fija el modelo de datos, no la implementación física"* y *"el mecanismo exacto de firma para `PROJECT` (...) no se especifica"*. Este documento cierra exactamente esas dos deudas, más las tres consecuencias de implementación que se derivan directamente de ellas: el algoritmo de inyección turno a turno a nivel de código real (incluyendo caché e invalidación), la separación de artefactos de persistencia, y el cálculo eficiente de Masa.
 
-No reabre: el modelo de nodos y aristas de `Impl §1`, el algoritmo conceptual de `Impl §2.1`, el mecanismo de arbitraje de `Impl §3`, la herencia de `gravityRules[]` de `Mandate v1.2.0`, ni la gramática formal de `gravityRules[].expression`. Donde este documento extiende un schema ya fijado, la extensión se señala explícitamente como tal (§7) — nunca se presenta como si ya hubiera estado ahí.
+No reabre: el modelo de nodos y aristas de `Impl §1`, el algoritmo conceptual de `Impl §2.1`, el mecanismo de arbitraje de `Impl §3`, la herencia de `gravityPostures[]` de `Mandate v1.2.0`, ni la gramática formal de `gravityPostures[].expression`. Donde este documento extiende un schema ya fijado, la extensión se señala explícitamente como tal (§7) — nunca se presenta como si ya hubiera estado ahí.
 
 ### 0.2 Confirmación de estado real — esto es diseño desde cero, no migración
 
@@ -60,7 +60,7 @@ Esta libertad tiene un límite: no aplica al resto del sistema. `mandate_state.j
 
 Regla de aplicación: cualquier mención a cualquiera de las tres estructuras en este documento —y, se recomienda, en todo documento futuro de la familia Gravity— usa el nombre canónico completo la primera vez que aparece en cada sección, y puede abreviarse dentro de esa misma sección solo si no hay otra estructura mencionada en el mismo párrafo. Este documento se autoaplica esta regla de aquí en adelante: toda referencia a la Estructura B se escribe "Grafo de Gravedad", nunca "el grafo".
 
-Esta convención no renombra ningún campo ya fijado (`GravityNode`, `gravityRules[]`, `DELEGATES_TO` permanecen sin cambio) — es una disciplina de prosa, no una decisión de schema, exactamente como la nota de terminología "posture"/"postular" que `API §0` ya adoptó para el mismo tipo de problema (vocabulario ambiguo sobre un campo ya fijado, sin tocar el campo).
+Esta convención no renombra ningún campo ya fijado (`GravityNode`, `gravityPostures[]`, `DELEGATES_TO` permanecen sin cambio) — es una disciplina de prosa, no una decisión de schema, exactamente como la nota de terminología "posture"/"postular" que `API §0` ya adoptó para el mismo tipo de problema (vocabulario ambiguo sobre un campo ya fijado, sin tocar el campo).
 
 ---
 
@@ -76,7 +76,7 @@ Antes de comparar tecnologías, el patrón de acceso concreto que domina el dise
 4. **El patrón es extremadamente asimétrico en lectura/escritura.** Las escrituras (postular una postura, firmar un nodo, promover una regla, superseder un nodo) son actos humanos deliberados y explícitos (`Orb` Principio XI: *"la persistencia debe ser deliberada"*) — órdenes de magnitud menos frecuentes que los miles de turnos que solo leen.
 5. **La lectura ocurre dentro del límite de latencia de un turno agéntico** — cualquier I/O de red no trivial en este punto se paga miles de veces por Mandate.
 6. **Cualquier lectura debe ejecutarse dentro de una Activity de Temporal**, nunca directamente en código de Workflow (§3.4) — esto es una restricción dura, independiente de qué motor de persistencia se elija.
-7. **La consistencia de una sola fuente de verdad por artefacto ya es un principio rector explícito del sistema**, no una preferencia de este documento: una de las `gravityRules[]` de ejemplo citadas en `Orb §15` es literalmente *"no introducir segunda fuente de verdad"*, y todo el resto de Nucleus (`.bloom/`, `mandate_state.json`, `.core/*.bl`) persiste como filesystem local, auditable y diffable.
+7. **La consistencia de una sola fuente de verdad por artefacto ya es un principio rector explícito del sistema**, no una preferencia de este documento: una de las `gravityPostures[]` de ejemplo citadas en `Orb §15` es literalmente *"no introducir segunda fuente de verdad"*, y todo el resto de Nucleus (`.bloom/`, `mandate_state.json`, `.core/*.bl`) persiste como filesystem local, auditable y diffable.
 
 ### 2.2 Evaluación de las tres alternativas
 
@@ -163,7 +163,7 @@ ACTIVITY resolveActiveGravityActivity(mandate_id, session_id, current_turn_inten
     for node_ref in path:
         node ← read_node(node_ref.nodeId)     # lectura local pequeña — nunca servida desde cache entre turnos
 
-        for posture in node.gravityRules where posture.status == "active":
+        for posture in node.gravityPostures where posture.status == "active":
             if posture.appliesTo matches current_turn_intent_type:
                 collected.append(posture tagged with node.nodeType, node.nodeId)
 
@@ -174,19 +174,19 @@ Este es el mismo contrato conceptual de `Impl §2.1` (mismo orden de recorrido, 
 
 ### 3.2 Qué se cachea, y qué deliberadamente no
 
-> **Nota de corrección (2026-08-29):** la versión inicial de este documento proponía cachear también el *contenido* de `gravityRules[]` de cada nodo de la espina, con invalidación por versión. La implementación (ver §3.3) encontró que esa capa no tenía dónde persistir de forma coherente con §3.4.4 sin duplicar posturas dentro de `orbital_agentic_state.json` — exactamente la segunda fuente de verdad que `Orb §15` ya cita como error a evitar. Se retira esa capa de caché; el contenido se lee siempre fresco, y la justificación de por qué eso no tiene costo real queda en la fila siguiente.
+> **Nota de corrección (2026-08-29):** la versión inicial de este documento proponía cachear también el *contenido* de `gravityPostures[]` de cada nodo de la espina, con invalidación por versión. La implementación (ver §3.3) encontró que esa capa no tenía dónde persistir de forma coherente con §3.4.4 sin duplicar posturas dentro de `orbital_agentic_state.json` — exactamente la segunda fuente de verdad que `Orb §15` ya cita como error a evitar. Se retira esa capa de caché; el contenido se lee siempre fresco, y la justificación de por qué eso no tiene costo real queda en la fila siguiente.
 
 | Elemento | ¿Se cachea entre turnos del mismo Mandate? | Motivo |
 |---|---|---|
 | **Espina estructural** (lista ordenada de `nodeId` desde `NUCLEUS` hasta `MANDATE`, incluyendo Estructura C si el Mandate es un sub-Mandate) | **Sí — una sola vez por Mandate, sin invalidación** | La cadena de ancestros de un Mandate es fija durante toda su ejecución: un Mandate no cambia de Project padre, un Project no cambia de Organization, en ningún punto de `Mandate v1.0.0`–`v1.2.0` ni de `Impl`. No es una caché que pueda quedar obsoleta — es un hecho estructural que no cambia mientras el Mandate existe. Recalcularla en cada turno sería trabajo repetido sin ningún cambio posible de resultado. |
-| **Contenido de `gravityRules[]` de cada nodo de la espina** (`ORGANIZATION`, `PROJECT`, `MANDATE`, sub-Mandates) | **No — se relee siempre, ver §3.3** | La lectura es de un archivo local pequeño (§2.3 ya justifica la elección de filesystem exactamente por esto: sin motor de grafo dedicado ni red de por medio, leer 4–6 archivos `node.json` por turno es órdenes de magnitud más barato que la propia llamada al modelo dentro de `propose_next_action`). Cachear este contenido exigiría persistirlo en algún artefacto para sobrevivir un replay (§3.4.4) — y persistirlo en `orbital_agentic_state.json` crearía una copia de las posturas paralela a `.bloom/.gravity/`, la segunda fuente de verdad que el propio sistema ya prohíbe (`Orb §15`, regla de ejemplo *"no introducir segunda fuente de verdad"*). El costo de no cachearlo es, en la práctica, nulo; el costo de cachearlo mal sería una inconsistencia real. |
-| **Contenido de `gravityRules[]` del nodo `SESSION`** | **Nunca — siempre lectura fresca** | Session Gravity se captura en vivo, durante la conversación, sin firma formal previa (`Impl §1.3`, `Paladin-UX §1.3`) — es, por diseño, el único nivel donde una nueva postura puede aparecer en cualquier turno sin ningún evento de mutación formal que dispare una invalidación. Mismo tratamiento que el resto del contenido (fila anterior), reforzado acá porque cachear Session Gravity sí sería un error activo, no solo una optimización innecesaria: serviría Gravity de sesión obsoleta al agente en el mismo turno en que el ingeniero acaba de postular algo nuevo. |
+| **Contenido de `gravityPostures[]` de cada nodo de la espina** (`ORGANIZATION`, `PROJECT`, `MANDATE`, sub-Mandates) | **No — se relee siempre, ver §3.3** | La lectura es de un archivo local pequeño (§2.3 ya justifica la elección de filesystem exactamente por esto: sin motor de grafo dedicado ni red de por medio, leer 4–6 archivos `node.json` por turno es órdenes de magnitud más barato que la propia llamada al modelo dentro de `propose_next_action`). Cachear este contenido exigiría persistirlo en algún artefacto para sobrevivir un replay (§3.4.4) — y persistirlo en `orbital_agentic_state.json` crearía una copia de las posturas paralela a `.bloom/.gravity/`, la segunda fuente de verdad que el propio sistema ya prohíbe (`Orb §15`, regla de ejemplo *"no introducir segunda fuente de verdad"*). El costo de no cachearlo es, en la práctica, nulo; el costo de cachearlo mal sería una inconsistencia real. |
+| **Contenido de `gravityPostures[]` del nodo `SESSION`** | **Nunca — siempre lectura fresca** | Session Gravity se captura en vivo, durante la conversación, sin firma formal previa (`Impl §1.3`, `Paladin-UX §1.3`) — es, por diseño, el único nivel donde una nueva postura puede aparecer en cualquier turno sin ningún evento de mutación formal que dispare una invalidación. Mismo tratamiento que el resto del contenido (fila anterior), reforzado acá porque cachear Session Gravity sí sería un error activo, no solo una optimización innecesaria: serviría Gravity de sesión obsoleta al agente en el mismo turno en que el ingeniero acaba de postular algo nuevo. |
 
 ### 3.3 Por qué `nodeVersion` no gatilla una relectura selectiva — y para qué sirve en cambio
 
 Con la corrección de §3.2, `nodeVersion` (extensión de schema, §7) deja de ser el mecanismo de invalidación de una caché de contenido que ya no existe. Su función en este diseño se acota a lo que realmente necesita, sin sobre-especificar un mecanismo que el patrón de acceso no justifica:
 
-1. **Concurrencia segura en escritura, no invalidación en lectura.** `nodeVersion` sigue existiendo como entero monotónico, incrementado por Nucleus en cada escritura efectiva a `gravityRules[]` o a `status` — mismo patrón que `stateVersion` de `mandate_state.json` real (`Audit` Hallazgo #2). Su uso es en la escritura: Nucleus, como único escritor de cualquier `node.json` (§2.4), puede leer-verificar-escribir (`compare-and-swap` sobre `nodeVersion`) para detectar una colisión si dos operaciones de escritura sobre el mismo nodo (p. ej. una promoción y una supersesión) se solapan — no para decidir si el lector de un turno agéntico debe o no releer contenido, porque ese lector siempre relee (§3.2).
+1. **Concurrencia segura en escritura, no invalidación en lectura.** `nodeVersion` sigue existiendo como entero monotónico, incrementado por Nucleus en cada escritura efectiva a `gravityPostures[]` o a `status` — mismo patrón que `stateVersion` de `mandate_state.json` real (`Audit` Hallazgo #2). Su uso es en la escritura: Nucleus, como único escritor de cualquier `node.json` (§2.4), puede leer-verificar-escribir (`compare-and-swap` sobre `nodeVersion`) para detectar una colisión si dos operaciones de escritura sobre el mismo nodo (p. ej. una promoción y una supersesión) se solapan — no para decidir si el lector de un turno agéntico debe o no releer contenido, porque ese lector siempre relee (§3.2).
 2. **La espina, en cambio, nunca necesita comprobación de versión** — no porque se verifique y coincida, sino porque no hay nada que verificar: la identidad de los nodos ancestros (§3.2, fila 1) no es información que pueda quedar desactualizada durante la vida del Mandate.
 3. Esto simplifica también la garantía de replay (§3.4): lo único que la caché persistida necesita conservar entre turnos es la espina (una lista de `nodeId`, inmutable por diseño), no un contenido que podría requerir reconciliación en cada recuperación tras un crash.
 
@@ -224,7 +224,7 @@ Tres artefactos de persistencia distintos participan en la inyección de Gravity
   "budget_consumed": { /* ... sin cambios ... */ },
 
   // NUEVO — extensión de este documento, no existía en BTIPS §8.5 ni en Mandate v1.2.0 §3.
-  // Contiene únicamente la espina (lista de nodeId, §3.2) — nunca contenido de gravityRules[],
+  // Contiene únicamente la espina (lista de nodeId, §3.2) — nunca contenido de gravityPostures[],
   // ver nota de corrección en §3.2 sobre por qué esa segunda capa de caché se retiró.
   "gravity_resolution_cache": {
     "spine": ["nucleus_root", "org_9a1", "proj_44c", "mnd_8f2a1c"],
@@ -249,23 +249,23 @@ Este campo es una **aceleración, no una fuente de verdad**: si se pierde o se d
 |---|---|---|
 | Jerarquía del nivel de origen | `origin` (`Impl §2.2`) | `nivel_base(origin)`: sesión/mandate → 1, project → 2, organization/nucleus → 3 |
 | Evidencia | `verifiable` | `+1` (tope 3) si `rule.verifiable == true` |
-| Precedencia | arista `PROMOTED_FROM` con `toRuleId == rule.ruleId` | `+1` (tope 3) si existe |
+| Precedencia | arista `PROMOTED_FROM` con `toPostureId == rule.postureId` | `+1` (tope 3) si existe |
 
 Este documento no toca la fórmula — la implementa de forma eficiente.
 
 ### 5.2 El problema: calcular el tercer factor sin recorrer el grafo completo
 
-Tal como está descrita en `Impl §1.5`, `PROMOTED_FROM` es una arista independiente del nodo. Calcular *"¿existe una arista `PROMOTED_FROM` con `toRuleId == rule.ruleId`?"* de forma ingenua exigiría, para cada postura devuelta por `resolve_active_gravity` en cada turno, una búsqueda sobre el conjunto completo de aristas de promoción del sistema — exactamente el recorrido completo del Grafo de Gravedad que el requerimiento del usuario prohíbe explícitamente ("sin recorrer el grafo completo en cada turno"), y que además contradice la misma disciplina de exposición mínima que ya rige el resto de la inyección (`Impl §2.4`, `API §3.1`: nunca se expone ni se recorre el grafo completo, solo lo resuelto para el turno).
+Tal como está descrita en `Impl §1.5`, `PROMOTED_FROM` es una arista independiente del nodo. Calcular *"¿existe una arista `PROMOTED_FROM` con `toPostureId == rule.postureId`?"* de forma ingenua exigiría, para cada postura devuelta por `resolve_active_gravity` en cada turno, una búsqueda sobre el conjunto completo de aristas de promoción del sistema — exactamente el recorrido completo del Grafo de Gravedad que el requerimiento del usuario prohíbe explícitamente ("sin recorrer el grafo completo en cada turno"), y que además contradice la misma disciplina de exposición mínima que ya rige el resto de la inyección (`Impl §2.4`, `API §3.1`: nunca se expone ni se recorre el grafo completo, solo lo resuelto para el turno).
 
 ### 5.3 Solución: denormalizar la arista en la propia postura
 
-Se extiende cada elemento de `gravityRules[]` (cada postura) con un campo `promotedFrom` que refleja, en el propio objeto, si esa postura nació de una promoción — ver justificación de extensión en §7. La arista `PROMOTED_FROM` (`Impl §1.4–§1.5`) sigue existiendo como registro canónico de linaje completo (queda persistida en el layout de §2.4 con el mismo propósito de auditoría con el que `Impl §1.5` la definió); el campo nuevo es una copia de solo lectura, escrita por Nucleus en la misma operación atómica que crea la arista — nunca puede quedar desincronizada porque no hay dos actores que la escriban por separado.
+Se extiende cada elemento de `gravityPostures[]` (cada postura) con un campo `promotedFrom` que refleja, en el propio objeto, si esa postura nació de una promoción — ver justificación de extensión en §7. La arista `PROMOTED_FROM` (`Impl §1.4–§1.5`) sigue existiendo como registro canónico de linaje completo (queda persistida en el layout de §2.4 con el mismo propósito de auditoría con el que `Impl §1.5` la definió); el campo nuevo es una copia de solo lectura, escrita por Nucleus en la misma operación atómica que crea la arista — nunca puede quedar desincronizada porque no hay dos actores que la escriban por separado.
 
 ```jsonc
-// Elemento de governance.gravityRules[] en un node.json de nivel ORGANIZATION,
+// Elemento de governance.gravityPostures[] en un node.json de nivel ORGANIZATION,
 // para una regla que se originó como postura postulada en un Mandate y fue promovida
 {
-  "ruleId": "grv_org_0091",
+  "postureId": "grv_org_0091",
   "primitive": "priority",
   "expression": "...",
   "appliesTo": ["mrg"],
@@ -277,7 +277,7 @@ Se extiende cada elemento de `gravityRules[]` (cada postura) con un campo `promo
   // NUEVO — extensión de este documento (§7). Denormalización de la arista
   // PROMOTED_FROM de Impl §1.5, escrita por Nucleus en el mismo acto que crea la arista.
   "promotedFrom": {
-    "fromRuleId": "grv_0af4",
+    "fromPostureId": "grv_0af4",
     "fromNodeId": "mnd_8f2a1c",
     "promotedVia": "cor",
     "occurredAt": "2026-09-15T10:00:00Z"
@@ -356,9 +356,9 @@ Toda extensión sobre el schema ya fijado en `Impl §1.2` se señala aquí expl�
 |---|---|---|
 | `nodeVersion: integer` | Nivel raíz de `GravityNode` | `Impl §1.2` no tenía ningún campo de versión monotónica. Sin él, Nucleus no tiene forma de detectar una colisión de escritura concurrente sobre el mismo nodo (p. ej. una promoción y una supersesión solapadas) antes de aplicar una sustitución atómica — mismo propósito de concurrencia segura que ya cumple `stateVersion` en `mandate_state.json` real (`Audit` Hallazgo #2). No gatilla ninguna invalidación de caché de lectura — esa capa se evaluó y se descartó, ver §3.2–§3.3. |
 | `signedBy` — de `string` a objeto `{actorId, role, roleBasis}` | Nivel raíz de `GravityNode` | El `string` plano de `Impl §1.2` no puede expresar bajo qué rol se firmó un nodo ni si ese rol es definitivo o interino para ese nivel — exactamente la distinción que la resolución de `AUTH-OWNERSHIP-01` sobre `PROJECT` (§6) necesita para no bloquear el diseño a la espera de que Architect se formalice. |
-| `promotedFrom: {fromRuleId, fromNodeId, promotedVia, occurredAt} \| null` | Cada elemento de `gravityRules[]` (dentro de cada `GravityNode`, no en la raíz) | `Impl §1.4–§1.5` modela la promoción exclusivamente como arista externa (`PROMOTED_FROM`). Calcular el tercer factor de Masa (`Paladin-UX §4.2`) contra una arista externa exige, en el caso ingenuo, recorrer el conjunto completo de aristas de promoción del sistema en cada turno — la denormalización en la propia postura reduce ese costo a una lectura de campo ya cargada (§5). |
+| `promotedFrom: {fromPostureId, fromNodeId, promotedVia, occurredAt} \| null` | Cada elemento de `gravityPostures[]` (dentro de cada `GravityNode`, no en la raíz) | `Impl §1.4–§1.5` modela la promoción exclusivamente como arista externa (`PROMOTED_FROM`). Calcular el tercer factor de Masa (`Paladin-UX §4.2`) contra una arista externa exige, en el caso ingenuo, recorrer el conjunto completo de aristas de promoción del sistema en cada turno — la denormalización en la propia postura reduce ese costo a una lectura de campo ya cargada (§5). |
 
-Ningún campo ya existente (`nodeId`, `nodeType`, `parentId`, `gravityRules[]` como arreglo, `status`, `createdAt`) cambia de forma o de significado. Las tres extensiones son aditivas y, por §0.2, no requieren ninguna migración porque no existe ningún `GravityNode` real persistido hoy sobre el cual migrar.
+Ningún campo ya existente (`nodeId`, `nodeType`, `parentId`, `gravityPostures[]` como arreglo, `status`, `createdAt`) cambia de forma o de significado. Las tres extensiones son aditivas y, por §0.2, no requieren ninguna migración porque no existe ningún `GravityNode` real persistido hoy sobre el cual migrar.
 
 ---
 
@@ -368,7 +368,7 @@ Siguiendo la misma disciplina que `Impl §5` y `Orb §34` aplican sobre sí mism
 
 - **El mecanismo de arbitraje entre Mandates en colisión** (`Impl §3` completo) — este documento solo reserva el espacio de persistencia de `ArbitrationEvent` en el layout de §2.4, por consistencia física del árbol de `.gravity/`, sin rediseñar cuándo se dispara, cómo se resuelve, ni su mecanismo de notificación (ya marcado como propuesta 🆕 sin resolver en `API §4.3`).
 - **La detección y tipificación de colisiones** — mismo motivo.
-- **La gramática formal de `gravityRules[].expression`** — sigue exactamente donde `Impl §5` la dejó; ninguna decisión de este documento depende de fijarla.
+- **La gramática formal de `gravityPostures[].expression`** — sigue exactamente donde `Impl §5` la dejó; ninguna decisión de este documento depende de fijarla.
 - **Si Architect existe como rol real en el modelo de autorización** — es una decisión de gobernanza de `AUTH-OWNERSHIP-01` y de trabajo futuro de Authorization, no de este cowork. §6 diseña *alrededor* de esa pregunta sin responderla.
 - **Herramienta de auditoría inversa sobre el Grafo de Gravedad completo** (ej. "listar todos los sub-Mandates que heredaron una postura dada") — ya diferida como *tooling, no schema* por `Mandate v1.2.0 §6`; este documento mantiene esa misma frontera.
 - **Un endpoint standalone de consulta de Gravity activa para Paladin UI o herramientas de auditoría humana** — ya señalado como propuesta nueva sin resolver por `API §3.2`; la Activity de §3.1 sirve exclusivamente al loop agéntico interno, no define una superficie de API pública.

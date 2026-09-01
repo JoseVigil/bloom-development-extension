@@ -38,7 +38,7 @@ func gravityexpressionParserInit() {
 	}
 	staticData.SymbolicNames = []string{
 		"", "", "", "", "", "", "", "", "", "", "", "", "", "", "CRITERION",
-		"RULE_REF", "NUMBER", "COMPARATOR", "IDENT", "WS",
+		"POSTURE_REF", "NUMBER", "COMPARATOR", "IDENT", "WS",
 	}
 	staticData.RuleNames = []string{
 		"expression", "constraintExpr", "thresholdExpr", "evidenceExpr", "priorityExpr",
@@ -130,26 +130,26 @@ func NewGravityExpressionParser(input antlr.TokenStream) *GravityExpressionParse
 
 // GravityExpressionParser tokens.
 const (
-	GravityExpressionParserEOF        = antlr.TokenEOF
-	GravityExpressionParserT__0       = 1
-	GravityExpressionParserT__1       = 2
-	GravityExpressionParserT__2       = 3
-	GravityExpressionParserT__3       = 4
-	GravityExpressionParserT__4       = 5
-	GravityExpressionParserT__5       = 6
-	GravityExpressionParserT__6       = 7
-	GravityExpressionParserT__7       = 8
-	GravityExpressionParserT__8       = 9
-	GravityExpressionParserT__9       = 10
-	GravityExpressionParserT__10      = 11
-	GravityExpressionParserT__11      = 12
-	GravityExpressionParserT__12      = 13
-	GravityExpressionParserCRITERION  = 14
-	GravityExpressionParserRULE_REF   = 15
-	GravityExpressionParserNUMBER     = 16
-	GravityExpressionParserCOMPARATOR = 17
-	GravityExpressionParserIDENT      = 18
-	GravityExpressionParserWS         = 19
+	GravityExpressionParserEOF         = antlr.TokenEOF
+	GravityExpressionParserT__0        = 1
+	GravityExpressionParserT__1        = 2
+	GravityExpressionParserT__2        = 3
+	GravityExpressionParserT__3        = 4
+	GravityExpressionParserT__4        = 5
+	GravityExpressionParserT__5        = 6
+	GravityExpressionParserT__6        = 7
+	GravityExpressionParserT__7        = 8
+	GravityExpressionParserT__8        = 9
+	GravityExpressionParserT__9        = 10
+	GravityExpressionParserT__10       = 11
+	GravityExpressionParserT__11       = 12
+	GravityExpressionParserT__12       = 13
+	GravityExpressionParserCRITERION   = 14
+	GravityExpressionParserPOSTURE_REF = 15
+	GravityExpressionParserNUMBER      = 16
+	GravityExpressionParserCOMPARATOR  = 17
+	GravityExpressionParserIDENT       = 18
+	GravityExpressionParserWS          = 19
 )
 
 // GravityExpressionParser rules.
@@ -1279,7 +1279,7 @@ type IExceptionExprContext interface {
 	GetParser() antlr.Parser
 
 	// Getter signatures
-	RULE_REF() antlr.TerminalNode
+	POSTURE_REF() antlr.TerminalNode
 	Criterion() ICriterionContext
 
 	// IsExceptionExprContext differentiates from other interfaces.
@@ -1318,8 +1318,8 @@ func NewExceptionExprContext(parser antlr.Parser, parent antlr.ParserRuleContext
 
 func (s *ExceptionExprContext) GetParser() antlr.Parser { return s.parser }
 
-func (s *ExceptionExprContext) RULE_REF() antlr.TerminalNode {
-	return s.GetToken(GravityExpressionParserRULE_REF, 0)
+func (s *ExceptionExprContext) POSTURE_REF() antlr.TerminalNode {
+	return s.GetToken(GravityExpressionParserPOSTURE_REF, 0)
 }
 
 func (s *ExceptionExprContext) Criterion() ICriterionContext {
@@ -1378,7 +1378,7 @@ func (p *GravityExpressionParser) ExceptionExpr() (localctx IExceptionExprContex
 	}
 	{
 		p.SetState(84)
-		p.Match(GravityExpressionParserRULE_REF)
+		p.Match(GravityExpressionParserPOSTURE_REF)
 		if p.HasError() {
 			// Recognition error - abort rule
 			goto errorExit

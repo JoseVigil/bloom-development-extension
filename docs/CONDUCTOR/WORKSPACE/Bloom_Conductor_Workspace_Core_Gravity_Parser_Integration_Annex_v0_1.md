@@ -9,7 +9,7 @@
 ## 1. Propósito
 
 Conductor Workspace Core necesita feedback inmediato mientras una persona
-edita `gravityRules[].expression`. El parser TypeScript generado desde la misma
+edita `gravityPostures[].expression`. El parser TypeScript generado desde la misma
 gramática que Nucleus permite señalar errores antes de confirmar una Postura sin
 convertir a la interfaz en autoridad.
 

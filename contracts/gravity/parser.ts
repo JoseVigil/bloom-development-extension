@@ -82,7 +82,7 @@ function buildAST(raw: string, tree: ExpressionContext): GravityExpressionAST {
   const exception = tree.exceptionExpr();
   if (exception) {
     return { ...base("exception", raw, requiredCriterion(exception.criterion(), raw), false),
-      primitive: "exception", predicateComputable: false, exceptionOf: exception.RULE_REF().getText() };
+      primitive: "exception", predicateComputable: false, exceptionOf: exception.POSTURE_REF().getText() };
   }
   throw new GravityExpressionParseError("expression does not match a Gravity primitive", { offset: 0, line: 1, column: 0 });
 }

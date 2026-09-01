@@ -33,10 +33,10 @@ func TestLogPriorityCycleFindingsWritesToNucleusGravityStream(t *testing.T) {
 			Subtype:        PriorityCycleSubtype,
 			CollisionClass: strPtr("scope_x"),
 			Cycle: []PriorityCycleEdge{
-				{Higher: "alpha", Lower: "beta", RuleID: "r1", NodeID: "n1"},
-				{Higher: "beta", Lower: "alpha", RuleID: "r2", NodeID: "n2"},
+				{Higher: "alpha", Lower: "beta", PostureID: "r1", NodeID: "n1"},
+				{Higher: "beta", Lower: "alpha", PostureID: "r2", NodeID: "n2"},
 			},
-			RuleIDs:    []string{"r1", "r2"},
+			PostureIDs: []string{"r1", "r2"},
 			NodeIDs:    []string{"n1", "n2"},
 			DetectedAt: "2026-09-01T00:00:00Z",
 		},

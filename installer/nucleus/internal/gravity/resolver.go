@@ -52,12 +52,12 @@ func (s *Store) ResolveActive(input ResolveInput) (ResolveResult, error) {
 		if node.Status != NodeActive {
 			continue
 		}
-		for _, rule := range node.GravityRules {
-			if rule.Status != "active" || !applies(rule.AppliesTo, input.IntentType) {
+		for _, posture := range node.GravityPostures {
+			if posture.Status != "active" || !applies(posture.AppliesTo, input.IntentType) {
 				continue
 			}
 			result.Collected = append(result.Collected, ResolvedPosture{
-				GravityRule: rule, NodeType: node.NodeType, NodeID: node.NodeID, Masa: ComputeMasa(rule),
+				GravityPosture: posture, NodeType: node.NodeType, NodeID: node.NodeID, Masa: ComputeMasa(posture),
 			})
 		}
 	}

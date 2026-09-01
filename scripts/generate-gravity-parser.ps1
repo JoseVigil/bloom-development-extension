@@ -16,14 +16,14 @@ $grammar = "contracts/gravity/GravityExpression.g4"
 $goOutput = Join-Path $repoRoot "installer/nucleus/internal/gravity"
 $tsOutput = Join-Path $repoRoot "contracts/gravity/generated"
 
-New-Item -ItemType Directory -Force -Path $tsOutput | Out-Null
+New-Item -ItemType Directory -Force -Path $goOutput, $tsOutput | Out-Null
 
 Push-Location $repoRoot
 try {
-    & java -jar $AntlrJar -Dlanguage=Go -package gravity -visitor -no-listener -o $goOutput $grammar
+    & java -jar $AntlrJar -Xexact-output-dir -Dlanguage=Go -package gravity -visitor -no-listener -o $goOutput $grammar
     if ($LASTEXITCODE -ne 0) { throw "ANTLR4 Go generation failed with exit code $LASTEXITCODE" }
 
-    & java -jar $AntlrJar -Dlanguage=TypeScript -visitor -no-listener -o $tsOutput $grammar
+    & java -jar $AntlrJar -Xexact-output-dir -Dlanguage=TypeScript -visitor -no-listener -o $tsOutput $grammar
     if ($LASTEXITCODE -ne 0) { throw "ANTLR4 TypeScript generation failed with exit code $LASTEXITCODE" }
 }
 finally {

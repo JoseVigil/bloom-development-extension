@@ -22,7 +22,7 @@ import (
 // "incluso dentro del mismo nodo"). This implementation treats them as ONE
 // mechanical check: the transitive closure of Higher->Lower relations across
 // every active PriorityNode sharing a CollisionClass, regardless of whether
-// the pairs originated in the same GravityRule/node or in different ones. A
+// the pairs originated in the same GravityPosture/node or in different ones. A
 // cycle entirely inside a single expression (e.g. "A over B, B over A"
 // declared in one `priority` posture) is caught the same way a cycle
 // spanning two different postures is — see TestDetectPriorityCyclesCatchesInternalCycleWithinOneExpression.
@@ -54,18 +54,18 @@ type PriorityCycleFinding struct {
 	Subtype        string              `json:"subtype"`
 	CollisionClass *string             `json:"collisionClass"`
 	Cycle          []PriorityCycleEdge `json:"cycle"`
-	RuleIDs        []string            `json:"ruleIds"`
+	PostureIDs     []string            `json:"postureIds"`
 	NodeIDs        []string            `json:"nodeIds"`
 	DetectedAt     string              `json:"detectedAt"`
 }
 
 // PriorityCycleEdge is one Higher->Lower relation participating in a
-// confirmed cycle, together with the GravityRule/GravityNode it came from.
+// confirmed cycle, together with the GravityPosture/GravityNode it came from.
 type PriorityCycleEdge struct {
-	Higher string `json:"higher"`
-	Lower  string `json:"lower"`
-	RuleID string `json:"ruleId"`
-	NodeID string `json:"nodeId"`
+	Higher    string `json:"higher"`
+	Lower     string `json:"lower"`
+	PostureID string `json:"postureId"`
+	NodeID    string `json:"nodeId"`
 }
 
 const (
@@ -95,8 +95,8 @@ func DetectPriorityCycles(postures []ResolvedPosture) []PriorityCycleFinding {
 // priorityEdge is one Higher->Lower pair together with the posture it came
 // from, flattened out of a PriorityNode.Order for graph construction.
 type priorityEdge struct {
-	Higher, Lower  string
-	RuleID, NodeID string
+	Higher, Lower     string
+	PostureID, NodeID string
 }
 
 // priorityGroup is the set of priority edges that are comparable against
@@ -117,14 +117,14 @@ func newPriorityGroup(collisionClass *string) *priorityGroup {
 	return &priorityGroup{collisionClass: collisionClass, seenNodes: map[string]bool{}}
 }
 
-func (g *priorityGroup) addPair(pair PriorityPair, ruleID, nodeID string) {
+func (g *priorityGroup) addPair(pair PriorityPair, postureID, nodeID string) {
 	for _, ident := range [2]string{pair.Higher, pair.Lower} {
 		if !g.seenNodes[ident] {
 			g.seenNodes[ident] = true
 			g.order = append(g.order, ident)
 		}
 	}
-	g.edges = append(g.edges, priorityEdge{Higher: pair.Higher, Lower: pair.Lower, RuleID: ruleID, NodeID: nodeID})
+	g.edges = append(g.edges, priorityEdge{Higher: pair.Higher, Lower: pair.Lower, PostureID: postureID, NodeID: nodeID})
 }
 
 // groupPriorityPostures decodes every active posture's expression, keeps
@@ -137,7 +137,7 @@ func groupPriorityPostures(postures []ResolvedPosture) []*priorityGroup {
 	classIndex := map[string]int{}
 
 	for _, posture := range postures {
-		node, ok := decodePriorityNode(posture.GravityRule)
+		node, ok := decodePriorityNode(posture.GravityPosture)
 		if !ok {
 			continue
 		}
@@ -156,14 +156,14 @@ func groupPriorityPostures(postures []ResolvedPosture) []*priorityGroup {
 			}
 		}
 		for _, pair := range node.Order {
-			group.addPair(pair, posture.RuleID, posture.NodeID)
+			group.addPair(pair, posture.PostureID, posture.NodeID)
 		}
 	}
 	return groups
 }
 
-// decodePriorityNode extracts a PriorityNode from a GravityRule, if and only
-// if the rule's Primitive is "priority" and its Expression decodes and
+// decodePriorityNode extracts a PriorityNode from a GravityPosture, if and only
+// if the posture's Primitive is "priority" and its Expression decodes and
 // parses to a PriorityNode. Anything else (a different primitive, a missing
 // or malformed Expression, an expression that fails to parse) is discarded,
 // not reported as an error: this function assumes it is only ever handed
@@ -171,17 +171,17 @@ func groupPriorityPostures(postures []ResolvedPosture) []*priorityGroup {
 // (Parse() runs there); a single malformed entry must not block cycle
 // detection for the rest of the active set.
 //
-// GravityRule.Expression is documented (Grammar spec §2.10) as governing
-// exclusively the content of `gravityRules[].expression: string` — i.e. the
+// GravityPosture.Expression is documented (Grammar spec §2.10) as governing
+// exclusively the content of `gravityPostures[].expression: string` — i.e. the
 // verbatim expression text, JSON-encoded as a string. There is no existing
 // call site in the repository that decodes it yet, so this is this cowork's
 // own decision, made explicit here rather than left implicit.
-func decodePriorityNode(rule GravityRule) (PriorityNode, bool) {
-	if rule.Primitive != "priority" || len(rule.Expression) == 0 {
+func decodePriorityNode(posture GravityPosture) (PriorityNode, bool) {
+	if posture.Primitive != "priority" || len(posture.Expression) == 0 {
 		return PriorityNode{}, false
 	}
 	var raw string
-	if err := json.Unmarshal(rule.Expression, &raw); err != nil {
+	if err := json.Unmarshal(posture.Expression, &raw); err != nil {
 		return PriorityNode{}, false
 	}
 	ast, err := Parse(raw)
@@ -228,11 +228,11 @@ func detectCyclesInGroup(group *priorityGroup, detectedAt string) []PriorityCycl
 
 func buildFinding(collisionClass *string, cycleEdges []priorityEdge, detectedAt string) PriorityCycleFinding {
 	cycle := make([]PriorityCycleEdge, len(cycleEdges))
-	ruleSet := map[string]bool{}
+	postureSet := map[string]bool{}
 	nodeSet := map[string]bool{}
 	for i, edge := range cycleEdges {
-		cycle[i] = PriorityCycleEdge{Higher: edge.Higher, Lower: edge.Lower, RuleID: edge.RuleID, NodeID: edge.NodeID}
-		ruleSet[edge.RuleID] = true
+		cycle[i] = PriorityCycleEdge{Higher: edge.Higher, Lower: edge.Lower, PostureID: edge.PostureID, NodeID: edge.NodeID}
+		postureSet[edge.PostureID] = true
 		nodeSet[edge.NodeID] = true
 	}
 	return PriorityCycleFinding{
@@ -240,7 +240,7 @@ func buildFinding(collisionClass *string, cycleEdges []priorityEdge, detectedAt 
 		Subtype:        PriorityCycleSubtype,
 		CollisionClass: collisionClass,
 		Cycle:          cycle,
-		RuleIDs:        sortedSetKeys(ruleSet),
+		PostureIDs:     sortedSetKeys(postureSet),
 		NodeIDs:        sortedSetKeys(nodeSet),
 		DetectedAt:     detectedAt,
 	}

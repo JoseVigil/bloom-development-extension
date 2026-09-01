@@ -2,7 +2,7 @@
 
 > ⚠️ **Auditado contra la fuente de verdad real** (`tree/bloom/truth/bloom_nucleus_truth.txt` / `bloom_project_truth.txt`, primera iteración de Mandate Genesis en desarrollo). Ver `NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md` antes de tomar cualquier decisión de implementación sobre este catálogo — en particular: `mandate_state.json` real permanece implementado y orientado a `signature`/`reconciliation`; el registro agéntico de turnos es un contrato separado llamado `orbital_agentic_state.json`, sin implementación en código todavía y correlacionado con el primero únicamente por `mandate_id`; `mrg`/`tst` no tienen ningún scaffold real todavía; el grafo de Gravity del Bloque 3/4 no tiene persistencia real y coexiste, sin relación declarada, con el grafo de Dominios/Genes que sí existe (`.cache/.semantic-index.json`); y el rol `Architect` que Gravity asume para firmar el nivel `PROJECT` no existe en el modelo de autorización vigente.
 
-> **Nota de terminología (2026-08-28):** lo que los cuatro documentos fuente llaman `gravityRules[]` / "regla" no es, conceptualmente, un conjunto de reglas de sistema — es criterio acumulado, postura de ingeniería, experiencia de desarrollador. Desde esta fecha, todo análisis y prosa nueva sobre Gravity usa **posture** para el elemento individual (lo que antes se llamaba "una regla") y **postular** para el acto de declararla — nunca "regla"/"declarar una regla". Esta convención **no altera ninguna cita textual** de este documento: donde `gravityRules[]`, `ruleId`, `rule_ref`, `appliedRuleId` o "regla" aparecen citados verbatim de BTIPS/MANDATE v1.2.0/GRAVITY v0.1/COR v1.0, se preservan exactamente como en la fuente — cambiarlos ahí sería falsificar la cita, no aplicar una convención de estilo. Si el nombre de campo en sí (`gravityRules[]` → `gravityPostures[]`) debe cambiar también en los cuatro documentos fuente es una decisión pendiente de confirmación.
+> **Nota de terminología (actualizada 2026-09-01):** la unidad gobernante de Gravity es **Posture**: criterio acumulado y postura de ingeniería, no una regla de sistema. El acto conceptual es **postular**. Los contratos canónicos son `gravityPostures[]`, `postureId`, `posture_ref` y `appliedPostureId`.
 
 **Estado:** Borrador de consolidación v0.1 — construido exclusivamente a partir de fragmentos ya existentes en los cuatro documentos fuente. No introduce comportamiento nuevo salvo donde se marca explícitamente.
 **Fecha:** 2026-08-28
@@ -162,7 +162,7 @@ Cita: **[GRAVITY v0.1 §4]**.
 | `intent_id` | string | ✅ Confirmado | **[BTIPS §8.5]**, turnos 1, 7, 8 (presente sólo cuando `nucleus_decision: "signed"`) | |
 | `reason_code` | enum cerrado — ver §2.3 | ✅ Confirmado | Múltiples, ver tabla §2.3 | Presente sólo cuando `nucleus_decision: "rejected"` |
 | `detail` | string | ✅ Confirmado (para al menos un `reason_code`) | **[BTIPS §8.2.1]**, **[BTIPS §8.5]** turno 6: `"declared_type=dev but source_refs=2; expected mrg"` | No hay evidencia de que `detail` acompañe a todos los `reason_code` — sólo se confirma para `INTENT_MISCLASSIFIED` |
-| `rule_ref` | string | ✅ Confirmado (para un `reason_code` específico) | **[MANDATE v1.2.0 §3]**: *"...el `rule_ref` apunta al `ruleId` heredado"* | Sólo asociado a `GRAVITY_THRESHOLD_BREACHED` |
+| `posture_ref` | string | ✅ Confirmado (para un `reason_code` específico) | **[MANDATE v1.2.0 §3]**: *"...el `posture_ref` apunta al `postureId` heredado"* | Sólo asociado a `GRAVITY_THRESHOLD_BREACHED` |
 | `conflict_with` | string (mandate_id) | ✅ Confirmado | **[GRAVITY v0.1 §4]** | Sólo presente cuando `nucleus_decision: "arbitration_triggered"` |
 | `gravity_context_injected` | array — ver §2.4 | ✅ Confirmado | **[MANDATE v1.2.0 §3]**, extendido en **[GRAVITY v0.1 §2.2–2.3]** | |
 
@@ -179,7 +179,7 @@ Se buscaron explícitamente todos los `reason_code` nombrados literalmente (como
 | `PATH_FORBIDDEN` | **[BTIPS §8.2.2, §8.3, §8.5]** turno 4; referenciado en **[COR §3.2]** | Escalación: `on_forbidden_path_touch: "reject_intent_hard_stop"` — **[BTIPS §8.2]**. |
 | `BUDGET_EXCEEDED` | **[BTIPS §8.2.2, §8.3]**; referenciado en **[COR §3.2]** | Escalación: `on_budget_exceeded: "pause_and_request_extension"` — **[BTIPS §8.2]**. |
 | `COR_FORBIDDEN_FOR_AGENT` | **[COR §1.1]** (interfaz `CorRejection` completa), **[COR §4]** (comentario de schema), **[COR §5]** (tabla de ciclo de vida) | Único `reason_code` cuyo shape de rechazo está completamente tipado en la fuente — ver §2.3.3. |
-| `GRAVITY_THRESHOLD_BREACHED` | **[MANDATE v1.2.0 §3]**; re-citado en **[GRAVITY v0.1 §3.3]** punto 2 | ⚠️ Ambas fuentes citan el origen de este código como `v1.1.0 §4`, documento **no incluido** entre los cuatro adjuntos — su definición completa (más allá del nombre y de que dispara con `verifiable: true` y puebla `rule_ref`) no pudo verificarse contra el documento de origen real. Se incluye porque el string aparece nombrado literalmente en dos de las cuatro fuentes entregadas. |
+| `GRAVITY_THRESHOLD_BREACHED` | **[MANDATE v1.2.0 §3]**; re-citado en **[GRAVITY v0.1 §3.3]** punto 2 | ⚠️ Ambas fuentes citan el origen de este código como `v1.1.0 §4`, documento **no incluido** entre los cuatro adjuntos — su definición completa (más allá del nombre y de que dispara con `verifiable: true` y puebla `posture_ref`) no pudo verificarse contra el documento de origen real. Se incluye porque el string aparece nombrado literalmente en dos de las cuatro fuentes entregadas. |
 
 #### 2.3.2 Código nombrado pero explícitamente **no ratificado** — no forma parte de la unión activa
 
@@ -210,7 +210,7 @@ Para el resto de los `reason_code` de §2.3.1, las fuentes confirman el nombre d
 
 | Campo | Tipo | Estado | Cita |
 |---|---|---|---|
-| `ruleId` | string | ✅ Confirmado | **[MANDATE v1.2.0 §3]**, **[GRAVITY v0.1 §2.3]** |
+| `postureId` | string | ✅ Confirmado | **[MANDATE v1.2.0 §3]**, **[GRAVITY v0.1 §2.3]** |
 | `origin` | enum: `"own" \| "inherited"` (alcance Mandate↔sub-Mandate) | ✅ Confirmado | **[MANDATE v1.2.0 §3]** |
 | `origin` (extendido) | enum: `"nucleus" \| "organization" \| "project" \| "mandate_own" \| "mandate_inherited" \| "session"` | ✅ Confirmado | **[GRAVITY v0.1 §2.2]**: *"`v1.2.0` §3 definía `origin: "own" \| "inherited"`, acotado a la relación Mandate↔sub-Mandate. Se extiende a: [...]"* — `mandate_own`/`mandate_inherited` reemplazan a `own`/`inherited` en el nuevo enum de 6 valores. |
 | `sourceMandateId` | string | ✅ Confirmado | **[MANDATE v1.2.0 §3]** (ejemplo con `origin: "inherited"`) |
@@ -242,7 +242,7 @@ Este documento formaliza esa posture ya existente como el contrato de consulta �
 
 **Justificación contra la política de opacidad de `cor`:** la lógica es la misma que sostiene el Zero-Read de `cor`, aplicada aquí sin que Gravity *sea* `cor`:
 
-- **[BTIPS §8.2.2]**, sobre por qué `cor` es opaco incluso en lectura: *"Un agente que pudiera leer `cor` directamente podría enumerar con precisión los límites exactos del sistema (qué paths, qué presupuestos, qué reglas) en vez de descubrirlos indirectamente turno a turno vía rechazo."* Exponer el **grafo completo** de Gravity (todos los nodos `ORGANIZATION`/`PROJECT`/`MANDATE` activos, con sus `gravityRules[]` íntegras, sus relaciones `PARENT_OF`/`INHERITS_FROM` — **[GRAVITY v0.1 §1.2, §1.4]**) sería estructuralmente el mismo vector de reconocimiento: un agente podría enumerar de una sola consulta todos los criterios y umbrales de toda la organización, en vez de descubrirlos turno a turno según lo que aplica a su intent concreto.
+- **[BTIPS §8.2.2]**, sobre por qué `cor` es opaco incluso en lectura: *"Un agente que pudiera leer `cor` directamente podría enumerar con precisión los límites exactos del sistema (qué paths, qué presupuestos, qué reglas) en vez de descubrirlos indirectamente turno a turno vía rechazo."* Exponer el **grafo completo** de Gravity (todos los nodos `ORGANIZATION`/`PROJECT`/`MANDATE` activos, con sus `gravityPostures[]` íntegras, sus relaciones `PARENT_OF`/`INHERITS_FROM` — **[GRAVITY v0.1 §1.2, §1.4]**) sería estructuralmente el mismo vector de reconocimiento: un agente podría enumerar de una sola consulta todos los criterios y umbrales de toda la organización, en vez de descubrirlos turno a turno según lo que aplica a su intent concreto.
 - **[COR v1.0 §3.2]**, invariante de opacidad en lectura: *"Toda la telemetría que el agente recibe sobre límites del sistema llega **exclusivamente** filtrada [...] nunca por consulta directa a la regla de negocio cruda."* El mismo principio de "filtrado, nunca consulta cruda" es el que ya aplica **[GRAVITY v0.1 §2.4]** al contexto de Gravity.
 - **Contraste explícito que la propia fuente marca:** `Gravity` **no** es `cor` — **[GRAVITY v0.1 §3.4]** aclara sobre `ArbitrationEvent`: *"no es un `corEvent`: no hay promulgación de ley, no hay `CorNucleusRecord`, no hay Zero-Read. Es un evento de coordinación ordinaria, visible para ambos Mandates afectados **sin restricción especial de lectura**."* Es decir, Gravity en general no hereda automáticamente el Zero-Read de `cor` como régimen — pero el mecanismo de inyección al Agent Loop (§2.4) sí adopta, por elección de diseño ya tomada en la fuente, el mismo patrón de filtrado que evita la enumeración total. La justificación no es "Gravity es secreta como `cor`"; es "exponer el grafo completo al proponente de un intent es el mismo vector de reconocimiento que motivó Zero-Read en `cor`, aunque el régimen de gobierno detrás sea distinto y menos restrictivo para otros consumidores" (ver nota abajo).
 
@@ -255,7 +255,7 @@ resolve_active_gravity(session_id):
     path ← walk_up(session_id → mandate → project → organization → nucleus)
     collected ← []
     for node in path (orden: NUCLEUS primero, SESSION último):
-        for rule in node.gravityRules where rule.status == "active":
+        for rule in node.gravityPostures where rule.status == "active":
             if rule.appliesTo matches current_turn.intent_type:
                 collected.append(rule tagged with node.nodeType)
     return collected  # = "Resolved Active Gravity"
@@ -266,7 +266,7 @@ Cita: **[GRAVITY v0.1 §2.1]**.
 |---|---|---|---|---|
 | `session_id` (parámetro de entrada) | string | ✅ Confirmado | **[GRAVITY v0.1 §2.1]** (único parámetro nombrado en la firma) | |
 | `intent_type` (filtro aplicado) | string | ✅ Confirmado como criterio de filtrado | **[GRAVITY v0.1 §2.1]**: `rule.appliesTo matches current_turn.intent_type` | ⚠️ El pseudocódigo lo lee de `current_turn`, ya asociado a la sesión — **no** aparece como segundo parámetro explícito de la función. No se agrega como parámetro de request por analogía; se documenta tal como está. |
-| `ruleId` (por elemento del resultado) | string | ✅ Confirmado | **[GRAVITY v0.1 §2.3]** | |
+| `postureId` (por elemento del resultado) | string | ✅ Confirmado | **[GRAVITY v0.1 §2.3]** | |
 | `origin` (por elemento) | enum de 6 valores — ver §2.4 | ✅ Confirmado | **[GRAVITY v0.1 §2.2]** | |
 | `sourceMandateId` (por elemento, si aplica) | string | ✅ Confirmado | **[MANDATE v1.2.0 §3]** | Sólo presente para `origin: mandate_inherited` |
 
@@ -276,10 +276,10 @@ Ejemplo de resultado, citado literalmente de **[GRAVITY v0.1 §2.3]**:
   "turn": 4,
   "intent_draft": { "type": "mrg" },
   "gravity_context_injected": [
-    { "ruleId": "grv_org_0044", "origin": "organization" },
-    { "ruleId": "grv_proj_0012", "origin": "project" },
-    { "ruleId": "grv_0af4", "origin": "mandate_own" },
-    { "ruleId": "grv_sess_009", "origin": "session" }
+    { "postureId": "grv_org_0044", "origin": "organization" },
+    { "postureId": "grv_proj_0012", "origin": "project" },
+    { "postureId": "grv_0af4", "origin": "mandate_own" },
+    { "postureId": "grv_sess_009", "origin": "session" }
   ],
   "nucleus_decision": "signed",
   "result": "pass"
@@ -291,7 +291,7 @@ Ejemplo de resultado, citado literalmente de **[GRAVITY v0.1 §2.3]**:
 ### 3.3 Qué se recomienda **no** exponer nunca a un Agent Loop, por la misma justificación de §3.1
 
 - El listado completo de nodos del grafo (`GravityNode[]`) y sus aristas (`PARENT_OF`, `DELEGATES_TO`, `INHERITS_FROM`, `PROMOTED_FROM`) — **[GRAVITY v0.1 §1.2, §1.4]** — es información de infraestructura de gobierno, análoga en espíritu (no en régimen legal) a lo que `cor` protege con Zero-Read.
-- `gravityRules[]` completas de nodos ajenos al camino de resolución del turno actual (p. ej. postures de otro Proyecto que no aplican a este Mandate) — el algoritmo de §3.2 ya las excluye por diseño al filtrar por `appliesTo`/`intent_type`.
+- `gravityPostures[]` completas de nodos ajenos al camino de resolución del turno actual (p. ej. postures de otro Proyecto que no aplican a este Mandate) — el algoritmo de §3.2 ya las excluye por diseño al filtrar por `appliesTo`/`intent_type`.
 
 ---
 
@@ -307,7 +307,7 @@ Ejemplo de resultado, citado literalmente de **[GRAVITY v0.1 §2.3]**:
   "involvedMandateIds": ["mnd_a1", "mnd_b2"],
   "commonAuthorityNodeId": "string — nodeId del ancestro común que arbitró (o NUCLEUS si no había uno más específico)",
   "resolutionStrategy": "enum — priority_rule | escalation_rule | default_pause_and_notify",
-  "appliedRuleId": "string | null — ruleId de la gravityRule usada, si strategy no fue default",
+  "appliedPostureId": "string | null — postureId de la gravityPosture usada, si strategy no fue default",
   "resolution": "enum — mandate_a_proceeds | mandate_b_proceeds | both_paused | rejected",
   "resolvedBy": "enum — nucleus_automatic | human_operator  // nunca 'agent'",
   "occurredAt": "string — ISO 8601"
@@ -326,7 +326,7 @@ Ejemplo de resultado, citado literalmente de **[GRAVITY v0.1 §2.3]**:
 |---|---|
 | `INVARIANT-ARB-001` — ningún conflicto se resuelve por negociación entre Agent Loops/Mandates; la resolución es exclusiva de Nucleus | **[GRAVITY v0.1 §3.2]** |
 | `INVARIANT-ARB-002` — el árbitro es siempre la autoridad común más cercana en el grafo, escalando hasta Nucleus | **[GRAVITY v0.1 §3.2]** |
-| `INVARIANT-ARB-003` — el resultado del arbitraje nunca modifica `gravityRules[]` de ningún Mandate ya firmado | **[GRAVITY v0.1 §3.2]** |
+| `INVARIANT-ARB-003` — el resultado del arbitraje nunca modifica `gravityPostures[]` de ningún Mandate ya firmado | **[GRAVITY v0.1 §3.2]** |
 | Orden de resolución: `priority_rule` (si existe y es `verifiable`) → `escalation_rule` (si existe) → `default_pause_and_notify` (pausa al segundo Mandate en llegar) | **[GRAVITY v0.1 §3.3]** |
 
 ### 4.3 Mecanismo de notificación al cliente — push vs. sólo consulta

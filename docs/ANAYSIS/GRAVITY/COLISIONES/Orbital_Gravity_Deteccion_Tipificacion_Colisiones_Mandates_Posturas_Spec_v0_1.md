@@ -32,9 +32,9 @@ Las citas usan `ruta:línea` contra el estado del repositorio leído el 2026-09-
 
 ## 0. Resumen ejecutivo
 
-1. **[D] El corpus sí contiene un caso de colisión, pero no una teoría general de colisiones.** **Impl** define solamente la superposición de territorio entre Mandates activos no relacionados por ancestría directa: `intent_draft.target ∩ scope_paths ≠ ∅` (`docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md:162-174`). No define cuándo dos contenidos de `gravityRules[]` son semánticamente incompatibles.
+1. **[D] El corpus sí contiene un caso de colisión, pero no una teoría general de colisiones.** **Impl** define solamente la superposición de territorio entre Mandates activos no relacionados por ancestría directa: `intent_draft.target ∩ scope_paths ≠ ∅` (`docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md:162-174`). No define cuándo dos contenidos de `gravityPostures[]` son semánticamente incompatibles.
 2. **[D] El documento posterior de persistencia no ratifica un detector.** Reserva `arbitration_events.log.jsonl`, pero excluye expresamente tanto el mecanismo de arbitraje como la detección y tipificación de colisiones (`docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:101-123`, `:365-371`).
-3. **[C] El modelo implementado permite leer posturas, pero no alcanza para detectar colisiones territoriales.** `GravityNode` contiene `nodeId`, tipo, padre, `gravityRules[]`, estado, firma y `nodeVersion`; no contiene `scope_paths`, targets de acciones ni ciclo de vida operacional de un Mandate (`installer/nucleus/internal/gravity/model.go:49-72`).
+3. **[C] El modelo implementado permite leer posturas, pero no alcanza para detectar colisiones territoriales.** `GravityNode` contiene `nodeId`, tipo, padre, `gravityPostures[]`, estado, firma y `nodeVersion`; no contiene `scope_paths`, targets de acciones ni ciclo de vida operacional de un Mandate (`installer/nucleus/internal/gravity/model.go:49-72`).
 4. **[C] `nodeVersion` no es una colisión semántica.** `CompareAndSwap` serializa escritores y rechaza una versión esperada obsoleta sobre el mismo nodo (`installer/nucleus/internal/gravity/store.go:91-129`). Ese conflicto de escritura es un mecanismo de consistencia, no evidencia de incompatibilidad entre Mandates o posturas.
 5. **[C] La gramática y el parser ya ofrecen estructura aprovechable, pero no un evaluador ni un detector.** El AST distingue `PriorityNode.collisionClass` y `EscalationNode.triggerClass` (`installer/nucleus/internal/gravity/expression_ast.go:44-59`); el contrato `GravityEvaluator` no tiene implementación y excluye expresamente el consumo de arbitraje (`installer/nucleus/internal/gravity/expression_ast.go:73-94`).
 6. **[I] Eje 4 necesita distinguir tres familias, no colapsarlas bajo una palabra:** colisión territorial entre Mandates, contradicción jerárquica entre posturas y colisión horizontal entre posturas independientes. Cada familia tiene datos, momento de detección y consecuencia distintos.
@@ -51,7 +51,7 @@ Las citas usan `ruta:línea` contra el estado del repositorio leído el 2026-09-
 
 - **[D]** Declara que aborda el mecanismo de resolución de conflictos dejado abierto por **Fundamentos** (`docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md:14-18`).
 - **[D]** Su caso de activación es concreto: dos Mandates activos con territorio superpuesto, medido contra `scope_paths` y el `target` de un `intent_draft` (`:162-174`).
-- **[D]** Fija Nucleus como árbitro único, prohíbe la negociación entre pares y declara que el arbitraje no reescribe `gravityRules[]` ya firmadas (`:176-188`).
+- **[D]** Fija Nucleus como árbitro único, prohíbe la negociación entre pares y declara que el arbitraje no reescribe `gravityPostures[]` ya firmadas (`:176-188`).
 - **[D]** Propone un orden de resolución y un shape de `ArbitrationEvent` (`:190-214`). Ese contenido pertenece al bosquejo histórico de arbitraje y queda fuera del diseño de este cowork.
 - **[D]** Conecta la recurrencia de eventos con evidencia para postular una postura `priority` (`:216-218`).
 
@@ -115,7 +115,7 @@ Las claves en mayúsculas son **[I] identificadores propuestos para discusión**
 
 **Datos necesarios:** identidad y estado activo de cada Mandate; relación de ancestría; `scope_paths`; target normalizado de la acción; semántica de intersección por tipo de target **[I]**.
 
-**Boundary:** no es una comparación de `gravityRules[]`. Es coordinación operacional entre unidades de trabajo. Una postura `priority` puede orientar el arbitraje posterior, pero no crea la superposición **[I]**.
+**Boundary:** no es una comparación de `gravityPostures[]`. Es coordinación operacional entre unidades de trabajo. Una postura `priority` puede orientar el arbitraje posterior, pero no crea la superposición **[I]**.
 
 ### 3.2 `POSTURE_HIERARCHICAL_CONTRADICTION` — contradicción vertical de autoridad
 
@@ -123,7 +123,7 @@ Las claves en mayúsculas son **[I] identificadores propuestos para discusión**
 
 **Hecho de colisión:** la postura inferior contradice, relaja o introduce una excepción no declarada contra la superior, dentro del mismo contexto aplicable.
 
-**Evidencia existente:** R-18 prohíbe contradicción, relajación y excepción encubierta; R-19 admite una `exception` explícita, nombrada y referida a un `ruleId` heredado (`docs/MANDATE/BLOOM_Mandate_Universal_Schema_v1_2_0.md:72-76`) **[D]**. **Impl** generaliza la no-contradicción a fronteras consecutivas de la jerarquía (`docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md:69-85`) **[D]**.
+**Evidencia existente:** R-18 prohíbe contradicción, relajación y excepción encubierta; R-19 admite una `exception` explícita, nombrada y referida a un `postureId` heredado (`docs/MANDATE/BLOOM_Mandate_Universal_Schema_v1_2_0.md:72-76`) **[D]**. **Impl** generaliza la no-contradicción a fronteras consecutivas de la jerarquía (`docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md:69-85`) **[D]**.
 
 **Momento natural de detección:** antes de firmar o persistir la postura inferior, no durante arbitraje horizontal entre Mandates ya activos **[I]**.
 
@@ -249,7 +249,7 @@ Los primeros cuatro datos pertenecen a coordinación operacional de Mandates, no
 
 **[D]** `ArbitrationEvent` vive físicamente dentro de `.gravity/`, pero **Boundary** lo excluye semánticamente de `GravityGraph`: no es linaje de una postura y solo puede ser evidencia candidata a Provenance (`docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:32-44`).
 
-**[I]** La detección no debe crear aristas `CONTRADICTS`, `EVIDENCES` ni equivalentes dentro de `GravityGraph`. Esos tipos permanecen no ratificados por **Boundary** (`:21-28`). Tampoco debe denormalizar una colisión dentro de `gravityRules[]` como si fuera linaje.
+**[I]** La detección no debe crear aristas `CONTRADICTS`, `EVIDENCES` ni equivalentes dentro de `GravityGraph`. Esos tipos permanecen no ratificados por **Boundary** (`:21-28`). Tampoco debe denormalizar una colisión dentro de `gravityPostures[]` como si fuera linaje.
 
 ### 6.2 Qué debe entregar la detección
 
@@ -258,7 +258,7 @@ Sin fijar nombres de campos ni un DTO implementable, **[I]** el handoff mínimo 
 - categoría y subtipo de colisión;
 - estado `CONFIRMED_COLLISION` y método de confirmación;
 - Mandates involucrados;
-- nodos y `ruleId` involucrados cuando la colisión sea de posturas;
+- nodos y `postureId` involucrados cuando la colisión sea de posturas;
 - contexto compartido (`scope`, intent type, métrica, clase o trigger);
 - evidencia estructurada que demuestra la incompatibilidad;
 - instante de detección;

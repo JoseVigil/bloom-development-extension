@@ -11,7 +11,7 @@
 
 ## 0. Encuadre y método
 
-Este documento investiga cuatro marcos conceptuales externos — **teoría de mediación**, **teoría de ecosistemas**, **teoría de juegos** y **dinámicas de enjambre (swarm intelligence)** — como candidatos a alimentar una futura matriz Rosetta Stone hacia el vocabulario ya fijado de Gravity: **Postura, Masa, Gravity, gravityRule, autoridad, jerarquía**.
+Este documento investiga cuatro marcos conceptuales externos — **teoría de mediación**, **teoría de ecosistemas**, **teoría de juegos** y **dinámicas de enjambre (swarm intelligence)** — como candidatos a alimentar una futura matriz Rosetta Stone hacia el vocabulario ya fijado de Gravity: **Postura, Masa, Gravity, gravityPosture, autoridad, jerarquía**.
 
 Cada sección responde cuatro preguntas, en este orden:
 
@@ -28,7 +28,7 @@ Cada sección responde cuatro preguntas, en este orden:
 >
 > **INVARIANT-ARB-002:** el árbitro es siempre la autoridad común más cercana en el grafo — el padre común si existe, escalando hasta Nucleus si no hay autoridad común más específica disponible.
 >
-> **INVARIANT-ARB-003:** el resultado de un arbitraje nunca modifica `gravityRules[]` de ningún Mandate ya firmado — es una resolución de secuencia/prioridad, no una reescritura de contrato.
+> **INVARIANT-ARB-003:** el resultado de un arbitraje nunca modifica `gravityPostures[]` de ningún Mandate ya firmado — es una resolución de secuencia/prioridad, no una reescritura de contrato.
 
 Y, en palabras del Implementation Spec: *"la autoridad nunca se distribuye, aunque el acceso sí"*. Ningún marco de los cuatro fue diseñado originalmente con esa restricción en mente — los cuatro nacen, en mayor o menor medida, para describir o producir coordinación **sin** una autoridad central obligatoria. Esa tensión es precisamente lo que cada sección debe hacer explícito, no disolver.
 
@@ -112,7 +112,7 @@ La teoría de juegos analiza cómo agentes racionales e independientes eligen es
 
 | Concepto (vocabulario propio) | Traducción tentativa a Gravity | Fidelidad |
 |---|---|---|
-| **Diseño de mecanismos** — fijar reglas ex-ante para que la conducta racional converja al resultado deseado sin intervención caso a caso | La `gravityRule` de primitivo **`priority`** declarada de antemano en el ancestro común (Implementation Spec §3.3.1) — exactamente el mismo movimiento: NUCLEUS fija la regla antes del conflicto para no tener que arbitrar cada caso | Buena — es la traducción más fiel de las tres; ambos mecanismos buscan reducir la necesidad de intervención puntual mediante reglas previas |
+| **Diseño de mecanismos** — fijar reglas ex-ante para que la conducta racional converja al resultado deseado sin intervención caso a caso | La `gravityPosture` de primitivo **`priority`** declarada de antemano en el ancestro común (Implementation Spec §3.3.1) — exactamente el mismo movimiento: NUCLEUS fija la regla antes del conflicto para no tener que arbitrar cada caso | Buena — es la traducción más fiel de las tres; ambos mecanismos buscan reducir la necesidad de intervención puntual mediante reglas previas |
 | **Árbitro / esquema de arbitraje** (p. ej. solución de negociación de Nash) — tercero que impone una división cuando las partes no acuerdan | El rol de NUCLEUS al resolver por `default_pause_and_notify` (§3.3.3) | Parcial — el esquema de arbitraje de Nash optimiza un axioma de equidad fijado a priori (simetría, Pareto-optimalidad); NUCLEUS explícitamente rehúsa optimizar "quién es más importante" sin regla o humano — es un arbitraje deliberadamente *no* optimizador |
 | **Punto focal / equilibrio de Schelling** — solución a la que convergen las partes sin comunicarse, por convención compartida | *No se traduce* (ver incompatibilidad) | — |
 
@@ -143,7 +143,7 @@ Las dinámicas de enjambre estudian cómo un comportamiento global coherente y r
 
 | Concepto (vocabulario propio) | Traducción tentativa a Gravity | Fidelidad |
 |---|---|---|
-| **Reglas locales simples** — cada agente actúa solo en función de su entorno inmediato | Las `gravityRules[]` propias de un Mandate/Session — el criterio bajo el cual **ese** nodo opera localmente | Buena, pero solo a nivel de un único Mandate — no escala a coordinación *entre* Mandates (ver incompatibilidad) |
+| **Reglas locales simples** — cada agente actúa solo en función de su entorno inmediato | Las `gravityPostures[]` propias de un Mandate/Session — el criterio bajo el cual **ese** nodo opera localmente | Buena, pero solo a nivel de un único Mandate — no escala a coordinación *entre* Mandates (ver incompatibilidad) |
 | **Estigmergia** — coordinación indirecta vía modificación de un entorno compartido y persistente | El grafo de Gravity como sustrato compartido que Orbital consulta en cada turno (`resolve_active_gravity`) | Parcial y solo en el lado de **lectura**: los Mandates sí leen un entorno persistente compartido, como en la estigmergia — pero no pueden **escribirlo** libremente (ver incompatibilidad) |
 | **Robustez sin punto único de falla** — la ausencia de un controlador central es la fuente de resiliencia del sistema | *No se traduce* (ver incompatibilidad) | — |
 

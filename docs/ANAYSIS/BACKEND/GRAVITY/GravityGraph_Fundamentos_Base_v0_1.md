@@ -6,8 +6,6 @@
 **Fuente única:** `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANAYSIS/GRAVITY/GRAFO/`, cierre del 2026-09-01). Ese documento sigue siendo la fuente de verdad para cualquier revisión futura de este cierre — este documento base no lo reemplaza, lo trae formalizado a la carpeta de análisis de este cowork con el mismo nivel de detalle.
 **Criterio de cierre citado en el original:** ratificar solo lo que sería costoso romper después (nomenclatura, alcance de qué representa cada término); diferir todo lo que pueda incorporarse más adelante sin alterar esas invariantes (ontología de Provenance, rol de Alfred/Sensor, tipos de arista nuevos).
 
-> **Nota de terminología en tránsito (2026-09-01):** hay un work específico disparado en Codex para renombrar integralmente `GravityRule` → `GravityPosture` (cambio transversal de nomenclatura, no funcional, con impacto potencial en contratos de backend, Backgate, persistencia y APIs). Jose comunicará el alcance exacto cuando esté validado, y la incorporación se coordinará en cada work/cowork correspondiente. Este documento sigue usando `GravityRule`/`gravityRules[]` — la nomenclatura vigente al cierre citado — hasta esa coordinación; no se adelanta el rename.
-
 ---
 
 ## 1. Boundary ratificado — invariante desde este cierre en adelante
@@ -15,7 +13,7 @@
 | Término | Alcance fijado | Qué incluye | Qué NO incluye |
 |---|---|---|---|
 | **Gravity** | El sistema de gobernanza del criterio, en su totalidad | Lenguaje declarativo, resolución activa por turno, arbitraje, masa, promoción, `cor`, autoridad de firma por nivel — y cualquier plano futuro que gobierne criterio (Semantics, Provenance, lo que Trazabilidad Viva termine formalizando) | No es una estructura de datos — es el sistema. Nunca debe usarse como sinónimo de una persistencia concreta |
-| **`GravityGraph`** (Grafo de Gravedad) | La estructura persistida que representa y preserva **Criterion** y su **linaje ya ratificado** | `GravityNode`/`gravityRules[]` (Criterion); la arista `PROMOTED_FROM` y sus denormalizaciones `promotedFrom`/`promotedTo` — porque son, hoy, el único precedente de procedencia que ya tiene diseño cerrado y ejemplos concretos | Cualquier tipo de arista de Provenance todavía no ratificado (`SUPPORTS`, `CONTRADICTS`, `EVIDENCES`, `CONFIRMS`, etc.) — esos no son parte de `GravityGraph` hasta que alguien los ratifique con el mismo nivel de detalle que tiene `PROMOTED_FROM` |
+| **`GravityGraph`** (Grafo de Gravedad) | La estructura persistida que representa y preserva **Criterion** y su **linaje ya ratificado** | `GravityNode`/`gravityPostures[]` (Criterion); la arista `PROMOTED_FROM` y sus denormalizaciones `promotedFrom`/`promotedTo` — porque son, hoy, el único precedente de procedencia que ya tiene diseño cerrado y ejemplos concretos | Cualquier tipo de arista de Provenance todavía no ratificado (`SUPPORTS`, `CONTRADICTS`, `EVIDENCES`, `CONFIRMS`, etc.) — esos no son parte de `GravityGraph` hasta que alguien los ratifique con el mismo nivel de detalle que tiene `PROMOTED_FROM` |
 | **Semantics** | Plano probabilístico, separado por diseño | BISP/ChromaDB — descubre relaciones posibles, nunca las certifica | Nunca se funde con `GravityGraph` ni se usa como sustituto de procedencia factual — axioma ya adoptado en la revisión anterior |
 | **Provenance** | Exigencia factual futura, sin estructura propia general todavía | **Excepción explícita: los precedentes ya ratificados quedan dentro de `GravityGraph`** (ver fila anterior) — no como una capa aparte pendiente, sino como la porción de Provenance que Gravity ya resolvió sin saberlo, antes de que el concepto tuviera nombre | La ontología completa (Criterion/Semantics/Provenance de la revisión anterior), Alfred, Sensor, cualquier tipo de arista nuevo — todo eso sigue sin diseñarse |
 
@@ -43,7 +41,7 @@ Ninguno de estos cinco gaps bloquea el próximo incremento del `GravityGraph`, s
 
 ## 5. Por qué este cowork lo necesita como base
 
-El trabajo de frontera abierto en `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` depende directamente de la fila 2 de la tabla del §1: si lo que un Mandate transporta para comparación cross-organizacional no puede ser el `GravityGraph` completo (porque `GravityGraph` es, por diseño, local y preserva linaje que no tiene sentido fuera de su Nucleus de origen), entonces la "representación mínima de Gravity" que ese documento deja como primera pregunta abierta tiene que construirse a partir de **Criterion puro** (`GravityNode`/`gravityRules[]`), no de Criterion+linaje. Este documento base es lo que permite afirmar eso con precisión, en vez de por intuición.
+El trabajo de frontera abierto en `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` depende directamente de la fila 2 de la tabla del §1: si lo que un Mandate transporta para comparación cross-organizacional no puede ser el `GravityGraph` completo (porque `GravityGraph` es, por diseño, local y preserva linaje que no tiene sentido fuera de su Nucleus de origen), entonces la "representación mínima de Gravity" que ese documento deja como primera pregunta abierta tiene que construirse a partir de **Criterion puro** (`GravityNode`/`gravityPostures[]`), no de Criterion+linaje. Este documento base es lo que permite afirmar eso con precisión, en vez de por intuición.
 
 ---
 

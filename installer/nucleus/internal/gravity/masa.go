@@ -1,7 +1,7 @@
 package gravity
 
 // ComputeMasa is pure: it only evaluates fields already present in posture.
-func ComputeMasa(posture GravityRule) int {
+func ComputeMasa(posture GravityPosture) int {
 	masa := 1
 	switch posture.Origin {
 	case OriginProject:

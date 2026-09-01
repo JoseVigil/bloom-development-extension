@@ -32,7 +32,7 @@ func createResolutionTree(t *testing.T) (*Store, map[string]string) {
 	}
 	nodes := []GravityNode{testNode("nucleus", NodeNucleus, nil), testNode("org", NodeOrganization, ptr("nucleus")), testNode("project", NodeProject, ptr("org")), testNode("mandate", NodeMandate, ptr("project")), testNode("session", NodeSession, ptr("mandate"))}
 	for i, key := range []string{"nucleus", "org", "project", "mandate", "session"} {
-		nodes[i].GravityRules = []GravityRule{{RuleID: key, AppliesTo: []string{"mrg"}, Status: "active", Origin: []RuleOrigin{OriginNucleus, OriginOrganization, OriginProject, OriginMandateOwn, OriginSession}[i]}}
+		nodes[i].GravityPostures = []GravityPosture{{PostureID: key, AppliesTo: []string{"mrg"}, Status: "active", Origin: []PostureOrigin{OriginNucleus, OriginOrganization, OriginProject, OriginMandateOwn, OriginSession}[i]}}
 		if nodes[i].NodeType == NodeNucleus || nodes[i].NodeType == NodeOrganization {
 			seedGovernedFixture(t, paths[key], nodes[i])
 			continue
@@ -53,7 +53,7 @@ func TestResolveActiveBuildsAndReusesSpineButReadsFreshContent(t *testing.T) {
 	if len(first.Collected) != 5 || len(first.Cache.Spine) != 4 || first.Cache.CachedAtTurn != 7 {
 		t.Fatalf("unexpected first result: %+v", first)
 	}
-	_, err = store.CompareAndSwap(paths["project"], 1, func(node *GravityNode) error { node.GravityRules[0].Status = "superseded"; return nil })
+	_, err = store.CompareAndSwap(paths["project"], 1, func(node *GravityNode) error { node.GravityPostures[0].Status = "superseded"; return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

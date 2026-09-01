@@ -53,7 +53,7 @@ export type GravityExpressionAST =
   | PriorityNode | EscalationNode | ExceptionNode;
 
 export interface GravityEvaluationContext {
-  ruleId: string;
+  postureId: string;
   origin: "nucleus" | "organization" | "project" | "mandate_own" | "mandate_inherited" | "session";
   ast: GravityExpressionAST;
   verifiableDeclared: boolean;
@@ -64,7 +64,7 @@ export interface GravityEvaluationContext {
 export type GravityEvaluationOutcome =
   | { status: "not_applicable" }
   | { status: "satisfied" }
-  | { status: "breached"; reasonCode: "GRAVITY_THRESHOLD_BREACHED"; ruleId: string; ruleRef: string }
+  | { status: "breached"; reasonCode: "GRAVITY_THRESHOLD_BREACHED"; postureId: string; postureRef: string }
   | { status: "indeterminate"; reason: string };
 
 export interface GravityEvaluator {
@@ -76,7 +76,7 @@ export type GravityExpressionRejection =
       position: { offset: number; line: number; column: number }; expectedTokens?: string[] }
   | { errorClass: "semantic"; reasonCode: "GRAVITY_EXPRESSION_SEMANTIC_ERROR"; message: string;
       violatedRule: "verifiable_requires_computable_predicate" | "exception_target_not_inherited";
-      ruleRef?: string };
+      postureRef?: string };
 
 export class GravityExpressionParseError extends Error {
   readonly errorClass = "syntax" as const;

@@ -30,7 +30,7 @@ escalationExpr
     ;
 
 exceptionExpr
-    : 'exception' 'of' RULE_REF criterion
+    : 'exception' 'of' POSTURE_REF criterion
     ;
 
 criterion
@@ -55,7 +55,7 @@ CRITERION
     : '::' .*? EOF
     ;
 
-RULE_REF
+POSTURE_REF
     : 'grv_' [A-Za-z0-9_]+
     ;
 

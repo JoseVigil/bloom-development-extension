@@ -40,7 +40,7 @@ const semanticRejection: GravityExpressionRejection = {
   reasonCode: "GRAVITY_EXPRESSION_SEMANTIC_ERROR",
   message: "exception target is not inherited",
   violatedRule: "exception_target_not_inherited",
-  ruleRef: "grv_9999",
+  postureRef: "grv_9999",
 };
 assert.equal(semanticRejection.errorClass, "semantic");
 assert.equal(semanticRejection.reasonCode, "GRAVITY_EXPRESSION_SEMANTIC_ERROR");

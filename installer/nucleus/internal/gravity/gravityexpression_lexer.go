@@ -49,11 +49,11 @@ func gravityexpressionlexerLexerInit() {
 	}
 	staticData.SymbolicNames = []string{
 		"", "", "", "", "", "", "", "", "", "", "", "", "", "", "CRITERION",
-		"RULE_REF", "NUMBER", "COMPARATOR", "IDENT", "WS",
+		"POSTURE_REF", "NUMBER", "COMPARATOR", "IDENT", "WS",
 	}
 	staticData.RuleNames = []string{
 		"T__0", "T__1", "T__2", "T__3", "T__4", "T__5", "T__6", "T__7", "T__8",
-		"T__9", "T__10", "T__11", "T__12", "CRITERION", "RULE_REF", "NUMBER",
+		"T__9", "T__10", "T__11", "T__12", "CRITERION", "POSTURE_REF", "NUMBER",
 		"COMPARATOR", "IDENT", "WS",
 	}
 	staticData.PredictionContextCache = antlr.NewPredictionContextCache()
@@ -179,23 +179,23 @@ func NewGravityExpressionLexer(input antlr.CharStream) *GravityExpressionLexer {
 
 // GravityExpressionLexer tokens.
 const (
-	GravityExpressionLexerT__0       = 1
-	GravityExpressionLexerT__1       = 2
-	GravityExpressionLexerT__2       = 3
-	GravityExpressionLexerT__3       = 4
-	GravityExpressionLexerT__4       = 5
-	GravityExpressionLexerT__5       = 6
-	GravityExpressionLexerT__6       = 7
-	GravityExpressionLexerT__7       = 8
-	GravityExpressionLexerT__8       = 9
-	GravityExpressionLexerT__9       = 10
-	GravityExpressionLexerT__10      = 11
-	GravityExpressionLexerT__11      = 12
-	GravityExpressionLexerT__12      = 13
-	GravityExpressionLexerCRITERION  = 14
-	GravityExpressionLexerRULE_REF   = 15
-	GravityExpressionLexerNUMBER     = 16
-	GravityExpressionLexerCOMPARATOR = 17
-	GravityExpressionLexerIDENT      = 18
-	GravityExpressionLexerWS         = 19
+	GravityExpressionLexerT__0        = 1
+	GravityExpressionLexerT__1        = 2
+	GravityExpressionLexerT__2        = 3
+	GravityExpressionLexerT__3        = 4
+	GravityExpressionLexerT__4        = 5
+	GravityExpressionLexerT__5        = 6
+	GravityExpressionLexerT__6        = 7
+	GravityExpressionLexerT__7        = 8
+	GravityExpressionLexerT__8        = 9
+	GravityExpressionLexerT__9        = 10
+	GravityExpressionLexerT__10       = 11
+	GravityExpressionLexerT__11       = 12
+	GravityExpressionLexerT__12       = 13
+	GravityExpressionLexerCRITERION   = 14
+	GravityExpressionLexerPOSTURE_REF = 15
+	GravityExpressionLexerNUMBER      = 16
+	GravityExpressionLexerCOMPARATOR  = 17
+	GravityExpressionLexerIDENT       = 18
+	GravityExpressionLexerWS          = 19
 )

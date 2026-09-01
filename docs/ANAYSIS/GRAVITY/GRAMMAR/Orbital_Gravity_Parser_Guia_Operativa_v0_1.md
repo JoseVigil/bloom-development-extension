@@ -12,7 +12,7 @@ especificación normativa de sintaxis, AST y errores sigue siendo
 
 ## 1. Propósito y frontera
 
-El parser transforma `gravityRules[].expression: string` en el AST canónico de
+El parser transforma `gravityPostures[].expression: string` en el AST canónico de
 Gravity. No evalúa el AST, no arbitra Mandates y no constituye un servicio o
 ejecutable independiente.
 

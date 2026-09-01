@@ -1,9 +1,9 @@
-# Orbital · Gravity — Gramática Formal y Parser de `gravityRules[].expression`
+# Orbital · Gravity — Gramática Formal y Parser de `gravityPostures[].expression`
 
 ## Especificación de Implementación v0.1 — de texto libre a AST evaluable, sin aplanar el criterio a regla de negocio
 
 **Tipo:** Especificación de implementación
-**Estado:** Borrador v0.1 — normativo para implementación; cierra el hueco que `Orbital_Gravity_Implementation_Spec_v0_1.md` §5 y `Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md` §8 dejaron nombrado y sin resolver ("la gramática formal de `gravityRules[].expression` sigue sin fijarse")
+**Estado:** Borrador v0.1 — normativo para implementación; cierra el hueco que `Orbital_Gravity_Implementation_Spec_v0_1.md` §5 y `Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md` §8 dejaron nombrado y sin resolver ("la gramática formal de `gravityPostures[].expression` sigue sin fijarse")
 **Fecha:** 2026-08-29
 **Dominio:** Orbital · Gravity · Nucleus · Conductor Workspace Core
 **Fuentes normativas (abreviaturas usadas en todo el documento):**
@@ -32,18 +32,18 @@ deployment actual.
 
 ## 0. Encuadre — qué resuelve este documento y qué no
 
-**Impl** §5 y **Persistencia** §8 dejan, cada uno, la misma frase casi textual: *"la gramática formal de `gravityRules[].expression` sigue sin fijarse — este documento no la necesita para especificar [lo que sí especifica]"*. Este documento cierra exactamente esa deuda, y solo esa: la gramática formal del campo `expression` (ya fijado como `string` desde **Mandate v1.1.0**/`v1.2.0`, sin cambio de tipo ni de ubicación), el parser que la produce, la representación estructurada (AST) que consume el resto del sistema, y el contrato de evaluación que un evaluador necesitaría implementar contra esa representación.
+**Impl** §5 y **Persistencia** §8 dejan, cada uno, la misma frase casi textual: *"la gramática formal de `gravityPostures[].expression` sigue sin fijarse — este documento no la necesita para especificar [lo que sí especifica]"*. Este documento cierra exactamente esa deuda, y solo esa: la gramática formal del campo `expression` (ya fijado como `string` desde **Mandate v1.1.0**/`v1.2.0`, sin cambio de tipo ni de ubicación), el parser que la produce, la representación estructurada (AST) que consume el resto del sistema, y el contrato de evaluación que un evaluador necesitaría implementar contra esa representación.
 
 **No reabre:**
 - El gesto de postulación en Conductor Workspace Core, originado en la fuente histórica **UX** §1 — este documento asume que el modo de escritura de una Postura ya está activo cuando la gramática se aplica; no diseña cómo se activa ese modo.
 - El mecanismo de `exception` en sí (**Mandate v1.2.0** R-19) — ya está cerrado como decisión de negocio; este documento solo le da forma sintáctica parseable.
 - El arbitraje entre Mandates en colisión ni la detección de colisiones (**Impl** §3 completo) — el AST que este documento define es *consumible* por ese mecanismo (§5 lo deja explícito), pero rediseñarlo queda fuera.
 - Ninguna superficie de comando administrativo para Gravity — ya descartada, no se reconsidera aquí.
-- El schema del objeto `gravityRules[]` como un todo (`ruleId`, `appliesTo[]`, `authoredBy`, `verifiable`, `promotable`, `promotedTo`, `status`, `promotedFrom` de **Persistencia** §5.3) — este documento gobierna exclusivamente el contenido del campo `expression` dentro de ese objeto, y toca el campo `verifiable` únicamente como cruce de validación semántica (§5, §6), nunca como redefinición de su tipo o su rol.
+- El schema del objeto `gravityPostures[]` como un todo (`postureId`, `appliesTo[]`, `authoredBy`, `verifiable`, `promotable`, `promotedTo`, `status`, `promotedFrom` de **Persistencia** §5.3) — este documento gobierna exclusivamente el contenido del campo `expression` dentro de ese objeto, y toca el campo `verifiable` únicamente como cruce de validación semántica (§5, §6), nunca como redefinición de su tipo o su rol.
 
 ### 0.1 Estado real del campo que esta gramática gobierna
 
-Igual que **Persistencia** §0.2 confirmó para el Grafo de Gravedad completo, no existe hoy ningún `gravityRules[].expression` persistido contra el cual migrar — todos los ejemplos citados en el corpus (`grv_2b91` en **Mandate v1.2.0** §5, los ejemplos de prosa en **Orb** §15–18) son texto libre ilustrativo, nunca datos reales en un `node.json`. Esto es la misma libertad de diseño que **Persistencia** §0.2 explota: no hay compatibilidad hacia atrás que preservar sobre datos reales. Sí existe, en cambio, una restricción real que preservar — la que **Persistencia** §0.2 marca como límite de esa libertad: el resto del sistema (`reason_code`, `rule_ref`, `origin`, `appliesTo[]`) sí tiene forma ya fijada, y esta gramática debe encajar en ella sin pedirle que cambie.
+Igual que **Persistencia** §0.2 confirmó para el Grafo de Gravedad completo, no existe hoy ningún `gravityPostures[].expression` persistido contra el cual migrar — todos los ejemplos citados en el corpus (`grv_2b91` en **Mandate v1.2.0** §5, los ejemplos de prosa en **Orb** §15–18) son texto libre ilustrativo, nunca datos reales en un `node.json`. Esto es la misma libertad de diseño que **Persistencia** §0.2 explota: no hay compatibilidad hacia atrás que preservar sobre datos reales. Sí existe, en cambio, una restricción real que preservar — la que **Persistencia** §0.2 marca como límite de esa libertad: el resto del sistema (`reason_code`, `posture_ref`, `origin`, `appliesTo[]`) sí tiene forma ya fijada, y esta gramática debe encajar en ella sin pedirle que cambie.
 
 ---
 
@@ -63,7 +63,7 @@ Una gramática formal que exigiera reducir cada `expression` a un predicado bool
 
 La gramática que seccion 2 fija no intenta convertir cada expresión en un predicado. Separa, para **toda** expresión, dos partes con estatus deliberadamente distinto:
 
-1. **Un envelope estructural** — mínimo, determinista, parseable sin ambigüedad — que identifica el primitivo, y que crece exactamente donde el corpus ya exige mecanización real: `threshold` necesita un predicado comparable porque **Impl** §3.3.1 dice literalmente *"si existe y es `verifiable`, se aplica automáticamente"*; `priority` necesita un orden entre categorías nombrado por el mismo motivo; `escalation` necesita un destino de escalamiento porque ese destino es, en sí, información estructural (a qué nivel de autoridad, **Impl** §1.3); `exception` necesita referenciar un `ruleId` porque R-19 lo exige textualmente ("explícita, nombrada, y referencie el `ruleId` heredado"). Fuera de eso, el envelope no impone nada.
+1. **Un envelope estructural** — mínimo, determinista, parseable sin ambigüedad — que identifica el primitivo, y que crece exactamente donde el corpus ya exige mecanización real: `threshold` necesita un predicado comparable porque **Impl** §3.3.1 dice literalmente *"si existe y es `verifiable`, se aplica automáticamente"*; `priority` necesita un orden entre categorías nombrado por el mismo motivo; `escalation` necesita un destino de escalamiento porque ese destino es, en sí, información estructural (a qué nivel de autoridad, **Impl** §1.3); `exception` necesita referenciar un `postureId` porque R-19 lo exige textualmente ("explícita, nombrada, y referencie el `postureId` heredado"). Fuera de eso, el envelope no impone nada.
 2. **Una cláusula de criterio** (`::` seguido de texto libre) — nunca tokenizada, nunca reducida a estructura, preservada verbatim de principio a fin del sistema (§7). Es la parte de la expresión donde vive el "porque la experiencia acumulada demuestra que..." de Cor. Para `constraint`, `evidence` y `exception` esta cláusula es **obligatoria**: son, por evidencia del propio corpus (`grv_2b91` verificable:false; los ejemplos de `constraint` en **Orb** §18 sin ningún predicado cuantitativo; la justificación de excepción que R-19 exige explícitamente), los tres primitivos cuyo criterio real no es reducible a un envelope estructural completo. Para `threshold`, `priority` y `escalation` la cláusula es opcional: el envelope ya puede ser autosuficiente cuando la regla es puramente mecánica, pero nada impide adjuntar racional en lenguaje natural.
 
 Esta asimetría no es arbitraria por sección — está calibrada primitivo por primitivo contra la evidencia real de expresividad que el corpus ya demuestra necesitar, no contra una preferencia de diseño de este documento.
@@ -87,8 +87,8 @@ IDENT         = letter , { id_char } ;
       significado un IDENT concreto (p.ej. qué es "coverage_pct") queda fuera de esta
       gramática, es responsabilidad del evaluador real, ver §5. *)
 
-RULE_REF      = "grv_" , { letter | digit | "_" } ;
-   (* coincide con todo ruleId ya usado en el corpus: grv_0af4, grv_2b91, grv_org_0091,
+POSTURE_REF      = "grv_" , { letter | digit | "_" } ;
+   (* coincide con todo postureId ya usado en el corpus: grv_0af4, grv_2b91, grv_org_0091,
       grv_proj_0012, grv_sess_009, grv_0af4_escalation_generic *)
 
 NUMBER        = digit , { digit } , [ "." , digit , { digit } ] ;
@@ -100,7 +100,7 @@ COMPARATOR    = "<=" | ">=" | "==" | "!=" | "<" | ">" ;
 CRITERION_TEXT = ? cualquier secuencia no vacía de caracteres Unicode ? ;
    (* todo lo que sigue al delimitador "::" hasta el final de la expresión, incluyendo
       espacios, puntuación, saltos de línea, y cualquier subcadena que luzca como un
-      RULE_REF u otro token — nunca se re-tokeniza. Ver §2.1.1 *)
+      POSTURE_REF u otro token — nunca se re-tokeniza. Ver §2.1.1 *)
 ```
 
 **2.1.1 Por qué `CRITERION_TEXT` no se tokeniza más allá de "::"**. Si la cláusula de criterio se tokenizara como el resto de la gramática, cualquier ingeniero que escribiera una frase con dos puntos, comillas o un operador de comparación dentro de su razonamiento (`"timeout de conexión y respuesta de Redis con error explícito"` ya usa dos puntos) rompería el parseo de exactamente la parte que la sección 1.1 declaró irreducible. `"::"` es el único delimitador estructural que separa envelope de criterio; una vez cruzado, el parser deja de intentar entender el texto — lo captura y lo devuelve íntegro (§4).
@@ -202,7 +202,7 @@ sin excepción.
 ### 2.8 `exception` (mecanismo de R-19)
 
 ```ebnf
-exception_expr  = "exception" , "of" , RULE_REF , criterion ;
+exception_expr  = "exception" , "of" , POSTURE_REF , criterion ;
 ```
 
 **Ejemplo — reexpresión del escenario que Mandate v1.2.0 R-19 describe en prosa:**
@@ -220,7 +220,7 @@ evidencia adicional (grv_2b91); el umbral genérico del padre puede relajarse a 
 
 | Regla | Enunciado |
 |---|---|
-| WF-1 | `RULE_REF` debe matchear `^grv_[A-Za-z0-9_]+$` en toda posición donde aparece (hoy, solo `exception_expr`). |
+| WF-1 | `POSTURE_REF` debe matchear `^grv_[A-Za-z0-9_]+$` en toda posición donde aparece (hoy, solo `exception_expr`). |
 | WF-2 | Toda `criterion` presente, tras recortar espacios en los extremos, debe tener longitud > 0. Una cláusula `::` seguida de nada o solo de espacios es un error de sintaxis, no una cláusula vacía válida. |
 | WF-3 | `criterion` es obligatoria (su ausencia es error de sintaxis) para `constraint_expr`, `evidence_expr` y `exception_expr` — ver §1.1. Es opcional para `threshold_expr`, `priority_expr`, `escalation_expr`. |
 | WF-4 | Ninguna palabra reservada (`constraint`, `threshold`, `evidence`, `priority`, `escalation`, `exception`, `on`, `over`, `for`, `to`, `of`, `min`) puede usarse como valor de un `IDENT` en posición de nombre libre (métrica, categoría, target). Si un ingeniero necesita ese literal, debe calificarlo (p. ej. `metric_priority` en vez de `priority` como nombre de métrica). |
@@ -228,7 +228,7 @@ evidencia adicional (grv_2b91); el umbral genérico del padre puede relajarse a 
 
 ### 2.10 Alcance textual — qué campo gobierna esta gramática y qué no toca
 
-Esta gramática gobierna exclusivamente el contenido de `gravityRules[].expression: string` (**Mandate v1.1.0**/`v1.2.0`, sin cambio de tipo). No define, valida ni interpreta `ruleId`, `primitive` (el valor de este campo, `"constraint" | "threshold" | "evidence" | "priority" | "escalation" | "exception"`, debe ser consistente con el primitivo que la gramática detectó al parsear `expression` — ver WF cruzada en §6), `appliesTo[]`, `authoredBy`, `verifiable`, `promotable`, `promotedTo`, `status`, ni `promotedFrom` (**Persistencia** §5.3). El cruce con `verifiable` se trata en §5–§6 como validación semántica, nunca como parte de la gramática misma.
+Esta gramática gobierna exclusivamente el contenido de `gravityPostures[].expression: string` (**Mandate v1.1.0**/`v1.2.0`, sin cambio de tipo). No define, valida ni interpreta `postureId`, `primitive` (el valor de este campo, `"constraint" | "threshold" | "evidence" | "priority" | "escalation" | "exception"`, debe ser consistente con el primitivo que la gramática detectó al parsear `expression` — ver WF cruzada en §6), `appliesTo[]`, `authoredBy`, `verifiable`, `promotable`, `promotedTo`, `status`, ni `promotedFrom` (**Persistencia** §5.3). El cruce con `verifiable` se trata en §5–§6 como validación semántica, nunca como parte de la gramática misma.
 
 ---
 
@@ -243,13 +243,13 @@ El corpus ya resolvió, repetidamente, la misma pregunta de fondo que "¿parser 
 - **Nucleus es la única autoridad de parseo.** El parseo + validación semántica (§6) debe ocurrir en el mismo punto donde **Mandate v1.2.0** R-18 valida no-contradicción al firmar un nodo, y donde **Persistencia** §2.4 fija que "Nucleus permanece como único escritor de cualquier `node.json`". Un `expression` que no parsea, o que parsea pero viola una regla semántica (§6), no debe llegar a persistirse — el parseo es una precondición normativa de la escritura atómica descripta en **Persistencia** §2.4, no un servicio aparte.
 - **Conductor Workspace Core parsea también, pero como acelerador advisory, nunca como autoridad.** Esto es exactamente la misma categoría de objeto que **Client** ya define para `AutoridadDeAlcanceDelIngeniero` y `gravity_resolution_cache`: una copia que ayuda (feedback inmediato mientras el ingeniero escribe el criterio dentro del panel de postulación, **UX** §1.4) pero que nunca reemplaza la verificación real. Un texto que el parser del cliente acepta y el de Nucleus rechaza no es una inconsistencia tolerada en silencio — es, por diseño, resuelta siempre a favor de Nucleus, con el mismo principio que ya gobierna cualquier otra asimetría cliente/servidor de este sistema ("la autoridad nunca se distribuye, aunque el acceso sí", citado en **Impl** §0 y **Persistencia** §2.4).
 
-**INVARIANT-GRAMMAR-001:** ningún `GravityNode.gravityRules[]` persistido puede contener una `expression` que no parsee, bajo la gramática vigente en el momento de la firma, según el parser autoritativo de Nucleus. El parser de Conductor Workspace Core nunca es el árbitro de esta invariante — solo puede acelerar el momento en que el ingeniero descubre una violación, nunca decidirla.
+**INVARIANT-GRAMMAR-001:** ningún `GravityNode.gravityPostures[]` persistido puede contener una `expression` que no parsee, bajo la gramática vigente en el momento de la firma, según el parser autoritativo de Nucleus. El parser de Conductor Workspace Core nunca es el árbitro de esta invariante — solo puede acelerar el momento en que el ingeniero descubre una violación, nunca decidirla.
 
 **INVARIANT-GRAMMAR-002:** la validación semántica cruzada entre `verifiable` (campo del objeto) y `predicateComputable` (propiedad derivada del AST, §4) ocurre en el mismo punto y con el mismo mecanismo que R-18 — antes de la firma del nodo, nunca después, nunca como corrección posterior.
 
 ### 3.3 Punto de integración exacto
 
-- **Nucleus:** dentro de la misma operación que ya firma un nodo `ORGANIZATION`/`PROJECT`/`MANDATE`/`SESSION` (**Persistencia** §2.4, §6.4) o que valida un sub-Mandate al firmarlo (**Mandate v1.2.0** R-18) — el parseo+validación de cada `expression` nueva o modificada en `gravityRules[]` corre inmediatamente antes de esa firma, como un paso más de la misma validación conjunta que R-18 ya ejecuta, no como un servicio aparte con su propio ciclo de vida.
+- **Nucleus:** dentro de la misma operación que ya firma un nodo `ORGANIZATION`/`PROJECT`/`MANDATE`/`SESSION` (**Persistencia** §2.4, §6.4) o que valida un sub-Mandate al firmarlo (**Mandate v1.2.0** R-18) — el parseo+validación de cada `expression` nueva o modificada en `gravityPostures[]` corre inmediatamente antes de esa firma, como un paso más de la misma validación conjunta que R-18 ya ejecuta, no como un servicio aparte con su propio ciclo de vida.
 - **Conductor Workspace Core:** dentro del objeto `PosturaDraft` que **Client** §2 define históricamente como cliente-only y mutable hasta confirmar — específicamente sobre el campo `criterio` de ese borrador, mientras el panel inline originado en **UX** §1.4 está abierto. El resultado del parseo advisory es un dato **cliente-only y efímero**: nunca se envía a Nucleus como AST autoritativo, se descarta con el borrador si el ingeniero cierra sin confirmar y no sustituye la respuesta de Nucleus. La ubicación concreta de la invocación en la aplicación Electron se define en el anexo de Conductor Workspace Core; no está implementada en el estado actual.
 
 **3.3.1 Estado de implementación al 2026-08-29.** Las fachadas puras Go
@@ -334,7 +334,7 @@ interface EscalationNode extends GravityExpressionNodeBase {
 
 interface ExceptionNode extends GravityExpressionNodeBase {
   primitive: "exception";
-  exceptionOf: string;            // RULE_REF — el ruleId heredado al que hace excepción (R-19)
+  exceptionOf: string;            // POSTURE_REF — el postureId heredado al que hace excepción (R-19)
   predicateComputable: false;
 }
 
@@ -366,11 +366,11 @@ Esta sección define la **interfaz** que un evaluador necesitaría implementar �
 
 ```typescript
 interface GravityEvaluationContext {
-  ruleId: string;
+  postureId: string;
   origin: "nucleus" | "organization" | "project"
         | "mandate_own" | "mandate_inherited" | "session";   // Impl §2.2
   ast: GravityExpressionAST;              // ya parseado, nunca el string crudo — ver §7
-  verifiableDeclared: boolean;            // campo `verifiable` del objeto gravityRules[]
+  verifiableDeclared: boolean;            // campo `verifiable` del objeto gravityPostures[]
   turn: { intentType: string };           // suficiente para el filtrado ya fijado por appliesTo — Impl §2.1
   metrics: Record<string, number>;        // valores medidos disponibles para este turno;
                                            // de dónde vienen queda fuera de este contrato — es
@@ -386,10 +386,10 @@ type GravityEvaluationOutcome =
   | { status: "satisfied" }
   | { status: "breached";
       reasonCode: "GRAVITY_THRESHOLD_BREACHED";
-      ruleId: string;
-      ruleRef: string }
-      // ruleRef == ruleId — mismo campo, mismo nombre que ya usa Mandate v1.2.0 §3
-      // ("el rule_ref apunta al ruleId heredado"), sin acuñar un nombre nuevo
+      postureId: string;
+      postureRef: string }
+      // postureRef == postureId — mismo campo, mismo nombre que ya usa Mandate v1.2.0 §3
+      // ("el posture_ref apunta al postureId heredado"), sin acuñar un nombre nuevo
   | { status: "indeterminate"; reason: string };
       // p. ej. la métrica que threshold necesita no está en metrics{} para este turno
 
@@ -418,10 +418,10 @@ El diagrama de estados de **UX** §5 entra a "POSTULACIÓN ACTIVA" (panel inline
 
 | Clase | Cuándo ocurre | Ejemplo |
 |---|---|---|
-| **Sintáctica** | El texto no matchea ninguna producción de §2 — token inesperado, palabra clave de primitivo ausente o mal escrita, `criterion` obligatoria ausente (WF-3), `RULE_REF` mal formado (WF-1) | `constraint on ::` (falta el nombre después de `on`) |
+| **Sintáctica** | El texto no matchea ninguna producción de §2 — token inesperado, palabra clave de primitivo ausente o mal escrita, `criterion` obligatoria ausente (WF-3), `POSTURE_REF` mal formado (WF-1) | `constraint on ::` (falta el nombre después de `on`) |
 | **Semántica** | El texto parsea a un AST válido, pero viola una regla que solo el Grafo de Gravedad real (Nucleus) puede verificar | `verifiable: true` declarado en el objeto, pero `ast.predicateComputable === false` (viola INVARIANT-GRAMMAR-002); o `exception of grv_9999` donde `grv_9999` no existe entre las reglas heredadas visibles para este nodo (viola R-19) |
 
-La distinción importa porque solo la primera es detectable enteramente en el cliente (Conductor Workspace Core no necesita el Grafo de Gravedad real para saber que `on` quedó sin argumento); la segunda exige, por diseño, la verificación autoritativa de Nucleus contra datos que el cliente nunca ve completos (**API** §3.1, misma justificación de opacidad que ya rige la exposición del grafo completo). Conductor Workspace Core puede dar una verificación *advisory* parcial de la segunda clase cuando el dato ya es visible en el breadcrumb resuelto de ese turno (**UX** §2.3 ya lista los `ruleId` heredados aplicables) — pero nunca la trata como definitiva, mismo principio que §3.2 ya fija para el resto del parseo del lado del cliente.
+La distinción importa porque solo la primera es detectable enteramente en el cliente (Conductor Workspace Core no necesita el Grafo de Gravedad real para saber que `on` quedó sin argumento); la segunda exige, por diseño, la verificación autoritativa de Nucleus contra datos que el cliente nunca ve completos (**API** §3.1, misma justificación de opacidad que ya rige la exposición del grafo completo). Conductor Workspace Core puede dar una verificación *advisory* parcial de la segunda clase cuando el dato ya es visible en el breadcrumb resuelto de ese turno (**UX** §2.3 ya lista los `postureId` heredados aplicables) — pero nunca la trata como definitiva, mismo principio que §3.2 ya fija para el resto del parseo del lado del cliente.
 
 **6.3.1 Forma de la respuesta — propuesta 🆕, no ratificada, siguiendo la misma disciplina de marcado que **API** §2.3.2/§2.3.4 usa para códigos sin respaldo textual todavía:**
 
@@ -437,7 +437,7 @@ type GravityExpressionRejection =
       message: string;
       violatedRule: "verifiable_requires_computable_predicate"  // INVARIANT-GRAMMAR-002
                    | "exception_target_not_inherited";           // R-19
-      ruleRef?: string };                                        // el RULE_REF referenciado, si aplica
+      postureRef?: string };                                        // el POSTURE_REF referenciado, si aplica
 ```
 
 Ninguno de los dos `reason_code` se mezcla, sin marcar, dentro de la unión cerrada que **API** §2.3.1 ya fijó para el ciclo de vida de un turno (`INTENT_MISCLASSIFIED`, `SCOPE_VIOLATION`, `PATH_FORBIDDEN`, `BUDGET_EXCEEDED`, `COR_FORBIDDEN_FOR_AGENT`, `GRAVITY_THRESHOLD_BREACHED`) — son, estructuralmente, códigos de un momento distinto (autoría de una Postura, no evaluación de un turno ya firmado), y **INVARIANT-GRAMMAR-001** (§3.2) es precisamente la garantía de que, una vez que un turno corre, ninguno de estos dos códigos puede aparecer ya: toda `expression` persistida ya pasó este chequeo antes de la firma.
@@ -448,11 +448,11 @@ Ninguno de los dos `reason_code` se mezcla, sin marcar, dentro de la unión cerr
 
 ### 7.1 Aplicando el mismo principio que Persistencia §3.2
 
-**Persistencia** §3.2 evaluó exactamente este tipo de pregunta para el contenido de `gravityRules[]` en general, y se corrigió a sí mismo a mitad de documento al encontrarla: *"la versión inicial de este documento proponía cachear también el contenido de `gravityRules[]` [...] Se retira esa capa de caché; el contenido se lee siempre fresco"* — con la justificación de que persistirlo en `orbital_agentic_state.json` "crearía una copia de las posturas paralela a `.bloom/.gravity/`, la segunda fuente de verdad que el propio sistema ya prohíbe". El AST de `expression` es, literalmente, contenido derivado de `gravityRules[]` — el mismo razonamiento aplica sin necesidad de reabrirlo: **el `expression: string` ya persistido en `node.json` es la única fuente de verdad; el AST es siempre derivado, nunca persistido como campo aparte.**
+**Persistencia** §3.2 evaluó exactamente este tipo de pregunta para el contenido de `gravityPostures[]` en general, y se corrigió a sí mismo a mitad de documento al encontrarla: *"la versión inicial de este documento proponía cachear también el contenido de `gravityPostures[]` [...] Se retira esa capa de caché; el contenido se lee siempre fresco"* — con la justificación de que persistirlo en `orbital_agentic_state.json` "crearía una copia de las posturas paralela a `.bloom/.gravity/`, la segunda fuente de verdad que el propio sistema ya prohíbe". El AST de `expression` es, literalmente, contenido derivado de `gravityPostures[]` — el mismo razonamiento aplica sin necesidad de reabrirlo: **el `expression: string` ya persistido en `node.json` es la única fuente de verdad; el AST es siempre derivado, nunca persistido como campo aparte.**
 
 ### 7.2 Por qué el caso de rendimiento no alcanza el umbral que exigiría cachear
 
-**Persistencia** §3.2 justifica no cachear el contenido de `gravityRules[]` comparando el costo real: *"leer 4–6 archivos `node.json` por turno es órdenes de magnitud más barato que la propia llamada al modelo dentro de `propose_next_action`"*. Parsear un puñado de `expression` cortas (típicamente una o dos oraciones, según todos los ejemplos del corpus) con el parser de §3 es, a su vez, órdenes de magnitud más barato que el propio *file read* que ya se descartó cachear — no hay I/O, es cómputo puro sobre un string ya cargado en memoria. Si el argumento de **Persistencia** §3.2 fue suficiente para no cachear el contenido crudo, con más razón es suficiente para no cachear su derivado. No se acuña ninguna excepción de rendimiento en este documento.
+**Persistencia** §3.2 justifica no cachear el contenido de `gravityPostures[]` comparando el costo real: *"leer 4–6 archivos `node.json` por turno es órdenes de magnitud más barato que la propia llamada al modelo dentro de `propose_next_action`"*. Parsear un puñado de `expression` cortas (típicamente una o dos oraciones, según todos los ejemplos del corpus) con el parser de §3 es, a su vez, órdenes de magnitud más barato que el propio *file read* que ya se descartó cachear — no hay I/O, es cómputo puro sobre un string ya cargado en memoria. Si el argumento de **Persistencia** §3.2 fue suficiente para no cachear el contenido crudo, con más razón es suficiente para no cachear su derivado. No se acuña ninguna excepción de rendimiento en este documento.
 
 ### 7.3 La única forma de "caché" permitida — y por qué no es una segunda fuente de verdad
 

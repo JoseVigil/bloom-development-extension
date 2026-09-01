@@ -10,7 +10,7 @@ import (
 func ptr(value string) *string { return &value }
 
 func testNode(id string, kind NodeType, parent *string) GravityNode {
-	return GravityNode{NodeID: id, NodeType: kind, ParentID: parent, GravityRules: []GravityRule{}, Status: NodeActive, CreatedAt: "2026-08-29T00:00:00Z"}
+	return GravityNode{NodeID: id, NodeType: kind, ParentID: parent, GravityPostures: []GravityPosture{}, Status: NodeActive, CreatedAt: "2026-08-29T00:00:00Z"}
 }
 
 func TestStoreLayoutCreateAndCAS(t *testing.T) {

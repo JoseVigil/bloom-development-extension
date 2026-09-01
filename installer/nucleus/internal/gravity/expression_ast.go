@@ -71,8 +71,8 @@ func (EscalationNode) gravityExpressionAST() {}
 func (ExceptionNode) gravityExpressionAST()  {}
 
 type GravityEvaluationContext struct {
-	RuleID             string
-	Origin             RuleOrigin
+	PostureID          string
+	Origin             PostureOrigin
 	AST                GravityExpressionAST
 	VerifiableDeclared bool
 	Turn               struct{ IntentType string }
@@ -82,8 +82,8 @@ type GravityEvaluationContext struct {
 type GravityEvaluationOutcome struct {
 	Status     string `json:"status"`
 	ReasonCode string `json:"reasonCode,omitempty"`
-	RuleID     string `json:"ruleId,omitempty"`
-	RuleRef    string `json:"ruleRef,omitempty"`
+	PostureID  string `json:"postureId,omitempty"`
+	PostureRef string `json:"postureRef,omitempty"`
 	Reason     string `json:"reason,omitempty"`
 }
 
@@ -106,14 +106,14 @@ type GravityExpressionError struct {
 	Position       *ExpressionErrorPosition `json:"position,omitempty"`
 	ExpectedTokens []string                 `json:"expectedTokens,omitempty"`
 	ViolatedRule   string                   `json:"violatedRule,omitempty"`
-	RuleRef        string                   `json:"ruleRef,omitempty"`
+	PostureRef     string                   `json:"postureRef,omitempty"`
 }
 
 func (e *GravityExpressionError) Error() string { return e.Message }
 
-func NewSemanticGravityExpressionError(message, violatedRule, ruleRef string) *GravityExpressionError {
+func NewSemanticGravityExpressionError(message, violatedRule, postureRef string) *GravityExpressionError {
 	return &GravityExpressionError{
 		ErrorClass: "semantic", ReasonCode: "GRAVITY_EXPRESSION_SEMANTIC_ERROR",
-		Message: message, ViolatedRule: violatedRule, RuleRef: ruleRef,
+		Message: message, ViolatedRule: violatedRule, PostureRef: postureRef,
 	}
 }

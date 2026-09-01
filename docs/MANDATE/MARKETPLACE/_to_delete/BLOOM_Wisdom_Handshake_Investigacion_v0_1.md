@@ -67,7 +67,7 @@ Define cómo se agrega evidencia entre Nucleus de forma anónima:
 
 ### 2.3 Gravity inheritance en sub-Mandates (`BLOOM_Mandate_Universal_Schema_v1_2_0.md`)
 
-Define reglas R-17 a R-21 sobre cómo un sub-Mandate hereda `governance.inheritedGravityRules[]` de su Mandate padre, con validación de no-contradicción al firmar (R-18), mecanismo de excepción nombrada (R-19), unión transitiva a profundidad máxima 2 (R-20), y que `promotable`/`promotedTo` queda ligado únicamente al `sourceMandateId` (R-21).
+Define reglas R-17 a R-21 sobre cómo un sub-Mandate hereda `governance.inheritedGravityPostures[]` de su Mandate padre, con validación de no-contradicción al firmar (R-18), mecanismo de excepción nombrada (R-19), unión transitiva a profundidad máxima 2 (R-20), y que `promotable`/`promotedTo` queda ligado únicamente al `sourceMandateId` (R-21).
 
 **Alcance real:** esto gobierna herencia **dentro de la misma organización** (Mandate padre → sub-Mandate). No dice nada sobre cómo Gravity o Wisdom se comparten **entre** organizaciones, que es el caso que te importa para el Marketplace. Es la pieza más cercana a un mecanismo de "promoción", pero está resuelta solo para el caso de un mismo origen.
 

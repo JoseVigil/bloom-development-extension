@@ -26,7 +26,7 @@ export default class GravityExpressionLexer extends Lexer {
 	public static readonly T__11 = 12;
 	public static readonly T__12 = 13;
 	public static readonly CRITERION = 14;
-	public static readonly RULE_REF = 15;
+	public static readonly POSTURE_REF = 15;
 	public static readonly NUMBER = 16;
 	public static readonly COMPARATOR = 17;
 	public static readonly IDENT = 18;
@@ -50,14 +50,14 @@ export default class GravityExpressionLexer extends Lexer {
                                                              null, null, 
                                                              null, null, 
                                                              "CRITERION", 
-                                                             "RULE_REF", 
+                                                             "POSTURE_REF", 
                                                              "NUMBER", "COMPARATOR", 
                                                              "IDENT", "WS" ];
 	public static readonly modeNames: string[] = [ "DEFAULT_MODE", ];
 
 	public static readonly ruleNames: string[] = [
 		"T__0", "T__1", "T__2", "T__3", "T__4", "T__5", "T__6", "T__7", "T__8", 
-		"T__9", "T__10", "T__11", "T__12", "CRITERION", "RULE_REF", "NUMBER", 
+		"T__9", "T__10", "T__11", "T__12", "CRITERION", "POSTURE_REF", "NUMBER", 
 		"COMPARATOR", "IDENT", "WS",
 	];
 

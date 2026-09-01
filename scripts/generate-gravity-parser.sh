@@ -19,11 +19,11 @@ grammar="contracts/gravity/GravityExpression.g4"
 go_output="$repo_root/installer/nucleus/internal/gravity"
 ts_output="$repo_root/contracts/gravity/generated"
 
-mkdir -p -- "$ts_output"
+mkdir -p -- "$go_output" "$ts_output"
 
 cd -- "$repo_root"
-java -jar "$antlr_jar" -Dlanguage=Go -package gravity -visitor -no-listener -o "$go_output" "$grammar"
-java -jar "$antlr_jar" -Dlanguage=TypeScript -visitor -no-listener -o "$ts_output" "$grammar"
+java -jar "$antlr_jar" -Xexact-output-dir -Dlanguage=Go -package gravity -visitor -no-listener -o "$go_output" "$grammar"
+java -jar "$antlr_jar" -Xexact-output-dir -Dlanguage=TypeScript -visitor -no-listener -o "$ts_output" "$grammar"
 
 # ANTLR emits interpreter/token metadata for its own tooling. Runtime consumers
 # only need generated source, so keep those transient artifacts out of the repo.

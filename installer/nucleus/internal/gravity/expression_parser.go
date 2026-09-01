@@ -133,7 +133,7 @@ func buildExpressionAST(raw string, tree *ExpressionContext) (GravityExpressionA
 		if err != nil {
 			return nil, err
 		}
-		return ExceptionNode{ExpressionNodeBase: expressionBase("exception", raw, criterion, false), ExceptionOf: value.RULE_REF().GetText()}, nil
+		return ExceptionNode{ExpressionNodeBase: expressionBase("exception", raw, criterion, false), ExceptionOf: value.POSTURE_REF().GetText()}, nil
 	}
 	return nil, syntaxExpressionError("expression does not match a Gravity primitive", 0, 1, 0, nil)
 }

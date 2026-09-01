@@ -23,7 +23,7 @@ El documento fundacional deja tres huecos explícitos en su §34: gramática def
 
 ### 1.1 Por qué un grafo y no una lista plana
 
-La jerarquía del documento fundacional (Nucleus → Organización → Proyecto → Mandate → Sesión) ya no es una lista de niveles — es una estructura con ramificación real: una Organización tiene múltiples Proyectos, un Proyecto tiene múltiples Mandates, un Mandate puede tener sub-Mandates delegados (`v1.2.0`), y cada Mandate agéntico puede tener múltiples Sesiones a lo largo de su ciclo de vida. Una lista plana no puede representar esto sin perder la información de *por qué camino* una regla llegó a aplicar en un turno dado. Un grafo sí.
+La jerarquía del documento fundacional (Nucleus → Organización → Proyecto → Mandate → Sesión) ya no es una lista de niveles — es una estructura con ramificación real: una Organización tiene múltiples Proyectos, un Proyecto tiene múltiples Mandates, un Mandate puede tener sub-Mandates delegados (`v1.2.0`), y cada Mandate agéntico puede tener múltiples Sesiones a lo largo de su ciclo de vida. Una lista plana no puede representar esto sin perder la información de *por qué camino* una postura llegó a aplicar en un turno dado. Un grafo sí.
 
 ### 1.2 Tipos de nodo
 
@@ -45,7 +45,7 @@ Propiedades comunes a todo nodo:
   "nodeId":      "string — uuid4",
   "nodeType":    "enum — NUCLEUS | ORGANIZATION | PROJECT | MANDATE | SESSION",
   "parentId":    "string | null — null únicamente para NUCLEUS",
-  "gravityRules": [ /* mismo schema de gravityRules[] ya fijado en v1.1.0 §2.1 */ ],
+  "gravityPostures": [ /* mismo schema de gravityPostures[] ya fijado en v1.1.0 §2.1 */ ],
   "status":      "enum — active | superseded",
   "createdAt":   "string — ISO 8601",
   "signedBy":    "string — autoridad que firmó este nodo (ver §1.3 por nivel)"
@@ -60,7 +60,7 @@ Esta tabla es la pieza que faltaba para que "coordinación sin depender de `cor`
 |---|---|---|---|
 | `NUCLEUS` | Constitutivo — no se firma, es dado (Nivel 0 de `v1.1.0`) | N/A | Invariantes de protocolo |
 | `ORGANIZATION` | Operador humano con autoridad organizacional, vía canal privilegiado de Nucleus | **Sí, siempre** | Ley global — Nivel 1 de `v1.1.0` |
-| `PROJECT` | Humano con autoridad de proyecto (Architect/Master, según roles ya definidos en BTIPS) | No | Nuevo — criterio de alcance intermedio, análogo en espíritu a `gravityRules` de Mandate pero con alcance mayor |
+| `PROJECT` | Humano con autoridad de proyecto (Architect/Master, según roles ya definidos en BTIPS) | No | Nuevo — criterio de alcance intermedio, análogo en espíritu a `gravityPostures` de Mandate pero con alcance mayor |
 | `MANDATE` | El humano que firma el Mandate al crearlo | No | Ya existente — `v1.1.0` §2 |
 | `SESSION` | Se captura en vivo, durante la conversación, sin firma formal previa | No | Ya existente conceptualmente — Session Gravity del documento fundacional §8 |
 
@@ -71,25 +71,25 @@ La consecuencia directa: **`cor` sigue siendo, sin excepción, el único camino 
 ```text
 PARENT_OF        — estructural, entre niveles consecutivos (Organization→Project→Mandate→Session)
 DELEGATES_TO      — Mandate → sub-Mandate (v1.2.0), acota capability_seam por subconjunto
-INHERITS_FROM     — dirección inversa conceptual de DELEGATES_TO para gravityRules: el hijo referencia
-                    de solo lectura las reglas del padre (mismo patrón de inheritedGravityRules de v1.2.0,
+INHERITS_FROM     — dirección inversa conceptual de DELEGATES_TO para gravityPostures: el hijo referencia
+                    de solo lectura las posturas del padre (mismo patrón de inheritedGravityPostures de v1.2.0,
                     generalizado ahora a cualquier par de niveles consecutivos, no solo Mandate↔sub-Mandate)
-PROMOTED_FROM     — registra que una regla en un nodo de nivel superior se originó como regla postulada
+PROMOTED_FROM     — registra que una postura en un nodo de nivel superior se originó como postura postulada
                     en un nodo de nivel inferior (ver §1.5)
 ```
 
-`INHERITS_FROM` generaliza R-17/R-18 de `v1.2.0` (que hasta ahora solo cubrían Mandate↔sub-Mandate) a los cuatro pares de niveles consecutivos: `Organization→Project`, `Project→Mandate`, `Mandate→Session`. La regla de no-contradicción (R-18, R-14) aplica igual en cada frontera: un nivel inferior nunca puede contradecir una regla heredada de uno superior, salvo `exception` explícita y nombrada.
+`INHERITS_FROM` generaliza R-17/R-18 de `v1.2.0` (que hasta ahora solo cubrían Mandate↔sub-Mandate) a los cuatro pares de niveles consecutivos: `Organization→Project`, `Project→Mandate`, `Mandate→Session`. La postura de no-contradicción (R-18, R-14) aplica igual en cada frontera: un nivel inferior nunca puede contradecir una postura heredada de uno superior, salvo `exception` explícita y nombrada.
 
 ### 1.5 Promoción — ya no es solo un diagrama conceptual
 
-El documento fundacional describe la promoción (§22) como flujo conceptual: `Session → Mandate/Project Candidate → Project → Governance Candidate → cor → Nucleus/Organization`. Esto se materializa en el grafo como una arista `PROMOTED_FROM` que conecta el nodo de la regla nueva (en el nivel superior) con el `ruleId` de origen (en el nivel inferior), preservando el linaje completo:
+El documento fundacional describe la promoción (§22) como flujo conceptual: `Session → Mandate/Project Candidate → Project → Governance Candidate → cor → Nucleus/Organization`. Esto se materializa en el grafo como una arista `PROMOTED_FROM` que conecta el nodo de la postura nueva (en el nivel superior) con el `postureId` de origen (en el nivel inferior), preservando el linaje completo:
 
 ```jsonc
 {
   "edgeType": "PROMOTED_FROM",
-  "fromRuleId": "grv_0af4",          // la regla original, nivel Mandate
+  "fromPostureId": "grv_0af4",          // la postura original, nivel Mandate
   "fromNodeId": "mnd_8f2a1c",
-  "toRuleId": "grv_org_0091",        // la regla promovida, nivel Organization
+  "toPostureId": "grv_org_0091",        // la postura promovida, nivel Organization
   "toNodeId": "org_root",
   "promotedVia": "cor",              // único valor posible cuando toNodeId.nodeType ∈ {ORGANIZATION, NUCLEUS}
   "promotedBy": "human_operator",    // nunca "agent" — mismo invariante que R-13/R-16 de v1.1.0
@@ -112,13 +112,13 @@ resolve_active_gravity(session_id):
     path ← walk_up(session_id → mandate → project → organization → nucleus)
     collected ← []
     for node in path (orden: NUCLEUS primero, SESSION último):
-        for rule in node.gravityRules where rule.status == "active":
-            if rule.appliesTo matches current_turn.intent_type:
-                collected.append(rule tagged with node.nodeType)
+        for posture in node.gravityPostures where posture.status == "active":
+            if posture.appliesTo matches current_turn.intent_type:
+                collected.append(posture tagged with node.nodeType)
     return collected  # = "Resolved Active Gravity" del documento fundacional §10
 ```
 
-El orden de recorrido (`NUCLEUS` primero) no es arbitrario: es lo que permite que la validación de no-contradicción (§1.4) se aplique en el mismo sentido en que ya se aplica en `v1.1.0`/`v1.2.0` — una regla de nivel inferior se valida *contra* el conjunto ya acumulado de niveles superiores, nunca al revés.
+El orden de recorrido (`NUCLEUS` primero) no es arbitrario: es lo que permite que la validación de no-contradicción (§1.4) se aplique en el mismo sentido en que ya se aplica en `v1.1.0`/`v1.2.0` — una postura de nivel inferior se valida *contra* el conjunto ya acumulado de niveles superiores, nunca al revés.
 
 ### 2.2 `origin` extendido
 
@@ -128,7 +128,7 @@ El orden de recorrido (`NUCLEUS` primero) no es arbitrario: es lo que permite qu
 "origin": "enum — nucleus | organization | project | mandate_own | mandate_inherited | session"
 ```
 
-`mandate_own` y `mandate_inherited` preservan exactamente la distinción ya fijada en `v1.2.0` (regla propia del Mandate vs. heredada de un Mandate padre); los tres valores nuevos (`nucleus`, `organization`, `project`) cubren los niveles que este documento agrega.
+`mandate_own` y `mandate_inherited` preservan exactamente la distinción ya fijada en `v1.2.0` (postura propia del Mandate vs. heredada de un Mandate padre); los tres valores nuevos (`nucleus`, `organization`, `project`) cubren los niveles que este documento agrega.
 
 ### 2.3 Traza de turno — ejemplo
 
@@ -137,10 +137,10 @@ El orden de recorrido (`NUCLEUS` primero) no es arbitrario: es lo que permite qu
   "turn": 4,
   "intent_draft": { "type": "mrg" },
   "gravity_context_injected": [
-    { "ruleId": "grv_org_0044", "origin": "organization" },
-    { "ruleId": "grv_proj_0012", "origin": "project" },
-    { "ruleId": "grv_0af4", "origin": "mandate_own" },
-    { "ruleId": "grv_sess_009", "origin": "session" }
+    { "postureId": "grv_org_0044", "origin": "organization" },
+    { "postureId": "grv_proj_0012", "origin": "project" },
+    { "postureId": "grv_0af4", "origin": "mandate_own" },
+    { "postureId": "grv_sess_009", "origin": "session" }
   ],
   "nucleus_decision": "signed",
   "result": "pass"
@@ -181,7 +181,7 @@ INVARIANT-ARB-001: ningún conflicto de superposición se resuelve por negociaci
 INVARIANT-ARB-002: el árbitro es siempre la autoridad común más cercana en el grafo — el padre
                    común si existe (Mandate padre, o Project si los Mandates no comparten padre),
                    escalando hasta Nucleus si no hay autoridad común más específica disponible.
-INVARIANT-ARB-003: el resultado de un arbitraje nunca modifica gravityRules[] de ningún Mandate
+INVARIANT-ARB-003: el resultado de un arbitraje nunca modifica gravityPostures[] de ningún Mandate
                    ya firmado — es una resolución de secuencia/prioridad, no una reescritura de contrato.
 ```
 
@@ -191,9 +191,9 @@ INVARIANT-ARB-003: el resultado de un arbitraje nunca modifica gravityRules[] de
 
 Cuando se dispara un arbitraje, Nucleus resuelve en este orden, deteniéndose en el primero que aplique:
 
-1. **¿Existe una `gravityRule` de primitivo `priority` ya declarada en el ancestro común** que resuelva explícitamente este tipo de colisión? (Ej.: *"ante conflicto de scope entre sub-Mandates de refactor y sub-Mandates de hotfix, el hotfix tiene precedencia"*.) Si existe y es `verifiable`, se aplica automáticamente.
-2. **¿Existe una `gravityRule` de primitivo `escalation`** que indique que este tipo de colisión debe resolverse con intervención humana? Si existe, se activa (mismo mecanismo ya descrito para `GRAVITY_THRESHOLD_BREACHED`, `v1.1.0` §4).
-3. **Default — sin regla aplicable:** Nucleus aplica la resolución más conservadora posible: pausa el segundo Mandate en llegar (por timestamp de la Action en conflicto), deja avanzar al primero, y notifica al humano con ambos `mandateId` y el `scope_path` en conflicto. Nunca ejecuta ambos en paralelo sobre territorio superpuesto, y nunca elige "el más importante" sin una regla o un humano que lo determine.
+1. **¿Existe una `gravityPosture` de primitivo `priority` ya declarada en el ancestro común** que resuelva explícitamente este tipo de colisión? (Ej.: *"ante conflicto de scope entre sub-Mandates de refactor y sub-Mandates de hotfix, el hotfix tiene precedencia"*.) Si existe y es `verifiable`, se aplica automáticamente.
+2. **¿Existe una `gravityPosture` de primitivo `escalation`** que indique que este tipo de colisión debe resolverse con intervención humana? Si existe, se activa (mismo mecanismo ya descrito para `GRAVITY_THRESHOLD_BREACHED`, `v1.1.0` §4).
+3. **Default — sin postura aplicable:** Nucleus aplica la resolución más conservadora posible: pausa el segundo Mandate en llegar (por timestamp de la Action en conflicto), deja avanzar al primero, y notifica al humano con ambos `mandateId` y el `scope_path` en conflicto. Nunca ejecuta ambos en paralelo sobre territorio superpuesto, y nunca elige "el más importante" sin una postura o un humano que lo determine.
 
 ### 3.4 `ArbitrationEvent` — persistencia en el grafo
 
@@ -203,19 +203,19 @@ Cuando se dispara un arbitraje, Nucleus resuelve en este orden, deteniéndose en
   "conflictScope": "string[] — paths en colisión",
   "involvedMandateIds": ["mnd_a1", "mnd_b2"],
   "commonAuthorityNodeId": "string — nodeId del ancestro común que arbitró (o NUCLEUS si no había uno más específico)",
-  "resolutionStrategy": "enum — priority_rule | escalation_rule | default_pause_and_notify",
-  "appliedRuleId": "string | null — ruleId de la gravityRule usada, si strategy no fue default",
+  "resolutionStrategy": "enum — priority_posture | escalation_posture | default_pause_and_notify",
+  "appliedPostureId": "string | null — postureId de la gravityPosture usada, si strategy no fue default",
   "resolution": "enum — mandate_a_proceeds | mandate_b_proceeds | both_paused | rejected",
   "resolvedBy": "enum — nucleus_automatic | human_operator  // nunca 'agent'",
   "occurredAt": "string — ISO 8601"
 }
 ```
 
-Persiste como nodo propio en el grafo, referenciado desde ambos Mandates involucrados — análogo en espíritu a `governanceImpact.corEvents[]` (`v1.0.1` §2), pero **no** es un `corEvent`: no hay promulgación de ley, no hay `CorNucleusRecord`, no hay Zero-Read. Es un evento de coordinación ordinaria, visible para ambos Mandates afectados sin restricción especial de lectura, porque no expone ninguna regla constitucional — solo la resolución de un conflicto puntual de territorio.
+Persiste como nodo propio en el grafo, referenciado desde ambos Mandates involucrados — análogo en espíritu a `governanceImpact.corEvents[]` (`v1.0.1` §2), pero **no** es un `corEvent`: no hay promulgación de ley, no hay `CorNucleusRecord`, no hay Zero-Read. Es un evento de coordinación ordinaria, visible para ambos Mandates afectados sin restricción especial de lectura, porque no expone ninguna postura constitucional — solo la resolución de un conflicto puntual de territorio.
 
 ### 3.5 Camino hacia la promoción, si la recurrencia lo justifica
 
-Si `ArbitrationEvent` con `resolutionStrategy: "default_pause_and_notify"` se repite con un patrón reconocible (mismo tipo de colisión, mismo par de categorías de Mandate), eso es evidencia — en el sentido exacto de `v1.1.0` §3.1 y del documento fundacional §22-23 — de que una `gravityRule` de `priority` debería postularse en el ancestro común, para que el arbitraje deje de necesitar intervención humana repetida. Si esa regla, además, resulta aplicable más allá de ese Proyecto, sigue el camino de promoción ya descrito (§1.5) hasta, eventualmente, `cor`. El arbitraje no reemplaza ese camino — es, en la práctica, su principal fuente de evidencia.
+Si `ArbitrationEvent` con `resolutionStrategy: "default_pause_and_notify"` se repite con un patrón reconocible (mismo tipo de colisión, mismo par de categorías de Mandate), eso es evidencia — en el sentido exacto de `v1.1.0` §3.1 y del documento fundacional §22-23 — de que una `gravityPosture` de `priority` debería postularse en el ancestro común, para que el arbitraje deje de necesitar intervención humana repetida. Si esa postura, además, resulta aplicable más allá de ese Proyecto, sigue el camino de promoción ya descrito (§1.5) hasta, eventualmente, `cor`. El arbitraje no reemplaza ese camino — es, en la práctica, su principal fuente de evidencia.
 
 ---
 
@@ -233,14 +233,14 @@ Dos sub-Mandates hermanos, hijos de `mnd_8f2a1c` (el Mandate del rate-limiter us
   "conflict_with": "mnd_child_fallback"
 }
 
-// Nucleus resuelve — no hay priority rule declarada, sí hay escalation genérica del padre:
+// Nucleus resuelve — no hay Posture de `priority` declarada, sí hay una Posture de `escalation` genérica del padre:
 {
   "eventId": "arb_0192",
   "conflictScope": ["src/ratelimit/fallback_logger.py"],
   "involvedMandateIds": ["mnd_child_fallback", "mnd_child_logging"],
   "commonAuthorityNodeId": "mnd_8f2a1c",
-  "resolutionStrategy": "escalation_rule",
-  "appliedRuleId": "grv_0af4_escalation_generic",
+  "resolutionStrategy": "escalation_posture",
+  "appliedPostureId": "grv_0af4_escalation_generic",
   "resolution": "mandate_b_proceeds",  // el humano decide priorizar logging, ya iniciado antes de notar el choque
   "resolvedBy": "human_operator",
   "occurredAt": "2026-09-15T11:20:00Z"
@@ -255,7 +255,7 @@ Ninguno de los dos Agent Loops negoció nada entre sí. Ninguno supo siquiera qu
 
 Deliberadamente, siguiendo el mismo principio que el documento fundacional aplicó en su propia §34:
 
-- La gramática formal de `gravityRules[].expression` sigue sin fijarse — este documento no la necesita para especificar persistencia y arbitraje.
+- La gramática formal de `gravityPostures[].expression` sigue sin fijarse — este documento no la necesita para especificar persistencia y arbitraje.
 - El mecanismo exacto de firma para `PROJECT` (qué rol organizacional concreto, qué flujo de UI) no se especifica — se asume "autoridad de proyecto ya existente en BTIPS" sin mayor detalle.
 - Qué pasa si el arbitraje mismo produce una tercera colisión (ej.: pausar el Mandate B genera una nueva colisión con un tercer Mandate) no está cubierto — es un caso de segundo orden que este v0.1 no explora todavía.
 - La representación de Paladin de "bajo qué Gravity estoy trabajando ahora" (§14 del documento fundacional) no se aborda — es UI, no persistencia ni arbitraje, y queda fuera de este documento por diseño.

@@ -32,7 +32,7 @@ export default class GravityExpressionParser extends Parser {
 	public static readonly T__11 = 12;
 	public static readonly T__12 = 13;
 	public static readonly CRITERION = 14;
-	public static readonly RULE_REF = 15;
+	public static readonly POSTURE_REF = 15;
 	public static readonly NUMBER = 16;
 	public static readonly COMPARATOR = 17;
 	public static readonly IDENT = 18;
@@ -65,7 +65,7 @@ export default class GravityExpressionParser extends Parser {
                                                              null, null, 
                                                              null, null, 
                                                              "CRITERION", 
-                                                             "RULE_REF", 
+                                                             "POSTURE_REF", 
                                                              "NUMBER", "COMPARATOR", 
                                                              "IDENT", "WS" ];
 	// tslint:disable:no-trailing-whitespace
@@ -404,7 +404,7 @@ export default class GravityExpressionParser extends Parser {
 			this.state = 83;
 			this.match(GravityExpressionParser.T__9);
 			this.state = 84;
-			this.match(GravityExpressionParser.RULE_REF);
+			this.match(GravityExpressionParser.POSTURE_REF);
 			this.state = 85;
 			this.criterion();
 			}
@@ -812,8 +812,8 @@ export class ExceptionExprContext extends ParserRuleContext {
 		super(parent, invokingState);
     	this.parser = parser;
 	}
-	public RULE_REF(): TerminalNode {
-		return this.getToken(GravityExpressionParser.RULE_REF, 0);
+	public POSTURE_REF(): TerminalNode {
+		return this.getToken(GravityExpressionParser.POSTURE_REF, 0);
 	}
 	public criterion(): CriterionContext {
 		return this.getTypedRuleContext(CriterionContext, 0) as CriterionContext;

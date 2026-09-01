@@ -30,7 +30,7 @@ No es simplemente un loop.
 
 No es un framework de ejecución.
 
-Orbital es una **capa de coordinación gobernada por criterio**, diseñada para permitir trabajo autónomo o semiautónomo sin entregar a los modelos la autoridad sobre las reglas que gobiernan ese trabajo.
+Orbital es una **capa de coordinación gobernada por criterio**, diseñada para permitir trabajo autónomo o semiautónomo sin entregar a los modelos la autoridad sobre las posturas que gobiernan ese trabajo.
 
 Los modelos pueden razonar.
 
@@ -47,14 +47,14 @@ Pero el sistema debe distinguir entre:
 - hacer trabajo;
 - interpretar una instrucción;
 - tomar una decisión;
-- establecer una regla;
-- modificar una regla;
-- promulgar una regla;
-- operar bajo reglas ya establecidas.
+- establecer una postura;
+- modificar una postura;
+- promulgar una postura;
+- operar bajo posturas ya establecidas.
 
 Esta distinción conduce a Gravity.
 
-Gravity no es solamente un lenguaje para describir reglas de coordinación.
+Gravity no es solamente un lenguaje para describir posturas de coordinación.
 
 Gravity constituye el **campo semántico y normativo dentro del cual el trabajo inteligente y la interacción humana adquieren significado operacional**.
 
@@ -91,7 +91,7 @@ El descubrimiento inicial fue que **el agente no debe ser la unidad conceptual p
 
 Los modelos, agentes, CLIs y herramientas son participantes reemplazables.
 
-Los Intents, Mandates, decisiones y reglas poseen continuidad independientemente de esos participantes.
+Los Intents, Mandates, decisiones y posturas poseen continuidad independientemente de esos participantes.
 
 Pero Gravity introduce una precisión todavía más profunda:
 
@@ -194,11 +194,11 @@ Puede expresar:
 - autoridad;
 - criterios de evaluación;
 - condiciones de escalamiento;
-- reglas de coordinación;
+- posturas de coordinación;
 - principios de ingeniería;
 - conocimiento derivado de experiencia.
 
-Gravity puede pensarse inicialmente como un **lenguaje de reglas densas en criterio**.
+Gravity puede pensarse inicialmente como un **lenguaje de posturas densas en criterio**.
 
 Su objetivo no es describir cada paso que debe realizar una AI.
 
@@ -206,7 +206,7 @@ Su objetivo es establecer las fuerzas que deben permanecer verdaderas mientras l
 
 Pero Gravity posee además una segunda propiedad fundacional:
 
-> **Las reglas Gravity participan en la interpretación de las expresiones realizadas dentro de su campo.**
+> **Las posturas Gravity participan en la interpretación de las expresiones realizadas dentro de su campo.**
 
 Por lo tanto, Gravity no es solamente una entrada de ejecución.
 
@@ -220,7 +220,7 @@ Este principio redefine la relación entre Gravity y lenguaje natural.
 
 En los sistemas contemporáneos de AI suele hablarse de *context engineering*.
 
-Documentos, memorias, instrucciones, reglas, ejemplos y otros artefactos son incorporados al contexto del modelo para mejorar su respuesta.
+Documentos, memorias, instrucciones, posturas, ejemplos y otros artefactos son incorporados al contexto del modelo para mejorar su respuesta.
 
 Gravity no debe reducirse a ese mecanismo.
 
@@ -240,7 +240,7 @@ Consideremos una expresión aparentemente simple:
 
 En un sistema conversacional plano, la interpretación depende fundamentalmente de la conversación y de la capacidad del modelo para inferir restricciones.
 
-En Cognituum podrían existir, antes de esa expresión, reglas como:
+En Cognituum podrían existir, antes de esa expresión, posturas como:
 
 ```text
 Organization Gravity:
@@ -385,7 +385,7 @@ La combinación permite una interacción que puede ser simultáneamente:
 
 # 8. La jerarquía de Gravity
 
-Gravity no debe asumirse como un conjunto plano de reglas.
+Gravity no debe asumirse como un conjunto plano de posturas.
 
 Cognituum posee diferentes niveles de autoridad, persistencia y alcance.
 
@@ -423,7 +423,7 @@ NUCLEUS
     SESSION GRAVITY
         │
         │ hipótesis temporales
-        │ reglas locales
+        │ posturas locales
         │ decisiones de trabajo
         │
         ▼
@@ -441,13 +441,13 @@ Las capas inferiores no reemplazan arbitrariamente a las superiores.
 
 Operan dentro de ellas.
 
-Una regla de sesión existe dentro del Mandate.
+Una postura de sesión existe dentro del Mandate.
 
 El Mandate existe dentro del proyecto.
 
 El proyecto existe dentro del campo organizacional definido por Nucleus.
 
-Por lo tanto, la interpretación de una expresión local puede depender de reglas provenientes de múltiples escalas.
+Por lo tanto, la interpretación de una expresión local puede depender de posturas provenientes de múltiples escalas.
 
 ---
 
@@ -455,11 +455,11 @@ Por lo tanto, la interpretación de una expresión local puede depender de regla
 
 La jerarquía Gravity introduce una propiedad fundamental: **el criterio posee alcance**.
 
-No todas las reglas tienen la misma autoridad.
+No todas las posturas tienen la misma autoridad.
 
-No todas las reglas tienen la misma duración.
+No todas las posturas tienen la misma duración.
 
-No todas las reglas pueden modificar a otras.
+No todas las posturas pueden modificar a otras.
 
 Una Session Gravity puede establecer:
 
@@ -517,7 +517,7 @@ Operational Interpretation
 
 El resultado no debe entenderse simplemente como un prompt enriquecido.
 
-Es la **interpretación de una expresión dentro de un sistema de reglas**.
+Es la **interpretación de una expresión dentro de un sistema de posturas**.
 
 Esto permite que el mismo texto pueda producir consecuencias diferentes dependiendo del campo bajo el cual sea pronunciado.
 
@@ -614,7 +614,7 @@ Persistent Organizational Context
         │ conversation│
         │ exploration │
         │ feedback    │
-        │ local rules │
+        │ local postures │
         └─────────────┘
               │
               ▼
@@ -767,7 +767,7 @@ La diferencia está en que **la instrucción fue pronunciada dentro de un sistem
 
 # 16. Gravity como lenguaje de ingeniería
 
-Un ingeniero experimentado posee reglas que rara vez aparecen explícitamente en código.
+Un ingeniero experimentado posee posturas que rara vez aparecen explícitamente en código.
 
 Sabe:
 
@@ -788,7 +788,7 @@ No necesariamente mediante largas especificaciones.
 
 También mediante:
 
-- reglas;
+- posturas;
 - patrones;
 - shortcuts;
 - principios;
@@ -935,12 +935,12 @@ Por lo tanto:
 
 > **Gravity expresa. `cor` promulga cuando la gobernanza lo requiere.**
 
-Una regla Gravity puede existir como:
+Una postura Gravity puede existir como:
 
-- regla de sesión;
-- regla de Mandate;
+- postura de sesión;
+- postura de Mandate;
 - criterio de proyecto;
-- regla candidata;
+- postura candidata;
 - conocimiento reusable.
 
 Eso no significa que posea automáticamente autoridad global.
@@ -953,7 +953,7 @@ Cuando una decisión necesita convertirse en ley de mayor alcance, debe atravesa
 
 Debe preservarse la diferencia entre dos actos.
 
-## Regla postulada
+## Postura postulada
 
 Puede surgir de:
 
@@ -966,15 +966,15 @@ Puede surgir de:
 
 La postulación significa:
 
-> Esto parece una regla valiosa.
+> Esto parece una postura valiosa.
 
 No significa:
 
-> Esta regla gobierna ahora la organización.
+> Esta postura gobierna ahora la organización.
 
-## Regla promulgada
+## Postura promulgada
 
-Una regla adquiere autoridad superior únicamente cuando atraviesa el mecanismo de gobernanza correspondiente.
+Una postura adquiere autoridad superior únicamente cuando atraviesa el mecanismo de gobernanza correspondiente.
 
 En el ámbito regulado por `cor`, esa promulgación depende de Nucleus y del canal autorizado.
 
@@ -996,7 +996,7 @@ Puede acumular evidencia.
 
 Puede convertirse en candidata a Project Gravity.
 
-Una regla de proyecto puede demostrar aplicabilidad organizacional.
+Una postura de proyecto puede demostrar aplicabilidad organizacional.
 
 Puede entonces proponerse para gobernanza superior.
 
@@ -1030,7 +1030,7 @@ Esto permite que experiencia local pueda transformarse deliberadamente en conoci
 
 # 23. De Gravity a Wisdom
 
-Una regla útil puede comenzar como intuición.
+Una postura útil puede comenzar como intuición.
 
 Después convertirse en decisión.
 
@@ -1120,7 +1120,7 @@ Orbital debe poder explicar algo más profundo:
 - qué conflictos fueron detectados;
 - qué modelo realizó cada operación;
 - qué evidencia produjo;
-- qué regla provocó una corrección;
+- qué postura provocó una corrección;
 - qué `cor` modificó la gobernanza;
 - quién autorizó esa modificación;
 - qué trabajo posterior quedó afectado.
@@ -1229,13 +1229,13 @@ Una decisión dice:
 
 > En este caso hicimos X.
 
-Una regla Gravity puede decir:
+Una postura Gravity puede decir:
 
 > Bajo estas condiciones debemos preferir X.
 
 Y una jerarquía Gravity puede agregar:
 
-> Mientras esta regla permanezca vigente, toda interacción y ejecución dentro de su alcance debe interpretarse bajo ese criterio.
+> Mientras esta postura permanezca vigente, toda interacción y ejecución dentro de su alcance debe interpretarse bajo ese criterio.
 
 La primera conserva historia.
 
@@ -1277,7 +1277,7 @@ Organization, Project, Mandate y Session Gravity poseen diferentes alcances y ni
 
 ## VIII. Las capas inferiores operan dentro de las superiores
 
-Una regla local no invalida silenciosamente una regla superior.
+Una postura local no invalida silenciosamente una postura superior.
 
 ## IX. La sesión no contiene el contexto
 
@@ -1297,7 +1297,7 @@ Una AI puede identificar criterio candidato sin poseer autoridad para convertirl
 
 ## XIII. `cor` preserva la frontera de gobernanza
 
-La promulgación de determinadas reglas de alcance superior ocurre únicamente mediante el canal autorizado.
+La promulgación de determinadas posturas de alcance superior ocurre únicamente mediante el canal autorizado.
 
 ## XIV. Gravity describe fuerzas, no necesariamente trayectorias
 
@@ -1305,7 +1305,7 @@ La ejecución debe conservar suficiente libertad para resolver problemas dentro 
 
 ## XV. La gravedad debe ser trazable
 
-Debe ser posible determinar qué reglas gobernaban una acción y una interpretación.
+Debe ser posible determinar qué posturas gobernaban una acción y una interpretación.
 
 ## XVI. La sabiduría pertenece a quien la produce
 
@@ -1346,7 +1346,7 @@ Estos términos son hipótesis.
 
 El lenguaje deberá surgir de casos reales.
 
-Una regla puede ser extensa.
+Una postura puede ser extensa.
 
 Otra extremadamente breve.
 
@@ -1369,7 +1369,7 @@ Paladin deberá permitir que el ingeniero pueda, de alguna manera:
 - conversar naturalmente;
 - conocer bajo qué Gravity está operando;
 - introducir Gravity;
-- distinguir una regla de una conversación;
+- distinguir una postura de una conversación;
 - comprender su alcance;
 - observar conflictos;
 - establecer Gravity local;
@@ -1425,7 +1425,7 @@ Le proporciona continuidad.
 
 A efectos de continuar el diseño, se adopta la siguiente definición:
 
-> **Gravity es el lenguaje y campo semántico-normativo de Cognituum mediante el cual se expresa criterio persistente para gobernar tanto la ejecución del trabajo inteligente como la interpretación operacional de las interacciones humanas. Gravity puede existir jerárquicamente a nivel de organización, proyecto, Mandate y sesión. Las expresiones realizadas dentro de ese campo adquieren significado operacional bajo la combinación de las reglas vigentes y su autoridad relativa.**
+> **Gravity es el lenguaje y campo semántico-normativo de Cognituum mediante el cual se expresa criterio persistente para gobernar tanto la ejecución del trabajo inteligente como la interpretación operacional de las interacciones humanas. Gravity puede existir jerárquicamente a nivel de organización, proyecto, Mandate y sesión. Las expresiones realizadas dentro de ese campo adquieren significado operacional bajo la combinación de las posturas vigentes y su autoridad relativa.**
 
 > **Orbital es el protocolo de coordinación mediante el cual procesos inteligentes pueden explorar, proponer, verificar y ejecutar dentro de un campo Gravity sin adquirir por ello autoridad para modificar las leyes que los gobiernan.**
 
