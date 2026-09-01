@@ -85,6 +85,24 @@ type GenesisBuildInput struct {
 	MandatesRoot  string
 }
 
+// GenesisPhaseOrder / GenesisPhasesWithStatusSubobject — CAMBIO (esta
+// sesión): generalización pedida por el usuario. activities.AdvancePhaseActivity
+// (antes mandate_genesis_phase_activities.go, ahora mandate_phase_activities.go)
+// dejó de conocer esta secuencia de memoria — es agnóstica de mandateType y
+// la recibe como parámetro en cada llamada. Este archivo, que sigue siendo
+// el orquestador específico de Genesis/domain_expansion (sin tocar su
+// lógica de negocio, per alcance confirmado con el usuario), es el dueño
+// natural de definir CUÁL es esa secuencia para este tipo de mandate.
+// "signed" y "completed" no tienen su propio sub-objeto en phases{} (a
+// diferencia de ingest/cluster/validate, que sí lo tienen desde
+// initialGenesisMandateState) — son valores de currentPhase nada más:
+// "signed" refleja que signature.status ya es "signed" (persistSignatureSigned,
+// mandate_genesis_sign_activity.go); "completed" refleja que
+// MandateExecutionWorkflow (Fase 4) terminó con Success: true.
+var GenesisPhaseOrder = []string{"ingest", "cluster", "validate", "signed", "completed"}
+
+var GenesisPhasesWithStatusSubobject = map[string]bool{"ingest": true, "cluster": true, "validate": true}
+
 // MandateGenesisBuildWorkflow orquesta: ingest → cluster → validate (Human
 // Sync) → sign → execute (child workflow, Fase 4).
 func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) error {
@@ -130,6 +148,23 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		return fmt.Errorf("fase ingest, publicar evento: %w", err)
 	}
 
+	// CAMBIO (esta sesión, Paso 2 — activities.AdvancePhaseActivity,
+	// internal/orchestration/activities/mandate_phase_activities.go): avanza
+	// currentPhase de "ingest" a "cluster" y marca phases.ingest.status=
+	// "completed" en la misma escritura atómica. Único escritor de
+	// currentPhase/phases.*.status a partir de acá — ver comentario del
+	// archivo para el porqué. PhaseOrder/PhasesWithStatusSubobject se pasan
+	// explícitos (GenesisPhaseOrder arriba) — la activity ya no los conoce.
+	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+		MandatesRoot:              input.MandatesRoot,
+		MandateID:                 input.MandateID,
+		Phase:                     "ingest",
+		PhaseOrder:                GenesisPhaseOrder,
+		PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+	}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("fase ingest, avanzar currentPhase: %w", err)
+	}
+
 	// ── Fase 2: cluster (dry_run — solo domain_proposal.json, NO .scaffold/) ──
 	var scaffoldResult activities.ScaffoldDomainResult
 	if err := workflow.ExecuteActivity(ctx, activities.ScaffoldDomainActivity, activities.ScaffoldDomainInput{
@@ -140,6 +175,18 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		MandatesRoot: input.MandatesRoot,
 	}).Get(ctx, &scaffoldResult); err != nil {
 		return fmt.Errorf("fase cluster: %w", err)
+	}
+
+	// CAMBIO (esta sesión, Paso 2): avanza currentPhase de "cluster" a
+	// "validate" y marca phases.cluster.status="completed".
+	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+		MandatesRoot:              input.MandatesRoot,
+		MandateID:                 input.MandateID,
+		Phase:                     "cluster",
+		PhaseOrder:                GenesisPhaseOrder,
+		PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+	}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("fase cluster, avanzar currentPhase: %w", err)
 	}
 
 	// candidateDomains para persistir en mandate_state.json más adelante —
@@ -255,6 +302,22 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	}
 	_ = humanSyncResult
 
+	// CAMBIO (esta sesión, Paso 2): avanza currentPhase de "validate" a
+	// "signed" y marca phases.validate.status="completed". Se dispara acá,
+	// después de que SignMandateActivity ya firmó con éxito (no antes,
+	// dentro de PersistHumanSyncActivity) porque firmar es lo que
+	// efectivamente cierra la fase validate — humanSync por sí solo es
+	// solo la confirmación, no el cierre de fase.
+	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+		MandatesRoot:              input.MandatesRoot,
+		MandateID:                 input.MandateID,
+		Phase:                     "validate",
+		PhaseOrder:                GenesisPhaseOrder,
+		PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+	}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("fase sign, avanzar currentPhase: %w", err)
+	}
+
 	// Traducir Action[] (mandate.json, dependsOn en actionIds) a
 	// []DomainAction (input del child, dependsOn en domainNames) — mismo
 	// mapeo que ya se documentó como pendiente en mandate_execution_workflow.go,
@@ -278,6 +341,8 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		}
 		domains = append(domains, DomainAction{
 			DomainName: a.DomainName,
+			DomainID:   a.Payload.DomainID,
+			ActionID:   a.ActionID,
 			Files:      filesByID[a.Payload.DomainID],
 			DependsOn:  deps,
 		})
@@ -300,9 +365,10 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 
 	var execResult MandateExecutionResult
 	childFuture := workflow.ExecuteChildWorkflow(childCtx, MandateExecutionWorkflow, MandateExecutionInput{
-		MandateID: input.MandateID,
-		Project:   input.Project,
-		Domains:   domains,
+		MandateID:    input.MandateID,
+		Project:      input.Project,
+		MandatesRoot: input.MandatesRoot,
+		Domains:      domains,
 	})
 
 	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
@@ -320,6 +386,27 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	err := childFuture.Get(ctx, &execResult)
 	if err != nil {
 		return fmt.Errorf("fase execute: %w", err)
+	}
+
+	// CAMBIO (esta sesión, Paso 2): currentPhase solo llega a "completed"
+	// cuando MandateExecutionWorkflow (Paso 1) reporta Success:true —
+	// decisión confirmada explícitamente con el usuario (no automático solo
+	// porque el child workflow haya retornado sin error de Temporal;
+	// recordar que MandateExecutionResult usa el patrón de soft-failure:
+	// falla por contenido de Success/Error, no por error de Go). Si
+	// Success:false, currentPhase se queda en "signed" — el mandate no se
+	// marca completo, y el evento all_complete de abajo igual se publica
+	// con el resultado real para que la UI pueda mostrar el fallo.
+	if execResult.Success {
+		if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+			MandatesRoot:              input.MandatesRoot,
+			MandateID:                 input.MandateID,
+			Phase:                     "signed",
+			PhaseOrder:                GenesisPhaseOrder,
+			PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+		}).Get(ctx, nil); err != nil {
+			return fmt.Errorf("fase execute, avanzar currentPhase a completed: %w", err)
+		}
 	}
 
 	return workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,

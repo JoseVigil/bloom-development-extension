@@ -417,6 +417,21 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			mandateWorker.RegisterWorkflow(temporalworkflows.MandateGenesisBuildWorkflow)
 			mandateWorker.RegisterWorkflow(temporalworkflows.MandateExecutionWorkflow)
 			mandateWorker.RegisterActivity(activities.ScaffoldDomainActivity)
+			// PersistExecutionResultActivity — CAMBIO esta sesión (Paso 1, action
+			// graph): MandateExecutionWorkflow ahora la invoca de verdad después
+			// de cada ScaffoldDomainActivity(Mode: real), para dejar el resultado
+			// durable en mandate_state.json (phases.execute.actions[actionId]).
+			// Sin este registro, un mandate real fallaría en runtime con
+			// "unable to find activity type" apenas terminara el primer scaffold.
+			mandateWorker.RegisterActivity(activities.PersistExecutionResultActivity)
+			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
+			// fase: mandate_genesis_phase_activities.go). MandateGenesisBuildWorkflow
+			// ahora la invoca después de ingest/cluster/validate y, condicional a
+			// execResult.Success, después de execute — es el único escritor de
+			// currentPhase/phases.*.status a partir de esta sesión. Mismo síntoma
+			// que PersistExecutionResultActivity si falta este registro: "unable
+			// to find activity type" en runtime.
+			mandateWorker.RegisterActivity(activities.AdvancePhaseActivity)
 			mandateWorker.RegisterActivity(activities.PublishMandateEventActivity)
 			// IngestReceptionActivity — CAMPO NUEVO esta sesión (Fase 1 real,
 			// ver mandate_genesis_activities.go). Sin este registro, Fase 1
@@ -536,6 +551,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"RunSystemHealthActivity",
 					"RunProfileDisconnectedHooksActivity",
 					"ScaffoldDomainActivity",
+					"PersistExecutionResultActivity",
+					"AdvancePhaseActivity",
 					"PublishMandateEventActivity",
 					"resolveActiveGravityActivity",
 				},
