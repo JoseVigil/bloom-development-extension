@@ -2,7 +2,8 @@
 
 **Tipo:** Recomendación de arquitectura (asesoría), no implementación
 **Estado:** Borrador v0.3 — decisiones confirmadas por Jose entre []; el resto es propuesta a validar
-**Fecha:** 2026-08-29 (v0.1 inicial) — actualizado el mismo día tras confirmación de la Opción A (§6) y de nuevo con los primeros pasos concretos (§9)
+**Fecha:** 2026-08-29 (v0.1 inicial) — actualizado el mismo día tras confirmación de la Opción A (§6), con los primeros pasos concretos (§9), y con la nota de estado que sigue.
+**Nota de estado (2026-08-29):** §9 de este documento pasó de "primeros pasos propuestos" a **en ejecución** — el loop mínimo (Backend sirviendo manifest de ion recipes + Batcave consumiéndolo con ETag) quedó asignado a los works de Codex BACKEND y BATCAVE. Ver `CODEX_Backend_Batcave_Status_v0_1.md` (mismo directorio) para el corte de alcance exacto. Este cowork queda libre para el resto de las etapas conceptuales (catálogo, canales, audiencias, políticas comerciales, retención, observabilidad, etc.), sin tocar el contrato operativo ya en manos de esos dos works.
 **Contexto:** conversación en la que se pidió asesoría para migrar sitios de Vercel a Cloudflare y construir, en el mismo repo (`bloom-nucleus-installer`), una aplicación backend nueva para: (1) distribuir binarios pesados del ecosistema Bloom, (2) registrar cuentas de usuario, (3) alojar una base de datos de Mandates para el futuro marketplace inter-organizacional.
 **Fuentes revisadas para este documento:** `BTIPS_Bloom_Technical_Intent_Package_v7_1_1.md`, `BATCAVE_ARCHITECTURE.md`, `metamorph-ionpump-reference.md`, `METAMORPH_COMANDOS.md` (los cuatro del repo local), más inspección directa de la estructura del repo (`package.json`, `installer/`, `backend/`, `contracts/`, `build-all.py`).
 
