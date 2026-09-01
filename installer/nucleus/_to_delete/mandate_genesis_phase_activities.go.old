@@ -1,0 +1,107 @@
+// internal/orchestration/activities/mandate_genesis_phase_activities.go
+//
+// CAMBIO (esta sesión): Paso 2 del plan de consolidación del action graph
+// (Mandate_Genesis_ActionGraph_Plan_Ejecucion_v1.md). Archivo nuevo,
+// deliberadamente separado de mandate_genesis_sign_activity.go — ese
+// archivo no se toca en este paso.
+//
+// AdvancePhaseActivity es, a partir de esta sesión, el único escritor de
+// currentPhase/phases.*.status después de la creación del mandate.
+// Confirmado contra el repo completo (Go, TS, Python) antes de escribir
+// esto: ningún código existente los actualizaba — currentPhase quedaba
+// fijo en "ingest" y phases.ingest.status/phases.cluster.status en
+// "pending" para siempre, desde que createGenesisMandate/create-mandate.handler.ts
+// los inicializan. Este archivo cierra ese gap.
+package activities
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"nucleus/internal/orchestration/mandatestate"
+)
+
+// genesisPhaseOrder es la secuencia canónica de currentPhase para un
+// Mandate Genesis/domain_expansion. "signed" y "completed" no tienen su
+// propio sub-objeto en phases{} (a diferencia de ingest/cluster/validate,
+// que sí lo tienen desde initialGenesisMandateState) — son valores de
+// currentPhase nada más: "signed" refleja que signature.status ya es
+// "signed" (persistSignatureSigned, mandate_genesis_sign_activity.go);
+// "completed" refleja que MandateExecutionWorkflow (Fase 4, Paso 1 de este
+// mismo plan) terminó con Success: true.
+var genesisPhaseOrder = []string{"ingest", "cluster", "validate", "signed", "completed"}
+
+var phasesWithStatusSubobject = map[string]bool{"ingest": true, "cluster": true, "validate": true}
+
+// AdvancePhaseInput.Phase es la fase que ACABA de completarse, no la que
+// arranca — Phase: "ingest" avanza currentPhase de "ingest" a "cluster" y
+// marca phases.ingest.status = "completed" en la misma escritura atómica.
+type AdvancePhaseInput struct {
+	MandatesRoot string
+	MandateID    string
+	Phase        string
+}
+
+type AdvancePhaseResult struct {
+	StateVersion uint64
+}
+
+func nextGenesisPhase(completedPhase string) (string, error) {
+	for i, p := range genesisPhaseOrder {
+		if p == completedPhase {
+			if i+1 >= len(genesisPhaseOrder) {
+				return "", fmt.Errorf("AdvancePhaseActivity: %q ya es la última fase de la secuencia %v", completedPhase, genesisPhaseOrder)
+			}
+			return genesisPhaseOrder[i+1], nil
+		}
+	}
+	return "", fmt.Errorf("AdvancePhaseActivity: fase desconocida %q (secuencia válida: %v)", completedPhase, genesisPhaseOrder)
+}
+
+// AdvancePhaseActivity avanza currentPhase un paso hacia adelante
+// (mandatestate.ValidateForwardOnly rechaza saltos y retrocesos, mismo
+// criterio que ya usa signature.status) y, cuando la fase que completó
+// tiene sub-objeto propio en phases{}, marca phases.<phase>.status =
+// "completed" en la misma escritura atómica vía mandatestate.Mutate.
+// Idempotente: un retry de Temporal que ya encuentra currentPhase == next
+// no vuelve a incrementar stateVersion.
+func AdvancePhaseActivity(input AdvancePhaseInput) (AdvancePhaseResult, error) {
+	if input.MandatesRoot == "" || input.MandateID == "" {
+		return AdvancePhaseResult{}, fmt.Errorf("AdvancePhaseActivity: MandatesRoot/MandateID vacíos")
+	}
+	next, err := nextGenesisPhase(input.Phase)
+	if err != nil {
+		return AdvancePhaseResult{}, err
+	}
+
+	path := filepath.Join(input.MandatesRoot, input.MandateID, "mandate_state.json")
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		current, _ := state["currentPhase"].(string)
+		if current == next {
+			return false, nil
+		}
+		if err := mandatestate.ValidateForwardOnly(genesisPhaseOrder, current, next); err != nil {
+			return false, err
+		}
+		state["currentPhase"] = next
+
+		if phasesWithStatusSubobject[input.Phase] {
+			phases, _ := state["phases"].(map[string]interface{})
+			if phases == nil {
+				phases = map[string]interface{}{}
+				state["phases"] = phases
+			}
+			phaseRecord, _ := phases[input.Phase].(map[string]interface{})
+			if phaseRecord == nil {
+				phaseRecord = map[string]interface{}{}
+			}
+			phaseRecord["status"] = "completed"
+			phases[input.Phase] = phaseRecord
+		}
+		return true, nil
+	})
+	if err != nil {
+		return AdvancePhaseResult{}, fmt.Errorf("AdvancePhaseActivity: %w", err)
+	}
+	return AdvancePhaseResult{StateVersion: version}, nil
+}

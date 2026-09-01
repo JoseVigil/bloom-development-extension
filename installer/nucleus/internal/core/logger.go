@@ -169,6 +169,8 @@ func getNucleusIcon(category string) string {
 		return "🔌"
 	case "TELEMETRY":
 		return "📡"
+	case "GRAVITY":
+		return "🪐"
 	default:
 		return "⚙️"
 	}
@@ -200,6 +202,8 @@ func getNucleusStreamDescription(category string) string {
 		return "Nucleus brain_poller log — captures Brain TCP connection lifecycle, PROFILE_DISCONNECTED events received, and hook dispatch results"
 	case "TELEMETRY": // ← NUEVO
 		return "Nucleus telemetry log — captures all reads, writes, errors, parse failures and lock issues related to telemetry.json"
+	case "GRAVITY":
+		return "Nucleus gravity log — captures Gravity posture resolution and confirmed collision findings (e.g. PRIORITY_CYCLE)"
 	default:
 		return fmt.Sprintf("Nucleus %s log", strings.ToLower(category))
 	}

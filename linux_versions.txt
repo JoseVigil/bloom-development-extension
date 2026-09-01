@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — linux
-# Generated: 2026-08-17 15:35:59
+# Generated: 2026-08-31 13:11:02
 
 ---
 brain/__build__.py
@@ -24,14 +24,14 @@ installer/conductor/setup/build_info.json
   "name": "bloom-setup",
   "product_name": "Bloom Conductor Setup",
   "version": "1.0.0",
-  "build": 104,
-  "full_version": "1.0.0+build.104",
+  "build": 110,
+  "full_version": "1.0.0+build.110",
   "channel": "stable",
-  "built_at": "2026-06-28T14:57:28.141Z",
-  "git_commit": "b35fdc5",
-  "platform": "linux",
+  "built_at": "2026-08-19T19:45:16.451Z",
+  "git_commit": "8dc935fa",
+  "platform": "win32",
   "arch": "win64",
-  "node_version": "v20.20.2",
+  "node_version": "v24.19.0",
   "electron_version": "^28.0.0"
 }
 
@@ -41,7 +41,7 @@ installer/conductor/setup/version.json
   "major": 1,
   "minor": 0,
   "patch": 0,
-  "build": 104,
+  "build": 110,
   "semver": "1.0.0",
   "channel": "stable"
 }
@@ -106,26 +106,6 @@ installer/host/build_number.txt
 52
 
 ---
-installer/metamorph/internal/core/build_info.go
-package core
-
-// Auto-generated during build
-const BuildNumberInt = 4
-const BuildNumber    = BuildNumberInt
-const BuildDate = "2026 -Mon 06-15"
-const BuildTime = "12:19:00"
-
----
-installer/sentinel/internal/core/build_info.go
-package core
-
-// Auto-generated during build
-const BuildNumberInt = 2
-const BuildNumber    = BuildNumberInt
-const BuildDate = "2026 -Fri 06-12"
-const BuildTime = "19:35:00"
-
----
 installer/metamorph/scripts/build_number.effective.txt
 39
 
@@ -135,7 +115,7 @@ installer/metamorph/scripts/build_number.txt
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
-96
+99
 
 ---
 installer/sensor/scripts/build_number.effective.txt
