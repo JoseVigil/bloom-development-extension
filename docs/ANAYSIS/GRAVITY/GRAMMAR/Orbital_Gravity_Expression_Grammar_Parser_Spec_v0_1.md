@@ -362,7 +362,7 @@ Esta tabla es, en sí, el mecanismo concreto de la resolución de tensión de §
 
 ## 5. Contrato de evaluación
 
-Esta sección define la **interfaz** que un evaluador necesitaría implementar — no lo implementa. El contrato cubre exclusivamente el caso de incumplimiento verificable que ya tiene `reason_code` fijado (`GRAVITY_THRESHOLD_BREACHED`, **Mandate v1.2.0** §3, re-citado en **API** §2.3.1); el consumo del mismo AST por el mecanismo de arbitraje (**Impl** §3, `priority_rule`/`escalation_rule` como estrategias de `ArbitrationEvent`) es un consumidor **distinto**, fuera de alcance de este documento (§8) — el contrato de abajo no lo rediseña, solo asegura que el AST que produce sea consumible por ambos sin re-parsear.
+Esta sección define la **interfaz** que un evaluador necesitaría implementar — no lo implementa. El contrato cubre exclusivamente el caso de incumplimiento verificable que ya tiene `reason_code` fijado (`GRAVITY_THRESHOLD_BREACHED`, **Mandate v1.2.0** §3, re-citado en **API** §2.3.1); el consumo del mismo AST por el mecanismo de arbitraje (**Impl** §3, `priority_posture`/`escalation_posture` como estrategias de `ArbitrationEvent`) es un consumidor **distinto**, fuera de alcance de este documento (§8) — el contrato de abajo no lo rediseña, solo asegura que el AST que produce sea consumible por ambos sin re-parsear.
 
 ```typescript
 interface GravityEvaluationContext {

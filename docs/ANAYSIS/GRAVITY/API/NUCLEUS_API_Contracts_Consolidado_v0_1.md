@@ -306,7 +306,7 @@ Ejemplo de resultado, citado literalmente de **[GRAVITY v0.1 §2.3]**:
   "conflictScope": "string[] — paths en colisión",
   "involvedMandateIds": ["mnd_a1", "mnd_b2"],
   "commonAuthorityNodeId": "string — nodeId del ancestro común que arbitró (o NUCLEUS si no había uno más específico)",
-  "resolutionStrategy": "enum — priority_rule | escalation_rule | default_pause_and_notify",
+  "resolutionStrategy": "enum — priority_posture | escalation_posture | default_pause_and_notify",
   "appliedPostureId": "string | null — postureId de la gravityPosture usada, si strategy no fue default",
   "resolution": "enum — mandate_a_proceeds | mandate_b_proceeds | both_paused | rejected",
   "resolvedBy": "enum — nucleus_automatic | human_operator  // nunca 'agent'",
@@ -327,7 +327,7 @@ Ejemplo de resultado, citado literalmente de **[GRAVITY v0.1 §2.3]**:
 | `INVARIANT-ARB-001` — ningún conflicto se resuelve por negociación entre Agent Loops/Mandates; la resolución es exclusiva de Nucleus | **[GRAVITY v0.1 §3.2]** |
 | `INVARIANT-ARB-002` — el árbitro es siempre la autoridad común más cercana en el grafo, escalando hasta Nucleus | **[GRAVITY v0.1 §3.2]** |
 | `INVARIANT-ARB-003` — el resultado del arbitraje nunca modifica `gravityPostures[]` de ningún Mandate ya firmado | **[GRAVITY v0.1 §3.2]** |
-| Orden de resolución: `priority_rule` (si existe y es `verifiable`) → `escalation_rule` (si existe) → `default_pause_and_notify` (pausa al segundo Mandate en llegar) | **[GRAVITY v0.1 §3.3]** |
+| Orden de resolución: `priority_posture` (si existe y es `verifiable`) → `escalation_posture` (si existe) → `default_pause_and_notify` (pausa al segundo Mandate en llegar) | **[GRAVITY v0.1 §3.3]** |
 
 ### 4.3 Mecanismo de notificación al cliente — push vs. sólo consulta
 
