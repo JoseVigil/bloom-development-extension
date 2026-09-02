@@ -1,10 +1,12 @@
 # GravityGraph — Fundamentos de Boundary (documento base v0.1)
 
 **Tipo:** Documento base — formaliza como conocimiento de base de este cowork el cierre de boundary que Jose compartió, para que las investigaciones de frontera que dependen de él (empezando por `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md`, mismo directorio) no tengan que releer ni reinterpretar la fuente cada vez.
-**Estado:** v0.1 — adopción formal, sin contenido nuevo propio.
+**Estado:** v0.2 — adopción formal del cierre de boundary, más el estado de implementación real reportado por Codex el mismo día (§5).
 **Fecha:** 2026-09-01
-**Fuente única:** `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANAYSIS/GRAVITY/GRAFO/`, cierre del 2026-09-01). Ese documento sigue siendo la fuente de verdad para cualquier revisión futura de este cierre — este documento base no lo reemplaza, lo trae formalizado a la carpeta de análisis de este cowork con el mismo nivel de detalle.
+**Fuentes:** (1) `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANAYSIS/GRAVITY/GRAFO/`, cierre del 2026-09-01) — sigue siendo la fuente de verdad para cualquier revisión futura de ese cierre; este documento base no lo reemplaza. (2) Actualización transversal de Codex del 2026-09-01 sobre la primera implementación real de Gravity en Go, y la migración terminológica `GravityRule`→`GravityPosture`.
 **Criterio de cierre citado en el original:** ratificar solo lo que sería costoso romper después (nomenclatura, alcance de qué representa cada término); diferir todo lo que pueda incorporarse más adelante sin alterar esas invariantes (ontología de Provenance, rol de Alfred/Sensor, tipos de arista nuevos).
+
+> **Nota de terminología (migrada, 2026-09-01):** el rename transversal `GravityRule` → `GravityPosture` (`gravityRules[]`→`gravityPostures[]`, y derivados) ya está validado e implementado end-to-end en Go/TypeScript, confirmado por Codex. Este documento usa exclusivamente `GravityPosture`/`gravityPostures[]` desde esta versión; el documento original citado como fuente puede conservar `Rule` en su propio texto.
 
 ---
 
@@ -39,7 +41,23 @@
 
 Ninguno de estos cinco gaps bloquea el próximo incremento del `GravityGraph`, según la nota de continuidad del original (sesión de Génesis Control, 2026-09-01). El detalle completo de esa reconciliación contra código real queda en el tablero de seguimiento de Gravity/Orbital/Posture — no se duplica acá.
 
-## 5. Por qué este cowork lo necesita como base
+## 5. Estado de implementación real (actualización 2026-09-01, Codex)
+
+Gravity dejó de ser únicamente diseño documental. Existe una primera implementación real en Go bajo `installer/nucleus/internal/gravity/`:
+
+- Persistencia filesystem del `GravityGraph` bajo `.bloom/.nucleus-{organization}/.gravity/`, con nodos JSON, escritura atómica y control CAS mediante `nodeVersion`.
+- `ResolveActive`, la caché exclusivamente estructural de la espina, y la lectura fresca de Postures en cada turno.
+- La Activity de Temporal `resolveActiveGravityActivity`, registrada en el worker de Mandates pero **todavía no invocada** por `MandateExecutionWorkflow` — la capacidad existe, pero no cambia todavía el comportamiento productivo por turno.
+- La función pura `ComputeMasa`.
+- `Store.CreateNode` falla cerrado para nodos `ORGANIZATION` y `NUCLEUS` hasta que estén conectados `cor` y el módulo central de Authorization — no hay camino productivo alternativo para crear o firmar esos niveles. `PROJECT`, `MANDATE` y `SESSION` conservan su comportamiento de creación.
+- La validación de firma de §6.4 sigue siendo contrato documental; no existe todavía un flujo productivo de firma de nodos Gravity.
+- La gramática de `gravityPostures[].expression` formalizada en un único archivo ANTLR4 (`.g4`), fuente única de la que se generan parsers para Go y TypeScript. `Parse(expression string) (GravityExpressionAST, error)` existe en Go, con parser advisory equivalente en TypeScript.
+- El AST canónico contempla los seis primitives (`constraint`, `threshold`, `evidence`, `priority`, `escalation`, `exception`); `predicateComputable` se deriva exclusivamente del primitive, nunca lo declara el autor.
+- No implementado todavía: `GravityEvaluator.evaluate()`, ni ningún consumidor nuevo de arbitraje.
+
+**Lo que esto cambia para este boundary:** nada de la tabla del §1 ni de los gaps del §4 queda invalidado — la implementación real todavía no toca la persistencia canónica de `PROMOTED_FROM` como arista independiente (la representa hoy vía `promotedFrom`/`promotedTo`, con la persistencia canónica de la arista tratada como incremento posterior), y ninguno de los cinco gaps de promoción quedó resuelto por este incremento. Lo que sí cambia es la base desde la que se construye el §5 siguiente: la afirmación de que la representación mínima de Gravity para el Mandate Server debe salir de Criterion puro ya no es solo una inferencia de diseño — hay persistencia real de `GravityNode`/`gravityPostures[]` de la que partir.
+
+## 6. Por qué este cowork lo necesita como base
 
 El trabajo de frontera abierto en `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` depende directamente de la fila 2 de la tabla del §1: si lo que un Mandate transporta para comparación cross-organizacional no puede ser el `GravityGraph` completo (porque `GravityGraph` es, por diseño, local y preserva linaje que no tiene sentido fuera de su Nucleus de origen), entonces la "representación mínima de Gravity" que ese documento deja como primera pregunta abierta tiene que construirse a partir de **Criterion puro** (`GravityNode`/`gravityPostures[]`), no de Criterion+linaje. Este documento base es lo que permite afirmar eso con precisión, en vez de por intuición.
 

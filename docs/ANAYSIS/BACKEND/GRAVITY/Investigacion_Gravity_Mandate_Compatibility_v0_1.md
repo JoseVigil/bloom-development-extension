@@ -1,18 +1,22 @@
 # Gravity — Investigación de Compatibilidad de Mandates al Instalar (v0.1)
 
 **Tipo:** Investigación pura (no propone implementación) — insumo conceptual para el cowork Cloud, separado de los works operativos BACKEND/BATCAVE que corren en Codex.
-**Estado:** Borrador v0.1
+**Estado:** Borrador v0.1. Actualizado 2026-09-01: terminología migrada a Posture y párrafos de "estado real" corregidos contra la primera implementación real de Gravity (ver notas al pie del encabezado).
 **Fecha:** 2026-08-29
 **Encargo explícito de Jose:** *"Eso impone un conjunto de reglas por cada mandate que deben ser compatibilizadas cada vez que uno importa e instala un mandate. Esa compatibilidad tiene que chequearse al momento de hacer la instalación de un mandate y no puede hacerse local. Tendría que haber un mecanismo en el servidor que haga ese match para saber si un mandate es compatible con mis posturas, con las de un CTO. [...] Si yo voy a instalar un mandate, tiene que estar contemplado que en mi postura como CTO de una empresa están todas contempladas en el mandate. Si hay una postura que va en contra de mis principios debería informarme. [...] Porque si no se hace en el servidor hay que bajar cada mandate al disco, verificar si es compatible, y eso va a ser un overhead para el ingeniero que no quiero."*
 **Método:** agente de investigación con lectura completa de 7 documentos núcleo de Gravity/Orbital/Mandate y consulta dirigida sobre 5 documentos adicionales (incluyendo, por hallazgo propio del agente, el Mandate Package Spec y el Governance Ownership Spec, decisivos para responder). Cero implementación propuesta; toda afirmación citada contra archivo y sección.
 
+> **Nota de terminología (migrada, 2026-09-01):** el rename transversal `GravityRule` → `GravityPosture` (y derivados: `gravityRules[]`→`gravityPostures[]`, `ruleId`→`postureId`, `inheritedGravityRules[]`→`inheritedGravityPostures[]`) ya está validado e implementado end-to-end en Go/TypeScript — confirmado por Codex el 2026-09-01. Este documento fue actualizado para usar exclusivamente `GravityPosture`/`gravityPostures[]`. Las citas de sección de los documentos fuente originales pueden seguir usando `Rule` en su propio texto; esta investigación adopta la nomenclatura vigente sin reescribir las fuentes citadas.
+>
+> **Nota de estado (2026-09-01):** Gravity dejó de ser únicamente diseño documental — existe una primera implementación real en Go bajo `installer/nucleus/internal/gravity/`. Los párrafos de "Estado real" de este documento fueron actualizados donde correspondía; el resto de la investigación (qué mecanismos existen o no para el matching cross-organizacional que pide Jose) sigue vigente sin cambios, porque nada de lo implementado hasta ahora resuelve ese problema todavía.
+
 ---
 
-## 1. Modelo de datos de una Posture de Gravity
+## 1. Modelo de datos de una Postura/Gravity Rule
 
 ✅ **Confirmado, documentado en capas sucesivas.** Cada `gravityPostures[]` tiene `postureId`, `primitive`, `expression`, `appliesTo[]`, `authoredBy`, `verifiable`, `promotable`, `promotedTo`, `status` (Mandate Universal Schema v1.2.0 §2/§5). El nodo contenedor (`GravityNode`) tiene `nodeType: NUCLEUS|ORGANIZATION|PROJECT|MANDATE|SESSION` — la jerarquía de 5 niveles ya conocida. `signedBy` es un objeto estructurado `{actorId, role, roleBasis}`. La gramática (EBNF, 6 primitivos: `constraint`, `threshold`, `evidence`, `priority`, `escalation`, `exception`) define un AST tipado con la propiedad `predicateComputable` — solo `threshold`/`priority`/`escalation` son mecánicamente evaluables; `constraint`/`evidence`/`exception` exigen siempre juicio humano por diseño, nunca se aplanan a "si A entonces B".
 
-**Estado real:** nada de esto está persistido hoy. La auditoría contra los archivos de verdad del proyecto confirma que no existe ningún `GravityNode` real, y que la operación de firma todavía no invoca el parser real (`gravity.Parse`).
+**Estado real (actualizado 2026-09-01):** dejó de ser solo diseño. Existe implementación real en Go bajo `installer/nucleus/internal/gravity/`: persistencia filesystem del `GravityGraph` (`.bloom/.nucleus-{organization}/.gravity/`, nodos JSON, escritura atómica, control CAS vía `nodeVersion`), `ResolveActive` con caché exclusivamente estructural de la espina, y `Parse(expression string) (GravityExpressionAST, error)` ya implementado en Go con parser advisory equivalente en TypeScript, ambos generados desde una única gramática ANTLR4 (`.g4`). Lo que sigue sin conectar: la validación de firma descrita en §6.4 sigue siendo contrato documental (no hay flujo productivo de firma de nodos Gravity todavía), y `Store.CreateNode` falla cerrado para nodos `ORGANIZATION`/`NUCLEUS` hasta que estén conectados `cor` y el módulo de Authorization — confirmación por código real, no ya por inferencia (actualización transversal de Codex, 2026-09-01).
 
 ---
 
@@ -26,7 +30,7 @@ Lo que pide Jose es distinto en un punto estructural: el Mandate a instalar **no
 
 ---
 
-## 3. ¿Existe ya un algoritmo de matching/detección de conflicto entre dos conjuntos de Postures de origen independiente?
+## 3. ¿Existe ya un algoritmo de matching/detección de conflicto entre dos conjuntos de reglas de origen independiente?
 
 ❌ **No existe — y está explícitamente diferido en cada documento que roza el tema.**
 
@@ -34,7 +38,7 @@ Se descartaron cuatro candidatos:
 1. **R-18** — ya cubierto en §2, opera sobre padre único conocido.
 2. **Arbitraje de Nucleus** (`ArbitrationEvent`) — el mecanismo de "conflicto" más sofisticado que existe, pero resuelve **superposición de `scope_paths` (territorio de archivos) entre Mandates ya activos en el mismo grafo**, nunca contenido semántico de posturas de un Mandate recién importado. Sí fija un patrón reutilizable: "Nucleus como árbitro único, nunca los pares".
 3. **La gramática/AST de Gravity** — diseñada para ser consumida por un futuro comparador (campos `collisionClass`/`triggerClass` existen "precisamente para ese consumo"), pero el propio documento aclara que el algoritmo comparador en sí "queda fuera" de su alcance.
-4. **El flujo real de instalación (`nucleus mandate install`, Mandate Package Spec §9)** — hallazgo más concluyente: tiene 7 pasos documentados con detalle operativo (verificación de integridad, `requiredIntentTypes`, rebind de identidad, hidratación cognitiva, Gene Blueprints, dependencias, firma final) y **en ninguno de ellos se lee, compara o valida `governance.gravityPostures[]` contra las posturas del comprador.**
+4. **El flujo real de instalación (`nucleus mandate install`, Mandate Package Spec §9)** — hallazgo más concluyente: tiene 7 pasos documentados con detalle operativo (verificación de integridad, `requiredIntentTypes`, rebind de identidad, hidratación cognitiva, Gene Blueprints, dependencias, firma final) y **en ninguno de ellos se lee, compara o valida `governance.gravityRules[]` contra las posturas del comprador.**
 
 **Conclusión:** el mecanismo que Jose describe no existe en ningún documento del proyecto, ni como algoritmo, ni como paso de flujo, ni como propuesta sin ratificar. Es terreno de diseño completamente nuevo.
 
@@ -44,11 +48,11 @@ Se descartaron cuatro candidatos:
 
 ✅ **Confirmado como principio arquitectónico general — reutilizable, pero hoy resuelve un problema más chico que el de Jose.**
 
-El corpus fija, repetida y explícitamente, que **Nucleus (servidor) es la única autoridad de parseo/validación de Gravity, nunca el cliente**: "ningún `GravityNode.gravityPostures[]` persistido puede contener una `expression` que no parsee según el parser autoritativo de Nucleus" (invariante formal); el parser de Conductor Workspace Core es "advisory, nunca autoridad"; "ningún conflicto de superposición se resuelve por negociación entre pares — la resolución es exclusivamente de Nucleus"; principio rector citado en cascada: **"la autoridad nunca se distribuye, aunque el acceso sí."**
+El corpus fija, repetida y explícitamente, que **Nucleus (servidor) es la única autoridad de parseo/validación de Gravity, nunca el cliente**: "ningún `GravityNode.gravityRules[]` persistido puede contener una `expression` que no parsee según el parser autoritativo de Nucleus" (invariante formal); el parser de Conductor Workspace Core es "advisory, nunca autoridad"; "ningún conflicto de superposición se resuelve por negociación entre pares — la resolución es exclusivamente de Nucleus"; principio rector citado en cascada: **"la autoridad nunca se distribuye, aunque el acceso sí."**
 
 **Esto significa que el requisito de Jose ("la comparativa tiene que hacerse en el servidor") ya es, de hecho, un principio arquitectónico ya establecido en toda la familia Gravity** — no hay que convencer al sistema de que la validación debe vivir en Nucleus.
 
-**Lo que no está resuelto:** todo lo anterior aplica a validar **una postura contra su propio nodo/turno**, nunca a comparar **dos grafos de posturas de origen independiente en el momento de instalar un Mandate**. Y ni siquiera el mecanismo servidor más básico ya diseñado (parsear + validar una postura al firmarla) está conectado en producción hoy.
+**Lo que no está resuelto:** todo lo anterior aplica a validar **una postura contra su propio nodo/turno**, nunca a comparar **dos grafos de posturas de origen independiente en el momento de instalar un Mandate**. Y aunque el parser (`gravity.Parse`) ya existe en código real (actualización 2026-09-01), el mecanismo completo de parsear + validar + firmar una postura todavía no está conectado en producción: la Activity de Temporal que resuelve Gravity por turno (`resolveActiveGravityActivity`) está implementada y registrada en el worker de Mandates, pero `MandateExecutionWorkflow` todavía no la invoca — la capacidad existe, pero no cambia todavía el comportamiento productivo por turno.
 
 ---
 
@@ -59,7 +63,7 @@ El corpus fija, repetida y explícitamente, que **Nucleus (servidor) es la únic
 | Endpoint/bloque | Qué hace | ¿Es lo que pide Jose? |
 |---|---|---|
 | `validate_and_sign` | Firma/rechaza un turno dentro de un Mandate **ya instalado** | No |
-| `resolve_active_gravity` | Devuelve Postures vigentes relevantes al turno actual (nunca el grafo completo) | No |
+| `resolve_active_gravity` | Devuelve reglas vigentes relevantes al turno actual (nunca el grafo completo) | No |
 | `ArbitrationEvent` | Conflicto de territorio (`scope_paths`) entre Mandates **ya activos** | No |
 | "Matriz de compatibilidad" del catálogo | Compatibilidad de **versión de schema/API** (BTIPS≥v6.1, MANDATE≥v1.2.0, etc.) | No — es un eje de versionado, nombrado "compatibilidad" pero de naturaleza distinta; vale la pena no confundirlo como evidencia de que el mecanismo ya existe |
 
@@ -118,7 +122,7 @@ Pero **el algoritmo de comparación, el endpoint que lo expone, la definición d
 | 6 | Vocabulario de resolución para instalación | Las señales de conflicto ya diseñadas (rechazar/señalar/reinterpretar/escalar/excepción/proponer cambio) son para un turno de conversación — decidir si aplican igual a instalación de Mandate o necesitan vocabulario propio | Paladin UX Postura/Gravity/Masa §3 |
 | 7 | Masa como desempate | Si el diseño futuro quisiera usarla para resolver empates automáticos, hoy está explícitamente descartada como mecanismo de decisión | Orbital Gravity Implementation Spec §3.3 |
 | 8 | Transporte confirmado del bloque `governance` | Confirmar que `governance.gravityPostures[]`/`inheritedGravityPostures[]` efectivamente viaja en el paquete — la spec no lo excluye pero tampoco lo confirma con ese detalle | Mandate Package Spec §1, §11 |
-| 9 | Estado de implementación de base | Antes de construir el match, falta wirear lo que está un nivel por debajo: `gravity.Parse()` no se invoca en la firma real, y no hay ningún `GravityNode` persistido en producción | Grammar §3.3.1; Persistencia §0.2 |
+| 9 | Estado de implementación de base | Actualizado 2026-09-01: la persistencia filesystem del `GravityGraph` y `gravity.Parse()` ya existen en código real; sigue faltando wirear la Activity al Workflow y conectar el flujo productivo de firma de nodos | Grammar §3.3.1; Persistencia §0.2; actualización transversal de Codex 2026-09-01 |
 
 ---
 
