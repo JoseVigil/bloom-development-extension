@@ -105,12 +105,16 @@ Se descarta también el modelado relacional, aunque con menos margen: un motor r
 └── .nucleus-{organization}/
     └── .gravity/
         ├── nucleus.node.json                              # singleton, sin parentId
+        ├── .domain/{domainId}/                            # proyección estructural, no fuente semántica
+        │   └── node.json                                  # parentId = nodeId de NUCLEUS
         ├── .organization/{orgId}/
         │   ├── node.json
         │   └── .project/{projectId}/
         │       ├── node.json
         │       └── .mandate/{mandateId}/
         │           ├── node.json
+        │           ├── .gene/{geneId}/                    # proyección estructural del Gene de origen
+        │           │   └── node.json                      # parentId = nodeId de MANDATE
         │           ├── .submandate/{subMandateId}/        # Estructura C — max_depth: 2
         │           │   ├── node.json
         │           │   └── .submandate/{subSubMandateId}/
@@ -118,6 +122,8 @@ Se descarta también el modelado relacional, aunque con menos margen: un motor r
         │           └── .session/{sessionId}/
         │               └── node.json                      # efímero — ver nota abajo
         ├── .edges/
+        │   ├── domain_gene/                               # proyecciones reconstruibles desde semantic-index
+        │   ├── domain_mandate/                            # proyecciones reconstruibles desde semantic-index
         │   └── arbitration_events.log.jsonl               # append-only — persistencia de Impl §3.4,
         │                                                   #   layout de referencia, mecanismo fuera de alcance (§8)
         └── .index/                                         # deliberadamente vacío en v0.1 — ver nota
@@ -132,6 +138,27 @@ Se descarta también el modelado relacional, aunque con menos margen: un motor r
 **Nota sobre `.index/`:** se declara la carpeta como reservada, deliberadamente vacía. `Mandate v1.2.0 §6` ya difirió explícitamente una herramienta de auditoría inversa análoga ("dado un `sourceMandateId`, listar todos los sub-Mandates que heredaron una regla específica") calificándola de *"tooling, no schema"*. Este documento aplica el mismo criterio a cualquier índice secundario sobre el Grafo de Gravedad completo: la única indexación que este documento sí especifica es la necesaria para el patrón de acceso caliente de §2.1 (la caché de §3), no un índice general de consulta.
 
 **Consistencia de escritura:** toda escritura de `node.json` sigue el mismo mecanismo de sustitución atómica (escribir a temporal, `rename` atómico) que ya usa `mandate_state.json` real para su campo `stateVersion` monotónico (`Audit` Hallazgo #2) — no se inventa un modelo de consistencia nuevo donde ya existe uno probado en este mismo sistema. Nucleus permanece como único escritor de cualquier `node.json` bajo `.gravity/`, consistente con la invariante rectora ya fijada ("la autoridad nunca se distribuye, aunque el acceso sí", `BTIPS §8.0`) — ningún Agent Loop escribe directamente bajo `.gravity/`, exactamente como ya ocurre con `forbidden_paths` y el resto de la infraestructura de Nucleus (`BTIPS §8.2`).
+
+### 2.5 Extensión contractual: nodos estructurales `DOMAIN` y `GENE`
+
+La reapertura de boundary del 2026-09-02 agrega dos tipos de nodo que modelan identidad y estructura, no
+Criterion:
+
+- `DOMAIN`: vive directamente bajo `.gravity/.domain/{domainId}/node.json`; su `parentId` es el `nodeId`
+  del `NUCLEUS` propietario y nunca `null`.
+- `GENE`: vive bajo el `MANDATE` de origen en `.gene/{geneId}/node.json`; su `parentId` es el `nodeId` de
+  ese `MANDATE` y debe coincidir con el `mandate_id` referenciado por el `gen.json` canónico.
+
+En ambos, `gravityPostures[]` está reservado como arreglo vacío. No pueden aportar Postures, participar de
+promoción ni alterar el recorrido de §3. Sus referencias apuntan, respectivamente, a
+`.cache/.semantic-index.json` y `.mandates/{mandateId}/.genes/{geneId}/gen.json` dentro de la misma raíz
+`.bloom/.nucleus-{organization}/`.
+
+Las relaciones Domain↔Gene y Domain↔Mandate bajo `.edges/` son proyecciones gobernadas de
+`.semantic-index.json`: son auditables, idempotentes y reconstruibles, pero no canónicas. Una discrepancia
+se resuelve a favor del índice semántico y dispara reconciliación de Gravity. La forma JSON ejecutable de
+los nodos y aristas, el ownership del materializador, sus gates de autorización y su estrategia concreta
+de concurrencia quedan pendientes de una especificación de implementación posterior.
 
 ---
 
@@ -373,6 +400,10 @@ Siguiendo la misma disciplina que `Impl §5` y `Orb §34` aplican sobre sí mism
 - **Herramienta de auditoría inversa sobre el Grafo de Gravedad completo** (ej. "listar todos los sub-Mandates que heredaron una postura dada") — ya diferida como *tooling, no schema* por `Mandate v1.2.0 §6`; este documento mantiene esa misma frontera.
 - **Un endpoint standalone de consulta de Gravity activa para Paladin UI o herramientas de auditoría humana** — ya señalado como propuesta nueva sin resolver por `API §3.2`; la Activity de §3.1 sirve exclusivamente al loop agéntico interno, no define una superficie de API pública.
 - **Reconciliación de ciclo de vida si el Mandate padre se pausa o aborta mientras un sub-Mandate depende de sus posturas heredadas** — ya diferido explícitamente por `Mandate v1.2.0 §6` como decisión de runtime de Temporal fuera de alcance de ese addendum, y sigue fuera de alcance de este.
+- **Implementación ejecutable de `DOMAIN`/`GENE`** — esta revisión solo formaliza su pertenencia al
+  `GravityGraph`. No amplía `Store.CreateNode`, no modifica el schema Go, no crea Activities ni
+  materializadores. Gates de autorización, ownership, concurrencia y reconciliación ejecutable requieren
+  propuesta y autorización separadas.
 
 ---
 

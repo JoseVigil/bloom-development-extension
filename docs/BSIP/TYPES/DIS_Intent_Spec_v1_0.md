@@ -295,6 +295,26 @@ Operaciones con `human_decision: "rejected"` no producen ningún efecto sobre el
 `diff` entre `.domain_graph_snapshot.json` (§3) y el estado final aplicado — insumo directo para que un
 `doc/` posterior sepa qué cambió sin tener que recorrer los turnos completos de `.mapping/`.
 
+**Efecto contractual futuro sobre `GravityGraph`:** después de confirmar el estado canónico final de
+`.cache/.semantic-index.json`, un materializador gobernado deberá sincronizar su proyección estructural:
+
+- `create_domain`: crea idempotentemente la proyección del nuevo `DOMAIN` y sus relaciones;
+- `rename_domain`: conserva `nodeId` y actualiza solo la proyección derivada que corresponda;
+- `add_edge` / `remove_edge`: activa o desactiva la proyección Domain↔Gene correspondiente;
+- `merge_domains`: marca como `superseded` los nodos fuente, deja inactivas sus relaciones proyectadas y
+  materializa el dominio destino ratificado;
+- `split_domains`: marca como `superseded` el nodo fuente, deja inactivas sus relaciones y materializa los
+  nuevos dominios y sus relaciones;
+- en todos los casos, las relaciones Domain↔Mandate se derivan del `mandates[]` canónico.
+
+La sincronización debe ser idempotente ante reintentos y reconstruible desde el índice. Gravity preserva
+identidad e historia estructural, pero no reemplaza la regla de §7.2: ante cualquier discrepancia,
+`.semantic-index.json` gana y la proyección debe reconciliarse. “Nucleus-wide” se limita a la misma raíz
+`.bloom/.nucleus-{organization}/`.
+
+Este contrato no asigna ownership al materializador, no resuelve concurrencia, no define gates de
+autorización y no habilita `Store.CreateNode` para `DOMAIN` o `GENE`.
+
 ---
 
 ## 6. Contrato `.pipeline/` y degradación graceful
@@ -411,3 +431,6 @@ silencio es un bug de integridad que este diseño evita de raíz sin necesitar m
   `.discovery/` — mismo pendiente ya abierto en `ING_Intent_Spec_v1_1.md §9`, no se duplica el diseño acá.
 - Formato de parsing de la URI `chroma://...` — depende del mismo pendiente abierto en BISP §2.6 y en
   `ING_Intent_Spec_v1_1.md §9`; `dis/` no define un formato propio y paralelo.
+- Implementación del materializador gobernado de la proyección `DOMAIN`/`GENE` en `GravityGraph`, con
+  ownership, autorización, commit posterior a la fuente canónica, concurrencia, reintentos y
+  reconciliación de divergencias.

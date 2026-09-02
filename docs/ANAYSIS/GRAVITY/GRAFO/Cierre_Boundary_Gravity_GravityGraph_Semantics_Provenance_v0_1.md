@@ -1,6 +1,6 @@
 # Cierre de Boundary — Gravity / GravityGraph / Semantics / Provenance (v0.1)
 
-**Tipo:** Cierre de arquitectura conceptual. Fija nomenclatura y alcance (invariante), no diseño físico ni ontología de Provenance.
+**Tipo:** Cierre de arquitectura conceptual, reabierto y ampliado el 2026-09-02. Fija nomenclatura y alcance (invariante), no diseño físico ejecutable ni ontología general de Provenance.
 **Fecha:** 2026-09-01
 **Criterio de cierre aplicado:** ratificar ahora solo lo que sería costoso romper después (nomenclatura, alcance de qué representa cada término); diferir todo lo que pueda incorporarse más adelante sin alterar esas invariantes (ontología de Provenance, rol de Alfred/Sensor, tipos de arista nuevos).
 
@@ -21,11 +21,11 @@
 | Término | Alcance fijado | Qué incluye | Qué NO incluye |
 |---|---|---|---|
 | **Gravity** | El sistema de gobernanza del criterio, en su totalidad | Lenguaje declarativo, resolución activa por turno, arbitraje, masa, promoción, `cor`, autoridad de firma por nivel — y cualquier plano futuro que gobierne criterio (Semantics, Provenance, lo que Trazabilidad Viva termine formalizando) | No es una estructura de datos — es el sistema. Nunca debe usarse como sinónimo de una persistencia concreta |
-| **`GravityGraph`** (Grafo de Gravedad) | La estructura persistida que representa y preserva **Criterion** y su **linaje ya ratificado** | `GravityNode`/`gravityPostures[]` (Criterion); la arista `PROMOTED_FROM` y sus denormalizaciones `promotedFrom`/`promotedTo` — porque son, hoy, el único precedente de procedencia que ya tiene diseño cerrado y ejemplos concretos | Cualquier tipo de arista de Provenance todavía no ratificado (`SUPPORTS`, `CONTRADICTS`, `EVIDENCES`, `CONFIRMS`, etc.) — esos no son parte de `GravityGraph` hasta que alguien los ratifique con el mismo nivel de detalle que tiene `PROMOTED_FROM` |
+| **`GravityGraph`** (Grafo de Gravedad) | La estructura persistida que representa y preserva **Criterion + estructura gobernada + Provenance ratificada** | `GravityNode`/`gravityPostures[]` (Criterion); nodos estructurales `DOMAIN` y `GENE` sin Postures; proyecciones gobernadas de sus relaciones canónicas; la arista `PROMOTED_FROM` y sus denormalizaciones `promotedFrom`/`promotedTo` | Contenido semántico canónico de Domain/Gene; relaciones probabilísticas; cualquier tipo de arista de Provenance todavía no ratificado (`SUPPORTS`, `CONTRADICTS`, `EVIDENCES`, `CONFIRMS`, etc.) |
 | **Semantics** | Plano probabilístico, separado por diseño | BISP/ChromaDB — descubre relaciones posibles, nunca las certifica | Nunca se funde con `GravityGraph` ni se usa como sustituto de procedencia factual — axioma ya adoptado en la revisión anterior |
 | **Provenance** | Exigencia factual futura, sin estructura propia general todavía | **Excepción explícita: los precedentes ya ratificados quedan dentro de `GravityGraph`** (ver fila anterior) — no como una capa aparte pendiente, sino como la porción de Provenance que Gravity ya resolvió sin saberlo, antes de que el concepto tuviera nombre | La ontología completa (Criterion/Semantics/Provenance de la revisión anterior), Alfred, Sensor, cualquier tipo de arista nuevo — todo eso sigue sin diseñarse, tal como se pidió |
 
-**Consecuencia directa de esta tabla, dicha sin rodeos:** `GravityGraph` deja de ser "solo Criterion" y pasa a ser, con precisión, **"Criterion + la porción de Provenance que ya está ratificada"**. No es una ampliación de alcance nueva — es reconocer que la promoción, que ya existía, siempre fue un caso de Provenance sin que nadie lo hubiera nombrado así hasta esta serie de conversaciones.
+**Consecuencia directa de esta tabla, dicha sin rodeos:** desde la reapertura del 2026-09-02, `GravityGraph` es **"Criterion + estructura gobernada + la porción de Provenance que ya está ratificada"**. La incorporación de estructura gobernada sí es una ampliación deliberada: reconoce que Domain y Gene son entidades de primer orden para las decisiones cognitivas y operacionales basadas en un Mandate. No funde Semantics con GravityGraph: incorpora identidades y relaciones estructurales gobernadas, nunca una copia del contenido semántico.
 
 ---
 
@@ -70,4 +70,35 @@ de verdad de este documento, que sigue siendo el cierre de boundary en sí.
 
 ---
 
-*Fin del cierre v0.1. Boundary fijado como invariante: Gravity (sistema) / GravityGraph (Criterion + linaje ratificado, incluyendo `PROMOTED_FROM`, excluyendo el log de arbitraje) / Semantics (probabilístico, separado) / Provenance (factual, sin estructura propia salvo lo ya ratificado). No se diseñó ontología de Provenance, ni el rol de Alfred/Sensor, ni nuevos tipos de arista — quedan disponibles para incorporarse después sin romper nada de lo fijado acá.*
+## 6. Reapertura ratificada — `DOMAIN` y `GENE` como estructura gobernada (2026-09-02)
+
+La exclusión de Domain y Gene del boundary anterior deja sin representación gobernada dos entidades que
+inciden directamente en cómo un Mandate organiza e interpreta código. Se reabre por ello el cierre de §1
+con estas invariantes:
+
+1. `DOMAIN` y `GENE` son tipos de nodo de primer orden del `GravityGraph`, pero son **nodos estructurales
+   sin Postures**. `gravityPostures[]` debe permanecer vacío y no se usa para autorización, precedencia,
+   promoción ni Masa.
+2. Un nodo `DOMAIN` pertenece a una instancia Nucleus organizacional concreta. Su `parentId` referencia
+   el `nodeId` de ese `NUCLEUS` y nunca es `null`. “Nucleus-wide” significa dentro de
+   `.bloom/.nucleus-{organization}/`, no entre organizaciones distintas.
+3. Un nodo `GENE` depende estructuralmente del nodo `MANDATE` que corresponde al `mandate_id` de su
+   `gen.json` canónico.
+4. Estos nodos no se insertan en el spine de Postures. `ResolveActive`, precedencia y Masa continúan
+   operando únicamente sobre los niveles portadores de Criterion.
+5. `.mandates/{mandateId}/.genes/{geneId}/gen.json` conserva la autoridad sobre identidad y contenido del
+   Gene; `.cache/.semantic-index.json` conserva la autoridad sobre Domain y la relación N:M Domain↔Gene.
+6. Toda relación alojada bajo `.gravity/` que refleje esos artefactos es una **proyección gobernada,
+   auditable, idempotente y reconstruible**. Nunca compite con las fuentes canónicas: ante discrepancia,
+   gana la fuente canónica y la proyección debe reconciliarse.
+7. Si `dis/` retira un Domain activo por merge o split, Gravity preserva su identidad histórica mediante
+   supersesión y deja inactivas sus proyecciones relacionales; los dominios resultantes usan IDs nuevos o
+   el `target_domain_id` ratificado por `dis/`, sin reutilizar IDs retirados.
+
+Esta ratificación es contractual. No habilita por sí sola tipos ejecutables, `Store.CreateNode`, Activities,
+materializadores ni cambios de comportamiento productivo; todos requieren un diseño de implementación y
+una autorización posterior.
+
+---
+
+*Fin del cierre v0.1 reabierto. Boundary fijado como invariante: Gravity (sistema) / GravityGraph (Criterion + estructura gobernada de `DOMAIN`/`GENE` + Provenance ratificada, incluyendo `PROMOTED_FROM`, excluyendo el log de arbitraje) / Semantics (probabilístico y canónico en sus propios artefactos) / Provenance (factual, sin estructura general salvo lo ratificado). Esta reapertura no implementa schema ni runtime.*

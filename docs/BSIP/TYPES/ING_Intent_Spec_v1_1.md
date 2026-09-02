@@ -430,6 +430,17 @@ necesidad de alguna de esas operaciones se resuelve con una corrida de `dis/`, n
 Entradas con `human_decision: "rejected"` no producen ningún efecto — el archivo correspondiente queda
 fuera del sistema, disponible para una futura ingesta si se reconsidera.
 
+**Efecto contractual futuro sobre `GravityGraph`:** únicamente después de que las escrituras canónicas
+anteriores hayan quedado confirmadas, un materializador gobernado deberá proyectar en Gravity el nodo
+`GENE`, el nodo `DOMAIN` si todavía no existe y las relaciones Domain↔Gene y Domain↔Mandate resultantes.
+La proyección debe ser idempotente ante reintentos y reconstruible íntegramente desde `gen.json` y
+`.cache/.semantic-index.json`; nunca pasa a ser fuente de verdad. “Nucleus-wide” queda acotado a la misma
+raíz `.bloom/.nucleus-{organization}/`. Un fallo de proyección no autoriza a reconstruir o alterar el dato
+canónico: queda como divergencia pendiente de reconciliación gobernada.
+
+Este efecto es contrato para una implementación posterior. Esta especificación no asigna ownership al
+materializador, no define gates ni concurrencia y no habilita `Store.CreateNode` para `DOMAIN` o `GENE`.
+
 Si `committed: false` (el turno queda abierto o el humano pide más iteración), se abre `.turn_{X+1}/` con
 la propuesta ajustada — mismo patrón que un turno de `.refinement/` en `dev` que no cierra en la primera
 vuelta.
@@ -590,6 +601,8 @@ quinta fila faltante en esta tabla: está deliberadamente fuera del alcance de e
 - Formato de parsing de la URI `chroma://...` para los `domain_centroid_ref` de esta especificación —
   depende de que se resuelva el pendiente equivalente ya abierto en BISP §2.6 para el resto del sistema;
   `ing/` no debería definir un formato propio y paralelo.
+- Implementación del materializador gobernado de la proyección `DOMAIN`/`GENE` en `GravityGraph`,
+  incluyendo ownership, autorización, orden de commit, reintentos, concurrencia y reconciliación.
 - **Retirado en v1.1** (ya no aplica): el pendiente de v1.0 sobre "verificar que `.dev_state.json` no
   contemple campos de dominio, gene, threshold, historial de deltas, para sostener la decisión de crear
   `ing` como sexto IntentType" — con `mandateType: genesis` fuera del modelo y el patrón genérico
