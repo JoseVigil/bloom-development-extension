@@ -17,8 +17,9 @@
 8. [Logging multi-tenant](#8-logging-multi-tenant)
 9. [Alfred — El Agente Remoto Soberano](#9-alfred--el-agente-remoto-soberano)
 10. [Workflow de inicialización](#10-workflow-de-inicialización)
-11. [Invariantes críticos](#11-invariantes-críticos)
-12. [Checklist de validación](#12-checklist-de-validación)
+11. [Evolución de autoridad organizacional remota](#11-evolución-de-autoridad-organizacional-remota)
+12. [Invariantes críticos](#12-invariantes-críticos)
+13. [Checklist de validación](#13-checklist-de-validación)
 
 ---
 
@@ -770,7 +771,168 @@ cd .bloom/.nucleus-acme/.batcave && npm start
 
 ---
 
-## 11. Invariantes críticos
+## 11. Evolución de autoridad organizacional remota
+
+> **Decisión de evolución aprobada (2026-09-02):** esta sección no reescribe
+> silenciosamente las premisas de v1.2 ni afirma que el recorrido ya esté
+> implementado. Documenta el estado objetivo y la transición requerida. Hasta
+> completar el cutover definido en §11.7, `.ownership.json` y BlindJudge
+> conservan el comportamiento legado descripto en las secciones anteriores.
+
+La evolución corporativa de roles requiere separar seis dominios que v1.2
+todavía combina parcialmente:
+
+| Dominio | Dueño o punto de decisión objetivo |
+|---|---|
+| **Identity** | El proveedor autentica; Backend vincula esa identidad a un principal estable |
+| **Organizational Authority** | Backend conserva memberships, definiciones de roles, asignaciones, vigencias y revocaciones |
+| **Sovereign Policy** | Nucleus aplica las políticas locales de la organización |
+| **Effective Authorization** | Nucleus decide para la acción, actor, scope y entorno concretos |
+| **Transport** | Batcave autentica la sesión y transporta estado e instrucciones sin crear autoridad |
+| **Execution** | Brain y Temporal ejecutan exclusivamente la operación autorizada |
+
+La frontera resultante es:
+
+```text
+Backend determina la autoridad organizacional
+    → Batcave la transporta
+    → Nucleus verifica el estado recibido y determina la autoridad efectiva
+    → Brain / Temporal ejecutan
+```
+
+### 11.1 Contradicciones explícitas con v1.2
+
+Esta evolución requiere decisiones sustitutivas, no correcciones editoriales:
+
+| ID | Premisa v1.2 | Estado objetivo |
+|---|---|---|
+| `BAT-AUTH-001` | `.ownership.json` es fuente de verdad de identidad y roles | Backend es fuente de verdad de los hechos organizacionales; `.ownership.json` queda como bootstrap y vínculo de confianza local |
+| `BAT-AUTH-002` | BlindJudge resuelve el rol y autoriza contra `.ownership.json` + contrato soberano | BlindJudge opera como gate de sesión, envelope y transporte; Nucleus resuelve el rol y decide la autorización efectiva |
+| `BAT-AUTH-003` | Acceso GitHub/Codespace puede confirmar acceso organizacional | La autenticación confirma identidad; solo una membership/asignación remota vigente confirma autoridad organizacional |
+| `BAT-AUTH-004` | La autoridad puede modificarse desde archivos locales | Después del cutover, editar archivos locales no puede crear, restaurar ni elevar autoridad |
+| `BAT-AUTH-005` | El estado local puede restaurarse como cualquier configuración | Una restauración nunca puede reducir la versión aceptada ni revivir una revocación |
+
+### 11.2 Papel futuro de `.ownership.json`
+
+`.ownership.json` no se elimina durante la migración. En el estado final conserva
+solamente datos de bootstrap y binding de instalación, como:
+
+- `organization_fingerprint` esperado;
+- identidad estable de la instalación;
+- referencia al issuer/trust bundle aceptado;
+- modo de migración de autoridad;
+- versión con la que se realizó el cutover.
+
+Dejan de ser autoritativos `master_user`, miembros, roles y estados de
+membership. La proyección remota aceptada y su versión monotónica viven bajo
+ownership de Nucleus. Una modificación manual de `.ownership.json` nunca puede
+otorgar permisos.
+
+### 11.3 Authority Snapshot
+
+Backend publica una representación completa, versionada y firmada de la
+autoridad de una organización. El contrato exacto todavía requiere aprobación
+conjunta, pero debe contener como mínimo:
+
+- organización e issuer;
+- versión monotónica;
+- principals e identidades vinculadas;
+- memberships y sus estados;
+- definiciones y versiones de roles;
+- asignaciones, scopes y vigencias;
+- revocaciones;
+- emisión, inicio de validez y expiración;
+- digest, algoritmo, `key_id` y firma.
+
+Batcave puede obtener, cachear y transportar los bytes exactos; puede rechazar
+un envelope malformado como defensa temprana. Nucleus debe volver a verificar
+firma, organización, schema, vigencia y versión antes de aceptar el snapshot.
+La verificación de Batcave nunca reemplaza la de Nucleus.
+
+### 11.4 Regla anti-downgrade
+
+Nucleus persiste por organización un high-water mark separado del snapshot:
+
+```text
+versión recibida < versión aceptada  → rechazo
+versión recibida = versión aceptada y mismo digest → replay idempotente
+versión recibida = versión aceptada y distinto digest → conflicto de integridad
+versión recibida > versión aceptada → candidata a aceptación tras verificación completa
+```
+
+Rollback, restore o reinstalación de Batcave no pueden reducir ese marcador.
+No existe un `force downgrade` ordinario para autoridad organizacional.
+
+### 11.5 Política offline
+
+La pérdida de conexión no invalida un snapshot todavía vigente. Al expirar, el
+Nucleus entra en modo restringido y falla cerrado para nuevas acciones que
+requieran autoridad organizacional.
+
+Con snapshot vencido pueden continuar diagnóstico, lectura, pausa, rollback y
+recuperación que reduzcan riesgo. Quedan bloqueados nuevos grants o elevaciones,
+firma de nuevos intents o Mandates, inicio de operaciones privilegiadas y
+acciones externas en nombre de la organización. Un workflow en curso debe
+revalidar autoridad antes del siguiente paso privilegiado y alcanzar un
+checkpoint seguro si ya no puede hacerlo.
+
+TTL, requisito de frescura y demora máxima de revocación son decisiones de
+seguridad pendientes; Batcave no puede extender localmente la vigencia.
+
+### 11.6 Qué puede y qué no puede hacer Batcave
+
+Batcave puede:
+
+- autenticar sesiones;
+- mantener conexiones salientes;
+- sincronizar, cachear y transportar snapshots;
+- aplicar límites de tamaño, schema, integridad y replay de transporte;
+- transportar decisiones y resultados de Nucleus.
+
+Batcave no puede:
+
+- decidir roles, memberships, scopes o revocaciones;
+- otorgar o elevar permisos;
+- convertir un estado offline en autorización;
+- evaluar Gravity;
+- autorizar directamente una instrucción;
+- sustituir la verificación o decisión de Nucleus;
+- ejecutar intents o Mandates.
+
+Los dos flujos permanecen separados:
+
+```text
+Backend → Authority Snapshot → Batcave → Nucleus → Authorization Decision → Brain/Temporal
+
+User/AITAP → Structured Intent/Mandate → Batcave → Nucleus → Authorization → Brain/Temporal
+```
+
+### 11.7 Migración desde v1.2
+
+1. **Legado caracterizado:** `.ownership.json` y BlindJudge conservan su
+   comportamiento actual; se agregan tests de caracterización antes de cambiarlo.
+2. **Shadow remoto:** Backend genera snapshots, Batcave los transporta y Nucleus
+   los verifica sin alterar decisiones productivas; las diferencias se auditan.
+3. **Coexistencia explícita:** cada instalación declara
+   `local_legacy`, `shadow_remote` o `remote_enforced`; nunca se mezclan privilegios
+   tomando el resultado más permisivo.
+4. **Preparación:** se vinculan principals, se resuelven divergencias, se instala
+   el trust bundle y se acepta una primera versión remota.
+5. **Cutover irreversible:** Nucleus registra la versión de corte y pasa a
+   `remote_enforced`; las memberships y asignaciones locales dejan de autorizar.
+6. **Deprecación:** lectores antiguos fallan explícitamente ante el nuevo formato;
+   no interpretan campos ausentes como una autoridad vacía o permisiva.
+
+Solo en el paso 5 `.ownership.json` deja definitivamente de ser fuente de
+autoridad. Esta sección no autoriza todavía schemas, endpoints, eventos ni
+cambios de código; esas superficies requieren aprobación puntual posterior.
+
+---
+
+## 12. Invariantes críticos
+
+Los invariantes originales siguientes describen el comportamiento legado de
+v1.2 y permanecen visibles para que la transición no sea silenciosa:
 
 ```
 INVARIANT-ORG-001: Sin nombres de organización hardcodeados
@@ -788,9 +950,21 @@ INVARIANT-ALF-004: El contrato .ai_bot.sovereign.bl nunca se carga desde fuera d
 INVARIANT-ALF-005: Batcave nunca interpreta lenguaje natural ni genera intents/Mandates — solo valida (BlindJudge) y enruta (RelayEngine) instrucciones que ya llegan estructuradas desde el cliente (Alfred local o AITAP)
 ```
 
+Al completar el cutover `remote_enforced`, se aplican además estas sustituciones:
+
+```text
+INVARIANT-AUTH-001: Backend es la fuente de verdad de principals, memberships, definiciones y asignaciones organizacionales
+INVARIANT-AUTH-002: Batcave transporta autoridad; no la crea, interpreta ni decide
+INVARIANT-AUTH-003: Nucleus verifica el Authority Snapshot y decide la autorización efectiva
+INVARIANT-AUTH-004: .ownership.json no concede autoridad después del cutover remoto
+INVARIANT-AUTH-005: La versión de autoridad aceptada nunca puede retroceder por replay, restore o rollback
+INVARIANT-AUTH-006: La autenticación de identidad no implica membership ni rol organizacional
+INVARIANT-AUTH-007: Brain y Temporal ejecutan; no asignan roles ni amplían la decisión recibida
+```
+
 ---
 
-## 12. Checklist de validación
+## 13. Checklist de validación
 
 ### Resolución de organización
 - [ ] Variable de entorno `BLOOM_ORGANIZATION` funciona
@@ -828,6 +1002,17 @@ INVARIANT-ALF-005: Batcave nunca interpreta lenguaje natural ni genera intents/M
 - [ ] Intent/Mandate que llega a Batcave es firmado por Nucleus local, nunca por Batcave
 - [ ] Logs de governance registran cada sesión con timestamp y usuario
 - [ ] `src/core/` no contiene ninguna clase que interprete lenguaje natural — verificar que no exista `alfred.ts`
+
+### Evolución de autoridad organizacional
+- [ ] El modo legado y el modo remoto están diferenciados explícitamente
+- [ ] Batcave no resuelve roles ni emite decisiones de autorización efectiva
+- [ ] Nucleus verifica organización, firma, vigencia y versión del snapshot
+- [ ] El high-water mark sobrevive a restore y rollback de aplicaciones
+- [ ] Un snapshot inferior se rechaza aunque su firma sea válida
+- [ ] Misma versión con distinto digest se trata como conflicto de integridad
+- [ ] Snapshot vencido activa el modo offline restringido
+- [ ] Editar `.ownership.json` no eleva privilegios después del cutover
+- [ ] Una revocación no puede revertirse restaurando estado anterior
 
 ### Repo Ops (fuera de Batcave, referencia)
 - [ ] Repo Ops (GitHub App, Device Flow) vive en Cortex/Discovery — no está en el código de Batcave

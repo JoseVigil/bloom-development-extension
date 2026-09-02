@@ -547,3 +547,116 @@ Local execution and resource access require local, contextual enforcement.
 Neither side replaces the other. The next step is collective discovery across
 ROLES, BACKEND, BATCAVE, METAMORPH, ADK, NUCLEUS, and GRAVITY before any schema
 or implementation is approved.
+
+## 19. BATCAVE architectural contribution
+
+**Contribution status:** responsibility boundary and migration direction
+approved by José Vigil on 2026-09-02. Exact database tables, endpoint names,
+event names, payload schema, cryptographic profile, TTLs, and implementation
+files remain subject to separate approval.
+
+The BATCAVE Work confirms the following target sequence:
+
+```text
+Backend determines organizational authority
+    → Batcave transports it
+    → Nucleus verifies the received state and determines effective authority
+    → Brain / Temporal execute
+```
+
+### 19.1 Explicit contradiction with BATCAVE v1.2
+
+BATCAVE v1.2 currently describes `.ownership.json` as the source of truth for
+organizational identity and uses it together with the sovereign contract to
+resolve roles in BlindJudge. That remains the documented legacy behavior until
+a controlled cutover; it is not silently reinterpreted.
+
+The approved target is:
+
+- `.ownership.json` becomes bootstrap and local trust binding;
+- Backend becomes authoritative for principals, memberships, role definitions,
+  assignments, validity, and revocations;
+- BlindJudge becomes a session/envelope/transport gate rather than the final
+  role authorization point;
+- Nucleus verifies the remote projection and owns the effective authorization
+  decision;
+- editing local files cannot grant or restore remote organizational authority.
+
+### 19.2 Selected synchronization shape
+
+The initial architectural shape is a complete signed **Authority Snapshot**.
+This selects a synchronization unit without approving its exact wire schema or
+endpoint. It must carry enough information for Nucleus to verify issuer,
+organization binding, monotonic version, principals, memberships, role
+definitions, assignments, scopes, validity, revocations, digest, signing key
+reference, and signature.
+
+Batcave may cache and transport exact snapshot bytes and reject structurally
+invalid envelopes as an early defense. Nucleus must independently verify the
+snapshot before accepting it. Batcave verification never confers authority.
+
+### 19.3 Anti-downgrade requirement
+
+Nucleus must persist an organization-scoped high-water mark separately from
+the replaceable snapshot or application artifacts:
+
+```text
+received version < accepted version → reject, even when correctly signed
+same version + same digest          → idempotent replay
+same version + different digest     → integrity/equivocation incident
+received version > accepted version → candidate after full verification
+```
+
+Software rollback, restoration, or Batcave reinstall must not lower this
+marker or restore revoked authority. Break-glass recovery requires a separate
+governance contract, not an ordinary force flag.
+
+### 19.4 Offline direction
+
+Loss of connectivity does not invalidate an unexpired accepted snapshot.
+After expiry, Nucleus enters a restricted fail-closed mode for new operations
+that require organizational authority.
+
+Read-only observation, diagnosis, pause, safe rollback, and risk-reducing
+recovery may continue. New grants, elevation, privileged intents, Mandate
+signing, and new externally acting operations remain blocked. In-flight
+workflows must revalidate before later privileged steps and stop at a safe
+checkpoint when authorization can no longer be established.
+
+Exact TTLs, freshness classes, and maximum revocation propagation delay remain
+security decisions requiring collective approval.
+
+### 19.5 Migration direction
+
+Migration from BATCAVE v1.2 proceeds through explicit modes:
+
+```text
+local_legacy → shadow_remote → remote_enforced
+```
+
+- `local_legacy` preserves current behavior while it is characterized.
+- `shadow_remote` verifies snapshots and records divergences without changing
+  production authorization.
+- cutover requires resolved identity mappings, an accepted trust bundle, a
+  valid initial snapshot, and a persisted high-water mark.
+- `remote_enforced` is irreversible through ordinary local file editing;
+  `.ownership.json` no longer grants roles or membership.
+- no mode merges local and remote authority by choosing the more permissive
+  result.
+
+The exact migration marker and persistence contract remain owned by Nucleus
+design and require separate implementation approval.
+
+### 19.6 Confirmed responsibility map
+
+| Component | Confirmed responsibility | Explicit exclusion |
+|---|---|---|
+| Backend | Organizational source of principals, memberships, roles, assignments, validity, and revocation | Does not execute local actions or decide resource-context authorization |
+| Batcave | Session authentication, organization-isolated synchronization, cache, relay, and transport controls | Does not assign roles, grant permission, evaluate Gravity, or replace Nucleus verification |
+| Nucleus | Signature/version/freshness verification and effective authorization with policy, Gravity, Vault, Executor, and environment constraints | Does not create a competing organizational truth |
+| Brain / Temporal | Execution of the bounded authorized operation | Do not assign roles or broaden authorization |
+| Metamorph | Software lifecycle for participating applications | Does not transport or roll back ordinary mutable organizational authority |
+
+This contribution updates the collective architectural direction but does not
+override the non-decisions in §17 concerning concrete schemas, endpoints,
+events, cryptographic profiles, intervals, or code changes.
