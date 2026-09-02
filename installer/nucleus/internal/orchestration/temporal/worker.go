@@ -90,6 +90,20 @@ func registerGravityActivities(registrar namedActivityRegistrar) {
 	registrar.RegisterActivityWithOptions(activities.ResolveActiveGravityActivity, activity.RegisterOptions{
 		Name: "resolveActiveGravityActivity",
 	})
+	// CAMBIO (cowork nodo SESSION/MANDATE de Gravity, 2026-09-02): sin
+	// estos tres registros, MandateExecutionWorkflow fallaría en runtime
+	// con "unable to find activity type" apenas arrancara — mismo síntoma
+	// ya documentado más abajo en este archivo para
+	// IngestReceptionActivity/PersistExecutionResultActivity.
+	registrar.RegisterActivityWithOptions(activities.EnsureGravityMandateNodeActivity, activity.RegisterOptions{
+		Name: "ensureGravityMandateNodeActivity",
+	})
+	registrar.RegisterActivityWithOptions(activities.CreateGravitySessionActivity, activity.RegisterOptions{
+		Name: "createGravitySessionActivity",
+	})
+	registrar.RegisterActivityWithOptions(activities.PersistExecutionGravityActivity, activity.RegisterOptions{
+		Name: "persistExecutionGravityActivity",
+	})
 }
 
 // RegisterActivityWithOptions registra una activity con opciones personalizadas

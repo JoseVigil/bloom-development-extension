@@ -83,6 +83,16 @@ type GenesisBuildInput struct {
 	Source        string
 	Project       string
 	MandatesRoot  string
+	// ProjectID — CAMPO NUEVO esta sesión (cowork nodo SESSION/MANDATE de
+	// Gravity): ver MandateExecutionInput.ProjectID en
+	// mandate_execution_workflow.go para la justificación completa. HOY
+	// sin ningún productor real — ni mandate_watcher.go ni
+	// temporal_client.go lo asignan al construir este input — llega vacío
+	// en toda ejecución real hasta que un cowork futuro resuelva la
+	// provisión de un ProjectID estable de Gravity. Declarado acá para que
+	// el campo exista y quede listo para esa integración, sin inventar un
+	// valor hoy.
+	ProjectID string
 }
 
 // GenesisPhaseOrder / GenesisPhasesWithStatusSubobject — CAMBIO (esta
@@ -348,6 +358,31 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		})
 	}
 
+	// IntentType — CAMPO NUEVO esta sesión (cowork nodo SESSION/MANDATE de
+	// Gravity): un solo valor por corrida (decisión ratificada, checkpoint
+	// §3), tomado de signResult.Actions[].IntentType — ya estampado por
+	// SignMandateActivity (mandate_genesis_sign_activity.go:262) igual
+	// para todas las Actions de un Mandate. Se valida esa uniformidad acá,
+	// no se asume: si alguna vez dejara de serlo, esto debe fallar cerrado
+	// en vez de elegir una al azar — no hay hoy un IntentType por Domain
+	// (appliesTo filtra por IntentType, nunca por Domain/Gene, resolver.go:56).
+	intentType := ""
+	for i, a := range signResult.Actions {
+		if i == 0 {
+			intentType = a.IntentType
+			continue
+		}
+		if a.IntentType != intentType {
+			return fmt.Errorf(
+				"mandate %s: Actions firmadas con IntentType inconsistente (%q vs %q) — no hay un único valor de Gravity IntentType para esta corrida",
+				input.MandateID, intentType, a.IntentType,
+			)
+		}
+	}
+	if intentType == "" {
+		return fmt.Errorf("mandate %s: signResult.Actions no trae IntentType — no puedo resolver Gravity activa sin él", input.MandateID)
+	}
+
 	// ── execute (child workflow) ─────────────────────────────────────────
 	// MandateExecutionWorkflow sigue siendo un placeholder puro (ver
 	// mandate_execution_workflow.go) — este cambio ya le pasa las Actions
@@ -369,6 +404,8 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		Project:      input.Project,
 		MandatesRoot: input.MandatesRoot,
 		Domains:      domains,
+		ProjectID:    input.ProjectID,
+		IntentType:   intentType,
 	})
 
 	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,

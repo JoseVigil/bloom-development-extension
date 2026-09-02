@@ -67,11 +67,30 @@ func TestTopologicalLayersDetectsCycle(t *testing.T) {
 // MandateExecutionWorkflow — Temporal test env, activities mockeadas.
 // ─────────────────────────────────────────────────────────────────────────
 
+// executionWorkflowFixture registra MandateExecutionWorkflow y mockea las
+// tres Activities de Gravity (Ensure MANDATE / Create SESSION / Resolve /
+// Persist) con una "corrida feliz" por default — cowork nodo SESSION/
+// MANDATE (2026-09-02). Sin estos mocks, todos los tests de este archivo
+// fallarían con "unable to find activity type" apenas arrancara el
+// workflow, porque esas Activities ahora se invocan antes de
+// topologicalLayers. Los tests que ejercitan la ejecución de dominios no
+// necesitan variar estos mocks — lo que les importa es el comportamiento
+// posterior (scaffold/persist), no la espina de Gravity.
 func executionWorkflowFixture(t *testing.T) *testsuite.TestWorkflowEnvironment {
 	t.Helper()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(MandateExecutionWorkflow)
+	env.OnActivity(activities.EnsureGravityMandateNodeActivity, mock.Anything, mock.Anything).
+		Return(activities.EnsureGravityMandateNodeResult{
+			NucleusRoot: "fixture-nucleus", OrganizationID: "org-fixture", MandateNodePath: "fixture-mandate-path", Created: true,
+		}, nil)
+	env.OnActivity(activities.CreateGravitySessionActivity, mock.Anything, mock.Anything).
+		Return(activities.CreateGravitySessionResult{SessionNodePath: "fixture-session-path", Created: true}, nil)
+	env.OnActivity(activities.ResolveActiveGravityActivity, mock.Anything, mock.Anything).
+		Return(activities.ResolveActiveGravityResult{}, nil)
+	env.OnActivity(activities.PersistExecutionGravityActivity, mock.Anything, mock.Anything).
+		Return(activities.PersistExecutionGravityResult{StateVersion: 1}, nil)
 	return env
 }
 
@@ -193,3 +212,58 @@ var errAssertScaffoldFailure = &scaffoldFailureError{}
 type scaffoldFailureError struct{}
 
 func (e *scaffoldFailureError) Error() string { return "scaffold real falló (fixture de test)" }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Gravity: la espina/SESSION se garantiza ANTES de cualquier Action —
+// cowork nodo SESSION/MANDATE (2026-09-02).
+// ─────────────────────────────────────────────────────────────────────────
+
+func TestMandateExecutionWorkflowAbortsBeforeAnyScaffoldWhenGravitySpineFails(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(MandateExecutionWorkflow)
+
+	env.OnActivity(activities.EnsureGravityMandateNodeActivity, mock.Anything, mock.Anything).
+		Return(activities.EnsureGravityMandateNodeResult{}, errAssertGravitySpineFailure)
+
+	scaffoldCalls := 0
+	env.OnActivity(activities.ScaffoldDomainActivity, mock.Anything, mock.Anything).
+		Return(func(input activities.ScaffoldDomainInput) (activities.ScaffoldDomainResult, error) {
+			scaffoldCalls++
+			return activities.ScaffoldDomainResult{}, nil
+		})
+
+	env.ExecuteWorkflow(MandateExecutionWorkflow, MandateExecutionInput{
+		MandateID:    "m-gravity-fail",
+		MandatesRoot: "fixture-root",
+		ProjectID:    "", // vacío a propósito: dispara el fail-closed real de EnsureGravityMandateNodeActivity en producción; acá viene mockeado, el punto es que el Workflow respeta el error.
+		Domains: []DomainAction{
+			{DomainName: "Billing"},
+		},
+	})
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow error: %v", err)
+	}
+
+	var result MandateExecutionResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatalf("GetWorkflowResult: %v", err)
+	}
+	if result.Success {
+		t.Fatalf("expected Success=false when Gravity spine fails, got %+v", result)
+	}
+	if result.Error == "" {
+		t.Fatal("expected Error populated with the Gravity failure")
+	}
+	if scaffoldCalls != 0 {
+		t.Fatalf("expected zero ScaffoldDomainActivity calls when Gravity spine fails, got %d", scaffoldCalls)
+	}
+}
+
+var errAssertGravitySpineFailure = &gravitySpineFailureError{}
+
+type gravitySpineFailureError struct{}
+
+func (e *gravitySpineFailureError) Error() string {
+	return "EnsureGravityMandateNodeActivity: ProjectID vacío (fixture de test)"
+}

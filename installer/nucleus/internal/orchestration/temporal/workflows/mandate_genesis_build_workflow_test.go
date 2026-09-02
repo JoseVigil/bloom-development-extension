@@ -65,6 +65,23 @@ func genesisWorkflowFixture(t *testing.T) (env *testsuite.TestWorkflowEnvironmen
 		})
 	env.OnActivity(activities.PublishMandateEventActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(func(event string, _ map[string]interface{}) error { orderSlice = append(orderSlice, "event:"+event); return nil })
+	// Gravity: MandateExecutionWorkflow (child, corre de verdad en este
+	// fixture) ahora garantiza espina+SESSION+resolución antes de
+	// scaffold — cowork nodo SESSION/MANDATE (2026-09-02). Sin estos tres
+	// mocks, ambos tests de este fixture fallarían con "unable to find
+	// activity type" apenas el child arrancara — mismo síntoma que ya
+	// documentan los mocks de ScaffoldDomainActivity/PersistExecutionResultActivity
+	// más arriba.
+	env.OnActivity(activities.EnsureGravityMandateNodeActivity, mock.Anything, mock.Anything).
+		Return(activities.EnsureGravityMandateNodeResult{
+			NucleusRoot: "fixture-nucleus", OrganizationID: "org-fixture", MandateNodePath: "fixture-mandate-path", Created: true,
+		}, nil)
+	env.OnActivity(activities.CreateGravitySessionActivity, mock.Anything, mock.Anything).
+		Return(activities.CreateGravitySessionResult{SessionNodePath: "fixture-session-path", Created: true}, nil)
+	env.OnActivity(activities.ResolveActiveGravityActivity, mock.Anything, mock.Anything).
+		Return(activities.ResolveActiveGravityResult{}, nil)
+	env.OnActivity(activities.PersistExecutionGravityActivity, mock.Anything, mock.Anything).
+		Return(activities.PersistExecutionGravityResult{StateVersion: 1}, nil)
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow("mandate:genesis:validate", GenesisValidateSignal{Approved: true, Domains: []DomainConfirmation{{ID: "dom-1", DomainName: "Core"}}})
 	}, time.Second)
@@ -81,7 +98,7 @@ func TestMandateGenesisSignatureEventFollowsDurableSignedState(t *testing.T) {
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(func(string, string) (activities.SignMandateResult, error) {
 			*order = append(*order, "state:signed")
-			return activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core"}}}, nil
+			return activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil
 		})
 	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m1", MandateType: "genesis", Project: "fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
@@ -118,7 +135,7 @@ func TestMandateGenesisAdvancesPhaseInOrderThroughCompletion(t *testing.T) {
 	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).
 		Return(activities.PersistHumanSyncResult{StateVersion: 2}, nil)
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
-		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core"}}}, nil)
+		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil)
 
 	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m3", MandateType: "genesis", Project: "fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
@@ -150,7 +167,7 @@ func TestMandateGenesisDoesNotAdvanceToCompletedWhenExecutionFails(t *testing.T)
 	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).
 		Return(activities.PersistHumanSyncResult{StateVersion: 2}, nil)
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
-		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core"}}}, nil)
+		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil)
 	// El scaffold real (Mode:real, dentro del child) va a fallar — ver
 	// comentario de failRealScaffold en genesisWorkflowFixture. La fase
 	// cluster (Mode:dry_run, en el padre) sigue funcionando normalmente.

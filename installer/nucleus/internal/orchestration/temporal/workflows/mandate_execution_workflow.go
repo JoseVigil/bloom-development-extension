@@ -49,7 +49,33 @@ type MandateExecutionInput struct {
 	// tiene (input.MandatesRoot) y ahora lo pasa acá.
 	MandatesRoot string
 	Domains      []DomainAction
+	// ProjectID — CAMPO NUEVO esta sesión (cowork nodo SESSION/MANDATE de
+	// Gravity): identidad estable del nodo Gravity PROJECT bajo el que
+	// debe vivir el MANDATE de esta corrida. Obligatorio para que
+	// EnsureGravityMandateNodeActivity pueda ubicar la espina — HOY sin
+	// productor real: MandateGenesisBuildWorkflow (único caller de este
+	// workflow) declara GenesisBuildInput.ProjectID pero ningún caller lo
+	// popula todavía (gap explícito, registrado en el checkpoint de este
+	// cowork, no resuelto acá — no existe en el repo ningún concepto de
+	// ProjectID estable). Mientras tanto, EnsureGravityMandateNodeActivity
+	// falla cerrado si llega vacío.
+	ProjectID string
+	// IntentType — CAMPO NUEVO esta sesión: un solo valor por corrida
+	// (nunca por DomainAction — decisión ratificada, checkpoint §3),
+	// tomado de signResult.Actions[].IntentType — ya estampado por
+	// SignMandateActivity (mandate_genesis_sign_activity.go:262, "gen" hoy,
+	// igual para todas las Actions de un Mandate) y copiado acá por
+	// MandateGenesisBuildWorkflow al construir este input.
+	IntentType string
 }
+
+// gravityExecutionTurn — ordinal técnico fijo, sin significado
+// conversacional (decisión del checkpoint §4): esta corrida llama a
+// resolveActiveGravityActivity exactamente una vez (nunca por
+// DomainAction, ya descartado), así que "turno 1" es literalmente "la
+// única resolución de esta sesión" — no una construcción para simular
+// turnos conversacionales que no existen en una ejecución batch.
+const gravityExecutionTurn uint64 = 1
 
 type MandateExecutionResult struct {
 	Success bool
@@ -154,6 +180,71 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 			MaximumAttempts: 3,
 		},
 	})
+
+	// ── Gravity: garantizar espina hasta MANDATE, crear SESSION, resolver
+	// y persistir evidencia — ANTES de ejecutar ninguna Action. Cowork
+	// nodo SESSION/MANDATE (2026-09-02): cierra G.1/G.2 de
+	// docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md.
+	// Un solo SessionID por invocación completa de este Workflow (decisión
+	// ratificada — nunca uno por DomainAction), reutilizado en la única
+	// llamada a resolveActiveGravityActivity de esta corrida. Cualquier
+	// fallo acá (espina inconsistente/faltante, SESSION, resolución o
+	// persistencia) aborta antes de tocar ninguna Action — mismo contrato
+	// soft-failure (Success:false, Error poblado) que el resto de este
+	// Workflow.
+	var mandateNode activities.EnsureGravityMandateNodeResult
+	if err := workflow.ExecuteActivity(ctx, activities.EnsureGravityMandateNodeActivity, activities.EnsureGravityMandateNodeInput{
+		MandatesRoot: input.MandatesRoot,
+		MandateID:    input.MandateID,
+		ProjectID:    input.ProjectID,
+	}).Get(ctx, &mandateNode); err != nil {
+		logger.Error("MandateExecutionWorkflow: no se pudo garantizar la espina Gravity hasta MANDATE", "mandateId", input.MandateID, "error", err)
+		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	}
+
+	// SessionID = RunID de esta invocación (workflow.GetInfo es
+	// determinístico/replay-safe, no un side effect prohibido en código de
+	// Workflow). RunID, no WorkflowID: WorkflowID es fijo por MandateID
+	// (mandate_execution_{mandateId}, mandate_genesis_build_workflow.go) y
+	// podría reutilizarse entre corridas distintas; RunID identifica la
+	// corrida real, uno a uno con "una invocación" tal como quedó
+	// ratificado (checkpoint §2).
+	sessionID := workflow.GetInfo(ctx).WorkflowExecution.RunID
+
+	var sessionResult activities.CreateGravitySessionResult
+	if err := workflow.ExecuteActivity(ctx, activities.CreateGravitySessionActivity, activities.CreateGravitySessionInput{
+		NucleusRoot:     mandateNode.NucleusRoot,
+		MandateNodePath: mandateNode.MandateNodePath,
+		MandateID:       input.MandateID,
+		SessionID:       sessionID,
+	}).Get(ctx, &sessionResult); err != nil {
+		logger.Error("MandateExecutionWorkflow: no se pudo crear la SESSION de Gravity", "mandateId", input.MandateID, "sessionId", sessionID, "error", err)
+		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	}
+
+	var gravityResolved activities.ResolveActiveGravityResult
+	if err := workflow.ExecuteActivity(ctx, activities.ResolveActiveGravityActivity, activities.ResolveActiveGravityInput{
+		NucleusRoot: mandateNode.NucleusRoot,
+		MandateID:   input.MandateID,
+		SessionID:   sessionID,
+		IntentType:  input.IntentType,
+		Turn:        gravityExecutionTurn,
+	}).Get(ctx, &gravityResolved); err != nil {
+		logger.Error("MandateExecutionWorkflow: no se pudo resolver Gravity activa", "mandateId", input.MandateID, "sessionId", sessionID, "error", err)
+		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	}
+
+	if err := workflow.ExecuteActivity(ctx, activities.PersistExecutionGravityActivity, activities.PersistExecutionGravityInput{
+		MandatesRoot: input.MandatesRoot,
+		MandateID:    input.MandateID,
+		SessionID:    sessionID,
+		IntentType:   input.IntentType,
+		Turn:         gravityExecutionTurn,
+		Result:       gravityResolved,
+	}).Get(ctx, nil); err != nil {
+		logger.Error("MandateExecutionWorkflow: no se pudo persistir la Gravity resuelta", "mandateId", input.MandateID, "sessionId", sessionID, "error", err)
+		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	}
 
 	layers, err := topologicalLayers(input.Domains)
 	if err != nil {
