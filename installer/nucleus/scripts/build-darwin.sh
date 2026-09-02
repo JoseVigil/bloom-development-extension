@@ -104,7 +104,11 @@ echo "Incrementando build number..."
 echo "Incrementando build number..." >> "${LOG_FILE}"
 
 BUILD_FILE="${SCRIPT_DIR}/build_number.txt"
-BUILD_INFO="${SCRIPT_DIR}/../internal/core/build_info.go"
+LEGACY_BUILD_INFO="${SCRIPT_DIR}/../internal/core/build_info.go"
+
+# build_info.go fue reemplazado por build_number.go + ldflags. Al estar
+# ignorado por Git puede sobrevivir a un pull y provocar redeclaraciones.
+rm -f -- "${LEGACY_BUILD_INFO}"
 
 if [[ ! -f "${BUILD_FILE}" ]]; then
     echo 0 > "${BUILD_FILE}"
@@ -115,17 +119,6 @@ NEXT_BUILD=$((CURRENT_BUILD + 1))
 
 BUILD_DATE=$(date +%Y-%m-%d)
 BUILD_TIME=$(date +%H:%M:00)
-
-cat > "${BUILD_INFO}" << EOF
-package core
-
-// Auto-generated during build - DO NOT EDIT
-// Generated: ${BUILD_DATE} ${BUILD_TIME}
-
-const BuildNumber = ${NEXT_BUILD}
-const BuildDate = "${BUILD_DATE}"
-const BuildTime = "${BUILD_TIME}"
-EOF
 
 echo "${NEXT_BUILD}" > "${BUILD_FILE}"
 
@@ -143,7 +136,12 @@ echo "Compiling nucleus → ${OUTPUT_FILE} ..." >> "${LOG_FILE}"
 pushd "${SCRIPT_DIR}/.." >/dev/null
 
 GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=${CGO_ENABLED} \
-    go build -p 1 -ldflags="-s -w" -o "${OUTPUT_FILE}" . >> "${LOG_FILE}" 2>&1
+    go build -p 1 \
+    -ldflags="-s -w \
+        -X nucleus/internal/core.buildNumber=${NEXT_BUILD} \
+        -X nucleus/internal/core.BuildDate=${BUILD_DATE} \
+        -X nucleus/internal/core.BuildTime=${BUILD_TIME}" \
+    -o "${OUTPUT_FILE}" . >> "${LOG_FILE}" 2>&1
 BUILD_RC=$?
 
 popd >/dev/null

@@ -2081,6 +2081,32 @@ def sync_metamorph_manifest() -> None:
 # GRAVITY PREFLIGHT — verifica el parser Go+TypeScript antes de tocar Nucleus
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _remove_legacy_nucleus_build_info() -> StepResult | None:
+    """Retira el build_info.go obsoleto que scripts antiguos dejaban ignorado."""
+    legacy_build_info = ROOT / "installer/nucleus/internal/core/build_info.go"
+    if not legacy_build_info.exists():
+        return None
+
+    if not legacy_build_info.is_file():
+        return StepResult(
+            "Gravity",
+            False,
+            error=f"La ruta legacy esperada no es un archivo: {legacy_build_info}",
+        )
+
+    try:
+        legacy_build_info.unlink()
+    except OSError as exc:
+        return StepResult(
+            "Gravity",
+            False,
+            error=f"No se pudo retirar el build_info.go legacy: {exc}",
+        )
+
+    log(f"  Eliminado artefacto legacy incompatible: {legacy_build_info}")
+    return None
+
+
 def _ensure_gravity_parser_node_dependencies() -> StepResult | None:
     """
     Garantiza que el runtime antlr4 y el compilador TypeScript declarados por
@@ -2163,12 +2189,16 @@ def verify_gravity_parser() -> StepResult:
     depender de Java. La regeneración explícita vive en
     regenerate_and_verify_gravity_parser(), usada solo por `--only parser`.
 
-    NO es de solo lectura en sentido estricto: `npm run test:gravity-parser`
-    compila un .tmp temporal (.tmp/gravity-parser-test/) para poder ejecutar
-    el test TS. Ese directorio es descartable entre corridas y no forma parte
-    de ningún artefacto de build ni de deployment.
+    NO es de solo lectura en sentido estricto: retira el build_info.go legacy
+    que scripts antiguos dejaban ignorado y `npm run test:gravity-parser`
+    compila un .tmp temporal (.tmp/gravity-parser-test/). Ambos son artefactos
+    descartables y no forman parte del contrato vigente ni del deployment.
     """
     log("Preflight: verificando parser de Gravity (Go + TypeScript) ...")
+
+    legacy_cleanup_error = _remove_legacy_nucleus_build_info()
+    if legacy_cleanup_error is not None:
+        return legacy_cleanup_error
 
     # Go: installer/nucleus/internal/gravity
     go_dir = ROOT / "installer/nucleus"

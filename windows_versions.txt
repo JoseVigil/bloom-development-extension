@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — windows
-# Generated: 2026-09-01 20:53:17
+# Generated: 2026-09-02 11:35:59
 
 ---
 brain\__build__.py
