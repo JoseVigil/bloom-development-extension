@@ -140,6 +140,18 @@ func (s *Store) readSpine(spine []string) ([]string, []GravityNode, error) {
 		if node.NodeID != spine[i] {
 			return nil, nil, fmt.Errorf("integridad de espina: path de %s contiene %s", spine[i], node.NodeID)
 		}
+		expected := NodeMandate
+		switch i {
+		case 0:
+			expected = NodeNucleus
+		case 1:
+			expected = NodeOrganization
+		case 2:
+			expected = NodeProject
+		}
+		if node.NodeType != expected {
+			return nil, nil, fmt.Errorf("integridad de espina: nodo %s tiene tipo %s, esperaba %s", node.NodeID, node.NodeType, expected)
+		}
 		if i > 0 && (node.ParentID == nil || *node.ParentID != spine[i-1]) {
 			return nil, nil, fmt.Errorf("integridad de espina: parentId de %s no es %s", node.NodeID, spine[i-1])
 		}

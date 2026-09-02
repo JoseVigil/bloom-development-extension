@@ -529,6 +529,7 @@ delta producido por `ing/` se escribe con este formato. *(sin cambios respecto a
       "name": "auth",
       "domain_centroid_ref": "chroma://nucleus/domains/dom_auth_a1b2",
       "genes": ["gene-uuid-1", "gene-uuid-2"],
+      "origin_mandate_id": "mandate-genesis-uuid",
       "mandates": ["mandate-genesis-uuid"],
       "first_created_by": "ing-intent-uuid-0",
       "last_updated": "ISO-8601"
@@ -537,6 +538,7 @@ delta producido por `ing/` se escribe con este formato. *(sin cambios respecto a
       "name": "billing",
       "domain_centroid_ref": "chroma://nucleus/domains/dom_billing_x1y2",
       "genes": ["gene-uuid-5"],
+      "origin_mandate_id": "mandate-billing-uuid",
       "mandates": ["mandate-billing-uuid"],
       "first_created_by": "ing-intent-uuid-7",
       "last_updated": "ISO-8601"
@@ -560,6 +562,8 @@ delta producido por `ing/` se escribe con este formato. *(sin cambios respecto a
   produce por sí mismo (siempre siembra una única arista), pero que `dis/` sí puede producir, y que
   `ing/.classification` debe tolerar sin error si la encuentra en una corrida posterior (simplemente
   ignora las aristas adicionales que no le correspondan resolver).
+- `origin_mandate_id` es obligatorio e inmutable: identifica el Mandate dentro del cual se creó y ratificó
+  la identidad del Domain. No se deriva de `first_created_by` ni de la posición de `mandates[]`.
 - `mandates[]` es acumulativo: si un Mandate de incorporación posterior extiende un gene de un dominio ya
   existente, su `mandate_id` se agrega a la lista sin reemplazar al Mandate original que creó el dominio.
   Esto preserva trazabilidad completa de qué Mandates tocaron cada dominio a lo largo del tiempo, sin

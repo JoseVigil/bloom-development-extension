@@ -105,14 +105,14 @@ Se descarta también el modelado relacional, aunque con menos margen: un motor r
 └── .nucleus-{organization}/
     └── .gravity/
         ├── nucleus.node.json                              # singleton, sin parentId
-        ├── .domain/{domainId}/                            # proyección estructural, no fuente semántica
-        │   └── node.json                                  # parentId = nodeId de NUCLEUS
         ├── .organization/{orgId}/
         │   ├── node.json
         │   └── .project/{projectId}/
         │       ├── node.json
         │       └── .mandate/{mandateId}/
         │           ├── node.json
+        │           ├── .domain/{domainId}/                # proyección; Domain nacido en este Mandate
+        │           │   └── node.json                      # parentId = origin_mandate_id
         │           ├── .gene/{geneId}/                    # proyección estructural del Gene de origen
         │           │   └── node.json                      # parentId = nodeId de MANDATE
         │           ├── .submandate/{subMandateId}/        # Estructura C — max_depth: 2
@@ -144,8 +144,9 @@ Se descarta también el modelado relacional, aunque con menos margen: un motor r
 La reapertura de boundary del 2026-09-02 agrega dos tipos de nodo que modelan identidad y estructura, no
 Criterion:
 
-- `DOMAIN`: vive directamente bajo `.gravity/.domain/{domainId}/node.json`; su `parentId` es el `nodeId`
-  del `NUCLEUS` propietario y nunca `null`.
+- `DOMAIN`: vive bajo el Mandate donde se creó y ratificó su identidad, en
+  `.mandate/{originMandateId}/.domain/{domainId}/node.json`; su `parentId` coincide con el
+  `origin_mandate_id` canónico y nunca es `null`.
 - `GENE`: vive bajo el `MANDATE` de origen en `.gene/{geneId}/node.json`; su `parentId` es el `nodeId` de
   ese `MANDATE` y debe coincidir con el `mandate_id` referenciado por el `gen.json` canónico.
 
@@ -159,6 +160,11 @@ Las relaciones Domain↔Gene y Domain↔Mandate bajo `.edges/` son proyecciones 
 se resuelve a favor del índice semántico y dispara reconciliación de Gravity. La forma JSON ejecutable de
 los nodos y aristas, el ownership del materializador, sus gates de autorización y su estrategia concreta
 de concurrencia quedan pendientes de una especificación de implementación posterior.
+
+**Enmienda ratificada por José Vigil (2026-09-02):** `origin_mandate_id` es obligatorio e inmutable en la
+entrada canónica del Domain. No se deriva de `first_created_by` ni de la posición de `mandates[]`. Para un
+Domain nuevo de merge/split es el Mandate que ratificó esa operación. Este parent representa procedencia;
+el lifecycle posterior del Mandate no mueve ni supersede automáticamente al Domain.
 
 ---
 

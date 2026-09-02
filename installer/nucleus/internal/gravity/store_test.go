@@ -64,13 +64,55 @@ func TestStoreCreateNodeRejectsOrganizationAndNucleus(t *testing.T) {
 			if !errors.Is(err, ErrGovernedNodeCreation) {
 				t.Fatalf("CreateNode() error = %v, want ErrGovernedNodeCreation", err)
 			}
-			if got, want := err.Error(), "ORGANIZATION/NUCLEUS node creation requires a governed authorization decision (cor + Authorization module) — not yet wired; rejecting by design"; got != want {
+			if got, want := err.Error(), "ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design"; got != want {
 				t.Fatalf("error = %q, want %q", got, want)
 			}
 			if _, statErr := os.Stat(tt.path); !os.IsNotExist(statErr) {
 				t.Fatalf("rejected node was persisted: stat error = %v", statErr)
 			}
 		})
+	}
+}
+
+func TestStoreCreateNodeRejectsDomainAndGene(t *testing.T) {
+	store, _ := NewStore(t.TempDir())
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	domain := testNode("domain", NodeDomain, ptr("mandate"))
+	domain.DomainRef = &DomainRef{SemanticIndexPath: ".cache/.semantic-index.json"}
+	gene := testNode("gene", NodeGene, ptr("mandate"))
+	gene.GeneRef = &GeneRef{MandateID: "mandate", GenePath: ".mandates/mandate/.genes/gene/gen.json"}
+	for _, node := range []GravityNode{domain, gene} {
+		err := store.CreateNode(filepath.Join(store.Root, ".test", string(node.NodeType), "node.json"), node)
+		if !errors.Is(err, ErrStructuralNodeCreation) {
+			t.Fatalf("CreateNode(%s) error = %v", node.NodeType, err)
+		}
+		if got, want := err.Error(), "DOMAIN/GENE node creation requires a governed structural projection operation — not yet authorized or wired; rejecting by design"; got != want {
+			t.Fatalf("error = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestStructuralNodeValidation(t *testing.T) {
+	domain := testNode("domain", NodeDomain, ptr("mandate"))
+	domain.DomainRef = &DomainRef{SemanticIndexPath: ".cache/.semantic-index.json"}
+	if err := validateNode(domain); err != nil {
+		t.Fatal(err)
+	}
+	domain.GravityPostures = []GravityPosture{{PostureID: "forbidden"}}
+	if err := validateNode(domain); err == nil {
+		t.Fatal("DOMAIN posture should be rejected")
+	}
+
+	gene := testNode("gene", NodeGene, ptr("mandate"))
+	gene.GeneRef = &GeneRef{MandateID: "other", GenePath: ".mandates/other/.genes/gene/gen.json"}
+	if err := validateNode(gene); err == nil {
+		t.Fatal("GENE parent mismatch should be rejected")
+	}
+	gene.GeneRef = &GeneRef{MandateID: "mandate", GenePath: "../escape/gen.json"}
+	if err := validateNode(gene); err == nil {
+		t.Fatal("GENE escaping path should be rejected")
 	}
 }
 

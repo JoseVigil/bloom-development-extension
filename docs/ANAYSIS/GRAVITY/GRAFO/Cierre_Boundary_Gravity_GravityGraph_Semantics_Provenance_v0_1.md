@@ -79,9 +79,10 @@ con estas invariantes:
 1. `DOMAIN` y `GENE` son tipos de nodo de primer orden del `GravityGraph`, pero son **nodos estructurales
    sin Postures**. `gravityPostures[]` debe permanecer vacío y no se usa para autorización, precedencia,
    promoción ni Masa.
-2. Un nodo `DOMAIN` pertenece a una instancia Nucleus organizacional concreta. Su `parentId` referencia
-   el `nodeId` de ese `NUCLEUS` y nunca es `null`. “Nucleus-wide” significa dentro de
-   `.bloom/.nucleus-{organization}/`, no entre organizaciones distintas.
+2. Un nodo `DOMAIN` pertenece a una instancia Nucleus organizacional concreta, pero su `parentId`
+   referencia el `nodeId` del `MANDATE` de origen declarado por el `origin_mandate_id` canónico y nunca es
+   `null`. El parent expresa procedencia, no ownership ni dependencia de lifecycle. “Nucleus-wide”
+   significa dentro de `.bloom/.nucleus-{organization}/`, no entre organizaciones distintas.
 3. Un nodo `GENE` depende estructuralmente del nodo `MANDATE` que corresponde al `mandate_id` de su
    `gen.json` canónico.
 4. Estos nodos no se insertan en el spine de Postures. `ResolveActive`, precedencia y Masa continúan
@@ -98,6 +99,11 @@ con estas invariantes:
 Esta ratificación es contractual. No habilita por sí sola tipos ejecutables, `Store.CreateNode`, Activities,
 materializadores ni cambios de comportamiento productivo; todos requieren un diseño de implementación y
 una autorización posterior.
+
+**Enmienda del dueño del proceso (José Vigil, 2026-09-02):** la regla anterior
+`DOMAIN.parentId = NUCLEUS` queda expresamente reemplazada por `DOMAIN.parentId = origin_mandate_id`. El
+campo canónico es distinto de `first_created_by` y de la colección acumulativa `mandates[]`; para una
+identidad nacida de merge/split corresponde al Mandate que ratificó esa operación.
 
 ---
 

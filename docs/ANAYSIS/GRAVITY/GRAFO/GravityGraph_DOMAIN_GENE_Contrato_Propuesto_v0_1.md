@@ -52,7 +52,7 @@ Las referencias deben ser relativas a la raíz de la instancia Nucleus y resolve
 
 | Tipo | `parentId` | Referencia obligatoria | Posturas | Spine |
 |---|---|---|---|---|
-| `DOMAIN` | ID de `NUCLEUS` | `domainRef` | Prohibidas | Excluido |
+| `DOMAIN` | ID del `MANDATE` de origen (`origin_mandate_id`) | `domainRef` | Prohibidas | Excluido |
 | `GENE` | ID de `MANDATE` de origen | `geneRef` | Prohibidas | Excluido |
 
 Para ambos tipos:
@@ -69,14 +69,13 @@ Para ambos tipos:
 └── .nucleus-{organization}/
     └── .gravity/
         ├── nucleus.node.json
-        ├── .domain/
-        │   └── {domainId}/
-        │       └── node.json
         ├── .organization/
         │   └── {organizationId}/
         │       └── .project/{projectId}/
         │           └── .mandate/{mandateId}/
         │               ├── node.json
+        │               ├── .domain/{domainId}/
+        │               │   └── node.json
         │               └── .gene/{geneId}/
         │                   └── node.json
         └── .edges/
@@ -94,7 +93,7 @@ El nesting de `GENE` expresa origen. No implica que el Gene forme parte de la ca
 {
   "nodeId": "dom_auth_a1b2",
   "nodeType": "DOMAIN",
-  "parentId": "nucleus-node-id",
+  "parentId": "origin-mandate-node-id",
   "domainRef": {
     "semanticIndexPath": ".cache/.semantic-index.json"
   },
@@ -125,6 +124,12 @@ El nesting de `GENE` expresa origen. No implica que el Gene forme parte de la ca
 
 Los ejemplos son shapes contractuales propuestos. La convención exacta de directorios ocultos para IDs de Mandate deberá homologarse con el layout canónico antes de implementar.
 
+**Enmienda ratificada por José Vigil (2026-09-02):** `DOMAIN.parentId` debe coincidir con
+`domains[domainId].origin_mandate_id`. Este campo canónico identifica el Mandate donde nació y se ratificó
+la identidad; es distinto de `first_created_by` (Intent creador) y de `mandates[]` (colección acumulativa
+sin semántica posicional). En merge/split, el Domain resultante usa como origen el Mandate que ratificó la
+operación. El parent expresa procedencia estructural, no ownership ni acoplamiento de lifecycle.
+
 ## 5. Relaciones proyectadas
 
 ### 5.1 Domain↔Gene
@@ -135,16 +140,41 @@ Representa que el `geneId` aparece en `domains[domainId].genes[]` del índice ca
 
 Representa que el `mandateId` aparece en `domains[domainId].mandates[]` del índice canónico.
 
-### 5.3 Propiedades mínimas necesarias
+### 5.3 Formato ratificado de arista
 
-El formato final de archivo no queda ratificado aquí. Cualquier contrato posterior debe poder expresar, como mínimo:
+```json
+{
+  "edgeId": "domain_gene:dom_auth_a1b2:gene-uuid-1",
+  "edgeType": "DOMAIN_GENE",
+  "fromNodeId": "dom_auth_a1b2",
+  "toNodeId": "gene-uuid-1",
+  "status": "active",
+  "canonicalSource": {
+    "path": ".cache/.semantic-index.json",
+    "selector": "domains/dom_auth_a1b2/genes/gene-uuid-1",
+    "fingerprint": "sha256:..."
+  },
+  "materializedAt": "ISO-8601",
+  "edgeVersion": 1
+}
+```
 
-- tipo de relación;
-- IDs de ambos extremos;
-- estado activo o supersedido;
-- versión o huella del estado canónico del que fue proyectada;
-- fecha de materialización;
-- identificador idempotente estable.
+`edgeId` es determinista: `domain_gene:{domainId}:{geneId}` o
+`domain_mandate:{domainId}:{mandateId}`. El selector lógico estable es
+`domains/{domainId}/genes/{geneId}` o `domains/{domainId}/mandates/{mandateId}`; no es un JSON Pointer
+posicional.
+
+El fingerprint es SHA-256 de la serialización JSON canónica del hecho puntual proyectado, nunca del
+archivo completo ni de la entrada completa del Domain:
+
+```text
+DOMAIN_GENE:    {edgeType, domainId, geneId, present}
+DOMAIN_MANDATE: {edgeType, domainId, mandateId, present}
+```
+
+`present` es `true` para `active` y `false` para una baja canónica proyectada como `superseded`. Un retry
+con el mismo hecho no cambia `materializedAt` ni `edgeVersion`; solo una mutación efectiva, protegida por
+CAS, incrementa la versión.
 
 No debe copiar nombres, centroides, funciones semánticas ni listas completas del índice.
 
@@ -168,7 +198,7 @@ Si una arista Gravity contradice el índice:
 | Operación canónica | Efecto esperado en Gravity |
 |---|---|
 | Crear Gene | Crear o confirmar nodo `GENE`; proyectar relaciones confirmadas |
-| Crear Domain | Crear o confirmar nodo `DOMAIN` bajo `NUCLEUS` |
+| Crear Domain | Crear o confirmar nodo `DOMAIN` bajo su `MANDATE` de origen |
 | Agregar relación | Crear o reactivar proyección idempotente |
 | Quitar relación | Superseder la proyección; no reescribir `gen.json` |
 | Renombrar Domain | No cambiar `nodeId`; no es necesario copiar el nombre |
@@ -218,4 +248,3 @@ Hasta entonces, cualquier intento de creación debe rechazarse por diseño.
 9. Presentar y aprobar la lista exacta de archivos de implementación.
 
 Hasta cumplir estas condiciones, el estado correcto es **arquitectura consolidada, implementación no autorizada**.
-

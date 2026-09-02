@@ -10,6 +10,8 @@ const (
 	NodeProject      NodeType = "PROJECT"
 	NodeMandate      NodeType = "MANDATE"
 	NodeSession      NodeType = "SESSION"
+	NodeDomain       NodeType = "DOMAIN"
+	NodeGene         NodeType = "GENE"
 )
 
 type NodeStatus string
@@ -43,6 +45,19 @@ type PromotedFrom struct {
 	OccurredAt    string `json:"occurredAt"`
 }
 
+// DomainRef points to the canonical semantic index. It never duplicates
+// Domain semantic content inside Gravity.
+type DomainRef struct {
+	SemanticIndexPath string `json:"semanticIndexPath"`
+}
+
+// GeneRef points to the canonical Gene and records its immutable origin
+// Mandate. ParentID must equal MandateID.
+type GeneRef struct {
+	MandateID string `json:"mandateId"`
+	GenePath  string `json:"genePath"`
+}
+
 // GravityPosture models the fields with defined runtime semantics. Extra keeps
 // forward-compatible fields from the still-open expression grammar available
 // to consumers without making this package their owner.
@@ -69,6 +84,32 @@ type GravityNode struct {
 	CreatedAt       string           `json:"createdAt"`
 	SignedBy        *SignedBy        `json:"signedBy,omitempty"`
 	NodeVersion     uint64           `json:"nodeVersion"`
+	DomainRef       *DomainRef       `json:"domainRef,omitempty"`
+	GeneRef         *GeneRef         `json:"geneRef,omitempty"`
+}
+
+type StructuralEdgeType string
+
+const (
+	EdgeDomainGene    StructuralEdgeType = "DOMAIN_GENE"
+	EdgeDomainMandate StructuralEdgeType = "DOMAIN_MANDATE"
+)
+
+type CanonicalSource struct {
+	Path        string `json:"path"`
+	Selector    string `json:"selector"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+type StructuralEdge struct {
+	EdgeID          string             `json:"edgeId"`
+	EdgeType        StructuralEdgeType `json:"edgeType"`
+	FromNodeID      string             `json:"fromNodeId"`
+	ToNodeID        string             `json:"toNodeId"`
+	Status          NodeStatus         `json:"status"`
+	CanonicalSource CanonicalSource    `json:"canonicalSource"`
+	MaterializedAt  string             `json:"materializedAt"`
+	EdgeVersion     uint64             `json:"edgeVersion"`
 }
 
 type ResolutionCache struct {

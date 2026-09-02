@@ -53,25 +53,33 @@ Por lo tanto, “Nucleus-wide” significa compartido dentro de una instancia Nu
 
 También se confirmó una deuda real: una parte de `IntentManager` busca provisionalmente `.bloom/.cache/.semantic-index.json` y declara expresamente que la ruta Nucleus-level todavía no está resuelta. Esa implementación no puede utilizarse como fundamento para redefinir el scope del Domain.
 
-### 2.4 Restricciones del modelo Gravity existente
+### 2.4 Restricciones del modelo Gravity existente — enmendado 2026-09-02
 
 El modelo actual solo admite `NUCLEUS`, `ORGANIZATION`, `PROJECT`, `MANDATE` y `SESSION`. Además, su validación exige que únicamente `NUCLEUS` tenga `parentId: null`.
 
-En consecuencia, un `DOMAIN` ubicado directamente debajo de Nucleus debe tener:
+**Enmienda ratificada por José Vigil (2026-09-02):** `DOMAIN` no se ubica directamente debajo de
+Nucleus. Su `parentId` expresa procedencia estructural y apunta al `nodeId` del `MANDATE` dentro del cual
+se creó y ratificó la identidad del Domain:
 
 ```text
-parentId = nodeId del NUCLEUS propietario
+parentId = domains[domainId].origin_mandate_id
 ```
 
-La propuesta preliminar de `DOMAIN.parentId: null` habría creado una segunda raíz y contradicho la invariante vigente del Store.
+`origin_mandate_id` es un campo canónico explícito, obligatorio e inmutable. No se deriva de
+`first_created_by` —que identifica al Intent creador— ni de la posición dentro de `mandates[]` —que es
+una colección acumulativa sin semántica posicional—. La propuesta preliminar de `DOMAIN.parentId: null`
+habría creado una segunda raíz; la variante posterior `DOMAIN.parentId = NUCLEUS` queda reemplazada por
+esta enmienda.
 
 ## 3. Decisión consolidada
 
-### 3.1 `DOMAIN`
+### 3.1 `DOMAIN` — enmendado 2026-09-02
 
 `DOMAIN` es un nodo estructural de primer orden, perteneciente a una instancia Nucleus concreta.
 
-- Es hijo directo de `NUCLEUS`.
+- Es hijo estructural del `MANDATE` identificado por `origin_mandate_id`.
+- Ese parent expresa procedencia, no ownership ni dependencia de lifecycle: cerrar, pausar o superseder
+  el Mandate no mueve ni supersede automáticamente al Domain.
 - Tiene referencia al índice semántico canónico.
 - No contiene una copia del nombre, centroide, Genes o Mandates del Domain como verdad alternativa.
 - No admite `gravityPostures[]` activas.
@@ -130,6 +138,9 @@ La futura materialización debe respetar este orden:
 
 La ubicación del materializador —Brain, Activity de Nucleus u otro seam autorizado— queda pendiente de decisión. Este documento no la adjudica implícitamente.
 
+Para un Domain creado por merge o split, `origin_mandate_id` es el Mandate que ratificó esa operación; no
+se hereda de los Domains fuente ni de la posición de ningún elemento en `mandates[]`.
+
 ## 7. Estado que debe registrar el work Gravity
 
 - **Decisión arquitectónica:** adoptada para formalización coordinada.
@@ -143,4 +154,3 @@ La ubicación del materializador —Brain, Activity de Nucleus u otro seam autor
 ## 8. Solicitud concreta a Albor
 
 Se solicita que Albor incorpore esta decisión al status del work Gravity y no trate `DOMAIN`/`GENE` como una extensión menor del enum existente. La implementación futura deberá partir del contrato técnico adjunto, resolver primero las gates y la autoridad de materialización, y presentar una lista exacta de archivos antes de cualquier cambio de código o de las especificaciones normativas.
-

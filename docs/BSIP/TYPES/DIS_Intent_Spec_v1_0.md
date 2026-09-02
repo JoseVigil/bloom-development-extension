@@ -283,11 +283,11 @@ recalcular, sin revalidar, sin herencias. Por cada `operation` con `human_decisi
 
 | `type` | Efecto en `.semantic-index.json` |
 |---|---|
-| `create_domain` | Nueva entrada, `domain_id` generado (`dom_{slug}_{hex4}`, ver §7.3), `genes[]` con los IDs indicados |
+| `create_domain` | Nueva entrada, `domain_id` generado (`dom_{slug}_{hex4}`, ver §7.3), `origin_mandate_id` del Mandate ratificador y `genes[]` con los IDs indicados |
 | `rename_domain` | Solo cambia `name`. La clave (`domain_id`) nunca se mueve |
 | `add_edge` / `remove_edge` | Alta/baja de `gene_id` en `genes[]` del `domain_id` indicado |
-| `merge_domains` | Se crea (o reusa, si `target_domain_id` fue indicado en el override) una entrada con la unión de todos los `genes[]` de los `source_domain_ids`. Los `source_domain_ids` dejan de existir como entradas activas — ver §7.3 sobre no reuso de IDs |
-| `split_domains` | El `source_domain_id` deja de existir como entrada activa. Se crean los `targets[]` como entradas nuevas, cada una con su subconjunto de `genes[]` |
+| `merge_domains` | Se crea (o reusa, si `target_domain_id` fue indicado en el override) una entrada con `origin_mandate_id` del Mandate que ratificó la operación y la unión de todos los `genes[]` de los `source_domain_ids`. Los `source_domain_ids` dejan de existir como entradas activas — ver §7.3 sobre no reuso de IDs |
+| `split_domains` | El `source_domain_id` deja de existir como entrada activa. Se crean los `targets[]` como entradas nuevas, cada una con `origin_mandate_id` del Mandate ratificador y su subconjunto de `genes[]` |
 
 Operaciones con `human_decision: "rejected"` no producen ningún efecto sobre el grafo.
 
@@ -374,6 +374,7 @@ ni lo necesita.
       "name": "billing",
       "domain_centroid_ref": "chroma://nucleus/domains/dom_billing_x1y2",
       "genes": ["gene-uuid-1", "gene-uuid-9"],
+      "origin_mandate_id": "mandate-genesis-uuid",
       "mandates": ["mandate-genesis-uuid", "mandate-billing-v2-uuid"],
       "first_created_by": "ing-intent-uuid-0",
       "last_updated": "ISO-8601"
@@ -387,6 +388,9 @@ ni lo necesita.
 - `name`: mutable. Renombrar un Dominio solo toca este campo, nunca la clave.
 - `genes[]`: única fuente de verdad de la relación N:M — un `gene_id` puede aparecer en el `genes[]` de más
   de un `domain_id` simultáneamente (Gene cross-domain).
+- `origin_mandate_id`: obligatorio e inmutable. Identifica el Mandate donde se creó y ratificó la
+  identidad; en merge/split es el Mandate ratificador. No se deriva de `first_created_by` ni de la
+  posición de `mandates[]`.
 - `mandates[]`: acumulativo, igual que en `ING_Intent_Spec_v1_1.md §7.3` — se agrega el `mandate_id` de
   cualquier Mandate cuyos Genes hayan sido asociados a este Dominio, sin reemplazar al original.
 

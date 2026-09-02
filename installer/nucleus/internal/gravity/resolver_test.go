@@ -3,6 +3,7 @@ package gravity
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,5 +78,23 @@ func TestResolveActiveFiltersIntent(t *testing.T) {
 	}
 	if len(result.Collected) != 0 {
 		t.Fatalf("collected=%d want 0", len(result.Collected))
+	}
+}
+
+func TestReadSpineRejectsStructuralNodeType(t *testing.T) {
+	store, paths := createResolutionTree(t)
+	node, err := store.ReadNode(paths["project"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.NodeType = NodeDomain
+	node.GravityPostures = []GravityPosture{}
+	node.DomainRef = &DomainRef{SemanticIndexPath: ".cache/.semantic-index.json"}
+	if err := atomicWriteNode(paths["project"], node); err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.ResolveActive(ResolveInput{MandateID: "mandate", SessionID: "session", IntentType: "mrg", Turn: 1})
+	if err == nil || !strings.Contains(err.Error(), "integridad de espina") {
+		t.Fatalf("expected structural spine rejection, got %v", err)
 	}
 }

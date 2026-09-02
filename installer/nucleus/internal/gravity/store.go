@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -12,8 +13,9 @@ import (
 )
 
 var (
-	ErrVersionConflict      = errors.New("gravity nodeVersion conflict")
-	ErrGovernedNodeCreation = errors.New("ORGANIZATION/NUCLEUS node creation requires a governed authorization decision (cor + Authorization module) — not yet wired; rejecting by design")
+	ErrVersionConflict        = errors.New("gravity nodeVersion conflict")
+	ErrGovernedNodeCreation   = errors.New("ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design")
+	ErrStructuralNodeCreation = errors.New("DOMAIN/GENE node creation requires a governed structural projection operation — not yet authorized or wired; rejecting by design")
 )
 
 type Store struct{ Root string }
@@ -61,6 +63,9 @@ func (s *Store) ReadNode(path string) (GravityNode, error) {
 func (s *Store) CreateNode(path string, node GravityNode) error {
 	if node.NodeType == NodeOrganization || node.NodeType == NodeNucleus {
 		return ErrGovernedNodeCreation
+	}
+	if node.NodeType == NodeDomain || node.NodeType == NodeGene {
+		return ErrStructuralNodeCreation
 	}
 	if err := s.requireInside(path); err != nil {
 		return err
@@ -149,7 +154,7 @@ func validateNode(node GravityNode) error {
 		return errors.New("nodeId obligatorio")
 	}
 	switch node.NodeType {
-	case NodeNucleus, NodeOrganization, NodeProject, NodeMandate, NodeSession:
+	case NodeNucleus, NodeOrganization, NodeProject, NodeMandate, NodeSession, NodeDomain, NodeGene:
 	default:
 		return fmt.Errorf("nodeType inválido: %q", node.NodeType)
 	}
@@ -161,6 +166,51 @@ func validateNode(node GravityNode) error {
 	}
 	if node.Status != NodeActive && node.Status != NodeSuperseded {
 		return fmt.Errorf("status inválido: %q", node.Status)
+	}
+	if node.NodeType == NodeDomain {
+		if len(node.GravityPostures) != 0 {
+			return errors.New("DOMAIN no admite gravityPostures")
+		}
+		if node.DomainRef == nil || node.DomainRef.SemanticIndexPath != ".cache/.semantic-index.json" {
+			return errors.New("DOMAIN requiere domainRef.semanticIndexPath canónico")
+		}
+		if node.GeneRef != nil || node.SignedBy != nil {
+			return errors.New("DOMAIN no admite geneRef ni signedBy")
+		}
+	}
+	if node.NodeType == NodeGene {
+		if len(node.GravityPostures) != 0 {
+			return errors.New("GENE no admite gravityPostures")
+		}
+		if node.GeneRef == nil || node.GeneRef.MandateID == "" || node.GeneRef.GenePath == "" {
+			return errors.New("GENE requiere geneRef completo")
+		}
+		if node.ParentID == nil || *node.ParentID != node.GeneRef.MandateID {
+			return errors.New("GENE parentId debe coincidir con geneRef.mandateId")
+		}
+		if err := validateLogicalRelativePath(node.GeneRef.GenePath); err != nil {
+			return fmt.Errorf("geneRef.genePath inválido: %w", err)
+		}
+		if node.DomainRef != nil || node.SignedBy != nil {
+			return errors.New("GENE no admite domainRef ni signedBy")
+		}
+	}
+	if node.NodeType != NodeDomain && node.DomainRef != nil {
+		return errors.New("domainRef solo es válido para DOMAIN")
+	}
+	if node.NodeType != NodeGene && node.GeneRef != nil {
+		return errors.New("geneRef solo es válido para GENE")
+	}
+	return nil
+}
+
+func validateLogicalRelativePath(value string) error {
+	if value == "" || path.IsAbs(value) || strings.Contains(value, "\\") {
+		return errors.New("la referencia debe ser relativa y usar separadores '/' controlados")
+	}
+	clean := path.Clean(value)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean != value {
+		return errors.New("la referencia escapa o no está normalizada")
 	}
 	return nil
 }
