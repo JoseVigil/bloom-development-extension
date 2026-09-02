@@ -21,7 +21,7 @@ Este cierre no afirma que Gravity y el Índice Semántico nunca deban proyectars
 
 ## 1. Premisas que esta investigación no reabre
 
-**[H] `Intent Core` está deprecado y fue excluido como fuente arquitectónica.** Gravity es la única autoridad vigente sobre autorización de postulados y Posturas. El motor BSIP de Brain (`ing`/`dis`) y el Índice Semántico Domain/Gene son sistemas vivos distintos y no se interpretan como extensiones de Intent Core.
+**[H] `Intent Cor` (`cor`) está deprecado y fue excluido como fuente arquitectónica.** Gravity es la única autoridad vigente sobre autorización de postulados y Posturas. El motor BSIP de Brain (`ing`/`dis`) y el Índice Semántico Domain/Gene son sistemas vivos distintos y no se interpretan como extensiones de Intent Cor. Nota de terminología: el nombre correcto es `Intent Cor`, nunca "Intent Core" — "Core" colisiona con el paquete Go real y vigente `internal/core` (core.GetUserRole(), RoleMaster), que no tiene relación con el intent `cor` deprecado.
 
 **[H] Se mantienen separados tres planos ya ratificados:**
 

@@ -144,3 +144,28 @@ Justificación honesta de por qué, a pesar de que (c) es la más fiel al diseñ
 ## 7. Cierre
 
 El bloqueo real no es sintáctico (`Store.CreateNode` ya permite crear `SESSION` sin gate especial) sino de diseño: qué es una "sesión" en un pipeline que, en su Fase 4, es batch y no conversacional. La evidencia real del repo muestra que el concepto de turno vivo existe — pero en Brain/BSIP, no en `MandateExecutionWorkflow`, y esa conversación (si ocurre) ya cerró para cuando Fase 4 arranca. Este documento recomendó (a), ratificada por control, con la salvedad explícita de que es una reinterpretación de `SESSION` que debe quedar documentada como tal en el código — y dos gaps nuevos (`G.1`, `G.2`) asignados al cowork de implementación en curso (Tablero §P).
+
+---
+
+## Addendum — correcciones aplicadas post-handoff (2026-09-02)
+
+`Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md` (misma carpeta) identificó cuatro
+inexactitudes en este documento, confirmadas correctas por control:
+
+1. **Rutas incompletas:** las citas a paquetes Go de este documento omiten el prefijo `installer/nucleus/`
+   (ej. `internal/gravity/resolver.go` debería leerse `installer/nucleus/internal/gravity/resolver.go`).
+2. **Cita desactualizada de `BSIPTurnRef`:** este documento cita
+   `mandate_genesis_activities.go:127-133`; la ubicación vigente es
+   `installer/nucleus/internal/orchestration/activities/mandate_genesis_activities.go:421-427`.
+3. **Comentario obsoleto en código, no en este documento:** `mandate_genesis_build_workflow.go:352` todavía
+   dice que `MandateExecutionWorkflow` es "un placeholder puro" — confirmado por control, contradice el
+   comportamiento real ya implementado (`mandate_execution_workflow.go:144-220`). La lectura de este
+   documento sobre el comportamiento real es correcta; el comentario del código es lo desactualizado.
+4. **Etiqueta `[P]` de la recomendación (§5):** debe leerse como decisión ya **ratificada** por control
+   (`SESSION = una corrida de MandateExecutionWorkflow`), no como propuesta pendiente. Lo que sigue sin
+   ratificar son los contratos de implementación (creación de `MANDATE`, procedencia de `IntentType`,
+   semántica de `Turn`, idempotencia) — ver `Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md §5,
+   §9` para el detalle completo, que es la referencia vigente para el próximo cowork.
+
+Nota de terminología: donde este documento dice "Intent Core", léase **"Intent Cor" (`cor`)** — "Core"
+colisiona con el paquete Go real y vigente `internal/core`, sin relación con el intent `cor` deprecado.
