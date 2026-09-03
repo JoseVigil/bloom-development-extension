@@ -651,7 +651,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   });
 
   // ── HANDLER: Crear Genesis Mandate ──────────────────────────────────────
-  ipcMain.handle('onboarding:create-mandate', async (event, { project, projectPath }) => {
+  ipcMain.handle('onboarding:create-mandate', async (event, { project, projectPath, projectId }) => {
     try {
       // FIX: sin cwd, nucleus arranca desde el directorio de la app y busca
       // .bloom subiendo desde ahí — nunca lo encuentra, porque el .bloom
@@ -668,10 +668,19 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       if (!workspacePath) {
         throw new Error('No hay organización activa con workspace_path — ¿se completó nucleus_create?');
       }
+      if (!projectId) {
+        throw new Error('onboarding:create-mandate requiere projectId');
+      }
+      const selectedProject = (activeOrgForCwd.projects || [])
+        .find(candidate => candidate.project_id === projectId);
+      if (!selectedProject) {
+        throw new Error(`projectId ${projectId} no pertenece a la organización seleccionada`);
+      }
 
       const result = await execNucleus([
         '--json', 'mandate', 'genesis',
         '--project', project,
+        '--project-id', projectId,
         '--source', projectPath
       ], 15000, { cwd: workspacePath });
       if (result.success !== false) {
@@ -707,6 +716,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
             throw new Error('No hay organización activa — no se puede asociar el mandate a ningún proyecto');
           }
           const proj = getOrCreateProject(data.onboarding, org, {
+            projectId,
             projectName: project,
             projectPath,
           });

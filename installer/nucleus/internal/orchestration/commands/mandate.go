@@ -52,6 +52,7 @@ type GenesisMandateResult struct {
 	MandateDir string `json:"mandate_dir"`
 	Status     string `json:"status"`
 	Project    string `json:"project"`
+	ProjectID  string `json:"project_id,omitempty"`
 	Error      string `json:"error,omitempty"`
 }
 
@@ -264,7 +265,7 @@ func copyDocsInto(mandateDir string, docs []string) ([]string, error) {
 // ── mandate genesis create ───────────────────────────────────────────────
 
 func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
-	var project, source, baseGenesisID string
+	var project, projectID, source, baseGenesisID string
 	var docs []string
 
 	cmd := &cobra.Command{
@@ -278,12 +279,13 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
   "mandate_id": "3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
   "mandate_dir": "{MandatesRoot}/3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
   "status": "building",
-  "project": "example-project"
+  "project": "example-project",
+  "project_id": "68f66d80-a8c7-4fe4-b3b5-06bd18d5a246"
 }`,
 		},
-		Example: `  nucleus mandate genesis --project my-app --source cli
+		Example: `  nucleus mandate genesis --project my-app --project-id 68f66d80-a8c7-4fe4-b3b5-06bd18d5a246 --source cli
   nucleus mandate genesis --project my-app --source cli --docs ./README.md --docs ./docs/architecture.md
-  nucleus --json mandate genesis --project my-app --source cli`,
+  nucleus --json mandate genesis --project my-app --project-id 68f66d80-a8c7-4fe4-b3b5-06bd18d5a246 --source cli`,
 		PreRun: func(cmd *cobra.Command, args []string) {
 			if err := requireMandateMaster(c); err != nil {
 				fmt.Printf("Error: %v\n", err)
@@ -292,7 +294,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 		},
 
 		Run: func(cmd *cobra.Command, args []string) {
-			result, err := createGenesisMandate(project, source, baseGenesisID, docs)
+			result, err := createGenesisMandate(project, projectID, source, baseGenesisID, docs)
 			if err != nil {
 				result = &GenesisMandateResult{Success: false, Error: err.Error()}
 			}
@@ -311,6 +313,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "Nombre del proyecto (requerido)")
+	cmd.Flags().StringVar(&projectID, "project-id", "", "Identidad estable del proyecto (opcional)")
 	cmd.Flags().StringVar(&source, "source", "cli", "Origen del mandate")
 	cmd.Flags().StringVar(&baseGenesisID, "base-genesis-id", "", "ID de genesis base (opcional)")
 	cmd.Flags().StringSliceVar(&docs, "docs", nil, "Path a un archivo o carpeta de documentación (repetible) — Capa 0 del Bootstrap Strategy")
@@ -342,7 +345,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 // copyDocsInto, ya definida en este mismo archivo para mandate create; el
 // turno anterior la implementó ahí por una identificación incorrecta de
 // cuál comando invoca onboarding, corregida ahora.
-func createGenesisMandate(project, source, baseGenesisID string, docs []string) (*GenesisMandateResult, error) {
+func createGenesisMandate(project, projectID, source, baseGenesisID string, docs []string) (*GenesisMandateResult, error) {
 	if project == "" {
 		return nil, fmt.Errorf("--project es requerido")
 	}
@@ -385,7 +388,7 @@ func createGenesisMandate(project, source, baseGenesisID string, docs []string) 
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	mandateState := initialGenesisMandateState(mandateID, mandateType, project, source, baseGenesisID, docsProvided, now)
+	mandateState := initialGenesisMandateState(mandateID, mandateType, project, projectID, source, baseGenesisID, docsProvided, now)
 	data, _ := json.MarshalIndent(mandateState, "", "  ")
 
 	// 'wx' equivalente en Go: O_CREATE|O_EXCL falla si el archivo ya existe.
@@ -411,14 +414,16 @@ func createGenesisMandate(project, source, baseGenesisID string, docs []string) 
 		MandateDir: dir,
 		Status:     "building",
 		Project:    project,
+		ProjectID:  projectID,
 	}, nil
 }
 
-func initialGenesisMandateState(mandateID, mandateType, project, source, baseGenesisID string, docsProvided []string, now string) map[string]interface{} {
+func initialGenesisMandateState(mandateID, mandateType, project, projectID, source, baseGenesisID string, docsProvided []string, now string) map[string]interface{} {
 	return map[string]interface{}{
 		"mandateId":     mandateID,
 		"mandateType":   mandateType,
 		"project":       project,
+		"projectId":     projectID,
 		"source":        source,
 		"baseGenesisId": baseGenesisID,
 		"status":        "building",
