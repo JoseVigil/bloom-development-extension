@@ -34,7 +34,7 @@ func createResolutionTree(t *testing.T) (*Store, map[string]string) {
 	nodes := []GravityNode{testNode("nucleus", NodeNucleus, nil), testNode("org", NodeOrganization, ptr("nucleus")), testNode("project", NodeProject, ptr("org")), testNode("mandate", NodeMandate, ptr("project")), testNode("session", NodeSession, ptr("mandate"))}
 	for i, key := range []string{"nucleus", "org", "project", "mandate", "session"} {
 		nodes[i].GravityPostures = []GravityPosture{{PostureID: key, AppliesTo: []string{"mrg"}, Status: "active", Origin: []PostureOrigin{OriginNucleus, OriginOrganization, OriginProject, OriginMandateOwn, OriginSession}[i]}}
-		if nodes[i].NodeType == NodeNucleus || nodes[i].NodeType == NodeOrganization {
+		if nodes[i].NodeType == NodeNucleus || nodes[i].NodeType == NodeOrganization || nodes[i].NodeType == NodeProject {
 			seedGovernedFixture(t, paths[key], nodes[i])
 			continue
 		}

@@ -21,8 +21,8 @@ func TestStoreLayoutCreateAndCAS(t *testing.T) {
 	if err := store.EnsureLayout(); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(store.Root, ".organization", "org", ".project", "project", "node.json")
-	if err := store.CreateNode(path, testNode("project", NodeProject, ptr("org"))); err != nil {
+	path := filepath.Join(store.Root, ".organization", "org", ".project", "project", ".mandate", "mandate", "node.json")
+	if err := store.CreateNode(path, testNode("mandate", NodeMandate, ptr("project"))); err != nil {
 		t.Fatal(err)
 	}
 	version, err := store.CompareAndSwap(path, 1, func(node *GravityNode) error { node.Status = NodeSuperseded; return nil })
@@ -40,7 +40,7 @@ func TestStoreLayoutCreateAndCAS(t *testing.T) {
 func TestStoreRejectsPathOutsideGravity(t *testing.T) {
 	base := t.TempDir()
 	store, _ := NewStore(base)
-	if err := store.CreateNode(filepath.Join(base, "outside.json"), testNode("project", NodeProject, ptr("org"))); err == nil {
+	if err := store.CreateNode(filepath.Join(base, "outside.json"), testNode("mandate", NodeMandate, ptr("project"))); err == nil {
 		t.Fatal("expected path rejection")
 	}
 }
@@ -85,11 +85,29 @@ func TestStoreCreateNodeStillRejectsOrganization(t *testing.T) {
 	if !errors.Is(err, ErrGovernedNodeCreation) {
 		t.Fatalf("CreateNode() error = %v, want ErrGovernedNodeCreation", err)
 	}
-	if got, want := err.Error(), "ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design"; got != want {
+	if got, want := err.Error(), "ORGANIZATION/PROJECT node creation requires a governed authorization decision — not yet wired; rejecting by design"; got != want {
 		t.Fatalf("error = %q, want %q", got, want)
 	}
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected ORGANIZATION was persisted: stat error = %v", statErr)
+	}
+}
+
+func TestStoreCreateNodeStillRejectsProject(t *testing.T) {
+	store, _ := NewStore(t.TempDir())
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(store.Root, ".organization", "org", ".project", "project", "node.json")
+	err := store.CreateNode(path, testNode("project", NodeProject, ptr("org")))
+	if !errors.Is(err, ErrGovernedNodeCreation) {
+		t.Fatalf("CreateNode() error = %v, want ErrGovernedNodeCreation", err)
+	}
+	if got, want := err.Error(), "ORGANIZATION/PROJECT node creation requires a governed authorization decision — not yet wired; rejecting by design"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("rejected PROJECT was persisted: stat error = %v", statErr)
 	}
 }
 
@@ -135,7 +153,7 @@ func TestStructuralNodeValidation(t *testing.T) {
 	}
 }
 
-func TestStoreCreateNodeKeepsProjectMandateAndSessionBehavior(t *testing.T) {
+func TestStoreCreateNodeKeepsMandateAndSessionBehavior(t *testing.T) {
 	store, _ := NewStore(t.TempDir())
 	if err := store.EnsureLayout(); err != nil {
 		t.Fatal(err)
@@ -145,7 +163,6 @@ func TestStoreCreateNodeKeepsProjectMandateAndSessionBehavior(t *testing.T) {
 		parent string
 		kind   NodeType
 	}{
-		{"PROJECT", "org", NodeProject},
 		{"MANDATE", "project", NodeMandate},
 		{"SESSION", "mandate", NodeSession},
 	}

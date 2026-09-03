@@ -15,7 +15,7 @@ import (
 
 var (
 	ErrVersionConflict        = errors.New("gravity nodeVersion conflict")
-	ErrGovernedNodeCreation   = errors.New("ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design")
+	ErrGovernedNodeCreation   = errors.New("ORGANIZATION/PROJECT node creation requires a governed authorization decision — not yet wired; rejecting by design")
 	ErrStructuralNodeCreation = errors.New("DOMAIN/GENE node creation requires a governed structural projection operation — not yet authorized or wired; rejecting by design")
 	ErrNucleusAlreadyExists   = errors.New("NUCLEUS node already exists under this root — a Gravity tree admits exactly one NUCLEUS by structural invariant")
 )
@@ -63,7 +63,7 @@ func (s *Store) ReadNode(path string) (GravityNode, error) {
 // CreateNode writes a new entity with nodeVersion=1. Existing entities are
 // never overwritten through this entry point.
 func (s *Store) CreateNode(path string, node GravityNode) error {
-	if node.NodeType == NodeOrganization {
+	if node.NodeType == NodeOrganization || node.NodeType == NodeProject {
 		return ErrGovernedNodeCreation
 	}
 	if node.NodeType == NodeDomain || node.NodeType == NodeGene {
