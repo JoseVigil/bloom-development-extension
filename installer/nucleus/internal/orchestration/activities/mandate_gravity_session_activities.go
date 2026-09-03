@@ -62,6 +62,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 
+	authoritydecision "nucleus/internal/governance/decision"
 	"nucleus/internal/gravity"
 	"nucleus/internal/orchestration/mandatestate"
 )
@@ -209,18 +210,36 @@ func EnsureGravityMandateNodeActivity(ctx context.Context, input EnsureGravityMa
 
 	projPath := filepath.Join(filepath.Dir(orgPath), ".project", input.ProjectID, "node.json")
 	projNode, err := store.ReadNode(projPath)
-	if err != nil {
-		return EnsureGravityMandateNodeResult{}, fmt.Errorf(
-			"EnsureGravityMandateNodeActivity: PROJECT %s no existe en %s (su creación queda fuera de este cowork — ver gap ProjectID): %w",
-			input.ProjectID, projPath, err,
-		)
+	projectCreated := false
+	if os.IsNotExist(err) {
+		observedVersion := orgNode.NodeVersion
+		decision, authErr := authoritydecision.AuthorizeGravityNodeCreation(authoritydecision.OpCreateProject, input.ProjectID, &orgID, &observedVersion)
+		if authErr != nil {
+			logger.Error("[GRAVITY] PROJECT creation denied", "project_id", input.ProjectID, "organization_id", orgID, "error", authErr)
+			return EnsureGravityMandateNodeResult{}, fmt.Errorf("EnsureGravityMandateNodeActivity: PROJECT creation denied: %w", authErr)
+		}
+		wantedProject := gravity.GravityNode{NodeID: input.ProjectID, NodeType: gravity.NodeProject, ParentID: &orgID, GravityPostures: []gravity.GravityPosture{}, Status: gravity.NodeActive, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+		if createErr := store.CreateGovernedNode(decision, wantedProject); createErr != nil {
+			projNode, err = store.ReadNode(projPath)
+			if err != nil {
+				logger.Error("[GRAVITY] PROJECT creation failed", "project_id", input.ProjectID, "organization_id", orgID, "error", createErr)
+				return EnsureGravityMandateNodeResult{}, fmt.Errorf("EnsureGravityMandateNodeActivity: create PROJECT: %w", createErr)
+			}
+		} else {
+			projectCreated = true
+			projNode, err = store.ReadNode(projPath)
+		}
+	} else if err != nil {
+		return EnsureGravityMandateNodeResult{}, fmt.Errorf("EnsureGravityMandateNodeActivity: read PROJECT: %w", err)
 	}
-	if projNode.NodeType != gravity.NodeProject || projNode.NodeID != input.ProjectID || projNode.ParentID == nil || *projNode.ParentID != orgID {
+	if err != nil || projNode.NodeType != gravity.NodeProject || projNode.NodeID != input.ProjectID || projNode.Status != gravity.NodeActive || projNode.ParentID == nil || *projNode.ParentID != orgID {
+		logger.Error("[GRAVITY] PROJECT incompatible", "project_id", input.ProjectID, "organization_id", orgID)
 		return EnsureGravityMandateNodeResult{}, fmt.Errorf(
 			"EnsureGravityMandateNodeActivity: nodo en %s no es el PROJECT %s esperado bajo ORGANIZATION %s (nodeType=%s nodeId=%s parentId=%v)",
 			projPath, input.ProjectID, orgID, projNode.NodeType, projNode.NodeID, projNode.ParentID,
 		)
 	}
+	logger.Info("[GRAVITY] PROJECT ready", "project_id", input.ProjectID, "organization_id", orgID, "created", projectCreated, "parent_observed_version", orgNode.NodeVersion)
 
 	mandatePath := filepath.Join(filepath.Dir(projPath), ".mandate", input.MandateID, "node.json")
 	projectID := input.ProjectID

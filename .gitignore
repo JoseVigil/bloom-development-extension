@@ -126,6 +126,7 @@ webview/package-lock.json
 .cache/
 libs/
 /.tmp/
+/.tmp-go-cache/
 
 # ============================================================================
 # Versioning

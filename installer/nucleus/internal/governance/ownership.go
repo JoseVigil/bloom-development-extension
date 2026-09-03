@@ -2,6 +2,7 @@ package governance
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"nucleus/internal/core"
 	"os"
@@ -179,13 +180,11 @@ func init() {
 			Use:   "init",
 			Short: "Initialize Nucleus organization",
 			Args:  cobra.NoArgs,
+			Annotations: map[string]string{
+				"category":      "GOVERNANCE",
+				"json_response": `{"org_id":"org_123","owner_id":"owner","status":"initialized"}`,
+			},
 			Run: func(cmd *cobra.Command, args []string) {
-				existing, _ := LoadOwnership()
-				if existing != nil {
-					fmt.Println("Organization already initialized")
-					os.Exit(1)
-				}
-
 				if githubID == "" {
 					fmt.Println("Error: --github-id required")
 					os.Exit(1)
@@ -195,25 +194,10 @@ func init() {
 					name = githubID
 				}
 
-				// Crear ownership record
-				record, err := CreateInitialOwnership(githubID, name)
+				record, err := initializeOrganization(githubID, name, masterFlag)
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
-					os.Exit(1)
-				}
-
-				// Crear .nucleus-governance.json
-				_, err = CreateInitialBlueprint(githubID, name)
-				if err != nil {
-					fmt.Printf("Error creating blueprint: %v\n", err)
-					os.Exit(1)
-				}
-
-				if masterFlag {
-					if err := core.SetMasterRole(); err != nil {
-						fmt.Printf("Error setting role: %v\n", err)
-						os.Exit(1)
-					}
+					return
 				}
 
 				if c.IsJSON {
@@ -375,4 +359,46 @@ func init() {
 
 		return cmd
 	})
+}
+
+func initializeOrganization(githubID, name string, master bool) (*OwnershipRecord, error) {
+	record, err := LoadOwnership()
+	if err != nil {
+		return nil, fmt.Errorf("load ownership: %w", err)
+	}
+	bp, err := LoadBlueprint()
+	if err != nil {
+		return nil, fmt.Errorf("load blueprint: %w", err)
+	}
+
+	if record != nil {
+		if !master {
+			return nil, errors.New("Organization already initialized")
+		}
+		if bp == nil || bp.OrgIdentity.OrgID != record.OrgID {
+			return nil, errors.New("ownership and blueprint are missing or have divergent org_id")
+		}
+	} else {
+		if bp != nil {
+			return nil, errors.New("blueprint exists without ownership")
+		}
+		record, err = CreateInitialOwnership(githubID, name)
+		if err != nil {
+			return nil, err
+		}
+		bp, err = CreateInitialBlueprint(record.OrgID, githubID, name)
+		if err != nil {
+			return nil, fmt.Errorf("create blueprint: %w", err)
+		}
+	}
+
+	if master {
+		if err := core.SetMasterRole(); err != nil {
+			return nil, fmt.Errorf("set master role: %w", err)
+		}
+		if err := bootstrapGravity(record.OrgID); err != nil {
+			return nil, fmt.Errorf("bootstrap Gravity: %w", err)
+		}
+	}
+	return record, nil
 }
