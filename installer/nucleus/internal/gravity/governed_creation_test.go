@@ -2,7 +2,7 @@ package gravity
 
 import (
 	"errors"
-	"nucleus/internal/governance"
+	authoritydecision "nucleus/internal/governance/decision"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,7 +12,7 @@ import (
 
 func TestCreateGovernedNodeRejectsZeroDecision(t *testing.T) {
 	store, _ := NewStore(t.TempDir())
-	err := store.CreateGovernedNode(governance.GovernedCreationDecision{}, testNode("org", NodeOrganization, ptr("nucleus")))
+	err := store.CreateGovernedNode(authoritydecision.GovernedCreationDecision{}, testNode("org", NodeOrganization, ptr("nucleus")))
 	if !errors.Is(err, ErrInvalidGovernedDecision) {
 		t.Fatalf("error = %v, want ErrInvalidGovernedDecision", err)
 	}
@@ -93,7 +93,7 @@ func TestCreateGovernedNodeRejectsDecisionMismatchAndUnsupportedNode(t *testing.
 
 func TestCreateGovernedNodeOrganizationIsSerializedAtTreeLevel(t *testing.T) {
 	store := governedStore(t)
-	decisions := []governance.GovernedCreationDecision{
+	decisions := []authoritydecision.GovernedCreationDecision{
 		authorizeOrganization(t, store, "org-a"),
 		authorizeOrganization(t, store, "org-b"),
 	}
@@ -152,9 +152,9 @@ func governedStore(t *testing.T) *Store {
 	return store
 }
 
-func authorizeOrganization(t *testing.T, store *Store, nodeID string) governance.GovernedCreationDecision {
+func authorizeOrganization(t *testing.T, store *Store, nodeID string) authoritydecision.GovernedCreationDecision {
 	t.Helper()
-	decision, err := governance.AuthorizeGravityNodeCreation(governance.OpCreateOrganization, nodeID, nil, nil)
+	decision, err := authoritydecision.AuthorizeGravityNodeCreation(authoritydecision.OpCreateOrganization, nodeID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,9 +164,9 @@ func authorizeOrganization(t *testing.T, store *Store, nodeID string) governance
 	return decision
 }
 
-func authorizeProject(t *testing.T, store *Store, nodeID, parentID string, version uint64) governance.GovernedCreationDecision {
+func authorizeProject(t *testing.T, store *Store, nodeID, parentID string, version uint64) authoritydecision.GovernedCreationDecision {
 	t.Helper()
-	decision, err := governance.AuthorizeGravityNodeCreation(governance.OpCreateProject, nodeID, &parentID, &version)
+	decision, err := authoritydecision.AuthorizeGravityNodeCreation(authoritydecision.OpCreateProject, nodeID, &parentID, &version)
 	if err != nil {
 		t.Fatal(err)
 	}

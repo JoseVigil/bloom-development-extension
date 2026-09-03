@@ -114,10 +114,13 @@ func SaveBlueprint(bp *Blueprint) error {
 }
 
 // CreateInitialBlueprint crea el blueprint inicial
-func CreateInitialBlueprint(githubID, orgName string) (*Blueprint, error) {
+func CreateInitialBlueprint(orgID, githubID, orgName string) (*Blueprint, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("org_id canónico obligatorio")
+	}
 	bp := &Blueprint{
 		OrgIdentity: OrgIdentity{
-			OrgID:         fmt.Sprintf("org_%d", time.Now().Unix()),
+			OrgID:         orgID,
 			Name:          orgName,
 			OwnerGithubID: githubID,
 			CreatedAt:     time.Now(),

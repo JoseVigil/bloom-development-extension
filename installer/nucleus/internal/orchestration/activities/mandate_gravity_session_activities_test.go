@@ -58,6 +58,14 @@ func gravitySpineFixture(t *testing.T) (nucleusRoot, mandatesRoot, orgID, projec
 	if err := os.WriteFile(filepath.Join(nucleusRoot, ".nucleus-governance.json"), raw, 0644); err != nil {
 		t.Fatal(err)
 	}
+	ownership := `{"org_id":"` + orgID + `","owner_id":"owner","created_at":"2026-09-03T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(nucleusRoot, ".ownership.json"), []byte(ownership), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nucleusRoot, ".master"), []byte("master"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BLOOM_NUCLEUS_ROOT", nucleusRoot)
 
 	store, err := gravity.NewStore(nucleusRoot)
 	if err != nil {
@@ -69,11 +77,6 @@ func gravitySpineFixture(t *testing.T) (nucleusRoot, mandatesRoot, orgID, projec
 	seedNodeDirect(t, filepath.Join(store.Root, ".organization", orgID, "node.json"), gravity.GravityNode{
 		NodeID: orgID, NodeType: gravity.NodeOrganization, ParentID: gravityStrPtr("nucleus-fixture"), Status: gravity.NodeActive,
 	})
-	if err := store.CreateNode(filepath.Join(store.Root, ".organization", orgID, ".project", projectID, "node.json"), gravity.GravityNode{
-		NodeID: projectID, NodeType: gravity.NodeProject, ParentID: gravityStrPtr(orgID), Status: gravity.NodeActive,
-	}); err != nil {
-		t.Fatal(err)
-	}
 
 	mandatesRoot = filepath.Join(nucleusRoot, ".mandates")
 	if err := os.MkdirAll(mandatesRoot, 0755); err != nil {
@@ -119,6 +122,28 @@ func TestEnsureGravityMandateNodeActivityCreatesUnderExistingProject(t *testing.
 	}
 }
 
+func TestEnsureGravityMandateNodeActivityReusesGovernedProject(t *testing.T) {
+	_, mandatesRoot, _, projectID := gravitySpineFixture(t)
+	input := EnsureGravityMandateNodeInput{MandatesRoot: mandatesRoot, MandateID: "mandate-a", ProjectID: projectID}
+	if _, err := runEnsureGravityMandateNode(t, input); err != nil {
+		t.Fatal(err)
+	}
+	input.MandateID = "mandate-b"
+	if _, err := runEnsureGravityMandateNode(t, input); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnsureGravityMandateNodeActivityDeniesProjectWithoutMaster(t *testing.T) {
+	nucleusRoot, mandatesRoot, _, projectID := gravitySpineFixture(t)
+	if err := os.Remove(filepath.Join(nucleusRoot, ".master")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runEnsureGravityMandateNode(t, EnsureGravityMandateNodeInput{MandatesRoot: mandatesRoot, MandateID: "mandate-denied", ProjectID: projectID}); err == nil {
+		t.Fatal("expected authorization denial")
+	}
+}
+
 func TestEnsureGravityMandateNodeActivityIsIdempotent(t *testing.T) {
 	_, mandatesRoot, _, projectID := gravitySpineFixture(t)
 	input := EnsureGravityMandateNodeInput{MandatesRoot: mandatesRoot, MandateID: "mandate-retry", ProjectID: projectID}
@@ -146,12 +171,27 @@ func TestEnsureGravityMandateNodeActivityFailsClosedWithoutProjectID(t *testing.
 	}
 }
 
-func TestEnsureGravityMandateNodeActivityFailsClosedWhenProjectMissing(t *testing.T) {
+func TestEnsureGravityMandateNodeActivityCreatesProjectWhenMissing(t *testing.T) {
 	_, mandatesRoot, _, _ := gravitySpineFixture(t)
-	if _, err := runEnsureGravityMandateNode(t, EnsureGravityMandateNodeInput{
+	result, err := runEnsureGravityMandateNode(t, EnsureGravityMandateNodeInput{
 		MandatesRoot: mandatesRoot, MandateID: "mandate-x", ProjectID: "no-existe",
-	}); err == nil {
-		t.Fatal("expected error when PROJECT node does not exist, got nil")
+	})
+	if err != nil {
+		t.Fatalf("expected governed PROJECT creation, got %v", err)
+	}
+	if !result.Created {
+		t.Fatal("expected MANDATE creation after governed PROJECT creation")
+	}
+}
+
+func TestEnsureGravityMandateNodeActivityRejectsIncompatibleProject(t *testing.T) {
+	nucleusRoot, mandatesRoot, orgID, projectID := gravitySpineFixture(t)
+	store, _ := gravity.NewStore(nucleusRoot)
+	path := filepath.Join(store.Root, ".organization", orgID, ".project", projectID, "node.json")
+	wrongParent := "wrong-org"
+	seedNodeDirect(t, path, gravity.GravityNode{NodeID: projectID, NodeType: gravity.NodeProject, ParentID: &wrongParent, Status: gravity.NodeActive})
+	if _, err := runEnsureGravityMandateNode(t, EnsureGravityMandateNodeInput{MandatesRoot: mandatesRoot, MandateID: "mandate-x", ProjectID: projectID}); err == nil {
+		t.Fatal("expected incompatible PROJECT rejection")
 	}
 }
 
