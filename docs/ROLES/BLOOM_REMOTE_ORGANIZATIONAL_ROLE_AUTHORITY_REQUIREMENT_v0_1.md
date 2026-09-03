@@ -660,3 +660,93 @@ design and require separate implementation approval.
 This contribution updates the collective architectural direction but does not
 override the non-decisions in §17 concerning concrete schemas, endpoints,
 events, cryptographic profiles, intervals, or code changes.
+
+## 20. NUCLEUS architectural contribution
+
+**Contribution status:** structural authorization methodology and migration
+impact approved by José Vigil on 2026-09-02. Package names, persistence files,
+APIs, commands, events, schemas, TTLs, cryptographic profiles, and implementation
+changes remain subject to separate approval.
+
+The remote authority model is not satisfied by placing a snapshot reader in
+front of the current local role checks. It requires Nucleus to separate four
+responsibilities that the legacy implementation currently mixes:
+
+```text
+synchronization and receipt
+    → cryptographic and semantic verification
+    → monotonic acceptance and reconciliation
+    → contextual effective authorization
+```
+
+Receipt never grants authority. Only an accepted Authority Snapshot may
+participate in an authorization decision, and that decision must additionally
+apply the active organization, exact actor/action/target, assignment scope and
+validity, Sovereign Policy, applicable GravityPostures, Vault and Executor
+boundaries, and current technical and environmental limits.
+
+### 20.1 Required internal responsibility separation
+
+Nucleus must eventually provide distinct conceptual responsibilities for:
+
+- authenticating or receiving a trustworthy local actor identity;
+- independently verifying snapshot issuer, signature, organization binding,
+  digest, version, validity, and required freshness;
+- persisting the accepted snapshot and its organization-scoped high-water mark
+  outside ordinary replaceable application artifacts;
+- detecting replay, downgrade, version gaps, digest conflicts, expiry, and
+  reconciliation requirements;
+- resolving principals, memberships, role definitions, assignments, scopes,
+  validity, suspension, expiry, and revocation from accepted remote state;
+- evaluating a single local authorization query and producing an auditable,
+  bounded decision for consumers;
+- propagating denial or revocation effects to Vault, Executor, active sessions,
+  and privileged Mandate steps without transferring ownership to those
+  components;
+- operating the explicit `local_legacy`, `shadow_remote`, and
+  `remote_enforced` migration modes.
+
+These are responsibility requirements, not approved Go packages, stores,
+interfaces, or filenames.
+
+### 20.2 Legacy guards and cutover impact
+
+The current `.master`, `.specialist`, `GetUserRole()`,
+`team_members[].role`, local team mutation commands, and direct reads of
+`.ownership.json` remain legacy behavior only while the installation is in
+`local_legacy`. During `shadow_remote`, Nucleus compares legacy outcomes with
+remote-derived outcomes and records divergence without changing production
+authorization. After the controlled transition to `remote_enforced`, none of
+those local values may grant membership, role, scope, or privilege.
+
+All privileged entry points must ultimately consult the same Nucleus-owned
+effective authorization decision rather than reproduce role checks in Vault,
+Mandates, Alfred, Brain, UI code, or other consumers. The transition must be
+fail-closed and must never combine local and remote results by choosing the more
+permissive outcome.
+
+### 20.3 Revocation is an operational security transition
+
+Revocation is not only a data synchronization event. Once verified and
+accepted, it may require Nucleus to prevent new operations, invalidate cached
+decisions, revoke or refuse Vault credential access, stop new Executor attempts,
+and require in-flight workflows to revalidate before later privileged steps.
+Whether an affected operation is cancelled, paused, drained, or allowed to
+reach a safe checkpoint remains a policy and lifecycle decision requiring
+separate approval.
+
+Failure to reach Backend, Batcave, Temporal, Vault, Executor, or Gravity cannot
+be interpreted as proof that authority remains valid. The approved offline
+direction in §19.4 governs until exact freshness classes and revocation timing
+are agreed.
+
+### 20.4 Decision and audit separation
+
+Nucleus must distinguish remote organizational facts, the locally accepted
+projection, the effective authorization decision, and execution evidence. A
+local audit record must identify the actor, organization, requested action and
+target, accepted authority version, decision, reason, applicable constraints,
+and correlation information without becoming a second source of authority.
+
+This contribution confirms the structural change required inside Nucleus while
+preserving every non-decision in §17.

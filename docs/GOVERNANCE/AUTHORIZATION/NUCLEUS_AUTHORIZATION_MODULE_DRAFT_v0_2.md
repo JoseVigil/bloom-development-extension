@@ -2,6 +2,16 @@
 
 **Estado:** DRAFT / PROPUESTA — no es contrato aprobado.
 
+> **Nota de evolución aprobada (2026-09-02):** la premisa de este borrador que
+> ubica roles y autoridad organizacional en `.ownership.json` fue superada por
+> `docs/ROLES/BLOOM_REMOTE_ORGANIZATIONAL_ROLE_AUTHORITY_REQUIREMENT_v0_1.md`
+> y la evolución coordinada de `docs/BATCAVE/BATCAVE_ARCHITECTURE.md` §11.
+> Se conserva el contenido original como caracterización del modelo
+> `local_legacy`. La dirección vigente exige Backend como fuente de verdad
+> organizacional, Authority Snapshots transportados por Batcave y verificados
+> por Nucleus, y autorización efectiva local propiedad de Nucleus. Las
+> superficies concretas de implementación continúan sin aprobar.
+
 **Cambios vs. v0.1:** incorpora hallazgo estructural a partir de `bloom_nucleus_tree.txt` y
 `bloom_project_tree.txt` — Nucleus no es un bloque opaco monolítico, tiene doble naturaleza (autoridad
 organizacional + proyecto propio que ejecuta sus propios intents). Esto resuelve una tensión que había
@@ -177,3 +187,142 @@ efímero vs. callback síncrono, decisión pendiente de José.
 
 *(sin cambios respecto a v0.1)* Ningún agente introduce mecanismos de autorización fuera de este
 documento. Toda necesidad detectada se reporta como fila pendiente acá.
+
+---
+
+## 10. Evolución requerida de la metodología de autorización
+
+**Estado de esta sección:** dirección estructural aprobada por José Vigil el
+2026-09-02; interfaces, schemas, packages, stores, archivos, eventos, TTLs y
+perfil criptográfico pendientes de aprobación específica.
+
+Las secciones 1–8 describen el modelo local previo. No deben utilizarse para
+inferir que `.ownership.json`, `.master`, `.specialist` o un `actor_role`
+declarado continúan siendo la fuente final de autorización después del cutover.
+
+### 10.1 Principio rector actualizado
+
+Nucleus conserva un único punto de decisión efectiva, pero su entrada ya no es
+un rol local aislado. La decisión debe resultar de la intersección de:
+
+```text
+principal autenticado y organización activa
+∩ Authority Snapshot remoto verificado y aceptado
+∩ membership, assignment, scope y vigencia
+∩ acción y target exactos
+∩ Sovereign Policy
+∩ GravityPostures aplicables
+∩ reglas de Vault
+∩ límites de Executor
+∩ límites técnicos y ambientales
+= decisión efectiva local
+```
+
+Backend conserva principals, memberships, definiciones y asignaciones de roles,
+vigencias y revocaciones. Batcave autentica sesiones, transporta y cachea el
+estado, pero no decide roles ni permisos. Nucleus verifica y decide. Brain y
+Temporal ejecutan solamente la operación autorizada. Metamorph permanece fuera
+del transporte ordinario y del rollback de autoridad mutable.
+
+### 10.2 Separación de responsabilidades internas
+
+El modelo objetivo requiere separar conceptualmente:
+
+1. recepción y sincronización del Authority Snapshot;
+2. verificación criptográfica y semántica independiente;
+3. aceptación monotónica, persistencia y reconciliación;
+4. resolución de identidad, membership, assignments, scopes y vigencia;
+5. evaluación contextual de autorización;
+6. propagación de restricciones y revocaciones a boundaries locales;
+7. auditoría de la decisión sin convertirla en una fuente alternativa.
+
+Recibir o cachear un snapshot nunca concede autoridad. Sólo una versión
+aceptada por Nucleus puede participar en una decisión.
+
+### 10.3 Estado monotónico y anti-downgrade
+
+Nucleus debe conservar por organización un high-water mark separado del
+snapshot reemplazable y de los artefactos de aplicación:
+
+```text
+versión recibida < versión aceptada          → rechazo
+misma versión + mismo digest                 → replay idempotente
+misma versión + digest diferente             → incidente de integridad
+versión recibida > versión aceptada          → candidata tras verificación completa
+```
+
+Rollback de software, restore de Batcave, edición local o reinstalación no
+pueden reducir este estado ni restaurar una membership o permiso revocado. Un
+procedimiento break-glass, si se aprueba, será un contrato de governance
+separado y no un flag `force` ordinario.
+
+### 10.4 Migración explícita
+
+La transición se realiza mediante modos mutuamente excluyentes:
+
+```text
+local_legacy → shadow_remote → remote_enforced
+```
+
+- `local_legacy` caracteriza y conserva temporalmente los guards actuales.
+- `shadow_remote` verifica snapshots y registra divergencias sin cambiar la
+  autorización productiva.
+- `remote_enforced` elimina la capacidad de los archivos y marcadores locales
+  para conceder membership, rol, scope o privilegio.
+
+Ningún modo puede combinar autoridad local y remota seleccionando el resultado
+más permisivo. El cutover requiere identidad resuelta, trust binding aceptado,
+snapshot inicial válido y high-water mark persistido.
+
+### 10.5 Impacto sobre guards existentes
+
+Los checks directos contra `GetUserRole()`, `.master`, `.specialist`,
+`team_members[].role` y lecturas de `.ownership.json` son superficies legacy.
+Todos los entry points privilegiados deberán migrar a una decisión única de
+Nucleus. Vault, Mandates, Alfred, Brain, UI y Executor no deben reimplementar
+roles ni interpretar directamente el snapshot.
+
+`.ownership.json` puede sobrevivir como bootstrap y trust binding local, pero
+después de `remote_enforced` una edición de ese archivo nunca puede elevar o
+restaurar autoridad.
+
+### 10.6 Revocación, offline y trabajo en curso
+
+Una revocación aceptada puede bloquear nuevas operaciones, invalidar decisiones
+cacheadas, afectar accesos de Vault, impedir nuevos attempts de Executor y
+obligar a que workflows en curso revaliden antes de pasos privilegiados. La
+elección entre cancelar, pausar, drenar o alcanzar un checkpoint seguro requiere
+una decisión posterior de policy y lifecycle.
+
+La pérdida de conectividad no extiende autoridad. Un snapshot aceptado continúa
+siendo utilizable sólo mientras cumpla la vigencia y frescura aprobadas. Después
+de expirar, Nucleus entra en modo restringido fail-closed para nuevas acciones
+que dependan de autoridad organizacional. Diagnóstico, observación y operaciones
+que reduzcan riesgo pueden continuar únicamente conforme a la política offline
+aprobada.
+
+### 10.7 Consulta, decisión y auditoría objetivo
+
+La forma concreta de la interfaz sigue abierta, pero toda consulta deberá
+representar como mínimo actor, organización, acción, target, scope solicitado y
+contexto técnico relevante. Toda decisión deberá ser bounded y correlacionable
+con la versión de autoridad aceptada, policies y Gravity aplicadas, límites
+resultantes, razón y vigencia.
+
+El registro de auditoría local debe distinguir:
+
+- hechos organizacionales remotos;
+- proyección verificada y aceptada;
+- decisión efectiva de Nucleus;
+- evidencia posterior de ejecución.
+
+Ninguno de esos registros derivados puede convertirse en una segunda fuente de
+autoridad organizacional.
+
+### 10.8 No-decisiones preservadas
+
+Esta actualización no aprueba tablas, endpoints, topics, payload schemas,
+algoritmos, claves, trust stores, TTLs, intervalos, nombres de interfaces,
+packages, archivos ni cambios de código. Tampoco aprueba un catálogo final de
+roles o una política concreta para operaciones offline y revocación de trabajo
+en curso.

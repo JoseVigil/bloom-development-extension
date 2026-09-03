@@ -927,6 +927,30 @@ Solo en el paso 5 `.ownership.json` deja definitivamente de ser fuente de
 autoridad. Esta sección no autoriza todavía schemas, endpoints, eventos ni
 cambios de código; esas superficies requieren aprobación puntual posterior.
 
+### 11.8 Implicación estructural para Nucleus
+
+La entrega del Authority Snapshot no se integra como una simple lectura previa
+a los guards locales existentes. El modelo remoto exige que Nucleus separe
+recepción, verificación independiente, aceptación monotónica, reconciliación y
+decisión efectiva. Batcave termina su responsabilidad al autenticar la sesión,
+aplicar controles de transporte y entregar los bytes y metadatos exactos; no
+puede convertir un snapshot recibido o cacheado en autoridad local.
+
+Nucleus es dueño de:
+
+- verificar organización, issuer, firma, digest, versión, vigencia y frescura;
+- conservar el snapshot aceptado, el high-water mark y el modo de migración;
+- resolver principal, membership, asignaciones, scopes y revocaciones;
+- combinar ese estado con Sovereign Policy, GravityPostures, Vault, Executor y
+  límites técnicos y ambientales;
+- registrar y exponer la decisión efectiva a los consumidores locales.
+
+Estas responsabilidades no aprueban nombres de packages, stores, APIs, eventos
+o archivos internos de Nucleus. Su diseño detallado pertenece al Work NUCLEUS.
+La contribución coordinada se documenta en
+`docs/ROLES/BLOOM_REMOTE_ORGANIZATIONAL_ROLE_AUTHORITY_REQUIREMENT_v0_1.md`
+§20.
+
 ---
 
 ## 12. Invariantes críticos
