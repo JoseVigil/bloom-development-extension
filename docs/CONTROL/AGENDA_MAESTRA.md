@@ -64,6 +64,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
 | 10 | PALADIN / Distribución por composición | PALADIN confirmado como producto Cognituum para ingenieros; principio de una plataforma con composición individual u organizacional bajo análisis | Resolver gobernanza, contrato de composición, bootstrap y transiciones antes de diseñar la implementación | Nucleus; Metamorph; Installer/Setup; AUTHORIZATION; Batcave; Core; propiedad de Mandates y Wisdom |
 | 11 | Gravity / Orbital Agentic State / Posture | Persistencia, resolución, masa y gramática formal dual implementadas y probadas; integración productiva pendiente | Integrar resolución/parser en Nucleus, Temporal y Conductor Workspace Core | AUTHORIZATION (Tema 9, para Architect); PALADIN (Tema 10, para Postura/UX); Nucleus; Temporal; Core |
+| 12 | ROLES / Autoridad Organizacional Remota | Dirección arquitectónica consolidada; no existe todavía modelo remoto productivo, Authority Snapshot ni sincronización Backend → Batcave → Nucleus | Aprobar modelo conceptual y abrir el diseño coordinado del Authority Snapshot, sin anticipar wire schema | Backend; Batcave; Nucleus; Metamorph; AUTHORIZATION; PALADIN; Mandate Genesis |
 
 ---
 
@@ -557,6 +558,63 @@ Claude Web/Cowork para las decisiones restantes de diseño; Codex o Claude Code 
 
 ---
 
+## 12. ROLES / Autoridad Organizacional Remota
+
+**Estado actual**
+
+Existe una dirección arquitectónica consolidada para la autoridad organizacional, pero no una implementación end-to-end. La cadena objetivo es:
+
+```text
+Backend organizacional
+  → Batcave: transporte, sincronización y cache
+  → Nucleus: verificación y autorización efectiva local
+  → Brain / Temporal: ejecución acotada ya autorizada
+```
+
+La verdad material vigente continúa siendo local y fail-closed: Nucleus reconoce únicamente `Master`, `Specialist` y `Unknown`; `.master` y `.specialist` participan de la detección efectiva. `Architect` aparece en fuentes históricas y borradores, pero no está aprobado ni materializado en el enum, marcadores, detección, asignación o guards. `team_members[].role` es una declaración administrativa local y no constituye una cadena verificable de identity, membership, asignación, vigencia y revocación.
+
+El modelo remoto objetivo preserva en Backend la fuente organizacional de principals, identidades externas vinculadas, memberships, definiciones de rol, asignaciones scoped, vigencias, revocaciones, auditoría y versión monotónica. Batcave autentica sesión y transporta/sincroniza/cachea los bytes y metadatos exactos del Authority Snapshot; no crea roles, concede permisos ni reemplaza la verificación independiente de Nucleus. Nucleus acepta únicamente snapshots con organización, procedencia, integridad, firma, vigencia y versión monotónica verificadas; mantiene un high-water mark durable y calcula la autorización efectiva junto con políticas soberanas, Gravity, Vault, Executor y límites técnicos.
+
+Brain y Temporal no reconstruyen autoridad desde archivos locales ni datos parciales: reciben la operación y sus límites ya autorizados. Metamorph conserva lifecycle, instalación, actualización, rollback técnico y preservación de estado durable, pero no participa del transporte ordinario ni decide autoridad. Un rollback técnico no puede disminuir el high-water mark ni restaurar membresías, asignaciones o permisos revocados.
+
+Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION conserva los fixes locales, roles fail-closed, gates y enforcement inmediato; ROLES gobierna la transición end-to-end hacia autoridad organizacional remota.
+
+**Fuentes de verdad**
+
+- `docs/ROLES/BLOOM_ROLES_ORGANIZATIONAL_AUTHORITY_CONSOLIDATION_v0_1.md`
+- `docs/ROLES/BLOOM_ROLES_DISCOVERY_BASE_v0_1.md`
+- `docs/BATCAVE/BATCAVE_ARCHITECTURE.md`
+- Tema 8 / Batcave, Tema 9 / AUTHORIZATION y Tema 10 / PALADIN de esta agenda.
+
+**Próximo paso concreto**
+
+1. Aprobar el modelo conceptual que separa identidad, membership, definición de rol, asignación scoped, permisos y vigencia.
+2. Abrir el diseño coordinado del Authority Snapshot entre Backend, Batcave y Nucleus, sin anticipar tablas, endpoints, eventos, stores, perfil criptográfico ni wire schema.
+3. Diseñar por separado producción/versionado monotónico, transporte/cache, verificación/aceptación local, high-water mark, revocación, freshness, operación offline y revalidación de pasos privilegiados.
+4. Definir criterios de entrada y salida de la migración `local_legacy → shadow_remote → remote_enforced`.
+
+**Dependencias cruzadas**
+
+- Tema 8 / Batcave: transporta, sincroniza y cachea Authority Snapshots; su gate de sesión no sustituye autorización efectiva.
+- Tema 9 / AUTHORIZATION: mantiene el enforcement local actual y deberá coordinar sus boundaries API con la futura decisión efectiva de Nucleus.
+- Tema 10 / PALADIN: la composición individual u organizacional depende de identidad, autoridad, expiración, revocación y transiciones gobernadas.
+- Tema 1 / Mandate Genesis: creación, firma, promoción, integración e instalación reales requieren una decisión efectiva vigente de Nucleus; los gates locales siguen siendo el enforcement material mientras rija `local_legacy`.
+- Tema 11 / Gravity: Gravity puede restringir una operación autorizada, pero nunca crea roles ni concede permisos faltantes.
+
+**Decisiones/riesgos abiertos**
+
+- No existe Authority Snapshot implementado ni sincronización Backend → Batcave → Nucleus para roles.
+- No existe todavía enforcement `shadow_remote` ni `remote_enforced`; tampoco hay revocación corporativa extremo a extremo.
+- Permanecen sin aprobación el catálogo de roles, la existencia de `Architect`, roles personalizados, scopes, herencia, múltiples Masters, separación de funciones e invitación/aceptación/suspensión/revocación.
+- Permanecen abiertos el wire schema, perfil criptográfico, rotación de claves, TTL/freshness, latencia de revocación, snapshots completos o incrementales y acknowledgements de recibido, verificado y aceptado.
+- Deben resistirse downgrade, replay inválido, conflicto de digest, expiración offline y rollback técnico sin que ningún archivo local restaure autoridad revocada.
+
+**Informe a AGENDA FOLLOWUP**
+
+Se informa la apertura del hito transversal **ROLES / Autoridad Organizacional Remota**. La dirección aprobada para investigación es Backend como verdad organizacional, Batcave como transporte/sincronización/cache, Nucleus como verificador y decisor efectivo local, y Brain/Temporal como ejecutores acotados. No existe todavía un modelo remoto productivo, Authority Snapshot ni sincronización end-to-end. El próximo Work es aprobar el modelo conceptual y diseñar coordinadamente el Authority Snapshot sin anticipar wire schema ni cambios de implementación. AUTHORIZATION mantiene en paralelo sus fixes y gates locales; este hito no los sustituye ni los declara cerrados.
+
+---
+
 ## Cola de prompts para sesiones externas
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
@@ -579,6 +637,7 @@ Claude Web/Cowork para las decisiones restantes de diseño; Codex o Claude Code 
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
 | Alta | 11 | Integración productiva de Gravity: workflow Temporal, validación autoritativa Nucleus y empaquetado en Conductor Workspace Core | Persistencia, resolución, masa y parser dual implementados; no crear componente parser independiente |
 | Media | 11 | Evaluar si `BLOOM_Mandate_Package_Spec_v1_0_0.md` y `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` requieren investigación propia o se relacionan con Wisdom | Ninguna — solo decidir si se abre |
+| Alta | 12 | Aprobar el modelo conceptual de autoridad organizacional remota y abrir el diseño coordinado del Authority Snapshot | No anticipar wire schema, tablas, endpoints ni implementación; conservar el enforcement local del Tema 9 |
 
 ## Registro cronológico de avances
 
@@ -597,3 +656,4 @@ Claude Web/Cowork para las decisiones restantes de diseño; Codex o Claude Code 
 | 2026-08-26 | 10 / PALADIN | El Work de distribución para desarrolladores e ingenieros externos fue renombrado PALADIN, nombre del producto Cognituum para ingenieros. Se presentó el principio de una plataforma con composición individual u organizacional. | AGENDA FOLLOWUP, decisión y material compartidos por el usuario | Se registró PALADIN como nombre cerrado; la composición, su cadena de autoridad, bootstrap, transiciones y propiedad del conocimiento permanecen pendientes de gobernanza. |
 | 2026-08-29 | 11 / Gravity | Se completó la primera etapa de implementación real: persistencia `.bloom/.gravity/`, resolución activa, cálculo de masa, gramática ANTLR4 dual, parsers Go/TypeScript y preflight de build. | Work Génesis, reportado por el usuario | Se cerró el contrato de parseo y sus pruebas; integración con workflow, persistencia/firma autoritativa, Core y rollout quedan pendientes. |
 | 2026-08-29 | 1 | Se confirmó, con logs de producción de cuatro días distintos, que el bloqueador de resolución de workspace del watcher de Mandates está corregido y desplegado — no es un blocker activo. Causa real: regresión de esquema (campos planos obsoletos vs. esquema multi-organización), corregida también en `dev-start`. Se identificó el alcance ampliado del mecanismo compartido de resolución (Vault, Ownership, Blueprint, Alfred, metadata) sin evidencia de fallo. | Codex, reportado por el usuario | Se actualiza el estado del Tema 1: el bloqueador de infraestructura queda cerrado; el roadmap avanza al paso 2 (action graph). |
+| 2026-09-03 | 12 (nuevo) | Se consolida el hito transversal ROLES / Autoridad Organizacional Remota: Backend como verdad organizacional, Batcave como transporte/sincronización/cache, Nucleus como verificador y decisor efectivo, y Brain/Temporal como ejecución acotada. | Work ROLES, fuentes documentales y decisión del usuario | Se abre el Tema 12 y se informa a AGENDA FOLLOWUP. AUTHORIZATION conserva su enforcement local; el diseño del Authority Snapshot queda pendiente sin anticipar wire schema. |
