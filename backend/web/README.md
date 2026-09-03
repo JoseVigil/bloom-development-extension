@@ -22,16 +22,33 @@ ni carpeta.
 ## Cómo correr esto en desarrollo
 
 ```bash
-cd web
+cd backend/web
 npm install
 cp .env.example .env
 npm run dev
 ```
 
-Esto levanta Vite en `localhost:5173` y hace proxy de `/v1/*` hacia
-`localhost:8787` (el Worker de `backend/` corriendo con `wrangler dev`) — así
-que para probar de punta a punta hace falta tener las dos cosas corriendo:
-`backend/` (`npm run dev`) y `web/` (`npm run dev`), en dos terminales.
+Esto levanta Vite en `localhost:8788` (fijo, `strictPort` — ver "Puertos"
+abajo) y hace proxy de `/v1/*` hacia `localhost:8787` (el Worker de
+`backend/` corriendo con `wrangler dev`) — así que para probar de punta a
+punta hace falta tener las dos cosas corriendo: `backend/` (`npm run dev`)
+y `backend/web/` (`npm run dev`), en dos terminales.
+
+## Puertos
+
+Este repo tiene dos sistemas corriendo puertos locales que no se conocen
+entre sí: el Control Plane de Nucleus (`docs/BOOTSTRAP/BOOTSTRAP_CONTROL_PLANE.md`)
+y este backend/frontend de Cloudflare. Nunca elegir un puerto para acá sin
+chequear `docs/BACKEND/Registro_Puertos_Locales_v0_1.md` primero — ese
+documento es la fuente de verdad, esta tabla es solo un resumen:
+
+| Puerto | Servicio | Dueño |
+|---|---|---|
+| `8787` | Worker (`wrangler dev`) | este `backend/` |
+| `8788` | Vite dev server | este `backend/web/` |
+| `4124` | WebSocket server | Control Plane (Nucleus) — no tocar |
+| `48215` | API Fastify | Control Plane (Nucleus) — no tocar |
+| `5173` | Svelte dev server (webview) | Control Plane (Nucleus) — no tocar |
 
 ## Gap conocido — esto no funciona todavía de punta a punta
 
@@ -52,7 +69,7 @@ que todavía está en fase de investigación — no de implementación — así 
 no se construyeron acá.
 
 También falta, del lado de `backend/`, habilitar CORS para que un origen
-distinto (`localhost:5173` en desarrollo, el dominio de Pages en producción)
+distinto (`localhost:8788` en desarrollo, el dominio de Pages en producción)
 pueda llamarlo con `credentials: "include"` — hoy `src/index.ts` no tiene
 ningún middleware de CORS. No lo toqué porque es un archivo que está
 construyendo el work BACKEND de Codex.

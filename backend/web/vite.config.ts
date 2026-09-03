@@ -12,7 +12,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // 8788, NO 5173 (default de Vite): 5173 esta reservado por el Control
+    // Plane de Nucleus para el Svelte dev server de la webview — ver
+    // docs/BOOTSTRAP/BOOTSTRAP_CONTROL_PLANE.md y
+    // docs/BACKEND/Registro_Puertos_Locales_v0_1.md.
+    port: 8788,
+    strictPort: true,
     proxy: {
       // En desarrollo local, backend/ corre en localhost:8787 (wrangler dev).
       "/v1": {

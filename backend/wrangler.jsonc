@@ -3,6 +3,11 @@
   "name": "bloom-backend",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-29",
+  "dev": {
+    // Explicito, no default implicito de wrangler: ver
+    // docs/BACKEND/Registro_Puertos_Locales_v0_1.md.
+    "port": 8787
+  },
   "d1_databases": [
     {
       "binding": "DB",
