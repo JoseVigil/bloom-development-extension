@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +17,7 @@ var (
 	ErrVersionConflict        = errors.New("gravity nodeVersion conflict")
 	ErrGovernedNodeCreation   = errors.New("ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design")
 	ErrStructuralNodeCreation = errors.New("DOMAIN/GENE node creation requires a governed structural projection operation — not yet authorized or wired; rejecting by design")
+	ErrNucleusAlreadyExists   = errors.New("NUCLEUS node already exists under this root — a Gravity tree admits exactly one NUCLEUS by structural invariant")
 )
 
 type Store struct{ Root string }
@@ -61,11 +63,20 @@ func (s *Store) ReadNode(path string) (GravityNode, error) {
 // CreateNode writes a new entity with nodeVersion=1. Existing entities are
 // never overwritten through this entry point.
 func (s *Store) CreateNode(path string, node GravityNode) error {
-	if node.NodeType == NodeOrganization || node.NodeType == NodeNucleus {
+	if node.NodeType == NodeOrganization {
 		return ErrGovernedNodeCreation
 	}
 	if node.NodeType == NodeDomain || node.NodeType == NodeGene {
 		return ErrStructuralNodeCreation
+	}
+	if node.NodeType == NodeNucleus {
+		exists, err := s.nucleusExists()
+		if err != nil {
+			return err
+		}
+		if exists {
+			return ErrNucleusAlreadyExists
+		}
 	}
 	if err := s.requireInside(path); err != nil {
 		return err
@@ -91,6 +102,33 @@ func (s *Store) CreateNode(path string, node GravityNode) error {
 		return err
 	}
 	return atomicWriteNode(path, node)
+}
+
+func (s *Store) nucleusExists() (bool, error) {
+	found := errors.New("gravity NUCLEUS node found")
+	err := filepath.WalkDir(s.Root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() != "node.json" {
+			return nil
+		}
+		node, err := s.ReadNode(path)
+		if err != nil {
+			return err
+		}
+		if node.NodeType == NodeNucleus {
+			return found
+		}
+		return nil
+	})
+	if errors.Is(err, found) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // CompareAndSwap serializes writers and rejects a stale expected version.

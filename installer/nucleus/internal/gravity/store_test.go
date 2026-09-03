@@ -45,32 +45,51 @@ func TestStoreRejectsPathOutsideGravity(t *testing.T) {
 	}
 }
 
-func TestStoreCreateNodeRejectsOrganizationAndNucleus(t *testing.T) {
+func TestStoreCreateNodeCreatesExactlyOneNucleus(t *testing.T) {
 	store, _ := NewStore(t.TempDir())
 	if err := store.EnsureLayout(); err != nil {
 		t.Fatal(err)
 	}
-	tests := []struct {
-		name string
-		node GravityNode
-		path string
-	}{
-		{"NUCLEUS", testNode("nucleus", NodeNucleus, nil), filepath.Join(store.Root, "nucleus.node.json")},
-		{"ORGANIZATION", testNode("org", NodeOrganization, ptr("nucleus")), filepath.Join(store.Root, ".organization", "org", "node.json")},
+	firstPath := filepath.Join(store.Root, "node.json")
+	if err := store.CreateNode(firstPath, testNode("nucleus", NodeNucleus, nil)); err != nil {
+		t.Fatalf("first NUCLEUS CreateNode() unexpected error: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := store.CreateNode(tt.path, tt.node)
-			if !errors.Is(err, ErrGovernedNodeCreation) {
-				t.Fatalf("CreateNode() error = %v, want ErrGovernedNodeCreation", err)
-			}
-			if got, want := err.Error(), "ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design"; got != want {
-				t.Fatalf("error = %q, want %q", got, want)
-			}
-			if _, statErr := os.Stat(tt.path); !os.IsNotExist(statErr) {
-				t.Fatalf("rejected node was persisted: stat error = %v", statErr)
-			}
-		})
+	persisted, err := store.ReadNode(firstPath)
+	if err != nil {
+		t.Fatalf("ReadNode(first NUCLEUS) error: %v", err)
+	}
+	if persisted.NodeType != NodeNucleus || persisted.ParentID != nil {
+		t.Fatalf("persisted NUCLEUS = %+v, want NodeNucleus with nil ParentID", persisted)
+	}
+
+	secondPath := filepath.Join(store.Root, ".duplicate", "node.json")
+	err = store.CreateNode(secondPath, testNode("nucleus-2", NodeNucleus, nil))
+	if !errors.Is(err, ErrNucleusAlreadyExists) {
+		t.Fatalf("second NUCLEUS CreateNode() error = %v, want ErrNucleusAlreadyExists", err)
+	}
+	if got, want := err.Error(), "NUCLEUS node already exists under this root — a Gravity tree admits exactly one NUCLEUS by structural invariant"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	if _, statErr := os.Stat(secondPath); !os.IsNotExist(statErr) {
+		t.Fatalf("second NUCLEUS was persisted: stat error = %v", statErr)
+	}
+}
+
+func TestStoreCreateNodeStillRejectsOrganization(t *testing.T) {
+	store, _ := NewStore(t.TempDir())
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(store.Root, ".organization", "org", "node.json")
+	err := store.CreateNode(path, testNode("org", NodeOrganization, ptr("nucleus")))
+	if !errors.Is(err, ErrGovernedNodeCreation) {
+		t.Fatalf("CreateNode() error = %v, want ErrGovernedNodeCreation", err)
+	}
+	if got, want := err.Error(), "ORGANIZATION/NUCLEUS node creation requires a governed authorization decision — not yet wired; rejecting by design"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("rejected ORGANIZATION was persisted: stat error = %v", statErr)
 	}
 }
 
