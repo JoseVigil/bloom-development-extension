@@ -73,9 +73,14 @@ func genesisWorkflowFixture(t *testing.T) (env *testsuite.TestWorkflowEnvironmen
 	// documentan los mocks de ScaffoldDomainActivity/PersistExecutionResultActivity
 	// más arriba.
 	env.OnActivity(activities.EnsureGravityMandateNodeActivity, mock.Anything, mock.Anything).
-		Return(activities.EnsureGravityMandateNodeResult{
-			NucleusRoot: "fixture-nucleus", OrganizationID: "org-fixture", MandateNodePath: "fixture-mandate-path", Created: true,
-		}, nil)
+		Return(func(_ context.Context, input activities.EnsureGravityMandateNodeInput) (activities.EnsureGravityMandateNodeResult, error) {
+			if input.ProjectID != "project-id-fixture" {
+				return activities.EnsureGravityMandateNodeResult{}, errors.New("ProjectID no llegó al child MandateExecutionWorkflow")
+			}
+			return activities.EnsureGravityMandateNodeResult{
+				NucleusRoot: "fixture-nucleus", OrganizationID: "org-fixture", MandateNodePath: "fixture-mandate-path", Created: true,
+			}, nil
+		})
 	env.OnActivity(activities.CreateGravitySessionActivity, mock.Anything, mock.Anything).
 		Return(activities.CreateGravitySessionResult{SessionNodePath: "fixture-session-path", Created: true}, nil)
 	env.OnActivity(activities.ResolveActiveGravityActivity, mock.Anything, mock.Anything).
@@ -100,7 +105,7 @@ func TestMandateGenesisSignatureEventFollowsDurableSignedState(t *testing.T) {
 			*order = append(*order, "state:signed")
 			return activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil
 		})
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m1", MandateType: "genesis", Project: "fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m1", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +142,7 @@ func TestMandateGenesisAdvancesPhaseInOrderThroughCompletion(t *testing.T) {
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil)
 
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m3", MandateType: "genesis", Project: "fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m3", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +178,7 @@ func TestMandateGenesisDoesNotAdvanceToCompletedWhenExecutionFails(t *testing.T)
 	// cluster (Mode:dry_run, en el padre) sigue funcionando normalmente.
 	*failRealScaffold = true
 
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m4", MandateType: "genesis", Project: "fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m4", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("no se esperaba error de workflow (soft-failure vía execResult.Success): %v", err)
 	}
@@ -198,7 +203,7 @@ func TestMandateGenesisSignatureFailurePersistsBeforeErrorEvent(t *testing.T) {
 			*order = append(*order, "state:failed")
 			return activities.PersistSignatureFailureResult{StateVersion: 3}, nil
 		})
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m2", MandateType: "genesis", Project: "fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m2", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if env.GetWorkflowError() == nil {
 		t.Fatal("expected workflow failure")
 	}

@@ -484,6 +484,8 @@ export async function listMandates(): Promise<{ mandates: MandateSummary[] }> {
 
 export interface CreateMandateParams {
   mandateType: 'genesis' | 'domain_expansion' | 'standard';
+  /** Identidad durable del proyecto; requerida para genesis/domain_expansion. */
+  projectId?: string;
   project: string;
   /** Requerido por el schema del server para genesis/domain_expansion/standard (GenesisCreateBody.name, ver create-mandate.schema.ts). */
   name: string;

@@ -557,7 +557,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       // getOrCreateProject busca por project_name (todavía no tenemos
       // project_id en este punto del flujo) y deja active_project_id
       // apuntando al proyecto resuelto.
-      getOrCreateProject(data.onboarding, org, {
+      const project = getOrCreateProject(data.onboarding, org, {
         projectName,
         projectPath: projectPath || null,
       });
@@ -574,7 +574,14 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       }
       data.onboarding.updated_at = new Date().toISOString();
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
-      return { success: true };
+      return {
+        success: true,
+        project: {
+          projectId: project.project_id,
+          projectName: project.project_name,
+          projectPath: project.project_path,
+        },
+      };
     } catch (err) {
       log.error('[IPC] onboarding:select-project — FAILED:', err.message);
       return { success: false, error: err.message };
@@ -735,7 +742,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // solo recibe la URL — así que se usa el mismo patrón que ya domina este
   // archivo: un flag persistido en nucleus.json, consumido y borrado por el
   // otro lado (ver 'onboarding:consume-pending-genesis-launch' más abajo).
-  ipcMain.handle('onboarding:complete', async (event, { workspaceUrl }) => {
+  ipcMain.handle('onboarding:complete', async (event, { workspaceUrl, projectId }) => {
     log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:5173');
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
@@ -747,23 +754,33 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         current_step:  'success'
       };
 
-      // Resolver el proyecto activo (elegido en project_select) para armar
-      // el flag. migrateToNestedSchema es idempotente — seguro llamarla acá
-      // aunque ya haya corrido antes en este mismo onboarding.
+      // Resolver por identidad explícita, no por nombre ni por la noción de
+      // "proyecto activo": puede haber varios proyectos operando a la vez.
       migrateToNestedSchema(nucleusData.onboarding);
-      const activeProject = getActiveProject(nucleusData.onboarding);
-      if (activeProject?.project_name) {
-        nucleusData.onboarding.pending_genesis_launch = {
-          project:     activeProject.project_name,
-          projectPath: activeProject.project_path || '',
-        };
-        log.info('[IPC] onboarding:complete — pending_genesis_launch escrito para project:', activeProject.project_name);
-      } else {
-        // No debería poder pasar (project_select/mandate_genesis son requires
-        // previos), pero si pasa, mejor no escribir un flag con datos vacíos
-        // que Core intentaría consumir sin proyecto real.
-        log.warn('[IPC] onboarding:complete — no hay proyecto activo, pending_genesis_launch NO se escribe');
+      if (!projectId) {
+        throw new Error('onboarding:complete requiere el projectId de la selección actual');
       }
+      const matches = (nucleusData.onboarding.organizations || [])
+        .flatMap(org => (org.projects || []).map(project => ({ org, project })))
+        .filter(({ project }) => project.project_id === projectId);
+      if (matches.length !== 1) {
+        throw new Error(`projectId ${projectId} no identifica exactamente un proyecto persistido`);
+      }
+      const selectedProject = matches[0].project;
+      if (!selectedProject.project_name) {
+        throw new Error(`projectId ${projectId} no tiene project_name persistido`);
+      }
+      nucleusData.onboarding.pending_genesis_launch = {
+        projectId:   selectedProject.project_id,
+        project:     selectedProject.project_name,
+        projectPath: selectedProject.project_path || '',
+      };
+      log.info(
+        '[IPC] onboarding:complete — pending_genesis_launch escrito para projectId:',
+        selectedProject.project_id,
+        '| project:',
+        selectedProject.project_name
+      );
 
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
 

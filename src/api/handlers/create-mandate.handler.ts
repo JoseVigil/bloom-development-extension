@@ -118,6 +118,7 @@ export async function createMandateHandler(
     // este mismo shape desde la unificación CLI/API sobre mandate_state.json.
     mandateId,
     mandateType: body.mandateType,
+    projectId: body.projectId,
     project: body.project,
     source: (body as any).source,
     baseGenesisId: (body as any).baseGenesis,

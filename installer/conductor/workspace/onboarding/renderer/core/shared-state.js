@@ -45,6 +45,7 @@ export const selection = {
   folderSelected: false,
   selectedProjectEl: null,
   selectedProject: null,   // { name, path }
+  selectedProjectId: null, // identidad durable devuelta por onboarding:select-project
 };
 
 // ── Copy dinámico (§7 del spec original) ──────────────────────────────────

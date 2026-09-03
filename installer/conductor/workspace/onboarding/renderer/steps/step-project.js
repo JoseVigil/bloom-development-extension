@@ -82,6 +82,7 @@ function hideImportStatus() {
 function resetProjectScreen() {
   hideImportStatus();
   selection.importedProjectPath = null;
+  selection.selectedProjectId = null;
   const btn = getContinueBtn();
   if (btn) {
     btn.disabled = true;
@@ -177,7 +178,13 @@ export async function importSelectedProject() {
     // Repo de GitHub — nada que copiar, la selección ya es la confirmación.
     selection.importedProjectPath = '';
     showImportStatus(`✓ "${project.name}" seleccionado — listo para continuar`, 'success');
-    await window.onboarding.selectProject({ projectName: project.name, projectPath: '' });
+    const selectResult = await window.onboarding.selectProject({ projectName: project.name, projectPath: '' });
+    if (!selectResult.success || !selectResult.project?.projectId) {
+      const error = selectResult?.error || 'La selección no devolvió un projectId';
+      showImportStatus(`No se pudo identificar el proyecto: ${error}`, 'error');
+      return;
+    }
+    selection.selectedProjectId = selectResult.project.projectId;
     if (btn) {
       btn.disabled = false;
       btn.onclick = advanceToMandateStep;
@@ -205,7 +212,16 @@ export async function importSelectedProject() {
   // en más (mandate genesis, project_path persistido, etc.).
   selection.importedProjectPath = importResult.destPath;
   showImportStatus(`✓ "${project.name}" importado — listo para continuar`, 'success');
-  await window.onboarding.selectProject({ projectName: project.name, projectPath: importResult.destPath });
+  const selectResult = await window.onboarding.selectProject({
+    projectName: project.name,
+    projectPath: importResult.destPath,
+  });
+  if (!selectResult.success || !selectResult.project?.projectId) {
+    const error = selectResult?.error || 'La selección no devolvió un projectId';
+    showImportStatus(`No se pudo identificar el proyecto: ${error}`, 'error');
+    return;
+  }
+  selection.selectedProjectId = selectResult.project.projectId;
 
   if (importResult.gitExcluded && importResult.gitExcluded.length > 0) {
     addNotification(

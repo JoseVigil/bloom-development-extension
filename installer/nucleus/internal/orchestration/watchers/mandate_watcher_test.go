@@ -32,6 +32,24 @@ func TestMandateGenesisDispatchPreservesClassificationFailure(t *testing.T) {
 	}
 }
 
+func TestGenesisBuildInputPreservesProjectID(t *testing.T) {
+	var state MandateState
+	if err := json.Unmarshal([]byte(`{
+		"mandateId":"mandate-fixture",
+		"project":"project-label",
+		"projectId":"project-id-fixture"
+	}`), &state); err != nil {
+		t.Fatal(err)
+	}
+	input := genesisBuildInput(state, "mandates-root")
+	if input.ProjectID != "project-id-fixture" {
+		t.Fatalf("ProjectID = %q, want project-id-fixture", input.ProjectID)
+	}
+	if input.Project != "project-label" {
+		t.Fatalf("Project = %q, want project-label", input.Project)
+	}
+}
+
 type syntheticGenesisTemporalClient struct {
 	state WorkflowExecutionState
 	err   error

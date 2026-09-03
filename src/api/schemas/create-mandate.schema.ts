@@ -29,6 +29,7 @@ export const GenesisCreateBody = Type.Object(
   {
     mandateId: Type.Optional(Type.String({ minLength: 1 })),
     mandateType: Type.Literal('genesis'),
+    projectId: Type.String({ minLength: 1 }),
     project: Type.String(),
     name: Type.String({ minLength: 1 }),
     source: Type.String({ minLength: 1 }),
@@ -40,6 +41,7 @@ export const DomainExpansionCreateBody = Type.Object(
   {
     mandateId: Type.Optional(Type.String({ minLength: 1 })),
     mandateType: Type.Literal('domain_expansion'),
+    projectId: Type.Optional(Type.String({ minLength: 1 })),
     project: Type.String(),
     name: Type.String({ minLength: 1 }),
     source: Type.String({ minLength: 1 }),

@@ -37,6 +37,7 @@ type MandateState struct {
 	BaseGenesisID string `json:"baseGenesisId,omitempty"`
 	Source        string `json:"source"`
 	Project       string `json:"project"`
+	ProjectID     string `json:"projectId"`
 	Status        string `json:"status"`
 	CurrentPhase  string `json:"currentPhase"`
 	StateVersion  int64  `json:"stateVersion"`
@@ -554,19 +555,7 @@ func persistReconciliation(path string, action reconciliationAction, reason stri
 // dispare un segundo workflow: mismo Workflow ID → Temporal devuelve
 // WorkflowExecutionAlreadyStarted, manejado abajo vía IsAlreadyStarted.
 func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateState) {
-	_, err := w.tc.StartMandateGenesisBuildWorkflow(ctx, ms.MandateID, workflows.GenesisBuildInput{
-		MandateID:     ms.MandateID,
-		MandateType:   ms.MandateType,
-		BaseGenesisID: ms.BaseGenesisID,
-		Source:        ms.Source,
-		Project:       ms.Project,
-		// MandatesRoot — CAMPO NUEVO esta sesión (Tarea 1). Sin esto,
-		// ScaffoldDomainActivity/SignMandateActivity/PersistHumanSyncActivity
-		// fallan al arrancar ("MandatesRoot vacío para mandate ..."). El
-		// watcher ya lo tenía disponible como campo propio
-		// (w.mandatesRoot, ver NewMandateWatcher) — solo faltaba pasarlo.
-		MandatesRoot: w.mandatesRoot,
-	})
+	_, err := w.tc.StartMandateGenesisBuildWorkflow(ctx, ms.MandateID, genesisBuildInput(ms, w.mandatesRoot))
 	if err != nil {
 		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &alreadyStarted) {
@@ -588,4 +577,21 @@ func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateSta
 		return
 	}
 	w.logger.Success("[mandate_watcher] MandateGenesisBuildWorkflow arrancado para mandate %s", ms.MandateID)
+}
+
+func genesisBuildInput(ms MandateState, mandatesRoot string) workflows.GenesisBuildInput {
+	return workflows.GenesisBuildInput{
+		MandateID:     ms.MandateID,
+		MandateType:   ms.MandateType,
+		BaseGenesisID: ms.BaseGenesisID,
+		Source:        ms.Source,
+		Project:       ms.Project,
+		ProjectID:     ms.ProjectID,
+		// MandatesRoot — CAMPO NUEVO esta sesión (Tarea 1). Sin esto,
+		// ScaffoldDomainActivity/SignMandateActivity/PersistHumanSyncActivity
+		// fallan al arrancar ("MandatesRoot vacío para mandate ..."). El
+		// watcher ya lo tenía disponible como campo propio
+		// (w.mandatesRoot, ver NewMandateWatcher) — solo faltaba pasarlo.
+		MandatesRoot: mandatesRoot,
+	}
 }

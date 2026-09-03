@@ -39,13 +39,21 @@ test('create genesis persists version and signature before publishing initiated'
   try {
     const mandateId = 'state-contract-fixture';
     await createMandateHandler({
-      body: { mandateId, mandateType: 'genesis', project: 'fixture', name: 'fixture', source: 'test' },
+      body: {
+        mandateId,
+        mandateType: 'genesis',
+        projectId: 'project-id-fixture',
+        project: 'fixture',
+        name: 'fixture',
+        source: 'test',
+      },
       log: { error() {}, warn() {} },
     }, replyFixture());
     assert.equal(observed.length, 1);
     const statePath = path.join(f.mandatesRoot, mandateId, 'mandate_state.json');
     assert.equal(fs.existsSync(statePath), true, 'event must only be emitted after state exists');
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.equal(state.projectId, 'project-id-fixture');
     assert.equal(state.stateVersion, 1);
     assert.equal(Number.isNaN(Date.parse(state.updatedAt)), false);
     assert.equal(state.signature.status, 'not_ready');

@@ -8,6 +8,7 @@
 
 import { log } from '../core/ipc-bridge.js';
 import { registerStepHandler, showSystemScreen } from '../core/navigation.js';
+import { selection } from '../core/shared-state.js';
 import { setStepperEstablished } from '../core/ui-stepper.js';
 
 function showCortex(msg) {
@@ -53,7 +54,16 @@ export async function completeOnboarding() {
   showCortex('Establishing workspace connection…');
   log('info', 'IPC → onboarding:complete');
 
-  const result = await window.onboarding.complete({ workspaceUrl: 'http://localhost:5173' });
+  if (!selection.selectedProjectId) {
+    log('error', 'completeOnboarding failed: no hay projectId para la selección actual');
+    showCortex('Handoff failed: el proyecto seleccionado no tiene una identidad válida.');
+    return;
+  }
+
+  const result = await window.onboarding.complete({
+    workspaceUrl: 'http://localhost:5173',
+    projectId: selection.selectedProjectId,
+  });
 
   log(result.success ? 'info' : 'error',
     `IPC ← onboarding:complete — success: ${result.success}`);

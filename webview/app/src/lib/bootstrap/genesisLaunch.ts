@@ -35,6 +35,7 @@
 import { createMandate as createMandateApi } from '$lib/api';
 
 type PendingGenesisLaunch = {
+  projectId: string;
   project: string;
   projectPath: string;
 };
@@ -84,12 +85,17 @@ export async function runPendingGenesisLaunch(): Promise<void> {
     // Onboarding recién cerrado — nada que hacer.
     return;
   }
+  if (!pending.projectId) {
+    console.error('[genesisLaunch] pending_genesis_launch sin projectId — no se crea el Mandate', pending);
+    return;
+  }
 
   console.log('[genesisLaunch] pending_genesis_launch encontrado — creando mandate vía Camino 2 (Fastify):', pending);
 
   try {
     const result = await createMandateApi({
       mandateType: 'genesis',
+      projectId: pending.projectId,
       project: pending.project,
       // No existe todavía un concepto de "nombre" separado del proyecto en
       // este flujo (ver mandate.go: la CLI tampoco lo pedía) — se reusa el
