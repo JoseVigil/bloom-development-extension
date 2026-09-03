@@ -64,7 +64,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
 | 10 | PALADIN / Distribución por composición | PALADIN confirmado como producto Cognituum para ingenieros; principio de una plataforma con composición individual u organizacional bajo análisis | Resolver gobernanza, contrato de composición, bootstrap y transiciones antes de diseñar la implementación | Nucleus; Metamorph; Installer/Setup; AUTHORIZATION; Batcave; Core; propiedad de Mandates y Wisdom |
 | 11 | Gravity / Orbital Agentic State / Posture | Persistencia, resolución, masa y gramática formal dual implementadas y probadas; integración productiva pendiente | Integrar resolución/parser en Nucleus, Temporal y Conductor Workspace Core | AUTHORIZATION (Tema 9, para Architect); PALADIN (Tema 10, para Postura/UX); Nucleus; Temporal; Core |
-| 12 | ROLES / Autoridad Organizacional Remota | Dirección arquitectónica consolidada; no existe todavía modelo remoto productivo, Authority Snapshot ni sincronización Backend → Batcave → Nucleus | Aprobar modelo conceptual y abrir el diseño coordinado del Authority Snapshot, sin anticipar wire schema | Backend; Batcave; Nucleus; Metamorph; AUTHORIZATION; PALADIN; Mandate Genesis |
+| 12 | ROLES / Autoridad Organizacional Remota | Contrato físico v0.1 aprobado; no existe implementación productiva ni sincronización Backend → Batcave → Nucleus | Preparar planes coordinados por Work y contratos de frontera, sin escritura | Backend; Batcave; Nucleus; Metamorph; AUTHORIZATION; PALADIN; Mandate Genesis |
 
 ---
 
@@ -562,7 +562,7 @@ Claude Web/Cowork para las decisiones restantes de diseño; Codex o Claude Code 
 
 **Estado actual**
 
-Existe una dirección arquitectónica consolidada para la autoridad organizacional, pero no una implementación end-to-end. La cadena objetivo es:
+El contrato físico interoperable de autoridad organizacional remota v0.1 está aprobado; no existe todavía una implementación end-to-end. La cadena contractual es:
 
 ```text
 Backend organizacional
@@ -571,11 +571,13 @@ Backend organizacional
   → Brain / Temporal: ejecución acotada ya autorizada
 ```
 
-La verdad material vigente continúa siendo local y fail-closed: Nucleus reconoce únicamente `Master`, `Specialist` y `Unknown`; `.master` y `.specialist` participan de la detección efectiva. `Architect` aparece en fuentes históricas y borradores, pero no está aprobado ni materializado en el enum, marcadores, detección, asignación o guards. `team_members[].role` es una declaración administrativa local y no constituye una cadena verificable de identity, membership, asignación, vigencia y revocación.
+La verdad material vigente continúa siendo local y fail-closed: Nucleus reconoce únicamente `Master`, `Specialist` y `Unknown`; `.master` y `.specialist` participan de la detección efectiva. `team_members[].role` es una declaración administrativa local y no constituye una cadena verificable de identity, membership, asignación, vigencia y revocación. La tensión con el contrato aprobado es intencional: se resuelve mediante `local_legacy → shadow_remote → remote_enforced`, no invalida el diseño ni habilita cambios implícitos.
 
 El modelo remoto objetivo preserva en Backend la fuente organizacional de principals, identidades externas vinculadas, memberships, definiciones de rol, asignaciones scoped, vigencias, revocaciones, auditoría y versión monotónica. Batcave autentica sesión y transporta/sincroniza/cachea los bytes y metadatos exactos del Authority Snapshot; no crea roles, concede permisos ni reemplaza la verificación independiente de Nucleus. Nucleus acepta únicamente snapshots con organización, procedencia, integridad, firma, vigencia y versión monotónica verificadas; mantiene un high-water mark durable y calcula la autorización efectiva junto con políticas soberanas, Gravity, Vault, Executor y límites técnicos.
 
-Brain y Temporal no reconstruyen autoridad desde archivos locales ni datos parciales: reciben la operación y sus límites ya autorizados. Metamorph conserva lifecycle, instalación, actualización, rollback técnico y preservación de estado durable, pero no participa del transporte ordinario ni decide autoridad. Un rollback técnico no puede disminuir el high-water mark ni restaurar membresías, asignaciones o permisos revocados.
+Brain y Temporal no reconstruyen autoridad desde archivos locales ni datos parciales: reciben la operación y sus límites ya autorizados y revalidan antes de cada paso privilegiado. Metamorph conserva lifecycle, instalación, actualización, rollback técnico y preservación de estado durable, pero no participa del transporte ordinario ni decide autoridad. Un rollback técnico no puede disminuir el high-water mark ni restaurar membresías, asignaciones o permisos revocados.
+
+El cutover válido produce conjuntamente **binding state `REMOTE_LOCKED` + authority mode `remote_enforced`**. No son sinónimos: `REMOTE_LOCKED` es el estado irreversible del binding tras el cutover; `remote_enforced` es el modo bajo el cual únicamente autoridad remota aceptada participa del enforcement productivo.
 
 Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION conserva los fixes locales, roles fail-closed, gates y enforcement inmediato; ROLES gobierna la transición end-to-end hacia autoridad organizacional remota.
 
@@ -583,15 +585,18 @@ Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION
 
 - `docs/ROLES/BLOOM_ROLES_ORGANIZATIONAL_AUTHORITY_CONSOLIDATION_v0_1.md`
 - `docs/ROLES/BLOOM_ROLES_DISCOVERY_BASE_v0_1.md`
+- `docs/ROLES/BLOOM_ORGANIZATIONAL_BINDING_SEMANTIC_CONTRACT_v0_1.md` (§7.7)
+- `docs/ROLES/BLOOM_AUTHORITY_SNAPSHOT_SEMANTIC_CONTRACT_v0_1.md` (§§8.5–8.6)
+- `docs/ROLES/BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md` (contrato físico aprobado)
 - `docs/BATCAVE/BATCAVE_ARCHITECTURE.md`
 - Tema 8 / Batcave, Tema 9 / AUTHORIZATION y Tema 10 / PALADIN de esta agenda.
 
 **Próximo paso concreto**
 
-1. Aprobar el modelo conceptual que separa identidad, membership, definición de rol, asignación scoped, permisos y vigencia.
-2. Abrir el diseño coordinado del Authority Snapshot entre Backend, Batcave y Nucleus, sin anticipar tablas, endpoints, eventos, stores, perfil criptográfico ni wire schema.
-3. Diseñar por separado producción/versionado monotónico, transporte/cache, verificación/aceptación local, high-water mark, revocación, freshness, operación offline y revalidación de pasos privilegiados.
-4. Definir criterios de entrada y salida de la migración `local_legacy → shadow_remote → remote_enforced`.
+1. Cada Work revisa exclusivamente su frontera contra el contrato aprobado y presenta incompatibilidades, responsabilidades, dependencias y plan posterior sin modificar archivos.
+2. Backend, Batcave y Nucleus presentan en conjunto contratos de frontera para producción/versionado, transporte/cache, verificación/aceptación, high-water mark, revocación, freshness y recovery.
+3. Genesis, Brain/Temporal, Vault, Executor, PALADIN y Metamorph clasifican sus superficies posteriores y los puntos que requieren enforcement material.
+4. Cada Work presenta lista exacta de archivos antes de cualquier escritura; la aprobación del diseño no autoriza implementación.
 
 **Dependencias cruzadas**
 
@@ -603,15 +608,14 @@ Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION
 
 **Decisiones/riesgos abiertos**
 
-- No existe Authority Snapshot implementado ni sincronización Backend → Batcave → Nucleus para roles.
-- No existe todavía enforcement `shadow_remote` ni `remote_enforced`; tampoco hay revocación corporativa extremo a extremo.
-- Permanecen sin aprobación el catálogo de roles, la existencia de `Architect`, roles personalizados, scopes, herencia, múltiples Masters, separación de funciones e invitación/aceptación/suspensión/revocación.
-- Permanecen abiertos el wire schema, perfil criptográfico, rotación de claves, TTL/freshness, latencia de revocación, snapshots completos o incrementales y acknowledgements de recibido, verificado y aceptado.
+- Las doce decisiones del §21 del diseño físico están aprobadas: schema full/delta I-JSON + JCS, SHA-256, Ed25519, HTTPS/WebSocket, audience por `installation_id`, trust bootstrap, estado durable de Nucleus, TTL 24 h, freshness 5/30/1440 min, revocación E2E 60 s, roles/scopes v1 y exclusión de `architect` en favor de `intent.cor.merge`.
+- No existe Authority Snapshot implementado ni sincronización Backend → Batcave → Nucleus; tampoco existen `shadow_remote`, `REMOTE_LOCKED + remote_enforced` ni revocación corporativa end-to-end en producción.
+- Permanecen para la planificación de implementación la mecánica de rotación de claves, contrato de invitación/aceptación/suspensión/revocación, múltiples Masters, separación de funciones, recovery de gaps/corrupción y las superficies físicas concretas de cada Work.
 - Deben resistirse downgrade, replay inválido, conflicto de digest, expiración offline y rollback técnico sin que ningún archivo local restaure autoridad revocada.
 
 **Informe a AGENDA FOLLOWUP**
 
-Se informa la apertura del hito transversal **ROLES / Autoridad Organizacional Remota**. La dirección aprobada para investigación es Backend como verdad organizacional, Batcave como transporte/sincronización/cache, Nucleus como verificador y decisor efectivo local, y Brain/Temporal como ejecutores acotados. No existe todavía un modelo remoto productivo, Authority Snapshot ni sincronización end-to-end. El próximo Work es aprobar el modelo conceptual y diseñar coordinadamente el Authority Snapshot sin anticipar wire schema ni cambios de implementación. AUTHORIZATION mantiene en paralelo sus fixes y gates locales; este hito no los sustituye ni los declara cerrados.
+Se informa la aprobación del contrato físico v0.1 de **ROLES / Autoridad Organizacional Remota**. Quedan aprobados el Authority Snapshot full/delta, I-JSON/JCS, SHA-256/Ed25519, HTTPS pull + WebSocket, audience por instalación, trust bootstrap, estado durable de Nucleus, TTL/freshness/revocación, roles/scopes v1 y la exclusión de `architect` en favor de `intent.cor.merge`. El cutover válido es `REMOTE_LOCKED + remote_enforced`. No existe implementación productiva: cada Work debe presentar primero su plan, contratos de frontera y lista exacta de archivos. AUTHORIZATION mantiene sus fixes y gates locales hasta el cutover; este hito no los sustituye ni los declara cerrados.
 
 ---
 
@@ -637,7 +641,7 @@ Se informa la apertura del hito transversal **ROLES / Autoridad Organizacional R
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
 | Alta | 11 | Integración productiva de Gravity: workflow Temporal, validación autoritativa Nucleus y empaquetado en Conductor Workspace Core | Persistencia, resolución, masa y parser dual implementados; no crear componente parser independiente |
 | Media | 11 | Evaluar si `BLOOM_Mandate_Package_Spec_v1_0_0.md` y `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` requieren investigación propia o se relacionan con Wisdom | Ninguna — solo decidir si se abre |
-| Alta | 12 | Aprobar el modelo conceptual de autoridad organizacional remota y abrir el diseño coordinado del Authority Snapshot | No anticipar wire schema, tablas, endpoints ni implementación; conservar el enforcement local del Tema 9 |
+| Alta | 12 | Homologación por frontera y planes coordinados de implementación del contrato físico de Remote Authority | Diseño v0.1 aprobado; cada Work presenta contrato de frontera y lista exacta de archivos antes de escribir |
 
 ## Registro cronológico de avances
 
@@ -657,3 +661,4 @@ Se informa la apertura del hito transversal **ROLES / Autoridad Organizacional R
 | 2026-08-29 | 11 / Gravity | Se completó la primera etapa de implementación real: persistencia `.bloom/.gravity/`, resolución activa, cálculo de masa, gramática ANTLR4 dual, parsers Go/TypeScript y preflight de build. | Work Génesis, reportado por el usuario | Se cerró el contrato de parseo y sus pruebas; integración con workflow, persistencia/firma autoritativa, Core y rollout quedan pendientes. |
 | 2026-08-29 | 1 | Se confirmó, con logs de producción de cuatro días distintos, que el bloqueador de resolución de workspace del watcher de Mandates está corregido y desplegado — no es un blocker activo. Causa real: regresión de esquema (campos planos obsoletos vs. esquema multi-organización), corregida también en `dev-start`. Se identificó el alcance ampliado del mecanismo compartido de resolución (Vault, Ownership, Blueprint, Alfred, metadata) sin evidencia de fallo. | Codex, reportado por el usuario | Se actualiza el estado del Tema 1: el bloqueador de infraestructura queda cerrado; el roadmap avanza al paso 2 (action graph). |
 | 2026-09-03 | 12 (nuevo) | Se consolida el hito transversal ROLES / Autoridad Organizacional Remota: Backend como verdad organizacional, Batcave como transporte/sincronización/cache, Nucleus como verificador y decisor efectivo, y Brain/Temporal como ejecución acotada. | Work ROLES, fuentes documentales y decisión del usuario | Se abre el Tema 12 y se informa a AGENDA FOLLOWUP. AUTHORIZATION conserva su enforcement local; el diseño del Authority Snapshot queda pendiente sin anticipar wire schema. |
+| 2026-09-04 | 12 | José aprobó los doce criterios del §21 de `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`. Se fijó que el cutover válido produce `binding state REMOTE_LOCKED + authority mode remote_enforced`; son dimensiones distintas y relacionadas. | Aprobación expresa del usuario | Se promueve el diseño físico v0.1 a contrato aprobado para planificación coordinada. La implementación permanece bloqueada hasta que cada Work presente sus fronteras y lista exacta de archivos. |
