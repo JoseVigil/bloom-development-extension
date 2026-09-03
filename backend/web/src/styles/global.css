@@ -182,3 +182,18 @@ select {
   background: var(--color-accent-strong);
   color: white;
 }
+
+.mock-banner {
+  background: #a9711f;
+  color: white;
+  text-align: center;
+  font-size: 0.85em;
+  padding: var(--space-2) var(--space-3);
+}
+
+.mock-banner-inline {
+  background: transparent;
+  color: var(--color-ink-soft);
+  padding: 0;
+  font-size: 0.8em;
+}

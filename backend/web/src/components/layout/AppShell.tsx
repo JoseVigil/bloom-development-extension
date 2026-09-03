@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { logout } from "@/api/auth";
+import { isMockAuth } from "@/api/mock";
 
 export function AppShell() {
   const { state, refresh } = useSession();
@@ -13,6 +14,9 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      {isMockAuth() ? (
+        <div className="mock-banner">Modo simulado — sin backend real (VITE_MOCK_AUTH)</div>
+      ) : null}
       <header className="app-header">
         <span className="app-title">Bloom</span>
         <nav className="app-nav">
