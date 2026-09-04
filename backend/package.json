@@ -12,6 +12,7 @@
     "db:seed:local": "wrangler d1 execute bloom-backend --local --file seed.sql"
   },
   "dependencies": {
+    "canonicalize": "^2.0.0",
     "drizzle-orm": "^0.44.0",
     "hono": "^4.9.0"
   },

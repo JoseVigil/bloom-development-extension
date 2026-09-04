@@ -13,7 +13,15 @@ import { describe, expect, it } from "vitest";
 // import si manifest.spec.ts usa otro mecanismo de acceso a bindings de test.
 import { env } from "cloudflare:test";
 
-import { canonicalizeJson, digestCanonical, sha256Hex, signDigest, verifyDigestSignature } from "../src/authority/canonical";
+import {
+  canonicalizeJson,
+  digestCanonical,
+  sha256Hex,
+  signCanonicalPayload,
+  signDigest,
+  verifyCanonicalSignature,
+  verifyDigestSignature,
+} from "../src/authority/canonical";
 import {
   resolveAuthoritySnapshot,
   type AuthoritySigningContext,
@@ -83,9 +91,9 @@ describe("canonicalizeJson / digestCanonical (RFC 8785)", () => {
       want: '{"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27]}',
     },
     {
-      name: "string: salto de línea, tab, comilla simple/doble y barra escapados",
-      input: '{"string":"\u20ac$ \n A\'B \\"\\\\\\" / "}',
-      want: '{"string":"\u20ac$ \n A\'B \\"\\\\\\" / "}',
+      name: "string: control char (Shift In), salto de línea, tab, comilla simple/doble y barra escapados",
+      input: '{"string":"\u20ac$\u000f \n A\'B \\"\\\\\\" / "}',
+      want: '{"string":"\u20ac$\u000f \n A\'B \\"\\\\\\" / "}',
     },
     {
       name: "orden de claves Unicode (control chars, dígito, emoji, hebreo con nequdot)",
@@ -128,22 +136,43 @@ describe("canonicalizeJson / digestCanonical (RFC 8785)", () => {
   });
 });
 
-describe("signDigest / verifyDigestSignature (Ed25519 + separador de dominio)", () => {
-  it("una firma válida verifica correctamente", async () => {
+describe("signCanonicalPayload / verifyCanonicalSignature (Ed25519 + separador de dominio)", () => {
+  it("una firma válida sobre el payload canónico verifica correctamente", async () => {
+    const { signing, publicKeyRaw } = await generateTestSigningContext();
+    const { canonical } = await digestCanonical({ hello: "world" });
+    const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
+    const valid = await verifyCanonicalSignature(canonical, signature, publicKeyRaw);
+    expect(valid).toBe(true);
+  });
+
+  it("una firma no verifica si el payload canónico cambia (el separador de dominio no es opcional)", async () => {
+    const { signing, publicKeyRaw } = await generateTestSigningContext();
+    const { canonical } = await digestCanonical({ hello: "world" });
+    const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
+    const { canonical: otherCanonical } = await digestCanonical({ hello: "mundo" });
+    const valid = await verifyCanonicalSignature(otherCanonical, signature, publicKeyRaw);
+    expect(valid).toBe(false);
+  });
+
+  it("una firma no verifica contra una clave pública distinta", async () => {
+    const { signing } = await generateTestSigningContext();
+    const { publicKeyRaw: otherPublicKeyRaw } = await generateTestSigningContext();
+    const { canonical } = await digestCanonical({ hello: "world" });
+    const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
+    const valid = await verifyCanonicalSignature(canonical, signature, otherPublicKeyRaw);
+    expect(valid).toBe(false);
+  });
+
+  it("retrocompatibilidad: signDigest / verifyDigestSignature siguen operando correctamente sobre el string que reciben", async () => {
+    // `signDigest` / `verifyDigestSignature` son wrappers retrocompatibles: delegan en el
+    // mismo `buildSignedMessage` que `signCanonicalPayload`. Este test sólo confirma que
+    // el wrapper sigue siendo funcionalmente consistente (firma/verifica round-trip),
+    // no que `digestHex` sea lo que Nucleus espera firmar (ver nota en canonical.ts).
     const { signing, publicKeyRaw } = await generateTestSigningContext();
     const { digestHex } = await digestCanonical({ hello: "world" });
     const signature = await signDigest(digestHex, signing.signingKeyPkcs8);
     const valid = await verifyDigestSignature(digestHex, signature, publicKeyRaw);
     expect(valid).toBe(true);
-  });
-
-  it("una firma no verifica contra un digest distinto (el separador de dominio no es opcional)", async () => {
-    const { signing, publicKeyRaw } = await generateTestSigningContext();
-    const { digestHex } = await digestCanonical({ hello: "world" });
-    const signature = await signDigest(digestHex, signing.signingKeyPkcs8);
-    const { digestHex: otherDigest } = await digestCanonical({ hello: "mundo" });
-    const valid = await verifyDigestSignature(otherDigest, signature, publicKeyRaw);
-    expect(valid).toBe(false);
   });
 });
 

@@ -16,14 +16,14 @@
 
 import canonicalize from "canonicalize";
 
-// DOMAIN_SEPARATOR — corregido en esta revisión a partir de un valor provisto
-// explícitamente en la sesión de corrección ("BLOOM-AUTHORITY-SNAPSHOT-v1"). IMPORTANTE:
-// este valor NO fue verificado contra el código fuente real de `internal/authority` (Go,
-// Nucleus) en esta sesión — nadie en esta conversación tuvo ese archivo a la vista. Sigue
-// siendo, estrictamente, una afirmación no confirmada, no un hecho verificado. Antes de
-// firmar algo real: confirmar byte a byte contra la constante Go correspondiente y dejar
-// registro en el reporte de cierre de dónde salió la confirmación (commit, línea, quién
-// lo confirmó). Si no coincide, Nucleus rechaza toda firma que produzca este Worker.
+// DOMAIN_SEPARATOR — valor provisto explícitamente en la sesión de corrección
+// ("BLOOM-AUTHORITY-SNAPSHOT-v1"). IMPORTANTE: este valor NO fue verificado contra el
+// código fuente real de `internal/authority` (Go, Nucleus) en esta sesión — nadie en esta
+// conversación tuvo ese archivo a la vista. Sigue siendo, estrictamente, una afirmación no
+// confirmada, no un hecho verificado. Antes de firmar algo real: confirmar byte a byte
+// contra la constante Go correspondiente y dejar registro en el reporte de cierre de dónde
+// salió la confirmación (commit, línea, quién lo confirmó). Si no coincide, Nucleus
+// rechaza toda firma que produzca este Worker.
 const DOMAIN_SEPARATOR = "BLOOM-AUTHORITY-SNAPSHOT-v1";
 
 /**
@@ -47,8 +47,14 @@ export async function sha256Hex(input: string): Promise<string> {
 
 /**
  * Canonicaliza y hashea un valor en un solo paso. Usar siempre esta función (y no
- * `JSON.stringify` a mano) para cualquier digest que vaya a firmarse o compararse contra
- * uno producido por Nucleus.
+ * `JSON.stringify` a mano) para cualquier digest que vaya a compararse contra uno
+ * producido por Nucleus.
+ *
+ * NOTA (revisión de firma, §ver `signCanonicalPayload` más abajo): el `digestHex` que
+ * devuelve esta función sigue siendo útil para comparar/loguear/indexar snapshots, pero
+ * YA NO es lo que se firma — lo que se firma es `canonical` (el JSON canonicalizado
+ * completo), porque así lo requiere Nucleus según lo confirmado explícitamente en esta
+ * sesión de corrección.
  */
 export async function digestCanonical(value: unknown): Promise<{ canonical: string; digestHex: string }> {
   const canonical = canonicalizeJson(value);
@@ -57,29 +63,32 @@ export async function digestCanonical(value: unknown): Promise<{ canonical: stri
 }
 
 /**
- * Construye el mensaje a firmar/verificar: bytes(DOMAIN_SEPARATOR) + 0x00 + bytes(digestHex).
+ * Construye el mensaje a firmar/verificar: bytes(DOMAIN_SEPARATOR) + 0x00 + bytes(payload).
  *
- * SUPUESTO DE DISEÑO (marcado explícitamente): se firma sobre el digest hex del payload
- * canonicalizado, no sobre el JSON canonicalizado completo, porque `signDigest` /
- * `verifyDigestSignature` reciben `digestHex` como parámetro (no el valor original ni su
- * forma canonical) y cambiar esa firma de función rompería `authority.spec.ts` y
- * `resolveAuthoritySnapshot`. Si Nucleus en realidad firma sobre los bytes del JSON
- * canonicalizado completo (no sobre su hash), esta función y sus call sites necesitan
- * cambiar de forma más amplia — confirmar contra `internal/authority` (Go) cuál de las
- * dos es el comportamiento real antes de dar esto por cerrado.
+ * `payload` es, para el flujo nuevo (`signCanonicalPayload` / `verifyCanonicalSignature`),
+ * el JSON canonicalizado completo (`canonical` que devuelve `digestCanonical`) — NO su
+ * hash. Esto reemplaza el comportamiento anterior de esta función (que recibía
+ * `digestHex`), a partir de la confirmación explícita provista en esta sesión de que
+ * Nucleus firma sobre los bytes del JSON canonicalizado, no sobre su digest.
+ *
+ * Los wrappers retrocompatibles `signDigest` / `verifyDigestSignature` (más abajo) siguen
+ * existiendo con la misma firma de función que antes para no romper call sites externos,
+ * pero delegan en este mismo mecanismo — quien los use debe tener presente que el string
+ * que le pasen es, literalmente, lo que termina dentro del mensaje firmado.
  */
-function buildSignedMessage(digestHex: string): Uint8Array {
+function buildSignedMessage(payload: string): Uint8Array {
   const domainBytes = new TextEncoder().encode(DOMAIN_SEPARATOR);
-  const digestBytes = new TextEncoder().encode(digestHex);
-  const message = new Uint8Array(domainBytes.length + 1 + digestBytes.length);
+  const payloadBytes = new TextEncoder().encode(payload);
+  const message = new Uint8Array(domainBytes.length + 1 + payloadBytes.length);
   message.set(domainBytes, 0);
   message[domainBytes.length] = 0x00;
-  message.set(digestBytes, domainBytes.length + 1);
+  message.set(payloadBytes, domainBytes.length + 1);
   return message;
 }
 
 /**
- * Firma Ed25519 con separador de dominio sobre el digest hex del contenido canonicalizado.
+ * Firma Ed25519 con separador de dominio sobre el JSON canonicalizado completo
+ * (`canonicalJson`, tal como lo devuelve `canonicalizeJson` / `digestCanonical().canonical`).
  *
  * `signingKeyPkcs8` es la clave privada en formato PKCS#8 (DER), inyectada desde un
  * Workers secret binding (`wrangler secret put AUTHORITY_SIGNING_KEY_PKCS8_B64`, guardada
@@ -93,22 +102,48 @@ function buildSignedMessage(digestHex: string): Uint8Array {
  * sumar una librería pura JS (p. ej. `@noble/ed25519`) con la misma firma de función, sin
  * tocar el resto de este archivo.
  */
-export async function signDigest(digestHex: string, signingKeyPkcs8: ArrayBuffer): Promise<string> {
+export async function signCanonicalPayload(canonicalJson: string, signingKeyPkcs8: ArrayBuffer): Promise<string> {
   const key = await crypto.subtle.importKey("pkcs8", signingKeyPkcs8, { name: "Ed25519" }, false, ["sign"]);
-  const message = buildSignedMessage(digestHex);
+  const message = buildSignedMessage(canonicalJson);
   const signature = await crypto.subtle.sign({ name: "Ed25519" }, key, message);
   return arrayBufferToBase64(signature);
 }
 
+export async function verifyCanonicalSignature(
+  canonicalJson: string,
+  signatureBase64: string,
+  publicKeyRaw: ArrayBuffer,
+): Promise<boolean> {
+  const key = await crypto.subtle.importKey("raw", publicKeyRaw, { name: "Ed25519" }, false, ["verify"]);
+  const message = buildSignedMessage(canonicalJson);
+  const signature = base64ToArrayBuffer(signatureBase64);
+  return crypto.subtle.verify({ name: "Ed25519" }, key, signature, message);
+}
+
+/**
+ * @deprecated Wrapper retrocompatible. Antes de esta revisión, `signDigest` firmaba sobre
+ * `digestHex` (el hash SHA-256 del payload canonicalizado). Se mantiene con la misma firma
+ * de función para no romper call sites existentes (p. ej. `resolveAuthoritySnapshot` o
+ * cualquier código que ya la invoque pasándole `digestHex`), pero ahora comparte el mismo
+ * `buildSignedMessage` que `signCanonicalPayload` — el string que se le pase acá es,
+ * literalmente, lo que entra al mensaje firmado.
+ *
+ * Para snapshots nuevos que deban validar contra Nucleus, usar `signCanonicalPayload`
+ * pasándole `digestCanonical(value).canonical`, no `digestHex`.
+ */
+export async function signDigest(digestHex: string, signingKeyPkcs8: ArrayBuffer): Promise<string> {
+  return signCanonicalPayload(digestHex, signingKeyPkcs8);
+}
+
+/**
+ * @deprecated Wrapper retrocompatible — ver nota en `signDigest`.
+ */
 export async function verifyDigestSignature(
   digestHex: string,
   signatureBase64: string,
   publicKeyRaw: ArrayBuffer,
 ): Promise<boolean> {
-  const key = await crypto.subtle.importKey("raw", publicKeyRaw, { name: "Ed25519" }, false, ["verify"]);
-  const message = buildSignedMessage(digestHex);
-  const signature = base64ToArrayBuffer(signatureBase64);
-  return crypto.subtle.verify({ name: "Ed25519" }, key, signature, message);
+  return verifyCanonicalSignature(digestHex, signatureBase64, publicKeyRaw);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
