@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/spf13/cobra"
+	ownershipcontract "nucleus/internal/governance/ownershipcontract"
 )
 
 // ============================================
@@ -53,20 +55,28 @@ func LoadOwnership() (*OwnershipRecord, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path)
+	canonical, err := LoadCanonicalOwnership(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil // No existe aún
 		}
 		return nil, err
 	}
-
-	var record OwnershipRecord
-	if err := json.Unmarshal(data, &record); err != nil {
-		return nil, err
+	if canonical.LegacyAuthority == nil {
+		return nil, errors.New("ownership has no productive legacy authority in current mode")
 	}
-
-	return &record, nil
+	orgID := ""
+	if canonical.Organization.LegacyOrgID != nil {
+		orgID = *canonical.Organization.LegacyOrgID
+	} else if canonical.Organization.CanonicalID != nil {
+		orgID = *canonical.Organization.CanonicalID
+	}
+	owner := canonical.LegacyAuthority.Owner
+	name := ""
+	if owner.DisplayName != nil {
+		name = *owner.DisplayName
+	}
+	return &OwnershipRecord{OrgID: orgID, OwnerID: owner.Subject, OwnerName: name, CreatedAt: canonical.CreatedAt, TeamMembers: fromContractMembers(canonical.LegacyAuthority.TeamMembers)}, nil
 }
 
 // SaveOwnership guarda el registro de propiedad con escritura atómica
@@ -76,25 +86,28 @@ func SaveOwnership(record *OwnershipRecord) error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(record, "", "  ")
+	canonical, err := LoadCanonicalOwnership(path)
 	if err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
+		legacyID := record.OrgID
+		display := record.OwnerName
+		now := record.CreatedAt.UTC()
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		canonical = &CanonicalOwnership{Schema: OwnershipSchema, SchemaVersion: OwnershipSchemaVersion, AuthorityMode: AuthorityLocalLegacy, Organization: OwnershipOrganization{LegacyOrgID: &legacyID}, Installation: OwnershipInstallation{InstallationID: randomID()}, Binding: OwnershipBinding{State: BindingUnbound}, LegacyAuthority: &LegacyAuthority{Owner: LegacyOwner{Source: "github_handle", Subject: record.OwnerID, DisplayName: &display}, TeamMembers: toContractMembers(record.TeamMembers), EffectiveMarkers: []string{}}, CreatedAt: now, UpdatedAt: now}
+		return persistCanonicalOwnership(path, canonical)
 	}
-
-	// Escritura atómica usando archivo temporal
-	tmpPath := path + ".tmp"
-
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return err
+	if canonical.LegacyAuthority == nil || canonical.AuthorityMode == AuthorityRemoteEnforced {
+		return errors.New("legacy ownership mutation forbidden in current authority mode")
 	}
-
-	// Renombrado atómico
-	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-
-	return nil
+	canonical.LegacyAuthority.TeamMembers = toContractMembers(record.TeamMembers)
+	canonical.LegacyAuthority.Owner.Subject = record.OwnerID
+	canonical.LegacyAuthority.Owner.DisplayName = &record.OwnerName
+	canonical.UpdatedAt = time.Now().UTC()
+	return persistCanonicalOwnership(path, canonical)
 }
 
 // CreateInitialOwnership crea el registro inicial de propiedad
@@ -108,7 +121,18 @@ func CreateInitialOwnership(ownerID, ownerName string) (*OwnershipRecord, error)
 		TeamMembers: []Member{},
 	}
 
-	if err := SaveOwnership(record); err != nil {
+	path, err := GetOwnershipPath()
+	if err != nil {
+		return nil, err
+	}
+	legacyID := record.OrgID
+	display := record.OwnerName
+	now := record.CreatedAt.UTC()
+	canonical := &CanonicalOwnership{Schema: OwnershipSchema, SchemaVersion: OwnershipSchemaVersion, AuthorityMode: AuthorityLocalLegacy, Organization: OwnershipOrganization{LegacyOrgID: &legacyID}, Installation: OwnershipInstallation{InstallationID: randomID()}, Binding: OwnershipBinding{State: BindingUnbound}, LegacyAuthority: &LegacyAuthority{Owner: LegacyOwner{Source: "github_handle", Subject: record.OwnerID, DisplayName: &display}, TeamMembers: []ownershipcontract.LegacyMember{}, EffectiveMarkers: []string{}}, CreatedAt: now, UpdatedAt: now}
+	if err := ValidateCanonicalOwnership(canonical); err != nil {
+		return nil, err
+	}
+	if err := persistCanonicalOwnership(path, canonical); err != nil {
 		return nil, err
 	}
 
@@ -143,24 +167,27 @@ func GetEffectiveRole() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	// Verificar marcador .master
-	masterFile := filepath.Join(nucleusRoot, ".master")
-	if _, err := os.Stat(masterFile); err == nil {
-		// Verificar que coincida con owner_github_id del blueprint
-		bp, err := LoadBlueprint()
-		if err != nil {
-			return "master", nil // Si no hay blueprint, confiar en marcador
-		}
-		if bp != nil {
-			return "master", nil
+	canonical, err := LoadCanonicalOwnership(filepath.Join(nucleusRoot, ".ownership.json"))
+	if err != nil {
+		return "unknown", err
+	}
+	if canonical.AuthorityMode == AuthorityRemoteEnforced {
+		return "unknown", nil
+	}
+	observed, err := observedEffectiveMarkers(nucleusRoot)
+	if err != nil {
+		return "unknown", err
+	}
+	declared := map[string]bool{}
+	if canonical.LegacyAuthority != nil {
+		for _, marker := range canonical.LegacyAuthority.EffectiveMarkers {
+			declared[marker] = true
 		}
 	}
-
-	// Verificar marcador .specialist
-	specialistFile := filepath.Join(nucleusRoot, ".specialist")
-	if _, err := os.Stat(specialistFile); err == nil {
-		return "specialist", nil
+	for _, marker := range []string{"master", "specialist"} {
+		if declared[marker] && containsString(observed, marker) {
+			return marker, nil
+		}
 	}
 
 	return "unknown", nil
@@ -393,12 +420,102 @@ func initializeOrganization(githubID, name string, master bool) (*OwnershipRecor
 	}
 
 	if master {
-		if err := core.SetMasterRole(); err != nil {
-			return nil, fmt.Errorf("set master role: %w", err)
+		if err := activateMasterMarkerAndOwnership(); err != nil {
+			return nil, fmt.Errorf("activate master marker: %w", err)
 		}
 		if err := bootstrapGravity(record.OrgID); err != nil {
 			return nil, fmt.Errorf("bootstrap Gravity: %w", err)
 		}
 	}
 	return record, nil
+}
+
+func activateMasterMarkerAndOwnership() error {
+	path, err := GetOwnershipPath()
+	if err != nil {
+		return err
+	}
+	lock := flock.New(path + ownershipTransitionLockSuffix)
+	if err := lock.Lock(); err != nil {
+		return err
+	}
+	defer func() { _ = lock.Unlock() }()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	analysis, err := ownershipcontract.Analyze(raw)
+	if err != nil || analysis.Canonical == nil {
+		return errors.New("master activation requires canonical ownership")
+	}
+	document := analysis.Canonical
+	if document.AuthorityMode == AuthorityRemoteEnforced || document.LegacyAuthority == nil {
+		return ownershipcontract.ErrLegacyAuthorityForbidden
+	}
+	if err := createOrValidateMasterMarkerLocked(filepath.Dir(path)); err != nil {
+		return err
+	}
+	markers, err := observedEffectiveMarkers(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	document.LegacyAuthority.EffectiveMarkers = markers
+	document.UpdatedAt = time.Now().UTC()
+	return persistCanonicalOwnershipLocked(path, document)
+}
+
+// createOrValidateMasterMarkerLocked requires the ownership transition lock.
+// It never acquires that lock, preventing recursive-lock deadlocks.
+func createOrValidateMasterMarkerLocked(nucleusRoot string) error {
+	path := filepath.Join(nucleusRoot, ".master")
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return errors.New(".master is not a regular file")
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if string(content) != "master" {
+			return errors.New(".master contains incompatible state")
+		}
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := atomicReplace(path, []byte("master"), 0644, "before_master_rename"); err != nil {
+		return err
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return errors.New(".master rename succeeded but verification failed")
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != "master" {
+		return errors.New(".master rename succeeded but content verification failed")
+	}
+	return nil
+}
+
+func toContractMembers(members []Member) []ownershipcontract.LegacyMember {
+	out := make([]ownershipcontract.LegacyMember, len(members))
+	for i, member := range members {
+		out[i] = ownershipcontract.LegacyMember{ID: member.ID, Name: member.Name, Role: member.Role, AddedAt: member.AddedAt, Active: member.Active}
+	}
+	return out
+}
+func fromContractMembers(members []ownershipcontract.LegacyMember) []Member {
+	out := make([]Member, len(members))
+	for i, member := range members {
+		out[i] = Member{ID: member.ID, Name: member.Name, Role: member.Role, AddedAt: member.AddedAt, Active: member.Active}
+	}
+	return out
+}
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }

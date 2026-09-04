@@ -11,9 +11,9 @@
 // function (bootSynapseSimulator) that:
 //   - Is ALWAYS called by the boot sequence, regardless of onboarding state.
 //   - Resolves the correct .ownership.json path depending on lifecycle phase:
-//       PRE-ONBOARDING  → no file required; SynapseSimulator runs in stub mode.
-//       POST-ONBOARDING → .bloom/.nucleus-{org}/.ownership.json inside the
-//                         nucleus repo (getOwnershipPath returns this path).
+//     PRE-ONBOARDING  → no file required; SynapseSimulator runs in stub mode.
+//     POST-ONBOARDING → .bloom/.nucleus-{org}/.ownership.json inside the
+//     nucleus repo (getOwnershipPath returns this path).
 //   - Is non-fatal: a SynapseSimulator failure produces a WARN, never a boot abort.
 //
 // Design invariant: this file must NOT import the governance package directly.
@@ -25,6 +25,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"nucleus/internal/governance"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,35 +37,37 @@ type SynapseSimulatorMode string
 
 const (
 	SynapseSimulatorModeStub       SynapseSimulatorMode = "STUB"       // onboarding — no ownership file
-	SynapseSimulatorModeGovernance SynapseSimulatorMode = "GOVERNANCE"  // post-onboarding — full governance
-	SynapseSimulatorModeSimulation SynapseSimulatorMode = "SIMULATION"  // --simulation flag
+	SynapseSimulatorModeGovernance SynapseSimulatorMode = "GOVERNANCE" // post-onboarding — full governance
+	SynapseSimulatorModeSimulation SynapseSimulatorMode = "SIMULATION" // --simulation flag
 )
 
 // SynapseSimulatorResult is returned by bootSynapseSimulator so callers can log/telemetry the
 // outcome without inspecting internal state.
 type SynapseSimulatorResult struct {
 	Mode        SynapseSimulatorMode `json:"mode"`
-	Healthy     bool        `json:"healthy"`
-	OwnershipOK bool        `json:"ownership_ok"`
-	Org         string      `json:"org,omitempty"`
-	Error       string      `json:"error,omitempty"`
+	Healthy     bool                 `json:"healthy"`
+	OwnershipOK bool                 `json:"ownership_ok"`
+	Org         string               `json:"org,omitempty"`
+	Error       string               `json:"error,omitempty"`
 }
 
 // getOwnershipPath returns the canonical path of .ownership.json for the
 // current lifecycle phase.
 //
 // PRE-ONBOARDING (onboardingCompleted == false):
-//   Returns "" — no file is expected.
+//
+//	Returns "" — no file is expected.
 //
 // POST-ONBOARDING:
-//   The file lives inside the USER'S PROJECT WORKSPACE at:
-//     <workspacePath>/.bloom/.nucleus-{org}/.ownership.json
-//   where <workspacePath> is onboarding.organizations[].workspace_path in
-//   nucleus.json (same value returned by getWorkspacePath()) — NOT
-//   installation.origin_path (getBloomDir(), the Bloom dev/extension repo
-//   root). `nucleus create` writes .bloom/.nucleus-{org}/ under the
-//   workspace the user is actually working in, never under the Bloom repo
-//   itself.
+//
+//	The file lives inside the USER'S PROJECT WORKSPACE at:
+//	  <workspacePath>/.bloom/.nucleus-{org}/.ownership.json
+//	where <workspacePath> is onboarding.organizations[].workspace_path in
+//	nucleus.json (same value returned by getWorkspacePath()) — NOT
+//	installation.origin_path (getBloomDir(), the Bloom dev/extension repo
+//	root). `nucleus create` writes .bloom/.nucleus-{org}/ under the
+//	workspace the user is actually working in, never under the Bloom repo
+//	itself.
 //
 // FIX (confirmado 2026-08-12): esta función usaba getNucleusRepoRoot() →
 // getBloomDir() (origin_path), que apunta al repo de bloom-development-extension.
@@ -77,7 +80,8 @@ type SynapseSimulatorResult struct {
 // — origin_path y workspace_path son campos distintos y no intercambiables.
 //
 // SIMULATION:
-//   Returns the simulation fixture path (unchanged from original logic).
+//
+//	Returns the simulation fixture path (unchanged from original logic).
 func getOwnershipPath(simulation bool, onboardingCompleted bool) string {
 	if simulation {
 		return filepath.Join("installer", "nucleus", "scripts",
@@ -165,13 +169,13 @@ func isOnboardingCompleted() bool {
 // It is always called during the boot sequence, before or after governance,
 // and operates in two modes:
 //
-//   STUB mode (pre-onboarding):
-//     SynapseSimulator registers its telemetry streams without a governance context.
-//     No .ownership.json is required.  All debug endpoints are available.
+//	STUB mode (pre-onboarding):
+//	  SynapseSimulator registers its telemetry streams without a governance context.
+//	  No .ownership.json is required.  All debug endpoints are available.
 //
-//   GOVERNANCE mode (post-onboarding):
-//     SynapseSimulator validates .ownership.json at the canonical path and registers
-//     with the full governance context.
+//	GOVERNANCE mode (post-onboarding):
+//	  SynapseSimulator validates .ownership.json at the canonical path and registers
+//	  with the full governance context.
 //
 // The function is intentionally non-fatal: any error is logged as WARN and
 // returned in SynapseSimulatorResult.Error, but the boot sequence continues.
@@ -238,7 +242,7 @@ func (s *Supervisor) bootSynapseSimulatorSimulation(ctx context.Context, result 
 	hlog := s.registerSynapseSimulatorTelemetry("SIMULATION")
 	hlogf(hlog, "INFO", "starting in SIMULATION mode (fixture: %s)", ownershipPath)
 	if result.Error != "" {
-		hlogf(hlog, "WARN", result.Error)
+		hlogf(hlog, "WARN", "%s", result.Error)
 	} else {
 		hlogf(hlog, "INFO", ".ownership.json validated at %s", ownershipPath)
 	}
@@ -251,7 +255,8 @@ func (s *Supervisor) bootSynapseSimulatorSimulation(ctx context.Context, result 
 
 // bootSynapseSimulatorGovernance runs SynapseSimulator with full post-onboarding governance.
 // Validates .ownership.json at the canonical path:
-//   <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
+//
+//	<nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
 func (s *Supervisor) bootSynapseSimulatorGovernance(ctx context.Context, result *SynapseSimulatorResult) *SynapseSimulatorResult {
 	org := readOrganizationFromNucleusJSON()
 	result.Org = org
@@ -262,7 +267,7 @@ func (s *Supervisor) bootSynapseSimulatorGovernance(ctx context.Context, result 
 		result.Error = "cannot resolve .ownership.json path (org slug absent from nucleus.json and BLOOM_DIR unset)"
 		s.slog("WARN", "SynapseSimulator GOVERNANCE: %s", result.Error)
 		hlog := s.registerSynapseSimulatorTelemetry("DEGRADED")
-		hlogf(hlog, "WARN", result.Error)
+		hlogf(hlog, "WARN", "%s", result.Error)
 		result.Healthy = true // non-fatal; SynapseSimulator still registers
 		return result
 	}
@@ -293,7 +298,7 @@ func (s *Supervisor) bootSynapseSimulatorGovernance(ctx context.Context, result 
 		result.Error = fmt.Sprintf("ownership validation failed: %v", err)
 		s.slog("WARN", "SynapseSimulator GOVERNANCE: %s", result.Error)
 		hlog := s.registerSynapseSimulatorTelemetry("DEGRADED")
-		hlogf(hlog, "WARN", result.Error)
+		hlogf(hlog, "WARN", "%s", result.Error)
 		result.Healthy = true // schema errors are non-fatal
 		return result
 	}
@@ -301,7 +306,7 @@ func (s *Supervisor) bootSynapseSimulatorGovernance(ctx context.Context, result 
 	result.OwnershipOK = true
 	hlog := s.registerSynapseSimulatorTelemetry("GOVERNANCE")
 	hlogf(hlog, "INFO", "starting in GOVERNANCE mode (org=%s, path=%s)", org, ownershipPath)
-	hlogf(hlog, "INFO", ".ownership.json validated — owner and created_at present")
+	hlogf(hlog, "INFO", ".ownership.json validated — canonical schema and binding matrix valid")
 	hlogf(hlog, "SUCCESS", "✓ GOVERNANCE mode ready (org=%s)", org)
 	result.Healthy = true
 	s.slog("SUCCESS", "✓ SynapseSimulator running in GOVERNANCE mode (org=%s)", org)
@@ -309,22 +314,9 @@ func (s *Supervisor) bootSynapseSimulatorGovernance(ctx context.Context, result 
 }
 
 // validateOwnershipFile reads and validates the required fields in .ownership.json.
-// Required: "owner", "created_at"
+// Required: canonical ownership schema (legacy inputs are normalized once).
 func validateOwnershipFile(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read failed: %w", err)
-	}
-	var ownership map[string]interface{}
-	if err := json.Unmarshal(data, &ownership); err != nil {
-		return fmt.Errorf("invalid JSON: %w", err)
-	}
-	for _, field := range []string{"owner", "created_at"} {
-		if _, exists := ownership[field]; !exists {
-			return fmt.Errorf("missing required field: %s", field)
-		}
-	}
-	return nil
+	return governance.ValidateOwnershipPath(path)
 }
 
 // registerSynapseSimulatorTelemetry registers the SynapseSimulator debug stream in telemetry.json

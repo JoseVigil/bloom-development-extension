@@ -3,6 +3,7 @@ package governance
 import (
 	"encoding/json"
 	"fmt"
+	"nucleus/internal/authority"
 	"nucleus/internal/client"
 	"nucleus/internal/core"
 	"os"
@@ -128,7 +129,7 @@ func CreateInitialBlueprint(orgID, githubID, orgName string) (*Blueprint, error)
 		GovernanceModel: GovernanceModel{
 			EnforceStateSigning:  true,
 			RequireMasterForKeys: true,
-			MinRoleForCorMerge:   "Architect",
+			MinRoleForCorMerge:   authority.PermissionIntentCorMerge,
 		},
 		VaultSnapshot: VaultSnapshot{
 			MasterProfileLinked: false,

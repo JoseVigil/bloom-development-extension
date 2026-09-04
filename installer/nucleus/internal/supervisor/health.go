@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"nucleus/internal/core"
+	"nucleus/internal/governance"
 
 	"github.com/spf13/cobra"
 )
@@ -468,7 +469,9 @@ func applyFixes(result *HealthResult) {
 						"-o", "json").CombinedOutput()
 					if err == nil {
 						var tq struct {
-							Pollers []struct{ Identity string `json:"identity"` } `json:"pollers"`
+							Pollers []struct {
+								Identity string `json:"identity"`
+							} `json:"pollers"`
 						}
 						if json.Unmarshal(out, &tq) == nil && len(tq.Pollers) > 0 {
 							connected = true
@@ -581,7 +584,7 @@ func applyFixes(result *HealthResult) {
 // Mirror of the evaluate: block in checkSystemHealthParallel — must stay in sync
 // if the criticality lists change.
 func recalculateHealthState(result *HealthResult) {
-	criticalComponents    := []string{"temporal", "worker", "vault", "governance"}
+	criticalComponents := []string{"temporal", "worker", "vault", "governance"}
 	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
 
 	criticalFailures, degradedCount := 0, 0
@@ -613,16 +616,16 @@ func recalculateHealthState(result *HealthResult) {
 	switch {
 	case criticalFailures > 0:
 		result.Success = false
-		result.State   = "FAILED"
-		result.Error   = fmt.Sprintf("%d critical components unhealthy", criticalFailures)
+		result.State = "FAILED"
+		result.Error = fmt.Sprintf("%d critical components unhealthy", criticalFailures)
 	case degradedCount > 0:
 		result.Success = false
-		result.State   = "DEGRADED"
-		result.Error   = fmt.Sprintf("%d non-critical components unhealthy", degradedCount)
+		result.State = "DEGRADED"
+		result.Error = fmt.Sprintf("%d non-critical components unhealthy", degradedCount)
 	default:
 		result.Success = true
-		result.State   = "HEALTHY"
-		result.Error   = ""
+		result.State = "HEALTHY"
+		result.Error = ""
 	}
 }
 
@@ -808,7 +811,6 @@ func resolveTemporalExe(binDir string) (string, error) {
 	return "", fmt.Errorf("temporal binary not found at %s or in PATH",
 		filepath.Join(binDir, "temporal", "temporal[.exe]"))
 }
-
 
 func checkTemporal(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{Port: 7233, GRPCURL: "localhost:7233"}
@@ -1055,24 +1057,10 @@ func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, vali
 	health.Healthy = true
 	health.State = "VALID"
 	if validate {
-		data, err := os.ReadFile(ownershipPath)
-		if err != nil {
+		if err := governance.ValidateOwnershipPath(ownershipPath); err != nil {
 			health.State = "DEGRADED"
-			health.Error = fmt.Sprintf("Failed to read .ownership.json: %v", err)
+			health.Error = fmt.Sprintf("Invalid ownership schema: %v", err)
 			return health
-		}
-		var ownership map[string]interface{}
-		if err := json.Unmarshal(data, &ownership); err != nil {
-			health.State = "DEGRADED"
-			health.Error = "Invalid JSON in .ownership.json"
-			return health
-		}
-		for _, field := range []string{"owner", "created_at"} {
-			if _, exists := ownership[field]; !exists {
-				health.State = "DEGRADED"
-				health.Error = fmt.Sprintf("Missing required field: %s", field)
-				return health
-			}
 		}
 	}
 	return health
@@ -1081,16 +1069,17 @@ func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, vali
 // checkSynapseSimulator verifica el subsistema de debug/observabilidad SynapseSimulator.
 //
 // Pre-onboarding: SynapseSimulator corre en modo STUB. Siempre Healthy=true.
-//   bootSynapseSimulator() es non-fatal y no tiene condición de fallo en stub mode —
-//   si nucleus service está corriendo, SynapseSimulator está en STUB por diseño.
 //
-//   DISEÑO: NO se usa la existencia del directorio de log como proxy de
-//   "bootSynapseSimulator corrió". El directorio lo crea registerSynapseSimulatorTelemetry()
-//   dentro del proceso de larga vida (nucleus service), pero checkSynapseSimulator
-//   corre en un proceso efímero nuevo que no comparte ese estado. Usar el
-//   directorio como proxy producía STUB_NOT_STARTED falsos en cada ciclo
-//   del system_health hook (cada minuto), manteniendo health_state en
-//   DEGRADED de forma permanente sin causa real.
+//	bootSynapseSimulator() es non-fatal y no tiene condición de fallo en stub mode —
+//	si nucleus service está corriendo, SynapseSimulator está en STUB por diseño.
+//
+//	DISEÑO: NO se usa la existencia del directorio de log como proxy de
+//	"bootSynapseSimulator corrió". El directorio lo crea registerSynapseSimulatorTelemetry()
+//	dentro del proceso de larga vida (nucleus service), pero checkSynapseSimulator
+//	corre en un proceso efímero nuevo que no comparte ese estado. Usar el
+//	directorio como proxy producía STUB_NOT_STARTED falsos en cada ciclo
+//	del system_health hook (cada minuto), manteniendo health_state en
+//	DEGRADED de forma permanente sin causa real.
 //
 // Post-onboarding: verifica que .ownership.json existe en la ruta canónica.
 //

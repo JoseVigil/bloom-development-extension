@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/gofrs/flock v0.13.0
+	github.com/gowebpki/jcs v1.0.1
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/spf13/cobra v1.8.0

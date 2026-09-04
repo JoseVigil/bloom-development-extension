@@ -1,10 +1,10 @@
 package decision
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"nucleus/internal/core"
+	ownershipcontract "nucleus/internal/governance/ownershipcontract"
 	"os"
 	"path/filepath"
 	"time"
@@ -84,23 +84,31 @@ func AuthorizeGravityNodeCreation(operation GovernedOperation, nodeID string, pa
 	if err != nil {
 		return GovernedCreationDecision{}, fmt.Errorf("read local legacy ownership: %w", err)
 	}
-	var ownership struct {
-		OrgID     string    `json:"org_id"`
-		OwnerID   string    `json:"owner_id"`
-		CreatedAt time.Time `json:"created_at"`
+	analysis, err := ownershipcontract.Analyze(ownershipRaw)
+	if err != nil {
+		return GovernedCreationDecision{}, fmt.Errorf("validate local legacy ownership: %w", err)
 	}
-	if err := json.Unmarshal(ownershipRaw, &ownership); err != nil {
-		return GovernedCreationDecision{}, fmt.Errorf("parse local legacy ownership: %w", err)
+	view, err := ownershipcontract.EffectiveLegacyView(analysis)
+	if err != nil {
+		return GovernedCreationDecision{}, fmt.Errorf("resolve local legacy authority: %w", err)
 	}
-	if ownership.OrgID == "" || ownership.OwnerID == "" || ownership.CreatedAt.IsZero() {
-		return GovernedCreationDecision{}, errors.New("local legacy ownership is missing required fields")
+	if view.Owner.Subject == "" {
+		return GovernedCreationDecision{}, errors.New("local legacy ownership has no owner subject")
 	}
-	masterInfo, err := os.Stat(filepath.Join(nucleusRoot, ".master"))
+	if view.MarkersDeclared && !contains(view.Markers, "master") {
+		return GovernedCreationDecision{}, errors.New("canonical ownership does not declare the master marker")
+	}
+	masterPath := filepath.Join(nucleusRoot, ".master")
+	masterInfo, err := os.Lstat(masterPath)
 	if err != nil {
 		return GovernedCreationDecision{}, fmt.Errorf("inspect local legacy master marker: %w", err)
 	}
 	if !masterInfo.Mode().IsRegular() {
 		return GovernedCreationDecision{}, errors.New("local legacy master marker is not a regular file")
+	}
+	marker, err := os.ReadFile(masterPath)
+	if err != nil || string(marker) != "master" {
+		return GovernedCreationDecision{}, errors.New("local legacy master marker contains incompatible state")
 	}
 	gravityRoot, err := filepath.Abs(filepath.Join(nucleusRoot, ".gravity"))
 	if err != nil {
@@ -115,6 +123,15 @@ func AuthorizeGravityNodeCreation(operation GovernedOperation, nodeID string, pa
 		basis:                 BasisLocalLegacy,
 		decidedAt:             time.Now().UTC(),
 	}, nil
+}
+
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneStringPointer(value *string) *string {
