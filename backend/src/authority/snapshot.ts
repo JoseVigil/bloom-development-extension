@@ -31,7 +31,7 @@
 //   `computeFullContentCandidate` y `ensureAuthorityVersion` para que el reemplazo sea
 //   localizado.
 
-import { digestCanonical, signDigest } from "./canonical";
+import { digestCanonical, signCanonicalPayload } from "./canonical";
 import type {
   AuthorityEnvelope,
   AuthoritySnapshotContent,
@@ -493,8 +493,13 @@ async function signContent(
   signing: AuthoritySigningContext,
 ): Promise<AuthorityEnvelope> {
   const { generated_at: _generatedAt, ...digestSubject } = content;
-  const { digestHex } = await digestCanonical(digestSubject);
-  const signature = await signDigest(digestHex, signing.signingKeyPkcs8);
+  // CORRECCIÓN v0.3: antes se firmaba sobre `digestHex` (vía el wrapper deprecado
+  // `signDigest`), no sobre el JSON canonicalizado. Nucleus firma/verifica sobre
+  // `domain + 0x00 + bytes(canonicalJson)`, no sobre `domain + 0x00 + bytes(digestHex)` —
+  // ver canonical.ts. `digestHex` se sigue exponiendo en el envelope (campo `digest`) sin
+  // cambios: ese campo es informativo/comparable, no lo que se firma.
+  const { canonical, digestHex } = await digestCanonical(digestSubject);
+  const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
   return {
     content,
     digest: digestHex,
