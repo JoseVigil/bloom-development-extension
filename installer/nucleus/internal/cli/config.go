@@ -18,6 +18,7 @@ func DefaultNucleusConfig() HelpConfig {
 		CategoryOrder: []string{
 			"SYSTEM",
 			"DIAGNOSTICS",
+			"SUPERVISOR",
 			"GOVERNANCE",
 			"TEAM",
 			"VAULT",
@@ -32,6 +33,7 @@ func DefaultNucleusConfig() HelpConfig {
 		CategoryDescs: map[string]string{
 			"SYSTEM":          "System information and diagnostics",
 			"DIAGNOSTICS":     "Health checks, log inspection and system diagnostics",
+			"SUPERVISOR":      "Supervisor operations and cross-component log inspection",
 			"GOVERNANCE":      "Organization initialization and authority",
 			"TEAM":            "Team and collaboration management",
 			"VAULT":           "Secure key and credential management",
