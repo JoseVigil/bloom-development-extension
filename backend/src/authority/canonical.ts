@@ -94,13 +94,24 @@ function buildSignedMessage(payload: string): Uint8Array {
  * Workers secret binding (`wrangler secret put AUTHORITY_SIGNING_KEY_PKCS8_B64`, guardada
  * como base64 y decodificada antes de llamar a esta función) — nunca hardcodeada.
  *
- * VERIFICACIÓN PENDIENTE (documentar en el reporte de cierre, §1.2 del encargo): esta
- * implementación asume que el runtime de Workers soporta `{ name: "Ed25519" }` de forma
- * nativa vía SubtleCrypto. Cloudflare lo fue habilitando de forma progresiva; hay que
- * confirmar contra el `compatibility_date` real de `wrangler.jsonc` de este proyecto antes
- * de dar esto por andando. Si no está soportado en ese compatibility_date, el fallback es
- * sumar una librería pura JS (p. ej. `@noble/ed25519`) con la misma firma de función, sin
- * tocar el resto de este archivo.
+ * SOPORTE NATIVO DE Ed25519 (§2.5, verificado en esta sesión contra el changelog oficial de
+ * Cloudflare Workers, developers.cloudflare.com/workers/platform/changelog/): la Web
+ * Crypto API de Workers soporta `{ name: "Ed25519" }` (curvas "Secure Curves", RFC 8032)
+ * desde el 2023-04-28. Ese cambio es un cambio de runtime (workerd) NO gateado por
+ * `compatibility_date` ni por ningún compatibility flag — el propio changelog de Cloudflare
+ * aclara explícitamente que "these changes are not configurable" y que son distintos de los
+ * cambios que sí dependen de compatibility date/flags. El `compatibility_date` de este
+ * proyecto en `wrangler.jsonc` es "2026-08-29", muy posterior a esa fecha, así que el
+ * soporte nativo está garantizado independientemente del valor de esa fecha.
+ *
+ * CONCLUSIÓN: no hace falta el fallback con `@noble/ed25519` que se dejó anotado en
+ * revisiones anteriores de este comentario — se descarta explícitamente para no sumar una
+ * dependencia criptográfica extra a auditar sin necesidad real. Si en el futuro aparece un
+ * caso concreto de fallo (p. ej. un entorno de test que no corra sobre workerd real, como
+ * `vitest` sin `@cloudflare/vitest-pool-workers`, o un Miniflare desactualizado), el punto
+ * de extensión sigue siendo este mismo archivo: envolver el `crypto.subtle.importKey` /
+ * `.sign` / `.verify` de acá con una rama de fallback, sin tocar las firmas de función de
+ * `signCanonicalPayload` / `verifyCanonicalSignature` ni el resto del archivo.
  */
 export async function signCanonicalPayload(canonicalJson: string, signingKeyPkcs8: ArrayBuffer): Promise<string> {
   const key = await crypto.subtle.importKey("pkcs8", signingKeyPkcs8, { name: "Ed25519" }, false, ["sign"]);
