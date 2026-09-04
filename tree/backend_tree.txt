@@ -1,0 +1,96 @@
+bloom-development-extension/
+└── backend/
+    ├── .gitignore
+    ├── .wrangler/
+    │   ├── state/
+    │   │   └── v3/
+    │   │       ├── cache/
+    │   │       │   └── miniflare-CacheObject/
+    │   │       │       ├── metadata.sqlite
+    │   │       │       ├── metadata.sqlite-shm
+    │   │       │       └── metadata.sqlite-wal
+    │   │       ├── d1/
+    │   │       │   └── miniflare-D1DatabaseObject/
+    │   │       │       ├── a36f84ea60804f30bb0c7f7cad9f5336a6cca0165abdab8b9241d93dbf0b6006.sqlite
+    │   │       │       ├── metadata.sqlite
+    │   │       │       ├── metadata.sqlite-shm
+    │   │       │       └── metadata.sqlite-wal
+    │   │       ├── observability/
+    │   │       │   └── miniflare-wobs-trace-store/
+    │   │       │       ├── a590acd76969f996ec6e4b599c3c09f58c283a76f2d61392b5d3046caf557602.sqlite
+    │   │       │       ├── a590acd76969f996ec6e4b599c3c09f58c283a76f2d61392b5d3046caf557602.sqlite-shm
+    │   │       │       ├── a590acd76969f996ec6e4b599c3c09f58c283a76f2d61392b5d3046caf557602.sqlite-wal
+    │   │       │       ├── metadata.sqlite
+    │   │       │       ├── metadata.sqlite-shm
+    │   │       │       └── metadata.sqlite-wal
+    │   │       └── r2/
+    │   │           └── miniflare-R2BucketObject/
+    │   │               ├── metadata.sqlite
+    │   │               ├── metadata.sqlite-shm
+    │   │               └── metadata.sqlite-wal
+    │   └── tmp/
+    │       ├── bundle-O1QBOa/
+    │       │   ├── middleware-insertion-facade.js
+    │       │   └── middleware-loader.entry.ts
+    │       └── dev-x9irA5/
+    │           ├── index.js
+    │           └── index.js.map
+    ├── README.md
+    ├── drizzle.config.ts
+    ├── migrations/
+    │   ├── 0000_initial.sql
+    │   └── meta/
+    ├── node_modules/ [... dependencies]
+    ├── package-lock.json
+    ├── package.json
+    ├── seed.sql
+    ├── src/
+    │   ├── index.ts
+    │   └── manifest.ts
+    ├── test/
+    │   └── manifest.spec.ts
+    ├── tsconfig.json
+    ├── vitest.config.mts
+    ├── web/
+    │   ├── .env.example
+    │   ├── .gitignore
+    │   ├── README.md
+    │   ├── index.html
+    │   ├── package-lock.json
+    │   ├── package.json
+    │   ├── src/
+    │   │   ├── App.tsx
+    │   │   ├── api/
+    │   │   │   ├── auth.ts
+    │   │   │   ├── client.ts
+    │   │   │   ├── mock.ts
+    │   │   │   └── users.ts
+    │   │   ├── components/
+    │   │   │   ├── auth/
+    │   │   │   │   ├── AuthGuard.tsx
+    │   │   │   │   └── LoginButton.tsx
+    │   │   │   ├── layout/
+    │   │   │   │   └── AppShell.tsx
+    │   │   │   └── users/
+    │   │   │       ├── RoleBadge.tsx
+    │   │   │       ├── UserForm.tsx
+    │   │   │       └── UserTable.tsx
+    │   │   ├── context/
+    │   │   │   └── SessionContext.tsx
+    │   │   ├── hooks/
+    │   │   │   └── useSession.ts
+    │   │   ├── main.tsx
+    │   │   ├── routes/
+    │   │   │   ├── Login.tsx
+    │   │   │   ├── NotFound.tsx
+    │   │   │   └── Users.tsx
+    │   │   ├── styles/
+    │   │   │   ├── global.css
+    │   │   │   └── tokens.css
+    │   │   ├── types/
+    │   │   │   └── user.ts
+    │   │   └── vite-env.d.ts
+    │   ├── tsconfig.json
+    │   └── vite.config.ts
+    ├── worker-configuration.d.ts
+    └── wrangler.jsonc
