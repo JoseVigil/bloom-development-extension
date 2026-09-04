@@ -16,13 +16,15 @@
 
 import canonicalize from "canonicalize";
 
-// SUPUESTO DE DISEÑO: el separador de dominio exacto usado por Nucleus
-// (`internal/authority` en Go) no está disponible en esta sesión — no tengo el §8.1 del
-// diseño físico. El valor de abajo es un placeholder explícito. Antes de firmar nada real,
-// hay que confirmarlo contra la implementación Go y reemplazarlo por el valor exacto (y
-// documentar de dónde salió) — si no coincide byte a byte, Nucleus va a rechazar toda
-// firma que produzca este Worker.
-const DOMAIN_SEPARATOR = "bloom-authority-snapshot-v1"; // TODO: confirmar contra Nucleus internal/authority (Go)
+// DOMAIN_SEPARATOR — corregido en esta revisión a partir de un valor provisto
+// explícitamente en la sesión de corrección ("BLOOM-AUTHORITY-SNAPSHOT-v1"). IMPORTANTE:
+// este valor NO fue verificado contra el código fuente real de `internal/authority` (Go,
+// Nucleus) en esta sesión — nadie en esta conversación tuvo ese archivo a la vista. Sigue
+// siendo, estrictamente, una afirmación no confirmada, no un hecho verificado. Antes de
+// firmar algo real: confirmar byte a byte contra la constante Go correspondiente y dejar
+// registro en el reporte de cierre de dónde salió la confirmación (commit, línea, quién
+// lo confirmó). Si no coincide, Nucleus rechaza toda firma que produzca este Worker.
+const DOMAIN_SEPARATOR = "BLOOM-AUTHORITY-SNAPSHOT-v1";
 
 /**
  * Canonicaliza un valor JSON según RFC 8785 (JCS).
@@ -55,6 +57,28 @@ export async function digestCanonical(value: unknown): Promise<{ canonical: stri
 }
 
 /**
+ * Construye el mensaje a firmar/verificar: bytes(DOMAIN_SEPARATOR) + 0x00 + bytes(digestHex).
+ *
+ * SUPUESTO DE DISEÑO (marcado explícitamente): se firma sobre el digest hex del payload
+ * canonicalizado, no sobre el JSON canonicalizado completo, porque `signDigest` /
+ * `verifyDigestSignature` reciben `digestHex` como parámetro (no el valor original ni su
+ * forma canonical) y cambiar esa firma de función rompería `authority.spec.ts` y
+ * `resolveAuthoritySnapshot`. Si Nucleus en realidad firma sobre los bytes del JSON
+ * canonicalizado completo (no sobre su hash), esta función y sus call sites necesitan
+ * cambiar de forma más amplia — confirmar contra `internal/authority` (Go) cuál de las
+ * dos es el comportamiento real antes de dar esto por cerrado.
+ */
+function buildSignedMessage(digestHex: string): Uint8Array {
+  const domainBytes = new TextEncoder().encode(DOMAIN_SEPARATOR);
+  const digestBytes = new TextEncoder().encode(digestHex);
+  const message = new Uint8Array(domainBytes.length + 1 + digestBytes.length);
+  message.set(domainBytes, 0);
+  message[domainBytes.length] = 0x00;
+  message.set(digestBytes, domainBytes.length + 1);
+  return message;
+}
+
+/**
  * Firma Ed25519 con separador de dominio sobre el digest hex del contenido canonicalizado.
  *
  * `signingKeyPkcs8` es la clave privada en formato PKCS#8 (DER), inyectada desde un
@@ -71,7 +95,7 @@ export async function digestCanonical(value: unknown): Promise<{ canonical: stri
  */
 export async function signDigest(digestHex: string, signingKeyPkcs8: ArrayBuffer): Promise<string> {
   const key = await crypto.subtle.importKey("pkcs8", signingKeyPkcs8, { name: "Ed25519" }, false, ["sign"]);
-  const message = new TextEncoder().encode(`${DOMAIN_SEPARATOR}:${digestHex}`);
+  const message = buildSignedMessage(digestHex);
   const signature = await crypto.subtle.sign({ name: "Ed25519" }, key, message);
   return arrayBufferToBase64(signature);
 }
@@ -82,7 +106,7 @@ export async function verifyDigestSignature(
   publicKeyRaw: ArrayBuffer,
 ): Promise<boolean> {
   const key = await crypto.subtle.importKey("raw", publicKeyRaw, { name: "Ed25519" }, false, ["verify"]);
-  const message = new TextEncoder().encode(`${DOMAIN_SEPARATOR}:${digestHex}`);
+  const message = buildSignedMessage(digestHex);
   const signature = base64ToArrayBuffer(signatureBase64);
   return crypto.subtle.verify({ name: "Ed25519" }, key, signature, message);
 }

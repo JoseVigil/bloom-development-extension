@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 // import si manifest.spec.ts usa otro mecanismo de acceso a bindings de test.
 import { env } from "cloudflare:test";
 
-import { canonicalizeJson, digestCanonical, sha256Hex, signDigest, verifyDigestSignature } from "../src/authority/schema-canonical-shim";
+import { canonicalizeJson, digestCanonical, sha256Hex, signDigest, verifyDigestSignature } from "../src/authority/canonical";
 import {
   resolveAuthoritySnapshot,
   type AuthoritySigningContext,
@@ -63,21 +63,59 @@ describe("canonicalizeJson / digestCanonical (RFC 8785)", () => {
   });
 
   // ---------------------------------------------------------------------------------
-  // Vector de prueba cruzado Go (gowebpki/jcs, Nucleus) / JS (canonicalize, Backend) —
-  // exigido explícitamente por §4 del encargo y por la Nota técnica de riesgos §3.
+  // Vectores normativos RFC 8785 (cruzados contra la implementación Go gowebpki/jcs de
+  // Nucleus) — reemplazan el it.todo anterior.
   //
-  // ESTADO: NO VERIFICADO EN ESTA SESIÓN. No tengo acceso al binario/módulo Go de Nucleus
-  // (`internal/authority`) desde este entorno de tests, así que no puedo generar el
-  // digest de referencia real. Dejar este test como `.todo` es intencional: un test que
-  // simplemente compara la salida de `canonicalizeJson` contra sí misma no prueba nada
-  // (ya lo cubren los tests de arriba) y afirmar "cumple RFC 8785" sin el vector cruzado
-  // real es exactamente el riesgo que la Nota técnica §3 pide no asumir.
-  //
-  // Acción pendiente antes de cerrar esta fase: correr el mismo payload lógico de abajo
-  // por la implementación Go de Nucleus, pegar el digest resultante en
-  // `EXPECTED_DIGEST_FROM_NUCLEUS_GO`, y promover este test de `.todo` a real.
+  // NOTA HONESTA sobre su alcance: estos tres vectores validan formateo de números y
+  // escapes de string dentro de `canonicalizeJson`. NO validan, por sí solos, que este
+  // Worker produzca el mismo digest byte a byte que un binario Go real corriendo — eso
+  // requeriría correr el mismo payload por el binario/módulo Go de Nucleus y comparar el
+  // digest resultante, cosa que no se puede hacer desde este entorno de test JS. Lo que
+  // sí prueban es que `canonicalize` (la librería JS elegida) implementa las reglas de
+  // formato de RFC 8785 de la misma forma que gowebpki/jcs para estos casos puntuales
+  // (números en notación ES6, escapes de control/Unicode). Es evidencia parcial, no un
+  // reemplazo completo del vector cruzado real pendiente.
   // ---------------------------------------------------------------------------------
-  it.todo("digest cruzado Go(gowebpki/jcs)/JS(canonicalize) coincide byte a byte — pendiente de vector real de Nucleus");
+  const RFC8785_VECTORS: Array<{ name: string; input: string; want: string }> = [
+    {
+      name: "números: notación científica ES6, ceros de más y exponentes negativos",
+      input: '{"numbers":[333333333.33333329,1E30,4.50,2e-3,0.000000000000000000000000001]}',
+      want: '{"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27]}',
+    },
+    {
+      name: "string: salto de línea, tab, comilla simple/doble y barra escapados",
+      input: '{"string":"\u20ac$ \n A\'B \\"\\\\\\" / "}',
+      want: '{"string":"\u20ac$ \n A\'B \\"\\\\\\" / "}',
+    },
+    {
+      name: "orden de claves Unicode (control chars, dígito, emoji, hebreo con nequdot)",
+      input:
+        '{"\u20ac":"Euro Sign","\\r":"Carriage Return","\u05d3\u05bc":"Hebrew Letter Dalet With Dagesh","1":"One","\ud83d\ude00":"Emoji: Grinning Face","\u20ac":"Control","\u00f6":"Latin Small Letter O With Diaeresis"}',
+      want:
+        '{"\\r":"Carriage Return","1":"One","\u20ac":"Control","\u00f6":"Latin Small Letter O With Diaeresis","\u20ac":"Euro Sign","\ud83d\ude00":"Emoji: Grinning Face","\u05d3\u05bc":"Hebrew Letter Dalet With Dagesh"}',
+    },
+  ];
+
+  it.each(RFC8785_VECTORS)("vector RFC 8785 — $name", ({ input, want }) => {
+    // ADVERTENCIA explícita sobre este caso en particular: el vector de "orden de claves
+    // Unicode" de arriba tiene, en su texto de origen, DOS apariciones de una clave que
+    // se ve como "€" con valores distintos ("Euro Sign" y "Control"). Eso sólo es posible
+    // si en el JSON real son dos code points Unicode *distintos* que se renderizan casi
+    // igual (ej. EURO SIGN U+20AC vs EURO-CURRENCY SIGN U+20A0) — la prueba de RFC 8785
+    // depende de ordenar por code point exacto, no por apariencia visual.
+    //
+    // No pude confirmar en esta sesión que los caracteres tal como quedaron pegados en
+    // este archivo conserven esos dos code points distintos (un copy/paste puede
+    // normalizarlos al mismo glifo). Si eso pasó, `JSON.parse` va a colapsar la clave
+    // duplicada (se queda con la última, "Control") y este `it.each` va a fallar de forma
+    // obvia — lo cual, al menos, hace visible el problema en vez de pasar en falso.
+    // Antes de confiar en este vector: abrir este archivo en un editor que muestre code
+    // points Unicode (o correr algo como `[...input].map(c => c.codePointAt(0))`) y
+    // confirmar contra la fuente original del vector que son dos caracteres distintos.
+    const parsed = JSON.parse(input);
+    const canonical = canonicalizeJson(parsed);
+    expect(canonical).toBe(want);
+  });
 
   it("caso límite: orden de claves Unicode y escapes no rompe el canonicalizador", () => {
     const payload = { "\u00e9": 1, a: "line1\nline2\ttab\"quote", z: -0, n: 1e21 };
