@@ -64,7 +64,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 | 9 | AUTHORIZATION | Fail-closed de roles, gate CLI y Alfred Master-only cerrados; handler API Node/TypeScript y boundary Go→Node pendientes | Preflight de instalaciones existentes y asignar/completar el tramo API de AUTH-FIX-02 | Nucleus identity/ownership; boundary Go→Node |
 | 10 | PALADIN / Distribución por composición | PALADIN confirmado como producto Cognituum para ingenieros; principio de una plataforma con composición individual u organizacional bajo análisis | Resolver gobernanza, contrato de composición, bootstrap y transiciones antes de diseñar la implementación | Nucleus; Metamorph; Installer/Setup; AUTHORIZATION; Batcave; Core; propiedad de Mandates y Wisdom |
 | 11 | Gravity / Orbital Agentic State / Posture | Persistencia, resolución, masa y gramática formal dual implementadas y probadas; integración productiva pendiente | Integrar resolución/parser en Nucleus, Temporal y Conductor Workspace Core | AUTHORIZATION (Tema 9, para Architect); PALADIN (Tema 10, para Postura/UX); Nucleus; Temporal; Core |
-| 12 | ROLES / Autoridad Organizacional Remota | Diseño físico v0.1 corregido y sometido a revisión; no existe implementación productiva ni sincronización Backend → Batcave → Nucleus | Homologar §20 por frontera y resolver la aprobación final de los criterios 13–16 | Backend; Batcave; Nucleus; Metamorph; AUTHORIZATION; PALADIN; Mandate Genesis |
+| 12 | ROLES / Autoridad Organizacional Remota | Fase 1 física de Nucleus implementada y validada dentro de su propia frontera (`ownershipcontract`, migración durable, markers fail-closed, decisión sellada de Gravity, módulo `internal/authority`); integración remota (Backend, Batcave, transporte, `shadow_remote`, cutover, `remote_enforced`) no activada | Homologar por frontera el impacto de la Fase 1 de Nucleus y resolver la aprobación final de los criterios 13–16 | Backend; Batcave; Nucleus; Metamorph; AUTHORIZATION; PALADIN; Mandate Genesis |
 
 ---
 
@@ -562,7 +562,7 @@ Claude Web/Cowork para las decisiones restantes de diseño; Codex o Claude Code 
 
 **Estado actual**
 
-El diseño físico interoperable de autoridad organizacional remota v0.1 fue corregido y sustituye la versión previamente distribuida; está sometido a revisión y no existe todavía una implementación end-to-end. La cadena contractual propuesta es:
+El diseño físico interoperable de autoridad organizacional remota v0.1 fue corregido y sustituye la versión previamente distribuida; está sometido a revisión. Sobre ese diseño, Nucleus reportó (2026-09-04, commit `3210f218`) que ya implementó y validó, dentro de su propia frontera, la Fase 1 física descrita más abajo. Esto es un avance material, no la implementación end-to-end: la cadena contractual propuesta sigue siendo
 
 ```text
 Backend organizacional
@@ -581,6 +581,42 @@ El cutover válido produce conjuntamente **binding state `REMOTE_LOCKED` + autho
 
 Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION conserva los fixes locales, roles fail-closed, gates y enforcement inmediato; ROLES gobierna la transición end-to-end hacia autoridad organizacional remota.
 
+**Fase 1 física de Nucleus — implementada y validada (commit `3210f218`, 2026-09-04)**
+
+Dentro de la frontera de Nucleus exclusivamente:
+
+- Paquete hoja compartido `installer/nucleus/internal/governance/ownershipcontract`: tipos wire de `bloom.organization.ownership` v1.0, separación `authority_mode`/`binding.state`, forma única `legacy_authority.owner`, decoding estricto con detección de claves duplicadas, clasificación de formatos legacy, rechazo fail-closed de formatos desconocidos/ambiguos/contradictorios, normalización pura y validación de schema/matriz modo-binding.
+- Migración durable de ownership: lock exclusivo, digest de bytes originales, escritura atómica (temp + rename), verificación posterior, migración idempotente, recuperación convergente ante interrupciones y rechazo sin mutación ante entradas inválidas. `SaveOwnership` ya no depende de un legacy previo.
+- Markers y autoridad legacy: único propietario de lock en la transición `.master`/`effective_markers`; coherencia exigida entre ownership válido, modo permitido, marker físico y `effective_markers`; en `remote_enforced` la lectura de autoridad legacy se rechaza antes de inspeccionar `.master`/`.specialist`, sin fallback.
+- `governance/decision`: `GovernedCreationDecision` sellada (campos privados, zero value inválido, sin constructores públicos ni struct literals externos), consumiendo el contrato compartido sin ciclos de dependencia hacia el paquete padre `governance`.
+- Módulo nuevo `installer/nucleus/internal/authority`: envelope de Authority Snapshot, canonicalización JCS (RFC 8785), digest SHA-256, firma Ed25519 con separación de dominio, resolución de `key_id` contra trust bundle, verificación de issuer/organización/audience/`installation_id`, TTL, snapshots full/delta con secuencias contiguas, normalización y validación de `result_digest`, replay idempotente, rechazo de downgrade y conflicto de digest, high-water mark/cutover floor/accepted projection/acceptance journal como unidades separadas, y persistencia atómica con recuperación convergente.
+- Catálogo v1 de roles built-in `master`/`specialist`, permisos explícitos, scopes sin herencia implícita, roles organizacionales versionados, rechazo de wildcards y reserva de IDs built-in. `architect` **no** fue incorporado como rol válido; el requisito histórico de merge de COR se expresa como capacidad explícita `intent.cor.merge`.
+- Supervisor y SynapseSimulator dejaron de validar una representación incompatible de owner; su validación de `.ownership.json` pasa ahora por la capa canónica de Governance.
+- Validado con `go test`, `go vet` y `go list -deps` sobre `internal/governance`, `internal/governance/ownershipcontract`, `internal/authority` e `internal/supervisor`; las tres verificaciones finalizaron correctamente.
+
+**Pendiente de activación / integración (no autorizado por este avance)**
+
+- `shadow_remote` y `remote_enforced` no están activados productivamente; no se realizó ningún cutover.
+- No se implementaron endpoints de Backend ni transporte/cache de Batcave; no se conectó WebSocket ni HTTPS pull; no existe flujo productivo de distribución de snapshots.
+- Brain y Temporal no incorporaron consumidores paralelos; Metamorph no transporta ni interpreta autoridad.
+- No se crearon comandos CLI ni streams de telemetría nuevos para Remote Authority; `telemetry.json` no fue modificado.
+- `.ownership.json` no contiene todavía accepted projection, high-water mark ni decisiones efectivas. La existencia de validadores y tipos para estados remotos no implica que esos modos estén habilitados.
+
+**Impacto por Work — revisión pendiente, sin autorización de escritura**
+
+Cada Work debe evaluar exclusivamente su propia frontera contra este avance material y responder qué supuestos quedaron desactualizados, qué superficies ya implementadas puede consumir, qué dependencias siguen pendientes, qué incompatibilidades existen con su código/documentación vigente, qué responsabilidades permanecen en su frontera y qué archivos necesitaría modificar en una fase posterior — sin modificar nada como consecuencia automática de esta comunicación:
+
+- **Backend:** sigue siendo la futura fuente de verdad de principals, memberships, roles, asignaciones, vigencias y revocaciones; no debe derivar identidad organizacional del slug o locator legacy.
+- **Batcave:** debe autenticar transporte y conservar bytes exactos; no debe interpretar ownership, roles, scopes ni permisos como autoridad efectiva.
+- **Genesis:** debe considerar binding, instalación, promoción y revalidación sin anticipar que el transporte o el cutover ya existen.
+- **Brain/Temporal:** no deben leer `.ownership.json` ni Authority Snapshot como fuentes paralelas de autorización; ejecutan trabajo bounded previamente autorizado y revalidado.
+- **Metamorph:** preserva estado durable durante el lifecycle del software; no transporta, interpreta ni restaura autoridad mutable.
+- **Conductor/Onboarding:** debe producir o migrar hacia el schema canónico sin inferir `canonical_id`, issuer, trust binding o identidad remota.
+- **Vault/Executor:** aplican sus límites adicionales sobre operaciones previamente autorizadas; no conceden autoridad desde ownership local.
+- **Gravity:** consume exclusivamente decisiones selladas emitidas por Nucleus.
+- **Core/UI:** sólo debe presentar estados verificados y no transformar datos legacy en autoridad.
+- **ROLES/Agenda (esta agenda):** actualizar la planificación para reflejar que la Fase 1 de Nucleus ya es implementación material y no una propuesta pendiente — es lo que esta entrada del 2026-09-04 registra.
+
 **Fuentes de verdad**
 
 - `docs/ROLES/BLOOM_ROLES_ORGANIZATIONAL_AUTHORITY_CONSOLIDATION_v0_1.md`
@@ -589,11 +625,12 @@ Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION
 - `docs/ROLES/BLOOM_AUTHORITY_SNAPSHOT_SEMANTIC_CONTRACT_v0_1.md` (§§8.5–8.6)
 - `docs/ROLES/BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md` (versión corregida; §20 normativo de `.ownership.json`; sometida a aprobación final)
 - `docs/BATCAVE/BATCAVE_ARCHITECTURE.md`
+- Reporte transversal de NUCLEUS "Actualización transversal: Remote Authority Phase 1 implementada" (commit `3210f218`, 2026-09-04).
 - Tema 8 / Batcave, Tema 9 / AUTHORIZATION y Tema 10 / PALADIN de esta agenda.
 
 **Próximo paso concreto**
 
-1. Cada Work revisa exclusivamente su frontera contra el diseño corregido, incluido §20 de `.ownership.json`, y presenta incompatibilidades, responsabilidades, dependencias y plan posterior sin modificar archivos.
+1. Cada Work revisa exclusivamente su frontera contra el diseño corregido, incluido §20 de `.ownership.json`, y contra la Fase 1 material ya implementada por Nucleus, y presenta incompatibilidades, responsabilidades, dependencias y plan posterior sin modificar archivos.
 2. Backend, Batcave y Nucleus homologan la separación entre identidad organizacional canónica, locator/slug legacy, `installation_id`, issuer, trust binding, producción/versionado, transporte/cache, verificación/aceptación, high-water mark, revocación, freshness y recovery.
 3. Genesis, Brain/Temporal, Vault, Executor, PALADIN, Core/UI y Metamorph clasifican sus superficies posteriores y confirman que consumen sólo decisiones efectivas de Nucleus, no ownership local como fuente paralela.
 4. Resolver la aprobación expresa de los criterios 13–16 del §22: schema canónico, normalización estricta de formatos legacy, prohibición post-cutover de autoridad legacy y separación durable de ownership/proyección/high-water/cutover floor.
@@ -610,14 +647,14 @@ Tema 12 no reemplaza ni declara cerrado el Tema 9 / AUTHORIZATION. AUTHORIZATION
 **Decisiones/riesgos abiertos**
 
 - Los doce criterios originales fueron aprobados en la versión anterior. La versión corregida agrega `PHY-DEC-011`, `PHY-DEC-012` y los criterios 13–16 del §22; el diseño físico completo permanece sometido a aprobación final expresa de José.
-- El §20 define, para transición, el schema canónico de `.ownership.json`, `legacy_authority.owner` como única forma de owner legacy, separación de binding y autoridad, detección/normalización temporal de formatos legacy, rechazo fail-closed, migración durable/idempotente/crash-consistent y conservación de evidencia de origen.
-- No existe Authority Snapshot implementado ni sincronización Backend → Batcave → Nucleus; tampoco existen `shadow_remote`, `REMOTE_LOCKED + remote_enforced` ni revocación corporativa end-to-end en producción.
-- Permanecen para la planificación de implementación la mecánica de rotación de claves, contrato de invitación/aceptación/suspensión/revocación, múltiples Masters, separación de funciones, recovery de gaps/corrupción y las superficies físicas concretas de cada Work.
-- Deben resistirse downgrade, replay inválido, conflicto de digest, expiración offline y rollback técnico sin que ningún archivo local restaure autoridad revocada.
+- El §20 define, para transición, el schema canónico de `.ownership.json`, `legacy_authority.owner` como única forma de owner legacy, separación de binding y autoridad, detección/normalización temporal de formatos legacy, rechazo fail-closed, migración durable/idempotente/crash-consistent y conservación de evidencia de origen. La Fase 1 de Nucleus implementa físicamente este contrato dentro de su frontera, pero eso no sustituye la aprobación final de los criterios 13–16 ni habilita por sí solo ningún modo remoto.
+- No existe sincronización Backend → Batcave → Nucleus en producción; tampoco están activados `shadow_remote`, `REMOTE_LOCKED + remote_enforced` ni revocación corporativa end-to-end. La presencia de validadores, tipos y catálogo v1 para estados remotos en Nucleus no significa que esos modos estén habilitados.
+- Permanecen para la planificación de implementación la mecánica de rotación de claves, contrato de invitación/aceptación/suspensión/revocación, múltiples Masters, separación de funciones, recovery de gaps/corrupción y las superficies físicas concretas de cada Work (Backend, Batcave, Brain/Temporal, Metamorph, Genesis, Conductor, Vault/Executor, Core/UI).
+- Deben resistirse downgrade, replay inválido, conflicto de digest, expiración offline y rollback técnico sin que ningún archivo local restaure autoridad revocada; el módulo `internal/authority` de Nucleus ya contempla estos rechazos dentro de su propia frontera.
 
 **Informe a AGENDA FOLLOWUP**
 
-Se informa la distribución de la versión corregida, sometida a aprobación final, del diseño físico v0.1 de **ROLES / Autoridad Organizacional Remota**. El nuevo §20 incorpora el contrato normativo transitorio de `.ownership.json`: owner legacy único, binding separado, formatos legacy reconocidos, migración fail-closed durable y prohibición post-cutover de autoridad local. Cada Work debe homologar exclusivamente su frontera y reportar incompatibilidades. No existe implementación productiva y ninguna revisión ni aprobación autoriza escritura: cada Work deberá presentar primero sus contratos de frontera y lista exacta de archivos. AUTHORIZATION mantiene sus fixes y gates locales hasta el cutover.
+Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 física de Remote Authority dentro de su propia frontera: contrato canónico `ownershipcontract`, migración durable de ownership, markers fail-closed, decisión sellada de Gravity y el nuevo módulo `internal/authority` (Authority Snapshot, JCS, firma Ed25519, full/delta, high-water mark, catálogo de roles v1 sin `architect`). Esto es evidencia material adicional sobre el diseño físico v0.1 corregido, todavía sometido a aprobación final; no constituye activación de `shadow_remote` ni `remote_enforced`, no hubo cutover, y no se implementó Backend, transporte de Batcave, consumidores en Brain/Temporal ni telemetría nueva. Cada Work debe homologar exclusivamente su frontera contra ambos documentos (diseño físico y este avance de Nucleus) y reportar qué supuestos quedaron desactualizados, qué puede consumir ya, qué depende de qué y qué archivos tocaría después. Ninguna revisión ni este reporte autoriza escritura: cada Work deberá presentar primero sus contratos de frontera y lista exacta de archivos, conforme a `AGENTS.md`, para autorización puntual de José. AUTHORIZATION mantiene sus fixes y gates locales hasta el cutover.
 
 ---
 
@@ -643,7 +680,7 @@ Se informa la distribución de la versión corregida, sometida a aprobación fin
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
 | Alta | 11 | Integración productiva de Gravity: workflow Temporal, validación autoritativa Nucleus y empaquetado en Conductor Workspace Core | Persistencia, resolución, masa y parser dual implementados; no crear componente parser independiente |
 | Media | 11 | Evaluar si `BLOOM_Mandate_Package_Spec_v1_0_0.md` y `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` requieren investigación propia o se relacionan con Wisdom | Ninguna — solo decidir si se abre |
-| Alta | 12 | Homologación por frontera del diseño físico corregido, incluido §20 de `.ownership.json` | Diseño sometido a aprobación final; cada Work reporta impacto y presenta lista exacta de archivos antes de escribir |
+| Alta | 12 | Homologación por frontera del diseño físico corregido (incluido §20 de `.ownership.json`) y de la Fase 1 física ya implementada por Nucleus (`ownershipcontract`, `authority`, migración durable, markers, decisión sellada de Gravity) | Diseño sometido a aprobación final; Fase 1 de Nucleus reportada pero no extiende autorización de escritura a otros Works; cada Work reporta impacto y presenta lista exacta de archivos antes de escribir |
 
 ## Registro cronológico de avances
 
@@ -665,3 +702,4 @@ Se informa la distribución de la versión corregida, sometida a aprobación fin
 | 2026-09-03 | 12 (nuevo) | Se consolida el hito transversal ROLES / Autoridad Organizacional Remota: Backend como verdad organizacional, Batcave como transporte/sincronización/cache, Nucleus como verificador y decisor efectivo, y Brain/Temporal como ejecución acotada. | Work ROLES, fuentes documentales y decisión del usuario | Se abre el Tema 12 y se informa a AGENDA FOLLOWUP. AUTHORIZATION conserva su enforcement local; el diseño del Authority Snapshot queda pendiente sin anticipar wire schema. |
 | 2026-09-04 | 12 | José aprobó los doce criterios del §21 de `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`. Se fijó que el cutover válido produce `binding state REMOTE_LOCKED + authority mode remote_enforced`; son dimensiones distintas y relacionadas. | Aprobación expresa del usuario | Se promueve el diseño físico v0.1 a contrato aprobado para planificación coordinada. La implementación permanece bloqueada hasta que cada Work presente sus fronteras y lista exacta de archivos. |
 | 2026-09-04 | 12 | Se distribuyó la versión material corregida de `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`, con `PHY-DEC-011/012`, §20 normativo de `.ownership.json` y cuatro criterios adicionales de aprobación. | Actualización del usuario; diseño físico corregido | Se sustituye la referencia anterior: el diseño completo vuelve a estado sometido a revisión hasta la aprobación expresa de los criterios 13–16 del §22. Se abre homologación obligatoria por frontera contra `.ownership.json`. |
+| 2026-09-04 | 12 | NUCLEUS reportó (commit `3210f218`) la implementación y validación de la Fase 1 física de Remote Authority dentro de su propia frontera: `ownershipcontract`, migración durable de ownership, markers fail-closed, decisión sellada de Gravity y el módulo `internal/authority` (Authority Snapshot, JCS, firma Ed25519, full/delta, high-water mark, catálogo de roles v1 sin `architect`); Supervisor/SynapseSimulator ya validan por la capa canónica. `shadow_remote`, `remote_enforced`, cutover, Backend, transporte de Batcave y consumidores en Brain/Temporal permanecen sin activar. | Work NUCLEUS, reportado por el usuario | Se actualiza el Tema 12: se registra la Fase 1 de Nucleus como implementación material (no propuesta), se diferencia de lo pendiente por Work, y se añade revisión de impacto para Backend, Batcave, Genesis, Brain/Temporal, Metamorph, Conductor, Vault, Executor, Gravity y Core/UI. Ninguna escritura queda autorizada por este reporte. |
