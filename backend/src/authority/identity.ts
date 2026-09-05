@@ -1,45 +1,56 @@
 // backend/src/authority/identity.ts
 //
-// Verificación de identidad de instalación S2S — lado Backend del encargo de Fase 3
-// (el encargo adjunto es el de Nucleus/Go; el endpoint de registro de Backend se
-// menciona ahí como "encargo aparte, mismo día" pero no está presente en esta sesión.
-// Este archivo es la implementación razonable de esa contraparte, para que
-// `request_signing.go` tenga algo real que verificar).
+// Identidad de instalación S2S — Fase 3, §1.1 del encargo
+// (Encargo_Implementacion_Fisica_Fase3_Backend_v0_1.md, aprobado 2026-09-04).
 //
-// COMPATIBILIDAD DE FIRMA: reusa `canonicalizeJson` y el mecanismo genérico de dominio
-// (`verifyWithDomain`) agregados en canonical.ts, en vez de reimplementar el ensamblado
-// `domain + 0x00 + payload` acá. Esto es lo que garantiza que un mensaje firmado por
-// Nucleus con `BLOOM-INSTALLATION-AUTH-v1` sea byte a byte el mismo que arma este
-// archivo para verificar — misma canonicalización JCS, mismo separador de dominio,
-// mismo layout de bytes.
+// Esta versión reemplaza una implementación de sesión anterior que asumía un encargo de
+// Nucleus no disponible en ese momento. Diferencias que importan respecto a esa versión
+// anterior (no reabrir, ya corregidas acá):
+//   - Tabla `installation_keys` (no `installation_identities`), columnas
+//     `public_key_raw`/`status`/`registered_at` en vez de `public_key`/`revoked_at`.
+//   - Ventana de replay ±120s (no 5 minutos) — §2 del documento de decisión.
+//   - El registro (`registerInstallationKey`) NO verifica firma/prueba de posesión.
+//     Está gateado exclusivamente por el token de servicio estático provisorio de
+//     Fase 2, chequeado en `index.ts` antes de llamar a esta función — el encargo es
+//     explícito: "no se inventa un mecanismo de autenticación nuevo para este endpoint
+//     en particular".
 //
-// Mensaje firmado (igual a lo que exige el encargo de Nucleus §1.2):
+// COMPATIBILIDAD DE FIRMA: reusa `canonicalizeJson` y `verifyWithDomain` de
+// `canonical.ts` para que el mensaje reconstruido acá sea byte a byte el mismo que firma
+// Nucleus (mismo dominio `BLOOM-INSTALLATION-AUTH-v1`, mismo separador 0x00, misma
+// canonicalización JCS) — mismo riesgo que el bug de firma de Fase 2 si se reimplementa
+// el ensamblado de bytes en dos lugares distintos.
+//
+// Mensaje firmado (igual de ambos lados, no se decide de nuevo acá — encargo Nucleus
+// §1.2):
 //   BLOOM-INSTALLATION-AUTH-v1 + 0x00 + canonical_JSON({installation_id, organization_id, method, path, timestamp})
+//
+// SUPUESTO: no tengo `canonical.ts` en esta sesión, sólo su interfaz tal como la usaba
+// la versión anterior de este archivo (`canonicalizeJson(obj): string`,
+// `verifyWithDomain(domain, canonicalPayload, signatureBase64, publicKeyRaw): Promise<boolean>`).
+// Si esa interfaz cambió, ajustar las dos llamadas de abajo.
 
 import { canonicalizeJson, verifyWithDomain } from "./canonical";
 
 export const INSTALLATION_AUTH_DOMAIN = "BLOOM-INSTALLATION-AUTH-v1";
 
+// §1.1 del encargo / §2 del documento de decisión: única defensa de replay en esta
+// fase, sin caché de nonce. ±120 segundos respecto de la hora del Worker.
+const REPLAY_WINDOW_MS = 120 * 1000;
+
 export interface InstallationAuthHeaders {
   installationId: string;
-  timestamp: string; // RFC3339 UTC, tal como lo emite Nucleus
+  timestamp: string; // RFC3339 UTC, emitido por Nucleus
   signatureBase64: string;
 }
 
-export interface InstallationIdentityRow {
+export interface InstallationKeyRow {
   installation_id: string;
   organization_id: string;
-  public_key: string; // base64 raw Ed25519 (32 bytes)
-  created_at: number;
-  revoked_at: number | null;
+  public_key_raw: string; // base64 raw Ed25519 (32 bytes)
+  status: "active" | "revoked";
+  registered_at: number;
 }
-
-// SUPUESTO: 5 minutos. El encargo de Nucleus es explícito en que la ventana de repetición
-// es responsabilidad de Backend ("no es responsabilidad de Nucleus imponer la ventana,
-// sólo firmar con la hora actual en UTC") pero no fija un valor — no hay ningún documento
-// disponible en esta sesión que lo especifique. Confirmar contra el diseño físico o el
-// encargo real de Backend antes de producción.
-const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
 export function readInstallationAuthHeaders(request: Request): InstallationAuthHeaders | null {
   const installationId = request.headers.get("X-Bloom-Installation-Id");
@@ -65,7 +76,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 /**
  * Reconstruye el payload canónico exactamente como lo arma Nucleus antes de firmar. El
  * orden de propiedades acá no importa (JCS lo normaliza), pero los NOMBRES sí deben
- * coincidir byte a byte con `request_signing.go`.
+ * coincidir byte a byte con el lado firmante.
  */
 function buildAuthPayload(params: {
   installationId: string;
@@ -84,89 +95,72 @@ function buildAuthPayload(params: {
 }
 
 /**
- * Verifica la firma de un request contra una identidad YA REGISTRADA (clave pública
- * conocida en `installation_identities`). No usar para el registro inicial: ahí la
- * clave pública todavía no existe en la base de datos, viaja en el body de la request
- * (ver `verifyRegistrationRequest`).
+ * Registra la clave pública de una instalación nueva (§1.1). NO verifica firma ni
+ * prueba de posesión — el registro está gateado exclusivamente por el token de
+ * servicio estático provisorio, chequeado por el caller (`index.ts`) antes de invocar
+ * esta función. Rechaza (`conflict`) si ya existe una fila `active` para ese
+ * `installation_id` — no sobreescribe en silencio; revocar-y-reemplazar es Fase 4.
  */
-export async function verifyInstallationRequest(params: {
-  organizationId: string;
-  method: string;
-  path: string;
-  headers: InstallationAuthHeaders;
-  identity: InstallationIdentityRow;
-}): Promise<boolean> {
-  if (params.identity.revoked_at !== null) return false;
-  if (params.identity.organization_id !== params.organizationId) return false;
-  if (!isWithinReplayWindow(params.headers.timestamp)) return false;
-
-  const payload = buildAuthPayload({
-    installationId: params.headers.installationId,
-    organizationId: params.organizationId,
-    method: params.method,
-    path: params.path,
-    timestamp: params.headers.timestamp,
-  });
-  const publicKeyRaw = base64ToArrayBuffer(params.identity.public_key);
-  return verifyWithDomain(INSTALLATION_AUTH_DOMAIN, payload, params.headers.signatureBase64, publicKeyRaw);
-}
-
-/**
- * Verifica el request de registro inicial: la clave pública viene en el body (primer
- * uso — todavía no hay fila en `installation_identities`), y la firma prueba posesión
- * de la clave privada correspondiente antes de persistir nada. La comprobación de
- * conflicto (installation_id ya registrado) es responsabilidad de
- * `registerInstallationIdentity`, no de esta función — así el binding de Nucleus puede
- * distinguir "firma inválida" (401) de "conflicto" (409) tal como exige
- * `binding_test.go` del lado Nucleus.
- */
-export async function verifyRegistrationRequest(params: {
-  organizationId: string;
-  method: string;
-  path: string;
-  headers: InstallationAuthHeaders;
-  publicKeyBase64: string;
-}): Promise<boolean> {
-  if (!isWithinReplayWindow(params.headers.timestamp)) return false;
-  const payload = buildAuthPayload({
-    installationId: params.headers.installationId,
-    organizationId: params.organizationId,
-    method: params.method,
-    path: params.path,
-    timestamp: params.headers.timestamp,
-  });
-  const publicKeyRaw = base64ToArrayBuffer(params.publicKeyBase64);
-  return verifyWithDomain(INSTALLATION_AUTH_DOMAIN, payload, params.headers.signatureBase64, publicKeyRaw);
-}
-
-export async function registerInstallationIdentity(
+export async function registerInstallationKey(
   db: D1Database,
-  params: { installationId: string; organizationId: string; publicKeyBase64: string },
+  params: { installationId: string; organizationId: string; publicKeyRaw: string },
 ): Promise<{ ok: true } | { ok: false; reason: "conflict" }> {
   const existing = await db
-    .prepare("SELECT installation_id FROM installation_identities WHERE installation_id = ?")
+    .prepare("SELECT installation_id FROM installation_keys WHERE installation_id = ? AND status = 'active'")
     .bind(params.installationId)
     .first<{ installation_id: string }>();
   if (existing) return { ok: false, reason: "conflict" };
 
   await db
     .prepare(
-      "INSERT INTO installation_identities (installation_id, organization_id, public_key, created_at, revoked_at) VALUES (?, ?, ?, ?, NULL)",
+      `INSERT INTO installation_keys (installation_id, organization_id, public_key_raw, status, registered_at)
+       VALUES (?, ?, ?, 'active', ?)`,
     )
-    .bind(params.installationId, params.organizationId, params.publicKeyBase64, Date.now())
+    .bind(params.installationId, params.organizationId, params.publicKeyRaw, Date.now())
     .run();
   return { ok: true };
 }
 
-export async function loadInstallationIdentity(
+/**
+ * Verifica la firma S2S de un request contra la clave `active` registrada para
+ * `headers.installationId` (§1.1). Hace ella misma el lookup en `installation_keys` —
+ * el criterio de "hay una clave activa para esa organización" es parte de lo que hay
+ * que verificar, no un dato ya resuelto por el caller.
+ *
+ * Rechaza (retorna `false`) si:
+ *   - no hay clave `active` registrada para `headers.installationId`,
+ *   - la organización de esa clave no coincide con `params.organizationId`,
+ *   - `headers.timestamp` está fuera de la ventana de ±120s,
+ *   - la firma no verifica contra la clave.
+ */
+export async function verifyInstallationSignature(
   db: D1Database,
-  installationId: string,
-): Promise<InstallationIdentityRow | null> {
-  const row = await db
+  params: {
+    organizationId: string;
+    method: string;
+    path: string;
+    headers: InstallationAuthHeaders;
+  },
+): Promise<boolean> {
+  if (!isWithinReplayWindow(params.headers.timestamp)) return false;
+
+  const key = await db
     .prepare(
-      "SELECT installation_id, organization_id, public_key, created_at, revoked_at FROM installation_identities WHERE installation_id = ?",
+      `SELECT installation_id, organization_id, public_key_raw, status, registered_at
+       FROM installation_keys WHERE installation_id = ? AND status = 'active'`,
     )
-    .bind(installationId)
-    .first<InstallationIdentityRow>();
-  return row ?? null;
+    .bind(params.headers.installationId)
+    .first<InstallationKeyRow>();
+  if (!key) return false;
+  if (key.organization_id !== params.organizationId) return false;
+
+  const payload = buildAuthPayload({
+    installationId: params.headers.installationId,
+    organizationId: params.organizationId,
+    method: params.method,
+    path: params.path,
+    timestamp: params.headers.timestamp,
+  });
+  const publicKeyRaw = base64ToArrayBuffer(key.public_key_raw);
+  return verifyWithDomain(INSTALLATION_AUTH_DOMAIN, payload, params.headers.signatureBase64, publicKeyRaw);
 }

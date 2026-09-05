@@ -1,19 +1,24 @@
 import { Hono } from "hono";
 import { manifestEtag, resolveIonManifest } from "./manifest";
 import {
-  loadInstallationIdentity,
   readInstallationAuthHeaders,
-  registerInstallationIdentity,
-  verifyInstallationRequest,
-  verifyRegistrationRequest,
+  registerInstallationKey,
+  verifyInstallationSignature,
 } from "./authority/identity";
-import { resolveAuthoritySnapshot } from "./authority/snapshot";
+import { resolveAuthoritySnapshot, resolveTrustBundle } from "./authority/snapshot";
 
 // SUPUESTO: `AUTHORITY_SIGNING_KEY_PKCS8_B64` y `AUTHORITY_SIGNING_KEY_ID` en `Env` no
 // están confirmados contra el `Env` real del proyecto (no tengo el
-// `worker-configuration.d.ts` ni el `wrangler.jsonc` completo en esta sesión, sólo lo
-// que menciona el comentario de `canonical.ts`: `AUTHORITY_SIGNING_KEY_PKCS8_B64` como
-// secret). Confirmar el binding exacto y el nombre de `signing_key_id` antes de desplegar.
+// `worker-configuration.d.ts` ni el `wrangler.jsonc` completo en esta sesión). Confirmar
+// el binding exacto antes de desplegar.
+//
+// SUPUESTO (§1.1 del encargo Fase 3): el registro de instalaciones se gatea con el
+// mismo token de servicio estático provisorio que Fase 2 usaba para las rutas de
+// snapshot/trust-bundle antes de esta fase. No tengo ese código de Fase 2 en esta
+// sesión, así que asumo un secret `AUTHORITY_SERVICE_TOKEN` en `Env` chequeado contra
+// un header `Authorization: Bearer <token>`. Si Fase 2 usó otro nombre de secret u otro
+// header, ajustar únicamente `checkServiceToken` — nada más de este archivo depende de
+// esa elección.
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -57,12 +62,22 @@ app.get("/v1/releases/:releaseId/download", async (context) => {
 });
 
 /**
- * Middleware de verificación S2S (§1.2 del encargo Fase 3: Nucleus firma cada request
- * saliente, Backend verifica). Se aplica sólo a rutas de `/v1/authority/*` que asumen
- * una identidad YA `BOUND` (ej. snapshot). El registro inicial
- * (`POST /v1/authority/identity/register`) NO pasa por este middleware: ahí la clave
- * pública todavía no está en `installation_identities` — viaja en el body de esa misma
- * request y se verifica con `verifyRegistrationRequest` dentro del handler.
+ * Chequeo del token de servicio estático provisorio (§1.1: "no se inventa un mecanismo
+ * de autenticación nuevo para este endpoint en particular"). Reservado exclusivamente
+ * para el registro de identidad — el encargo es explícito en que snapshot/trust-bundle
+ * ya NO aceptan este token una vez que la instalación tiene clave registrada.
+ */
+function checkServiceToken(context: any): boolean {
+  const authHeader = context.req.header("Authorization");
+  const expected = context.env.AUTHORITY_SERVICE_TOKEN;
+  return Boolean(expected) && authHeader === `Bearer ${expected}`;
+}
+
+/**
+ * Middleware de verificación S2S (§1.1 del encargo Fase 3). Se aplica a las rutas de
+ * `/v1/authority/*` que asumen una identidad YA registrada (snapshot, trust-bundle) —
+ * reemplaza, no suma, el "sin autenticación estricta o token estático" que Fase 2 dejó
+ * como opción provisoria para esas dos rutas específicamente.
  */
 const verifyInstallationAuth = async (context: any, next: () => Promise<void>) => {
   const organizationId = context.req.query("org");
@@ -75,18 +90,12 @@ const verifyInstallationAuth = async (context: any, next: () => Promise<void>) =
     return context.json({ error: "missing_auth_headers" }, 401);
   }
 
-  const identity = await loadInstallationIdentity(context.env.DB, headers.installationId);
-  if (!identity) {
-    return context.json({ error: "unknown_installation" }, 401);
-  }
-
   const url = new URL(context.req.url);
-  const verified = await verifyInstallationRequest({
+  const verified = await verifyInstallationSignature(context.env.DB, {
     organizationId,
     method: context.req.method,
     path: url.pathname,
     headers,
-    identity,
   });
   if (!verified) {
     return context.json({ error: "invalid_signature" }, 401);
@@ -95,43 +104,30 @@ const verifyInstallationAuth = async (context: any, next: () => Promise<void>) =
   await next();
 };
 
-app.post("/v1/authority/identity/register", async (context) => {
+app.post("/v1/authority/installations/register", async (context) => {
+  if (!checkServiceToken(context)) {
+    return context.json({ error: "invalid_service_token" }, 401);
+  }
+
   const organizationId = context.req.query("org");
   if (!organizationId) {
     return context.json({ error: "missing_org", message: "Query parameter 'org' is required." }, 400);
   }
 
-  const headers = readInstallationAuthHeaders(context.req.raw);
-  if (!headers) {
-    return context.json({ error: "missing_auth_headers" }, 401);
+  const body = await context.req
+    .json<{ installation_id?: string; public_key_raw?: string }>()
+    .catch(() => null);
+  if (!body?.installation_id || !body?.public_key_raw) {
+    return context.json({ error: "missing_fields" }, 400);
   }
 
-  const body = await context.req.json<{ public_key?: string }>().catch(() => null);
-  if (!body?.public_key) {
-    return context.json({ error: "missing_public_key" }, 400);
-  }
-
-  const url = new URL(context.req.url);
-  const proven = await verifyRegistrationRequest({
+  const result = await registerInstallationKey(context.env.DB, {
+    installationId: body.installation_id,
     organizationId,
-    method: context.req.method,
-    path: url.pathname,
-    headers,
-    publicKeyBase64: body.public_key,
-  });
-  if (!proven) {
-    return context.json({ error: "invalid_signature" }, 401);
-  }
-
-  const result = await registerInstallationIdentity(context.env.DB, {
-    installationId: headers.installationId,
-    organizationId,
-    publicKeyBase64: body.public_key,
+    publicKeyRaw: body.public_key_raw,
   });
   if (!result.ok) {
-    // Conflicto: installation_id ya registrado. El binding de Nucleus (binding.go) NO
-    // debe avanzar a BOUND ante este código — es la contraparte exacta de
-    // "Si el registro es rechazado ... el binding no avanza" del encargo Fase 3 §1.3.
+    // installation_id ya tiene una fila `active` — conflicto, no se sobreescribe.
     return context.json({ error: "installation_conflict" }, 409);
   }
 
@@ -155,6 +151,22 @@ app.get("/v1/authority/snapshot", verifyInstallationAuth, async (context) => {
     context.env.AUTHORITY_SIGNING_KEY_ID,
   );
   return context.json(envelope);
+});
+
+app.get("/v1/authority/trust-bundle", verifyInstallationAuth, async (context) => {
+  const organizationId = context.req.query("org")!;
+  const keys = await resolveTrustBundle(context.env.DB, organizationId);
+  return context.json({
+    organization_id: organizationId,
+    keys: keys.map((key) => ({
+      key_id: key.key_id,
+      public_key_raw: key.public_key_raw,
+      status: key.status,
+      signed_by_key_id: key.signed_by_key_id,
+      created_at: key.created_at,
+      retired_at: key.retired_at,
+    })),
+  });
 });
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
