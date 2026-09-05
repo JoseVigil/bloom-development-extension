@@ -103,7 +103,7 @@ bloom-development-extension/
     │       ├── ING_Intent_Spec_v1_1.md
     │       ├── MRG_Intent_Spec_v1_0.md
     │       └── TST_Intent_Spec_v1_0.md
-    ├── BTIPS_Bloom_Technical_Intent_Package_v7_1_1.md
+    ├── BTIPS_Bloom_Technical_Intent_Package_v7_2.md
     ├── BTIP_resumen_ecosistema_1.0.md
     ├── BUILD/
     │   ├── BUILD_ALL_Documentacion_v1_0.md

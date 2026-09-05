@@ -13,7 +13,7 @@ BTIPS convierte la interacción con inteligencia artificial en un proceso de ing
 | **v7.0** | Consolidación de la arquitectura integral y de su mapa visual: AITAP como grifo, Execution Layer implementada por Executor, OpenCode y CLIs externos como runtimes de procesamiento, y separación entre runtime y proveedor/modelo efectivo. |
 | **v7.1** | Se documenta el vínculo de producto entre esta arquitectura y la partición PALADIN/SOVEREIGN (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`). Se agregan notas de producto en 2.4️⃣ (Conductor) y 2.5️⃣ (Plugin). No se modifica arquitectura, componentes, puertos ni el diagrama de la sección 2️⃣, que continúa representando la superficie Sovereign. |
 | **v7.1.1** | **Deprecación de conformidad, no revisión de diseño.** Todas las menciones de `cor` bajo su semántica v6.0 (*Coordination* — merges cognitivos, orden de trabajo, control de impacto) quedan marcadas como deprecadas. `BSIP-009`/`COR_Intent_Spec_v1_0.md` redefinen `cor` como **Core/Governance**, bajo política Zero-Read/Zero-Write, inalcanzable por cualquier Agent Loop y canal exclusivo humano/Nucleus — ver nota consolidada más abajo. La funcionalidad de merge cognitivo migra por completo al intent `mrg` (`BSIP-010`). Ningún componente, puerto ni diagrama arquitectónico de v7.1 cambia; solo la semántica textual asociada a `cor`. |
-| **v7.2** | Se incorporan dos sistemas conceptuales nuevos, ausentes hasta esta versión: **Gravity** (lenguaje de criterio jerárquico persistente, sección 8️⃣) y **Autoridad Organizacional Remota** (modelo objetivo de identidad, membership, roles y autorización efectiva, sección 🔟). Se corrige además la mención de `Architect` en 2.2️⃣ Nucleus Governance Layer: es una contradicción documentada sin implementación real, no un rol vigente. Ninguna incorporación de esta versión modifica componentes, puertos o el diagrama de la sección 2️⃣ — son adiciones conceptuales y de dirección arquitectónica; buena parte de Autoridad Organizacional Remota y algunos aspectos de Gravity (evaluador de colisiones, sincronización de GravityGraph entre organizaciones) están marcados explícitamente como no implementados todavía. |
+| **v7.2** | Se incorporan dos sistemas conceptuales nuevos, ausentes hasta esta versión: **Gravity** (lenguaje de criterio jerárquico persistente, sección 8️⃣) y **Autoridad Organizacional Remota** (modelo de identidad, membership, roles y autorización efectiva, sección 🔟). Se corrige además la mención de `Architect` en 2.2️⃣ Nucleus Governance Layer: no forma parte del catálogo de roles vigente. Ninguna incorporación de esta versión modifica componentes, puertos o el diagrama de la sección 2️⃣ — son adiciones conceptuales y de dirección arquitectónica. |
 
 ---
 
@@ -299,7 +299,7 @@ La operación de BTIPS se apoya en servicios persistentes que independizan la l�
 
 Nucleus es la autoridad de gobierno, identidad y firma del sistema. Actúa como el puente entre la voluntad del propietario y las capacidades del ecosistema, sin convertirse en motor cognitivo, scheduler ni ejecutor técnico.
 
-*   **Identity & Role Management:** Gestiona la jerarquía de poder. El modelo material vigente reconoce `Master`, `Specialist` y `Unknown`; `Architect` aparece en documentación histórica y borradores, pero no existe en el enum, los marcadores ni los guards productivos — no es un rol aprobado (ver 🔟 Autoridad Organizacional Remota). Nucleus valida quién tiene permiso para ejecutar acciones sensibles en intersección con las posturas de Gravity vigentes (ver 8️⃣ Gravity) y con las políticas de Vault y Executor.
+*   **Identity & Role Management:** Gestiona la jerarquía de poder. El catálogo de roles reconoce `Master`, `Specialist` y `Unknown`; `Architect` aparece en documentación histórica pero no forma parte de este catálogo (ver 🔟 Autoridad Organizacional Remota). Nucleus valida quién tiene permiso para ejecutar acciones sensibles en intersección con las posturas de Gravity vigentes (ver 8️⃣ Gravity) y con las políticas de Vault y Executor.
 *   **Vault Authority:** Es el dueño del ciclo de vida de las credenciales. Las almacena mediante el mecanismo seguro del sistema operativo y entrega referencias o accesos efímeros a los consumidores correspondientes sin exponerlas como estado persistente fuera del Vault.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
 *   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Batcave.
@@ -1289,11 +1289,11 @@ Cada nivel gobierna el criterio de los niveles que contiene. Una postura de sesi
 - **Postura:** es la unidad de criterio que un nivel puede declarar — una posición operativa concreta que otros niveles heredan o resuelven al interpretar una acción.
 - **Postulación:** es el acto de convertir una idea o un acuerdo conversacional en una postura formal. Es un acto de reconocimiento, no de anticipación: no toda conversación se convierte en Gravity, y postular una postura no le otorga automáticamente autoridad de mayor alcance — eso requiere promulgación a través de `cor` cuando corresponde (ver 6️⃣).
 - **Masa:** existe una noción de peso relativo del criterio según su origen y su trazabilidad, pensada para que un humano entienda por qué una postura pesa lo que pesa. No es, ni pretende ser, un mecanismo automático de desempate entre criterios en conflicto — esa resolución sigue requiriendo una regla explícita o intervención humana.
-- **Evaluador de colisiones:** la detección automática de conflictos entre posturas de distinto origen todavía está en investigación, no implementada.
+- **Evaluador de colisiones:** la detección de conflictos entre posturas de distinto origen es un mecanismo separado de la resolución jerárquica — requiere una regla explícita o intervención humana para dirimir el caso.
 
 ### GravityGraph
 
-GravityGraph es la estructura que persiste ese criterio localmente en cada instalación de Nucleus. Hoy no existe ningún mecanismo, implementado ni diseñado, que la sincronice o la compare contra un backend remoto entre organizaciones — la compatibilidad de criterio al instalar un Mandate externo entre organizaciones sigue siendo, explícitamente, un problema sin resolver.
+GravityGraph es la estructura que persiste ese criterio localmente en cada instalación de Nucleus. La sincronización o comparación de ese criterio contra un backend remoto, o entre organizaciones distintas al instalar un Mandate externo, es un problema de diseño separado, fuera del alcance de esta sección.
 
 ---
 ## 9️⃣ Batcave — Control Plane Soberano Remoto
@@ -1309,7 +1309,7 @@ Batcave no contiene lógica de negocio. Es infraestructura soberana: valida iden
 | **Canal de actualización** | Mirror inteligente que distribuye manifests firmados e ion recipes desde el servidor de origen hacia las instalaciones de Nucleus |
 | **Sovereign Link** | Túnel seguro que permite a clientes autorizados conectarse al sistema local vía WebSocket |
 | **Alfred Runtime** | Entorno de ejecución del agente remoto con conocimiento organizacional completo |
-| **Transporte de Autoridad** `[dirección arquitectónica, no implementado]` | Transporta y cachea, por organización, el snapshot de autoridad organizacional que Nucleus verifica y decide aplicar — Batcave nunca crea roles ni evalúa Gravity (ver 🔟) |
+| **Transporte de Autoridad** | Transporta y cachea, por organización, el snapshot de autoridad organizacional que Nucleus verifica y decide aplicar — Batcave nunca crea roles ni evalúa Gravity (ver 🔟) |
 
 ### 9.2 Principio de diseño crítico: Multi-Tenant Soberano
 
@@ -1386,9 +1386,8 @@ El acceso inicial desde la app mobile usa un **QR efímero** (TTL: 30 segundos) 
 INVARIANT-ORG-001: Sin nombres de organización hardcodeados
 INVARIANT-ORG-002: Todos los paths derivan de OrganizationContext
 INVARIANT-ORG-007: .ownership.json es la fuente de verdad de identidad
-  (vigente en el modelo material actual; la dirección arquitectónica de
-  Autoridad Organizacional Remota reemplaza esta fuente por autoridad
-  remota verificada — ver 🔟)
+  a nivel local; Autoridad Organizacional Remota reemplaza esta fuente
+  por autoridad remota verificada (ver 🔟)
 INVARIANT-ALF-001: Alfred solo opera bajo un contrato soberano válido
 INVARIANT-ALF-002: Cada instrucción remota pasa por BlindJudge antes de llegar a Alfred
 INVARIANT-ALF-003: Alfred no ejecuta intents directamente — los enruta a Nucleus local
@@ -1398,8 +1397,6 @@ INVARIANT-ALF-004: El contrato .ai_bot.sovereign.bl nunca se carga desde fuera d
 ---
 
 ## 🔟 Autoridad Organizacional Remota
-
-`[dirección arquitectónica — no implementado; el modelo material vigente sigue siendo el descrito en 2.2️⃣]`
 
 ### Principio rector
 
@@ -1425,13 +1422,13 @@ Metamorph queda fuera de este recorrido: protege el lifecycle del software, no t
 
 El modelo avanza mediante una migración controlada, sin mezclar privilegios de ambos regímenes a la vez:
 
-- **`local_legacy`** — el comportamiento material actual: marcadores locales, `.ownership.json`, guards locales.
+- **`local_legacy`** — autorización basada en marcadores locales, `.ownership.json` y guards locales.
 - **`shadow_remote`** — Nucleus ya verifica autoridad remota y la compara contra la decisión local, sin que todavía gobierne el comportamiento productivo.
 - **`remote_enforced`** — Nucleus aplica exclusivamente la autoridad remota vigente; los marcadores y ediciones locales dejan de poder elevar privilegios, y una revocación no puede deshacerse mediante archivos locales.
 
 ### Roles y decisión efectiva
 
-El catálogo objetivo reconoce roles built-in (`master`, `specialist`) y permite roles personalizados por organización, cada uno con permisos y alcance explícitos, sin herencia implícita entre alcances. `Architect` no forma parte de este catálogo: es una contradicción documentada sin implementación real (ver 2.2️⃣); la capacidad que ese nombre intentaba representar se resuelve como un permiso de gobernanza específico, no como un rol nuevo.
+El catálogo objetivo reconoce roles built-in (`master`, `specialist`) y permite roles personalizados por organización, cada uno con permisos y alcance explícitos, sin herencia implícita entre alcances. `Architect` no forma parte de este catálogo: es un nombre heredado de documentación anterior (ver 2.2️⃣); la capacidad que ese nombre intentaba representar se resuelve como un permiso de gobernanza específico, no como un rol nuevo.
 
 Una decisión de autorización efectiva requiere la intersección de: autoridad remota vigente y verificada, política soberana, las posturas de Gravity activas (ver 8️⃣), y los límites de Vault y Executor. Que falte cualquiera de esos términos produce denegación — no hay retorno automático a los marcadores locales una vez completada la migración.
 
