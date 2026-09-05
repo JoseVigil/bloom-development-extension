@@ -13,6 +13,7 @@ BTIPS convierte la interacción con inteligencia artificial en un proceso de ing
 | **v7.0** | Consolidación de la arquitectura integral y de su mapa visual: AITAP como grifo, Execution Layer implementada por Executor, OpenCode y CLIs externos como runtimes de procesamiento, y separación entre runtime y proveedor/modelo efectivo. |
 | **v7.1** | Se documenta el vínculo de producto entre esta arquitectura y la partición PALADIN/SOVEREIGN (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`). Se agregan notas de producto en 2.4️⃣ (Conductor) y 2.5️⃣ (Plugin). No se modifica arquitectura, componentes, puertos ni el diagrama de la sección 2️⃣, que continúa representando la superficie Sovereign. |
 | **v7.1.1** | **Deprecación de conformidad, no revisión de diseño.** Todas las menciones de `cor` bajo su semántica v6.0 (*Coordination* — merges cognitivos, orden de trabajo, control de impacto) quedan marcadas como deprecadas. `BSIP-009`/`COR_Intent_Spec_v1_0.md` redefinen `cor` como **Core/Governance**, bajo política Zero-Read/Zero-Write, inalcanzable por cualquier Agent Loop y canal exclusivo humano/Nucleus — ver nota consolidada más abajo. La funcionalidad de merge cognitivo migra por completo al intent `mrg` (`BSIP-010`). Ningún componente, puerto ni diagrama arquitectónico de v7.1 cambia; solo la semántica textual asociada a `cor`. |
+| **v7.2** | Se incorporan dos sistemas conceptuales nuevos, ausentes hasta esta versión: **Gravity** (lenguaje de criterio jerárquico persistente, sección 8️⃣) y **Autoridad Organizacional Remota** (modelo objetivo de identidad, membership, roles y autorización efectiva, sección 🔟). Se corrige además la mención de `Architect` en 2.2️⃣ Nucleus Governance Layer: es una contradicción documentada sin implementación real, no un rol vigente. Ninguna incorporación de esta versión modifica componentes, puertos o el diagrama de la sección 2️⃣ — son adiciones conceptuales y de dirección arquitectónica; buena parte de Autoridad Organizacional Remota y algunos aspectos de Gravity (evaluador de colisiones, sincronización de GravityGraph entre organizaciones) están marcados explícitamente como no implementados todavía. |
 
 ---
 
@@ -155,6 +156,8 @@ flowchart LR
                 Pipelines"]
                     MandatesFolder["🏛️ .mandates/
                     Contratos firmados"]
+                    GravityFolder["🪐 .gravity/
+                    Gravity Postures"]
                 end
                 ProjectFolder["🐍 .project-{name}/
                 Pipelines"]
@@ -208,6 +211,7 @@ flowchart LR
         Brain -.lee.-> IonSites
 
         NucleusExe -.crea y firma.-> MandatesFolder
+        NucleusExe -.gobierna / resuelve postura.-> GravityFolder
 
         ConductorWorkspace <--> ProjectFolder
         ConductorWorkspace <--> NucleusFolder
@@ -251,12 +255,14 @@ flowchart LR
         end
         AlfredMobile["📱 Alfred Mobile\nApp · WebSocket + GitHub OAuth"]
         BloomUpdateServer["📦 Bloom Update Server\nManifests firmados · Ion Recipes"]
-        Marketplace["🌐 Mandate Marketplace\nEcosistema inter-org"]
+        Marketplace["🌐 Wisdom\nMandates Marketplace"]
         GeminiAPI["🔷 Gemini API
         Google"]
         AlfredMobile --"WebSocket
         QR + nonce"--> BlindJudge
         BloomUpdateServer --"manifests firmados\nion recipes"--> Batcave
+        Marketplace --"snapshot de autoridad
+        (no implementado)"--> Batcave
     end
 
     ExternalAIAPI <--> GeminiAPI
@@ -293,7 +299,7 @@ La operación de BTIPS se apoya en servicios persistentes que independizan la l�
 
 Nucleus es la autoridad de gobierno, identidad y firma del sistema. Actúa como el puente entre la voluntad del propietario y las capacidades del ecosistema, sin convertirse en motor cognitivo, scheduler ni ejecutor técnico.
 
-*   **Identity & Role Management:** Gestiona la jerarquía de poder (Master/Architect/Specialist), validando quién tiene permiso para ejecutar acciones sensibles.
+*   **Identity & Role Management:** Gestiona la jerarquía de poder. El modelo material vigente reconoce `Master`, `Specialist` y `Unknown`; `Architect` aparece en documentación histórica y borradores, pero no existe en el enum, los marcadores ni los guards productivos — no es un rol aprobado (ver 🔟 Autoridad Organizacional Remota). Nucleus valida quién tiene permiso para ejecutar acciones sensibles en intersección con las posturas de Gravity vigentes (ver 8️⃣ Gravity) y con las políticas de Vault y Executor.
 *   **Vault Authority:** Es el dueño del ciclo de vida de las credenciales. Las almacena mediante el mecanismo seguro del sistema operativo y entrega referencias o accesos efímeros a los consumidores correspondientes sin exponerlas como estado persistente fuera del Vault.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
 *   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Batcave.
@@ -966,6 +972,8 @@ Metamorph cierra el ciclo de gobernanza técnica:
 
 Ambos operan bajo el principio de **reconciliación declarativa vs comandos imperativos**, garantizando que el sistema converja hacia un estado conocido y reproducible sin importar el estado inicial.
 
+**Límite frente a Autoridad Organizacional Remota:** Metamorph gobierna el estado *binario* del sistema, nunca la autoridad organizacional. No transporta, cachea ni decide el snapshot de autoridad remota (ver 🔟), y el estado de esa autoridad queda fuera del alcance de cualquier rollback de binarios que Metamorph ejecute.
+
 ---
 
 ## 3️⃣ Nucleus — Documentación Básica (oficial)
@@ -1106,6 +1114,8 @@ Se ejecuta **en Projects o Nucleus**, como input pasivo.
 >
 > Ver `COR_Intent_Spec_v1_0.md` para la especificación completa.
 
+**Relación con Gravity:** Gravity (ver 8️⃣) y `cor` están relacionados pero no son lo mismo. Gravity expresa criterio persistente en cualquier nivel de su jerarquía; `cor` es el canal exclusivo por el cual ese criterio se promulga como ley de alcance organizacional cuando corresponde. Postular una postura de Gravity no le otorga por sí sola autoridad global — eso solo ocurre atravesando `cor`.
+
 ---
 
 ### `ing` — Ingestion Intent
@@ -1172,6 +1182,8 @@ Nivel 4 — Intent
          cor NO pertenece a este nivel — es política de Nivel 1 (ver BSIP-009)
 ```
 
+Cada nivel de esta jerarquía opera además bajo su propia Gravity activa: la organización, el proyecto, el Mandate y la sesión pueden declarar criterio propio que gobierna cómo se interpretan sus Actions (ver 8️⃣ Gravity).
+
 ### Qué es y qué NO es un Mandate
 
 | NO es / NO hace | SÍ es / SÍ hace |
@@ -1201,7 +1213,9 @@ Temporal conserva el workflow y permite retomarlo desde el último punto durable
 
 ---
 
-### 🌐 El Marketplace de Mandates — Modelo de Negocio
+### 🌐 Wisdom — El Marketplace de Mandates y Modelo de Negocio
+
+**Nomenclatura:** este ecosistema de intercambio se llama **Wisdom**. "Marketplace" describe su función (un mercado horizontal de Mandates entre organizaciones), pero el nombre propio del sistema, incluido el nodo del diagrama de la sección 2️⃣, es Wisdom.
 
 Los Mandates son el **producto central del ecosistema Bloom**. Su diseño como contratos firmados, versionados y autocontenidos los hace naturalmente transferibles entre organizaciones.
 
@@ -1209,11 +1223,11 @@ Los Mandates son el **producto central del ecosistema Bloom**. Su diseño como c
 
 Un Mandate no es solo automatización. Es **conocimiento operativo codificado**: el proceso que una organización desarrolló, refinó y validó para resolver un problema complejo, expresado de forma que otra organización puede adoptar, ejecutar y adaptar directamente en su propio Nucleus.
 
-Cuando una organización publica un Mandate en el marketplace, está vendiendo algo más valioso que código: está vendiendo **la experiencia de haber resuelto el problema**.
+Cuando una organización publica un Mandate en Wisdom, está vendiendo algo más valioso que código: está vendiendo **la experiencia de haber resuelto el problema**.
 
 #### El Ecosistema Horizontal
 
-El marketplace de Mandates es un **ecosistema horizontal de intercambio entre organizaciones**. No es una tienda vertical de Bloom hacia clientes — es una red donde cualquier organización que use Bloom puede ser simultáneamente productora y consumidora de Mandates.
+Wisdom es un **ecosistema horizontal de intercambio entre organizaciones**. No es una tienda vertical de Bloom hacia clientes — es una red donde cualquier organización que use Bloom puede ser simultáneamente productora y consumidora de Mandates.
 
 ```
 Organización A                    Organización B
@@ -1244,16 +1258,47 @@ Los Mandates funcionan como unidad de intercambio porque reúnen las propiedades
 
 #### Implicaciones para el Diseño del Sistema
 
-El marketplace define una restricción de diseño que atraviesa todo Bloom:
+Wisdom define una restricción de diseño que atraviesa todo Bloom:
 
-> **Un Mandate publicado en el marketplace nunca puede asumir acceso a recursos propietarios del vendor.** Solo puede asumir que el Nucleus del comprador tiene los tipos de intent necesarios y los datos que el comprador decide proveer.
+> **Un Mandate publicado en Wisdom nunca puede asumir acceso a recursos propietarios del vendor.** Solo puede asumir que el Nucleus del comprador tiene los tipos de intent necesarios y los datos que el comprador decide proveer.
 
-Esto es lo que hace que los Mandates sean transferibles y no solo exportables. Un Mandate bien diseñado para el marketplace es un Mandate que funciona igual en el Nucleus del que lo creó que en el Nucleus del que lo compró.
+Esto es lo que hace que los Mandates sean transferibles y no solo exportables. Un Mandate bien diseñado para Wisdom es un Mandate que funciona igual en el Nucleus del que lo creó que en el Nucleus del que lo compró.
 
 ---
-## 8️⃣ Batcave — Control Plane Soberano Remoto
 
-### 8.1 Qué es Batcave
+## 8️⃣ Gravity — Lenguaje de Criterio Persistente
+
+`[fundamento conceptual — sin gramática ni runtime definitivos todavía]`
+
+### Qué es Gravity
+
+Gravity es el lenguaje y campo de criterio persistente de Bloom. No reemplaza el lenguaje natural ni el prompting: les da un sistema de leyes bajo el cual una expresión adquiere significado operacional. Un prompt dice algo; Gravity determina qué puede significar eso operacionalmente dentro del sistema. Tampoco es una técnica de context engineering — no es información adjunta a una conversación, sino la capa de autoridad y criterio bajo la cual esa conversación ocurre.
+
+### Jerarquía
+
+Gravity existe en cinco niveles, de mayor a menor autoridad:
+
+```text
+NUCLEUS → ORGANIZATION → PROJECT → MANDATE → SESSION
+```
+
+Cada nivel gobierna el criterio de los niveles que contiene. Una postura de sesión no invalida silenciosamente una postura de organización; opera dentro de ella. Cuando el sistema resuelve qué criterio aplica a una acción, recorre esta jerarquía de mayor a menor autoridad y conserva solo lo relevante para esa acción puntual — nunca expone ni evalúa el campo completo de una vez.
+
+### Postura y Postulación
+
+- **Postura:** es la unidad de criterio que un nivel puede declarar — una posición operativa concreta que otros niveles heredan o resuelven al interpretar una acción.
+- **Postulación:** es el acto de convertir una idea o un acuerdo conversacional en una postura formal. Es un acto de reconocimiento, no de anticipación: no toda conversación se convierte en Gravity, y postular una postura no le otorga automáticamente autoridad de mayor alcance — eso requiere promulgación a través de `cor` cuando corresponde (ver 6️⃣).
+- **Masa:** existe una noción de peso relativo del criterio según su origen y su trazabilidad, pensada para que un humano entienda por qué una postura pesa lo que pesa. No es, ni pretende ser, un mecanismo automático de desempate entre criterios en conflicto — esa resolución sigue requiriendo una regla explícita o intervención humana.
+- **Evaluador de colisiones:** la detección automática de conflictos entre posturas de distinto origen todavía está en investigación, no implementada.
+
+### GravityGraph
+
+GravityGraph es la estructura que persiste ese criterio localmente en cada instalación de Nucleus. Hoy no existe ningún mecanismo, implementado ni diseñado, que la sincronice o la compare contra un backend remoto entre organizaciones — la compatibilidad de criterio al instalar un Mandate externo entre organizaciones sigue siendo, explícitamente, un problema sin resolver.
+
+---
+## 9️⃣ Batcave — Control Plane Soberano Remoto
+
+### 9.1 Qué es Batcave
 
 **Batcave** es el **control plane soberano remoto** del ecosistema Bloom. Corre en GitHub Codespaces y actúa como punto de contacto seguro entre el mundo exterior (aplicaciones móviles, bots, agentes remotos) y el sistema local donde vive Nucleus.
 
@@ -1264,14 +1309,15 @@ Batcave no contiene lógica de negocio. Es infraestructura soberana: valida iden
 | **Canal de actualización** | Mirror inteligente que distribuye manifests firmados e ion recipes desde el servidor de origen hacia las instalaciones de Nucleus |
 | **Sovereign Link** | Túnel seguro que permite a clientes autorizados conectarse al sistema local vía WebSocket |
 | **Alfred Runtime** | Entorno de ejecución del agente remoto con conocimiento organizacional completo |
+| **Transporte de Autoridad** `[dirección arquitectónica, no implementado]` | Transporta y cachea, por organización, el snapshot de autoridad organizacional que Nucleus verifica y decide aplicar — Batcave nunca crea roles ni evalúa Gravity (ver 🔟) |
 
-### 8.2 Principio de diseño crítico: Multi-Tenant Soberano
+### 9.2 Principio de diseño crítico: Multi-Tenant Soberano
 
 **SIN VALORES HARDCODEADOS. TODO DERIVA DE `{organization}`.**
 
 Batcave es multi-tenant por diseño. Cada organización tiene su propio namespace aislado, su propia configuración, sus propios logs y su propia instancia de Alfred. Ningún valor puede estar quemado en el código. Esta es la base que garantiza que múltiples organizaciones puedan coexistir en el mismo control plane sin data leakage entre ellas.
 
-### 8.3 Rol en la cadena de gobernanza
+### 9.3 Rol en la cadena de gobernanza
 
 Batcave extiende la cadena de autoridad del sistema Bloom hacia el exterior, sin romperla:
 
@@ -1287,7 +1333,7 @@ Sistema Actualizado
 
 Como canal de actualización, Batcave es el origen de los manifests firmados que Nucleus valida antes de autorizar a Metamorph. **Metamorph jamás se conecta a internet directamente** — todo artefacto llega pre-validado desde Batcave vía Nucleus.
 
-### 8.4 Estructura organizacional
+### 9.4 Estructura organizacional
 
 Batcave vive dentro del namespace del Nucleus:
 
@@ -1317,7 +1363,7 @@ Batcave vive dentro del namespace del Nucleus:
         └── .ai_bot.sovereign.bl     ← Contrato de Alfred (REAL)
 ```
 
-### 8.5 Seguridad: BlindJudge y el protocolo de nonces
+### 9.5 Seguridad: BlindJudge y el protocolo de nonces
 
 El componente **BlindJudge** es la capa de validación de autoridad de Batcave. Verifica la firma de cada comando antes de enviarlo a Alfred. Un comando sin firma válida activa **lockdown automático**.
 
@@ -1334,12 +1380,15 @@ El acceso inicial desde la app mobile usa un **QR efímero** (TTL: 30 segundos) 
 }
 ```
 
-### 8.6 Invariantes críticos de Batcave
+### 9.6 Invariantes críticos de Batcave
 
 ```
 INVARIANT-ORG-001: Sin nombres de organización hardcodeados
 INVARIANT-ORG-002: Todos los paths derivan de OrganizationContext
 INVARIANT-ORG-007: .ownership.json es la fuente de verdad de identidad
+  (vigente en el modelo material actual; la dirección arquitectónica de
+  Autoridad Organizacional Remota reemplaza esta fuente por autoridad
+  remota verificada — ver 🔟)
 INVARIANT-ALF-001: Alfred solo opera bajo un contrato soberano válido
 INVARIANT-ALF-002: Cada instrucción remota pasa por BlindJudge antes de llegar a Alfred
 INVARIANT-ALF-003: Alfred no ejecuta intents directamente — los enruta a Nucleus local
@@ -1348,9 +1397,53 @@ INVARIANT-ALF-004: El contrato .ai_bot.sovereign.bl nunca se carga desde fuera d
 
 ---
 
-## 9️⃣ Alfred — El Agente Remoto Soberano
+## 🔟 Autoridad Organizacional Remota
 
-### 9.1 Qué es Alfred
+`[dirección arquitectónica — no implementado; el modelo material vigente sigue siendo el descrito en 2.2️⃣]`
+
+### Principio rector
+
+> El backend remoto conserva la fuente organizacional de identidades, memberships, roles y asignaciones. Nucleus consume ese estado de forma verificable y revocable, y sigue siendo el punto local que decide y aplica la autorización efectiva, junto con las políticas vigentes, Gravity y los límites técnicos.
+
+Un rol no es una propiedad global de una persona ni de su máquina. Es una relación entre actor, organización, alcance, rol y vigencia — identidad, membership, definición de rol y asignación permanecen conceptos separados.
+
+### La cadena
+
+```text
+Backend (verdad organizacional)
+        ↓
+Batcave (transporte y caché)
+        ↓
+Nucleus (verificación y decisión efectiva)
+        ↓
+Brain / Temporal (ejecución acotada)
+```
+
+Metamorph queda fuera de este recorrido: protege el lifecycle del software, no transporta ni decide autoridad (ver 2.13️⃣).
+
+### Migración en tres etapas
+
+El modelo avanza mediante una migración controlada, sin mezclar privilegios de ambos regímenes a la vez:
+
+- **`local_legacy`** — el comportamiento material actual: marcadores locales, `.ownership.json`, guards locales.
+- **`shadow_remote`** — Nucleus ya verifica autoridad remota y la compara contra la decisión local, sin que todavía gobierne el comportamiento productivo.
+- **`remote_enforced`** — Nucleus aplica exclusivamente la autoridad remota vigente; los marcadores y ediciones locales dejan de poder elevar privilegios, y una revocación no puede deshacerse mediante archivos locales.
+
+### Roles y decisión efectiva
+
+El catálogo objetivo reconoce roles built-in (`master`, `specialist`) y permite roles personalizados por organización, cada uno con permisos y alcance explícitos, sin herencia implícita entre alcances. `Architect` no forma parte de este catálogo: es una contradicción documentada sin implementación real (ver 2.2️⃣); la capacidad que ese nombre intentaba representar se resuelve como un permiso de gobernanza específico, no como un rol nuevo.
+
+Una decisión de autorización efectiva requiere la intersección de: autoridad remota vigente y verificada, política soberana, las posturas de Gravity activas (ver 8️⃣), y los límites de Vault y Executor. Que falte cualquiera de esos términos produce denegación — no hay retorno automático a los marcadores locales una vez completada la migración.
+
+### Protecciones acordadas
+
+El diseño exige, entre otras cosas: que una versión de autoridad inferior a la ya aceptada se rechace (anti-downgrade), que una revocación se propague con una latencia máxima acotada, y que ante pérdida de conectividad el sistema entre en un modo restringido para las operaciones que requieren autoridad vigente, en vez de asumir autorización por defecto.
+
+---
+
+## 1️⃣1️⃣ Alfred — El Agente Remoto Soberano
+
+### 11.1 Qué es Alfred
 
 Alfred es el agente de inteligencia artificial que opera remotamente a través de Batcave. A diferencia de los componentes del sistema local (Nucleus, Brain, Sentinel, Conductor), **Alfred vive en el control plane remoto** y se comunica con el sistema local a través del túnel soberano que provee Batcave.
 
@@ -1358,7 +1451,7 @@ Alfred no es un chatbot genérico. Es un agente con **conocimiento total del mod
 
 La capacidad central de Alfred es **ejecutar intents y Mandates de forma remota**. Un usuario con acceso autorizado puede instruir a Alfred desde la aplicación mobile, y Alfred traduce esa instrucción en la acción concreta dentro del sistema local. Alfred es, en definitiva, **la voz del Nucleus hacia el exterior**.
 
-### 9.2 El Contrato Soberano: `.ai_bot.sovereign.bl`
+### 11.2 El Contrato Soberano: `.ai_bot.sovereign.bl`
 
 El contrato soberano es el archivo que define la identidad operacional de Alfred para una organización específica. Contiene:
 
@@ -1370,7 +1463,7 @@ El contrato soberano es el archivo que define la identidad operacional de Alfred
 
 Este archivo vive en `.nucleus-{organization}/.core/.ai_bot.sovereign.bl` y es cargado por Alfred al inicializarse. Es la diferencia entre un agente genérico y uno que conoce que la organización tiene tres proyectos activos, que el Mandate de estabilización de autenticación está en curso, y que solo el Master puede aprobar merges en producción.
 
-### 9.3 Modelo de capacidades
+### 11.3 Modelo de capacidades
 
 Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Mandate puede expresar:
 
@@ -1386,7 +1479,7 @@ Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Ma
 
 Alfred no ejecuta estos pasos directamente. **Traduce la instrucción del usuario en el intent o Mandate correcto**, lo envía al Nucleus local a través del túnel de Batcave, y devuelve el resultado al usuario en tiempo real vía streaming WebSocket.
 
-### 9.4 Flujo de ejecución remota
+### 11.4 Flujo de ejecución remota
 
 ```
 Usuario (app mobile)
@@ -1419,16 +1512,16 @@ Resultado → RelayEngine → Alfred → WebSocket stream → app mobile
 
 Cada paso es auditado. Los logs de governance registran qué instrucción llegó, qué intent fue creado, qué resultado retornó y en qué timestamp. El usuario ve el progreso en tiempo real vía el stream de Alfred.
 
-### 9.5 Autenticación y niveles de permiso
+### 11.5 Autenticación y niveles de permiso
 
 Alfred solo acepta sesiones que pasen por el protocolo completo de Batcave:
 
 1. **GitHub OAuth**: el usuario se autentica con su cuenta de GitHub. Batcave valida que ese usuario pertenezca a la organización.
 2. **QR + nonce**: el acceso inicial desde la app mobile usa un QR efímero que contiene los endpoints de Batcave y un nonce de un solo uso.
 3. **BlindJudge**: verifica la firma de cada comando antes de enviarlo a Alfred.
-4. **Nivel de permiso**: el contrato soberano define qué puede hacer cada usuario. Un Specialist puede crear intents `exp` y `doc`. Solo el Master puede crear Mandates o aprobar intents `dev` en producción.
+4. **Nivel de permiso**: el contrato soberano define qué puede hacer cada usuario. Un Specialist puede crear intents `exp` y `doc`. Solo el Master puede crear Mandates o aprobar intents `dev` en producción. *(Ejemplo narrativo simplificado — el modelo completo de roles, permisos y autorización efectiva se describe en 🔟 Autoridad Organizacional Remota.)*
 
-### 9.6 Qué puede hacer Alfred que ningún otro componente puede
+### 11.6 Qué puede hacer Alfred que ningún otro componente puede
 
 Alfred es el **único punto del ecosistema Bloom que permite operar el sistema desde el exterior** sin estar físicamente en la máquina local. Todos los demás componentes (Conductor, Sentinel, Brain) requieren presencia local. Alfred rompe esa restricción de forma soberana: el acceso es remoto, pero **la autoridad sigue siendo local**. Nucleus firma y valida; Brain interpreta; Temporal coordina; Executor materializa la ejecución. Alfred es el canal gobernado que los conecta con el usuario móvil.
 
@@ -1441,15 +1534,15 @@ Esto lo convierte en el mecanismo central para:
 
 ---
 
-## 🔟 Aplicación Mobile — El Paradigma de las Instrucciones Remotas
+## 1️⃣2️⃣ Aplicación Mobile — El Paradigma de las Instrucciones Remotas
 
-### 10.1 La app mobile en el ecosistema Bloom
+### 12.1 La app mobile en el ecosistema Bloom
 
 La aplicación mobile es el **cliente soberano de Alfred**. No es una app de monitoreo pasivo ni un dashboard de lectura — es la interfaz de comando remoto del Nucleus, diseñada para que el usuario pueda **gobernar su sistema cognitivo desde cualquier lugar**.
 
 La app se conecta a Alfred a través de Batcave usando el protocolo WebSocket soberano, autenticada mediante GitHub OAuth y el mecanismo de QR + nonce efímero. Una vez autenticada, el usuario puede emitir instrucciones en lenguaje natural o comandos estructurados que Alfred traduce a intents o Mandates en el sistema local.
 
-### 10.2 Instrucciones remotas como paradigma cognitivo
+### 12.2 Instrucciones remotas como paradigma cognitivo
 
 > **El uso del celular como terminal de BTIPS materializa el concepto cognitivo de instrucciones remotas.**
 
@@ -1466,7 +1559,7 @@ El concepto de **instrucciones remotas** tiene implicaciones cognitivas profunda
 
 Este paradigma no es solo una conveniencia de UX. **Es una extensión del modelo cognitivo de BTIPS hacia un nuevo espacio temporal y físico**: la intención técnica ya no está atada al escritorio ni al horario de trabajo.
 
-### 10.3 Capacidades de la app mobile
+### 12.3 Capacidades de la app mobile
 
 La app mobile expone las capacidades de Alfred organizadas en tres superficies:
 
@@ -1488,7 +1581,7 @@ La app mobile expone las capacidades de Alfred organizadas en tres superficies:
 - Revisar logs de governance de forma resumida
 - Confirmar acciones sensibles (merges, deploys, decisiones de coordinación)
 
-### 10.4 Diagrama de integración mobile
+### 12.4 Diagrama de integración mobile
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1526,7 +1619,7 @@ La app mobile expone las capacidades de Alfred organizadas en tres superficies:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 10.5 Invariante de autoridad distribuida
+### 12.5 Invariante de autoridad distribuida
 
 Un principio fundamental que la app mobile hereda del ecosistema: **la autoridad nunca se distribuye, aunque el acceso sí**.
 
@@ -1554,7 +1647,7 @@ Executor + runtime (ejecutan técnicamente)
 Resultado → Alfred → mobile (streaming)
 ```
 
-### 10.6 Integración con Bloom Sensor y presencia cognitiva
+### 12.6 Integración con Bloom Sensor y presencia cognitiva
 
 La combinación de la app mobile con **Bloom Sensor** abre una dimensión adicional del paradigma de instrucciones remotas. Mientras Bloom Sensor mide el `energy_index` de la sesión local (0.0–1.0), Alfred puede, en el futuro, usar esa señal para:
 

@@ -1,8 +1,7 @@
 bloom-development-extension/
 └── docs/
     ├── AGENTIC/
-    │   ├── BTIPS_Mandates_Agenticos_Addendum_Sesion.md
-    │   └── BTIPS_Mandates_Agenticos_Propuesta.md
+    │   └── BTIPS_Mandates_Agenticos_Spec_Unificada.md
     ├── AITAP/
     │   ├── AITAP_Arquitectura_Grifo_Orquestadores_v1_0.md
     │   ├── AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md
@@ -21,6 +20,63 @@ bloom-development-extension/
     │   └── ALFRED_STATUS_2026-08-14.md
     ├── ANA/
     │   └── # BTips Ana.md
+    ├── ANALYSIS/
+    │   └── BACKEND/
+    │       └── ROLES/
+    │           └── Nota_Tecnica_Analisis_Fase4_Escrituras_y_Bootstrap.md
+    ├── ANAYSIS/
+    │   ├── BACKEND/
+    │   │   ├── GRAVITY/
+    │   │   │   ├── GravityGraph_Fundamentos_Base_v0_1.md
+    │   │   │   ├── Investigacion_Gravity_Mandate_Compatibility_v0_1.md
+    │   │   │   └── Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md
+    │   │   ├── INSTALLER_METAMORPH/
+    │   │   │   └── Investigacion_Installer_Metamorph_Autoupdate_v0_1.md
+    │   │   └── ROLES/
+    │   │       ├── Authority_Snapshot-Fase2_BackendAutoridad_Remota.md
+    │   │       ├── BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md
+    │   │       ├── Contexto_Decision_Autoridad_Organizacional_Roles_v0_1.md
+    │   │       ├── Encargo_Implementacion_Fisica_Fase2_Backend_v0_1.md
+    │   │       └── Nota_Tecnica_Riesgos_Ejecucion_Encargo_Fase2_Backend_v0_1.md
+    │   ├── GRAVITY/
+    │   │   ├── API/
+    │   │   │   ├── NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md
+    │   │   │   └── NUCLEUS_API_Contracts_Consolidado_v0_1.md
+    │   │   ├── COLISIONES/
+    │   │   │   └── Orbital_Gravity_Deteccion_Tipificacion_Colisiones_Mandates_Posturas_Spec_v0_1.md
+    │   │   ├── GENES/
+    │   │   │   └── Investigacion_Gravity_Genes_Domains_Puntos_Creacion_v0_1.md
+    │   │   ├── GRAFO/
+    │   │   │   ├── Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md
+    │   │   │   ├── GravityGraph_DOMAIN_GENE_Contrato_Propuesto_v0_1.md
+    │   │   │   ├── GravityGraph_DOMAIN_GENE_Handoff_Albor_v0_1.md
+    │   │   │   ├── GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md
+    │   │   │   ├── Investigacion_GravityGraph_DomainGene_Relacion_v0_1.md
+    │   │   │   └── Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md
+    │   │   ├── GRAMMAR/
+    │   │   │   ├── Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md
+    │   │   │   └── Orbital_Gravity_Parser_Guia_Operativa_v0_1.md
+    │   │   ├── MODELS/
+    │   │   │   ├── Corolario___La_persona_como_fuente_de_Gravity.md
+    │   │   │   ├── Orbital___Fundamentos_de_Coordinacion_Gravity_e_Interaccion_Gobernada.md
+    │   │   │   └── Paladin_Client_Object_Model_v0_1.md
+    │   │   ├── PALADIN/
+    │   │   │   └── Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md
+    │   │   ├── ROSETA/
+    │   │   │   └── Rosetta_Stone_Investigacion_Marcos_Externos_v0_1.md
+    │   │   └── SESSION/
+    │   │       ├── Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md
+    │   │       └── Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md
+    │   └── WISDOM/
+    │       └── WISDOM_DEVELOPMENT_SCOPE_v0_1.md
+    ├── BACKEND/
+    │   ├── Alcance_Infraestructura_Web_Comercial_v0_1.md
+    │   ├── Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md
+    │   ├── Backend_Cloudflare_Arquitectura_v0_1.md
+    │   ├── CODEX_Backend_Batcave_Status_v0_1.md
+    │   ├── CODEX_Backend_Kickoff_v0_1.md
+    │   ├── CODEX_Frontera_Backend_Batcave_v0_1.md
+    │   └── Registro_Puertos_Locales_v0_1.md
     ├── BATCAVE/
     │   └── BATCAVE_ARCHITECTURE.md
     ├── BOOTSTRAP/
@@ -44,10 +100,10 @@ bloom-development-extension/
     │       ├── DIS_Intent_Spec_v1_0.md
     │       ├── DOC_Intent_Spec_v1_0.md
     │       ├── EXP_Intent_Spec_v1_0.md
-    │       └── ING_Intent_Spec_v1_1.md
-    ├── BTIPS/
-    │   └── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
-    ├── BTIPS_Bloom_Technical_Intent_Package_v6_0.md
+    │       ├── ING_Intent_Spec_v1_1.md
+    │       ├── MRG_Intent_Spec_v1_0.md
+    │       └── TST_Intent_Spec_v1_0.md
+    ├── BTIPS_Bloom_Technical_Intent_Package_v7_1_1.md
     ├── BTIP_resumen_ecosistema_1.0.md
     ├── BUILD/
     │   ├── BUILD_ALL_Documentacion_v1_0.md
@@ -75,6 +131,7 @@ bloom-development-extension/
     │       │   └── btips_workspace_v3.html
     │       ├── BLOOM_CORE_GENESIS_MANDATE_PRELUDIO_v0_1.md
     │       ├── Bloom_Conductor_Core_UI_Contexto_para_Codex.md
+    │       ├── Bloom_Conductor_Workspace_Core_Gravity_Parser_Integration_Annex_v0_1.md
     │       ├── Bloom_Conductor_Workspace_Core_UI_01.md
     │       └── bloom-conductor-genesis-v1_1.html
     ├── CONTEXT/
@@ -83,6 +140,8 @@ bloom-development-extension/
     │   └── AGENDA_MAESTRA.md
     ├── CONTROL_PLANE/
     │   └── CONTROL_PLANE_DEBUG_PANEL_STATUS.md
+    ├── CORPO/
+    │   └── COGNITUUM_Documento_Vision_Institucional.md
     ├── CORTEX/
     │   ├── AUTHORITY_BOUNDARY.md
     │   ├── BTIPS-CORTEX-REFERENCE-v1.2.md
@@ -100,13 +159,8 @@ bloom-development-extension/
     │   ├── AGENTS.md
     │   ├── EXECUTOR_ARCHITECTURE_v1_0.md
     │   ├── EXECUTOR_E0_ARCHITECTURE_DECISION_PACKAGE_v1_0.md
-    │   ├── EXECUTOR_E0_CLI_CATALOG_v1_0.md
-    │   ├── EXECUTOR_E0_CONTRACTS_DTOS_v1_0.md
     │   ├── EXECUTOR_E0_DESIGN_PACKAGE_v1_0.md
-    │   ├── EXECUTOR_E0_METAMORPH_WORK_PACKAGE_v1_0.md
     │   ├── EXECUTOR_E0_MIGRATION_PLAN_v1_0.md
-    │   ├── EXECUTOR_E0_PACKAGE_MAP_v1_0.md
-    │   ├── EXECUTOR_E0_SETUP_WORK_PACKAGE_v1_0.md
     │   ├── EXECUTOR_GENESIS_DEV_INTEGRATION_HANDOFF_2026-08-21.md
     │   ├── EXECUTOR_IMPLEMENTATION_HANDOFF_2026-08-20.md
     │   ├── EXECUTOR_IMPLEMENTATION_SPEC_v1_0.md
@@ -127,8 +181,11 @@ bloom-development-extension/
     │   │   ├── COGNITUUM_EXECUTION_RUNTIME_ADAPTERS_NORM_v1_0.md
     │   │   ├── COGNITUUM_EXECUTOR_APPLICATION_DECISION_v1_0.md
     │   │   ├── COGNITUUM_RESPONSIBILITY_BOUNDARIES.md
-    │   │   ├── EXECUTOR_E0_ARCHITECTURE_REVIEW_2026-08-20.md
-    │   │   └── OPENCODE_FIRST_PARTY_RUNTIME_STATUS_2026-08-20.md
+    │   │   ├── OPENCODE_FIRST_PARTY_RUNTIME_STATUS_2026-08-20.md
+    │   │   └── RESPUESTA_AUDITORIA_GRANT_v1_0.md
+    │   ├── AUTHORIZATION/
+    │   │   ├── HALLAZGO_SEGURIDAD_URGENTE_FAILOPEN_v1_0.md
+    │   │   └── NUCLEUS_AUTHORIZATION_MODULE_DRAFT_v0_2.md
     │   ├── GOVERNANCE_OWNERSHIP_SPEC_v1_0.md
     │   ├── RESEARCH/
     │   │   ├── AITAP_ROUTING_MANDATE_GENESIS_CLIS_2026-08-20.md
@@ -165,15 +222,17 @@ bloom-development-extension/
     │   ├── BLOOM_Mandate_CLI_Command_Surface_v0_2_0.md
     │   ├── BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md
     │   ├── BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md
-    │   ├── BLOOM_Mandate_Universal_Schema_v1_0_0.md
+    │   ├── BLOOM_Mandate_Universal_Schema_v1_2_0.md
     │   ├── Core_Mandate_No_Aparece_Auditoria_v1.md
     │   ├── GENESIS/
-    │   │   ├── Mandate_Genesis_Implementation_Plan_v1.md
     │   │   └── Mandate_Genesis_Synapse_Simulator_Etapa_A_Design_v1.md
     │   ├── MARKETPLACE/
     │   │   ├── BLOOM_Cognitive_Evidence_Model_v1_0_0.md
     │   │   ├── BLOOM_Mandate_Package_Spec_v1_0_0.md
-    │   │   └── CUUM_cognituum-tokenomics.md
+    │   │   ├── CUUM_cognituum-tokenomics.md
+    │   │   └── _to_delete/
+    │   │       ├── BLOOM_Wisdom_Handshake_Investigacion_v0_1.md
+    │   │       └── BLOOM_Wisdom_Sintesis_Codex_v0_1.md
     │   ├── Mandate_Domain_Spec_v1.0.0.md
     │   ├── Mandate_Event_Mechanism_Auditoria_v1.md
     │   ├── Mandate_Genesis_Completion_Plan_v1.md
@@ -192,7 +251,13 @@ bloom-development-extension/
     │   ├── Guía Maestra de Implementación Comandos NUCLEUS.md
     │   ├── NUCLEUS_SYNAPSE_USAGE_GUIDE_v3.1.md
     │   └── SYNAPSE_NEW_COMMAND_GUIDE_v1_0.md
+    ├── ORBITAL/
+    │   └── GRAVITY/
+    │       ├── Orbital_Gravity_Implementation_Spec_v0_1.md
+    │       └── _to_delete/
     ├── Onboarding_SynapseSimulator.txt
+    ├── PALADIN/
+    │   └── PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0_1.md
     ├── PALETTE/
     │   └── # 🎨 Bloom Color Palette.md
     ├── PROMPTS/
@@ -212,6 +277,14 @@ bloom-development-extension/
     │   ├── BTIPS-SECURITY-COMPLIANCE.md
     │   ├── BTIPS-SYNAPSE-PROTOCOL.md
     │   └── BTIPS-TECHNICAL-OVERVIEW.md
+    ├── ROLES/
+    │   ├── BLOOM_AUTHORITY_SNAPSHOT_SEMANTIC_CONTRACT_v0_1.md
+    │   ├── BLOOM_GUIDE_ROLE_DESIGN_AND_CREATION_v0_1.md
+    │   ├── BLOOM_ORGANIZATIONAL_BINDING_SEMANTIC_CONTRACT_v0_1.md
+    │   ├── BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md
+    │   ├── BLOOM_REMOTE_ORGANIZATIONAL_ROLE_AUTHORITY_REQUIREMENT_v0_1.md
+    │   ├── BLOOM_ROLES_DISCOVERY_BASE_v0_1.md
+    │   └── BLOOM_ROLES_ORGANIZATIONAL_AUTHORITY_CONSOLIDATION_v0_1.md
     ├── SENSOR/
     │   ├── BACKUP/
     │   │   ├── PROMPT_MAESTRO_BLOOM_SENSOR_v1.md
@@ -220,6 +293,8 @@ bloom-development-extension/
     │   └── SENSOR_Spec_v2_0.md
     ├── SENTINEL/
     │   └── Implementación de Comandos Sentinel.md
+    ├── SESSIONS/
+    │   └── 2026-08-21_Cowork_Cierre_Mandate_Genesis.md
     ├── SYNAPSE/
     │   ├── BACKUP/
     │   │   ├── BTIPS-SYNAPSE-PROTOCOL-v4.0.md
@@ -326,6 +401,7 @@ bloom-development-extension/
     │   └── BTIPS_Whisper_Kokoro_Integration_Research.md
     ├── VSCODE/
     │   └── BTIPS_VSCODE_PLUGIN.md
-    ├── resources.txt
-    └── tech-debt/
-        └── TD-001-mandate-cli-watcher-fix.md
+    ├── WISDOM/
+    │   ├── BLOOM_Wisdom_Handshake_Investigacion_v0_1.md
+    │   └── BLOOM_Wisdom_Sintesis_Codex_v0_1.md
+    └── resources.txt
