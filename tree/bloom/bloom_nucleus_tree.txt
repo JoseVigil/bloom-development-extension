@@ -1,5 +1,4 @@
 .bloom/
-│
 └── .nucleus-{organization}/
     │
     ├── .core/
@@ -7,9 +6,9 @@
     │   ├── .rules.bl
     │   ├── .standards.bl
     │   ├── .policies.bl
-	│   ├── .ai_bot.sovereign.bl
-	│   ├── .ai_bot.governance.bl
-	│   ├── .ai_bot.plane.bl
+    │   ├── .ai_bot.sovereign.bl
+    │   ├── .ai_bot.governance.bl
+    │   ├── .ai_bot.plane.bl
     │   └── .meta.json
     │
     ├── .governance/
@@ -26,182 +25,76 @@
     │       └── .testing-requirements.bl
     │
     ├── .intents/
-    │   │
     │   ├── .exp/
     │   │   └── .{intent-name-uuid}/
     │   │       ├── .exp_state.json
-    │   │       │
-    │   │       ├── .inquiry/
-    │   │       │   ├── .inquiry.json
-    │   │       │   ├── .context_exp_plan.json
-    │   │       │   └── .files/
-    │   │       │       ├── .expbase.json
-    │   │       │       ├── .expbase_index.json
-    │   │       │       └── [optional files]
-    │   │       │
-    │   │       ├── .discovery/
-    │   │       │   └── .turn_X/
-    │   │       │       ├── .turn.json
-    │   │       │       ├── .context_exp_plan.json
-    │   │       │       └── .files/
-    │   │       │           ├── .expbase.json
-    │   │       │           ├── .expbase_index.json
-    │   │       │           └── [optional files]
-    │   │       │
-    │   │       ├── .findings/
-    │   │       │   ├── .findings.json
-    │   │       │   ├── .context_exp_plan.json
-    │   │       │   └── .files/
-    │   │       │       ├── .expbase.json
-    │   │       │       ├── .expbase_index.json
-    │   │       │       └── [optional files]
-    │   │       │
-    │   │       └── .pipeline/
-    │   │           ├── .inquiry/
-    │   │           │   ├── .payload.json
-    │   │           │   ├── .index.json
-    │   │           │   └── .response/
-    │   │           │       ├── .raw_output.txt
-    │   │           │       └── .report.json
-    │   │           └── .discovery/
-    │   │               └── .turn_X/
-    │   │                   ├── .payload.json
-    │   │                   ├── .index.json
-    │   │                   └── .response/
-    │   │                       ├── .raw_output.txt
-    │   │                       └── .report.json
-    │   │
+    │   │       ├── .inquiry/ ...
+    │   │       ├── .discovery/ ...
+    │   │       ├── .findings/ ...
+    │   │       └── .pipeline/ ...
     │   └── .cor/
     │       └── .{intent-name-uuid}/
     │           ├── .cor_state.json
-    │           │
-    │           ├── .freeze_snapshot/
-    │           │   ├── .snapshot.json
-    │           │   ├── .context_cor_plan.json
-    │           │   └── .files/
-    │           │       ├── .left_tree.json
-    │           │       ├── .right_tree.json
-    │           │       ├── .left_hashes.json
-    │           │       └── .right_hashes.json
-    │           │
-    │           ├── .structural_analysis/
-    │           │   ├── .analysis.json
-    │           │   ├── .context_cor_plan.json
-    │           │   └── .files/
-    │           │       ├── .shared.json
-    │           │       ├── .divergent.json
-    │           │       ├── .conflicts.json
-    │           │       └── .orphans.json
-    │           │
-    │           ├── .semantic_interpretation/
-    │           │   ├── .interpretation.json
-    │           │   ├── .context_cor_plan.json
-    │           │   └── .files/
-    │           │       ├── .intent_deltas.json
-    │           │       ├── .semantic_conflicts.json
-    │           │       └── .compatible_changes.json
-    │           │
-    │           ├── .dual_path_synthesis/
-    │           │   ├── .synthesis.json
-    │           │   ├── .context_cor_plan.json
-    │           │   └── .files/
-    │           │       ├── .dev_path.json
-    │           │       ├── .doc_path.json
-    │           │       └── .cross_references.json
-    │           │
-    │           ├── .proposal_assembly/
-    │           │   ├── .proposal.json
-    │           │   ├── .context_cor_plan.json
-    │           │   └── .files/
-    │           │       ├── .merge_plan.json
-    │           │       ├── .risk_matrix.json
-    │           │       └── .impact_summary.json
-    │           │
-    │           ├── .governed_submission/
-    │           │   ├── .submission.json
-    │           │   ├── .context_cor_plan.json
-    │           │   └── .files/
-    │           │       ├── .generated_dev_intents.json
-    │           │       ├── .generated_doc_intents.json
-    │           │       └── .approval_log.json
-    │           │
-    │           └── .pipeline/
-    │               ├── .freeze_snapshot/
-    │               │   ├── .payload.json
-    │               │   ├── .index.json
-    │               │   └── .response/
-    │               │       ├── .raw_output.txt
-    │               │       ├── .report.json
-    │               │       └── .staging/
-    │               │
-    │               ├── .structural_analysis/
-    │               │   ├── .payload.json
-    │               │   ├── .index.json
-    │               │   └── .response/
-    │               │       ├── .raw_output.txt
-    │               │       ├── .report.json
-    │               │       └── .staging/
-    │               │
-    │               ├── .semantic_interpretation/
-    │               │   ├── .payload.json
-    │               │   ├── .index.json
-    │               │   └── .response/
-    │               │       ├── .raw_output.txt
-    │               │       ├── .report.json
-    │               │       └── .staging/
-    │               │
-    │               ├── .dual_path_synthesis/
-    │               │   ├── .payload.json
-    │               │   ├── .index.json
-    │               │   └── .response/
-    │               │       ├── .raw_output.txt
-    │               │       ├── .report.json
-    │               │       └── .staging/
-    │               │
-    │               ├── .proposal_assembly/
-    │               │   ├── .payload.json
-    │               │   ├── .index.json
-    │               │   └── .response/
-    │               │       ├── .raw_output.txt
-    │               │       ├── .report.json
-    │               │       └── .staging/
-    │               │
-    │               └── .governed_submission/
-    │                   ├── .payload.json
-    │                   ├── .index.json
-    │                   └── .response/
-    │                       ├── .raw_output.txt
-    │                       ├── .report.json
-    │                       └── .staging/
-	│
-	├── .mandates/
+    │           ├── .freeze_snapshot/ ...
+    │           ├── .structural_analysis/ ...
+    │           ├── .semantic_interpretation/ ...
+    │           ├── .dual_path_synthesis/ ...
+    │           ├── .proposal_assembly/ ...
+    │           ├── .governed_submission/ ...
+    │           └── .pipeline/ ...
+    │
+    ├── .gravity/                                          ← GravityGraph (Persistencia_Grafo §2.4–2.5)
+    │   ├── nucleus.node.json                              # singleton, sin parentId
+    │   ├── .organization/{orgId}/
+    │   │   ├── node.json
+    │   │   └── .project/{projectId}/
+    │   │       ├── node.json
+    │   │       └── .mandate/{mandateId}/
+    │   │           ├── node.json
+    │   │           ├── .domain/{domainId}/                # proyección — parentId = origin_mandate_id
+    │   │           │   └── node.json                      #   canónico → .cache/.semantic-index.json
+    │   │           ├── .gene/{geneId}/                     # proyección — parentId = nodeId del MANDATE
+    │   │           │   └── node.json                      #   canónico → .mandates/{mandateId}/.genes/{geneId}/
+    │   │           ├── .submandate/{subMandateId}/         # máx. 2 niveles
+    │   │           │   ├── node.json
+    │   │           │   └── .submandate/{subSubMandateId}/
+    │   │           │       └── node.json
+    │   │           └── .session/{sessionId}/
+    │   │               └── node.json                      # efímero — GC al cerrar el Mandate
+    │   ├── .edges/
+    │   │   ├── domain_gene/                                # proyección reconstruible desde semantic-index
+    │   │   ├── domain_mandate/                             # proyección reconstruible desde semantic-index
+    │   │   └── arbitration_events.log.jsonl                # append-only
+    │   └── .index/                                          # reservado, deliberadamente vacío en v0.1
+    │
+    ├── .mandates/
     │   └── .{mandate-id-uuid}/
-    │       ├── mandate.json                ← incluye parent_mandates y own_genes
+    │       ├── mandate.json                # incluye parent_mandates y own_genes
     │       ├── mandate_state.json
-    │       └── .genes/                     ← ADN del mandate
+    │       └── .genes/                     # ADN del mandate — fuente canónica de GENE
     │           └── .{gen-id-uuid}/
-    │               ├── gen.json            ← identidad, función semántica, embedding_ref
-    │               ├── gen_state.json      ← scope vivo: archivos actuales con md5
+    │               ├── gen.json
+    │               ├── gen_state.json
     │               └── .history/
     │                   └── .delta_{N}/
-    │                       ├── delta.json      ← qué cambió, cuándo, bajo qué intent
-    │                       └── snapshot.json   ← estado completo del scope en ese momento
+    │                       ├── delta.json
+    │                       └── snapshot.json
     │
     ├── .cache/
     │   ├── .projects-snapshot.json
-    │   ├── .semantic-index.json
+    │   ├── .semantic-index.json         # fuente canónica de DOMAIN
     │   ├── .dependency-graph.json
     │   ├── .last-sync.json
-    │   └── chroma/                         ← ChromaDB persiste aquí (BISP + Genes)
-    │       ├── {collection-per-project}/   ← intents vectorizados por proyecto
-    │       └── {nucleus-genes}/            ← funciones de genes vectorizadas (cross-mandate)
+    │   └── chroma/
+    │       ├── {collection-per-project}/
+    │       └── {nucleus-genes}/
     │
     ├── .relations/
     │   ├── .project-links.json
     │   └── .dependency-map.json
     │
-	├── .ownership.json
-	│
+    ├── .ownership.json
+    │
     ├── findings/
     │   ├── README.md
     │   └── {intent-name}/
@@ -210,7 +103,7 @@
     │       └── data.json
     │
     └── reports/
-        ├── health-dashboard.json           ← incluye genes huérfanos y deltas recientes
+        ├── health-dashboard.json
         ├── statistics.json
         └── exports/
             └── {timestamp}-report.pdf

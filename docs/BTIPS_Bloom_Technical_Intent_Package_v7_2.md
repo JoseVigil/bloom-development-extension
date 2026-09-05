@@ -1295,6 +1295,8 @@ Cada nivel gobierna el criterio de los niveles que contiene. Una postura de sesi
 
 GravityGraph es la estructura que persiste ese criterio localmente en cada instalación de Nucleus. La sincronización o comparación de ese criterio contra un backend remoto, o entre organizaciones distintas al instalar un Mandate externo, es un problema de diseño separado, fuera del alcance de esta sección.
 
+Además del criterio, GravityGraph aloja nodos estructurales de identidad y linaje — Domain y Gene — anidados bajo el Mandate que los originó. Estos nodos no declaran ni heredan Postura: representan estructura, no criterio, y no participan de la resolución jerárquica descrita arriba.
+
 ---
 ## 9️⃣ Batcave — Control Plane Soberano Remoto
 
