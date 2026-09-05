@@ -24,7 +24,14 @@ const BatcaveConfigSchema = z.object({
   logging: z.object({
     level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     pretty: z.boolean().default(true)
-  }).optional()
+  }).optional(),
+
+  // §1.3: dato operativo real (a qué Backend le habla esta instancia de Batcave).
+  // Sin .optional() y sin default a propósito — si falta, loadConfig debe fallar explícito,
+  // nunca arrancar el servidor con un backend indefinido.
+  backend: z.object({
+    base_url: z.string().url()
+  })
 });
 
 export type BatcaveConfig = z.infer<typeof BatcaveConfigSchema>;
@@ -33,7 +40,7 @@ export type BatcaveConfig = z.infer<typeof BatcaveConfigSchema>;
  * Load configuration with environment overrides
  */
 export async function loadConfig(org: OrganizationContext): Promise<BatcaveConfig> {
-  let fileConfig: BatcaveConfig = {};
+  let fileConfig: Partial<BatcaveConfig> = {};
   
   // Load from config file if exists
   if (existsSync(org.configPath)) {
@@ -63,10 +70,16 @@ export async function loadConfig(org: OrganizationContext): Promise<BatcaveConfi
     logging: {
       level: (process.env.LOG_LEVEL as any) || fileConfig.logging?.level || 'info',
       pretty: process.env.LOG_PRETTY === 'false' ? false : (fileConfig.logging?.pretty ?? true)
-    }
+    },
+
+    backend: {
+      base_url: process.env.BATCAVE_BACKEND_BASE_URL || fileConfig.backend?.base_url
+    } as { base_url: string }
   };
   
-  // Validate
+  // Validate — si `backend.base_url` falta en ambos lugares (config file y env var), Zod
+  // rechaza acá mismo (string requerido, no opcional): loadConfig falla explícito, tal
+  // como exige §1.3, en vez de arrancar el servidor con un backend indefinido.
   return BatcaveConfigSchema.parse(config);
 }
 

@@ -1,6 +1,7 @@
 import { resolveOrganization } from './utils/org-resolver.js';
 import { PathResolver } from './config/paths.js';
 import { loadConfig, getCodespaceUrl } from './config/loader.js';
+import { startServer } from './server/http-server.js';
 
 async function main() {
   console.log('🦇 BATCAVE - Sovereign Control Plane');
@@ -41,8 +42,7 @@ async function main() {
     console.log('✅ BATCAVE initialized successfully');
     console.log('\n🚀 Ready to start server...');
     
-    // TODO: Start actual server here
-    // await startServer(org, paths, config);
+    await startServer(org, paths, config);
     
   } catch (error) {
     console.error('❌ Initialization failed:', error);
