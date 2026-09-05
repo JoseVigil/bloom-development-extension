@@ -77,13 +77,49 @@ export async function digestCanonical(value: unknown): Promise<{ canonical: stri
  * que le pasen es, literalmente, lo que termina dentro del mensaje firmado.
  */
 function buildSignedMessage(payload: string): Uint8Array {
-  const domainBytes = new TextEncoder().encode(DOMAIN_SEPARATOR);
+  return buildDomainSeparatedMessage(DOMAIN_SEPARATOR, payload);
+}
+
+/**
+ * AGREGADO (no pedido explícitamente por el encargo de Fase 3, pero necesario para
+ * cumplirlo sin duplicar código criptográfico): versión parametrizada por dominio del
+ * mismo ensamblado `domain + 0x00 + payload` que ya usa `buildSignedMessage` para
+ * snapshots. `identity.ts` (verificación S2S, dominio `BLOOM-INSTALLATION-AUTH-v1`)
+ * necesita el mismo mecanismo con OTRO domain separator — el encargo de Nucleus es
+ * explícito en que reusar el separador de snapshots para instalación sería una
+ * debilidad criptográfica real, no sólo una cuestión de nombres. En vez de copiar estas
+ * 7 líneas en `identity.ts` (duplicación de lógica de seguridad = riesgo de que diverjan
+ * silenciosamente), se exporta acá y `signCanonicalPayload`/`verifyCanonicalSignature`
+ * pasan a ser wrappers de esto con `DOMAIN_SEPARATOR` fijo — comportamiento externo
+ * idéntico al de antes de este cambio.
+ */
+export function buildDomainSeparatedMessage(domain: string, payload: string): Uint8Array {
+  const domainBytes = new TextEncoder().encode(domain);
   const payloadBytes = new TextEncoder().encode(payload);
   const message = new Uint8Array(domainBytes.length + 1 + payloadBytes.length);
   message.set(domainBytes, 0);
   message[domainBytes.length] = 0x00;
   message.set(payloadBytes, domainBytes.length + 1);
   return message;
+}
+
+export async function signWithDomain(domain: string, payload: string, signingKeyPkcs8: ArrayBuffer): Promise<string> {
+  const key = await crypto.subtle.importKey("pkcs8", signingKeyPkcs8, { name: "Ed25519" }, false, ["sign"]);
+  const message = buildDomainSeparatedMessage(domain, payload);
+  const signature = await crypto.subtle.sign({ name: "Ed25519" }, key, message);
+  return arrayBufferToBase64(signature);
+}
+
+export async function verifyWithDomain(
+  domain: string,
+  payload: string,
+  signatureBase64: string,
+  publicKeyRaw: ArrayBuffer,
+): Promise<boolean> {
+  const key = await crypto.subtle.importKey("raw", publicKeyRaw, { name: "Ed25519" }, false, ["verify"]);
+  const message = buildDomainSeparatedMessage(domain, payload);
+  const signature = base64ToArrayBuffer(signatureBase64);
+  return crypto.subtle.verify({ name: "Ed25519" }, key, signature, message);
 }
 
 /**

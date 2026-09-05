@@ -1,241 +1,492 @@
 // backend/test/authority.spec.ts
 //
-// SUPUESTO DE DISEÑO: no tengo `backend/test/manifest.spec.ts` en esta sesión, así que no
-// puedo replicar literalmente "el mismo patrón" (harness exacto, helpers de setup de D1,
-// convención de nombres). Asumo el harness estándar de Cloudflare Workers + vitest
-// (`@cloudflare/vitest-pool-workers`, import de bindings desde `cloudflare:test`), que es
-// lo esperable dado que `vitest.config.mts` existe en el árbol y el proyecto es un Worker
-// con D1. Confirmar contra manifest.spec.ts real y ajustar imports/setup si el patrón
-// existente es distinto (p. ej. si usa un mock de D1Database en vez de miniflare real).
+// NOTA IMPORTANTE: este archivo no fue ejecutado en esta sesión (no hay acceso de red a
+// npm/wrangler ni a `@cloudflare/vitest-pool-workers` en este entorno, y tampoco un D1
+// real disponible). Usa un `FakeD1` mínimo que implementa sólo lo que
+// `identity.ts`/`snapshot.ts` invocan (`prepare().bind().first()/.all()/.run()`), como
+// sustituto de un binding D1 real para poder razonar sobre la lógica sin depender de la
+// infraestructura de Workers. Antes de confiar en estos tests, correrlos de verdad con
+// `@cloudflare/vitest-pool-workers` contra una D1 local (`wrangler d1 execute --local`)
+// aplicando 0001 y 0002.
 
 import { describe, expect, it } from "vitest";
-// @ts-expect-error -- provisto en runtime por @cloudflare/vitest-pool-workers; ajustar el
-// import si manifest.spec.ts usa otro mecanismo de acceso a bindings de test.
-import { env } from "cloudflare:test";
-
+import { generateKeyPairSync, sign as nodeSign } from "node:crypto";
+import { canonicalizeJson } from "../src/authority/canonical";
 import {
-  canonicalizeJson,
-  digestCanonical,
-  sha256Hex,
-  signCanonicalPayload,
-  signDigest,
-  verifyCanonicalSignature,
-  verifyDigestSignature,
-} from "../src/authority/canonical";
-import {
-  resolveAuthoritySnapshot,
-  type AuthoritySigningContext,
-} from "../src/authority/snapshot";
+  INSTALLATION_AUTH_DOMAIN,
+  isWithinReplayWindow,
+  loadInstallationIdentity,
+  registerInstallationIdentity,
+  verifyInstallationRequest,
+  verifyRegistrationRequest,
+  type InstallationAuthHeaders,
+} from "../src/authority/identity";
+import { buildSnapshotContent } from "../src/authority/snapshot";
 
-// -----------------------------------------------------------------------------------
-// Fixtures de firma para tests (Ed25519). NO son las claves reales del Worker — se
-// generan en memoria sólo para que el test pueda firmar/verificar sin depender de
-// `wrangler secret put`. `crypto.subtle.generateKey` corre igual bajo el pool de
-// Workers de vitest.
-// -----------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// FakeD1: implementación mínima en memoria de las tablas relevantes de 0001 + 0002.
+// No es un D1 real -- sólo soporta las queries literales que emiten identity.ts/snapshot.ts.
+// ---------------------------------------------------------------------------
 
-async function generateTestSigningContext(): Promise<{
-  signing: AuthoritySigningContext;
-  publicKeyRaw: ArrayBuffer;
-}> {
-  const keyPair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as CryptoKeyPair;
-  const pkcs8 = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-  const publicKeyRaw = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+interface FakeRow {
+  [key: string]: unknown;
+}
+
+class FakeD1 {
+  tables: Record<string, FakeRow[]> = {
+    principals: [],
+    memberships: [],
+    role_definitions: [],
+    role_assignments: [],
+    revocations: [],
+    authority_state: [],
+    installation_identities: [],
+  };
+
+  prepare(sql: string) {
+    return new FakeStatement(this, sql);
+  }
+}
+
+class FakeStatement {
+  private boundArgs: unknown[] = [];
+  constructor(
+    private db: FakeD1,
+    private sql: string,
+  ) {}
+
+  bind(...args: unknown[]) {
+    this.boundArgs = args;
+    return this;
+  }
+
+  private run_query(): FakeRow[] {
+    const sql = this.sql;
+    const args = this.boundArgs;
+
+    if (sql.includes("FROM installation_identities WHERE installation_id = ?") && sql.includes("SELECT installation_id\n")) {
+      return this.db.tables.installation_identities.filter((r) => r.installation_id === args[0]);
+    }
+    if (sql.startsWith("INSERT INTO installation_identities")) {
+      this.db.tables.installation_identities.push({
+        installation_id: args[0],
+        organization_id: args[1],
+        public_key: args[2],
+        created_at: args[3],
+        revoked_at: null,
+      });
+      return [];
+    }
+    if (sql.includes("SELECT installation_id, organization_id, public_key, created_at, revoked_at FROM installation_identities")) {
+      return this.db.tables.installation_identities.filter((r) => r.installation_id === args[0]);
+    }
+    if (sql.includes("FROM authority_state")) {
+      return this.db.tables.authority_state.filter((r) => r.organization_id === args[0]);
+    }
+    if (sql.includes("FROM memberships")) {
+      const [organizationId, sinceFilter] = args as [string, number];
+      return this.db.tables.memberships.filter(
+        (r) => r.organization_id === organizationId && (r.since_version as number) > sinceFilter,
+      );
+    }
+    if (sql.includes("FROM principals")) {
+      const sinceFilter = args[args.length - 1] as number;
+      const ids = args.slice(0, -1) as string[];
+      return this.db.tables.principals.filter((r) => ids.includes(r.id as string) && (r.since_version as number) > sinceFilter);
+    }
+    if (sql.includes("FROM role_definitions")) {
+      const [organizationId, sinceFilter] = args as [string, number];
+      return this.db.tables.role_definitions.filter(
+        (r) => (r.organization_id === null || r.organization_id === organizationId) && (r.since_version as number) > sinceFilter,
+      );
+    }
+    if (sql.includes("FROM role_assignments")) {
+      const [organizationId, sinceFilter] = args as [string, number];
+      return this.db.tables.role_assignments.filter(
+        (r) => r.organization_id === organizationId && (r.since_version as number) > sinceFilter,
+      );
+    }
+    if (sql.includes("FROM revocations")) {
+      const [organizationId, sinceFilter] = args as [string, number];
+      return this.db.tables.revocations.filter(
+        (r) => r.organization_id === organizationId && (r.visible_from_version as number) > sinceFilter,
+      );
+    }
+    throw new Error(`FakeD1: query no soportada en el mock: ${sql}`);
+  }
+
+  async first<T>(): Promise<T | null> {
+    const rows = this.run_query();
+    return (rows[0] as T) ?? null;
+  }
+
+  async all<T>(): Promise<{ results: T[] }> {
+    return { results: this.run_query() as T[] };
+  }
+
+  async run(): Promise<void> {
+    this.run_query();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de firma (lado "Nucleus" simulado con node:crypto, no con el Nucleus real en Go)
+// ---------------------------------------------------------------------------
+
+function makeKeyPair() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const publicKeyRaw = publicKey.export({ type: "spki", format: "der" }).subarray(-32); // últimos 32 bytes = raw Ed25519
+  return { publicKey, privateKey, publicKeyBase64: Buffer.from(publicKeyRaw).toString("base64") };
+}
+
+function signAsNucleus(
+  privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"],
+  domain: string,
+  payload: string,
+): string {
+  const domainBytes = Buffer.from(domain, "utf8");
+  const payloadBytes = Buffer.from(payload, "utf8");
+  const message = Buffer.concat([domainBytes, Buffer.from([0x00]), payloadBytes]);
+  const signature = nodeSign(null, message, privateKey);
+  return signature.toString("base64");
+}
+
+function buildHeaders(params: {
+  privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"];
+  installationId: string;
+  organizationId: string;
+  method: string;
+  path: string;
+  timestamp?: string;
+}): InstallationAuthHeaders {
+  const timestamp = params.timestamp ?? new Date().toISOString();
+  const payload = canonicalizeJson({
+    installation_id: params.installationId,
+    organization_id: params.organizationId,
+    method: params.method,
+    path: params.path,
+    timestamp,
+  });
   return {
-    signing: { signingKeyId: "test-key-1", signingKeyPkcs8: pkcs8 },
-    publicKeyRaw,
+    installationId: params.installationId,
+    timestamp,
+    signatureBase64: signAsNucleus(params.privateKey, INSTALLATION_AUTH_DOMAIN, payload),
   };
 }
 
-describe("canonicalizeJson / digestCanonical (RFC 8785)", () => {
-  it("produce el mismo output sin importar el orden de inserción de claves", () => {
-    const a = canonicalizeJson({ b: 1, a: 2, c: { z: 1, y: 2 } });
-    const b = canonicalizeJson({ a: 2, c: { y: 2, z: 1 }, b: 1 });
-    expect(a).toBe(b);
-    // JCS ordena claves lexicográficamente por code point.
-    expect(a).toBe('{"a":2,"b":1,"c":{"y":2,"z":1}}');
-  });
+// ---------------------------------------------------------------------------
+// Separación de dominio (mismo requisito que binding_test.go del lado Nucleus, §1.2)
+// ---------------------------------------------------------------------------
 
-  it("digestCanonical es determinístico para el mismo valor lógico", async () => {
-    const first = await digestCanonical({ x: 1, y: [1, 2, 3] });
-    const second = await digestCanonical({ y: [1, 2, 3], x: 1 });
-    expect(first.digestHex).toBe(second.digestHex);
-    expect(first.digestHex).toHaveLength(64); // sha256 hex
-  });
+describe("separación de dominio BLOOM-INSTALLATION-AUTH-v1 vs BLOOM-AUTHORITY-SNAPSHOT-v1", () => {
+  it("una firma válida para instalación no debe verificar bajo el dominio de snapshot ni viceversa", async () => {
+    const { privateKey, publicKeyBase64 } = makeKeyPair();
+    const { verifyWithDomain } = await import("../src/authority/canonical");
+    const payload = canonicalizeJson({ hello: "world" });
 
-  it("sha256Hex coincide con un vector conocido (cadena vacía)", async () => {
-    // Vector estándar SHA-256("") — no depende de canonicalización, sólo valida el
-    // wrapper de digest.
-    const digest = await sha256Hex("");
-    expect(digest).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".slice(0, 64));
-  });
+    const sigInstallation = signAsNucleus(privateKey, INSTALLATION_AUTH_DOMAIN, payload);
+    const publicKeyRaw = Buffer.from(publicKeyBase64, "base64");
 
-  // ---------------------------------------------------------------------------------
-  // Vectores normativos RFC 8785 (cruzados contra la implementación Go gowebpki/jcs de
-  // Nucleus) — reemplazan el it.todo anterior.
-  //
-  // NOTA HONESTA sobre su alcance: estos tres vectores validan formateo de números y
-  // escapes de string dentro de `canonicalizeJson`. NO validan, por sí solos, que este
-  // Worker produzca el mismo digest byte a byte que un binario Go real corriendo — eso
-  // requeriría correr el mismo payload por el binario/módulo Go de Nucleus y comparar el
-  // digest resultante, cosa que no se puede hacer desde este entorno de test JS. Lo que
-  // sí prueban es que `canonicalize` (la librería JS elegida) implementa las reglas de
-  // formato de RFC 8785 de la misma forma que gowebpki/jcs para estos casos puntuales
-  // (números en notación ES6, escapes de control/Unicode). Es evidencia parcial, no un
-  // reemplazo completo del vector cruzado real pendiente.
-  // ---------------------------------------------------------------------------------
-  const RFC8785_VECTORS: Array<{ name: string; input: string; want: string }> = [
-    {
-      name: "números: notación científica ES6, ceros de más y exponentes negativos",
-      input: '{"numbers":[333333333.33333329,1E30,4.50,2e-3,0.000000000000000000000000001]}',
-      want: '{"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27]}',
-    },
-    {
-      name: "string: control char (Shift In), salto de línea, tab, comilla simple/doble y barra escapados",
-      input: '{"string":"\u20ac$\u000f \n A\'B \\"\\\\\\" / "}',
-      want: '{"string":"\u20ac$\u000f \n A\'B \\"\\\\\\" / "}',
-    },
-    {
-      name: "orden de claves Unicode (control chars, dígito, emoji, hebreo con nequdot)",
-      input:
-        '{"\u20ac":"Euro Sign","\\r":"Carriage Return","\u05d3\u05bc":"Hebrew Letter Dalet With Dagesh","1":"One","\ud83d\ude00":"Emoji: Grinning Face","\u20ac":"Control","\u00f6":"Latin Small Letter O With Diaeresis"}',
-      want:
-        '{"\\r":"Carriage Return","1":"One","\u20ac":"Control","\u00f6":"Latin Small Letter O With Diaeresis","\u20ac":"Euro Sign","\ud83d\ude00":"Emoji: Grinning Face","\u05d3\u05bc":"Hebrew Letter Dalet With Dagesh"}',
-    },
-  ];
-
-  it.each(RFC8785_VECTORS)("vector RFC 8785 — $name", ({ input, want }) => {
-    // ADVERTENCIA explícita sobre este caso en particular: el vector de "orden de claves
-    // Unicode" de arriba tiene, en su texto de origen, DOS apariciones de una clave que
-    // se ve como "€" con valores distintos ("Euro Sign" y "Control"). Eso sólo es posible
-    // si en el JSON real son dos code points Unicode *distintos* que se renderizan casi
-    // igual (ej. EURO SIGN U+20AC vs EURO-CURRENCY SIGN U+20A0) — la prueba de RFC 8785
-    // depende de ordenar por code point exacto, no por apariencia visual.
-    //
-    // No pude confirmar en esta sesión que los caracteres tal como quedaron pegados en
-    // este archivo conserven esos dos code points distintos (un copy/paste puede
-    // normalizarlos al mismo glifo). Si eso pasó, `JSON.parse` va a colapsar la clave
-    // duplicada (se queda con la última, "Control") y este `it.each` va a fallar de forma
-    // obvia — lo cual, al menos, hace visible el problema en vez de pasar en falso.
-    // Antes de confiar en este vector: abrir este archivo en un editor que muestre code
-    // points Unicode (o correr algo como `[...input].map(c => c.codePointAt(0))`) y
-    // confirmar contra la fuente original del vector que son dos caracteres distintos.
-    const parsed = JSON.parse(input);
-    const canonical = canonicalizeJson(parsed);
-    expect(canonical).toBe(want);
-  });
-
-  it("caso límite: orden de claves Unicode y escapes no rompe el canonicalizador", () => {
-    const payload = { "\u00e9": 1, a: "line1\nline2\ttab\"quote", z: -0, n: 1e21 };
-    const canonical = canonicalizeJson(payload);
-    // No se afirma un output exacto acá (eso es justamente lo que el vector cruzado
-    // pendiente de arriba debe validar contra Go) — sólo que no explota y que es
-    // determinístico frente al mismo input.
-    expect(canonicalizeJson(payload)).toBe(canonical);
-    expect(() => JSON.parse(canonical)).not.toThrow();
+    expect(await verifyWithDomain(INSTALLATION_AUTH_DOMAIN, payload, sigInstallation, publicKeyRaw)).toBe(true);
+    expect(await verifyWithDomain("BLOOM-AUTHORITY-SNAPSHOT-v1", payload, sigInstallation, publicKeyRaw)).toBe(false);
   });
 });
 
-describe("signCanonicalPayload / verifyCanonicalSignature (Ed25519 + separador de dominio)", () => {
-  it("una firma válida sobre el payload canónico verifica correctamente", async () => {
-    const { signing, publicKeyRaw } = await generateTestSigningContext();
-    const { canonical } = await digestCanonical({ hello: "world" });
-    const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
-    const valid = await verifyCanonicalSignature(canonical, signature, publicKeyRaw);
-    expect(valid).toBe(true);
+// ---------------------------------------------------------------------------
+// Registro de identidad (POST /v1/authority/identity/register)
+// ---------------------------------------------------------------------------
+
+describe("registro de identidad de instalación", () => {
+  it("acepta un registro con firma válida y crea la fila", async () => {
+    const db = new FakeD1() as unknown as D1Database;
+    const { privateKey, publicKeyBase64 } = makeKeyPair();
+    const headers = buildHeaders({
+      privateKey,
+      installationId: "inst-1",
+      organizationId: "org-1",
+      method: "POST",
+      path: "/v1/authority/identity/register",
+    });
+
+    const proven = await verifyRegistrationRequest({
+      organizationId: "org-1",
+      method: "POST",
+      path: "/v1/authority/identity/register",
+      headers,
+      publicKeyBase64,
+    });
+    expect(proven).toBe(true);
+
+    const result = await registerInstallationIdentity(db, {
+      installationId: "inst-1",
+      organizationId: "org-1",
+      publicKeyBase64,
+    });
+    expect(result.ok).toBe(true);
+
+    const stored = await loadInstallationIdentity(db, "inst-1");
+    expect(stored?.public_key).toBe(publicKeyBase64);
+    expect(stored?.revoked_at).toBeNull();
   });
 
-  it("una firma no verifica si el payload canónico cambia (el separador de dominio no es opcional)", async () => {
-    const { signing, publicKeyRaw } = await generateTestSigningContext();
-    const { canonical } = await digestCanonical({ hello: "world" });
-    const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
-    const { canonical: otherCanonical } = await digestCanonical({ hello: "mundo" });
-    const valid = await verifyCanonicalSignature(otherCanonical, signature, publicKeyRaw);
-    expect(valid).toBe(false);
+  it("rechaza el registro si installation_id ya existe (conflicto, no debe sobreescribir la clave)", async () => {
+    const db = new FakeD1() as unknown as D1Database;
+    const first = makeKeyPair();
+    const second = makeKeyPair();
+
+    await registerInstallationIdentity(db, {
+      installationId: "inst-1",
+      organizationId: "org-1",
+      publicKeyBase64: first.publicKeyBase64,
+    });
+
+    const result = await registerInstallationIdentity(db, {
+      installationId: "inst-1",
+      organizationId: "org-1",
+      publicKeyBase64: second.publicKeyBase64,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("conflict");
+
+    const stored = await loadInstallationIdentity(db, "inst-1");
+    expect(stored?.public_key).toBe(first.publicKeyBase64); // no se pisó con la segunda clave
   });
 
-  it("una firma no verifica contra una clave pública distinta", async () => {
-    const { signing } = await generateTestSigningContext();
-    const { publicKeyRaw: otherPublicKeyRaw } = await generateTestSigningContext();
-    const { canonical } = await digestCanonical({ hello: "world" });
-    const signature = await signCanonicalPayload(canonical, signing.signingKeyPkcs8);
-    const valid = await verifyCanonicalSignature(canonical, signature, otherPublicKeyRaw);
-    expect(valid).toBe(false);
-  });
+  it("rechaza el registro si la firma no corresponde a la clave pública declarada", async () => {
+    const attacker = makeKeyPair();
+    const victim = makeKeyPair();
+    const headers = buildHeaders({
+      privateKey: attacker.privateKey, // firma con OTRA clave privada
+      installationId: "inst-1",
+      organizationId: "org-1",
+      method: "POST",
+      path: "/v1/authority/identity/register",
+    });
 
-  it("retrocompatibilidad: signDigest / verifyDigestSignature siguen operando correctamente sobre el string que reciben", async () => {
-    // `signDigest` / `verifyDigestSignature` son wrappers retrocompatibles: delegan en el
-    // mismo `buildSignedMessage` que `signCanonicalPayload`. Este test sólo confirma que
-    // el wrapper sigue siendo funcionalmente consistente (firma/verifica round-trip),
-    // no que `digestHex` sea lo que Nucleus espera firmar (ver nota en canonical.ts).
-    const { signing, publicKeyRaw } = await generateTestSigningContext();
-    const { digestHex } = await digestCanonical({ hello: "world" });
-    const signature = await signDigest(digestHex, signing.signingKeyPkcs8);
-    const valid = await verifyDigestSignature(digestHex, signature, publicKeyRaw);
-    expect(valid).toBe(true);
+    const proven = await verifyRegistrationRequest({
+      organizationId: "org-1",
+      method: "POST",
+      path: "/v1/authority/identity/register",
+      headers,
+      publicKeyBase64: victim.publicKeyBase64, // pero declara la clave pública de otra instalación
+    });
+    expect(proven).toBe(false);
   });
 });
 
-describe("authority_state — concurrencia optimista (Nota técnica de riesgos §1)", () => {
-  const organizationId = "org-test-authority-state";
+// ---------------------------------------------------------------------------
+// Verificación de requests S2S posteriores (GET /v1/authority/snapshot, etc.)
+// ---------------------------------------------------------------------------
 
-  it("dos requests concurrentes contra la misma organización convergen sin duplicar versión", async () => {
-    // Requiere migración 0001_authority_snapshot.sql aplicada localmente
-    // (`wrangler d1 migrations apply bloom-backend --local`) y al menos una organización
-    // `org-test-authority-state` con datos mínimos, según §4 del encargo. Si el fixture de
-    // seed real usa otro nombre de organización, ajustar acá.
-    await env.DB.prepare("INSERT OR IGNORE INTO organizations (id, name) VALUES (?, ?)")
-      .bind(organizationId, "Org de test — authority_state")
-      .run();
+describe("verificación de requests S2S contra identidad ya registrada", () => {
+  it("acepta una firma válida sobre installation_id/organization_id/method/path/timestamp", async () => {
+    const { privateKey, publicKeyBase64 } = makeKeyPair();
+    const headers = buildHeaders({
+      privateKey,
+      installationId: "inst-1",
+      organizationId: "org-1",
+      method: "GET",
+      path: "/v1/authority/snapshot",
+    });
 
-    const { signing } = await generateTestSigningContext();
-
-    const [first, second] = await Promise.all([
-      resolveAuthoritySnapshot({
-        db: env.DB,
-        organizationId,
-        capability: "full",
-        clientHighWaterMark: null,
-        signing,
-      }),
-      resolveAuthoritySnapshot({
-        db: env.DB,
-        organizationId,
-        capability: "full",
-        clientHighWaterMark: null,
-        signing,
-      }),
-    ]);
-
-    // Ambos requests deben terminar reportando la misma versión consolidada — ninguno
-    // debe haber "ganado" con una versión distinta a costa del otro (eso indicaría que el
-    // `WHERE current_version = ?` no está funcionando como precondición real).
-    expect(first.currentVersion).toBe(second.currentVersion);
-
-    const state = await env.DB.prepare("SELECT current_version FROM authority_state WHERE organization_id = ?")
-      .bind(organizationId)
-      .first<{ current_version: number }>();
-    expect(state?.current_version).toBe(first.currentVersion);
+    const ok = await verifyInstallationRequest({
+      organizationId: "org-1",
+      method: "GET",
+      path: "/v1/authority/snapshot",
+      headers,
+      identity: {
+        installation_id: "inst-1",
+        organization_id: "org-1",
+        public_key: publicKeyBase64,
+        created_at: Date.now(),
+        revoked_at: null,
+      },
+    });
+    expect(ok).toBe(true);
   });
 
-  it("un high_water_mark igual a la versión actual responde 'no_newer_version', no un envelope", async () => {
-    const { signing } = await generateTestSigningContext();
-    const baseline = await resolveAuthoritySnapshot({
-      db: env.DB,
-      organizationId,
-      capability: "full",
-      clientHighWaterMark: null,
-      signing,
+  it.each(["installationId", "timestamp"] as const)(
+    "rechaza si se altera %s manteniendo la firma original",
+    async (field) => {
+      const { privateKey, publicKeyBase64 } = makeKeyPair();
+      const headers = buildHeaders({
+        privateKey,
+        installationId: "inst-1",
+        organizationId: "org-1",
+        method: "GET",
+        path: "/v1/authority/snapshot",
+      });
+      const tampered = { ...headers, [field]: field === "timestamp" ? new Date(Date.now() + 1000).toISOString() : "inst-2" };
+
+      const ok = await verifyInstallationRequest({
+        organizationId: "org-1",
+        method: "GET",
+        path: "/v1/authority/snapshot",
+        headers: tampered,
+        identity: {
+          installation_id: "inst-1",
+          organization_id: "org-1",
+          public_key: publicKeyBase64,
+          created_at: Date.now(),
+          revoked_at: null,
+        },
+      });
+      expect(ok).toBe(false);
+    },
+  );
+
+  it("rechaza si organization_id del request no coincide con el de la identidad registrada", async () => {
+    const { privateKey, publicKeyBase64 } = makeKeyPair();
+    const headers = buildHeaders({
+      privateKey,
+      installationId: "inst-1",
+      organizationId: "org-A",
+      method: "GET",
+      path: "/v1/authority/snapshot",
     });
 
-    const repeated = await resolveAuthoritySnapshot({
-      db: env.DB,
-      organizationId,
-      capability: "full",
-      clientHighWaterMark: baseline.currentVersion,
-      signing,
+    const ok = await verifyInstallationRequest({
+      organizationId: "org-A",
+      method: "GET",
+      path: "/v1/authority/snapshot",
+      headers,
+      identity: {
+        installation_id: "inst-1",
+        organization_id: "org-B", // registrada para otra organización
+        public_key: publicKeyBase64,
+        created_at: Date.now(),
+        revoked_at: null,
+      },
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rechaza una identidad revocada aunque la firma sea válida", async () => {
+    const { privateKey, publicKeyBase64 } = makeKeyPair();
+    const headers = buildHeaders({
+      privateKey,
+      installationId: "inst-1",
+      organizationId: "org-1",
+      method: "GET",
+      path: "/v1/authority/snapshot",
     });
 
-    expect(repeated.kind).toBe("no_newer_version");
+    const ok = await verifyInstallationRequest({
+      organizationId: "org-1",
+      method: "GET",
+      path: "/v1/authority/snapshot",
+      headers,
+      identity: {
+        installation_id: "inst-1",
+        organization_id: "org-1",
+        public_key: publicKeyBase64,
+        created_at: Date.now(),
+        revoked_at: Date.now(),
+      },
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rechaza timestamps fuera de la ventana de repetición", () => {
+    const now = new Date("2026-09-04T12:00:00Z");
+    expect(isWithinReplayWindow("2026-09-04T12:00:00Z", now)).toBe(true);
+    expect(isWithinReplayWindow("2026-09-04T11:00:00Z", now)).toBe(false);
+    expect(isWithinReplayWindow("not-a-date", now)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integridad referencial del snapshot (full y delta) contra el schema real de 0001
+// ---------------------------------------------------------------------------
+
+describe("integridad referencial de buildSnapshotContent", () => {
+  function seed(db: FakeD1) {
+    db.tables.authority_state.push({ organization_id: "org-1", current_version: 5, current_digest: null, updated_at: 0 });
+
+    db.tables.principals.push(
+      { id: "p1", external_ids: "{}", display_name: "Ana", since_version: 1 },
+      { id: "p2", external_ids: "{}", display_name: "Beto", since_version: 4 },
+    );
+    db.tables.memberships.push(
+      { id: "m1", principal_id: "p1", organization_id: "org-1", status: "active", effective_from: 0, effective_until: null, since_version: 1 },
+      { id: "m2", principal_id: "p2", organization_id: "org-1", status: "active", effective_from: 0, effective_until: null, since_version: 4 },
+    );
+    db.tables.role_definitions.push(
+      { id: "r-master", organization_id: null, key: "master", version: 1, definition: "{}", since_version: 1 },
+      { id: "r-custom", organization_id: "org-1", key: "reviewer", version: 1, definition: "{}", since_version: 3 },
+    );
+    db.tables.role_assignments.push({
+      id: "ra1",
+      organization_id: "org-1",
+      principal_id: "p1",
+      membership_id: "m1",
+      role_definition_id: "r-master",
+      scope: null,
+      effective_from: 0,
+      effective_until: null,
+      since_version: 1,
+    });
+    db.tables.revocations.push({
+      id: "rev1",
+      organization_id: "org-1",
+      target_type: "role_assignment",
+      target_id: "ra1",
+      visible_from_version: 5,
+      effective_until: null,
+      reason: "test",
+    });
+  }
+
+  it("un snapshot full incluye sólo principals con membership en la organización pedida", async () => {
+    const db = new FakeD1();
+    seed(db);
+    // principal ajeno a la organización -- no debe aparecer en el snapshot de org-1
+    db.tables.principals.push({ id: "p3", external_ids: "{}", display_name: "Ajeno", since_version: 1 });
+
+    const content = await buildSnapshotContent(db as unknown as D1Database, "org-1", null);
+    expect(content.kind).toBe("full");
+    const principalIds = content.principals.map((p) => p.id).sort();
+    expect(principalIds).toEqual(["p1", "p2"]);
+
+    // toda membership referencia un principal presente en el mismo payload (full)
+    for (const membership of content.memberships) {
+      expect(principalIds).toContain(membership.principal_id);
+    }
+    // todo role_assignment referencia una membership y un role_definition presentes
+    const membershipIds = content.memberships.map((m) => m.id);
+    const roleDefinitionIds = content.role_definitions.map((r) => r.id);
+    for (const assignment of content.role_assignments) {
+      expect(membershipIds).toContain(assignment.membership_id);
+      expect(roleDefinitionIds).toContain(assignment.role_definition_id);
+    }
+  });
+
+  it("incluye role_definitions built-in (organization_id null) junto con las custom de la organización", async () => {
+    const db = new FakeD1();
+    seed(db);
+    const content = await buildSnapshotContent(db as unknown as D1Database, "org-1", null);
+    const keys = content.role_definitions.map((r) => r.key).sort();
+    expect(keys).toEqual(["master", "reviewer"]);
+  });
+
+  it("un delta desde base_version=2 sólo trae filas con since_version > 2, y revocations con visible_from_version > 2", async () => {
+    const db = new FakeD1();
+    seed(db);
+    const content = await buildSnapshotContent(db as unknown as D1Database, "org-1", 2);
+    expect(content.kind).toBe("delta");
+    if (content.kind === "delta") expect(content.base_version).toBe(2);
+
+    expect(content.principals.map((p) => p.id)).toEqual(["p2"]); // p1 tiene since_version=1, no > 2
+    expect(content.role_definitions.map((r) => r.id)).toEqual(["r-custom"]); // r-master since_version=1
+    expect(content.role_assignments).toEqual([]); // ra1 tiene since_version=1
+    expect(content.revocations.map((r) => r.id)).toEqual(["rev1"]); // visible_from_version=5 > 2
+  });
+
+  it("version en el contenido coincide con current_version de authority_state, no con el conteo de filas", async () => {
+    const db = new FakeD1();
+    seed(db);
+    const content = await buildSnapshotContent(db as unknown as D1Database, "org-1", null);
+    expect(content.version).toBe(5);
   });
 });
