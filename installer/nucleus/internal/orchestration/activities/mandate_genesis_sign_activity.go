@@ -31,12 +31,12 @@ import (
 // acá.
 //
 // CORRECCIÓN: en el turno anterior quedó marcada como "no enganchada
-// todavía a MandateGenesisBuildWorkflow" — eso violaba D-B1 (Backend
+// todavía a MandateBuildWorkflow" — eso violaba D-B1 (Backend
 // Design §0: Fase 4 se ejecuta con el MandateExecutionWorkflow que ya
 // existe para `mandate run`, no con una llamada directa a
 // ScaffoldDomainActivity desde el padre). Corregido: el workflow ahora SÍ
 // llama a esta función antes de arrancar el child workflow — ver
-// mandate_genesis_build_workflow.go.
+// mandate_build_workflow.go.
 //
 // Esta función resuelve D-3 (dependsOn) de punta a punta a nivel de
 // datos: lee dependsOn de DomainCandidate (gen-state.types.ts /
@@ -164,7 +164,7 @@ type SignMandateResult struct {
 	// solo el conteo) para que el workflow pueda construir []DomainAction
 	// sin releer mandate.json. Antes de este cambio SignMandateActivity
 	// estaba huérfana (nadie la llamaba) — ahora que sí se llama desde
-	// MandateGenesisBuildWorkflow, este campo es lo que cierra el loop.
+	// MandateBuildWorkflow, este campo es lo que cierra el loop.
 	Actions      []Action `json:"actions"`
 	StateVersion uint64   `json:"stateVersion"`
 }

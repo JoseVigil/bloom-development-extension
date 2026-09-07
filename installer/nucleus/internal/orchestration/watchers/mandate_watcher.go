@@ -28,7 +28,7 @@ import (
 // NOTA: el handler TS original solo escribía {status, currentPhase, phases}
 // — sin mandateId/mandateType/project/source. Se agregaron esos campos en
 // ambos lados (Go y TS) en este mismo turno porque el watcher los necesita
-// para armar GenesisBuildInput. Si alguien vuelve a tocar el handler TS sin
+// para armar MandateBuildInput. Si alguien vuelve a tocar el handler TS sin
 // saber esto, va a romper el watcher silenciosamente — dejar este comentario
 // como advertencia.
 type MandateState struct {
@@ -104,7 +104,7 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 
 // CAMBIO esta sesión: se eliminaron signalIngestComplete/signalClusterComplete
 // y sendPhaseSignal (más abajo, ya no existe). Confirmado contra el cuerpo
-// real de MandateGenesisBuildWorkflow: Fase 1 y Fase 2 corren secuenciales
+// real de MandateBuildWorkflow: Fase 1 y Fase 2 corren secuenciales
 // vía ExecuteActivity(...).Get(...), sin ningún GetSignalChannel/Receive
 // antes de Fase 3 — esas dos señales no tenían destinatario, eran no-ops.
 // Se sacan como dead code en vez de agregarles setHandler porque hoy no hay
@@ -114,16 +114,16 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 
 type MandateWatcher struct {
 	mandatesRoot string
-	tc           GenesisTemporalClient
+	tc           MandateBuildTemporalClient
 	watcher      *fsnotify.Watcher
 	progress     *mandateProgress
 	logger       *core.Logger
 }
 
-// GenesisTemporalClient is the narrow Temporal contract needed by the watcher.
+// MandateBuildTemporalClient is the narrow Temporal contract needed by the watcher.
 // Keeping it here lets worker start own both components without an import cycle.
-type GenesisTemporalClient interface {
-	StartMandateGenesisBuildWorkflow(context.Context, string, workflows.GenesisBuildInput) (client.WorkflowRun, error)
+type MandateBuildTemporalClient interface {
+	StartMandateBuildWorkflow(context.Context, string, workflows.MandateBuildInput) (client.WorkflowRun, error)
 	IsWorkflowRunning(context.Context, string) (bool, error)
 	GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error)
 }
@@ -159,22 +159,22 @@ const (
 	reconciliationClear    reconciliationAction = "clear"
 )
 
-type genesisDuplicateDisposition string
+type buildDuplicateDisposition string
 
 const (
-	genesisDuplicateActive       genesisDuplicateDisposition = "active"
-	genesisDuplicateHistorical   genesisDuplicateDisposition = "historical"
-	genesisDuplicateUnclassified genesisDuplicateDisposition = "unclassified"
+	buildDuplicateActive       buildDuplicateDisposition = "active"
+	buildDuplicateHistorical   buildDuplicateDisposition = "historical"
+	buildDuplicateUnclassified buildDuplicateDisposition = "unclassified"
 )
 
-func classifyGenesisDuplicate(running bool, statusErr error) genesisDuplicateDisposition {
+func classifyBuildDuplicate(running bool, statusErr error) buildDuplicateDisposition {
 	if statusErr != nil {
-		return genesisDuplicateUnclassified
+		return buildDuplicateUnclassified
 	}
 	if running {
-		return genesisDuplicateActive
+		return buildDuplicateActive
 	}
-	return genesisDuplicateHistorical
+	return buildDuplicateHistorical
 }
 
 // NewMandateWatcher construye el watcher e inicializa su logger propio
@@ -183,7 +183,7 @@ func classifyGenesisDuplicate(running bool, statusErr error) genesisDuplicateDis
 // también persista en logs/nucleus/mandate/nucleus_mandate_YYYYMMDD.log
 // y quede registrado en telemetry.json — InitLogger hace ambas cosas en
 // una sola llamada, no hace falta invocar telemetry register aparte.
-func NewMandateWatcher(mandatesRoot string, tc GenesisTemporalClient, paths *core.Paths, jsonMode bool) (*MandateWatcher, error) {
+func NewMandateWatcher(mandatesRoot string, tc MandateBuildTemporalClient, paths *core.Paths, jsonMode bool) (*MandateWatcher, error) {
 	logger, err := core.InitLogger(paths, "MANDATE", jsonMode)
 	if err != nil {
 		return nil, fmt.Errorf("no pude inicializar logger de mandate: %w", err)
@@ -304,7 +304,7 @@ func (w *MandateWatcher) handleEvent(ctx context.Context, event fsnotify.Event) 
 // ambos escriben el mismo archivo desde la unificación) y en cada avance
 // de fase que Nucleus/Brain persistan ahí mismo. Decide, según el
 // contenido, si hay que:
-//   - arrancar MandateGenesisBuildWorkflow (primera vez que se ve el
+//   - arrancar MandateBuildWorkflow (primera vez que se ve el
 //     mandateId), o
 //   - no hacer nada (la escritura no cambió nada relevante — por ejemplo,
 //     un touch sin cambio de contenido, un evento duplicado de fsnotify, o
@@ -344,7 +344,7 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 	}
 
 	// Rama aditiva: observa estados pre-firma, pero no reemplaza ni altera la
-	// clasificación de dispatch duplicado que vive en startGenesisWorkflow.
+	// clasificación de dispatch duplicado que vive en startBuildWorkflow.
 	if err := w.reconcileUnsignedMandate(ctx, path, ms, time.Now()); err != nil {
 		w.logger.Warning("[mandate_watcher] no pude reconciliar %s: %v", ms.MandateID, err)
 	}
@@ -381,15 +381,15 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 
 	switch {
 	case ms.Status == "building" && ms.CurrentPhase == "ingest" && ms.Phases.Ingest.Status == "pending":
-		w.startGenesisWorkflow(ctx, ms)
+		w.startBuildWorkflow(ctx, ms)
 
 	default:
 		// Cualquier otra transición (ingest completado, cluster, validate,
-		// sign, etc.) la maneja MandateGenesisBuildWorkflow internamente
+		// sign, etc.) la maneja MandateBuildWorkflow internamente
 		// vía ExecuteActivity secuencial — este watcher solo necesita
 		// reaccionar al arranque inicial. La confirmación humana (Fase 3)
 		// tampoco pasa por acá: mandate_genesis_domains_cmd.go señaliza
-		// "mandate:genesis:validate" directo al workflow, sin pasar por
+		// "mandate:build:validate" directo al workflow, sin pasar por
 		// este watcher ni por mandate_state.json como intermediario para
 		// ese paso puntual.
 	}
@@ -444,7 +444,7 @@ func (w *MandateWatcher) reconcileUnsignedMandate(ctx context.Context, path stri
 		return err
 	}
 
-	workflowID := fmt.Sprintf("mandate_genesis_%s", ms.MandateID)
+	workflowID := fmt.Sprintf("mandate_build_%s", ms.MandateID)
 	workflowState, queryErr := w.tc.GetWorkflowExecutionState(ctx, workflowID)
 	action, reason := evaluateUnsignedMandate(ms, workflowState, queryErr, now)
 	if action == reconciliationNoop ||
@@ -546,41 +546,41 @@ func persistReconciliation(path string, action reconciliationAction, reason stri
 	return f.Close()
 }
 
-// startGenesisWorkflow arranca MandateGenesisBuildWorkflow. El Workflow ID
-// real (confirmado en temporal_client.go) es "mandate_genesis_{mandateID}",
-// no el mandateID pelado — StartMandateGenesisBuildWorkflow lo arma así
+// startBuildWorkflow arranca MandateBuildWorkflow. El Workflow ID
+// real (confirmado en temporal_client.go) es "mandate_build_{mandateID}",
+// no el mandateID pelado — StartMandateBuildWorkflow lo arma así
 // internamente, acá no hace falta reconstruirlo porque el propio método
 // lo recibe como parámetro separado. Esto hace que un segundo evento de
 // fsnotify sobre la misma escritura (fsnotify puede duplicar eventos) no
 // dispare un segundo workflow: mismo Workflow ID → Temporal devuelve
 // WorkflowExecutionAlreadyStarted, manejado abajo vía IsAlreadyStarted.
-func (w *MandateWatcher) startGenesisWorkflow(ctx context.Context, ms MandateState) {
-	_, err := w.tc.StartMandateGenesisBuildWorkflow(ctx, ms.MandateID, genesisBuildInput(ms, w.mandatesRoot))
+func (w *MandateWatcher) startBuildWorkflow(ctx context.Context, ms MandateState) {
+	_, err := w.tc.StartMandateBuildWorkflow(ctx, ms.MandateID, mandateBuildInput(ms, w.mandatesRoot))
 	if err != nil {
 		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &alreadyStarted) {
-			workflowID := fmt.Sprintf("mandate_genesis_%s", ms.MandateID)
+			workflowID := fmt.Sprintf("mandate_build_%s", ms.MandateID)
 			running, statusErr := w.tc.IsWorkflowRunning(ctx, workflowID)
-			switch classifyGenesisDuplicate(running, statusErr) {
-			case genesisDuplicateUnclassified:
+			switch classifyBuildDuplicate(running, statusErr) {
+			case buildDuplicateUnclassified:
 				w.logger.Error("[mandate_watcher] Temporal rechazó el dispatch duplicado de %s y no se pudo clasificar el Run: %v", ms.MandateID, statusErr)
 				return
-			case genesisDuplicateActive:
+			case buildDuplicateActive:
 				w.logger.Info("[mandate_watcher] workflow ya está vivo para %s, redispatch ignorado", ms.MandateID)
 				return
-			case genesisDuplicateHistorical:
+			case buildDuplicateHistorical:
 				w.logger.Error("[mandate_watcher] Temporal rechazó un nuevo Run para %s: Workflow ID histórico protegido por REJECT_DUPLICATE", ms.MandateID)
 				return
 			}
 		}
-		w.logger.Error("[mandate_watcher] error al arrancar MandateGenesisBuildWorkflow para %s: %v", ms.MandateID, err)
+		w.logger.Error("[mandate_watcher] error al arrancar MandateBuildWorkflow para %s: %v", ms.MandateID, err)
 		return
 	}
-	w.logger.Success("[mandate_watcher] MandateGenesisBuildWorkflow arrancado para mandate %s", ms.MandateID)
+	w.logger.Success("[mandate_watcher] MandateBuildWorkflow arrancado para mandate %s", ms.MandateID)
 }
 
-func genesisBuildInput(ms MandateState, mandatesRoot string) workflows.GenesisBuildInput {
-	return workflows.GenesisBuildInput{
+func mandateBuildInput(ms MandateState, mandatesRoot string) workflows.MandateBuildInput {
+	return workflows.MandateBuildInput{
 		MandateID:     ms.MandateID,
 		MandateType:   ms.MandateType,
 		BaseGenesisID: ms.BaseGenesisID,

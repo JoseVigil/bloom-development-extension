@@ -29,7 +29,7 @@
 // hidratación de la UI (abrir/actualizar el tab correspondiente) ya no
 // depende de este hook — corre por su cuenta vía websocketStore +
 // mandateStore (ver +layout.svelte, frente 3 de la misma auditoría): el
-// evento `mandate:genesis:initiated` que este POST dispara llega por WS y
+// evento `mandate:build:initiated` que este POST dispara llega por WS y
 // actualiza mandateStore igual, sin importar quién disparó la creación.
 
 import { createMandate as createMandateApi } from '$lib/api';

@@ -58,7 +58,7 @@ test('create genesis persists version and signature before publishing initiated'
     assert.equal(Number.isNaN(Date.parse(state.updatedAt)), false);
     assert.equal(state.signature.status, 'not_ready');
     assert.deepEqual(state.signature.artifacts, { reception: null, domainProposal: null, humanSyncPersisted: false });
-    assert.equal(observed[0].event, 'mandate:genesis:initiated');
+    assert.equal(observed[0].event, 'mandate:build:initiated');
   } finally {
     if (previous === undefined) delete process.env.BLOOM_NUCLEUS_PATH;
     else process.env.BLOOM_NUCLEUS_PATH = previous;

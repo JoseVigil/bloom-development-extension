@@ -35,10 +35,10 @@ type mandateWatcherTemporalClient struct {
 	client *Client
 }
 
-var _ watchers.GenesisTemporalClient = mandateWatcherTemporalClient{}
+var _ watchers.MandateBuildTemporalClient = mandateWatcherTemporalClient{}
 
-func (a mandateWatcherTemporalClient) StartMandateGenesisBuildWorkflow(ctx context.Context, mandateID string, input temporalworkflows.GenesisBuildInput) (client.WorkflowRun, error) {
-	return a.client.StartMandateGenesisBuildWorkflow(ctx, mandateID, input)
+func (a mandateWatcherTemporalClient) StartMandateBuildWorkflow(ctx context.Context, mandateID string, input temporalworkflows.MandateBuildInput) (client.WorkflowRun, error) {
+	return a.client.StartMandateBuildWorkflow(ctx, mandateID, input)
 }
 
 func (a mandateWatcherTemporalClient) IsWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
@@ -421,14 +421,14 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Success("✅ Activities registradas")
 
 			// ── Worker dedicado a mandate-orchestration ──────────────────────
-			// MandateGenesisBuildWorkflow (y su child MandateExecutionWorkflow)
+			// MandateBuildWorkflow (y su child MandateExecutionWorkflow)
 			// arrancan siempre con TaskQueue "mandate-orchestration" (hardcoded
-			// en temporal_client_addition.go y mandate_genesis_build_workflow.go).
+			// en temporal_client_addition.go y mandate_build_workflow.go).
 			// El worker principal solo escucha `taskQueue` (profile-orchestration
 			// por default) — sin este worker separado, esos workflows quedan
 			// disparados en Temporal sin nadie que los ejecute.
 			mandateWorker := NewWorker(temporalClient.GetClient(), "mandate-orchestration")
-			mandateWorker.RegisterWorkflow(temporalworkflows.MandateGenesisBuildWorkflow)
+			mandateWorker.RegisterWorkflow(temporalworkflows.MandateBuildWorkflow)
 			mandateWorker.RegisterWorkflow(temporalworkflows.MandateExecutionWorkflow)
 			mandateWorker.RegisterActivity(activities.ScaffoldDomainActivity)
 			// PersistExecutionResultActivity — CAMBIO esta sesión (Paso 1, action
@@ -439,7 +439,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// "unable to find activity type" apenas terminara el primer scaffold.
 			mandateWorker.RegisterActivity(activities.PersistExecutionResultActivity)
 			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
-			// fase: mandate_genesis_phase_activities.go). MandateGenesisBuildWorkflow
+			// fase: mandate_genesis_phase_activities.go). MandateBuildWorkflow
 			// ahora la invoca después de ingest/cluster/validate y, condicional a
 			// execResult.Success, después de execute — es el único escritor de
 			// currentPhase/phases.*.status a partir de esta sesión. Mismo síntoma
@@ -450,7 +450,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// IngestReceptionActivity — CAMPO NUEVO esta sesión (Fase 1 real,
 			// ver mandate_genesis_activities.go). Sin este registro, Fase 1
 			// fallaría en runtime con "unable to find activity type" apenas
-			// MandateGenesisBuildWorkflow la invocara — mismo síntoma que ya
+			// MandateBuildWorkflow la invocara — mismo síntoma que ya
 			// tienen SignMandateActivity/PersistHumanSyncActivity, que el
 			// workflow también invoca (fases sign/validate) pero que NO están
 			// registradas acá — gap preexistente, no introducido en este
@@ -551,7 +551,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"SeedWorkflow",
 					"OnboardingWorkflow",
 					"SystemHealthWorkflow",
-					"MandateGenesisBuildWorkflow",
+					"MandateBuildWorkflow",
 					"MandateExecutionWorkflow",
 				},
 				[]string{

@@ -196,13 +196,13 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 			// ─────────────────────────────────────────────────────────
 			// FIX DEL BUG (esta sesión): hasta acá, este comando escribía
 			// confirmedDomainIds en mandate_state.json pero NUNCA
-			// señalizaba a MandateGenesisBuildWorkflow — que está
+			// señalizaba a MandateBuildWorkflow — que está
 			// bloqueado indefinidamente en signalCh.Receive(ctx, &signal)
-			// esperando "mandate:genesis:validate" (ver
-			// mandate_genesis_build_workflow.go, Fase 3). Sin esto, un
+			// esperando "mandate:build:validate" (ver
+			// mandate_build_workflow.go, Fase 3). Sin esto, un
 			// mandate confirmado por CLI queda colgado para siempre.
 			//
-			// Se arma GenesisValidateSignal solo con ID+DomainName por
+			// Se arma MandateValidateSignal solo con ID+DomainName por
 			// dominio — SIN Rename ni Files, porque este comando no los
 			// recibe como input hoy (confirmado explícitamente, no
 			// inventado: el flag --domain-id no tiene contraparte para
@@ -234,8 +234,8 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 			}
 			defer tc.Close()
 
-			workflowID := fmt.Sprintf("mandate_genesis_%s", mandateID) // mismo formato que StartMandateGenesisBuildWorkflow, temporal_client.go
-			signalErr := tc.SignalWorkflow(ctx, workflowID, "", "mandate:genesis:validate", workflows.GenesisValidateSignal{
+			workflowID := fmt.Sprintf("mandate_build_%s", mandateID) // mismo formato que StartMandateBuildWorkflow, temporal_client.go
+			signalErr := tc.SignalWorkflow(ctx, workflowID, "", "mandate:build:validate", workflows.MandateValidateSignal{
 				Approved: true,
 				Domains:  signalDomains,
 			})

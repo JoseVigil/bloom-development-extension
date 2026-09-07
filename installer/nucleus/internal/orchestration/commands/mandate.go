@@ -323,7 +323,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 // createGenesisMandate NO llama a Temporal directamente — escribe
 // mandate_state.json y es mandate_watcher.go (fsnotify sobre
 // mandate_state.json, ya no gen_state.json — ver decisión de unificación)
-// quien dispara StartMandateGenesisBuildWorkflow. Esto mantiene desacoplado
+// quien dispara StartMandateBuildWorkflow. Esto mantiene desacoplado
 // el CLI del cliente Temporal, y además hace que el CLI y la API
 // (create-mandate.handler.ts) escriban exactamente el mismo archivo con la
 // misma forma — ambos son entradas válidas al mismo mecanismo.
@@ -333,7 +333,7 @@ func createGenesisMandateSubcommand(c *core.Core) *cobra.Command {
 // NOTA sobre campos: el handler TS (create-mandate.handler.ts) escribe hoy
 // un mandate_state.json más chico, solo {status, currentPhase, phases} —
 // sin mandateType/project/source embebidos. Ese archivo no le alcanza al
-// watcher de Go para armar GenesisBuildInput (necesita mandateType, source,
+// watcher de Go para armar MandateBuildInput (necesita mandateType, source,
 // project). Acá SÍ los embebemos. Hay que aplicar el mismo agregado del
 // lado TS para que ambas entradas (CLI y API) produzcan un archivo
 // consistente — lo dejo señalado, y también lo aplico en el handler TS en

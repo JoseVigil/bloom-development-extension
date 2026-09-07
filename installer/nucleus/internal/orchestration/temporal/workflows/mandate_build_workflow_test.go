@@ -22,13 +22,13 @@ import (
 // scaffold real (Mode:real, dentro del child MandateExecutionWorkflow) falle
 // lo pone en true antes de env.ExecuteWorkflow. El scaffold dry_run de la
 // fase cluster, en el padre, nunca falla por este toggle — solo Mode:real.
-func genesisWorkflowFixture(t *testing.T) (env *testsuite.TestWorkflowEnvironment, order *[]string, failRealScaffold *bool) {
+func buildWorkflowFixture(t *testing.T) (env *testsuite.TestWorkflowEnvironment, order *[]string, failRealScaffold *bool) {
 	t.Helper()
 	var suite testsuite.WorkflowTestSuite
 	env = suite.NewTestWorkflowEnvironment()
 	orderSlice := []string{}
 	fail := false
-	env.RegisterWorkflow(MandateGenesisBuildWorkflow)
+	env.RegisterWorkflow(MandateBuildWorkflow)
 	env.RegisterWorkflow(MandateExecutionWorkflow)
 	env.OnActivity(activities.IngestReceptionActivity, mock.Anything, mock.Anything).
 		Return(activities.IngestReceptionResult{IntentID: "intent-1", FolderName: ".fixture"}, nil)
@@ -88,13 +88,13 @@ func genesisWorkflowFixture(t *testing.T) (env *testsuite.TestWorkflowEnvironmen
 	env.OnActivity(activities.PersistExecutionGravityActivity, mock.Anything, mock.Anything).
 		Return(activities.PersistExecutionGravityResult{StateVersion: 1}, nil)
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow("mandate:genesis:validate", GenesisValidateSignal{Approved: true, Domains: []DomainConfirmation{{ID: "dom-1", DomainName: "Core"}}})
+		env.SignalWorkflow("mandate:build:validate", MandateValidateSignal{Approved: true, Domains: []DomainConfirmation{{ID: "dom-1", DomainName: "Core"}}})
 	}, time.Second)
 	return env, &orderSlice, &fail
 }
 
-func TestMandateGenesisSignatureEventFollowsDurableSignedState(t *testing.T) {
-	env, order, _ := genesisWorkflowFixture(t)
+func TestMandateBuildSignatureEventFollowsDurableSignedState(t *testing.T) {
+	env, order, _ := buildWorkflowFixture(t)
 	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).
 		Return(func(activities.PersistHumanSyncInput) (activities.PersistHumanSyncResult, error) {
 			*order = append(*order, "state:pending")
@@ -105,22 +105,22 @@ func TestMandateGenesisSignatureEventFollowsDurableSignedState(t *testing.T) {
 			*order = append(*order, "state:signed")
 			return activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil
 		})
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m1", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateBuildWorkflow, MandateBuildInput{MandateID: "m1", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatal(err)
 	}
 	joined := strings.Join(*order, "|")
 	// CAMBIO (esta sesión, Paso 2): antes se pedía adyacencia exacta
-	// "state:signed|event:mandate:genesis:signed". Ya no es adyacente —
+	// "state:signed|event:mandate:build:signed". Ya no es adyacente —
 	// AdvancePhaseActivity(Phase:"validate") ahora corre legítimamente
 	// entre la firma y la publicación del evento (Hook 3, currentPhase
 	// validate→signed) — así que lo que importa (que el estado firmado sea
 	// durable ANTES de publicar el evento) se verifica por posición, no por
 	// adyacencia literal.
 	signedIdx := strings.Index(joined, "state:signed")
-	eventIdx := strings.Index(joined, "event:mandate:genesis:signed")
+	eventIdx := strings.Index(joined, "event:mandate:build:signed")
 	if signedIdx == -1 || eventIdx == -1 || signedIdx > eventIdx {
-		t.Fatalf("expected state:signed before event:mandate:genesis:signed, got order=%s", joined)
+		t.Fatalf("expected state:signed before event:mandate:build:signed, got order=%s", joined)
 	}
 	if strings.Contains(joined, "mark-effect-applied") || strings.Contains(joined, "commit-turn") || strings.Contains(joined, "advance-turn") {
 		t.Fatalf("BSIP wiring activated: %s", joined)
@@ -135,14 +135,14 @@ func TestMandateGenesisSignatureEventFollowsDurableSignedState(t *testing.T) {
 // Success:false (soft-failure — el child no retorna error de Go, ver
 // MandateExecutionResult).
 
-func TestMandateGenesisAdvancesPhaseInOrderThroughCompletion(t *testing.T) {
-	env, order, _ := genesisWorkflowFixture(t)
+func TestMandateBuildAdvancesPhaseInOrderThroughCompletion(t *testing.T) {
+	env, order, _ := buildWorkflowFixture(t)
 	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).
 		Return(activities.PersistHumanSyncResult{StateVersion: 2}, nil)
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil)
 
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m3", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateBuildWorkflow, MandateBuildInput{MandateID: "m3", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatal(err)
 	}
@@ -167,18 +167,18 @@ func TestMandateGenesisAdvancesPhaseInOrderThroughCompletion(t *testing.T) {
 	}
 }
 
-func TestMandateGenesisDoesNotAdvanceToCompletedWhenExecutionFails(t *testing.T) {
-	env, order, failRealScaffold := genesisWorkflowFixture(t)
+func TestMandateBuildDoesNotAdvanceToCompletedWhenExecutionFails(t *testing.T) {
+	env, order, failRealScaffold := buildWorkflowFixture(t)
 	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).
 		Return(activities.PersistHumanSyncResult{StateVersion: 2}, nil)
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(activities.SignMandateResult{ActionsCreated: 1, SignedAt: "2026-08-27T10:00:00Z", Actions: []activities.Action{{DomainName: "Core", IntentType: "gen"}}}, nil)
 	// El scaffold real (Mode:real, dentro del child) va a fallar — ver
-	// comentario de failRealScaffold en genesisWorkflowFixture. La fase
+	// comentario de failRealScaffold en buildWorkflowFixture. La fase
 	// cluster (Mode:dry_run, en el padre) sigue funcionando normalmente.
 	*failRealScaffold = true
 
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m4", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateBuildWorkflow, MandateBuildInput{MandateID: "m4", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("no se esperaba error de workflow (soft-failure vía execResult.Success): %v", err)
 	}
@@ -192,8 +192,8 @@ func TestMandateGenesisDoesNotAdvanceToCompletedWhenExecutionFails(t *testing.T)
 	}
 }
 
-func TestMandateGenesisSignatureFailurePersistsBeforeErrorEvent(t *testing.T) {
-	env, order, _ := genesisWorkflowFixture(t)
+func TestMandateBuildSignatureFailurePersistsBeforeErrorEvent(t *testing.T) {
+	env, order, _ := buildWorkflowFixture(t)
 	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).
 		Return(activities.PersistHumanSyncResult{StateVersion: 2}, nil)
 	env.OnActivity(activities.SignMandateActivity, mock.Anything, mock.Anything, mock.Anything).
@@ -203,12 +203,12 @@ func TestMandateGenesisSignatureFailurePersistsBeforeErrorEvent(t *testing.T) {
 			*order = append(*order, "state:failed")
 			return activities.PersistSignatureFailureResult{StateVersion: 3}, nil
 		})
-	env.ExecuteWorkflow(MandateGenesisBuildWorkflow, GenesisBuildInput{MandateID: "m2", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
+	env.ExecuteWorkflow(MandateBuildWorkflow, MandateBuildInput{MandateID: "m2", MandateType: "genesis", Project: "fixture", ProjectID: "project-id-fixture", MandatesRoot: "fixture"})
 	if env.GetWorkflowError() == nil {
 		t.Fatal("expected workflow failure")
 	}
 	joined := strings.Join(*order, "|")
-	if !strings.Contains(joined, "state:failed|event:mandate:genesis:error") {
+	if !strings.Contains(joined, "state:failed|event:mandate:build:error") {
 		t.Fatalf("order=%s", joined)
 	}
 }

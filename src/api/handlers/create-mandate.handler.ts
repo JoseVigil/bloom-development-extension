@@ -112,7 +112,7 @@ export async function createMandateHandler(
   const now = new Date().toISOString();
   const mandateState = {
     // AGREGADO: el watcher de Nucleus (Go) necesita estos campos embebidos
-    // para armar GenesisBuildInput — el shape original ({status,
+    // para armar MandateBuildInput — el shape original ({status,
     // currentPhase, phases}) no le alcanzaba. Ver mandate_watcher.go
     // (MandateState) y mandate.go (createGenesisMandate), que ya escriben
     // este mismo shape desde la unificación CLI/API sobre mandate_state.json.
@@ -165,7 +165,7 @@ export async function createMandateHandler(
 
   // Notifica al Control Plane que el archivo está listo.
   // Nucleus (Go) reaccionará a este evento iniciando el proceso.
-  publishMandateEvent('mandate:genesis:initiated', {
+  publishMandateEvent('mandate:build:initiated', {
     mandateId,
     projectName: body.project,
     source: (body as any).source, // 'source' existe en genesis/domain_expansion

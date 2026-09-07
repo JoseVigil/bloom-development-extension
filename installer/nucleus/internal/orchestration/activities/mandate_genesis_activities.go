@@ -67,7 +67,7 @@ type ScaffoldDomainResult struct {
 	// devuelve acá porque el workflow (caller) NO puede leer archivos por
 	// su cuenta — el código de un Workflow de Temporal debe ser
 	// determinista, toda I/O tiene que pasar por una Activity. Sin esto,
-	// MandateGenesisBuildWorkflow no tendría forma de construir
+	// MandateBuildWorkflow no tendría forma de construir
 	// candidateDomains para pasarle a PersistHumanSyncActivity más
 	// adelante sin una activity de lectura aparte.
 	Domains []ProposedDomain
@@ -191,7 +191,7 @@ func ScaffoldDomainActivity(input ScaffoldDomainInput) (ScaffoldDomainResult, er
 	// domains — CAMPO NUEVO esta sesión, gap encontrado por Frontend
 	// después de armar el flujo completo: sin esto, la UI nunca ve el id
 	// real (dom_{slug}_{sufijo}) que scaffoldDryRun generó, y no tiene
-	// cómo devolverlo en GenesisValidateSignal.Domains[].ID —
+	// cómo devolverlo en MandateValidateSignal.Domains[].ID —
 	// SignMandateActivity fallaría al firmar por "confirmedDomainIds
 	// referencia domainId ausente en candidateDomains". Solo se agrega la
 	// key en Mode=dry_run (domains no vacío); en Mode=real se omite del
@@ -301,14 +301,14 @@ func publishMandateEvent(event string, data map[string]interface{}) {
 // ─────────────────────────────────────────────────────────────────────────
 // IngestReceptionActivity — Fase 1 real (.reception/ de ing/, ver
 // ING_Intent_Spec_v1_1.md §3). Reemplaza el hueco que existía antes en
-// mandate_genesis_build_workflow.go, donde Fase 1 era una sola
+// mandate_build_workflow.go, donde Fase 1 era una sola
 // PublishMandateEventActivity sin ningún trabajo real detrás (confirmado en
 // BLOOM_BISP_Session_Decisions_v1_1.md:330 — "no llama a Brain, no llama a
 // Ollama, no toca ChromaDB"). El pulso "mandate:phase:ingest" sigue
 // existiendo (la UI de /genesis lo espera como marcador de fase única, sin
 // progreso incremental — ver bloom-conductor-genesis-v1_1.html), pero ahora
 // se dispara DESPUÉS de que esta activity corrió de verdad, no en su lugar
-// — ver el caller en mandate_genesis_build_workflow.go.
+// — ver el caller en mandate_build_workflow.go.
 //
 // Invoca `brain intent create --type ing` + `brain intent hydrate` como
 // subprocess: mismo patrón D-15 que runBrainCreate (governance/create.go)

@@ -8,7 +8,7 @@
 // escribe mandate_state.json con currentPhase "ingest" / status "pending"
 // desde el primer instante).
 //
-// mandate_watcher.go dispara MandateGenesisBuildWorkflow apenas ve esa
+// mandate_watcher.go dispara MandateBuildWorkflow apenas ve esa
 // condición, sin esperar ningún botón de esta pantalla. Por eso el flag
 // docsReadyRequested de más abajo es DELIBERADAMENTE optimista: no bloquea
 // nada por sí mismo hasta que exista un gate del lado de mandate_watcher.go

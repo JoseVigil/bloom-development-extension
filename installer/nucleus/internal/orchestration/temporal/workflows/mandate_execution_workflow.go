@@ -13,7 +13,7 @@ import (
 // CAMBIO (esta sesión): Paso 1 del plan de consolidación del action graph
 // (Mandate_Genesis_ActionGraph_Plan_Ejecucion_v1.md) — MandateExecutionWorkflow
 // deja de ser el placeholder puro que era. Alcance deliberadamente acotado:
-// solo este archivo y mandate_genesis_build_workflow.go (para pasar
+// solo este archivo y mandate_build_workflow.go (para pasar
 // ActionID/DomainID/MandatesRoot, ver abajo). NO se tocó
 // mandate_genesis_sign_activity.go ni el shape de Action — mandate.json
 // sigue siendo inmutable tras firma (R-1); los resultados de ejecución se
@@ -22,7 +22,7 @@ import (
 type DomainAction struct {
 	DomainName string
 	// DomainID — CAMPO NUEVO esta sesión: Action.Payload.DomainID (el id
-	// estable dom_{slug}_{sufijo}), copiado en mandate_genesis_build_workflow.go
+	// estable dom_{slug}_{sufijo}), copiado en mandate_build_workflow.go
 	// al armar []DomainAction desde signResult.Actions. No se usaba antes
 	// porque nada consumía DomainAction todavía.
 	DomainID string
@@ -45,7 +45,7 @@ type MandateExecutionInput struct {
 	Project   string
 	// MandatesRoot — CAMPO NUEVO esta sesión: requerido por
 	// ScaffoldDomainActivity y PersistExecutionResultActivity para ubicar
-	// {mandatesRoot}/{mandateID}/. mandate_genesis_build_workflow.go ya lo
+	// {mandatesRoot}/{mandateID}/. mandate_build_workflow.go ya lo
 	// tiene (input.MandatesRoot) y ahora lo pasa acá.
 	MandatesRoot string
 	Domains      []DomainAction
@@ -53,8 +53,8 @@ type MandateExecutionInput struct {
 	// Gravity): identidad estable del nodo Gravity PROJECT bajo el que
 	// debe vivir el MANDATE de esta corrida. Obligatorio para que
 	// EnsureGravityMandateNodeActivity pueda ubicar la espina — HOY sin
-	// productor real: MandateGenesisBuildWorkflow (único caller de este
-	// workflow) declara GenesisBuildInput.ProjectID pero ningún caller lo
+	// productor real: MandateBuildWorkflow (único caller de este
+	// workflow) declara MandateBuildInput.ProjectID pero ningún caller lo
 	// popula todavía (gap explícito, registrado en el checkpoint de este
 	// cowork, no resuelto acá — no existe en el repo ningún concepto de
 	// ProjectID estable). Mientras tanto, EnsureGravityMandateNodeActivity
@@ -65,7 +65,7 @@ type MandateExecutionInput struct {
 	// tomado de signResult.Actions[].IntentType — ya estampado por
 	// SignMandateActivity (mandate_genesis_sign_activity.go:262, "gen" hoy,
 	// igual para todas las Actions de un Mandate) y copiado acá por
-	// MandateGenesisBuildWorkflow al construir este input.
+	// MandateBuildWorkflow al construir este input.
 	IntentType string
 }
 
@@ -84,8 +84,8 @@ type MandateExecutionResult struct {
 	CompletedDomains []string
 	// Error — poblado en fallo (dependencia irresoluble, scaffold real
 	// fallido, o fallo al persistir el resultado). El workflow no propaga
-	// esto como error de Go: MandateGenesisBuildWorkflow ya publica
-	// execResult completo en el evento mandate:genesis:all_complete sin
+	// esto como error de Go: MandateBuildWorkflow ya publica
+	// execResult completo en el evento mandate:build:all_complete sin
 	// importar su contenido (ver childFuture.Get en el padre) — el mismo
 	// contrato soft-failure que ya sugería este campo antes de esta sesión.
 	Error string
@@ -173,7 +173,7 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 
 	// ActivityOptions no se hereda del padre a través del límite de child
 	// workflow — hay que declararlo de nuevo acá, mismo criterio
-	// (StartToCloseTimeout + reintentos) que ya usa MandateGenesisBuildWorkflow.
+	// (StartToCloseTimeout + reintentos) que ya usa MandateBuildWorkflow.
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -205,7 +205,7 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 	// SessionID = RunID de esta invocación (workflow.GetInfo es
 	// determinístico/replay-safe, no un side effect prohibido en código de
 	// Workflow). RunID, no WorkflowID: WorkflowID es fijo por MandateID
-	// (mandate_execution_{mandateId}, mandate_genesis_build_workflow.go) y
+	// (mandate_execution_{mandateId}, mandate_build_workflow.go) y
 	// podría reutilizarse entre corridas distintas; RunID identifica la
 	// corrida real, uno a uno con "una invocación" tal como quedó
 	// ratificado (checkpoint §2).

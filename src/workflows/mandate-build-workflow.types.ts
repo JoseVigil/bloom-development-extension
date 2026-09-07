@@ -1,12 +1,12 @@
 import type { GenMandateType } from '../types/gen-state.types';
 
 /**
- * Input de `MandateGenesisBuildWorkflow` (§6.1). El propio código del
+ * Input de `MandateBuildWorkflow` (§6.1). El propio código del
  * workflow no es parte de esta tarea (ya está definido en §6.1 del
  * diseño) — esto es solo el contrato de entrada que el handler de
  * creación necesita para el `client.start(...)`.
  */
-export interface GenesisBuildInput {
+export interface MandateBuildInput {
   mandateId: string;
   mandateType: GenMandateType;
   project: string;
@@ -17,9 +17,9 @@ export interface GenesisBuildInput {
   baseGenesisId?: string;
 }
 
-export const GENESIS_BUILD_WORKFLOW_TYPE = 'MandateGenesisBuildWorkflow' as const;
+export const MANDATE_BUILD_WORKFLOW_TYPE = 'MandateBuildWorkflow' as const;
 
 /** Convención de Temporal: 1 workflow run por mandateId, sin colisiones. */
-export function genesisBuildWorkflowId(mandateId: string): string {
-  return `mandate-genesis-build:${mandateId}`;
+export function mandateBuildWorkflowId(mandateId: string): string {
+  return `mandate-build:${mandateId}`;
 }

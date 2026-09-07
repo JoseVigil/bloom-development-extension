@@ -6,7 +6,7 @@
  * Secciones:
  *   1. Eventos AI (bloom.ai.execution.*) — existentes, no modificar
  *   2. Eventos filesystem (btip:*)        — existentes, no modificar
- *   3. Eventos Mandate Genesis (mandate:genesis:*) — pre-firma, Fases 1-3
+ *   3. Eventos Mandate Build (mandate:build:*) — pre-firma, Fases 1-3
  *   4. Eventos Mandate Action (mandate:action:*)   — post-firma, Fase 4 / scaffold
  */
 
@@ -75,19 +75,19 @@ export interface BtipDeletedPayload {
 }
 
 // ---------------------------------------------------------------------------
-// 3. EVENTOS MANDATE GENESIS (mandate:genesis:*)
+// 3. EVENTOS MANDATE BUILD (mandate:build:*)
 // Emitidos por el Daemon (Control Plane autónomo en :4124).
 // Cubren el ciclo pre-firma: desde que el usuario dispara el genesis
 // hasta que confirma los dominios y el mandate.json queda firmado.
 // ---------------------------------------------------------------------------
 
 /**
- * mandate:genesis:initiated
+* mandate:build:initiated
  * El Daemon creó el estado intermedio del Mandate Genesis.
  * mandate_state.json existe con status: "building".
  * El mandate.json NO existe todavía.
  */
-export interface MandateGenesisInitiatedPayload {
+export interface MandateBuildInitiatedPayload {
   mandateId: string;          // "genesis-{project-name}-{uuid}"
   projectName: string;
   source: string;             // path local o URL de repositorio
@@ -95,11 +95,11 @@ export interface MandateGenesisInitiatedPayload {
 }
 
 /**
- * mandate:genesis:ingest_progress
+* mandate:build:ingest_progress
  * Progreso periódico durante la Fase 1 (ingest).
  * El cliente puede usar esto para actualizar una barra de progreso.
  */
-export interface MandateGenesisIngestProgressPayload {
+export interface MandateBuildIngestProgressPayload {
   mandateId: string;
   filesTotal: number;
   filesProcessed: number;
@@ -107,11 +107,11 @@ export interface MandateGenesisIngestProgressPayload {
 }
 
 /**
- * mandate:genesis:ingest_complete
+* mandate:build:ingest_complete
  * La Fase 1 completó. Todos los archivos están vectorizados en ChromaDB.
  * Brain pasa automáticamente a la Fase 2 (cluster).
  */
-export interface MandateGenesisIngestCompletePayload {
+export interface MandateBuildIngestCompletePayload {
   mandateId: string;
   filesTotal: number;
   vectorsCreated: number;
@@ -119,7 +119,7 @@ export interface MandateGenesisIngestCompletePayload {
 }
 
 /**
- * mandate:genesis:domains_proposed
+* mandate:build:domains_proposed
  * La Fase 2 completó. Brain propone N dominios.
  * Este evento activa el punto de sincronización humana (Fase 3):
  * el cliente debe presentar la pantalla de validación de dominios.
@@ -134,7 +134,7 @@ export interface DomainProposal {
                                 // solo presente en domain_expansion, ver §12.8
 }
 
-export interface MandateGenesisDomainsProposedPayload {
+export interface MandateBuildDomainsProposedPayload {
   mandateId: string;
   mandateType: 'genesis' | 'domain_expansion';
   domains: DomainProposal[];
@@ -142,12 +142,12 @@ export interface MandateGenesisDomainsProposedPayload {
 }
 
 /**
- * mandate:genesis:signed
+* mandate:build:signed
  * El usuario confirmó los dominios. Nucleus firmó el mandate.json.
  * A partir de este evento el mandate existe formalmente.
  * mandate_state.json pasa de "building" → "pending" → "running".
  */
-export interface MandateGenesisSignedPayload {
+export interface MandateBuildSignedPayload {
   mandateId: string;
   domainsConfirmed: number;   // cuántos dominios quedaron tras la edición del usuario
   actionsCreated: number;     // = domainsConfirmed (una action .gen por dominio)
@@ -156,12 +156,12 @@ export interface MandateGenesisSignedPayload {
 }
 
 /**
- * mandate:genesis:error
+* mandate:build:error
  * Error en cualquier punto del ciclo pre-firma.
  * Si resumable: true, el cliente puede ofrecer "Reintentar" via
  * nucleus mandate resume <mandateId>.
  */
-export interface MandateGenesisErrorPayload {
+export interface MandateBuildErrorPayload {
   mandateId: string;
   phase: 'ingest' | 'cluster' | 'validate' | 'sign';
   message: string;
@@ -255,13 +255,13 @@ export interface WsEventMap {
   'btip:updated': BtipUpdatedPayload;
   'btip:deleted': BtipDeletedPayload;
 
-  // Mandate Genesis (pre-firma)
-  'mandate:genesis:initiated':        MandateGenesisInitiatedPayload;
-  'mandate:genesis:ingest_progress':  MandateGenesisIngestProgressPayload;
-  'mandate:genesis:ingest_complete':  MandateGenesisIngestCompletePayload;
-  'mandate:genesis:domains_proposed': MandateGenesisDomainsProposedPayload;
-  'mandate:genesis:signed':           MandateGenesisSignedPayload;
-  'mandate:genesis:error':            MandateGenesisErrorPayload;
+  // Mandate Build (pre-firma)
+  'mandate:build:initiated':        MandateBuildInitiatedPayload;
+  'mandate:build:ingest_progress':  MandateBuildIngestProgressPayload;
+  'mandate:build:ingest_complete':  MandateBuildIngestCompletePayload;
+  'mandate:build:domains_proposed': MandateBuildDomainsProposedPayload;
+  'mandate:build:signed':           MandateBuildSignedPayload;
+  'mandate:build:error':            MandateBuildErrorPayload;
 
   // Mandate Action (post-firma / scaffold)
   'mandate:action:started':      MandateActionStartedPayload;

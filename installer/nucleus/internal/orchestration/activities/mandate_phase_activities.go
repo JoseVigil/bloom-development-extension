@@ -12,8 +12,8 @@
 // "Genesis": el caller le pasa su propia secuencia de fases (PhaseOrder) y
 // qué fases de esa secuencia tienen su propio sub-objeto en phases{}
 // (PhasesWithStatusSubobject). El caso concreto de hoy (Genesis/
-// domain_expansion) define esos dos valores en mandate_genesis_build_workflow.go
-// (GenesisPhaseOrder / GenesisPhasesWithStatusSubobject) — cualquier otro
+// domain_expansion) define esos dos valores en mandate_build_workflow.go
+// (BuildPhaseOrder / BuildPhasesWithStatusSubobject) — cualquier otro
 // tipo de mandate futuro define los suyos sin tocar este archivo.
 //
 // AdvancePhaseActivity sigue siendo el único escritor de

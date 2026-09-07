@@ -1,4 +1,4 @@
-// internal/orchestration/temporal/workflows/mandate_genesis_build_workflow.go
+// internal/orchestration/temporal/workflows/mandate_build_workflow.go
 package workflows
 
 import (
@@ -58,14 +58,14 @@ type DomainConfirmation struct {
 	Files      []string `json:"files,omitempty"`
 }
 
-// GenesisValidateSignal es el payload de la señal "mandate:genesis:validate".
-type GenesisValidateSignal struct {
+// MandateValidateSignal es el payload de la señal "mandate:build:validate".
+type MandateValidateSignal struct {
 	Approved bool                 `json:"approved"`
 	Domains  []DomainConfirmation `json:"domains,omitempty"`
 }
 
-// GenesisBuildInput es el único dueño de este shape — temporal_client.go y
-// mandate_watcher.go lo referencian como workflows.GenesisBuildInput, sin
+// MandateBuildInput es el único dueño de este shape — temporal_client.go y
+// mandate_watcher.go lo referencian como workflows.MandateBuildInput, sin
 // redeclararlo, para evitar el bug de "dos tipos con el mismo nombre en
 // paquetes distintos" que rompía la serialización de Temporal.
 //
@@ -73,10 +73,10 @@ type GenesisValidateSignal struct {
 // PersistHumanSyncActivity e IngestReceptionActivity. CORRECCIÓN sobre el
 // comentario anterior ("sigue sin llegar poblado"): mandate_watcher.go
 // (quien arma este struct al arrancar el workflow) ya lo puebla vía
-// w.mandatesRoot — ver startGenesisWorkflow, comentario "MandatesRoot —
+// w.mandatesRoot — ver startBuildWorkflow, comentario "MandatesRoot —
 // CAMPO NUEVO esta sesión (Tarea 1)". El gap quedó cerrado en un turno
 // anterior; este comentario había quedado desactualizado.
-type GenesisBuildInput struct {
+type MandateBuildInput struct {
 	MandateID     string
 	MandateType   string
 	BaseGenesisID string
@@ -95,7 +95,7 @@ type GenesisBuildInput struct {
 	ProjectID string
 }
 
-// GenesisPhaseOrder / GenesisPhasesWithStatusSubobject — CAMBIO (esta
+// BuildPhaseOrder / BuildPhasesWithStatusSubobject — CAMBIO (esta
 // sesión): generalización pedida por el usuario. activities.AdvancePhaseActivity
 // (antes mandate_genesis_phase_activities.go, ahora mandate_phase_activities.go)
 // dejó de conocer esta secuencia de memoria — es agnóstica de mandateType y
@@ -109,15 +109,15 @@ type GenesisBuildInput struct {
 // "signed" refleja que signature.status ya es "signed" (persistSignatureSigned,
 // mandate_genesis_sign_activity.go); "completed" refleja que
 // MandateExecutionWorkflow (Fase 4) terminó con Success: true.
-var GenesisPhaseOrder = []string{"ingest", "cluster", "validate", "signed", "completed"}
+var BuildPhaseOrder = []string{"ingest", "cluster", "validate", "signed", "completed"}
 
-var GenesisPhasesWithStatusSubobject = map[string]bool{"ingest": true, "cluster": true, "validate": true}
+var BuildPhasesWithStatusSubobject = map[string]bool{"ingest": true, "cluster": true, "validate": true}
 
-// MandateGenesisBuildWorkflow orquesta: ingest → cluster → validate (Human
+// MandateBuildWorkflow orquesta: ingest → cluster → validate (Human
 // Sync) → sign → execute (child workflow, Fase 4).
-func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) error {
+func MandateBuildWorkflow(ctx workflow.Context, input MandateBuildInput) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("MandateGenesisBuildWorkflow arrancado", "mandateId", input.MandateID)
+	logger.Info("MandateBuildWorkflow arrancado", "mandateId", input.MandateID)
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
@@ -164,13 +164,13 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	// "completed" en la misma escritura atómica. Único escritor de
 	// currentPhase/phases.*.status a partir de acá — ver comentario del
 	// archivo para el porqué. PhaseOrder/PhasesWithStatusSubobject se pasan
-	// explícitos (GenesisPhaseOrder arriba) — la activity ya no los conoce.
+	// explícitos (BuildPhaseOrder arriba) — la activity ya no los conoce.
 	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
 		MandatesRoot:              input.MandatesRoot,
 		MandateID:                 input.MandateID,
 		Phase:                     "ingest",
-		PhaseOrder:                GenesisPhaseOrder,
-		PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+		PhaseOrder:                BuildPhaseOrder,
+		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
 	}).Get(ctx, nil); err != nil {
 		return fmt.Errorf("fase ingest, avanzar currentPhase: %w", err)
 	}
@@ -193,8 +193,8 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		MandatesRoot:              input.MandatesRoot,
 		MandateID:                 input.MandateID,
 		Phase:                     "cluster",
-		PhaseOrder:                GenesisPhaseOrder,
-		PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+		PhaseOrder:                BuildPhaseOrder,
+		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
 	}).Get(ctx, nil); err != nil {
 		return fmt.Errorf("fase cluster, avanzar currentPhase: %w", err)
 	}
@@ -218,14 +218,14 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	// Espera indefinidamente una señal externa que confirme el resultado
 	// del clustering antes de avanzar a la ejecución real. No lleva
 	// timeout: es intencional, un humano puede tardar horas en revisar.
-	var signal GenesisValidateSignal
-	signalCh := workflow.GetSignalChannel(ctx, "mandate:genesis:validate")
+	var signal MandateValidateSignal
+	signalCh := workflow.GetSignalChannel(ctx, "mandate:build:validate")
 	signalCh.Receive(ctx, &signal)
 
 	if !signal.Approved {
 		logger.Info("Human Sync rechazó el mandate", "mandateId", input.MandateID)
 		return workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-			"mandate:genesis:rejected", map[string]interface{}{"mandateId": input.MandateID},
+			"mandate:build:rejected", map[string]interface{}{"mandateId": input.MandateID},
 		).Get(ctx, nil)
 	}
 
@@ -299,7 +299,7 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 			return fmt.Errorf("fase sign agotó reintentos (%v) y no pudo persistir signature=failed: %w", err, failureErr)
 		}
 		if publishErr := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-			"mandate:genesis:error", map[string]interface{}{
+			"mandate:build:error", map[string]interface{}{
 				"mandateId": input.MandateID,
 				"phase":     "sign",
 				"error":     err.Error(),
@@ -322,8 +322,8 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 		MandatesRoot:              input.MandatesRoot,
 		MandateID:                 input.MandateID,
 		Phase:                     "validate",
-		PhaseOrder:                GenesisPhaseOrder,
-		PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+		PhaseOrder:                BuildPhaseOrder,
+		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
 	}).Get(ctx, nil); err != nil {
 		return fmt.Errorf("fase sign, avanzar currentPhase: %w", err)
 	}
@@ -409,7 +409,7 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 	})
 
 	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-		"mandate:genesis:signed", map[string]interface{}{
+		"mandate:build:signed", map[string]interface{}{
 			"mandateId":        input.MandateID,
 			"domainsConfirmed": len(confirmedIDs),
 			"actionsCreated":   signResult.ActionsCreated,
@@ -439,15 +439,15 @@ func MandateGenesisBuildWorkflow(ctx workflow.Context, input GenesisBuildInput) 
 			MandatesRoot:              input.MandatesRoot,
 			MandateID:                 input.MandateID,
 			Phase:                     "signed",
-			PhaseOrder:                GenesisPhaseOrder,
-			PhasesWithStatusSubobject: GenesisPhasesWithStatusSubobject,
+			PhaseOrder:                BuildPhaseOrder,
+			PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
 		}).Get(ctx, nil); err != nil {
 			return fmt.Errorf("fase execute, avanzar currentPhase a completed: %w", err)
 		}
 	}
 
 	return workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-		"mandate:genesis:all_complete", map[string]interface{}{
+		"mandate:build:all_complete", map[string]interface{}{
 			"mandateId": input.MandateID,
 			"result":    execResult,
 		},

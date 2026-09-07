@@ -28,7 +28,7 @@ export type MandateType = 'genesis' | 'domain_expansion' | 'standard';
 export type DomainBaseline = 'empty' | 'existing';
 export type MandatePhase = 'ingest' | 'cluster' | 'validate' | 'scaffold';
 // 'draft' (standard sin confirmar) y 'pending' (genesis firmado, esperando
-// que Temporal arranque el scaffold — ver comentario de mandate:genesis:signed
+// que Temporal arranque el scaffold — ver comentario de mandate:build:signed
 // en ws-events.ts: mandate_state.json pasa "building" → "pending" → "running")
 // se agregan acá porque son estados reales que puede reportar el backend,
 // no existían en el placeholder original.
@@ -195,7 +195,7 @@ export function createMandateStore() {
 		};
 
 		switch (event) {
-			case 'mandate:genesis:initiated':
+			case 'mandate:build:initiated':
 				upsert(mandateId, {
 					title: data.projectName || mandateId,
 					mandateType: 'genesis',
@@ -214,26 +214,26 @@ export function createMandateStore() {
 				});
 				break;
 
-			case 'mandate:genesis:ingest_progress':
+			case 'mandate:build:ingest_progress':
 				upsert(mandateId, { phase: 'ingest', currentStatus: incomingStatus ?? 'building', ...revision });
 				break;
 
-			case 'mandate:genesis:ingest_complete':
+			case 'mandate:build:ingest_complete':
 				upsert(mandateId, { phase: 'cluster', currentStatus: incomingStatus ?? 'building', ...revision });
 				break;
 
-			case 'mandate:genesis:domains_proposed':
+			case 'mandate:build:domains_proposed':
 				// Fase 3 — punto de sincronización humana, esperando confirmación.
 				upsert(mandateId, { phase: 'validate', currentStatus: incomingStatus ?? 'waiting', ...revision });
 				break;
 
-			case 'mandate:genesis:signed':
+			case 'mandate:build:signed':
 				// mandate.json firmado. mandate_state.json pasa building → pending
 				// (ver ws-events.ts) — todavía no arrancó el scaffold en sí.
 				upsert(mandateId, { phase: 'scaffold', currentStatus: incomingStatus ?? 'pending', ...revision });
 				break;
 
-			case 'mandate:genesis:error':
+			case 'mandate:build:error':
 				upsert(mandateId, { currentStatus: incomingStatus ?? 'failed', ...revision });
 				break;
 

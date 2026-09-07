@@ -74,7 +74,7 @@ func dummyLongRunningWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-func TestStartMandateGenesisRejectsDuplicateWhileRunning(t *testing.T) {
+func TestStartMandateBuildRejectsDuplicateWhileRunning(t *testing.T) {
 	requireLocalTemporal(t)
 	ctx := context.Background()
 	rawClient, err := client.Dial(client.Options{HostPort: "localhost:7233", Namespace: "default"})
@@ -84,7 +84,7 @@ func TestStartMandateGenesisRejectsDuplicateWhileRunning(t *testing.T) {
 	defer rawClient.Close()
 
 	mandateID := fmt.Sprintf("policy-running-%d", time.Now().UnixNano())
-	workflowID := "mandate_genesis_" + mandateID
+	workflowID := "mandate_build_" + mandateID
 	taskQueue := "mandate-genesis-policy-test"
 	w := worker.New(rawClient, taskQueue, worker.Options{})
 	w.RegisterWorkflow(dummyLongRunningWorkflow)
@@ -98,7 +98,7 @@ func TestStartMandateGenesisRejectsDuplicateWhileRunning(t *testing.T) {
 		t.Fatalf("initial ExecuteWorkflow() error: %v", err)
 	}
 	tc := &Client{client: rawClient}
-	_, err = tc.StartMandateGenesisBuildWorkflow(ctx, mandateID, workflows.GenesisBuildInput{MandateID: mandateID})
+	_, err = tc.StartMandateBuildWorkflow(ctx, mandateID, workflows.MandateBuildInput{MandateID: mandateID})
 	if err == nil || !IsAlreadyStarted(err) {
 		t.Fatalf("duplicate error = %v, want wrapped WorkflowExecutionAlreadyStarted", err)
 	}
@@ -110,7 +110,7 @@ func TestStartMandateGenesisRejectsDuplicateWhileRunning(t *testing.T) {
 	}
 }
 
-func TestStartMandateGenesisRejectsDuplicateAfterCompletion(t *testing.T) {
+func TestStartMandateBuildRejectsDuplicateAfterCompletion(t *testing.T) {
 	requireLocalTemporal(t)
 	ctx := context.Background()
 	rawClient, err := client.Dial(client.Options{HostPort: "localhost:7233", Namespace: "default"})
@@ -120,7 +120,7 @@ func TestStartMandateGenesisRejectsDuplicateAfterCompletion(t *testing.T) {
 	defer rawClient.Close()
 
 	mandateID := fmt.Sprintf("policy-closed-%d", time.Now().UnixNano())
-	workflowID := "mandate_genesis_" + mandateID
+	workflowID := "mandate_build_" + mandateID
 	taskQueue := "mandate-genesis-policy-test"
 	w := worker.New(rawClient, taskQueue, worker.Options{})
 	w.RegisterWorkflow(dummyLongRunningWorkflow)
@@ -141,7 +141,7 @@ func TestStartMandateGenesisRejectsDuplicateAfterCompletion(t *testing.T) {
 	}
 
 	tc := &Client{client: rawClient}
-	_, err = tc.StartMandateGenesisBuildWorkflow(ctx, mandateID, workflows.GenesisBuildInput{MandateID: mandateID})
+	_, err = tc.StartMandateBuildWorkflow(ctx, mandateID, workflows.MandateBuildInput{MandateID: mandateID})
 	if err == nil || !IsAlreadyStarted(err) {
 		t.Fatalf("historical duplicate error = %v, want wrapped WorkflowExecutionAlreadyStarted", err)
 	}
@@ -162,7 +162,7 @@ func requireLocalTemporal(t *testing.T) {
 
 // TestHasNonTerminalMandateWork_DetectsRunningAndCompleted es el test
 // central: arranca un workflow real con el WorkflowID que
-// HasNonTerminalMandateWork espera (mandate_genesis_{mandateID}), confirma
+// HasNonTerminalMandateWork espera (mandate_build_{mandateID}), confirma
 // que se detecta como no-terminal mientras corre, lo señaliza para que
 // termine, y confirma que deja de detectarse.
 func TestHasNonTerminalMandateWork_DetectsRunningAndCompleted(t *testing.T) {
@@ -202,7 +202,7 @@ func TestHasNonTerminalMandateWork_DetectsRunningAndCompleted(t *testing.T) {
 		t.Fatalf("failed to create fake mandate dir: %v", err)
 	}
 
-	workflowID := "mandate_genesis_" + mandateID
+	workflowID := "mandate_build_" + mandateID
 	we, err := rawClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: testTaskQueue,

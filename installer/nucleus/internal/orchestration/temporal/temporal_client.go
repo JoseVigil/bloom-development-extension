@@ -418,15 +418,15 @@ type OnboardingResult struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
-// StartMandateGenesisBuildWorkflow dispara Mandate Genesis Build. Fire-and-forget
+// StartMandateBuildWorkflow dispara el build de Mandate (Genesis o domain_expansion). Fire-and-forget
 // (mismo criterio que ExecuteOnboardingWorkflow): la Fase 3 del workflow es un
 // Human Sync Point que puede durar horas — no hay we.Get() acá.
-func (c *Client) StartMandateGenesisBuildWorkflow(
+func (c *Client) StartMandateBuildWorkflow(
 	ctx context.Context,
 	mandateID string,
-	input workflows.GenesisBuildInput,
+	input workflows.MandateBuildInput,
 ) (client.WorkflowRun, error) {
-	workflowID := fmt.Sprintf("mandate_genesis_%s", mandateID)
+	workflowID := fmt.Sprintf("mandate_build_%s", mandateID)
 
 	options := client.StartWorkflowOptions{
 		ID:                                       workflowID,
@@ -436,7 +436,7 @@ func (c *Client) StartMandateGenesisBuildWorkflow(
 		WorkflowExecutionErrorWhenAlreadyStarted: true,
 	}
 
-	run, err := c.client.ExecuteWorkflow(ctx, options, "MandateGenesisBuildWorkflow", input)
+	run, err := c.client.ExecuteWorkflow(ctx, options, "MandateBuildWorkflow", input)
 	if err != nil {
 		return nil, fmt.Errorf("no pude iniciar %s con REJECT_DUPLICATE: %w", workflowID, err)
 	}
@@ -507,7 +507,7 @@ func classifyWorkflowExecutionStatus(status enums.WorkflowExecutionStatus) Workf
 // DomainAction/Files. Acoplar el tracking de in-flight a esos campos hoy
 // habría significado rehacerlo en cuanto la Fase 4 real aterrice.
 //
-// Confirmado por código (mandate_watcher.go, mandate_genesis_build_workflow.go,
+// Confirmado por código (mandate_watcher.go, mandate_build_workflow.go,
 // mandate_genesis_sign_activity.go) que SÍ existe ya un índice local por
 // organización — no hay que inventarlo: cada Mandate Genesis en curso tiene
 // una carpeta {MandatesRoot}/{mandateID}/ con mandate_state.json, y
@@ -519,7 +519,7 @@ func classifyWorkflowExecutionStatus(status enums.WorkflowExecutionStatus) Workf
 // propio índice local?") con "ambos, cada uno para lo que sabe": el índice
 // local para enumerar, Temporal para el estado de verdad.
 //
-// No toca DomainAction, MandateExecutionWorkflow ni mandate_genesis_build_workflow.go
+// No toca DomainAction, MandateExecutionWorkflow ni mandate_build_workflow.go
 // — cero superficie compartida con lo que el roadmap de Mandate Genesis va a
 // rediseñar.
 // ─────────────────────────────────────────────────────────────────────────
@@ -533,10 +533,10 @@ func classifyWorkflowExecutionStatus(status enums.WorkflowExecutionStatus) Workf
 //
 // Cada carpeta bajo mandatesRoot es un mandateID (ver mandate_watcher.go /
 // SignMandateActivity). Un Mandate Genesis puede tener hasta dos workflows
-// asociados a lo largo de su ciclo de vida — "mandate_genesis_{id}"
+// asociados a lo largo de su ciclo de vida — "mandate_build_{id}"
 // (Fases 1-3, arrancado por mandate_watcher.go) y, tras la firma,
 // "mandate_execution_{id}" como child workflow (Fase 4, ver
-// mandate_genesis_build_workflow.go línea ~236). Se chequean los dos IDs
+// mandate_build_workflow.go línea ~236). Se chequean los dos IDs
 // por carpeta porque cualquiera de los dos en RUNNING cuenta como
 // "in-flight" para efectos de G3.
 //
@@ -562,7 +562,7 @@ func (c *Client) HasNonTerminalMandateWork(ctx context.Context, mandatesRoot str
 		mandateID := e.Name()
 
 		for _, workflowID := range []string{
-			fmt.Sprintf("mandate_genesis_%s", mandateID),
+			fmt.Sprintf("mandate_build_%s", mandateID),
 			fmt.Sprintf("mandate_execution_%s", mandateID),
 		} {
 			running, err := c.isWorkflowRunning(ctx, workflowID)

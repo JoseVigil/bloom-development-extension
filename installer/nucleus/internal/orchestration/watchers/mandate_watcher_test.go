@@ -14,25 +14,25 @@ import (
 	"nucleus/internal/orchestration/temporal/workflows"
 )
 
-func TestMandateGenesisDispatchClassifiesLiveDuplicate(t *testing.T) {
-	if got := classifyGenesisDuplicate(true, nil); got != genesisDuplicateActive {
-		t.Fatalf("classification = %q, want %q", got, genesisDuplicateActive)
+func TestMandateBuildDispatchClassifiesLiveDuplicate(t *testing.T) {
+	if got := classifyBuildDuplicate(true, nil); got != buildDuplicateActive {
+		t.Fatalf("classification = %q, want %q", got, buildDuplicateActive)
 	}
 }
 
-func TestMandateGenesisDispatchClassifiesHistoricalDuplicate(t *testing.T) {
-	if got := classifyGenesisDuplicate(false, nil); got != genesisDuplicateHistorical {
-		t.Fatalf("classification = %q, want %q", got, genesisDuplicateHistorical)
+func TestMandateBuildDispatchClassifiesHistoricalDuplicate(t *testing.T) {
+	if got := classifyBuildDuplicate(false, nil); got != buildDuplicateHistorical {
+		t.Fatalf("classification = %q, want %q", got, buildDuplicateHistorical)
 	}
 }
 
-func TestMandateGenesisDispatchPreservesClassificationFailure(t *testing.T) {
-	if got := classifyGenesisDuplicate(false, errors.New("describe failed")); got != genesisDuplicateUnclassified {
-		t.Fatalf("classification = %q, want %q", got, genesisDuplicateUnclassified)
+func TestMandateBuildDispatchPreservesClassificationFailure(t *testing.T) {
+	if got := classifyBuildDuplicate(false, errors.New("describe failed")); got != buildDuplicateUnclassified {
+		t.Fatalf("classification = %q, want %q", got, buildDuplicateUnclassified)
 	}
 }
 
-func TestGenesisBuildInputPreservesProjectID(t *testing.T) {
+func TestMandateBuildInputPreservesProjectID(t *testing.T) {
 	var state MandateState
 	if err := json.Unmarshal([]byte(`{
 		"mandateId":"mandate-fixture",
@@ -41,7 +41,7 @@ func TestGenesisBuildInputPreservesProjectID(t *testing.T) {
 	}`), &state); err != nil {
 		t.Fatal(err)
 	}
-	input := genesisBuildInput(state, "mandates-root")
+	input := mandateBuildInput(state, "mandates-root")
 	if input.ProjectID != "project-id-fixture" {
 		t.Fatalf("ProjectID = %q, want project-id-fixture", input.ProjectID)
 	}
@@ -50,18 +50,18 @@ func TestGenesisBuildInputPreservesProjectID(t *testing.T) {
 	}
 }
 
-type syntheticGenesisTemporalClient struct {
+type syntheticMandateBuildTemporalClient struct {
 	state WorkflowExecutionState
 	err   error
 }
 
-func (f *syntheticGenesisTemporalClient) StartMandateGenesisBuildWorkflow(context.Context, string, workflows.GenesisBuildInput) (client.WorkflowRun, error) {
+func (f *syntheticMandateBuildTemporalClient) StartMandateBuildWorkflow(context.Context, string, workflows.MandateBuildInput) (client.WorkflowRun, error) {
 	return nil, nil
 }
-func (f *syntheticGenesisTemporalClient) IsWorkflowRunning(context.Context, string) (bool, error) {
+func (f *syntheticMandateBuildTemporalClient) IsWorkflowRunning(context.Context, string) (bool, error) {
 	return f.state == WorkflowExecutionRunning, f.err
 }
-func (f *syntheticGenesisTemporalClient) GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error) {
+func (f *syntheticMandateBuildTemporalClient) GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error) {
 	return f.state, f.err
 }
 
@@ -114,7 +114,7 @@ func TestUnsignedMandateGracePeriodIsFifteenMinutes(t *testing.T) {
 func TestReconcileMarksMissingWorkflowRequiredAfterGraceAndPreservesFields(t *testing.T) {
 	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	path := syntheticMandateState(t, t.TempDir(), now.Add(-unsignedMandateGracePeriod))
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionNotFound}}
+	w := &MandateWatcher{tc: &syntheticMandateBuildTemporalClient{state: WorkflowExecutionNotFound}}
 	var ms MandateState
 	raw, _ := os.ReadFile(path)
 	_ = json.Unmarshal(raw, &ms)
@@ -134,7 +134,7 @@ func TestReconcileMarksMissingWorkflowRequiredAfterGraceAndPreservesFields(t *te
 func TestReconcileTemporalUnavailableIsUnknownNeverFailed(t *testing.T) {
 	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	path := syntheticMandateState(t, t.TempDir(), now.Add(-time.Hour))
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionUnknown, err: errors.New("unavailable")}}
+	w := &MandateWatcher{tc: &syntheticMandateBuildTemporalClient{state: WorkflowExecutionUnknown, err: errors.New("unavailable")}}
 	var ms MandateState
 	raw, _ := os.ReadFile(path)
 	_ = json.Unmarshal(raw, &ms)
@@ -153,7 +153,7 @@ func TestReconcileTemporalUnavailableIsUnknownNeverFailed(t *testing.T) {
 func TestReconcileTerminalWorkflowMarksFailedIdempotently(t *testing.T) {
 	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	path := syntheticMandateState(t, t.TempDir(), now)
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionFailed}}
+	w := &MandateWatcher{tc: &syntheticMandateBuildTemporalClient{state: WorkflowExecutionFailed}}
 	var ms MandateState
 	raw, _ := os.ReadFile(path)
 	_ = json.Unmarshal(raw, &ms)
@@ -187,7 +187,7 @@ func TestReconcileSignedMandateDoesNotTouchState(t *testing.T) {
 	if err := json.Unmarshal(before, &ms); err != nil {
 		t.Fatal(err)
 	}
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionFailed}}
+	w := &MandateWatcher{tc: &syntheticMandateBuildTemporalClient{state: WorkflowExecutionFailed}}
 	if err := w.reconcileUnsignedMandate(context.Background(), path, ms, now); err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestReconcileRunningWorkflowDoesNotMarkMissingOrFailed(t *testing.T) {
 	if err := json.Unmarshal(before, &ms); err != nil {
 		t.Fatal(err)
 	}
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionRunning}}
+	w := &MandateWatcher{tc: &syntheticMandateBuildTemporalClient{state: WorkflowExecutionRunning}}
 	if err := w.reconcileUnsignedMandate(context.Background(), path, ms, now); err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestReconcileNeverMutatesBrainIntentProposalOrHumanSync(t *testing.T) {
 	if err := json.Unmarshal(raw, &ms); err != nil {
 		t.Fatal(err)
 	}
-	w := &MandateWatcher{tc: &syntheticGenesisTemporalClient{state: WorkflowExecutionNotFound}}
+	w := &MandateWatcher{tc: &syntheticMandateBuildTemporalClient{state: WorkflowExecutionNotFound}}
 	if err := w.reconcileUnsignedMandate(context.Background(), path, ms, now); err != nil {
 		t.Fatal(err)
 	}

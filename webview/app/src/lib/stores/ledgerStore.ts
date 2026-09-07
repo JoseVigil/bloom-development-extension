@@ -9,7 +9,7 @@
 // declarados explícitamente como tales, para poder maquetar LedgerPanel
 // sin bloquear en el backend. Los seis eventos reales confirmados en el
 // roadmap (mandate:phase:ingest, mandate:action:started/completed/failed,
-// mandate:genesis:rejected, mandate:genesis:all_complete) son el contrato
+// mandate:build:rejected, mandate:build:all_complete) son el contrato
 // a reemplazar esto cuando exista el consumidor real.
 
 import { writable, derived, type Readable } from 'svelte/store';

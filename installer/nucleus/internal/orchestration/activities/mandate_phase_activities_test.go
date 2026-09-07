@@ -11,7 +11,7 @@ import (
 
 // genesisPhaseOrderFixture / genesisPhasesWithStatusSubobjectFixture — la
 // secuencia concreta que usa hoy Genesis/domain_expansion (ver
-// GenesisPhaseOrder en mandate_genesis_build_workflow.go). AdvancePhaseActivity
+// BuildPhaseOrder en mandate_build_workflow.go). AdvancePhaseActivity
 // ya no la conoce de memoria — estos tests se la pasan como cualquier otro
 // caller lo haría.
 var genesisPhaseOrderFixture = []string{"ingest", "cluster", "validate", "signed", "completed"}
