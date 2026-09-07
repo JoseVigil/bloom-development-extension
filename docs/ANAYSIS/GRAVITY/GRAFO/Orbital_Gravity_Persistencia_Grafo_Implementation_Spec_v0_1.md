@@ -240,7 +240,7 @@ Tres artefactos de persistencia distintos participan en la inyección de Gravity
 
 | Artefacto | Qué contiene | Quién lo consume | Estado de implementación |
 |---|---|---|---|
-| **`mandate_state.json`** (real, sin cambios) | `stateVersion`, `signature.status`, `reconciliation` — el estado operacional real del Mandate declarativo (`Audit` Hallazgo #2) | `MandateGenesisBuildWorkflow`, watcher de reconciliación | Implementado. **Este documento no le agrega ni le quita ningún campo.** |
+| **`mandate_state.json`** (real, sin cambios) | `stateVersion`, `signature.status`, `reconciliation` — el estado operacional real del Mandate declarativo (`Audit` Hallazgo #2) | `MandateBuildWorkflow`, watcher de reconciliación | Implementado. **Este documento no le agrega ni le quita ningún campo.** |
 | **`orbital_agentic_state.json`** (contrato documental, extendido aquí) | `turns[]`, `budget_consumed`, `gravity_context_injected` por turno (ya fijados por `BTIPS §8.5` / `Mandate v1.2.0 §3` / `Impl §2.3`) **+ `gravity_resolution_cache`** (nuevo, ver abajo) | El propio Workflow de Temporal del Mandate, entre turnos | Sin implementación en código todavía (`Audit`); este documento no cambia ese estado, solo extiende su schema documental |
 | **Grafo de Gravedad** (`.bloom/.gravity/`, nuevo — este documento) | `node.json` por nodo (`GravityNode`, extendido §7), `arbitration_events.log.jsonl` | `resolveActiveGravityActivity` (lectura); Nucleus como único escritor | No existe (§0.2) — este documento lo especifica por primera vez |
 

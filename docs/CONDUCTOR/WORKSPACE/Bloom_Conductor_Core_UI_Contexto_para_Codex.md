@@ -4,7 +4,7 @@
 
 Bloom Conductor es la app de escritorio (Electron + Svelte) que el usuario usa a diario — el "workspace core". Esta línea de trabajo viene rediseñando y arreglando su UI, partiendo de dos prototipos HTML legacy (`btips_workspace_v3.html` y `bloom-conductor-genesis-v1_1.html`) contrastados contra el código Svelte real, que resultó estar bastante desalineado de esos prototipos y con varios bugs de fondo no detectados hasta ahora.
 
-**Regla de scope, no negociable:** esta línea de trabajo es **solo UI del Core**. Todo lo que toca Mandate Genesis (arquitectura de Temporal, `sentinel`, workflows de Go, el pivot de `MandateGenesisBuildWorkflow` a motor genérico) se trabaja en otra sesión aparte, dedicada. Si algo de UI depende de esa capa (como pasó con `synapse-simulator`, ver abajo), se documenta como pendiente cruzado y no se resuelve acá.
+**Regla de scope, no negociable:** esta línea de trabajo es **solo UI del Core**. Todo lo que toca Mandate Genesis (arquitectura de Temporal, `sentinel`, workflows de Go, el pivot de `MandateBuildWorkflow` a motor genérico) se trabaja en otra sesión aparte, dedicada. Si algo de UI depende de esa capa (como pasó con `synapse-simulator`, ver abajo), se documenta como pendiente cruzado y no se resuelve acá.
 
 ## Metodología que se viene usando (importante para Codex)
 

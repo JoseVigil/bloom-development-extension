@@ -76,7 +76,7 @@ Hoy es inofensivo — solo se llama durante `nucleus_create` / `use-existing-wor
 | G1 / G3 | `internal/orchestration/queries/status.go` | Único archivo bajo `queries/` — candidato natural para exponer estado consultable |
 | G2 | `internal/orchestration/workflows/system_gate.go` | El nombre es casi literal a lo que buscamos — "gate" = compuerta/guarda. **Prioridad #1 para pedir.** |
 | G3 | `internal/orchestration/temporal/workflows/mandate_execution_workflow.go` | Workflow de ejecución de Mandates — acá vive el estado que define "in-flight" |
-| G3 | `internal/orchestration/temporal/workflows/mandate_genesis_build_workflow.go` | Idem, para el flujo de genesis de Mandate |
+| G3 | `internal/orchestration/temporal/workflows/mandate_build_workflow.go` | Idem, para el flujo de genesis de Mandate |
 | G3 | `internal/mandates/mandate_runner.go`, `mandate_types.go` | Definición de estados/tipos de Mandate — de acá sale qué es "estado terminal" |
 | G4 | `internal/orchestration/workflows/recovery_flow.go` | "recovery" sugiere manejo de reanudación/drenado tras interrupción |
 | G4 | `internal/supervisor/supervisor.go`, `service.go`, `workers.go` | Supervisor de procesos — probable dueño del lifecycle de workers, candidato para el lock de drenado |

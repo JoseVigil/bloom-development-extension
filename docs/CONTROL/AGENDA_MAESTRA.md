@@ -74,7 +74,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 El bloqueador de resolución de workspace del watcher, activo hasta el 25 de agosto, está corregido y verificado en el binario desplegado — no solo en diseño. La causa real no era un campo faltante en `nucleus.json`: fue una regresión de esquema — el watcher buscaba los campos planos obsoletos (`onboarding.workspace_org`/`workspace_path`), mientras el onboarding ya escribía el esquema multi-organización vigente (`active_org_slug` + `organizations[].workspace_path`). El fallback por filesystem tampoco podía resolverlo porque el servicio arranca desde el directorio del binario (`AppData\...\bin\nucleus`), sin ancestro común con el workspace real.
 
-Corrección ya desplegada: `LoadMachineNucleusConfig()` lee correctamente el esquema anidado (`mandate_config.go`), deriva `MandatesRoot` sin depender del CWD, y usa el scan por filesystem únicamente como fallback de desarrollo (`service.go`). Confirmado con logs reales de producción de cuatro días distintos (25, 26, 27 y 29 de agosto), incluyendo el despacho efectivo de `MandateGenesisBuildWorkflow` — no solo la resolución del path.
+Corrección ya desplegada: `LoadMachineNucleusConfig()` lee correctamente el esquema anidado (`mandate_config.go`), deriva `MandatesRoot` sin depender del CWD, y usa el scan por filesystem únicamente como fallback de desarrollo (`service.go`). Confirmado con logs reales de producción de cuatro días distintos (25, 26, 27 y 29 de agosto), incluyendo el despacho efectivo de `MandateBuildWorkflow` — no solo la resolución del path.
 
 Se detectó y corrigió, en el mismo trabajo, una regresión equivalente en `dev-start` (mismo campo plano obsoleto). El alcance actual de esta resolución de workspace es más amplio de lo que se creía — comparten el mismo mecanismo centralizado (`ResolveActiveOrgContext()`/`ResolveNucleusRoot()`) los comandos de Mandates, Vault, Ownership, Blueprint, Alfred y metadata de Nucleus. Sin evidencia de fallo en ninguno de ellos hoy.
 
@@ -94,7 +94,7 @@ El Work independiente **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MOD
 
 El ownership general queda fijado: Nucleus gobierna y autoriza; Temporal orquesta Actions durablemente; Brain conserva el ciclo de vida, identidad, persistencia e interpretación de Intents; AITAP conserva Gateway, referencias de Vault y Contabilidad sin ejecutar código ni tocar filesystem; Executor implementa la Execution Layer sobre trabajo definido y autorizado, sin decidir si Genesis necesita `dev`; Core proyecta el estado durable.
 
-La verificación de contrato con AUTHORIZATION quedó completada para el canal CLI: Specialist y Unknown son rechazados sin estado parcial ni dispatch a Temporal; Master pasa por un único punto de entrada (`requireMandateMaster → governance.RequireMaster`) y crea `mandate_state.json`. AUTHORIZATION, roles y gates no fueron modificados por la corrección del watcher; el despacho de `MandateGenesisBuildWorkflow` desde el `MandatesRoot` correcto quedó confirmado en producción.
+La verificación de contrato con AUTHORIZATION quedó completada para el canal CLI: Specialist y Unknown son rechazados sin estado parcial ni dispatch a Temporal; Master pasa por un único punto de entrada (`requireMandateMaster → governance.RequireMaster`) y crea `mandate_state.json`. AUTHORIZATION, roles y gates no fueron modificados por la corrección del watcher; el despacho de `MandateBuildWorkflow` desde el `MandatesRoot` correcto quedó confirmado en producción.
 
 **Fuentes de verdad**
 

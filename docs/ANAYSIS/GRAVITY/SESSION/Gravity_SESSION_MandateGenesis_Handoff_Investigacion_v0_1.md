@@ -380,7 +380,7 @@ installer/nucleus/internal/orchestration/activities/mandate_genesis_activities.g
 
 ### Comentario obsoleto en el código
 
-`mandate_genesis_build_workflow.go:352-359` todavía afirma que `MandateExecutionWorkflow` es un placeholder puro.
+`mandate_build_workflow.go:352-359` todavía afirma que `MandateExecutionWorkflow` es un placeholder puro.
 
 Eso contradice el comportamiento implementado en:
 

@@ -47,9 +47,9 @@ autorice cuándo aplicar o reevaluar esa decisión.
 | Execution Layer tiene ubicación y schemas v1, pero no core/adapters/batería | Provisional/NOT_RUN | `installer/execution/README.md`; `COGNITUUM_EXECUTION_LAYER_CONFORMANCE_v1_0.md` §§2-6 |
 | El package v1 ya porta checkpoint, capabilities, grant y correlación | Materializado, no integrado | `installer/execution/contracts/v1/execution-package.schema.json:7-67` |
 | Result v1 distingue `paused` y referencias de Evidence | Materializado, no integrado | `installer/execution/contracts/v1/execution-result.schema.json:7-41` |
-| Genesis usa Temporal con Activities para I/O y retry | Implementado | `mandate_genesis_build_workflow.go:87-140` |
-| Genesis persiste Human Sync antes de firmar y avanzar | Implementado | `mandate_genesis_build_workflow.go:159-220` |
-| La ejecución real del child workflow sigue pendiente | Abierto | `mandate_genesis_build_workflow.go:251-273` |
+| Genesis usa Temporal con Activities para I/O y retry | Implementado | `mandate_build_workflow.go:87-140` |
+| Genesis persiste Human Sync antes de firmar y avanzar | Implementado | `mandate_build_workflow.go:159-220` |
+| La ejecución real del child workflow sigue pendiente | Abierto | `mandate_build_workflow.go:251-273` |
 | Genesis invoca hoy Brain por subprocess para create/hydrate | Implementado | `mandate_genesis_activities.go:368-482` |
 | CLIS Integration no tiene componente localizable con ese nombre | Abierto | relevamiento del árbol al 2026-08-20; los adapters previstos viven conceptualmente bajo `installer/execution/providers/` |
 

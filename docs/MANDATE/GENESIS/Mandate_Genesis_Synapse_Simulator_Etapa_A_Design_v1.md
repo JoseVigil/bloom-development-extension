@@ -86,7 +86,7 @@ Onboarding deja pending_genesis_launch
   └─ CORTE: MandateWatcher no vive en worker start
 
 Si el watcher está activo:
-  → MandateGenesisBuildWorkflow
+  → MandateBuildWorkflow
   → brain intent create --type ing
   → brain intent hydrate
   → evento mandate:phase:ingest
@@ -391,7 +391,7 @@ Modificar:
 - `worker.go`;
 - `mandate_watcher.go`;
 - `mandate_genesis_activities.go`;
-- `mandate_genesis_build_workflow.go`;
+- `mandate_build_workflow.go`;
 - registro de activities y pruebas Temporal.
 
 Crear una activity cognitiva dedicada detrás de la frontera de Brain.

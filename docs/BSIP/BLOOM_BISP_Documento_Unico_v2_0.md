@@ -349,12 +349,12 @@ Esta sección documenta el estado real de un consumidor en potencia del protocol
 Mandate Genesis — sin modificar el protocolo en sí.
 
 **Confirmado por código:**
-- **Fase 1 (ingest)** del `MandateGenesisBuildWorkflow`: hoy es una sola `PublishMandateEventActivity`
+- **Fase 1 (ingest)** del `MandateBuildWorkflow`: hoy es una sola `PublishMandateEventActivity`
   que emite `mandate:phase:ingest`. **No llama a Brain, no llama a Ollama, no toca ChromaDB.**
 - **Fase 2 (cluster)**: hoy es `ScaffoldDomainActivity` con `Mode: dry_run` — devuelve siempre un único
   dominio (`input.Project`), sin clustering real ni consulta a ChromaDB. El cliente TCP:5678 mencionado
   en documentación previa **no existe en el código**.
-- **`GenesisBuildInput`** (Temporal): campos reales son `MandateID`, `MandateType`, `BaseGenesisID`,
+- **`MandateBuildInput`** (Temporal): campos reales son `MandateID`, `MandateType`, `BaseGenesisID`,
   `Source`, `Project`, `MandatesRoot`. **No incluye `RawDocs`** — si Fase 1 llega a implementar A.5.1, no
   puede asumir que los archivos le llegan empaquetados en el input de Temporal; tiene que leerlos del
   filesystem en `{MandatesRoot}/{MandateID}`.

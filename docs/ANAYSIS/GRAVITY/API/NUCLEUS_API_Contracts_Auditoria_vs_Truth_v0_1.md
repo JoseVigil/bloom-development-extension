@@ -71,12 +71,12 @@ mandate_state.json
 
 **No hay ningún campo en común entre las dos estructuras.** No hay `turns[]`, ni `turn_count`, ni `budget_consumed`, ni `status: running` en el `mandate_state.json` real — y no hay `signature`, ni `reconciliation`, ni `stateVersion` en el Orbital Agentic State. La resolución aprobada elimina la colisión mediante dos artefactos independientes:
 
-- El **real** es el estado de un Mandate **declarativo** tal como lo produce hoy el único flujo que existe (`MandateGenesisBuildWorkflow` — nombrado explícitamente en la nota `[DESALINEACIÓN]` del propio truth) — está orientado a rastrear **la firma** (`signature.status`), no la ejecución turno a turno.
+- El **real** es el estado de un Mandate **declarativo** tal como lo produce hoy el único flujo que existe (`MandateBuildWorkflow` — nombrado explícitamente en la nota `[DESALINEACIÓN]` del propio truth) — está orientado a rastrear **la firma** (`signature.status`), no la ejecución turno a turno.
 - `orbital_agentic_state.json` es el contrato documental de `BTIPS §8.5` para el modo `agentic`, que **todavía no tiene ninguna implementación** — ni siquiera el intent `tst` que lo cerraría existe como directorio en ningún truth (ver Hallazgo #4).
 
 Mi catálogo ya distinguía, en su §2.5, "decisión síncrona" vs. "registro de turno persistido", pero asumía incorrectamente que el registro agéntico era una variante del objeto real. La resolución final fija que no lo es: `mandate_state.json` conserva el estado operacional real de Nucleus y `orbital_agentic_state.json` conserva, como contrato documental separado, la ejecución turno a turno del modo agéntico. Se correlacionan por `mandate_id`; no comparten archivo, schema ni ciclo de vida.
 
-**Resolución final aprobada:** se descarta extender el `mandate_state.json` real. Cuando se implemente `execution_mode: "agentic"`, `turns[]`, `budget_consumed` y `gravity_context_injected` pertenecerán a `orbital_agentic_state.json`. El archivo operacional real conserva `signature`, `reconciliation` y `stateVersion` para sus consumidores actuales (`MandateGenesisBuildWorkflow` y el watcher de reconciliación).
+**Resolución final aprobada:** se descarta extender el `mandate_state.json` real. Cuando se implemente `execution_mode: "agentic"`, `turns[]`, `budget_consumed` y `gravity_context_injected` pertenecerán a `orbital_agentic_state.json`. El archivo operacional real conserva `signature`, `reconciliation` y `stateVersion` para sus consumidores actuales (`MandateBuildWorkflow` y el watcher de reconciliación).
 
 ---
 

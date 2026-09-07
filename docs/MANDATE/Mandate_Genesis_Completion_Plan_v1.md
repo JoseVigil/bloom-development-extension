@@ -41,7 +41,7 @@ TD-001 (registrado la sesión anterior) proponía instanciar `watchers.NewMandat
 
 - Es un proceso **persistente**, spawneado como hijo detached (`exec.Command` sin contexto, mismo patrón que Control Plane/Brain) desde `startWorkerManager()` (`service.go:685`) — y esa función **sí corre bajo `dev-start`** (Fase 2 de `executeBootSequence`, confirmado en la auditoría anterior) además de bajo `service start`.
 - Ya abre un `temporalClient` propio (`worker.go:269`, `NewClient(ctx, &c.Paths, false)`) — el mismo tipo (`*temporal.Client`) que `MandateWatcher` necesita como segundo argumento.
-- Ya construye y arranca un worker dedicado a la task queue `mandate-orchestration` (`worker.go:363-391`) con `MandateGenesisBuildWorkflow`/`MandateExecutionWorkflow` registrados — es decir, **el lado de ejecución del workflow ya corre bajo `dev-start` hoy**. Lo único que falta es quién lo *arranca*.
+- Ya construye y arranca un worker dedicado a la task queue `mandate-orchestration` (`worker.go:363-391`) con `MandateBuildWorkflow`/`MandateExecutionWorkflow` registrados — es decir, **el lado de ejecución del workflow ya corre bajo `dev-start` hoy**. Lo único que falta es quién lo *arranca*.
 - Arreglar acá resuelve `dev-start` y `service start` en un solo lugar, porque ambos comandos spawnean `nucleus worker start` de la misma forma. El bloque separado que ya existe en `service.go:2091-2140` puede quedar como está (es inocuo — dos watchers corriendo en paralelo bajo `service start` sólo generan un segundo intento de `StartWorkflow` que Temporal rechaza vía `WorkflowExecutionAlreadyStarted`, ya manejado por `IsAlreadyStarted`) o eliminarse en un paso de limpieza aparte; no es necesario tocarlo para que esto funcione.
 
 ### Cambio exacto propuesto en `worker.go`
@@ -86,12 +86,12 @@ Notas de implementación:
 
 ## 3. Segundo gap, no documentado en TD-001: activities faltantes para Fase 3
 
-`MandateGenesisBuildWorkflow` (`mandate_genesis_build_workflow.go`) invoca, en orden:
+`MandateBuildWorkflow` (`mandate_build_workflow.go`) invoca, en orden:
 
 1. `IngestReceptionActivity` (línea 111) — registrada en `mandateWorker` ✓ (`worker.go:384`).
 2. `PublishMandateEventActivity` (línea 120, y de nuevo 169 y 276) — registrada ✓ (`worker.go:374`).
 3. `ScaffoldDomainActivity` (línea 134, dry-run de Fase 2/cluster) — registrada ✓ (`worker.go:373`).
-4. Espera bloqueante de `workflow.GetSignalChannel(ctx, "mandate:genesis:validate")` (línea 164) — Fase 3, punto de sincronización humana.
+4. Espera bloqueante de `workflow.GetSignalChannel(ctx, "mandate:build:validate")` (línea 164) — Fase 3, punto de sincronización humana.
 5. `PersistHumanSyncActivity` (línea 202) — **NO registrada en `mandateWorker`.**
 6. `SignMandateActivity` (línea 217) — **NO registrada en `mandateWorker`.**
 7. `ExecuteChildWorkflow(MandateExecutionWorkflow, ...)` (línea 267) — workflow registrado ✓ (`worker.go:372`); el workflow en sí es un placeholder puro (confirmado en `BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md:224`: "MandateExecutionWorkflow (P4 real) sigue placeholder puro" — estado documentado y aceptado, no un bug a resolver acá).
@@ -111,7 +111,7 @@ mandateWorker.RegisterActivity(activities.SignMandateActivity)
 
 ## 4. El disparo de la Fase 3 (Signal) ya está resuelto — no hace falta tocarlo
 
-`BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md:223` documenta: *"3 — validate: Espera Signal `mandate:genesis:validate`; CLI (`domains confirm`) y Signal ya señalizan correctamente... Sin cambios de esta migración."* — es decir, ya existe un comando CLI (`nucleus mandate genesis domains confirm`, ver `mandate_genesis_domains_cmd.go`) que manda la signal real. No hace falta construir nada nuevo para desbloquear Fase 3 una vez que las activities de arriba estén registradas — solo correr ese comando cuando el mandate llegue a `domains_proposed`.
+`BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md:223` documenta: *"3 — validate: Espera Signal `mandate:build:validate`; CLI (`domains confirm`) y Signal ya señalizan correctamente... Sin cambios de esta migración."* — es decir, ya existe un comando CLI (`nucleus mandate genesis domains confirm`, ver `mandate_genesis_domains_cmd.go`) que manda la signal real. No hace falta construir nada nuevo para desbloquear Fase 3 una vez que las activities de arriba estén registradas — solo correr ese comando cuando el mandate llegue a `domains_proposed`.
 
 ---
 
@@ -123,7 +123,7 @@ mandateWorker.RegisterActivity(activities.SignMandateActivity)
 4. `go build ./...` sobre `installer/nucleus` — cero errores.
 5. Reiniciar el stack (`nucleus dev-start`, o cerrar/reabrir Core si Electron lo dispara) y confirmar en el log de `nucleus_worker_*.log` la línea `✅ Mandate watcher iniciado — vigilando ...`.
 6. Confirmar que `mandate_state.json` del mandate real (`2d2d1fe3-...`) cambia de `currentPhase: ingest / status: pending` a algo distinto dentro de los primeros segundos (el `watchExistingMandateDirs()` de `Start()` procesa mandates preexistentes al arrancar, no hace falta tocar el archivo a mano).
-7. Seguir el mandate hasta que llegue a `validate` / `domains_proposed` (vía evento `mandate:genesis:domains_proposed` en el WS, ya cableado del lado de Core — ver implementación de la sesión anterior) y correr `nucleus mandate genesis domains confirm --mandate-id 2d2d1fe3-ee2d-4bf3-9bab-95ffc36f1e4f` (confirmar flags exactos del comando real) para mandar la signal.
+7. Seguir el mandate hasta que llegue a `validate` / `domains_proposed` (vía evento `mandate:build:domains_proposed` en el WS, ya cableado del lado de Core — ver implementación de la sesión anterior) y correr `nucleus mandate genesis domains confirm --mandate-id 2d2d1fe3-ee2d-4bf3-9bab-95ffc36f1e4f` (confirmar flags exactos del comando real) para mandar la signal.
 8. Confirmar que el mandate llega a `status: completed` (o al punto máximo que permite el placeholder de `MandateExecutionWorkflow`, per §3 punto 7).
 
 No implementado en este turno — este documento es el insumo para decidir si se ejecuta ahora mismo en esta sesión o se pasa a una sesión de Claude Code, como se discutió.
