@@ -70,7 +70,7 @@ function projectRevision(parsed: Record<string, unknown>): { stateVersion?: numb
  * Escanea `mandatesRoot(fsCtx)` (`.mandates/`) y lee, por cada subcarpeta,
  * `mandate_state.json` (genesis/domain_expansion desde 'building' en
  * adelante — mismo archivo que escriben tanto `create-mandate.handler.ts`
- * como `mandate.go:createGenesisMandate`, confirmado unificado en la
+ * como `mandate.go:createBuildMandate`, confirmado unificado en la
  * auditoría) o, si no existe, `mandate_draft.json` (standard, todavía sin
  * confirmar). No hay un tercer archivo a considerar para este listado: el
  * propio `mandate_state.json` va reflejando `status`/`currentPhase` a

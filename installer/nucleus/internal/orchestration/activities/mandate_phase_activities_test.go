@@ -42,7 +42,7 @@ func runAdvancePhase(t *testing.T, input AdvancePhaseInput) (AdvancePhaseResult,
 }
 
 // writePhaseStateFixture escribe un mandate_state.json con la forma real de
-// initialGenesisMandateState (internal/orchestration/commands/mandate.go) —
+// initialBuildMandateState (internal/orchestration/commands/mandate.go) —
 // currentPhase: currentPhase, phases.ingest/cluster/validate con su propio
 // sub-objeto status:"pending". writeGenesisStateFixture (en
 // mandate_genesis_sign_activity_test.go) no sirve acá porque no setea

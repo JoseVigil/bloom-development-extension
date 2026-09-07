@@ -63,7 +63,7 @@ No confundir "Fase 2 del workflow" con "`dis/`": Fase 2 dispara `.classification
 
 ### CAMBIO UI — dónde se dispara la creación del mandate
 
-**Qué había hasta ahora:** el step `mandate_genesis` del Onboarding (el último de los 7 steps, en Electron) disparaba la creación real del mandate — IPC síncrono que invoca `nucleus mandate genesis`, escribe `mandate_state.json`, y ese mismo evento cierra la ventana de Onboarding y abre Core. La creación quedaba atada al proceso de instalación inicial: pasaba una sola vez, dentro de un wizard lineal, sin posibilidad de reintentar ni depurar por separado.
+**Qué había hasta ahora:** el step `mandate_genesis` del Onboarding (el último de los 7 steps, en Electron) disparaba la creación real del mandate — IPC síncrono que invoca `nucleus mandate build`, escribe `mandate_state.json`, y ese mismo evento cierra la ventana de Onboarding y abre Core. La creación quedaba atada al proceso de instalación inicial: pasaba una sola vez, dentro de un wizard lineal, sin posibilidad de reintentar ni depurar por separado.
 
 **Qué se decide cambiar, y por qué:** sacar la creación real del mandate del Onboarding. El Onboarding pasa a mostrar el step `mandate_genesis` solo como pantalla explicativa — comunica qué va a pasar, pero no dispara nada — y la creación efectiva ocurre recién cuando abre Core: automáticamente al finalizar el Onboarding (con un parámetro que le indica a Core "arrancá Genesis para este proyecto"), o más adelante, desde una funcionalidad propia de Core equivalente a "crear mandate → elegir Genesis", disponible en cualquier momento, no solo en la instalación inicial. Motivos, en orden de peso:
 
@@ -99,7 +99,7 @@ No confundir "Fase 2 del workflow" con "`dis/`": Fase 2 dispara `.classification
 ```
 ONBOARDING (Electron, ventana 1)                                    [ESTADO REAL — histórico, código GAP V3]
   └── step PROJECT: usuario elige/importa carpeta de proyecto (ya sube TODO el proyecto a la raíz .bloom/)
-  └── step MANDATE (último step): copy + botón → dispara CLI `nucleus mandate genesis --project --source [--docs]`
+  └── step MANDATE (último step): copy + botón → dispara CLI `nucleus mandate build --project --source [--docs]`
         └── el flag `--docs` es parseo de CLI para Capa 0 (detección de documentación) — NO viaja como
             campo del input de Temporal (ver §1.1). No confundir ambas cosas.
         └── escribe mandate_state.json (currentPhase: "ingest", status: "pending")
@@ -121,7 +121,7 @@ CORE (Electron, ventana 2 — Svelte webview en :5173)
 ONBOARDING (Electron, ventana 1)                          [DISEÑO v3.1 — 🔀 Pivot, no implementado todavía]
   └── step PROJECT: usuario elige/importa carpeta de proyecto (sin cambios respecto al flujo real)
   └── step MANDATE (último step, redefinido): pantalla puramente EXPLICATIVA — comunica qué es Genesis y
-        qué va a pasar, pero NO dispara `nucleus mandate genesis` ni escribe mandate_state.json.
+        qué va a pasar, pero NO dispara `nucleus mandate build` ni escribe mandate_state.json.
         └── verify/produce del step cambia (ver §1.2) — ya no puede verificar `genesis_mandate_id`,
             porque a esta altura ese mandate todavía no existe.
         └── dispara onboarding:complete → misma Opción C (ventana nueva Core + cierre de la vieja) —
@@ -152,7 +152,7 @@ CORE (Electron, ventana 2 — Svelte webview)
 
 ```
 step-mandate.js (click "Create Mandate →")
-  → IPC onboarding:create-mandate (síncrono) → nucleus mandate genesis (CLI)
+  → IPC onboarding:create-mandate (síncrono) → nucleus mandate build (CLI)
   → persiste genesis_mandate_id + completed_steps en nucleus.json
   → navigateTo('__onboarding_complete__')          [directo, sin pasar por MilestoneReactor]
 
@@ -319,7 +319,7 @@ Este documento (v1) tenía la deuda D-11 abierta: "contenido real de `ws-events.
 | D-13 | Layout de filesystem real (plano) vs. árbol documentado (anidado) | Backend | **✅ Resuelto en esta migración** — es plano. Ver §5.1. |
 | Q-02 | Endpoints `GET/POST /api/project/docs` | Backend | Bloquea que el picker de Capa 0 funcione de verdad, no solo la UI — sin cambios |
 | Q-08 | Endpoint que exponga `genesis_mandate_id`+fase para redirect automático a `/genesis` | Backend | Hoy `/genesis` solo es alcanzable por link manual en el Sidebar — sin cambios |
-| `mandate_dir` | Campo nuevo en `GenesisMandateResult` (Go) | Backend | Propuesto, viable, no aplicado todavía — sin evidencia nueva en GAP V3 |
+| `mandate_dir` | Campo nuevo en `BuildMandateResult` (Go) | Backend | Propuesto, viable, no aplicado todavía — sin evidencia nueva en GAP V3 |
 | Preload bridge Core | `window.nucleus` en `preload_core.js` | Frontend | Reportado como arreglado por la sesión de Frontend — archivo real todavía no confirmado por esta sesión |
 | D-05 (heredado) | `registerSynapseHandlers` no se llama en el path de Core | Frontend | Sin resolver, deuda conocida desde el Preludio original |
 | Sync `ing/` | `mandate_state.json.currentPhase` vs. `.ing_state.json.phase_active` — orden de escritura y comportamiento ante falla parcial | Backend | No bloquea hoy — sin decisión de diseño todavía (ver §8) |

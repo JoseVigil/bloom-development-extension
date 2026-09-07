@@ -2,8 +2,8 @@ package commands
 
 import "testing"
 
-func TestInitialGenesisMandateStateIncludesVersionAndSignature(t *testing.T) {
-	state := initialGenesisMandateState("m1", "genesis", "project", "project-id", "cli", "", nil, "2026-08-27T10:00:00Z")
+func TestInitialBuildMandateStateIncludesVersionAndSignature(t *testing.T) {
+	state := initialBuildMandateState("m1", "genesis", "project", "project-id", "cli", "", nil, "2026-08-27T10:00:00Z")
 	if state["stateVersion"] != 1 || state["updatedAt"] != "2026-08-27T10:00:00Z" {
 		t.Fatalf("version fields=%#v", state)
 	}
@@ -17,8 +17,8 @@ func TestInitialGenesisMandateStateIncludesVersionAndSignature(t *testing.T) {
 	}
 }
 
-func TestInitialGenesisMandateStateAllowsEmptyProjectID(t *testing.T) {
-	state := initialGenesisMandateState("m1", "genesis", "project", "", "cli", "", nil, "2026-08-27T10:00:00Z")
+func TestInitialBuildMandateStateAllowsEmptyProjectID(t *testing.T) {
+	state := initialBuildMandateState("m1", "genesis", "project", "", "cli", "", nil, "2026-08-27T10:00:00Z")
 	if state["projectId"] != "" {
 		t.Fatalf("projectId=%#v, want empty string", state["projectId"])
 	}

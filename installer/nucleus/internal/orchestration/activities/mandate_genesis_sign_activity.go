@@ -82,7 +82,7 @@ type validatePhaseState struct {
 type mandateGenesisState struct {
 	MandateID string `json:"mandateId"`
 	// MandateType — CAMPO NUEVO esta sesión. mandate_state.json SÍ lo trae
-	// (createGenesisMandate lo escribe, commands/mandate.go:376:
+	// (createBuildMandate lo escribe, commands/mandate.go:376:
 	// "mandateType": mandateType, "genesis" | "domain_expansion") pero este
 	// struct no lo leía — fix del hardcode MandateType: "genesis" más abajo,
 	// que firmaba mandate.json como genesis sin importar el tipo real.

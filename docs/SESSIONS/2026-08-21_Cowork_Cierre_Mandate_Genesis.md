@@ -53,7 +53,7 @@ Verificado: `tsc --noEmit` limpio, `vite build` sin errores nuevos (el único fa
 | Onboarding separa creación (Camino 2) de confirmación de pantalla | ✅ Implementado |
 | Core detecta y muestra mandates vía WS en vivo | ✅ Implementado |
 | Core recupera mandates preexistentes al abrir (catch-up) | ✅ Implementado |
-| CLI (`nucleus mandate genesis`) emite eventos / progresa en Temporal bajo `dev-start` | ❌ Pendiente — TD-001 |
+| CLI (`nucleus mandate build`) emite eventos / progresa en Temporal bajo `dev-start` | ❌ Pendiente — TD-001 |
 | QA manual de D-22/D-23 (onboarding completo, cierre/reapertura de Core) | ❌ No corrida todavía, por ninguno de los dos lados |
 | Migración de Core al diseño objetivo (`bloom-conductor-genesis-v1_1.html`) | 🟡 Recién arrancada — 3 documentos de contexto leídos, esperando screenshot del estado actual para definir el primer recorte de trabajo |
 

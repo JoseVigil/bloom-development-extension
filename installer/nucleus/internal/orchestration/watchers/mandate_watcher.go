@@ -21,7 +21,7 @@ import (
 )
 
 // MandateState espeja la forma embebida que escriben tanto
-// create-mandate.handler.ts (API) como createGenesisMandate (mandate.go,
+// create-mandate.handler.ts (API) como createBuildMandate (mandate.go,
 // CLI) desde la unificación acordada — gen_state.json queda deprecado,
 // mandate_state.json es la única fuente de verdad para el ciclo pre-firma.
 //

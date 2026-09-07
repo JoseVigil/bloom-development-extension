@@ -4,7 +4,7 @@
 // prompt-picker-capa1-frontend-v2.md). Esta pantalla NO es un paso previo a
 // que exista un mandateId — el Genesis Mandate ya fue creado durante
 // onboarding (confirmado en nucleus.json: onboarding.genesis_mandate_id +
-// "mandate_genesis" en completed_steps, y en mandate.go: createGenesisMandate
+// "mandate_genesis" en completed_steps, y en mandate.go: createBuildMandate
 // escribe mandate_state.json con currentPhase "ingest" / status "pending"
 // desde el primer instante).
 //

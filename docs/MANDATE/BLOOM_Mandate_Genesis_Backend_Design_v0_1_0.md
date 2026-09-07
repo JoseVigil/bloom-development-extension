@@ -282,16 +282,16 @@ nucleus mandate create --type domain_expansion --project <id> --name <name> \
   --source <path|url> --base-genesis <mandateId>
 
 # Fase 3 — Human Sync Point (nuevo, específico de genesis/domain_expansion)
-nucleus mandate genesis domains list --mandate <id>
+nucleus mandate build domains list --mandate <id>
   # lee gen_state.json.phases.validate.humanSync.candidateDomains — solo válido si
   # currentPhase == 'validate'
 
-nucleus mandate genesis domains confirm --mandate <id> --domain <domainId,...> \
+nucleus mandate build domains confirm --mandate <id> --domain <domainId,...> \
   [--rename <domainId>:<newName>,...]
   # dispara la Signal de Temporal que libera el wait; esto es lo que efectivamente
   # ejecuta sign() — ver §6.2
 
-nucleus mandate genesis domains reject --mandate <id> --domain <domainId,...>
+nucleus mandate build domains reject --mandate <id> --domain <domainId,...>
   # remueve candidatos antes de confirmar; no requiere re-correr cluster completo
 
 # Ciclo de vida — mismos verbos que standard, comportamiento discriminado internamente

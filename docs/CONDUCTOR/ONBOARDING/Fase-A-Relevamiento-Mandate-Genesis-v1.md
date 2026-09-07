@@ -17,8 +17,8 @@ Esto es exactamente lo que B.1 pide convertir en "pantalla explicativa sin ejecu
 
 ### `onboarding/ipc/onboarding-handlers.js`
 Confirma el handler completo, `ipcMain.handle('onboarding:create-mandate', ...)` (línea 643): síncrono, no fire-and-forget. Lo que hace, en orden:
-1. Lee `nucleus.json`, resuelve `workspace_path` de la org activa (para el `cwd` del subproceso — sin esto `nucleus mandate genesis` no encuentra `.bloom/`).
-2. Ejecuta `nucleus --json mandate genesis --project <project> --source <projectPath>` (línea 661).
+1. Lee `nucleus.json`, resuelve `workspace_path` de la org activa (para el `cwd` del subproceso — sin esto `nucleus mandate build` no encuentra `.bloom/`).
+2. Ejecuta `nucleus --json mandate build --project <project> --source <projectPath>` (línea 661).
 3. Extrae `mandateId` del resultado (varios nombres de campo probados, fallback `local-${Date.now()}` — comentario propio marca esto como no confirmado contra el binario real).
 4. Persiste `genesis_mandate_id` en el **proyecto activo dentro de `organizations[]/projects[]`** de `nucleus.json` (no un `mandate_state.json` aparte — eso lo escribe el binario Go, fuera del alcance de esta sesión).
 5. Empuja `'mandate_genesis'` a `completed_steps[]` directamente, sin pasar por `reactor.handleMilestone()`.
@@ -44,7 +44,7 @@ Confirma que este archivo es puramente presentacional (clases CSS `.step-node`, 
 ```
 step-mandate.js (click "Create Mandate →")
   → IPC onboarding:create-mandate (síncrono)
-  → nucleus mandate genesis (CLI)
+  → nucleus mandate build (CLI)
   → persiste genesis_mandate_id + completed_steps en nucleus.json
   → navigateTo('__onboarding_complete__')          [renderer, directo, sin Brain]
 
@@ -106,7 +106,7 @@ Confirmado, con evidencia nueva: `registerSynapseHandlers` está definido y expo
 
 ## Qué queda sin confirmar
 
-- El shape exacto de stdout de `nucleus mandate genesis --json` (qué campo trae el ID real) — `onboarding-handlers.js` ya lo marca como no confirmado contra el binario, y esta sesión no tenía alcance para tocar Go.
+- El shape exacto de stdout de `nucleus mandate build --json` (qué campo trae el ID real) — `onboarding-handlers.js` ya lo marca como no confirmado contra el binario, y esta sesión no tenía alcance para tocar Go.
 - Origen de `selection.importedProjectPath` (no está en `shared-state.js`, probablemente en `step-project.js`, no leído).
 - `BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_1.md`, referenciado como contexto previo por la directiva, no se encontró en el repositorio ni en la carpeta de prompts compartida — el relevamiento de arriba se hizo contra el código real y la propia directiva v3.1, sin ese documento.
 

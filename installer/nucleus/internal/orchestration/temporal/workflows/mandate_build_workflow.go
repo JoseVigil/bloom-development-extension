@@ -105,7 +105,7 @@ type MandateBuildInput struct {
 // natural de definir CUÁL es esa secuencia para este tipo de mandate.
 // "signed" y "completed" no tienen su propio sub-objeto en phases{} (a
 // diferencia de ingest/cluster/validate, que sí lo tienen desde
-// initialGenesisMandateState) — son valores de currentPhase nada más:
+// initialBuildMandateState) — son valores de currentPhase nada más:
 // "signed" refleja que signature.status ya es "signed" (persistSignatureSigned,
 // mandate_genesis_sign_activity.go); "completed" refleja que
 // MandateExecutionWorkflow (Fase 4) terminó con Success: true.

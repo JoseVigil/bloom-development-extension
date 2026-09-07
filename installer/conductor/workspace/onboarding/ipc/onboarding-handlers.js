@@ -678,7 +678,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       }
 
       const result = await execNucleus([
-        '--json', 'mandate', 'genesis',
+        '--json', 'mandate', 'build',
         '--project', project,
         '--project-id', projectId,
         '--source', projectPath
@@ -692,7 +692,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
           // MANDATE-STEP-IMPLEMENTATION-PROMPT.md §3.2.
           //
           // OPEN ITEM sin confirmar contra el binario real: no sabemos con
-          // certeza qué trae `nucleus mandate genesis --json` por stdout, así
+          // certeza qué trae `nucleus mandate build --json` por stdout, así
           // que se prueban los nombres de campo más probables y, si ninguno
           // aparece, se genera un ID local — a step-verifiers.js (verify:
           // 'json_field') solo le importa que el campo sea truthy, no un

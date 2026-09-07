@@ -114,7 +114,7 @@ export async function createMandateHandler(
     // AGREGADO: el watcher de Nucleus (Go) necesita estos campos embebidos
     // para armar MandateBuildInput — el shape original ({status,
     // currentPhase, phases}) no le alcanzaba. Ver mandate_watcher.go
-    // (MandateState) y mandate.go (createGenesisMandate), que ya escriben
+    // (MandateState) y mandate.go (createBuildMandate), que ya escriben
     // este mismo shape desde la unificación CLI/API sobre mandate_state.json.
     mandateId,
     mandateType: body.mandateType,

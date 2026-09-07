@@ -111,7 +111,7 @@ mandateWorker.RegisterActivity(activities.SignMandateActivity)
 
 ## 4. El disparo de la Fase 3 (Signal) ya está resuelto — no hace falta tocarlo
 
-`BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md:223` documenta: *"3 — validate: Espera Signal `mandate:build:validate`; CLI (`domains confirm`) y Signal ya señalizan correctamente... Sin cambios de esta migración."* — es decir, ya existe un comando CLI (`nucleus mandate genesis domains confirm`, ver `mandate_genesis_domains_cmd.go`) que manda la signal real. No hace falta construir nada nuevo para desbloquear Fase 3 una vez que las activities de arriba estén registradas — solo correr ese comando cuando el mandate llegue a `domains_proposed`.
+`BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md:223` documenta: *"3 — validate: Espera Signal `mandate:build:validate`; CLI (`domains confirm`) y Signal ya señalizan correctamente... Sin cambios de esta migración."* — es decir, ya existe un comando CLI (`nucleus mandate build domains confirm`, ver `mandate_genesis_domains_cmd.go`) que manda la signal real. No hace falta construir nada nuevo para desbloquear Fase 3 una vez que las activities de arriba estén registradas — solo correr ese comando cuando el mandate llegue a `domains_proposed`.
 
 ---
 
@@ -123,7 +123,7 @@ mandateWorker.RegisterActivity(activities.SignMandateActivity)
 4. `go build ./...` sobre `installer/nucleus` — cero errores.
 5. Reiniciar el stack (`nucleus dev-start`, o cerrar/reabrir Core si Electron lo dispara) y confirmar en el log de `nucleus_worker_*.log` la línea `✅ Mandate watcher iniciado — vigilando ...`.
 6. Confirmar que `mandate_state.json` del mandate real (`2d2d1fe3-...`) cambia de `currentPhase: ingest / status: pending` a algo distinto dentro de los primeros segundos (el `watchExistingMandateDirs()` de `Start()` procesa mandates preexistentes al arrancar, no hace falta tocar el archivo a mano).
-7. Seguir el mandate hasta que llegue a `validate` / `domains_proposed` (vía evento `mandate:build:domains_proposed` en el WS, ya cableado del lado de Core — ver implementación de la sesión anterior) y correr `nucleus mandate genesis domains confirm --mandate-id 2d2d1fe3-ee2d-4bf3-9bab-95ffc36f1e4f` (confirmar flags exactos del comando real) para mandar la signal.
+7. Seguir el mandate hasta que llegue a `validate` / `domains_proposed` (vía evento `mandate:build:domains_proposed` en el WS, ya cableado del lado de Core — ver implementación de la sesión anterior) y correr `nucleus mandate build domains confirm --mandate-id 2d2d1fe3-ee2d-4bf3-9bab-95ffc36f1e4f` (confirmar flags exactos del comando real) para mandar la signal.
 8. Confirmar que el mandate llega a `status: completed` (o al punto máximo que permite el placeholder de `MandateExecutionWorkflow`, per §3 punto 7).
 
 No implementado en este turno — este documento es el insumo para decidir si se ejecuta ahora mismo en esta sesión o se pasa a una sesión de Claude Code, como se discutió.

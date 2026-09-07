@@ -47,7 +47,7 @@ import (
 
 // WIRING REQUERIDO (una línea, en mandate.go, no incluida en este archivo
 // para no reescribir un archivo completo por un solo agregado): dentro de
-// createGenesisMandateSubcommand, después de `cmd.Flags().StringVar(...)`
+// createBuildMandateSubcommand, después de `cmd.Flags().StringVar(...)`
 // y antes de `return cmd`, agregar:
 //
 //   cmd.AddCommand(createDomainsSubcommand(c))

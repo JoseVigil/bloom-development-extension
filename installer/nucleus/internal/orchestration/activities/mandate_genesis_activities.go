@@ -319,7 +319,7 @@ func publishMandateEvent(event string, data map[string]interface{}) {
 // intent_id que create devolvió.
 //
 // domain_baseline mapea 1:1 desde MandateType — único origen confirmado
-// contra createGenesisMandate (commands/mandate.go): "genesis" -> "empty"
+// contra createBuildMandate (commands/mandate.go): "genesis" -> "empty"
 // (Genesis puro), "domain_expansion" -> "existing" (incorpora sobre un
 // baseGenesisId ya existente). No hay un tercer caso documentado en
 // ninguna parte del código leído — cualquier otro valor es error duro, no
@@ -343,7 +343,7 @@ func publishMandateEvent(event string, data map[string]interface{}) {
 
 type IngestReceptionInput struct {
 	MandateID    string
-	MandateType  string // "genesis" | "domain_expansion" — ver createGenesisMandate
+	MandateType  string // "genesis" | "domain_expansion" — ver createBuildMandate
 	Project      string
 	MandatesRoot string
 }
