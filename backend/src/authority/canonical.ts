@@ -41,7 +41,12 @@ export function canonicalizeJson(value: unknown): string {
 }
 
 export async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return sha256HexBytes(new TextEncoder().encode(input));
+}
+
+export async function sha256HexBytes(input: ArrayBuffer | Uint8Array): Promise<string> {
+  const bytes = input instanceof Uint8Array ? new Uint8Array(input) : new Uint8Array(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

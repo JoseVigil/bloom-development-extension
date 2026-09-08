@@ -6,6 +6,7 @@ import type { PathResolver } from '../config/paths.js';
 import type { BatcaveConfig } from '../config/loader.js';
 import { createBatcaveLoggers, type BatcaveLoggers } from './logging.js';
 import { createAuthorityProxyRoutes } from './routes/authority-proxy.js';
+import { createMandateDeliveryProxyRoutes } from './routes/mandate-delivery-proxy.js';
 
 /**
  * Arma la app Hono: una ruta de salud simple + las rutas del proxy S2S de
@@ -18,6 +19,7 @@ export function createApp(config: BatcaveConfig, loggers: BatcaveLoggers): Hono 
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
   app.route('/', createAuthorityProxyRoutes(config, loggers));
+  app.route('/', createMandateDeliveryProxyRoutes(config));
 
   return app;
 }

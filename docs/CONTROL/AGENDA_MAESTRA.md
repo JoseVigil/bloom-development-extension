@@ -53,7 +53,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 | # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
 |---|---|---|---|---|
-| 1 | Mandate Genesis | Composición funcional cerrada; primer vertical reencuadrado a CLI + AITAP + Executor | Consolidar action graph y contratos durables para iniciar el vertical | Brain; Temporal; AITAP; Executor; Nucleus/Core |
+| 1 | Mandate Genesis | Mandate desacoplado de Genesis en workflow, eventos y CLI; Genesis permanece como tipo/recorrido de negocio; composición funcional cerrada | Validar el renombre en Go y consolidar action graph y contratos durables para iniciar el vertical | Brain; Temporal; AITAP; Executor; Nucleus/Core |
 | 2 | Core UI Redesign | Sidebar y Profiles cerrados | Definir/armar panel derecho, Home y Wisdom tras diagnóstico | Switch de organización; Alfred; contrato de Mandate |
 | 3 | BSIP Response | Validador aislado listo; formato de patch con evidencia inicial | Ejecutar batería de adherencia antes de cerrar schema | Modelos de frontera; OpenCode; canal API/web |
 | 4 | AITAP | Frontera arquitectónica cerrada; scaffold incompleto | Resolver integración real de Contrato D y alta de dispositivos | BSIP Response; Nucleus; Alfred |
@@ -80,6 +80,10 @@ Se detectó y corrigió, en el mismo trabajo, una regresión equivalente en `dev
 
 Riesgo residual, no bloqueante: instalaciones legacy que conserven únicamente el esquema plano podrían fallar si el servicio arranca antes de que Conductor las migre. No amerita acción ahora — queda como endurecimiento futuro opcional si se confirma que existen instalaciones en ese estado.
 
+La abstracción queda corregida de forma explícita: **Mandate es la entidad genérica; Genesis es un tipo y un recorrido funcional particular, no una clase técnica distinta de Mandate ni el nombre de su infraestructura compartida**. La misma construcción genérica atiende los tipos `genesis`, `domain_expansion` y `standard`; no corresponde crear una implementación de Mandate por cada label o determinación de negocio.
+
+El saneamiento nominal fue materializado en tres commits sobre `main`: Fase 2 en `61dec985`, actualización documental en `9c5e6d33` y Fase 3 CLI en `55e589d9`. El workflow compartido es ahora `MandateBuildWorkflow`, los eventos runtime usan `mandate:build:*` y la creación por CLI se invoca mediante `nucleus mandate build`. Permanecen correctamente ligados a Genesis el valor de `MandateType`, la familia `BaseGenesisID` que ancla `domain_expansion` a un Mandate Genesis, las actividades específicas del tipo y las superficies de Onboarding que sólo crean ese tipo. Los documentos forenses fechados conservan los nombres históricos; `GENESIS_RENAME_INDEX.md` traduce esas referencias al estado actual.
+
 La composición funcional canónica de un Genesis completo queda fijada así:
 
 ```text
@@ -101,6 +105,7 @@ La verificación de contrato con AUTHORIZATION quedó completada para el canal C
 - `docs/MANDATE/BLOOM_Estado_Consolidado_Takeaway_v1.md`
 - `docs/MANDATE/BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_3.md`
 - `docs/MANDATE/Mandate_Genesis_Completion_Plan_v1.md`
+- `docs/MANDATE/GENESIS_RENAME_INDEX.md`
 - `docs/CONDUCTOR/WORKSPACE/Bloom_Conductor_Workspace_Core_UI_01.md`
 
 **Próximo paso concreto**
@@ -127,6 +132,8 @@ Coordinación entre los Works de Genesis, AITAP y Executor hasta cerrar sus cont
 **Decisiones/riesgos abiertos**
 
 - Permanecen abiertos el action graph, motor Temporal, schemas `doc`/`exp`, transición durable, autorización Nucleus → Executor, findings que habilitan `dev` y representación en Core.
+- La creación de Mandates todavía tiene dos implementaciones: `createBuildMandate` en CLI/Go y `createMandateHandler` en API/Node construyen `mandate_state.json` por caminos separados. Unificarlas bajo una sola fuente de verdad es un rediseño posterior, no parte del renombre.
+- La barrida nominal, `gofmt` y TypeScript `tsc --noEmit` fueron reportados en verde durante las fases del saneamiento. `go build` y `go test` no pudieron ejecutarse por falta de acceso al proxy de módulos; deben correrse localmente antes de declarar el cambio completamente verde. Los binarios y artefactos precompilados permanecen pendientes de rebuild y despliegue.
 - El bloqueador de resolución de workspace del watcher está resuelto y verificado en producción (ver Estado actual). El E2E CLI Master ya no está bloqueado por esta causa — sigue pendiente de QA manual end-to-end formal, no de infraestructura. El E2E API de creación de Mandates sigue sin aceptarse como válido hasta que el handler Node/TypeScript y el boundary Go→Node de AUTH-FIX-02 estén cerrados (sin cambios respecto a lo ya registrado en Tema 9).
 - Estas decisiones precisan la implementación, pero no pueden alterar la composición funcional sin volver a AGENDA FOLLOWUP.
 - Elevar a esta agenda solamente blockers transversales reales encontrados por cualquiera de los dos Works.
@@ -703,3 +710,4 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 | 2026-09-04 | 12 | José aprobó los doce criterios del §21 de `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`. Se fijó que el cutover válido produce `binding state REMOTE_LOCKED + authority mode remote_enforced`; son dimensiones distintas y relacionadas. | Aprobación expresa del usuario | Se promueve el diseño físico v0.1 a contrato aprobado para planificación coordinada. La implementación permanece bloqueada hasta que cada Work presente sus fronteras y lista exacta de archivos. |
 | 2026-09-04 | 12 | Se distribuyó la versión material corregida de `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`, con `PHY-DEC-011/012`, §20 normativo de `.ownership.json` y cuatro criterios adicionales de aprobación. | Actualización del usuario; diseño físico corregido | Se sustituye la referencia anterior: el diseño completo vuelve a estado sometido a revisión hasta la aprobación expresa de los criterios 13–16 del §22. Se abre homologación obligatoria por frontera contra `.ownership.json`. |
 | 2026-09-04 | 12 | NUCLEUS reportó (commit `3210f218`) la implementación y validación de la Fase 1 física de Remote Authority dentro de su propia frontera: `ownershipcontract`, migración durable de ownership, markers fail-closed, decisión sellada de Gravity y el módulo `internal/authority` (Authority Snapshot, JCS, firma Ed25519, full/delta, high-water mark, catálogo de roles v1 sin `architect`); Supervisor/SynapseSimulator ya validan por la capa canónica. `shadow_remote`, `remote_enforced`, cutover, Backend, transporte de Batcave y consumidores en Brain/Temporal permanecen sin activar. | Work NUCLEUS, reportado por el usuario | Se actualiza el Tema 12: se registra la Fase 1 de Nucleus como implementación material (no propuesta), se diferencia de lo pendiente por Work, y se añade revisión de impacto para Backend, Batcave, Genesis, Brain/Temporal, Metamorph, Conductor, Vault, Executor, Gravity y Core/UI. Ninguna escritura queda autorizada por este reporte. |
+| 2026-09-07 | 1 | Se corrigió el acoplamiento técnico que trataba Genesis como nombre de la infraestructura compartida de Mandates. `MandateBuildWorkflow`, `mandate:build:*` y `nucleus mandate build` son ahora los nombres genéricos; `genesis` se conserva como `MandateType`, recorrido funcional y contexto específico donde corresponde. | Commits `61dec985`, `9c5e6d33` y `55e589d9`; `docs/MANDATE/GENESIS_RENAME_INDEX.md` | Se fija en Agenda que Mandate es la entidad genérica y Genesis un tipo/label. Quedan abiertos la doble implementación CLI/Go vs. API/Node, la ejecución local de `go build`/`go test` y el rebuild de artefactos antes de declarar el saneamiento completamente validado y desplegado. |

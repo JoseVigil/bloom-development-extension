@@ -18,6 +18,10 @@
   ],
   "r2_buckets": [
     {
+      "binding": "MANDATES",
+      "bucket_name": "bloom-mandates"
+    },
+    {
       "binding": "RELEASES",
       "bucket_name": "bloom-releases"
     }

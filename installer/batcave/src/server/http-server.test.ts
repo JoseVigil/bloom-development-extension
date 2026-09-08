@@ -103,3 +103,11 @@ describe('http-server', () => {
     expect(fetchMock).toHaveBeenCalledWith(`${BACKEND_BASE_URL}/v1/authority/trust-bundle`, expect.anything());
   });
 });
+import { createApp as createMandateTestApp } from './http-server.js';
+import { it as mandateIt, expect as mandateExpect } from 'vitest';
+
+mandateIt('mounts the independent Mandate Delivery route', async () => {
+  const app = createMandateTestApp({ backend: { base_url: 'http://127.0.0.1:1' } } as any, {} as any);
+  const response = await app.request('/v1/mandate/bootstrap?org=o&installation_id=i');
+  mandateExpect(response.status).toBe(502);
+});

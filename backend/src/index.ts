@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { DeliveryError, resolveMandateDelivery } from './mandate-delivery';
 import { manifestEtag, resolveIonManifest } from "./manifest";
 import {
   readInstallationAuthHeaders,
@@ -103,6 +104,22 @@ const verifyInstallationAuth = async (context: any, next: () => Promise<void>) =
 
   await next();
 };
+
+app.get('/v1/mandate/bootstrap', verifyInstallationAuth, async (context) => {
+  const installationId = context.req.query('installation_id');
+  if (!installationId || context.req.queries('installation_id')?.length !== 1 || context.req.queries('org')?.length !== 1)
+    return context.json({ error: 'invalid_recipient_query' }, 400);
+  if (installationId !== context.req.header('X-Bloom-Installation-Id'))
+    return context.json({ error: 'recipient_mismatch' }, 403);
+  try {
+    const delivery = await resolveMandateDelivery(context.env, context.req.query('org')!, installationId);
+    context.header('Cache-Control', 'no-store');
+    return context.json(delivery);
+  } catch (error) {
+    if (error instanceof DeliveryError) return context.json({ error: error.message }, error.status);
+    return context.json({ error: 'mandate_delivery_failed' }, 500);
+  }
+});
 
 app.post("/v1/authority/installations/register", async (context) => {
   if (!checkServiceToken(context)) {
