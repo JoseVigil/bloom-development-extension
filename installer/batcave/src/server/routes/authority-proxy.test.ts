@@ -27,6 +27,61 @@ describe('authority-proxy', () => {
     vi.unstubAllGlobals();
   });
 
+  it('preserves registration credentials and exact bytes without logging secrets', async () => {
+    const bytes = new Uint8Array([0, 255, 13, 10, 32, 123, 125]);
+    fetchMock.mockResolvedValue(new Response(bytes, { status: 201 }));
+    const loggers = fakeLoggers();
+    const res = await createAuthorityProxyRoutes(config, loggers).request('/v1/authority/installations/register?org=opaque', {
+      method: 'POST', headers: { authorization: 'Bearer secret-value', 'content-type': 'application/octet-stream', 'x-correlation-id': 'c1' }, body: bytes
+    });
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('authorization')).toBe('Bearer secret-value');
+    expect(headers.get('x-correlation-id')).toBe('c1');
+    expect(headers.get('content-type')).toBe('application/octet-stream');
+    expect(new Uint8Array(fetchMock.mock.calls[0][1].body)).toEqual(bytes);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
+    expect(res.headers.has('content-type')).toBe(false);
+    expect(JSON.stringify((loggers.relay.info as any).mock.calls)).not.toContain('secret-value');
+  });
+
+  it.each([204, 205, 304])('preserves conditional metadata on bodyless status %s', async (status) => {
+    const metadata = { etag: '"v42"', 'last-modified': 'Tue, 08 Sep 2026 00:00:00 GMT', 'cache-control': 'private, no-cache', 'retry-after': '10', 'x-correlation-id': 'c42', vary: 'Accept' };
+    fetchMock.mockResolvedValue(new Response(null, { status, headers: metadata }));
+    const res = await createAuthorityProxyRoutes(config, fakeLoggers()).request('/v1/authority/snapshot?org=opaque&base_version=42', {
+      headers: { 'if-none-match': '"v42"', 'if-modified-since': metadata['last-modified'], 'if-match': '"v41"', 'if-unmodified-since': metadata['last-modified'], 'x-correlation-id': 'c42' }
+    });
+    expect(res.status).toBe(status);
+    expect(await res.text()).toBe('');
+    for (const [key, value] of Object.entries(metadata)) expect(res.headers.get(key)).toBe(value);
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('if-none-match')).toBe('"v42"');
+    expect(headers.get('if-match')).toBe('"v41"');
+    expect(headers.get('if-modified-since')).toBe(metadata['last-modified']);
+    expect(headers.get('if-unmodified-since')).toBe(metadata['last-modified']);
+    expect(headers.get('x-correlation-id')).toBe('c42');
+  });
+
+  it('preserves backend error status, bytes and retry metadata', async () => {
+    const body = '  unavailable\r\n';
+    fetchMock.mockResolvedValue(new Response(body, { status: 503, headers: { 'retry-after': '30', 'x-correlation-id': 'failure' } }));
+    const res = await createAuthorityProxyRoutes(config, fakeLoggers()).request('/v1/authority/trust-bundle');
+    expect(res.status).toBe(503);
+    expect(await res.text()).toBe(body);
+    expect(res.headers.get('retry-after')).toBe('30');
+    expect(res.headers.get('x-correlation-id')).toBe('failure');
+  });
+
+  it('does not fabricate registration authentication or relay it to S2S reads', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
+    const app = createAuthorityProxyRoutes(config, fakeLoggers());
+    await app.request('/v1/authority/installations/register', { method: 'POST' });
+    expect(fetchMock.mock.calls[0][1].headers.has('authorization')).toBe(false);
+    for (const path of ['snapshot', 'trust-bundle']) {
+      await app.request(`/v1/authority/${path}`, { headers: { authorization: 'Bearer registration-only' } });
+      expect(fetchMock.mock.calls[fetchMock.mock.calls.length - 1][1].headers.has('authorization')).toBe(false);
+    }
+  });
+
   it('forwards method, S2S headers, query params and body on POST register', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {

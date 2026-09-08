@@ -13,6 +13,15 @@ const S2S_HEADERS = [
   'x-bloom-signature'
 ] as const;
 
+const REQUEST_METADATA_HEADERS = [
+  'x-correlation-id', 'if-none-match', 'if-modified-since', 'if-match', 'if-unmodified-since'
+] as const;
+
+const RESPONSE_METADATA_HEADERS = [
+  'content-type', 'etag', 'last-modified', 'cache-control', 'expires', 'date',
+  'age', 'vary', 'retry-after', 'x-correlation-id', 'www-authenticate'
+] as const;
+
 /** Espejo exacto de las tres rutas ya fijas del lado Backend. */
 const AUTHORITY_PATHS = {
   register: '/v1/authority/installations/register',
@@ -42,11 +51,16 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
     targetUrl.search = incomingUrl.search;
 
     const forwardHeaders = new Headers();
-    for (const name of S2S_HEADERS) {
+    for (const name of [...S2S_HEADERS, ...REQUEST_METADATA_HEADERS]) {
       const value = c.req.header(name);
       if (value !== undefined) {
         forwardHeaders.set(name, value);
       }
+    }
+
+    if (backendPath === AUTHORITY_PATHS.register) {
+      const authorization = c.req.header('authorization');
+      if (authorization !== undefined) forwardHeaders.set('authorization', authorization);
     }
 
     let body: ArrayBuffer | undefined;
@@ -77,8 +91,14 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
       return c.json({ error: 'backend_unreachable' }, 502);
     }
 
-    const responseBody = await backendResponse.arrayBuffer();
-    const responseContentType = backendResponse.headers.get('content-type') ?? 'application/json';
+    const responseBody = [204, 205, 304].includes(backendResponse.status)
+      ? null
+      : await backendResponse.arrayBuffer();
+    const responseHeaders = new Headers();
+    for (const name of RESPONSE_METADATA_HEADERS) {
+      const value = backendResponse.headers.get(name);
+      if (value !== null) responseHeaders.set(name, value);
+    }
 
     loggers.relay.info(
       {
@@ -98,7 +118,7 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
 
     return new Response(responseBody, {
       status: backendResponse.status,
-      headers: { 'content-type': responseContentType }
+      headers: responseHeaders
     });
   };
 }
