@@ -24,7 +24,7 @@ bloom-development-extension/
     │   └── BACKEND/
     │       └── ROLES/
     │           └── Nota_Tecnica_Analisis_Fase4_Escrituras_y_Bootstrap.md
-    ├── ANAYSIS/
+    ├── ANALYSIS/
     │   ├── BACKEND/
     │   │   ├── GRAVITY/
     │   │   │   ├── GravityGraph_Fundamentos_Base_v0_1.md

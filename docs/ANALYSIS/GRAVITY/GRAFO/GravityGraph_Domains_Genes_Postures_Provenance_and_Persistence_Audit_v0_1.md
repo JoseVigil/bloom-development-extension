@@ -30,7 +30,7 @@ Se excluyó completamente de este análisis todo el sistema Intent Core indicado
 | Relación Domain↔Gene | Relación N:M; un Gene puede pertenecer a varios Domains | `domains[domain_id].genes[]` |
 | Semantics | Plano probabilístico usado para descubrir relaciones | BISP/ChromaDB; separado de GravityGraph |
 
-La separación está fijada expresamente en [Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md](C:/repos/bloom-development-extension/docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:38) y en [Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md](C:/repos/bloom-development-extension/docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:23).
+La separación está fijada expresamente en [Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md](C:/repos/bloom-development-extension/docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:38) y en [Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md](C:/repos/bloom-development-extension/docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:23).
 
 ---
 
@@ -133,7 +133,7 @@ La entidad persistente se llama `GravityPosture`:
 
 Definición implementada: [model.go](C:/repos/bloom-development-extension/installer/nucleus/internal/gravity/model.go:49).
 
-La documentación UX denomina **postulación** al gesto de tomar contenido conversacional y proponerlo como Posture. La interfaz dice “Postular esto” y luego permite confirmar la postulación: [Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md](C:/repos/bloom-development-extension/docs/ANAYSIS/GRAVITY/PALADIN/Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md:16).
+La documentación UX denomina **postulación** al gesto de tomar contenido conversacional y proponerlo como Posture. La interfaz dice “Postular esto” y luego permite confirmar la postulación: [Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md](C:/repos/bloom-development-extension/docs/ANALYSIS/GRAVITY/PALADIN/Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md:16).
 
 Por lo tanto:
 

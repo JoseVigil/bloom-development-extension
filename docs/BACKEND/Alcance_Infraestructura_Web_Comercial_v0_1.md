@@ -11,11 +11,11 @@
 
 ### 1. Auth (GitHub) + ABM de usuarios
 Sistema web con al menos validación de usuario por GitHub y alta/baja/modificación de usuarios.
-**Conecta con:** el track de Roles/Authority ya abierto (`docs/ANAYSIS/BACKEND/ROLES/`) — es la superficie natural para administrar `principals`, `memberships` y asignaciones de rol que ese encargo ya scopea del lado de datos/backend. Todavía no tiene ninguna pieza de frontend diseñada.
+**Conecta con:** el track de Roles/Authority ya abierto (`docs/ANALYSIS/BACKEND/ROLES/`) — es la superficie natural para administrar `principals`, `memberships` y asignaciones de rol que ese encargo ya scopea del lado de datos/backend. Todavía no tiene ninguna pieza de frontend diseñada.
 
 ### 2. Wisdom Browser / Marketplace UI
 Interfaz web donde el ingeniero/CTO navega el marketplace de Mandates, ve qué existe, dispara descarga/instalación, y ve el resultado del chequeo de compatibilidad de posturas (compatible / conflicto / necesita revisión) antes de decidir instalar.
-**Conecta con:** `docs/WISDOM/` (cadena Postura→Gravity→Wisdom, Mandate Package) y `docs/ANAYSIS/BACKEND/GRAVITY/Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` (el chequeo de compatibilidad en sí, hoy sin superficie). También con los endpoints conceptuales de Wisdom ya anotados en `CODEX_Frontera_Backend_Batcave_v0_1.md` (`publications`, `adoptions`) — esos son transporte, no interfaz.
+**Conecta con:** `docs/WISDOM/` (cadena Postura→Gravity→Wisdom, Mandate Package) y `docs/ANALYSIS/BACKEND/GRAVITY/Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` (el chequeo de compatibilidad en sí, hoy sin superficie). También con los endpoints conceptuales de Wisdom ya anotados en `CODEX_Frontera_Backend_Batcave_v0_1.md` (`publications`, `adoptions`) — esos son transporte, no interfaz.
 
 ### 3. Cobro al usuario — suscripción anual
 El usuario/organización paga con tarjeta, con cadencia anual, para tener acceso al sistema.

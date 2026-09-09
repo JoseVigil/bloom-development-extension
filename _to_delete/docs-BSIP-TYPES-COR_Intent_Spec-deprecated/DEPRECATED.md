@@ -5,7 +5,7 @@ para autorizar y promulgar reglas de negocio, invariantes y postulados/posturas 
 por control (2026-09-02) como deprecado sin transición en curso: Gravity absorbió por completo ese
 articulado de autorización de postulados y posturas — no hay ningún camino de código pendiente de terminar
 de construir sobre `cor`. Ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 y
-`docs/ANAYSIS/GRAVITY/COR/Investigacion_Cor_Authorization_Nodos_Gravity_v0_2.md` para el detalle de esta
+`docs/ANALYSIS/GRAVITY/COR/Investigacion_Cor_Authorization_Nodos_Gravity_v0_2.md` para el detalle de esta
 corrección y la lista de residuales documentales todavía sin migrar a nomenclatura Gravity-nativa.
 
 **Nota de discrepancia sin resolver, dejada explícita para control:** `docs/CONTROL/AGENDA_MAESTRA.md` §11

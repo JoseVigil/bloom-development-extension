@@ -8,7 +8,7 @@ import (
 
 // This file implements detection of the PRIORITY_CYCLE subtype ONLY, out of
 // the taxonomy proposed by
-// docs/ANAYSIS/GRAVITY/COLISIONES/Orbital_Gravity_Deteccion_Tipificacion_Colisiones_Mandates_Posturas_Spec_v0_1.md
+// docs/ANALYSIS/GRAVITY/COLISIONES/Orbital_Gravity_Deteccion_Tipificacion_Colisiones_Mandates_Posturas_Spec_v0_1.md
 // ("Spec-Colisiones"). This is a deliberately narrow cowork, ratified by the
 // control session for exactly this subtype (Spec-Colisiones §9.4). No other
 // subtype of POSTURE_HORIZONTAL_INCOMPATIBILITY, no MANDATE_TERRITORY_OVERLAP,

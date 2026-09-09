@@ -288,4 +288,4 @@ La regla arquitectónica central es:
 
 ---
 
-*Referencia cruzada: `CODEX_Backend_Batcave_Status_v0_1.md` (status previo de scope, mismo directorio), `Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md` (diseño de identidad de este cowork que dio origen a este contrato), `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` (docs/ANAYSIS/BACKEND/GRAVITY — primer tema de frontera abierto en este cowork tras este corte).*
+*Referencia cruzada: `CODEX_Backend_Batcave_Status_v0_1.md` (status previo de scope, mismo directorio), `Backend_Batcave_Nucleus_Identidad_y_Comunicacion_v0_1.md` (diseño de identidad de este cowork que dio origen a este contrato), `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md` (docs/ANALYSIS/BACKEND/GRAVITY — primer tema de frontera abierto en este cowork tras este corte).*

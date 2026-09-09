@@ -20,8 +20,8 @@ Esta decisión es deliberadamente pragmática: la semántica documental original
 
 La decisión se encuentra registrada en:
 
-- `docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:9`
-- `docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:117-128`
+- `docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:9`
+- `docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:117-128`
 
 La integración todavía no está lista para implementarse mecánicamente. Antes deben resolverse tres contratos:
 
@@ -35,8 +35,8 @@ La integración todavía no está lista para implementarse mecánicamente. Antes
 
 Se incorporaron dos documentos nuevos:
 
-1. `docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md`
-2. `docs/ANAYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md`
+1. `docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md`
+2. `docs/ANALYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md`
 
 El primero es la versión durable de la investigación sobre `SESSION`.
 
@@ -46,7 +46,7 @@ El segundo no modifica la elección de `SessionID`, pero agrega una restricción
 
 Fuente:
 
-- `docs/ANAYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:494`
+- `docs/ANALYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:494`
 
 ---
 
@@ -118,7 +118,7 @@ Por tanto, aunque `resolveActiveGravityActivity` devolviera Gravity resuelta, to
 
 Este gap también está registrado en:
 
-- `docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:140`
+- `docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:140`
 
 ---
 
@@ -201,7 +201,7 @@ Actualmente no existe un creador productivo del nodo Gravity `MANDATE` dentro de
 
 Fuente:
 
-- `docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:136`
+- `docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md:136`
 
 `Store.CreateNode` permite crear `PROJECT`, `MANDATE` y `SESSION`, pero bloquea la creación directa no gobernada de `ORGANIZATION` y `NUCLEUS`:
 
@@ -244,8 +244,8 @@ No debe derivarse de:
 
 El audit nuevo confirma que `appliesTo[]` filtra tipos de Intent, no Domains ni Genes:
 
-- `docs/ANAYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:99`
-- `docs/ANAYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:441`
+- `docs/ANALYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:99`
+- `docs/ANALYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:441`
 
 Por tanto, el gap correcto es:
 
@@ -297,8 +297,8 @@ Estado operacional de Genesis
 
 Fuentes:
 
-- `docs/ANAYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:7-13`
-- `docs/ANAYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:494`
+- `docs/ANALYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:7-13`
+- `docs/ANALYSIS/GRAVITY/GRAFO/GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md:494`
 
 Consecuencias para `SESSION`:
 

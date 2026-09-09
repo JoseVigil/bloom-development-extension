@@ -53,7 +53,7 @@ Su fuente de verdad contractual es:
 ```
 
 Esto está separado expresamente de GravityGraph:
-`docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:38`.
+`docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:38`.
 
 ### Plano 3: Genesis operativo
 

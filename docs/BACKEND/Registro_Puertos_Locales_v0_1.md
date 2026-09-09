@@ -53,7 +53,7 @@ Este documento existe para que no vuelva a pasar.
   cubre configuración de producción (Cloudflare Workers/Pages no exponen
   puertos locales) ni el puerto `5678` de Brain (TCP, subsistema Go
   separado, fuera del alcance de este cowork — ver
-  `ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md`).
+  `ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md`).
 
 ## Historial
 

@@ -28,7 +28,7 @@ De `Investigacion_Gravity_Mandate_Compatibility_v0_1.md` (mismo directorio, v0.1
 - El Mandate Package ya transporta `mandate.json` completo al momento de instalar — el sustrato de datos está más cerca de existir que el algoritmo de comparación en sí (investigación, conclusión, punto 4).
 - La herencia R-17 a R-21 confirma que el problema de Jose es estructuralmente distinto de la herencia vertical intra-linaje ya resuelta: esa herencia asume un padre único ya conocido en el grafo; este trabajo parte de un Mandate que, al momento de importarse, no tiene ninguna relación de parentesco declarada con la organización compradora (investigación §2).
 
-De `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANAYSIS/GRAVITY/GRAFO`, cierre del 2026-09-01):
+De `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANALYSIS/GRAVITY/GRAFO`, cierre del 2026-09-01):
 
 - **Gravity** queda fijado como el sistema de gobernanza del criterio en su totalidad — posturas, postulados, `gravityRules[]`, resolución por turno, arbitraje, masa, promoción. Es exactamente lo que el Mandate Server necesita comparar.
 - **`GravityGraph`** queda fijado como la estructura persistida que preserva Criterion + el linaje ya ratificado (incluida la arista `PROMOTED_FROM`) — y es local a cada organización/Nucleus. Este cierre no le da ningún mecanismo para cruzar frontera organizacional ni para compararse contra el grafo de otra organización.

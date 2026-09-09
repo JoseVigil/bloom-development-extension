@@ -3,7 +3,7 @@
 **Tipo:** Documento base — formaliza como conocimiento de base de este cowork el cierre de boundary que Jose compartió, para que las investigaciones de frontera que dependen de él (empezando por `Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md`, mismo directorio) no tengan que releer ni reinterpretar la fuente cada vez.
 **Estado:** v0.2 — adopción formal del cierre de boundary, más el estado de implementación real reportado por Codex el mismo día (§5).
 **Fecha:** 2026-09-01
-**Fuentes:** (1) `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANAYSIS/GRAVITY/GRAFO/`, cierre del 2026-09-01) — sigue siendo la fuente de verdad para cualquier revisión futura de ese cierre; este documento base no lo reemplaza. (2) Actualización transversal de Codex del 2026-09-01 sobre la primera implementación real de Gravity en Go, y la migración terminológica `GravityRule`→`GravityPosture`.
+**Fuentes:** (1) `Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` (`docs/ANALYSIS/GRAVITY/GRAFO/`, cierre del 2026-09-01) — sigue siendo la fuente de verdad para cualquier revisión futura de ese cierre; este documento base no lo reemplaza. (2) Actualización transversal de Codex del 2026-09-01 sobre la primera implementación real de Gravity en Go, y la migración terminológica `GravityRule`→`GravityPosture`.
 **Criterio de cierre citado en el original:** ratificar solo lo que sería costoso romper después (nomenclatura, alcance de qué representa cada término); diferir todo lo que pueda incorporarse más adelante sin alterar esas invariantes (ontología de Provenance, rol de Alfred/Sensor, tipos de arista nuevos).
 
 > **Nota de terminología (migrada, 2026-09-01):** el rename transversal `GravityRule` → `GravityPosture` (`gravityRules[]`→`gravityPostures[]`, y derivados) ya está validado e implementado end-to-end en Go/TypeScript, confirmado por Codex. Este documento usa exclusivamente `GravityPosture`/`gravityPostures[]` desde esta versión; el documento original citado como fuente puede conservar `Rule` en su propio texto.
@@ -63,4 +63,4 @@ El trabajo de frontera abierto en `Mandate_Server_Compatibilidad_Gravity_Introdu
 
 ---
 
-*Documento base v0.1. No agrega diseño nuevo — formaliza, para consulta directa de este cowork, el cierre de boundary ya ratificado en `docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md`. Cualquier actualización de ese cierre debe reflejarse primero en el original y después, si corresponde, acá.*
+*Documento base v0.1. No agrega diseño nuevo — formaliza, para consulta directa de este cowork, el cierre de boundary ya ratificado en `docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md`. Cualquier actualización de ese cierre debe reflejarse primero en el original y después, si corresponde, acá.*

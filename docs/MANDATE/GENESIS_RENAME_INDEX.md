@@ -71,12 +71,12 @@ Fase 2 actualizó las referencias hardcodeadas de las tablas 1-2 en estos docume
 - `docs/MANDATE/Mandate_Genesis_Truth_Matrix_and_Execution_Roadmap_v1.md`
 - `docs/MANDATE/GENESIS/Mandate_Genesis_Synapse_Simulator_Etapa_A_Design_v1.md`
 - `docs/MANDATE/bloom-mandate-arquitectura-genesis-conductor.md`
-- `docs/ANAYSIS/GRAVITY/SESSION/Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md`
-- `docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md`
+- `docs/ANALYSIS/GRAVITY/SESSION/Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md`
+- `docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md`
 - `docs/GOVERNANCE/RESEARCH/AITAP_ROUTING_MANDATE_GENESIS_CLIS_2026-08-20.md`
 - `docs/SESSIONS/2026-08-21_Cowork_Cierre_Mandate_Genesis.md`
-- `docs/ANAYSIS/GRAVITY/API/NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md`
-- `docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md`
+- `docs/ANALYSIS/GRAVITY/API/NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md`
+- `docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md`
 - `docs/BSIP/BLOOM_BISP_Documento_Unico_v2_0.md`
 - `docs/CONDUCTOR/WORKSPACE/Bloom_Conductor_Core_UI_Contexto_para_Codex.md`
 - `docs/CONTROL/AGENDA_MAESTRA.md`

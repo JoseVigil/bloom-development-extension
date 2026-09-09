@@ -2,7 +2,7 @@
 // GAP CONOCIDO: igual que api/auth.ts, estos endpoints todavía no existen
 // en backend/. orgMembers.role hoy es una columna de texto libre sin
 // versionado, scope ni vigencia (ver
-// docs/ANAYSIS/BACKEND/ROLES/BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md
+// docs/ANALYSIS/BACKEND/ROLES/BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md
 // §5) — este ABM asume el modelo mínimo (usuario + rol) hasta que ese
 // trabajo defina membership, definición de rol y asignación por separado.
 //

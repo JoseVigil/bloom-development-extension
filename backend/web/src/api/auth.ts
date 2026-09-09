@@ -3,7 +3,7 @@
 // El backend real hoy solo expone GET /, GET /v1/manifest y
 // GET /v1/releases/:id/download (ver el Mapa del Backend Bloom, artifact).
 // Esta capa define el contrato que el frontend espera consumir una vez que
-// el trabajo de docs/ANAYSIS/BACKEND/ROLES produzca esos endpoints —
+// el trabajo de docs/ANALYSIS/BACKEND/ROLES produzca esos endpoints —
 // llamarla hoy contra un backend real devuelve 404.
 //
 // Con VITE_MOCK_AUTH=true (ver .env.example), cada función de acá delega a

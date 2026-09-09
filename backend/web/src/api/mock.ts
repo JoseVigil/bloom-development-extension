@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // MODO SIMULADO (VITE_MOCK_AUTH=true): stub puramente de frontend, sin
 // backend real, para poder ver y probar Login + ABM mientras
-// docs/ANAYSIS/BACKEND/ROLES/BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md
+// docs/ANALYSIS/BACKEND/ROLES/BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md
 // sigue en fase de investigacion (no de implementacion) y esos endpoints
 // todavia no existen en backend/. Vive enteramente aca: api/auth.ts y
 // api/users.ts son los unicos que llaman a estas funciones, y solo cuando

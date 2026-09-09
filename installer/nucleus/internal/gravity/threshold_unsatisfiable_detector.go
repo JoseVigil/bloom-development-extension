@@ -8,7 +8,7 @@ import (
 
 // This file implements detection of the THRESHOLD_UNSATISFIABLE subtype
 // ONLY, out of the taxonomy proposed by
-// docs/ANAYSIS/GRAVITY/COLISIONES/Orbital_Gravity_Deteccion_Tipificacion_Colisiones_Mandates_Posturas_Spec_v0_1.md
+// docs/ANALYSIS/GRAVITY/COLISIONES/Orbital_Gravity_Deteccion_Tipificacion_Colisiones_Mandates_Posturas_Spec_v0_1.md
 // ("Spec-Colisiones"). This is the next narrow, control-ratified increment
 // after PRIORITY_CYCLE (priority_cycle_detector.go, commit 56420a6) — the
 // only other POSTURE_HORIZONTAL_INCOMPATIBILITY subtype Spec-Colisiones §9.4

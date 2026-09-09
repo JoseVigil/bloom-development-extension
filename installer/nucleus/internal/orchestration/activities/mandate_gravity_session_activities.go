@@ -2,7 +2,7 @@
 //
 // Nuevo (cowork nodo SESSION/MANDATE de Gravity, 2026-09-02): cierra dos
 // gaps registrados en
-// docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md
+// docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md
 // (G.1, G.2) y en su handoff
 // (Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md §5): quién
 // crea el nodo Gravity MANDATE y cuándo, y cómo se modela el nodo SESSION
@@ -298,7 +298,7 @@ type CreateGravitySessionResult struct {
 // SESSION hijo del MANDATE ya garantizado. Decisión ratificada: un nodo
 // SESSION = una invocación completa de MandateExecutionWorkflow — nunca un
 // DomainAction (checkpoint de este cowork, §2; investigación original
-// docs/ANAYSIS/GRAVITY/SESSION/..., handoff §4).
+// docs/ANALYSIS/GRAVITY/SESSION/..., handoff §4).
 //
 // Ciclo de vida: se crea "active" y nunca se cierra en este cowork —
 // decisión deliberada, no omisión: no existe hoy ningún consumidor (Agent

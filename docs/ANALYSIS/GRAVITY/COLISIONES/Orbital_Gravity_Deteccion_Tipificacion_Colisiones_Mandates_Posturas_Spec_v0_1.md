@@ -11,12 +11,12 @@
 
 | Abreviatura | Fuente |
 |---|---|
-| **Fundamentos** | `docs/ANAYSIS/GRAVITY/MODELS/Orbital___Fundamentos_de_Coordinacion_Gravity_e_Interaccion_Gobernada.md` |
+| **Fundamentos** | `docs/ANALYSIS/GRAVITY/MODELS/Orbital___Fundamentos_de_Coordinacion_Gravity_e_Interaccion_Gobernada.md` |
 | **Impl** | `docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md` |
-| **Persistencia** | `docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md` |
-| **Boundary** | `docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` |
-| **Grammar** | `docs/ANAYSIS/GRAVITY/GRAMMAR/Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md` |
-| **Compatibilidad** | `docs/ANAYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md` |
+| **Persistencia** | `docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md` |
+| **Boundary** | `docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md` |
+| **Grammar** | `docs/ANALYSIS/GRAVITY/GRAMMAR/Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md` |
+| **Compatibilidad** | `docs/ANALYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md` |
 | **Mandate v1.2.0** | `docs/MANDATE/BLOOM_Mandate_Universal_Schema_v1_2_0.md` |
 | **Código Gravity** | `installer/nucleus/internal/gravity/` |
 
@@ -33,13 +33,13 @@ Las citas usan `ruta:línea` contra el estado del repositorio leído el 2026-09-
 ## 0. Resumen ejecutivo
 
 1. **[D] El corpus sí contiene un caso de colisión, pero no una teoría general de colisiones.** **Impl** define solamente la superposición de territorio entre Mandates activos no relacionados por ancestría directa: `intent_draft.target ∩ scope_paths ≠ ∅` (`docs/ORBITAL/GRAVITY/Orbital_Gravity_Implementation_Spec_v0_1.md:162-174`). No define cuándo dos contenidos de `gravityPostures[]` son semánticamente incompatibles.
-2. **[D] El documento posterior de persistencia no ratifica un detector.** Reserva `arbitration_events.log.jsonl`, pero excluye expresamente tanto el mecanismo de arbitraje como la detección y tipificación de colisiones (`docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:101-123`, `:365-371`).
+2. **[D] El documento posterior de persistencia no ratifica un detector.** Reserva `arbitration_events.log.jsonl`, pero excluye expresamente tanto el mecanismo de arbitraje como la detección y tipificación de colisiones (`docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:101-123`, `:365-371`).
 3. **[C] El modelo implementado permite leer posturas, pero no alcanza para detectar colisiones territoriales.** `GravityNode` contiene `nodeId`, tipo, padre, `gravityPostures[]`, estado, firma y `nodeVersion`; no contiene `scope_paths`, targets de acciones ni ciclo de vida operacional de un Mandate (`installer/nucleus/internal/gravity/model.go:49-72`).
 4. **[C] `nodeVersion` no es una colisión semántica.** `CompareAndSwap` serializa escritores y rechaza una versión esperada obsoleta sobre el mismo nodo (`installer/nucleus/internal/gravity/store.go:91-129`). Ese conflicto de escritura es un mecanismo de consistencia, no evidencia de incompatibilidad entre Mandates o posturas.
 5. **[C] La gramática y el parser ya ofrecen estructura aprovechable, pero no un evaluador ni un detector.** El AST distingue `PriorityNode.collisionClass` y `EscalationNode.triggerClass` (`installer/nucleus/internal/gravity/expression_ast.go:44-59`); el contrato `GravityEvaluator` no tiene implementación y excluye expresamente el consumo de arbitraje (`installer/nucleus/internal/gravity/expression_ast.go:73-94`).
 6. **[I] Eje 4 necesita distinguir tres familias, no colapsarlas bajo una palabra:** colisión territorial entre Mandates, contradicción jerárquica entre posturas y colisión horizontal entre posturas independientes. Cada familia tiene datos, momento de detección y consecuencia distintos.
-7. **[I] La detección debe tener dos fases:** seleccionar candidatos mediante hechos estructurados y confirmar solo aquello que pueda demostrarse con esos hechos. La semejanza semántica puede descubrir candidatos, pero no certificar una colisión: **Boundary** mantiene Semantics como plano probabilístico separado (`docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:21-28`).
-8. **[I] Un hallazgo confirmado puede alimentar un `ArbitrationEvent`, pero no entra por ello en `GravityGraph`.** **Boundary** fija que el log de arbitraje queda fuera de su boundary semántico y es evidencia candidata a Provenance, no linaje ratificado (`docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:32-44`).
+7. **[I] La detección debe tener dos fases:** seleccionar candidatos mediante hechos estructurados y confirmar solo aquello que pueda demostrarse con esos hechos. La semejanza semántica puede descubrir candidatos, pero no certificar una colisión: **Boundary** mantiene Semantics como plano probabilístico separado (`docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:21-28`).
+8. **[I] Un hallazgo confirmado puede alimentar un `ArbitrationEvent`, pero no entra por ello en `GravityGraph`.** **Boundary** fija que el log de arbitraje queda fuera de su boundary semántico y es evidencia candidata a Provenance, no linaje ratificado (`docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:32-44`).
 
 **Resultado de cierre:** hay base suficiente para especificar categorías y contrato de detección, pero no para implementar todavía un detector completo. Permanecen sin ratificar el catálogo controlado de categorías, el origen operacional de Mandates activos y sus territorios, la semántica comparativa de posturas cualitativas, y el boundary exacto entre detección confirmada y arbitraje. Este documento los deja visibles; no los resuelve por omisión.
 
@@ -55,9 +55,9 @@ Las citas usan `ruta:línea` contra el estado del repositorio leído el 2026-09-
 - **[D]** Propone un orden de resolución y un shape de `ArbitrationEvent` (`:190-214`). Ese contenido pertenece al bosquejo histórico de arbitraje y queda fuera del diseño de este cowork.
 - **[D]** Conecta la recurrencia de eventos con evidencia para postular una postura `priority` (`:216-218`).
 
-### 1.2 `docs/ANAYSIS/.../Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md`
+### 1.2 `docs/ANALYSIS/.../Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md`
 
-- **[D]** Este documento posterior toma el modelo de nodos y el algoritmo de resolución como dato de entrada, pero limita su propio alcance a persistencia, recorrido, separación de artefactos, masa y firma (`docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:18-34`).
+- **[D]** Este documento posterior toma el modelo de nodos y el algoritmo de resolución como dato de entrada, pero limita su propio alcance a persistencia, recorrido, separación de artefactos, masa y firma (`docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:18-34`).
 - **[D]** Reserva físicamente `.edges/arbitration_events.log.jsonl` y califica su mecanismo como fuera de alcance (`:101-123`).
 - **[D]** Excluye textualmente “el mecanismo de arbitraje”, “la detección y tipificación de colisiones” y, en ese momento histórico, la gramática de `expression` (`:365-371`).
 
@@ -70,7 +70,7 @@ Las citas usan `ruta:línea` contra el estado del repositorio leído el 2026-09-
 - la ausencia de detector en **Persistencia** es deliberada;
 - ninguna de las dos fuentes define comparación semántica general entre dos posturas.
 
-Esta lectura coincide con **Compatibilidad**, que distingue expresamente el arbitraje territorial de la comparación de contenido entre posturas de origen independiente (`docs/ANAYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md:29-39`).
+Esta lectura coincide con **Compatibilidad**, que distingue expresamente el arbitraje territorial de la comparación de contenido entre posturas de origen independiente (`docs/ANALYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md:29-39`).
 
 ---
 
@@ -88,13 +88,13 @@ La definición exige cinco elementos:
 4. **Incompatibilidad demostrable:** debe existir un hecho estructurado que impida satisfacer ambas, o una determinación autorizada cuando el criterio no sea mecánicamente decidible.
 5. **Consecuencia de gobernanza:** la coexistencia exige impedir, elevar, exceptuar, secuenciar o arbitrar. Este documento identifica el handoff, no diseña esa decisión.
 
-**[D]** La necesidad de scope, herencia, precedencia, autoridad, override, exception y conflict ya aparece como fundamento semántico, aunque su sintaxis no estuviera fijada entonces (`docs/ANAYSIS/GRAVITY/MODELS/Orbital___Fundamentos_de_Coordinacion_Gravity_e_Interaccion_Gobernada.md:454-488`).
+**[D]** La necesidad de scope, herencia, precedencia, autoridad, override, exception y conflict ya aparece como fundamento semántico, aunque su sintaxis no estuviera fijada entonces (`docs/ANALYSIS/GRAVITY/MODELS/Orbital___Fundamentos_de_Coordinacion_Gravity_e_Interaccion_Gobernada.md:454-488`).
 
 ### 2.2 Lo que no alcanza para declarar una colisión
 
 - **[I] Coincidencia de `appliesTo`.** Solo reduce el conjunto candidato. Dos posturas aplicables a `dev` pueden ser complementarias.
 - **[I] Similitud de lenguaje.** Dos textos parecidos pueden reforzarse; dos textos distintos pueden contradecirse. La similitud probabilística nunca es prueba factual.
-- **[I] Diferencia de masa.** Masa explica peso; no decide compatibilidad. **Compatibilidad** registra que el corpus descarta elegir “el más importante” sin postura explícita o humano (`docs/ANAYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md:70-75`).
+- **[I] Diferencia de masa.** Masa explica peso; no decide compatibilidad. **Compatibilidad** registra que el corpus descarta elegir “el más importante” sin postura explícita o humano (`docs/ANALYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md:70-75`).
 - **[C] Conflicto de `nodeVersion`.** Es versión de escritura obsoleta sobre un nodo, no colisión de criterio (`installer/nucleus/internal/gravity/store.go:91-129`).
 - **[I] Error de parseo.** Una postura inválida individualmente falla su contrato de expresión; todavía no existe un par de sujetos compatibles o incompatibles que comparar.
 - **[I] Una `exception` válida.** La excepción explícita y autorizada es el mecanismo que evita tratar una desviación permitida como contradicción encubierta.
@@ -135,7 +135,7 @@ Las claves en mayúsculas son **[I] identificadores propuestos para discusión**
 
 **Hecho de colisión:** ambas son aplicables al mismo contexto y sus obligaciones, límites u órdenes no pueden satisfacerse conjuntamente.
 
-**Evidencia existente:** el corpus reconoce que comparar conjuntos de posturas de origen independiente no tiene algoritmo (`docs/ANAYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md:29-39`, `:96-107`) **[D]**.
+**Evidencia existente:** el corpus reconoce que comparar conjuntos de posturas de origen independiente no tiene algoritmo (`docs/ANALYSIS/BACKEND/GRAVITY/Investigacion_Gravity_Mandate_Compatibility_v0_1.md:29-39`, `:96-107`) **[D]**.
 
 **Subtipos propuestos:**
 
@@ -180,7 +180,7 @@ Los subtipos no deben tratarse como equivalentes:
 - referencias `exceptionOf`;
 - ventana temporal de coexistencia cuando aplique.
 
-El parser actual ya deriva `collisionClass` y `triggerClass` (`installer/nucleus/internal/gravity/expression_ast.go:49-59`) **[C]**, pero **Grammar** deja libre el vocabulario de categoría, métrica y nivel de escalamiento (`docs/ANAYSIS/GRAVITY/GRAMMAR/Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md:471-481`) **[D]**. Por eso una coincidencia de strings puede seleccionar candidatos, pero la equivalencia entre alias todavía no está definida **[I]**.
+El parser actual ya deriva `collisionClass` y `triggerClass` (`installer/nucleus/internal/gravity/expression_ast.go:49-59`) **[C]**, pero **Grammar** deja libre el vocabulario de categoría, métrica y nivel de escalamiento (`docs/ANALYSIS/GRAVITY/GRAMMAR/Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md:471-481`) **[D]**. Por eso una coincidencia de strings puede seleccionar candidatos, pero la equivalencia entre alias todavía no está definida **[I]**.
 
 ### 4.2 Fase B — confirmación
 
@@ -202,7 +202,7 @@ Reglas de seguridad propuestas:
 ### 4.3 Qué podría confirmarse mecánicamente con el modelo actual
 
 - **Territorio:** solo si otro subsistema entrega Mandates activos, ancestry, scopes y target normalizados. Esos datos no están en `GravityNode` **[C]/[I]**.
-- **Thresholds:** comparación matemática básica cuando coinciden métrica, unidad, dominio y contexto; la fuente de métricas sigue fuera de contrato del evaluador (`docs/ANAYSIS/GRAVITY/GRAMMAR/Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md:471-477`) **[D]**.
+- **Thresholds:** comparación matemática básica cuando coinciden métrica, unidad, dominio y contexto; la fuente de métricas sigue fuera de contrato del evaluador (`docs/ANALYSIS/GRAVITY/GRAMMAR/Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md:471-477`) **[D]**.
 - **Priority:** detección de ciclos sobre pares estructurados y una `collisionClass` común **[C]/[I]**.
 - **Escalation:** detección de targets diferentes; incompatibilidad no confirmable sin política de composición **[I]**.
 - **Constraint/evidence/exception cualitativas:** no confirmables mecánicamente solo con el AST **[C]/[I]**.
@@ -235,7 +235,7 @@ Los primeros cuatro datos pertenecen a coordinación operacional de Mandates, no
 
 ### 5.3 Por qué `nodeVersion` queda explícitamente fuera
 
-**[D]** **Persistencia** acota `nodeVersion` a concurrencia segura de escritura, no invalidación de lectura (`docs/ANAYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:175-191`).
+**[D]** **Persistencia** acota `nodeVersion` a concurrencia segura de escritura, no invalidación de lectura (`docs/ANALYSIS/GRAVITY/GRAFO/Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md:175-191`).
 
 **[C]** El código implementa exactamente esa decisión: obtiene lock, relee el nodo, compara `expected` con `NodeVersion`, muta y aumenta la versión si hubo cambio (`installer/nucleus/internal/gravity/store.go:91-129`).
 
@@ -247,7 +247,7 @@ Los primeros cuatro datos pertenecen a coordinación operacional de Mandates, no
 
 ### 6.1 Boundary obligatorio
 
-**[D]** `ArbitrationEvent` vive físicamente dentro de `.gravity/`, pero **Boundary** lo excluye semánticamente de `GravityGraph`: no es linaje de una postura y solo puede ser evidencia candidata a Provenance (`docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:32-44`).
+**[D]** `ArbitrationEvent` vive físicamente dentro de `.gravity/`, pero **Boundary** lo excluye semánticamente de `GravityGraph`: no es linaje de una postura y solo puede ser evidencia candidata a Provenance (`docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:32-44`).
 
 **[I]** La detección no debe crear aristas `CONTRADICTS`, `EVIDENCES` ni equivalentes dentro de `GravityGraph`. Esos tipos permanecen no ratificados por **Boundary** (`:21-28`). Tampoco debe denormalizar una colisión dentro de `gravityPostures[]` como si fuera linaje.
 
@@ -351,7 +351,7 @@ hecho operativo o conjunto de posturas aplicables
 
 ### 9.2 Gaps preservados por referencia cruzada — no resueltos aquí
 
-Los cinco gaps del cierre de boundary permanecen intactos (`docs/ANAYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:48-56`) **[D]**:
+Los cinco gaps del cierre de boundary permanecen intactos (`docs/ANALYSIS/GRAVITY/GRAFO/Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md:48-56`) **[D]**:
 
 1. staging obligatorio versus salto de niveles en promoción;
 2. shape exacto de `promotedTo`;

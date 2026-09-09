@@ -1,5 +1,5 @@
 // Roles reales confirmados en el modelo actual (ver
-// docs/ANAYSIS/BACKEND/GRAVITY/GravityGraph_Fundamentos_Base_v0_1.md y la
+// docs/ANALYSIS/BACKEND/GRAVITY/GravityGraph_Fundamentos_Base_v0_1.md y la
 // auditoría de .ownership.json): "architect" no existe implementado todavía,
 // solo "master" y "specialist". orgMembers.role sigue siendo texto libre en
 // el schema real de D1 — este tipo es una restricción del lado del cliente,

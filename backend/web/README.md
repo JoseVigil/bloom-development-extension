@@ -89,7 +89,7 @@ tenga un lugar único y tipado que actualizar el día que esos endpoints
 existan — hoy, con `VITE_MOCK_AUTH=false`, llamarlos devuelve 404. Esos
 endpoints son responsabilidad del trabajo de autoridad organizacional de
 Roles
-(`docs/ANAYSIS/BACKEND/ROLES/BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md`),
+(`docs/ANALYSIS/BACKEND/ROLES/BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md`),
 que todavía está en fase de investigación — no de implementación — así que
 no se construyeron acá, ni siquiera como mock del lado del backend: el
 modo simulado de arriba vive enteramente en `backend/web/`, nunca en

@@ -184,7 +184,7 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 	// ── Gravity: garantizar espina hasta MANDATE, crear SESSION, resolver
 	// y persistir evidencia — ANTES de ejecutar ninguna Action. Cowork
 	// nodo SESSION/MANDATE (2026-09-02): cierra G.1/G.2 de
-	// docs/ANAYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md.
+	// docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md.
 	// Un solo SessionID por invocación completa de este Workflow (decisión
 	// ratificada — nunca uno por DomainAction), reutilizado en la única
 	// llamada a resolveActiveGravityActivity de esta corrida. Cualquier

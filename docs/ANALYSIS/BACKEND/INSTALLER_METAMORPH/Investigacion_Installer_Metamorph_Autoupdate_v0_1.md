@@ -5,7 +5,7 @@
 **Fecha:** 2026-08-29
 **Encargo explícito de Jose:** *"El instalador va a ser clave [...] Metamorph va a ser clave en que cada cosa que se actualice de ese sistema sea de manera automática, de manera tal que no haya que pedirle al desarrollador o al ingeniero que actualice, actualice, actualice. Simplemente le dará OK a una ventana y se actualizará solo el sistema. Eso va a permitir que cosas de urgencia, como Ion Pump o cambios en cualquiera de las aplicaciones, se puedan hacer rápidamente. [...] Metamorph tiene que estar muy aceitado en cada versión que está local y cada versión que está en el servidor de disponibilidad y cómo van a ser las notificaciones de actualizaciones."*
 **Método:** agente de investigación con lectura completa de 9 documentos/archivos núcleo y consulta dirigida (grep + lectura parcial) sobre ~25 documentos y archivos de código adicionales, todos provistos por Jose. Cero implementación propuesta; toda afirmación está citada contra archivo y sección/línea.
-**Nota de fuentes:** los documentos de `docs/BACKEND/` no existen en el repo local subido a este work — viven en el Project de claude.ai bajo `ANAYSIS/CLOUDFLARE/`; se leyeron desde ahí.
+**Nota de fuentes:** los documentos de `docs/BACKEND/` no existen en el repo local subido a este work — viven en el Project de claude.ai bajo `ANALYSIS/CLOUDFLARE/`; se leyeron desde ahí.
 
 ---
 

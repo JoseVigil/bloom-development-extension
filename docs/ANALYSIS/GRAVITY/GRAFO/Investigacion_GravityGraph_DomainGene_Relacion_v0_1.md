@@ -122,7 +122,7 @@ La palabra “Domain” en este Workflow no demuestra identidad con `domains[dom
 
 **[H]** La especificación de Paladin diseña captura, visualización y conflicto de Posturas. Menciona una vista separada de “grafo completo”, pero deja expresamente fuera de alcance el diseño de su interior.
 
-Fuente documental: `docs/ANAYSIS/GRAVITY/PALADIN/Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md:216-223`.
+Fuente documental: `docs/ANALYSIS/GRAVITY/PALADIN/Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md:216-223`.
 
 No se encontró implementación de Paladin/Control que lea simultáneamente `.gravity/**/node.json` y `.cache/.semantic-index.json`. Una futura necesidad de visualización es plausible, pero no equivale a un consumidor real con queries, casos de uso y ciclo de actualización definidos.
 
