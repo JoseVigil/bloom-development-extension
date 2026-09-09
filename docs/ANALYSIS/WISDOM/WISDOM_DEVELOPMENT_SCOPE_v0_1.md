@@ -10,8 +10,8 @@ La investigación obligatoria de referencia es:
 
 - `docs/WISDOM/BLOOM_Wisdom_Handshake_Investigacion_v0_1.md`
 - `docs/WISDOM/BLOOM_Wisdom_Sintesis_Codex_v0_1.md`
-- `docs/MANDATE/MARKETPLACE/BLOOM_Mandate_Package_Spec_v1_0_0.md`
-- `docs/MANDATE/MARKETPLACE/BLOOM_Cognitive_Evidence_Model_v1_0_0.md`
+- `docs/WISDOM/BLOOM_Mandate_Package_Spec_v1_0_0.md` (movido desde `docs/MANDATE/MARKETPLACE/` el 2026-09-09 — esa carpeta ya no es la fuente activa de este contenido)
+- `docs/WISDOM/BLOOM_Cognitive_Evidence_Model_v1_0_0.md` (movido desde `docs/MANDATE/MARKETPLACE/` el 2026-09-09 — esa carpeta ya no es la fuente activa de este contenido)
 
 La cadena bajo investigación es:
 
