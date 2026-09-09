@@ -1,3 +1,7 @@
+**Nota de actualización (2026-09-09, posterior a la investigación original):** `docs/MANDATE/MARKETPLACE/` ya no existe en absoluto — se retiró la carpeta completa (incluidos los dos stubs que apuntaban a `docs/WISDOM/` y su subcarpeta `_to_delete/`), movida a `_to_delete/docs-MANDATE-MARKETPLACE-deprecated/` en la raíz del repo, pendiente de borrado manual. Este archivo se relocalizó de `docs/MANDATE/MARKETPLACE/` a `docs/MANDATE/` en el mismo movimiento. Las citas a `docs/MANDATE/MARKETPLACE/...` en el cuerpo de este documento (Sección 2, Discrepancia E) describen el estado tal como era al momento de la investigación — ya no son rutas válidas.
+
+---
+
 Restricción de alcance heredada del encargo madre — no negociable: este documento es resultado de investigación de solo lectura. Ningún hallazgo de código habilita por sí solo un cambio de código; no se modificó ni se propone modificar ningún archivo bajo `installer/`, `src/`, `backend/`, `BloomNucleus/`, `brain/`, `webview/` ni ningún otro directorio de código de este repositorio.
 
 # Verificación de Código — BLOOM Mandate Package × Gravity × Wisdom v0.1
