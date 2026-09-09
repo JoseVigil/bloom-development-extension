@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — linux
-# Generated: 2026-09-07 14:03:02
+# Generated: 2026-09-08 03:57:06
 
 ---
 brain/__build__.py
@@ -115,7 +115,7 @@ installer/metamorph/scripts/build_number.txt
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
-108
+110
 
 ---
 installer/sensor/scripts/build_number.effective.txt
