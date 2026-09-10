@@ -42,13 +42,17 @@ export function createHttpServer(
   const host = config.server?.host ?? '0.0.0.0';
   const port = config.server?.port_rest ?? 48215;
 
-  return serve({ fetch: app.fetch, hostname: host, port }, (info) => {
+  const server = serve({ fetch: app.fetch, hostname: host, port }, (info) => {
     loggers.governance.info(
       { host: info.address, port: info.port },
       'http_server_started'
     );
     onListen?.(info);
   });
+  // Notice streams are disposable hints. Bound idle sockets so reconnect/pull can
+  // recover after a relay or client restart instead of retaining a dead channel.
+  if ('keepAliveTimeout' in server) (server as any).keepAliveTimeout = 25_000;
+  return server;
 }
 
 /**

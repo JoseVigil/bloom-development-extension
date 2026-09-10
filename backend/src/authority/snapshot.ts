@@ -30,6 +30,8 @@
 // porque no tengo confirmado que `schema.ts` la tenga en ese tipo.
 
 import { digestCanonical, signCanonicalPayload } from "./canonical";
+import { EmissionStoreError, loadCurrentEmission, loadEmissionVersion } from "./emission-store";
+import { wireVersion } from "./emission";
 import type {
   AuthorityEnvelope,
   AuthoritySnapshotContent,
@@ -44,6 +46,26 @@ interface PrincipalRow {
   id: string;
   external_ids: string; // JSON
   display_name: string | null;
+}
+
+/** Wire 1B: serve immutable persisted bytes. Never call the legacy builder or sign on pull. */
+export async function resolveWireAuthoritySnapshot(db: D1Database, organizationId: string,
+  installationId: string, baseVersion: string | null): Promise<string> {
+  if (baseVersion !== null) wireVersion(baseVersion);
+  const current = await loadCurrentEmission(db, organizationId);
+  if (!current) throw new EmissionStoreError("emission_unavailable");
+  if (!current.metadata.audience.installation_ids.includes(installationId)) throw new EmissionStoreError("audience_mismatch");
+  if (baseVersion !== null && wireVersion(baseVersion) > wireVersion(current.metadata.authority_version)) throw new EmissionStoreError("version_ahead");
+  if (baseVersion !== null && baseVersion === current.baseVersion && current.delta) {
+    try {
+      const base = await loadEmissionVersion(db, organizationId, baseVersion);
+      if (base && base.metadata.issuer === current.metadata.issuer) return current.delta;
+    } catch (error) {
+      if (!(error instanceof EmissionStoreError) || error.code !== "recovery_required") throw error;
+      // A damaged historical base cannot support a delta. Current full is independently verifiable.
+    }
+  }
+  return current.full;
 }
 
 interface MembershipRow {

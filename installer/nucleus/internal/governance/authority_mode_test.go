@@ -17,6 +17,15 @@ func TestEffectiveAuthorityModeIsLocalLegacy(t *testing.T) {
 	}
 }
 
+func TestInstallingShadowCannotChangeEffectiveMode(t *testing.T) {
+	restore := InstallAuthorityShadow(&ShadowConfiguration{})
+	defer restore()
+	mode, err := EffectiveAuthorityMode()
+	if err != nil || mode != ModeLocalLegacy {
+		t.Fatalf("shadow changed effective mode: %q %v", mode, err)
+	}
+}
+
 func TestAuthorizeGravityNodeCreationLocalLegacy(t *testing.T) {
 	root := validLocalLegacyRoot(t)
 	parent := "org"

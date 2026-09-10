@@ -62,7 +62,7 @@ Nivel 4 — Intent          exp / cor / dev / doc / tst / mrg — idéntico en a
 
 ---
 
-### 8.1.1 Nota Técnica de Arquitectura: Asimetría de Gobernanza e Invariantes Orbitales (`cor`, `mrg`, `tst`)
+### 8.1.1 Nota Técnica de Arquitectura: Asimetría de Gobernanza e Invariantes Orbitales (`mrg`, `tst`)
 
 La evolución del protocolo BTIPS en su versión v6.1 responde directamente a la implementación del modelo de **Gobernanza Orbital**. Los intents `cor`, `mrg` y `tst` formalizan la separación absoluta entre la trayectoria del agente y las leyes del sistema:
 

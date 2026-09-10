@@ -16,6 +16,7 @@ const S2S_HEADERS = [
 const REQUEST_METADATA_HEADERS = [
   'x-correlation-id', 'if-none-match', 'if-modified-since', 'if-match', 'if-unmodified-since'
 ] as const;
+const HUMAN_PROOF_HEADERS = ['cookie', 'origin', 'x-authority-csrf'] as const;
 
 const RESPONSE_METADATA_HEADERS = [
   'content-type', 'etag', 'last-modified', 'cache-control', 'expires', 'date',
@@ -26,7 +27,14 @@ const RESPONSE_METADATA_HEADERS = [
 const AUTHORITY_PATHS = {
   register: '/v1/authority/installations/register',
   snapshot: '/v1/authority/snapshot',
-  trustBundle: '/v1/authority/trust-bundle'
+  trustBundle: '/v1/authority/trust-bundle',
+  trustManifest: '/v1/authority/trust-manifest',
+  actorChallenge: '/v1/authority/actor/challenge',
+  actorApprove: '/v1/authority/actor/approve',
+  syncChallenge: '/v1/authority/sync/challenge',
+  syncPull: '/v1/authority/sync/pull',
+  syncNotice: '/v1/authority/sync/notice',
+  evidence: '/v1/authority/evidence'
 } as const;
 
 function headersPresence(headers: Headers): Record<string, boolean> {
@@ -62,6 +70,12 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
       const authorization = c.req.header('authorization');
       if (authorization !== undefined) forwardHeaders.set('authorization', authorization);
     }
+    if (backendPath === AUTHORITY_PATHS.actorApprove) {
+      for (const name of HUMAN_PROOF_HEADERS) {
+        const value = c.req.header(name);
+        if (value !== undefined) forwardHeaders.set(name, value);
+      }
+    }
 
     let body: ArrayBuffer | undefined;
     if (method === 'POST') {
@@ -91,9 +105,7 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
       return c.json({ error: 'backend_unreachable' }, 502);
     }
 
-    const responseBody = [204, 205, 304].includes(backendResponse.status)
-      ? null
-      : await backendResponse.arrayBuffer();
+    const responseBody = [204, 205, 304].includes(backendResponse.status) ? null : backendResponse.body;
     const responseHeaders = new Headers();
     for (const name of RESPONSE_METADATA_HEADERS) {
       const value = backendResponse.headers.get(name);
@@ -124,7 +136,7 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
 }
 
 /**
- * Monta las tres rutas de autoridad como proxy transparente hacia Backend.
+ * Monta las rutas de autoridad como proxy transparente hacia Backend.
  * No inventa un esquema de rutas nuevo — son namespaced exactamente igual a
  * como ya existen en Backend, para montar debajo del mismo router que usa el
  * resto de Batcave.
@@ -135,6 +147,13 @@ export function createAuthorityProxyRoutes(config: BatcaveConfig, loggers: Batca
   app.post(AUTHORITY_PATHS.register, proxyHandler('POST', AUTHORITY_PATHS.register, config, loggers));
   app.get(AUTHORITY_PATHS.snapshot, proxyHandler('GET', AUTHORITY_PATHS.snapshot, config, loggers));
   app.get(AUTHORITY_PATHS.trustBundle, proxyHandler('GET', AUTHORITY_PATHS.trustBundle, config, loggers));
+  app.get(AUTHORITY_PATHS.trustManifest, proxyHandler('GET', AUTHORITY_PATHS.trustManifest, config, loggers));
+  app.post(AUTHORITY_PATHS.actorChallenge, proxyHandler('POST', AUTHORITY_PATHS.actorChallenge, config, loggers));
+  app.post(AUTHORITY_PATHS.actorApprove, proxyHandler('POST', AUTHORITY_PATHS.actorApprove, config, loggers));
+  app.post(AUTHORITY_PATHS.syncChallenge, proxyHandler('POST', AUTHORITY_PATHS.syncChallenge, config, loggers));
+  app.get(AUTHORITY_PATHS.syncPull, proxyHandler('GET', AUTHORITY_PATHS.syncPull, config, loggers));
+  app.get(AUTHORITY_PATHS.syncNotice, proxyHandler('GET', AUTHORITY_PATHS.syncNotice, config, loggers));
+  app.get(AUTHORITY_PATHS.evidence, proxyHandler('GET', AUTHORITY_PATHS.evidence, config, loggers));
 
   return app;
 }

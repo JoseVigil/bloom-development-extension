@@ -2,9 +2,62 @@
 
 **Work:** ROLES
 
-**Estado:** diseño físico para aprobación; no implementado
+**Estado:** dirección de primera entrega aprobada; lote 1A implementado y probado localmente. Integración, controles y cutover no demostrados ni habilitados.
 
-**Fecha:** 2026-09-04
+**Fecha:** 2026-09-08
+
+## 0. Consolidación de decisiones y alcance de 1A
+
+La devolución final de José para «Agregar sincronización de autoridad» sustituye
+las propuestas previas que contradigan esta sección. El contrato ejecutable de
+1A se precisa en [Interoperabilidad v0.1](BLOOM_AUTHORITY_INTEROPERABILITY_CONTRACT_v0_1.md).
+
+- Sovereign es la plataforma; un tenant del cliente contiene organizaciones Bloom.
+  `tenant_id` no sustituye `organization_id` ni crea autoridad entre organizaciones.
+- El recorrido es el onboarding del máster organizacional. Crear organización,
+  habilitar onboarding y designar primer máster son facultades separables que una
+  autorización puede enumerar conjuntamente. No crean una autoridad permanente
+  del designante ni exigen tres personas, trámites o artefactos.
+- D1 conserva autenticación, sesiones, identidad externa estable y prueba del actor
+  local separada de instalación. La primera concesión no exige un máster remoto
+  anterior: exige habilitación verificada, destinatario identificado, aceptación
+  y una única confirmación durable. Verificador y evidencia productivos siguen
+  pendientes; Sovereign rechaza creación/concesión sin ellos. Organizaciones
+  existentes requieren correspondencia explícita. Paladin no hereda ese recorrido
+  ni transfiere autoridad remota por continuidad del rol local.
+- D2 está parcialmente resuelta: identidad humana inicial verificada y memberships
+  organizacionales. Mutaciones globales de principals, identidades adicionales y
+  recuperación no están disponibles. No existe autoridad global de identidad.
+- D3 admite el perfil acotado de concesión de `master`, `specialist` y subconjuntos
+  del máster vigente; aceptación y revalidación del otorgante, sin autoelevación.
+  Administrar assignments no es permiso universal para conceder. Proyectos exigen
+  pertenencia canónica verificada y scope exacto; no hay herencia operativa. Nuevas
+  concesiones Vault/Executor y actores de servicio como alternativa se rechazan.
+  Incorporación de otros másters y recuperación son recorridos separados; ninguna
+  recuperación reabre el onboarding. El catálogo actual no se declara suficiente
+  para todas las responsabilidades del máster.
+- D4 distingue digest de payload y de estado. Estado y metadata común de cada
+  versión son inmutables; renovar requiere una versión organizacional superior.
+  Renovación inicial: 4 minutos, hasta 360 emisiones/día por organización activa.
+- D5 adopta Durable Object, outbox durable, relay WebSocket y consulta HTTPS actual
+  ligada a desafío. Poll 20 s y restricción 50 s son parámetros iniciales por validar.
+  Incluir `standard` en esa restricción continúa pendiente de aprobación expresa.
+  El objetivo de revocación 60 s no es una garantía demostrada por esos parámetros.
+- D6 adopta store recuperable y checkpoint separado para crashes y restore parcial;
+  no cubre restore conjunto ni binarios que ignoren el contrato. 1A agrega metadata
+  y digest de estado al store actual; todavía no implementa el checkpoint.
+- D7 requiere clasificación cerrada de operaciones y controles. Ausencia de control
+  requerido: `not_evaluable` en shadow y deny remoto. Shadow preserva exactamente el
+  resultado local. Gravity sigue en investigación en tenant/organización/proyecto;
+  no se implementan Gravity, Vault ni Executor ni permisos nuevos por inferencia.
+- D8 exige CLI humano/JSON y observación integrada de 24 h en lotes posteriores.
+  Esa evidencia no equivale a readiness productiva ni autoriza cutover.
+
+1A implementa sólo tipos wire, normalización, emisión pura, verificación/aceptación
+Go y vectores cruzados. No conecta la ruta HTTP legacy, no administra identidades,
+no concede roles y no instala confianza productiva. El primer lote terminado se
+conserva. Las secciones de migración y cutover restantes expresan diseño futuro;
+no son operaciones autorizadas por esta entrega.
 
 ## 1. Propósito y límites
 
@@ -26,9 +79,9 @@ Define:
 - resolución de la contradicción `Architect`.
 - schema canónico transitorio, compatibilidad y migración de `.ownership.json`.
 
-No modifica código, migraciones, configuración, servicios ni contratos
-existentes. Los nombres físicos internos de tablas, packages y archivos de
-runtime quedan para la ronda de implementación.
+La autorización de implementación es por lote y lista exacta. El alcance realizado
+de 1A y las dependencias aún pendientes están delimitados en §0 y en el contrato
+de interoperabilidad; el resto de este documento no autoriza escrituras.
 
 ## 2. Decisiones cerradas en esta ronda
 
@@ -38,7 +91,7 @@ runtime quedan para la ronda de implementación.
 | `PHY-DEC-002` | SHA-256 para digest y Ed25519 para firma del payload canónico |
 | `PHY-DEC-003` | Transporte híbrido: HTTPS pull autoritativo + WebSocket de notificación; SSE no se adopta |
 | `PHY-DEC-004` | Nucleus conserva por organización binding, snapshot aceptado, high-water mark y journal de aceptación separados lógicamente |
-| `PHY-DEC-005` | Snapshot TTL 24 h; freshness por clase 5 min/30 min/24 h; revocación E2E máxima 60 s cuando hay conectividad |
+| `PHY-DEC-005` | Snapshot TTL máximo 24 h; freshness por clase 5 min/30 min/24 h; objetivo de revocación E2E 60 s aún por demostrar; parámetros y pendiente D5 en §13 |
 | `PHY-DEC-006` | Targeting mediante `installation_id` ligado al binding; la sesión no determina la organización |
 | `PHY-DEC-007` | Confianza inicial por root de Backend pinneada y manifiesto de issuer firmado; issuer privado requiere trust anchor explícito fuera de banda |
 | `PHY-DEC-008` | Catálogo built-in v1: `master` y `specialist`; `architect` no se incorpora |
@@ -80,8 +133,10 @@ Algoritmo: SHA-256.
 
 Representación: base64url sin padding.
 
-El digest se calcula sobre los bytes JCS del objeto `payload`, sin el objeto
-`integrity` exterior.
+El digest de `integrity.digest` se calcula sobre JCS(`payload`), sin `integrity`.
+El digest de estado se calcula sobre JCS del `FullContent` completo normalizado,
+sin metadata, audience ni envelope. `delta.content.result_digest` es este segundo
+digest. Ambos usan SHA-256/base64url sin padding y no son intercambiables.
 
 ### 3.4 Firma
 
@@ -163,6 +218,13 @@ downgrade automático de algoritmos en v1.
 - la instalación receptora debe aparecer en `installation_ids`.
 - arrays vacíos se representan como `[]`; no se omiten.
 - propiedades desconocidas provocan rechazo en v1.
+- Todas las propiedades del perfil son obligatorias y case-sensitive; sólo admiten
+  `null` los campos indicados explícitamente. Versiones positivas hasta uint64 máximo.
+- Timestamps UTC con precisión de hasta 9 decimales; se normalizan quitando ceros
+  fraccionarios finales, sin redondear a milisegundos ni normalizar Unicode.
+- Metadata común inmutable por versión: schema, schema_version, snapshot_id,
+  issuer, organization_id, authority_version, issued_at, not_before, expires_at y
+  audience. Full/delta sólo difieren en kind, base_authority_version y content.
 
 ## 5. Snapshot completo
 
@@ -230,7 +292,7 @@ Sólo `active`, dentro de vigencia, puede sostener una asignación aplicable.
   "role_origin": "builtin",
   "display_name": "Master",
   "status": "active",
-  "permissions": ["authority.assignment.manage"]
+  "permissions": ["authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "authority.membership.manage", "authority.role_definition.manage", "intent.cor.merge", "intent.create", "mandate.create", "mandate.install", "mandate.promote", "mandate.sign"]
 }
 ```
 
@@ -286,7 +348,8 @@ La presencia de una revocación válida domina el estado histórico del target.
 
 ## 6. Orden canónico de arrays
 
-Antes de JCS, el productor ordena:
+Antes de JCS, el productor ordena. Toda comparación textual usa unidades UTF-16
+sin locale ni normalización Unicode; toda versión usa comparación entera exacta:
 
 - `audience.installation_ids` por valor ascendente;
 - `principals` por `principal_id`;
@@ -358,6 +421,17 @@ Reglas:
 - su digest debe coincidir con `content.result_digest`;
 - aceptación del delta persiste el estado completo resultante, no sólo un patch;
 - cualquier gap o diferencia de digest obliga a obtener un full snapshot.
+- El upsert de un rol se identifica por `(role_id, role_version)`; `entity_id`
+  coincide con `value.role_id`. No reemplaza otras versiones del mismo rol.
+- 1A conserva versiones históricas de roles y revocaciones. No admite borrado de
+  principals; membership/assignment removidos requieren revocación correspondiente.
+- Cambiar permisos u origen de una versión de rol requiere una nueva versión;
+  modificar display_name/status no cambia los permisos de assignments existentes.
+- Misma versión con metadata común distinta o estado normalizado distinto es
+  conflicto. Un full equivalente es idempotente aunque su digest de payload sea
+  distinto del delta aceptado. Replay exacto no escribe ni renueva tiempos.
+- Un delta de igual versión cuyo payload no fue el aceptado no puede reaplicarse
+  sobre su propio resultado: requiere reconstrucción mediante full.
 
 Así se hace verificable `SNAP-INV-021`: full y deltas que llegan a la misma
 versión producen exactamente el mismo digest de estado normalizado.
@@ -473,7 +547,7 @@ haya observado una versión más nueva sin confirmación de aceptación.
 ### 10.1 Identificador
 
 Cada instalación tiene un `installation_id` opaco y estable, creado durante
-bootstrap local y registrado durante el binding. No deriva de hostname,
+onboarding local y registrado durante el binding. No deriva de hostname,
 username, path, slug ni hardware serial.
 
 ### 10.2 Audience firmada
@@ -516,7 +590,7 @@ La sola respuesta de red no puede instalar su propia confianza.
 
 ### 11.3 GitHub
 
-GitHub puede autenticar una identidad externa durante bootstrap, pero no prueba
+GitHub puede autenticar una identidad externa durante onboarding, pero no prueba
 la identidad organizacional Bloom, no firma el binding y no concede roles.
 
 ## 12. Estado durable de Nucleus
@@ -525,11 +599,16 @@ Nucleus mantiene cuatro unidades lógicas separadas:
 
 1. **Binding state:** organización, issuer, instalación y trust anchor aceptados.
 2. **Accepted projection:** último estado organizacional completo aceptado.
-3. **Monotonic state:** high-water mark, digest aceptado y cutover floor.
+3. **Monotonic state:** high-water mark, digest de payload, digest de estado y cutover floor.
 4. **Acceptance journal:** recepción, verificación, rechazo, conflicto y
    aceptación con correlation IDs.
 
-No se fijan filenames ni packages.
+1A guarda además la metadata común de emisión en el store actual de Nucleus.
+Su journal actual registra aceptación; recepción/rechazo/conflicto y checkpoint
+separado aún requieren lotes posteriores. Estado durable legacy sin los nuevos
+compromisos se rechaza sin borrarlo ni bajar el high-water mark. La ausencia total
+del archivo todavía requiere el checkpoint de D6 para distinguir pérdida de evidencia
+de una instalación nueva; 1A no demuestra esa protección.
 
 ### 12.1 Transacción de aceptación
 
@@ -556,7 +635,8 @@ durables y no interpreta su contenido.
 
 La aceptación se serializa por organización. Dos candidatos de versiones
 distintas se reevalúan contra el high-water mark dentro de la misma sección
-crítica. Misma versión con distinto digest siempre produce conflicto.
+crítica. Misma versión con metadata común o digest de estado distintos produce
+conflicto. La diferencia legítima de digest de payload entre full y delta no lo produce.
 
 ## 13. TTL, freshness y revocación
 
@@ -580,27 +660,40 @@ Una política local puede exigir mayor frescura, nunca menor.
 
 ### 13.3 Revocación
 
-Latencia máxima end-to-end con conectividad disponible: **60 segundos** desde
+Objetivo end-to-end con conectividad disponible: **60 segundos** desde
 que Backend confirma la revocación hasta que Nucleus la acepta o entra en estado
-restringido porque no pudo verificarla.
+restringido porque no pudo verificarla. No demostrado por 1A ni por adoptar los
+parámetros siguientes. Su medición comienza en el commit durable de Backend.
 
 Implementación esperada:
 
 - notificación WebSocket inmediata;
 - pull urgente;
 - retry continuo dentro de la ventana;
-- si la ventana vence sin aceptación, Nucleus bloquea nuevas operaciones
-  `critical` y `privileged` para esa organización hasta reconciliar.
+- restricción inicial tras **50 segundos** sin reconciliación confirmada para
+  `critical` y `privileged`; la ampliación a `standard` exige decisión expresa de
+  José y no se incorpora por inferencia. La cobertura de revocación de memberships
+  necesarias para `standard` no puede afirmarse universal mientras esté pendiente.
 
 Este valor no convierte Batcave en decisor: sólo obliga a que la falta de
 confirmación reduzca capacidad.
 
 ### 13.4 Poll de recuperación
 
-Sin notificación WebSocket, Batcave realiza pull condicional al menos cada
-**5 minutos**. Esta frecuencia cubre cambios rutinarios, pero no satisface por sí
-sola la ventana de revocación; por eso el canal push y el fail-closed son
-obligatorios.
+Polling inicial: **20 segundos**, sujeto a medición junto con colas, timeouts y
+reintentos. Una respuesta de snapshot cacheada no acredita consulta actual.
+La respuesta de comprobación será firmada y ligada al desafío de Nucleus,
+organización, instalación y versión leída con consistencia suficiente para observar
+cambios ya confirmados. Sólo confirma reconciliación si esa versión está aceptada.
+El plazo corre desde el inicio de esa consulta, no desde una recepción demorada;
+un reinicio exige comprobación nueva. Avisos, replay y comprobación actual no
+renuevan issued_at ni freshness del snapshot. Implementación pendiente.
+
+Renovación inicial: **4 minutos**, una nueva versión/emisión compartida por
+organización activa, incluso sin cambio de hechos. Hasta **360 emisiones/día**;
+almacenamiento e historial crecen con esas emisiones y el fan-out con instalaciones.
+No generar una versión nueva por cada pull. Scheduler, retención y medición de costo
+quedan para los lotes de persistencia/sincronización; 1A no los activa.
 
 ### 13.5 Expiración
 
@@ -770,8 +863,8 @@ se registra únicamente como comparación y no altera enforcement productivo.
 | `BIND-INV-009/015` | cutover floor y high-water mark fuera del rollback ordinario |
 | `BIND-INV-016` | Batcave notifica/transporta; Nucleus verifica y acepta |
 | `SNAP-INV-001` | comparación decimal estricta contra high-water mark |
-| `SNAP-INV-002` | misma versión + mismo SHA-256 = replay idempotente |
-| `SNAP-INV-003` | misma versión + digest distinto = integrity conflict |
+| `SNAP-INV-002` | misma versión y metadata común + replay de payload o full con igual digest de estado = idempotencia sin renovar tiempos |
+| `SNAP-INV-003` | misma versión + metadata común distinta o digest de estado distinto = integrity conflict |
 | `SNAP-INV-005/006` | transacción de aceptación y estado monotónico durable |
 | `SNAP-INV-014/016/017` | revocation records + versión monotónica + sin fallback legacy |
 | `SNAP-INV-019/020` | base exacta y full reconciliation ante gap |
@@ -1109,7 +1202,7 @@ archivo operativo. Esta ronda no fija el filename o store de ese registro.
 | Nucleus blueprint | `org_identity.org_id`, owner GitHub y `Architect` legacy | Verifica coherencia; `org_id` queda como legacy hasta binding; Architect no concede | Referencia canonical ID/binding; permiso exacto reemplaza rol hardcodeado |
 | Supervisor/SynapseSimulator | exige `owner` + `created_at` | Usa el owner canónico dentro de `legacy_authority` | Valida schema/binding; no interpreta owner como autoridad |
 | Batcave resolver | fingerprint, nombre, master y key fingerprint | Migra `batcave_typescript_v0`; usa locator sólo para discovery | Transporta según canonical ID + installation ID; no decide roles |
-| Batcave bootstrap | escribe schema propio | Deja de crear una segunda forma; produce candidato para migración/binding | No escribe autoridad; participa sólo en transporte de binding |
+| Batcave onboarding | escribe schema propio | Deja de crear una segunda forma; produce candidato para migración/binding | No escribe autoridad; participa sólo en transporte de binding |
 | Metamorph rollout | valida subset Go | Acepta canónico validando estructura e identidad sin interpretarla | Preserva ownership/binding/cutover como durable state |
 | Conductor/onboarding | usa slug, workspace y GitHub | Slug continúa como UX; no se convierte en canonical ID | Registra selección y estado de binding; no concede autoridad |
 
@@ -1117,7 +1210,7 @@ archivo operativo. Esta ronda no fija el filename o store de ese registro.
 
 #### Binding state
 
-`.ownership.json` proyecta el estado necesario para bootstrap, pero la decisión
+`.ownership.json` proyecta el estado necesario para onboarding, pero la decisión
 durable de binding sigue perteneciendo a Nucleus. Una edición manual que no
 coincide con esa decisión produce divergencia.
 
@@ -1246,7 +1339,7 @@ La implementación deberá incluir, como mínimo:
 | Snapshot para otra organización | binding exacto + organization ID firmada |
 | Snapshot para otro dispositivo | audience firmada con installation ID |
 | Replay | authority version + digest + high-water mark |
-| Equivocation | misma versión/digest distinto produce incidente |
+| Equivocation | misma versión con metadata común o digest de estado distintos produce conflicto |
 | Downgrade por restore | high-water mark y cutover floor separados |
 | Omisión de revocación en delta | base exacta, secuencia contigua y result digest |
 | Clave nueva autofirmada | cadena desde trust anchor previo |
@@ -1267,7 +1360,7 @@ expresamente:
 2. JCS + SHA-256 + Ed25519;
 3. transporte híbrido HTTPS/WebSocket;
 4. audience por installation ID;
-5. bootstrap de confianza pinneado/out-of-band;
+5. establecimiento de confianza pinneada/out-of-band;
 6. unidades durables de Nucleus;
 7. TTL 24 h;
 8. freshness 5 min/30 min/24 h;
@@ -1293,7 +1386,9 @@ expresamente:
 
 ## 24. Regla de continuidad
 
-Este documento termina en diseño físico.
+Este documento delimita diseño físico y evidencia local de 1A. Sólo la aprobación
+puntual de los 11 archivos habilitó los cambios descritos en §0; no amplía el permiso
+a las operaciones restantes.
 
 No autoriza:
 

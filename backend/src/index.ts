@@ -6,7 +6,13 @@ import {
   registerInstallationKey,
   verifyInstallationSignature,
 } from "./authority/identity";
-import { resolveAuthoritySnapshot, resolveTrustBundle } from "./authority/snapshot";
+import { resolveTrustBundle } from "./authority/snapshot";
+import { authoritySnapshotResponse } from "./authority/snapshot-route";
+import { configuredAuthorityHumanResponse } from "./authority/administration-route";
+import { configuredAuthorityTrustResponse } from './authority/trust-route';
+import { AuthoritySyncObject } from './authority/sync-object';
+import { authorityEvidenceResponse } from './authority/evidence-route';
+import { authoritySyncResponse, relayAuthorityOutbox } from './authority/sync-route';
 
 // SUPUESTO: `AUTHORITY_SIGNING_KEY_PKCS8_B64` y `AUTHORITY_SIGNING_KEY_ID` en `Env` no
 // están confirmados contra el `Env` real del proyecto (no tengo el
@@ -22,6 +28,13 @@ import { resolveAuthoritySnapshot, resolveTrustBundle } from "./authority/snapsh
 // esa elección.
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.post('/v1/authority/human/login', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.get('/v1/authority/human/callback', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/human/renew', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/human/logout', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/administration', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/actor/approve', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 
 app.get("/", (context) => context.json({ service: "bloom-backend", status: "ok" }));
 
@@ -152,23 +165,18 @@ app.post("/v1/authority/installations/register", async (context) => {
 });
 
 app.get("/v1/authority/snapshot", verifyInstallationAuth, async (context) => {
-  const organizationId = context.req.query("org")!;
-  const baseVersionParam = context.req.query("base_version");
-  const baseVersion = baseVersionParam !== undefined ? Number(baseVersionParam) : null;
-  if (baseVersionParam !== undefined && Number.isNaN(baseVersion)) {
-    return context.json({ error: "invalid_base_version" }, 400);
-  }
-
-  const signingKeyPkcs8 = base64ToArrayBuffer(context.env.AUTHORITY_SIGNING_KEY_PKCS8_B64);
-  const envelope = await resolveAuthoritySnapshot(
-    context.env.DB,
-    organizationId,
-    baseVersion,
-    signingKeyPkcs8,
-    context.env.AUTHORITY_SIGNING_KEY_ID,
-  );
-  return context.json(envelope);
+  return authoritySnapshotResponse(context.env.DB, context.req.raw, {
+    organizationId: context.req.query("org")!,
+    installationId: context.req.header("X-Bloom-Installation-Id")!,
+  });
 });
+
+app.get('/v1/authority/trust-manifest',verifyInstallationAuth,c=>configuredAuthorityTrustResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
+app.post('/v1/authority/actor/challenge',verifyInstallationAuth,c=>configuredAuthorityTrustResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
+app.post('/v1/authority/sync/challenge',verifyInstallationAuth,c=>authoritySyncResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
+app.get('/v1/authority/sync/pull',verifyInstallationAuth,c=>authoritySyncResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
+app.get('/v1/authority/sync/notice',verifyInstallationAuth,c=>authoritySyncResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
+app.get('/v1/authority/evidence',verifyInstallationAuth,c=>authorityEvidenceResponse(c.env.DB,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
 
 app.get("/v1/authority/trust-bundle", verifyInstallationAuth, async (context) => {
   const organizationId = context.req.query("org")!;
@@ -193,4 +201,6 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+export { AuthoritySyncObject };
+Object.assign(app,{scheduled:async (_controller:ScheduledController,env:Env)=>{await relayAuthorityOutbox(env);}});
 export default app;

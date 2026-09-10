@@ -190,6 +190,26 @@ describe('authority-proxy', () => {
     expect(forwardedHeaders.has('x-bloom-signature')).toBe(false);
   });
 
+  it('forwards actor proof only on approval and never logs cookie, csrf or signature', async () => {
+    fetchMock.mockResolvedValue(new Response('{}',{status:200,headers:{'content-type':'application/json'}}));
+    const loggers=fakeLoggers(),app=createAuthorityProxyRoutes(config,loggers);
+    await app.request('/v1/authority/actor/approve',{method:'POST',headers:{cookie:'__Host-authority-session=secret-cookie',origin:'https://human.test','x-authority-csrf':'secret-csrf','x-bloom-signature':'secret-signature','content-type':'application/json'},body:'{}'});
+    const forwarded=fetchMock.mock.calls[0][1].headers as Headers;
+    expect(forwarded.get('cookie')).toBe('__Host-authority-session=secret-cookie');expect(forwarded.get('origin')).toBe('https://human.test');expect(forwarded.get('x-authority-csrf')).toBe('secret-csrf');
+    const logs=JSON.stringify([(loggers.relay.info as any).mock.calls,(loggers.security.warn as any).mock.calls]);
+    expect(logs).not.toContain('secret-cookie');expect(logs).not.toContain('secret-csrf');expect(logs).not.toContain('secret-signature');
+  });
+
+  it('streams notice bytes and exposes all trust/sync routes without interpreting them', async () => {
+    const encoder=new TextEncoder();let controller:ReadableStreamDefaultController<Uint8Array>;
+    const stream=new ReadableStream<Uint8Array>({start(c){controller=c;c.enqueue(encoder.encode('{"event_id":"e1"}\n'));}});
+    fetchMock.mockResolvedValueOnce(new Response(stream,{headers:{'content-type':'application/x-ndjson'}}));
+    const app=createAuthorityProxyRoutes(config,fakeLoggers());const pending=app.request('/v1/authority/sync/notice?org=o',{headers:{'x-bloom-installation-id':'i'}});
+    controller!.close();const response=await pending;expect(await response.text()).toBe('{"event_id":"e1"}\n');
+    for(const [method,path] of [['GET','trust-manifest'],['POST','actor/challenge'],['POST','sync/challenge'],['GET','sync/pull']] as const){fetchMock.mockResolvedValueOnce(new Response('{}'));await app.request(`/v1/authority/${path}?org=o`,{method,body:method==='POST'?'{}':undefined,headers:method==='POST'?{'content-type':'application/json'}:undefined});}
+    expect(fetchMock.mock.calls.map(c=>new URL(c[0]).pathname)).toEqual(['/v1/authority/sync/notice','/v1/authority/trust-manifest','/v1/authority/actor/challenge','/v1/authority/sync/challenge','/v1/authority/sync/pull']);
+  });
+
   it('does not verify, reconstruct or interpret the signature', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
     const app = createAuthorityProxyRoutes(config, fakeLoggers());
@@ -203,5 +223,17 @@ describe('authority-proxy', () => {
     const [, calledInit] = fetchMock.mock.calls[0];
     const forwardedHeaders = calledInit.headers as Headers;
     expect(forwardedHeaders.get('x-bloom-signature')).toBe('this-is-not-a-real-signature');
+  });
+
+  it('relays evidence bytes, cursor metadata and S2S auth without logging secrets', async () => {
+    const bytes='{"items":[],"next_cursor":"opaque-secret-cursor"}';
+    fetchMock.mockResolvedValue(new Response(bytes,{status:200,headers:{'content-type':'application/json','etag':'"evidence-1"'}}));
+    const loggers=fakeLoggers(),app=createAuthorityProxyRoutes(config,loggers);
+    const res=await app.request('/v1/authority/evidence?org=o&cursor=c1&limit=25',{headers:{'x-bloom-installation-id':'i','x-bloom-timestamp':'1','x-bloom-signature':'secret-signature','if-none-match':'"old"'}});
+    expect(fetchMock.mock.calls[0][0]).toBe('https://backend.test/v1/authority/evidence?org=o&cursor=c1&limit=25');
+    expect((fetchMock.mock.calls[0][1].headers as Headers).get('x-bloom-signature')).toBe('secret-signature');
+    expect(await res.text()).toBe(bytes);expect(res.headers.get('etag')).toBe('"evidence-1"');
+    expect(JSON.stringify([(loggers.relay.info as any).mock.calls,(loggers.security.warn as any).mock.calls])).not.toContain('secret-signature');
+    expect(JSON.stringify((loggers.relay.info as any).mock.calls)).not.toContain('opaque-secret-cursor');
   });
 });

@@ -16,6 +16,14 @@
       "migrations_dir": "migrations"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "AUTHORITY_SYNC", "class_name": "AuthoritySyncObject" }
+    ]
+  },
+  "migrations": [
+    { "tag": "authority-sync-v1", "new_sqlite_classes": ["AuthoritySyncObject"] }
+  ],
   "r2_buckets": [
     {
       "binding": "MANDATES",

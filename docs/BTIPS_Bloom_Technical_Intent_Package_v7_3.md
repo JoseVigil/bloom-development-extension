@@ -12,8 +12,9 @@ BTIPS convierte la interacción con inteligencia artificial en un proceso de ing
 | **v6.0** | Arquitectura integral de Bloom: Cortex y Companion, AITAP, Execution Layer, Executor, runtimes de procesamiento, Temporal, Cognituum Runner y los intents `ing` y `dis`. |
 | **v7.0** | Consolidación de la arquitectura integral y de su mapa visual: AITAP como grifo, Execution Layer implementada por Executor, OpenCode y CLIs externos como runtimes de procesamiento, y separación entre runtime y proveedor/modelo efectivo. |
 | **v7.1** | Se documenta el vínculo de producto entre esta arquitectura y la partición PALADIN/SOVEREIGN (ver `PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0.1`). Se agregan notas de producto en 2.4️⃣ (Conductor) y 2.5️⃣ (Plugin). No se modifica arquitectura, componentes, puertos ni el diagrama de la sección 2️⃣, que continúa representando la superficie Sovereign. |
-| **v7.1.1** | **Deprecación de conformidad, no revisión de diseño.** Todas las menciones de `cor` bajo su semántica v6.0 (*Coordination* — merges cognitivos, orden de trabajo, control de impacto) quedan marcadas como deprecadas. `BSIP-009`/`COR_Intent_Spec_v1_0.md` redefinen `cor` como **Core/Governance**, bajo política Zero-Read/Zero-Write, inalcanzable por cualquier Agent Loop y canal exclusivo humano/Nucleus — ver nota consolidada más abajo. La funcionalidad de merge cognitivo migra por completo al intent `mrg` (`BSIP-010`). Ningún componente, puerto ni diagrama arquitectónico de v7.1 cambia; solo la semántica textual asociada a `cor`. |
+| **v7.1.1** | **Corrección de conformidad, no revisión de diseño.** La funcionalidad de merge cognitivo, orden de trabajo y control de impacto se documenta exclusivamente bajo el intent `mrg` (`BSIP-010`), que la absorbe por completo. Se documenta además, en lenguaje llano y sin nombre de intent asociado, la superficie constitucional del sistema — reglas de negocio, invariantes y políticas de orquestación de Nucleus — sujeta a una política de Zero-Read/Zero-Write inalcanzable por cualquier Agent Loop y accesible únicamente por un operador humano vía canal privilegiado de Nucleus, o por Nucleus mismo por decisión de sistema (`BSIP-009`). Ningún componente, puerto ni diagrama arquitectónico de v7.1 cambia; el ajuste es exclusivamente terminológico. |
 | **v7.2** | Se incorporan dos sistemas conceptuales nuevos, ausentes hasta esta versión: **Gravity** (lenguaje de criterio jerárquico persistente, sección 8️⃣) y **Autoridad Organizacional Remota** (modelo de identidad, membership, roles y autorización efectiva, sección 🔟). Se corrige además la mención de `Architect` en 2.2️⃣ Nucleus Governance Layer: no forma parte del catálogo de roles vigente. Ninguna incorporación de esta versión modifica componentes, puertos o el diagrama de la sección 2️⃣ — son adiciones conceptuales y de dirección arquitectónica. |
+| **v7.3** | **Gravity pasa de fundamento conceptual a parcialmente implementado** (sección 8️⃣): persistencia (GravityGraph en Go, JSON bajo `.bloom/.nucleus-{organización}/.gravity/`, escritura atómica y concurrencia optimista) y parser (ANTLR4, AST de seis primitivas) reales; `GravityEvaluator.evaluate()` y la firma real de nodos siguen sin implementar. Se documenta además un residual en código de producción: `Store.CreateNode` falla hoy cerrado para `ORGANIZATION` y `NUCLEUS`. Se retira de forma total y definitiva todo rastro textual del intent legado de coordinación en todo el documento — activo, deprecado o histórico —, incluyendo la nota de deprecación consolidada y todas las referencias cruzadas puntuales; donde describía una función vigente (la superficie constitucional del sistema, Zero-Read/Zero-Write, canal exclusivo humano/Nucleus), esa función queda descrita en lenguaje llano sin nombre asociado. |
 
 ---
 
@@ -24,16 +25,6 @@ BTIPS nace de un problema concreto: los modelos de IA trabajan rápido, pero **p
 La arquitectura BTIPS introduce una **unidad mínima de trabajo persistente** donde cada acción técnica queda registrada como un intent, junto con su contexto, entradas, salidas y efectos en el sistema. De esta forma, el conocimiento no vive en prompts efímeros ni en la memoria del modelo, sino en **Bloom Technical Intent Package**.
 
 BTIPS convierte la interacción con IA en un **proceso de ingeniería**, no en una conversación. Esto permite que una organización mantenga coherencia técnica, acelere iteraciones y transfiera conocimiento entre humanos, aplicaciones y modelos sin degradación ni ambigüedad.
-
----
-
-> ### ⚠️ Nota de deprecación consolidada — `cor` (v7.1.1)
->
-> Este documento describe, en varios puntos, un intent `cor` bajo la semántica **v6.0** (*Coordination*): merges cognitivos, orden de trabajo, control de impacto organizacional. Esa semántica quedó **superada por completo** —no parcheada— por `BSIP-009`/`COR_Intent_Spec_v1_0.md`, que redefine `cor` como **Core/Governance**: la superficie constitucional del sistema (reglas de negocio, invariantes, políticas de orquestación de Nucleus), bajo una política sin precedente en el resto de la taxonomía —**Zero-Read/Zero-Write** para cualquier Agent Loop— y proponible exclusivamente por un operador humano vía canal privilegiado de Nucleus, o por Nucleus mismo por decisión de sistema.
->
-> La funcionalidad de **merge cognitivo** que este documento atribuye a `cor` en v6.0 migra íntegramente al intent `mrg` (`BSIP-010`). Toda mención puntual de `cor` a partir de aquí queda marcada con **[deprecado — ver BSIP-009]** y, donde corresponde a la función de merge, corregida a `mrg`. Ningún otro componente, puerto o diagrama arquitectónico de v7.1 se ve afectado por esta nota — es exclusivamente terminológica sobre `cor`.
->
-> Fuente autoritativa vigente: `COR_Intent_Spec_v1_0.md`.
 
 ---
 
@@ -65,8 +56,8 @@ Sigue siendo simple, pero ahora **explica la pirámide**.
 ```mermaid
 flowchart LR
     %% ─── Taxonomía de Intents v7.1 ───
-    %% cor [deprecado v6.0 - ver BSIP-009]: ahora Core/Governance, Zero-Read/Zero-Write, canal exclusivo humano/Nucleus
-    %% mrg -> Merge & Integration, sucesor de la funcionalidad de merge cognitivo descrita en v6.0 para cor
+    %% Existe además una superficie constitucional (reglas, invariantes, política Zero-Read/Zero-Write, canal exclusivo humano/Nucleus) que no es un intent operativo
+    %% mrg -> Merge & Integration, absorbe por completo la funcionalidad de merge cognitivo
     %% dev -> Execution Layer (Executor / Project Runners), local o remoto vía Alfred/Mobile
     %% mrg -> Merge & Integration, Alfred/Mobile -> Execution Layer
     %% tst -> Test Runner & Gate, Alfred/Mobile -> Execution Layer
@@ -216,10 +207,10 @@ flowchart LR
         ConductorWorkspace <--> ProjectFolder
         ConductorWorkspace <--> NucleusFolder
 
-        %% [deprecado v6.0 - ver BSIP-009] cor ya no es "Coordination"; es Core/Governance, canal exclusivo humano/Nucleus
+        %% Canal constitucional: reglas, invariantes y política de orquestación, Zero-Read/Zero-Write, exclusivo humano/Nucleus
         NucleusExe <--> PassThroughTerminal
-        PassThroughTerminal --"cor · Core/Governance
-        (BSIP-009, human-only)"--> Core
+        PassThroughTerminal --"canal constitucional
+        (BSIP-009, solo humano)"--> Core
 
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
@@ -385,7 +376,7 @@ El Conductor no es "otra interfaz más". Es el **órgano de gobernanza conscient
 #### Capacidades Principales
 
 * **Event Bus Visualization**: Observa en tiempo real cada evento que fluye por el sistema (intents ejecutándose, resultados llegando, errores detectados)
-* **Intent Editor Avanzado**: Crea, edita e integra intents con sintaxis asistida, especialmente los de tipo `mrg` [sucesor, ver nota de deprecación de `cor`] para merges cognitivos
+* **Intent Editor Avanzado**: Crea, edita e integra intents con sintaxis asistida, especialmente los de tipo `mrg` para merges cognitivos
 * **Vault Shield**: Visualiza de forma transparente cuando el sistema accede a credenciales cifradas, eliminando la opacidad de las operaciones de seguridad
 * **Project Switcher**: Navega entre Nucleus y Projects sin perder contexto
 * **Rehydration Automática**: Al abrirse, reconstruye su estado escaneando `.bloom/` y sincronizando eventos perdidos del Sidecar
@@ -398,9 +389,7 @@ Cuando el usuario forja un intent en el Conductor, este se serializa como un arc
 
 #### El Merge Cognitivo
 
-> **[deprecado v6.0 — ver BSIP-009]** Esta sección describía originalmente esta capacidad bajo el intent `cor`. `cor` fue redefinido por `BSIP-009` como **Core/Governance** (Zero-Read/Zero-Write, canal exclusivo humano/Nucleus) y ya no tiene relación alguna con merges de código. La funcionalidad descrita a continuación es correcta y sigue vigente; el intent que la materializa es `mrg` (`BSIP-010`), no `cor`.
-
-Una de las capacidades más poderosas del Conductor es facilitar **merges cognitivos** que superan las limitaciones de herramientas tradicionales como Git. Cuando dos intents `dev` modifican el mismo archivo de formas incompatibles, el Conductor permite crear un intent `mrg` que:
+Una de las capacidades más poderosas del Conductor es facilitar **merges cognitivos** que superan las limitaciones de herramientas tradicionales como Git. Esta capacidad se materializa íntegramente mediante el intent `mrg` (`BSIP-010`). Cuando dos intents `dev` modifican el mismo archivo de formas incompatibles, el Conductor permite crear un intent `mrg` que:
 
 1. Analiza ambas modificaciones
 2. Consulta al modelo de IA sobre la mejor forma de integrarlas
@@ -518,7 +507,7 @@ El plugin nunca opera como autoridad. Lee el filesystem, genera artefactos, disp
 | Crear un Mandate estratégico multi-proyecto | ✅ | — |
 | Observar el Event Bus en tiempo real | ✅ | Parcial (webview) |
 | Gestionar intents `exp` organizacionales | ✅ | — |
-| Actuar como canal humano privilegiado de `cor` [redefinido — ver BSIP-009, ya no es "gestión" de coordinación sino canal exclusivo de Core/Governance] | ✅ | — |
+| Actuar como canal humano privilegiado para la superficie constitucional del sistema (reglas de negocio, invariantes, política de orquestación de Nucleus — ver BSIP-009) | ✅ | — |
 | Trabajar dentro de un intent `dev` o `doc` | ✅ | ✅ |
 | Navegar el filesystem de intents del workspace | — | ✅ |
 | Gestionar perfiles Chrome y cuentas AI | — | ✅ |
@@ -1007,7 +996,9 @@ Representa el **nivel más alto de la pirámide cognitiva**.
 
 ✔️ **`exp` — Exploration (principal)**
 ✔️ **`inf` — Information**
-⚠️ **`cor` [deprecado v6.0 — ver BSIP-009]** — ya no es un intent operativo de esta lista: es la política constitucional contra la cual se evalúan los demás, Zero-Read/Zero-Write, canal exclusivo humano/Nucleus. No pertenece a "intents permitidos" en el mismo sentido que el resto.
+
+ℹ️ Existe además, por fuera de esta lista, una política constitucional (Zero-Read/Zero-Write, canal exclusivo humano/Nucleus) contra la cual se evalúan los demás intents — no es en sí misma un intent operativo (ver 6️⃣).
+
 ✔️ **`doc` — Documentation estratégica**
 ✔️ **`ing` — Ingestion bajo Mandate**
 ✔️ **`dis` — Discovery bajo Mandate**
@@ -1101,20 +1092,16 @@ Se ejecuta **en Projects o Nucleus**, como input pasivo.
 
 ---
 
-### `cor` — Core / Governance Intent [redefinido — v6.0 deprecada]
+### La superficie constitucional del sistema
 
-> **[deprecado v6.0 — ver BSIP-009]** Esta sección describía `cor` como *"Coordination"* — merges cognitivos, orden de trabajo, control de impacto. Esa semántica fue reemplazada por completo por `BSIP-009`/`COR_Intent_Spec_v1_0.md`, fuente autoritativa vigente. La funcionalidad de merge migró a `mrg` (`BSIP-010`).
->
-> Bajo la semántica vigente, `cor` es la superficie **Core/Governance**: reglas de negocio, invariantes y políticas de orquestación de Nucleus — la "constitución" del sistema, no una unidad de trabajo que se ejecute. Trae consigo una política sin precedente en el resto de la taxonomía:
->
-> - **Zero-Read/Zero-Write** para cualquier Agent Loop — ni lectura ni escritura, sin excepción configurable por seam ni por Mandate.
-> - **Invariante de proponente:** si `proposer_type === "agent"`, Nucleus rechaza en `validate_and_sign`, antes de evaluar cualquier otro campo del draft.
-> - **Canal de ejecución exclusivo:** solo un operador humano vía canal privilegiado de Nucleus, o Nucleus mismo por decisión de sistema. Nunca a través de un Mandate agéntico, ni de una Action generada indirectamente por un Agent Loop.
-> - **No cristaliza a Mandate:** no es una unidad de trabajo secuenciable con `dependsOn`/`onSuccess`/`onFailure` como `dev`, `doc` o `mrg`.
->
-> Ver `COR_Intent_Spec_v1_0.md` para la especificación completa.
+A diferencia de los intents anteriores, existe en Nucleus una superficie que no es una unidad de trabajo que se ejecute: las reglas de negocio, los invariantes y las políticas de orquestación de Nucleus — la "constitución" del sistema. Trae consigo una política sin precedente en el resto de la taxonomía:
 
-**Relación con Gravity:** Gravity (ver 8️⃣) y `cor` están relacionados pero no son lo mismo. Gravity expresa criterio persistente en cualquier nivel de su jerarquía; `cor` es el canal exclusivo por el cual ese criterio se promulga como ley de alcance organizacional cuando corresponde. Postular una postura de Gravity no le otorga por sí sola autoridad global — eso solo ocurre atravesando `cor`.
+- **Zero-Read/Zero-Write** para cualquier Agent Loop — ni lectura ni escritura, sin excepción configurable por seam ni por Mandate.
+- **Invariante de proponente:** si el proponente declarado es un agente, Nucleus rechaza la propuesta en `validate_and_sign`, antes de evaluar cualquier otro campo del draft.
+- **Canal de ejecución exclusivo:** solo un operador humano vía canal privilegiado de Nucleus, o Nucleus mismo por decisión de sistema. Nunca a través de un Mandate agéntico, ni de una Action generada indirectamente por un Agent Loop.
+- **No cristaliza a Mandate:** no es una unidad de trabajo secuenciable con `dependsOn`/`onSuccess`/`onFailure` como `dev`, `doc` o `mrg`.
+
+**Relación con Gravity:** Gravity (ver 8️⃣) expresa criterio persistente en cualquier nivel de su jerarquía. Promulgar ese criterio como ley de alcance organizacional, sin embargo, ocurre exclusivamente a través de la superficie constitucional descrita arriba, nunca por la sola postulación. Postular una postura de Gravity no le otorga por sí sola autoridad global.
 
 ---
 
@@ -1152,7 +1139,7 @@ Opera en tres fases propias:
 
 Un **Mandate** es la unidad de ejecución estratégica más alta del sistema Bloom. Donde los intents operan de forma acotada y determinista, los Mandates **agrupan, secuencian y persisten** múltiples intents bajo una intención firmada y gobernada, permitiendo que objetivos complejos se ejecuten con estado, trazabilidad y control a lo largo del tiempo.
 
-Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objetivo organizacional y lo descompone en una secuencia de **Actions**. Cada Action se materializa en un intent concreto (`dev`, `doc`, `exp`, `inf`, `mrg`, `ing` o `dis`). `cor` [deprecado v6.0 — ver BSIP-009] **nunca** se materializa como Action de un Mandate: no cristaliza a Mandate bajo ninguna circunstancia. El Mandate nunca ejecuta lógica directamente: Nucleus conserva su autoridad y firma, Brain interpreta sus Intents y Temporal mantiene su workflow durable.
+Un Mandate es un **contrato inmutable firmado por Nucleus** que declara un objetivo organizacional y lo descompone en una secuencia de **Actions**. Cada Action se materializa en un intent concreto (`dev`, `doc`, `exp`, `inf`, `mrg`, `ing` o `dis`). La superficie constitucional del sistema (ver 6️⃣) **nunca** se materializa como Action de un Mandate: no cristaliza a Mandate bajo ninguna circunstancia. El Mandate nunca ejecuta lógica directamente: Nucleus conserva su autoridad y firma, Brain interpreta sus Intents y Temporal mantiene su workflow durable.
 
 > **Definición formal:**
 > Un Mandate es un contrato estratégico firmado por Nucleus que declara un objetivo organizacional descompuesto en Actions, cada una resuelta como un Intent/BISP y coordinada mediante un workflow durable de Temporal bajo la autoridad organizacional de Nucleus.
@@ -1179,7 +1166,7 @@ Nivel 3 — Action
 
 Nivel 4 — Intent
          Unidad de intención concreta (dev / doc / exp / inf / mrg / ing / dis)
-         cor NO pertenece a este nivel — es política de Nivel 1 (ver BSIP-009)
+         La superficie constitucional NO pertenece a este nivel — es política de Nivel 1 (ver BSIP-009)
 ```
 
 Cada nivel de esta jerarquía opera además bajo su propia Gravity activa: la organización, el proyecto, el Mandate y la sesión pueden declarar criterio propio que gobierna cómo se interpretan sus Actions (ver 8️⃣ Gravity).
@@ -1266,36 +1253,23 @@ Esto es lo que hace que los Mandates sean transferibles y no solo exportables. U
 
 ---
 
-## 8️⃣ Gravity — Lenguaje de Criterio Persistente
+## 8️⃣ Gravity — Sistema de Gobernanza de Criterio
 
-`[fundamento conceptual — sin gramática ni runtime definitivos todavía]`
+`[parcialmente implementado — persistencia y parser reales; evaluación y firma de nodos pendientes]`
 
-### Qué es Gravity
+Gravity no es una estructura de datos ni un motor de reglas: es el sistema completo de gobernanza del criterio de la organización — el lenguaje declarativo para expresarlo, la resolución activa turno a turno, el arbitraje entre Mandates en conflicto, la métrica de masa, la promoción de criterio entre niveles, y la autoridad de firma que corresponde a cada nivel de la jerarquía `NUCLEUS → ORGANIZATION → PROJECT → MANDATE → SESSION`. La estructura persistida es el **GravityGraph**: un árbol de nodos unidos por aristas `PARENT_OF`, `DELEGATES_TO`, `INHERITS_FROM` y `PROMOTED_FROM`, donde cada nodo carga su propio arreglo de `gravityPostures[]` — implementado en Go, persistido como JSON bajo `.bloom/.nucleus-{organización}/.gravity/`, con escritura atómica y control de concurrencia optimista vía `nodeVersion`.
 
-Gravity es el lenguaje y campo de criterio persistente de Bloom. No reemplaza el lenguaje natural ni el prompting: les da un sistema de leyes bajo el cual una expresión adquiere significado operacional. Un prompt dice algo; Gravity determina qué puede significar eso operacionalmente dentro del sistema. Tampoco es una técnica de context engineering — no es información adjunta a una conversación, sino la capa de autoridad y criterio bajo la cual esa conversación ocurre.
+Una **Postura** (rename ya migrado end-to-end de `GravityRule`) no es una restricción dura como un `capability_seam` o `scope_path` — es criterio acumulado, experiencia de desarrollador. Postular ≠ promulgar: postular dice "esto parece valioso", no "esto ya gobierna". Cada postura tiene un campo `verifiable: true|false`: si `true`, Nucleus la aplica automáticamente y puede disparar `GRAVITY_THRESHOLD_BREACHED`; si `false`, es criterio puro inyectado como contexto, sin enforcement automático.
 
-### Jerarquía
+Ningún agente ni humano ve nunca el grafo completo: `resolve_active_gravity(session_id)` devuelve solo el subconjunto de posturas cuyo `appliesTo` coincide con el intent del turno — la misma opacidad de gobierno que rige la superficie constitucional del sistema (ver 6️⃣). En Paladín esto se expone como el **breadcrumb de autoridad** (chip por nivel, expandible, con "Ver grafo completo" como link separado, nunca vista por defecto).
 
-Gravity existe en cinco niveles, de mayor a menor autoridad:
+La **Masa** es un cálculo determinista (nivel de origen + verifiable + `PROMOTED_FROM`, tope 3) que explica al ingeniero por qué una postura pesa lo que pesa — **nunca** es criterio automático de desempate. Un conflicto real entre Mandates sobre el mismo territorio dispara un **ArbitrationEvent** (nodo propio del grafo, visible sin restricción para ambos Mandates), resuelto por `priority` declarada, `escalation` a humano, o pausa+notificación por defecto — firmado siempre por `nucleus_automatic` o `human_operator`, nunca por `agent`. Frente a un conflicto de Gravity, la UX de Paladín ofrece seis salidas: rechazar, señalar sin bloquear, reinterpretar (mostrando "Pediste / Hice"), pedir elevación, ejecutar como excepción nombrando la autoridad habilitante, o proponer modificar la Gravity vigente (reabre postulación, nunca edita directo).
 
-```text
-NUCLEUS → ORGANIZATION → PROJECT → MANDATE → SESSION
-```
+**Postular** no otorga por sí solo autoridad de mayor alcance: promulgar una postura como ley de alcance organizacional ocurre exclusivamente a través de la superficie constitucional del sistema descrita en 6️⃣, cuando corresponde.
 
-Cada nivel gobierna el criterio de los niveles que contiene. Una postura de sesión no invalida silenciosamente una postura de organización; opera dentro de ella. Cuando el sistema resuelve qué criterio aplica a una acción, recorre esta jerarquía de mayor a menor autoridad y conserva solo lo relevante para esa acción puntual — nunca expone ni evalúa el campo completo de una vez.
+**Estado de implementación:** existe el parser ANTLR4 que compila `expression` a un AST de seis primitivas (`constraint`, `threshold`, `evidence`, `priority`, `escalation`, `exception`), existe `ComputeMasa`, y existe la Activity de Temporal que resuelve la Gravity activa — sin conectar todavía al workflow productivo. `GravityEvaluator.evaluate()` y la firma real de nodos permanecen sin implementar.
 
-### Postura y Postulación
-
-- **Postura:** es la unidad de criterio que un nivel puede declarar — una posición operativa concreta que otros niveles heredan o resuelven al interpretar una acción.
-- **Postulación:** es el acto de convertir una idea o un acuerdo conversacional en una postura formal. Es un acto de reconocimiento, no de anticipación: no toda conversación se convierte en Gravity, y postular una postura no le otorga automáticamente autoridad de mayor alcance — eso requiere promulgación a través de `cor` cuando corresponde (ver 6️⃣).
-- **Masa:** existe una noción de peso relativo del criterio según su origen y su trazabilidad, pensada para que un humano entienda por qué una postura pesa lo que pesa. No es, ni pretende ser, un mecanismo automático de desempate entre criterios en conflicto — esa resolución sigue requiriendo una regla explícita o intervención humana.
-- **Evaluador de colisiones:** la detección de conflictos entre posturas de distinto origen es un mecanismo separado de la resolución jerárquica — requiere una regla explícita o intervención humana para dirimir el caso.
-
-### GravityGraph
-
-GravityGraph es la estructura que persiste ese criterio localmente en cada instalación de Nucleus. La sincronización o comparación de ese criterio contra un backend remoto, o entre organizaciones distintas al instalar un Mandate externo, es un problema de diseño separado, fuera del alcance de esta sección.
-
-Además del criterio, GravityGraph aloja nodos estructurales de identidad y linaje — Domain y Gene — anidados bajo el Mandate que los originó. Estos nodos no declaran ni heredan Postura: representan estructura, no criterio, y no participan de la resolución jerárquica descrita arriba.
+> ⚠️ **Residual pendiente en código de producción:** `Store.CreateNode` falla hoy cerrado para `ORGANIZATION` y `NUCLEUS`, citando en su mensaje de error la espera de que el módulo de Authorization y el canal de la superficie constitucional del sistema (ver 6️⃣) terminen de conectarse. No es solo un asunto de documentación: es un string vivo en código de producción y debe corregirse ahí, no solo aquí.
 
 ---
 ## 9️⃣ Batcave — Control Plane Soberano Remoto
@@ -1469,7 +1443,7 @@ Alfred puede instruir al sistema a ejecutar cualquier acción que un intent o Ma
 | Acción | Tipo de instrucción | Efecto en el sistema local |
 |---|---|---|
 | Explorar una alternativa técnica | Intent `exp` | Brain interpreta el intent y conserva sus resultados en el BISP |
-| Coordinar un merge cognitivo | Intent `mrg` [antes descrito como `cor` — ver nota de deprecación, BSIP-009] | Brain coordina la resolución semántica y Executor materializa las acciones técnicas necesarias |
+| Coordinar un merge cognitivo | Intent `mrg` | Brain coordina la resolución semántica y Executor materializa las acciones técnicas necesarias |
 | Desarrollar una feature | Intent `dev` | Brain construye el trabajo y Executor lo opera mediante el runtime seleccionado |
 | Documentar una decisión | Intent `doc` | Brain construye el resultado documental y el flujo técnico persiste sus efectos |
 | Incorporar material o código | Intent `ing` | Brain recibe, clasifica y consolida el material dentro del Mandate correspondiente |
@@ -1527,7 +1501,7 @@ Alfred es el **único punto del ecosistema Bloom que permite operar el sistema d
 Esto lo convierte en el mecanismo central para:
 
 - **Supervisión remota**: consultar el estado de un Mandate en curso desde el teléfono mientras el sistema corre en la máquina de desarrollo.
-- **Aprobación de acciones**: recibir una notificación de que un `cor` (Core/Governance, `BSIP-009`) requiere decisión humana y resolverlo desde la app — este es, de hecho, el canal privilegiado humano que `BSIP-009` exige para `cor`; nunca una resolución automática ni delegable a un Agent Loop.
+- **Aprobación de acciones**: recibir una notificación de que una propuesta sobre la superficie constitucional del sistema (`BSIP-009`) requiere decisión humana y resolverla desde la app — este es, de hecho, el canal privilegiado humano que `BSIP-009` exige para esa superficie; nunca una resolución automática ni delegable a un Agent Loop.
 - **Instrucción asíncrona**: iniciar un `exp` intent antes de llegar a la oficina para que Brain ya tenga resultados cuando el usuario se siente.
 - **Reporting bajo demanda**: pedirle a Alfred que genere y envíe el reporte de estado del Nucleus sin necesidad de abrir el Conductor.
 
@@ -1564,7 +1538,7 @@ La app mobile expone las capacidades de Alfred organizadas en tres superficies:
 
 **Comando activo**
 - Emitir instrucciones en lenguaje natural a Alfred
-- Crear intents (`exp`, `doc`, `inf`) de forma estructurada; resolver notificaciones de `cor` [Core/Governance, BSIP-009] pendientes de decisión humana — nunca "crearlos" en el sentido operativo del resto
+- Crear intents (`exp`, `doc`, `inf`) de forma estructurada; resolver notificaciones pendientes de decisión humana sobre la superficie constitucional del sistema (`BSIP-009`) — nunca "crearlas" en el sentido operativo del resto
 - Iniciar y monitorear Mandates
 - Aprobar o rechazar acciones que requieren decisión humana
 

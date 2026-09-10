@@ -1,0 +1,679 @@
+{
+  "description": "TEST ONLY. Public RFC 8032 test seed; NEVER a production trust anchor. Expected arrays and delta are literal; signatures made with node:crypto independently of emission.ts.",
+  "key_id": "fixture-only-rfc8032",
+  "private_key_pkcs8_base64": "MC4CAQAwBQYDK2VwBCIEIJ1hsZ3v/VpguoRK9JLsLMREScVpezJpGXA7rAMcrn9g",
+  "public_key_base64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+  "now": "2026-09-08T12:05:00Z",
+  "base_state": {
+    "principals": [
+      {
+        "principal_id": "p-😀",
+        "principal_type": "human",
+        "status": "active",
+        "external_identities": [
+          {
+            "provider": "github",
+            "subject": "123456789",
+            "display_handle": "José <fixture> & 😀",
+            "status": "verified",
+            "verified_at": "2026-09-08T12:00:00.123456789Z"
+          }
+        ]
+      },
+      {
+        "principal_id": "p-",
+        "principal_type": "human",
+        "status": "active",
+        "external_identities": []
+      }
+    ],
+    "memberships": [
+      {
+        "membership_id": "m-1",
+        "principal_id": "p-😀",
+        "organization_id": "org-fixture",
+        "status": "active",
+        "valid_from": "2026-09-08T12:00:00.123456789Z",
+        "valid_until": null,
+        "accepted_at": "2026-09-08T12:00:00.123456789Z"
+      }
+    ],
+    "role_definitions": [
+      {
+        "role_id": "org:editor",
+        "role_version": "2",
+        "role_origin": "organization",
+        "display_name": "Edición",
+        "status": "active",
+        "permissions": [
+          "intent.cor.merge",
+          "intent.create"
+        ]
+      },
+      {
+        "role_id": "org:editor",
+        "role_version": "10",
+        "role_origin": "organization",
+        "display_name": "Edición",
+        "status": "active",
+        "permissions": [
+          "intent.cor.merge",
+          "intent.create"
+        ]
+      }
+    ],
+    "role_assignments": [
+      {
+        "assignment_id": "a-old",
+        "membership_id": "m-1",
+        "role_id": "org:editor",
+        "role_version": "2",
+        "scope": {
+          "type": "project",
+          "id": "project-fixture"
+        },
+        "status": "active",
+        "valid_from": "2026-09-08T12:00:00.123456789Z",
+        "valid_until": null,
+        "accepted_at": "2026-09-08T12:00:00.123456789Z"
+      }
+    ],
+    "revocations": []
+  },
+  "result_state": {
+    "principals": [
+      {
+        "principal_id": "p-😀",
+        "principal_type": "human",
+        "status": "active",
+        "external_identities": [
+          {
+            "provider": "github",
+            "subject": "123456789",
+            "display_handle": "José-renamed",
+            "status": "verified",
+            "verified_at": "2026-09-08T12:00:00.123456789Z"
+          }
+        ]
+      },
+      {
+        "principal_id": "p-",
+        "principal_type": "human",
+        "status": "active",
+        "external_identities": []
+      }
+    ],
+    "memberships": [
+      {
+        "membership_id": "m-1",
+        "principal_id": "p-😀",
+        "organization_id": "org-fixture",
+        "status": "active",
+        "valid_from": "2026-09-08T12:00:00.123456789Z",
+        "valid_until": "2026-09-09T12:00:00Z",
+        "accepted_at": "2026-09-08T12:00:00.123456789Z"
+      }
+    ],
+    "role_definitions": [
+      {
+        "role_id": "org:editor",
+        "role_version": "2",
+        "role_origin": "organization",
+        "display_name": "Edición",
+        "status": "active",
+        "permissions": [
+          "intent.cor.merge",
+          "intent.create"
+        ]
+      },
+      {
+        "role_id": "org:editor",
+        "role_version": "10",
+        "role_origin": "organization",
+        "display_name": "Edición",
+        "status": "active",
+        "permissions": [
+          "intent.cor.merge",
+          "intent.create"
+        ]
+      }
+    ],
+    "role_assignments": [
+      {
+        "assignment_id": "a-new",
+        "membership_id": "m-1",
+        "role_id": "org:editor",
+        "role_version": "10",
+        "scope": {
+          "type": "project",
+          "id": "project-fixture"
+        },
+        "status": "active",
+        "valid_from": "2026-09-08T12:00:00.123456789Z",
+        "valid_until": null,
+        "accepted_at": "2026-09-08T12:00:00.123456789Z"
+      }
+    ],
+    "revocations": [
+      {
+        "revocation_id": "r-1",
+        "target_type": "role_assignment",
+        "target_id": "a-old",
+        "effective_at": "2026-09-08T12:01:00Z",
+        "recorded_in_authority_version": "9007199254740994",
+        "reason_code": "FIXTURE_REPLACEMENT"
+      }
+    ]
+  },
+  "metadata": {
+    "base": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.0",
+      "snapshot_id": "emission-1",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "9007199254740993",
+      "issued_at": "2026-09-08T12:00:00Z",
+      "not_before": "2026-09-08T12:00:00Z",
+      "expires_at": "2026-09-09T12:00:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a",
+          "installation-b"
+        ]
+      }
+    },
+    "result": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.0",
+      "snapshot_id": "emission-2",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "9007199254740994",
+      "issued_at": "2026-09-08T12:01:00Z",
+      "not_before": "2026-09-08T12:01:00Z",
+      "expires_at": "2026-09-09T12:00:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a",
+          "installation-b"
+        ]
+      }
+    },
+    "renewal": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.0",
+      "snapshot_id": "emission-3",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "9007199254740995",
+      "issued_at": "2026-09-08T12:04:00Z",
+      "not_before": "2026-09-08T12:04:00Z",
+      "expires_at": "2026-09-09T12:00:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a",
+          "installation-b"
+        ]
+      }
+    }
+  },
+  "expected": {
+    "base_state_jcs": "{\"memberships\":[{\"accepted_at\":\"2026-09-08T12:00:00.123456789Z\",\"membership_id\":\"m-1\",\"organization_id\":\"org-fixture\",\"principal_id\":\"p-😀\",\"status\":\"active\",\"valid_from\":\"2026-09-08T12:00:00.123456789Z\",\"valid_until\":null}],\"principals\":[{\"external_identities\":[{\"display_handle\":\"José <fixture> & 😀\",\"provider\":\"github\",\"status\":\"verified\",\"subject\":\"123456789\",\"verified_at\":\"2026-09-08T12:00:00.123456789Z\"}],\"principal_id\":\"p-😀\",\"principal_type\":\"human\",\"status\":\"active\"},{\"external_identities\":[],\"principal_id\":\"p-\",\"principal_type\":\"human\",\"status\":\"active\"}],\"revocations\":[],\"role_assignments\":[{\"accepted_at\":\"2026-09-08T12:00:00.123456789Z\",\"assignment_id\":\"a-old\",\"membership_id\":\"m-1\",\"role_id\":\"org:editor\",\"role_version\":\"2\",\"scope\":{\"id\":\"project-fixture\",\"type\":\"project\"},\"status\":\"active\",\"valid_from\":\"2026-09-08T12:00:00.123456789Z\",\"valid_until\":null}],\"role_definitions\":[{\"display_name\":\"Edición\",\"permissions\":[\"intent.cor.merge\",\"intent.create\"],\"role_id\":\"org:editor\",\"role_origin\":\"organization\",\"role_version\":\"2\",\"status\":\"active\"},{\"display_name\":\"Edición\",\"permissions\":[\"intent.cor.merge\",\"intent.create\"],\"role_id\":\"org:editor\",\"role_origin\":\"organization\",\"role_version\":\"10\",\"status\":\"active\"}]}",
+    "state_jcs": "{\"memberships\":[{\"accepted_at\":\"2026-09-08T12:00:00.123456789Z\",\"membership_id\":\"m-1\",\"organization_id\":\"org-fixture\",\"principal_id\":\"p-😀\",\"status\":\"active\",\"valid_from\":\"2026-09-08T12:00:00.123456789Z\",\"valid_until\":\"2026-09-09T12:00:00Z\"}],\"principals\":[{\"external_identities\":[{\"display_handle\":\"José-renamed\",\"provider\":\"github\",\"status\":\"verified\",\"subject\":\"123456789\",\"verified_at\":\"2026-09-08T12:00:00.123456789Z\"}],\"principal_id\":\"p-😀\",\"principal_type\":\"human\",\"status\":\"active\"},{\"external_identities\":[],\"principal_id\":\"p-\",\"principal_type\":\"human\",\"status\":\"active\"}],\"revocations\":[{\"effective_at\":\"2026-09-08T12:01:00Z\",\"reason_code\":\"FIXTURE_REPLACEMENT\",\"recorded_in_authority_version\":\"9007199254740994\",\"revocation_id\":\"r-1\",\"target_id\":\"a-old\",\"target_type\":\"role_assignment\"}],\"role_assignments\":[{\"accepted_at\":\"2026-09-08T12:00:00.123456789Z\",\"assignment_id\":\"a-new\",\"membership_id\":\"m-1\",\"role_id\":\"org:editor\",\"role_version\":\"10\",\"scope\":{\"id\":\"project-fixture\",\"type\":\"project\"},\"status\":\"active\",\"valid_from\":\"2026-09-08T12:00:00.123456789Z\",\"valid_until\":null}],\"role_definitions\":[{\"display_name\":\"Edición\",\"permissions\":[\"intent.cor.merge\",\"intent.create\"],\"role_id\":\"org:editor\",\"role_origin\":\"organization\",\"role_version\":\"2\",\"status\":\"active\"},{\"display_name\":\"Edición\",\"permissions\":[\"intent.cor.merge\",\"intent.create\"],\"role_id\":\"org:editor\",\"role_origin\":\"organization\",\"role_version\":\"10\",\"status\":\"active\"}]}",
+    "base_state_digest": "MOi_ukiJdxKN3cexVTY1Y7dCEPDjjQri0uG3GmaTsh0",
+    "state_digest": "tXncfzWOT2q23PH0iw1FgFaKrnBUBjWULPWvYD2qu4c"
+  },
+  "envelopes": {
+    "full1": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.0",
+        "snapshot_id": "emission-1",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "9007199254740993",
+        "issued_at": "2026-09-08T12:00:00Z",
+        "not_before": "2026-09-08T12:00:00Z",
+        "expires_at": "2026-09-09T12:00:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a",
+            "installation-b"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José <fixture> & 😀",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-old",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "2",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": []
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "1vl68m0bOGpup_CW4-OMCOVGE50RWWPHWPtDEzSEvBg",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "Vahsmq-ozL-A5VgiqyEfgxS-t8wwkH0T92lSMeMrgAN-iZeyVHskjIREkye8tFn_UTvjaeCJoRsUSag0oPeNCg"
+      }
+    },
+    "full2": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.0",
+        "snapshot_id": "emission-2",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "9007199254740994",
+        "issued_at": "2026-09-08T12:01:00Z",
+        "not_before": "2026-09-08T12:01:00Z",
+        "expires_at": "2026-09-09T12:00:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a",
+            "installation-b"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José-renamed",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": "2026-09-09T12:00:00Z",
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-new",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "10",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": [
+            {
+              "revocation_id": "r-1",
+              "target_type": "role_assignment",
+              "target_id": "a-old",
+              "effective_at": "2026-09-08T12:01:00Z",
+              "recorded_in_authority_version": "9007199254740994",
+              "reason_code": "FIXTURE_REPLACEMENT"
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "vEqfNrN4aNnW_0PBEzmC6w7ylK0GsDSY6dVWUFp4Q-M",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "qzKo1U0_rHF7VG2jZhEeTtgOEnzifUH3Ae4SVQnnJWrcs3QQ4jInOwfU4T3BNk_p47aa433pZEvMhCEaS9MgBw"
+      }
+    },
+    "delta2": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.0",
+        "snapshot_id": "emission-2",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "9007199254740994",
+        "issued_at": "2026-09-08T12:01:00Z",
+        "not_before": "2026-09-08T12:01:00Z",
+        "expires_at": "2026-09-09T12:00:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a",
+            "installation-b"
+          ]
+        },
+        "kind": "delta",
+        "base_authority_version": "9007199254740993",
+        "content": {
+          "result_digest": "tXncfzWOT2q23PH0iw1FgFaKrnBUBjWULPWvYD2qu4c",
+          "operations": [
+            {
+              "sequence": "1",
+              "operation": "upsert",
+              "collection": "principals",
+              "entity_id": "p-😀",
+              "value": {
+                "principal_id": "p-😀",
+                "principal_type": "human",
+                "status": "active",
+                "external_identities": [
+                  {
+                    "provider": "github",
+                    "subject": "123456789",
+                    "display_handle": "José-renamed",
+                    "status": "verified",
+                    "verified_at": "2026-09-08T12:00:00.123456789Z"
+                  }
+                ]
+              }
+            },
+            {
+              "sequence": "2",
+              "operation": "upsert",
+              "collection": "memberships",
+              "entity_id": "m-1",
+              "value": {
+                "membership_id": "m-1",
+                "principal_id": "p-😀",
+                "organization_id": "org-fixture",
+                "status": "active",
+                "valid_from": "2026-09-08T12:00:00.123456789Z",
+                "valid_until": "2026-09-09T12:00:00Z",
+                "accepted_at": "2026-09-08T12:00:00.123456789Z"
+              }
+            },
+            {
+              "sequence": "3",
+              "operation": "remove",
+              "collection": "role_assignments",
+              "entity_id": "a-old",
+              "value": null
+            },
+            {
+              "sequence": "4",
+              "operation": "upsert",
+              "collection": "role_assignments",
+              "entity_id": "a-new",
+              "value": {
+                "assignment_id": "a-new",
+                "membership_id": "m-1",
+                "role_id": "org:editor",
+                "role_version": "10",
+                "scope": {
+                  "type": "project",
+                  "id": "project-fixture"
+                },
+                "status": "active",
+                "valid_from": "2026-09-08T12:00:00.123456789Z",
+                "valid_until": null,
+                "accepted_at": "2026-09-08T12:00:00.123456789Z"
+              }
+            },
+            {
+              "sequence": "5",
+              "operation": "upsert",
+              "collection": "revocations",
+              "entity_id": "r-1",
+              "value": {
+                "revocation_id": "r-1",
+                "target_type": "role_assignment",
+                "target_id": "a-old",
+                "effective_at": "2026-09-08T12:01:00Z",
+                "recorded_in_authority_version": "9007199254740994",
+                "reason_code": "FIXTURE_REPLACEMENT"
+              }
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "3uHyFZ-fFAXrKBfKTojIinK7y1xN-3RFGClTXbZZZFA",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "dR1_mSiqi16p6FhqdRfO8L5IYgy8QgDbRBHXS_vq-XNWwtIT_LrloC9YB7Fbiyb_Kw6aZPKCPaAcjbGTjp_lBA"
+      }
+    },
+    "renewal3": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.0",
+        "snapshot_id": "emission-3",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "9007199254740995",
+        "issued_at": "2026-09-08T12:04:00Z",
+        "not_before": "2026-09-08T12:04:00Z",
+        "expires_at": "2026-09-09T12:00:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a",
+            "installation-b"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José-renamed",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": "2026-09-09T12:00:00Z",
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-new",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "10",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": [
+            {
+              "revocation_id": "r-1",
+              "target_type": "role_assignment",
+              "target_id": "a-old",
+              "effective_at": "2026-09-08T12:01:00Z",
+              "recorded_in_authority_version": "9007199254740994",
+              "reason_code": "FIXTURE_REPLACEMENT"
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "E6woE8qnvfEepXgmaPz4pXvbX-1ldj_ZykoRkLCcpmo",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "q342SulHqA8eh4XToB0-D7w3qSN2b5VQQmABXACaHDejgk-iDWzMjTc_238U7SemPie6Hy7_hewzZR3boi_uCQ"
+      }
+    }
+  }
+}

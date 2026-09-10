@@ -3,16 +3,19 @@ package decision
 import (
 	"errors"
 	"fmt"
+	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	ownershipcontract "nucleus/internal/governance/ownershipcontract"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
 type AuthorityMode string
 
 const ModeLocalLegacy AuthorityMode = "local_legacy"
+const ModeShadowRemote AuthorityMode = "shadow_remote"
 
 type GovernedOperation string
 
@@ -35,6 +38,7 @@ type GovernedCreationDecision struct {
 	parentObservedVersion *uint64
 	basis                 DecisionBasis
 	decidedAt             time.Time
+	shadow                *authority.ShadowRecord
 }
 
 func (d GovernedCreationDecision) Operation() GovernedOperation { return d.operation }
@@ -42,6 +46,13 @@ func (d GovernedCreationDecision) GravityRoot() string          { return d.gravi
 func (d GovernedCreationDecision) NodeID() string               { return d.nodeID }
 func (d GovernedCreationDecision) Basis() DecisionBasis         { return d.basis }
 func (d GovernedCreationDecision) DecidedAt() time.Time         { return d.decidedAt }
+func (d GovernedCreationDecision) ShadowEvidence() *authority.ShadowRecord {
+	if d.shadow == nil {
+		return nil
+	}
+	copy := *d.shadow
+	return &copy
+}
 
 func (d GovernedCreationDecision) ParentID() *string {
 	return cloneStringPointer(d.parentID)
@@ -55,7 +66,70 @@ func EffectiveAuthorityMode() (AuthorityMode, error) {
 	return ModeLocalLegacy, nil
 }
 
+type RemoteEvaluator interface {
+	Evaluate(authority.DecisionRequest) authority.AuthorityDecision
+}
+type ShadowConfiguration struct {
+	Evaluator   RemoteEvaluator
+	Request     func(GovernedOperation, string, *string, *uint64) authority.DecisionRequest
+	Sink        authority.ShadowSink
+	Now         func() time.Time
+	CommittedAt func(authority.AuthorityDecision) time.Time
+	Connected   bool
+}
+
+var shadowState struct {
+	sync.RWMutex
+	configuration *ShadowConfiguration
+}
+
+// InstallShadow enables observation only. It cannot change EffectiveAuthorityMode and
+// returns a cleanup closure so tests and callers cannot accidentally retain a config.
+func InstallShadow(configuration *ShadowConfiguration) func() {
+	shadowState.Lock()
+	previous := shadowState.configuration
+	shadowState.configuration = configuration
+	shadowState.Unlock()
+	return func() { shadowState.Lock(); shadowState.configuration = previous; shadowState.Unlock() }
+}
+func currentShadow() *ShadowConfiguration {
+	shadowState.RLock()
+	defer shadowState.RUnlock()
+	if shadowState.configuration == nil {
+		return nil
+	}
+	copy := *shadowState.configuration
+	return &copy
+}
+
 func AuthorizeGravityNodeCreation(operation GovernedOperation, nodeID string, parentID *string, parentObservedVersion *uint64) (GovernedCreationDecision, error) {
+	local, localErr := authorizeGravityNodeCreationLocal(operation, nodeID, parentID, parentObservedVersion)
+	configuration := currentShadow()
+	if configuration == nil {
+		return local, localErr
+	}
+	now := time.Now().UTC()
+	if configuration.Now != nil {
+		now = configuration.Now().UTC()
+	}
+	remote := authority.AuthorityDecision{Outcome: authority.DecisionNotEvaluable, Reason: "state_unavailable", Operation: string(operation), EvaluatedAt: now}
+	if configuration.Evaluator != nil && configuration.Request != nil {
+		remote = configuration.Evaluator.Evaluate(configuration.Request(operation, nodeID, parentID, parentObservedVersion))
+	} else if configuration.Request == nil {
+		remote.Reason = "operation_permission_unmapped"
+	}
+	committed := now
+	if configuration.CommittedAt != nil {
+		committed = configuration.CommittedAt(remote)
+	}
+	value, err, record := authority.PreserveShadow(local, localErr, remote, authority.ShadowInput{Operation: string(operation), Class: operationClass(operation), CommittedAt: committed, ObservedAt: now, Connected: configuration.Connected}, configuration.Sink)
+	if localErr == nil {
+		value.shadow = &record
+	}
+	return value, err
+}
+
+func authorizeGravityNodeCreationLocal(operation GovernedOperation, nodeID string, parentID *string, parentObservedVersion *uint64) (GovernedCreationDecision, error) {
 	mode, err := EffectiveAuthorityMode()
 	if err != nil {
 		return GovernedCreationDecision{}, err
@@ -123,6 +197,13 @@ func AuthorizeGravityNodeCreation(operation GovernedOperation, nodeID string, pa
 		basis:                 BasisLocalLegacy,
 		decidedAt:             time.Now().UTC(),
 	}, nil
+}
+
+func operationClass(operation GovernedOperation) authority.OperationClass {
+	if operation == OpCreateOrganization {
+		return authority.ClassCritical
+	}
+	return authority.ClassPrivileged
 }
 
 func contains(values []string, wanted string) bool {

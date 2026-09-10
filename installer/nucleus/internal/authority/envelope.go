@@ -4,11 +4,18 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/gowebpki/jcs"
 )
@@ -37,7 +44,7 @@ func ParseAndVerifyEnvelope(raw []byte, trust TrustBundle) (Envelope, []byte, er
 		return Envelope{}, nil, err
 	}
 	var env Envelope
-	if err := decodeStrict(raw, &env); err != nil {
+	if err := decodeWire(raw, &env); err != nil {
 		return Envelope{}, nil, err
 	}
 	if env.Integrity.Canonicalization != "JCS-RFC8785" || env.Integrity.DigestAlgorithm != "SHA-256" || env.Integrity.SignatureAlgorithm != "Ed25519" {
@@ -49,7 +56,7 @@ func ParseAndVerifyEnvelope(raw []byte, trust TrustBundle) (Envelope, []byte, er
 	}
 	sum := sha256.Sum256(canonical)
 	digest, err := base64.RawURLEncoding.DecodeString(env.Integrity.Digest)
-	if err != nil || !bytes.Equal(digest, sum[:]) {
+	if err != nil || base64.RawURLEncoding.EncodeToString(digest) != env.Integrity.Digest || subtle.ConstantTimeCompare(digest, sum[:]) != 1 {
 		return Envelope{}, nil, errors.New("authority digest mismatch")
 	}
 	var issuer struct {
@@ -64,7 +71,7 @@ func ParseAndVerifyEnvelope(raw []byte, trust TrustBundle) (Envelope, []byte, er
 		return Envelope{}, nil, errors.New("untrusted authority key")
 	}
 	sig, err := base64.RawURLEncoding.DecodeString(env.Integrity.Signature)
-	if err != nil {
+	if err != nil || len(sig) != ed25519.SignatureSize || base64.RawURLEncoding.EncodeToString(sig) != env.Integrity.Signature {
 		return Envelope{}, nil, errors.New("invalid signature encoding")
 	}
 	message := append(append([]byte(signatureDomain), 0), canonical...)
@@ -86,6 +93,9 @@ func decodeStrict(raw []byte, dst any) error {
 	return nil
 }
 func rejectDuplicateKeys(raw []byte) error {
+	if !utf8.Valid(raw) {
+		return errors.New("invalid UTF-8")
+	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.UseNumber()
 	var walk func() error
@@ -95,6 +105,11 @@ func rejectDuplicateKeys(raw []byte) error {
 			return e
 		}
 		switch v := tok.(type) {
+		case json.Number:
+			f, err := strconv.ParseFloat(string(v), 64)
+			if err != nil || (f == 0 && strings.HasPrefix(string(v), "-")) {
+				return errors.New("invalid I-JSON number")
+			}
 		case json.Delim:
 			if v == '{' {
 				seen := map[string]bool{}
@@ -136,6 +151,88 @@ func rejectDuplicateKeys(raw []byte) error {
 	var extra any
 	if err := d.Decode(&extra); err != io.EOF {
 		return errors.New("trailing JSON")
+	}
+	return nil
+}
+
+// Wire fields are mandatory and case-sensitive, unlike encoding/json's defaults.
+// Pointer fields alone admit null. DeltaOperation.value also admits null for remove.
+func decodeWire(raw []byte, dst any) error {
+	if err := rejectDuplicateKeys(raw); err != nil {
+		return err
+	}
+	var value any
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if err := d.Decode(&value); err != nil {
+		return err
+	}
+	if err := checkWireShape(value, reflect.TypeOf(dst).Elem()); err != nil {
+		return err
+	}
+	return decodeStrict(raw, dst)
+}
+
+var wireTimePattern = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$`)
+
+func checkWireShape(value any, t reflect.Type) error {
+	if t.Kind() == reflect.Pointer {
+		if value == nil {
+			return nil
+		}
+		return checkWireShape(value, t.Elem())
+	}
+	if t == reflect.TypeOf(json.RawMessage{}) {
+		return nil
+	}
+	if t == reflect.TypeOf(time.Time{}) {
+		s, ok := value.(string)
+		if !ok || !wireTimePattern.MatchString(s) || strings.HasPrefix(s, "0000") {
+			return errors.New("UTC wire timestamp required")
+		}
+		_, err := time.Parse(time.RFC3339Nano, s)
+		return err
+	}
+	if value == nil {
+		return errors.New("required wire value is null")
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		m, ok := value.(map[string]any)
+		if !ok {
+			return errors.New("wire object required")
+		}
+		if len(m) != t.NumField() {
+			return errors.New("missing or unknown wire property")
+		}
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
+			key := strings.Split(field.Tag.Get("json"), ",")[0]
+			v, exists := m[key]
+			if !exists {
+				return fmt.Errorf("missing wire property %s", key)
+			}
+			if field.Type == reflect.TypeOf(json.RawMessage{}) && v == nil && key != "value" {
+				return errors.New("null wire content")
+			}
+			if err := checkWireShape(v, field.Type); err != nil {
+				return fmt.Errorf("%s: %w", key, err)
+			}
+		}
+	case reflect.Slice:
+		a, ok := value.([]any)
+		if !ok {
+			return errors.New("wire array required")
+		}
+		for _, v := range a {
+			if err := checkWireShape(v, t.Elem()); err != nil {
+				return err
+			}
+		}
+	case reflect.String:
+		if _, ok := value.(string); !ok {
+			return errors.New("wire string required")
+		}
 	}
 	return nil
 }

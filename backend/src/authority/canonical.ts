@@ -16,14 +16,9 @@
 
 import canonicalize from "canonicalize";
 
-// DOMAIN_SEPARATOR — valor provisto explícitamente en la sesión de corrección
-// ("BLOOM-AUTHORITY-SNAPSHOT-v1"). IMPORTANTE: este valor NO fue verificado contra el
-// código fuente real de `internal/authority` (Go, Nucleus) en esta sesión — nadie en esta
-// conversación tuvo ese archivo a la vista. Sigue siendo, estrictamente, una afirmación no
-// confirmada, no un hecho verificado. Antes de firmar algo real: confirmar byte a byte
-// contra la constante Go correspondiente y dejar registro en el reporte de cierre de dónde
-// salió la confirmación (commit, línea, quién lo confirmó). Si no coincide, Nucleus
-// rechaza toda firma que produzca este Worker.
+// Wire v1: confirmed against signatureDomain in Nucleus internal/authority/envelope.go.
+// authority-interop.spec.ts exchanges newly signed artifacts with Go to verify the
+// exact domain + NUL + JCS(payload) bytes. Existing helper interfaces stay unchanged.
 const DOMAIN_SEPARATOR = "BLOOM-AUTHORITY-SNAPSHOT-v1";
 
 /**
@@ -65,6 +60,18 @@ export async function digestCanonical(value: unknown): Promise<{ canonical: stri
   const canonical = canonicalizeJson(value);
   const digestHex = await sha256Hex(canonical);
   return { canonical, digestHex };
+}
+
+/** Wire v1 encoding. Legacy hexadecimal/base64 helpers keep their existing ABI. */
+export function base64ToBase64url(value: string): string {
+  return value.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Caller supplies the validated, normalized state or the entire wire payload. */
+export async function digestWire(value: unknown): Promise<string> {
+  const canonical = canonicalizeJson(value);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  return base64ToBase64url(arrayBufferToBase64(digest));
 }
 
 /**

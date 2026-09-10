@@ -118,7 +118,7 @@ func TestSnapshotDeltaAppliesAllCollectionsAndConvergesWithFull(t *testing.T) {
 	membership := Membership{MembershipID: "m1", PrincipalID: "p1", OrganizationID: "org", Status: "active", ValidFrom: now, AcceptedAt: now}
 	role := RoleDefinition{RoleID: "custom", RoleVersion: "1", RoleOrigin: "organization", DisplayName: "Custom", Status: "active", Permissions: []string{"intent.create"}}
 	assignment := RoleAssignment{AssignmentID: "a1", MembershipID: "m1", RoleID: "custom", RoleVersion: "1", Scope: Scope{Type: "organization", ID: "org"}, Status: "active", ValidFrom: now, AcceptedAt: now}
-	revocation := Revocation{RevocationID: "r1", TargetType: "assignment", TargetID: "old", EffectiveAt: now, RecordedInAuthorityVersion: "2", ReasonCode: "test"}
+	revocation := Revocation{RevocationID: "r1", TargetType: "role_assignment", TargetID: "old", EffectiveAt: now, RecordedInAuthorityVersion: "2", ReasonCode: "test"}
 	result := FullContent{Principals: []Principal{principal}, Memberships: []Membership{membership}, RoleDefinitions: []RoleDefinition{role}, RoleAssignments: []RoleAssignment{assignment}, Revocations: []Revocation{revocation}}
 	normalizeProjection(&result)
 	resultRaw, _ := json.Marshal(result)
@@ -221,5 +221,28 @@ func TestSnapshotRejectedCandidateDoesNotMutateDurableState(t *testing.T) {
 	}
 	if string(before) != string(after) {
 		t.Fatal("rejected candidate mutated durable state")
+	}
+}
+
+func TestSnapshotAcceptanceUsesManifestAndCheckpoint(t *testing.T) {
+	manifestPayload, rootPub, rootPriv, _, issuerPriv, now := trustFixture(t)
+	manifestPayload.Issuer = "issuer"
+	manifest, err := ParseAndVerifyTrustManifest(signedTrustFixture(t, manifestPayload, rootPriv, "root"), map[string]ed25519.PublicKey{"root": rootPub}, Binding{"org", "issuer", "installation"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _, _ := fullFixture(t, "1")
+	p.IssuedAt, p.NotBefore, p.ExpiresAt = now.Add(-time.Minute), now.Add(-time.Minute), now.Add(time.Hour)
+	dir := t.TempDir()
+	v := &Verifier{Manifest: manifest, Binding: Binding{"org", "issuer", "installation"}, Store: &Store{Path: filepath.Join(dir, "state.json")}, Checkpoint: &CheckpointStore{Path: filepath.Join(dir, "checkpoint.json")}, Now: func() time.Time { return now }}
+	if _, err = v.VerifyAndAccept(signedFixture(t, p, issuerPriv, "issuer-key"), "manifest"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(v.Checkpoint.Path); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Payload.Keys[0].Status = "retired"
+	if _, err = v.VerifyAndAccept(signedFixture(t, p, issuerPriv, "issuer-key"), "retired-key"); err == nil {
+		t.Fatal("retired manifest key accepted")
 	}
 }

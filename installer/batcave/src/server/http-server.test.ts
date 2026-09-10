@@ -80,7 +80,7 @@ describe('http-server', () => {
     // Interceptamos sólo las llamadas hacia el Backend; todo lo demás (incluida
     // nuestra propia request de test hacia el servidor local) usa el fetch real.
     realFetch = globalThis.fetch;
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn((input: Request | string | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url.startsWith(BACKEND_BASE_URL)) {
         return Promise.resolve(
@@ -101,6 +101,13 @@ describe('http-server', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ bundle: [] });
     expect(fetchMock).toHaveBeenCalledWith(`${BACKEND_BASE_URL}/v1/authority/trust-bundle`, expect.anything());
+  });
+
+  it('closes and restarts the disposable notice transport; pull remains available', async()=>{
+    tmpRoot=mkdtempSync(join(tmpdir(),'batcave-http-restart-'));const {org,paths}=makeOrgAndPaths(tmpRoot);const config={server:{port_rest:0,port_wss:0,host:'127.0.0.1'},backend:{base_url:BACKEND_BASE_URL}} as BatcaveConfig;
+    realFetch=globalThis.fetch;const mock=vi.fn((input:Request|string|URL,init?:RequestInit)=>{const url=String(input);if(url.startsWith(BACKEND_BASE_URL))return Promise.resolve(new Response(url.includes('/notice')?'notice\n':'{"snapshot":true}',{status:200}));return realFetch(input,init);});vi.stubGlobal('fetch',mock);
+    server=createHttpServer(org,paths,config);let address=await listen(server);expect(await (await fetch(`http://127.0.0.1:${address.port}/v1/authority/sync/notice?org=o`)).text()).toBe('notice\n');
+    await new Promise<void>(resolve=>server!.close(()=>resolve()));server=createHttpServer(org,paths,config);address=await listen(server);expect(await (await fetch(`http://127.0.0.1:${address.port}/v1/authority/sync/pull?org=o`)).json()).toEqual({snapshot:true});
   });
 });
 import { createApp as createMandateTestApp } from './http-server.js';
