@@ -27,17 +27,21 @@ const (
 // ActiveOrgContext is the active organization persisted by the installed
 // Nucleus in config/nucleus.json.
 type ActiveOrgContext struct {
-	OrgSlug       string
-	WorkspacePath string
-	NucleusRoot   string
+	OrgSlug          string
+	OrganizationID   string
+	AuthorityBaseURL string
+	WorkspacePath    string
+	NucleusRoot      string
 }
 
 type machineNucleusConfig struct {
-	Onboarding struct {
+	AuthorityBaseURL string `json:"authority_base_url"`
+	Onboarding       struct {
 		ActiveOrgSlug string `json:"active_org_slug"`
 		Organizations []struct {
-			OrgSlug       string `json:"org_slug"`
-			WorkspacePath string `json:"workspace_path"`
+			OrgSlug        string `json:"org_slug"`
+			OrganizationID string `json:"organization_id"`
+			WorkspacePath  string `json:"workspace_path"`
 		} `json:"organizations"`
 	} `json:"onboarding"`
 }
@@ -70,6 +74,12 @@ func ResolveActiveOrgContext() (*ActiveOrgContext, error) {
 				configPath,
 			)
 		}
+		if org.OrganizationID == "" {
+			return nil, fmt.Errorf("organization_id_missing: organización activa %q", org.OrgSlug)
+		}
+		if cfg.AuthorityBaseURL == "" {
+			return nil, errors.New("authority_base_url_missing")
+		}
 
 		nucleusRoot := filepath.Join(
 			org.WorkspacePath,
@@ -85,9 +95,11 @@ func ResolveActiveOrgContext() (*ActiveOrgContext, error) {
 		}
 
 		return &ActiveOrgContext{
-			OrgSlug:       org.OrgSlug,
-			WorkspacePath: filepath.Clean(org.WorkspacePath),
-			NucleusRoot:   filepath.Clean(nucleusRoot),
+			OrgSlug:          org.OrgSlug,
+			OrganizationID:   org.OrganizationID,
+			AuthorityBaseURL: cfg.AuthorityBaseURL,
+			WorkspacePath:    filepath.Clean(org.WorkspacePath),
+			NucleusRoot:      filepath.Clean(nucleusRoot),
 		}, nil
 	}
 

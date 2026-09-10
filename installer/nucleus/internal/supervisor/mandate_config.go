@@ -13,11 +13,13 @@ import (
 // Estructura mínima necesaria para leer la configuración de onboarding
 // del workspace y organización del usuario.
 type NucleusConfig struct {
-	Onboarding struct {
+	AuthorityBaseURL string `json:"authority_base_url"`
+	Onboarding       struct {
 		ActiveOrgSlug string `json:"active_org_slug"`
 		Organizations []struct {
-			OrgSlug       string `json:"org_slug"`
-			WorkspacePath string `json:"workspace_path"`
+			OrgSlug        string `json:"org_slug"`
+			OrganizationID string `json:"organization_id"`
+			WorkspacePath  string `json:"workspace_path"`
 		} `json:"organizations"`
 	} `json:"onboarding"`
 

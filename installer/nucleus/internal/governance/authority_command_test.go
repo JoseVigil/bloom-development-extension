@@ -2,10 +2,24 @@ package governance
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"nucleus/internal/authority"
+	"nucleus/internal/core"
+	"nucleus/internal/mandatedelivery"
 )
 
 func executeAuthority(t *testing.T, jsonMode bool, name string, service AuthorityCommandServices) (string, error) {
@@ -17,6 +31,123 @@ func executeAuthority(t *testing.T, jsonMode bool, name string, service Authorit
 	cmd.SetArgs([]string{name})
 	err := cmd.Execute()
 	return out.String(), err
+}
+
+func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	rootPublic, rootPrivate, _ := ed25519.GenerateKey(rand.Reader)
+	issuerPublic, issuerPrivate, _ := ed25519.GenerateKey(rand.Reader)
+	appData, workspace := t.TempDir(), t.TempDir()
+	t.Setenv("BLOOM_APPDATA_DIR", appData)
+	t.Setenv("AUTHORITY_SERVICE_TOKEN", "service-token")
+	nucleusRoot := filepath.Join(workspace, ".bloom", ".nucleus-acme")
+	if err := os.MkdirAll(filepath.Join(nucleusRoot, ".core"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nucleusRoot, ".core", ".nucleus-config.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	registrationCount, mandateMode := 0, "pending"
+	var installationID string
+	var server *httptest.Server
+	signEnvelope := func(payload any, domain, keyID string, private ed25519.PrivateKey) []byte {
+		raw, _ := json.Marshal(payload)
+		canonical, _ := authority.Canonicalize(raw)
+		sum := sha256.Sum256(canonical)
+		sig := ed25519.Sign(private, append(append([]byte(domain), 0), canonical...))
+		out, _ := json.Marshal(authority.Envelope{Payload: raw, Integrity: authority.Integrity{Canonicalization: "JCS-RFC8785", DigestAlgorithm: "SHA-256", Digest: base64.RawURLEncoding.EncodeToString(sum[:]), SignatureAlgorithm: "Ed25519", KeyID: keyID, Signature: base64.RawURLEncoding.EncodeToString(sig)}})
+		return out
+	}
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/authority/installations/register":
+			registrationCount++
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			installationID = body["installation_id"]
+			if registrationCount == 1 {
+				w.WriteHeader(201)
+				_, _ = w.Write([]byte(`{"status":"registered"}`))
+			} else {
+				w.WriteHeader(409)
+				_, _ = w.Write([]byte(`{"error":"installation_conflict"}`))
+			}
+		case "/v1/authority/trust-manifest":
+			p := authority.TrustManifestPayload{Schema: "bloom.authority.trust-manifest", SchemaVersion: "1.0", ManifestID: "manifest", Issuer: "issuer", OrganizationID: "org-id", ManifestVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), RootKeyID: "root", Keys: []authority.TrustKey{{KeyID: "issuer-key", PublicKey: base64.RawURLEncoding.EncodeToString(issuerPublic), Status: "active", ValidFrom: now.Add(-time.Hour)}}}
+			_, _ = w.Write(signEnvelope(p, "BLOOM-AUTHORITY-TRUST-MANIFEST-v1", "root", rootPrivate))
+		case "/v1/authority/sync/challenge":
+			_ = json.NewEncoder(w).Encode(map[string]any{"challenge": "challenge", "organization_id": "org-id", "installation_id": installationID, "issued_at": now, "expires_at": now.Add(time.Minute)})
+		case "/v1/authority/sync/pull":
+			content := authority.FullContent{Principals: []authority.Principal{}, Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{}}
+			contentRaw, _ := json.Marshal(content)
+			p := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", Kind: "full", SnapshotID: "snapshot", Issuer: "issuer", OrganizationID: "org-id", AuthorityVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), Audience: authority.Audience{OrganizationID: "org-id", InstallationIDs: []string{installationID}}, Content: contentRaw}
+			snapshot := signEnvelope(p, "BLOOM-AUTHORITY-SNAPSHOT-v1", "issuer-key", issuerPrivate)
+			stateDigest, _ := authority.StateDigest(content, "org-id")
+			snapshotSum := sha256.Sum256(mustCanonicalPayload(t, snapshot))
+			challengeSum := sha256.Sum256([]byte("challenge"))
+			check := authority.CurrentCheckPayload{Schema: "bloom.authority.current-check", SchemaVersion: "1.0", CheckID: "check", Issuer: "issuer", OrganizationID: "org-id", InstallationID: installationID, ChallengeDigest: hex.EncodeToString(challengeSum[:]), AuthorityVersion: "1", StateDigest: stateDigest, SnapshotDigest: base64.RawURLEncoding.EncodeToString(snapshotSum[:]), CheckedAt: now}
+			var checkEnvelope authority.Envelope
+			_ = json.Unmarshal(signEnvelope(check, "BLOOM-AUTHORITY-CURRENT-PULL-v1", "issuer-key", issuerPrivate), &checkEnvelope)
+			_ = json.NewEncoder(w).Encode(map[string]any{"snapshot": json.RawMessage(snapshot), "current_check": checkEnvelope})
+		case "/v1/mandate/bootstrap":
+			if mandateMode == "pending" {
+				w.WriteHeader(404)
+				return
+			}
+			if mandateMode == "error" {
+				_, _ = w.Write([]byte(`{"invalid":true}`))
+				return
+			}
+			artifact := []byte("mandate")
+			digest := sha256.Sum256(artifact)
+			issued := now.Format(time.RFC3339Nano)
+			payload := map[string]string{"mandate_id": "mandate", "organization_id": "org-id", "installation_id": installationID, "mandate_version": "1", "mandate_digest": hex.EncodeToString(digest[:]), "issued_at": issued}
+			canonical, _ := authority.Canonicalize(mustJSON(payload))
+			sig := ed25519.Sign(issuerPrivate, append(append([]byte(mandatedelivery.Domain), 0), canonical...))
+			_ = json.NewEncoder(w).Encode(map[string]any{"envelope": map[string]string{"mandate_id": "mandate", "organization_id": "org-id", "installation_id": installationID, "mandate_version": "1", "mandate_digest": hex.EncodeToString(digest[:]), "issued_at": issued, "signature": base64.StdEncoding.EncodeToString(sig), "signing_key_id": "issuer-key"}, "mandate_base64": base64.StdEncoding.EncodeToString(artifact)})
+		}
+	}))
+	defer server.Close()
+	config := map[string]any{"authority_base_url": server.URL, "onboarding": map[string]any{"active_org_slug": "acme", "organizations": []map[string]string{{"org_slug": "acme", "organization_id": "org-id", "workspace_path": workspace}}}}
+	if err := os.MkdirAll(filepath.Join(appData, "config"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appData, "config", "nucleus.json"), mustJSON(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	authorityCommandHTTPClient, authorityCommandRoots, authorityCommandNow = server.Client(), func() map[string]ed25519.PublicKey { return map[string]ed25519.PublicKey{"root": rootPublic} }, func() time.Time { return now }
+	defer func() {
+		authorityCommandHTTPClient = nil
+		authorityCommandRoots = authority.DevelopmentPinnedRoots
+		authorityCommandNow = func() time.Time { return time.Now().UTC() }
+	}()
+	services := defaultAuthorityServices(&core.Core{Paths: core.Paths{AppDataDir: appData}})
+	for _, expected := range []string{"pending", "accepted", "replay", "error"} {
+		mandateMode = expected
+		report, err := services.Run("sync", nil)
+		if err != nil || !report.OK || report.Evidence["mandate_delivery"] != expected {
+			t.Fatalf("mode=%s report=%+v err=%v", expected, report, err)
+		}
+	}
+	if registrationCount != 4 {
+		t.Fatalf("registration count=%d", registrationCount)
+	}
+}
+
+func mustJSON(value any) []byte { raw, _ := json.Marshal(value); return raw }
+
+func mustCanonicalPayload(t *testing.T, envelope []byte) []byte {
+	t.Helper()
+	var parsed authority.Envelope
+	if err := json.Unmarshal(envelope, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := authority.Canonicalize(parsed.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return canonical
 }
 func TestAuthorityCLIHumanAndJSONCarrySameEvidence(t *testing.T) {
 	service := AuthorityCommandServices{Run: func(command string, args []string) (AuthorityEvidenceReport, error) {
