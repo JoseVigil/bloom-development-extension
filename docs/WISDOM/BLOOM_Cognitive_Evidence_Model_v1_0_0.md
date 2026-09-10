@@ -49,7 +49,7 @@ Todos los campos marcados como `enum` referencian `evidenceTaxonomy.json`, un vo
   "decisionCategory":   "enum — 'architecture' | 'data_model' | 'protocol' | 'dependency_choice' | 'security_control' | 'performance_strategy' | 'concurrency_model' | 'error_handling_strategy'",
 
   "contextTrigger": {
-    "originIntentType":       "enum — 'exp' | 'dev' | 'doc' | 'gen' | 'cor'",
+    "originIntentType":       "enum — 'exp' | 'dev' | 'doc' | 'gen'",  // 'cor' deprecado 2026-09-02, ver AGENDA_MAESTRA §11
     "environmentFingerprint": "object — misma taxonomía cerrada que executionEvent.environmentFingerprint (Cognitive Ledger, telemetría)"
   },
 
@@ -149,7 +149,7 @@ Todos los campos marcados como `enum` referencian `evidenceTaxonomy.json`, un vo
 
   "involvedDependencyTags": ["string — conceptTag de vocabulario controlado, ej: 'connection-pooling-layer', 'message-queue-consumer'. NUNCA nombre de paquete + versión exacta salvo que sea open source ampliamente público y el tag por sí solo no revele topología interna del comprador."],
 
-  "resolvingIntentType":  "enum — típicamente 'exp', puede ser 'dev' o 'cor'",
+  "resolvingIntentType":  "enum — típicamente 'exp', puede ser 'dev'",  // 'cor' deprecado 2026-09-02, ver AGENDA_MAESTRA §11
   "remediationApplied":   "string — MISMA taxonomía cerrada que executionEvent.remediationApplied (I-15)",
   "detectionMethod":      "enum — 'automated_test' | 'manual_review' | 'production_incident' | 'staging_validation'",
   "severityAtDiscovery":  "enum — 'blocking' | 'degraded' | 'cosmetic'",

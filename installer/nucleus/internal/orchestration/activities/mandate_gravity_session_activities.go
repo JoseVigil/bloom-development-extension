@@ -12,10 +12,11 @@
 // Alcance deliberadamente acotado — lo que este archivo NO hace:
 //
 //   - No crea ORGANIZATION ni NUCLEUS. Store.CreateNode ya los bloquea por
-//     diseño (store.go:62-64, ErrGovernedNodeCreation — gobernado por
-//     cor+Authorization, no wireado todavía). Si el nodo no existe, estas
-//     Activities fallan cerrado — nunca intentan crearlo ni rodear el
-//     bloqueo.
+//     diseño (store.go:18,67, ErrGovernedNodeCreation — requiere una decisión
+//     de autorización gobernada, todavía no wireada; NO depende de `cor`,
+//     que está deprecado — ver docs/CONTROL/AGENDA_MAESTRA.md §11,
+//     corrección 2026-09-02). Si el nodo no existe, estas Activities fallan
+//     cerrado — nunca intentan crearlo ni rodear el bloqueo.
 //
 //   - No crea PROJECT. No existe en todo el repo ningún concepto de
 //     ProjectID estable — `Project` es siempre un nombre libre (ver

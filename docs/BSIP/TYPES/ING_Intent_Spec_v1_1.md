@@ -73,8 +73,8 @@ Ver Changelog y §7.1/§7.3.
 
 ## 0. Resumen ejecutivo
 
-`ing/` es el sexto tipo de intent del sistema, sumado a los cinco existentes (`dev`, `doc`, `exp`, `inf`,
-`cor`) — y precede en el flujo típico al séptimo, `dis/`. Su función es incorporar archivos raw o de código
+`ing/` es el sexto tipo de intent del sistema, sumado a los cinco existentes al momento de esta spec (`dev`, `doc`, `exp`, `inf`,
+`cor`; `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11) — y precede en el flujo típico al séptimo, `dis/`. Su función es incorporar archivos raw o de código
 nuevos al ecosistema — tanto en el arranque de un proyecto (Mandate Génesis) como en cualquier
 incorporación posterior (nuevo subsistema, nuevo repo, nuevo módulo) — y sembrar el linaje de los Genes
 resultantes. La curación de la topología de Dominios a la que esos Genes pertenecen es responsabilidad de

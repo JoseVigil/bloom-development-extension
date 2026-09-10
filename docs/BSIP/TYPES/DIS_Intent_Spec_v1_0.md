@@ -60,8 +60,8 @@ Reglas de diseño que este documento fija como contrato:
 
 ## 0. Resumen ejecutivo
 
-`dis/` es el séptimo tipo de intent del sistema, sumado a los seis existentes (`dev`, `doc`, `exp`, `inf`,
-`cor`, `ing`). Su función es re-mapear la topología de Dominios de un proyecto a partir de la totalidad de
+`dis/` es el séptimo tipo de intent del sistema, sumado a los seis existentes al momento de esta spec (`dev`, `doc`, `exp`, `inf`,
+`cor`, `ing`; `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). Su función es re-mapear la topología de Dominios de un proyecto a partir de la totalidad de
 Genes ya ingeridos — detectando Dominios que deberían fusionarse o dividirse, y Genes cuya funcionalidad
 legítimamente se extiende a través de más de un Dominio.
 

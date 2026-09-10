@@ -11,6 +11,8 @@
 
 Este documento es la fuente de verdad unificada para el sistema de Mandates de Bloom. Integra la arquitectura general del Mandate con la especificación del Mandate Genesis y la spec UX/UI del Conductor.
 
+> ⚠️ **Nota de deprecación (2026-09-10):** este documento (v2.0, 2026-06-28) trata `cor` como un tipo de intent vigente — en enums de schema, árbol de directorios, tabla de responsabilidades del Conductor y flujo de UX de decisión humana (§6.6). Control confirmó el 2026-09-02 que `cor` está **deprecado**, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Gravity absorbió el articulado de autorización de postulados y posturas que `cor` cubría. Las menciones puntuales de `cor` de acá en adelante quedan anotadas; no se reescribió cada schema para no inventar qué reemplaza a `cor` en detalle técnico — el reemplazo para ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.
+
 **Secciones 1–4** — arquitectura y comportamiento del sistema. Prerequisito de lectura para cualquier decisión de diseño o implementación.
 
 **Sección 5** — especificación del Mandate Genesis: el tipo especial de Mandate que estructura semánticamente un proyecto desde cero. Incluye la extensión `domain_expansion` para proyectos que crecen después del genesis fundacional.
@@ -47,7 +49,7 @@ Este documento es la fuente de verdad unificada para el sistema de Mandates de B
 
 ### 1.1 Glosario mínimo
 
-**Intent** — unidad mínima de trabajo técnico. Acotado, determinista, ejecutable por Brain. Tipos: `dev` (código), `doc` (documentación), `exp` (exploración), `inf` (información), `cor` (coordinación), `gen` (genesis — ver §5). Un intent vive en `.bloom/.intents/` y tiene un lifecycle propio.
+**Intent** — unidad mínima de trabajo técnico. Acotado, determinista, ejecutable por Brain. Tipos: `dev` (código), `doc` (documentación), `exp` (exploración), `inf` (información), `gen` (genesis — ver §5). Un intent vive en `.bloom/.intents/` y tiene un lifecycle propio. (`cor`, coordinación, fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11; absorbido por Gravity.)
 
 **Action** — unidad semántica dentro de un Mandate. No ejecuta lógica directamente: declara una intención que Nucleus resuelve como un intent concreto. La Action es el puente entre la estrategia del Mandate y la ejecución del Intent.
 
@@ -65,7 +67,7 @@ La jerarquía completa:
 Nivel 1 — Nucleus        autoridad, gobernanza, firma
 Nivel 2 — Mandate        contrato estratégico firmado, versionado, inmutable
 Nivel 3 — Action         unidad semántica del Mandate
-Nivel 4 — Intent         unidad ejecutable concreta (exp / cor / dev / doc / gen)
+Nivel 4 — Intent         unidad ejecutable concreta (exp / dev / doc / gen)  [`cor` deprecado, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11]
 ```
 
 Un Mandate nunca ejecuta lógica directamente. Nunca escribe en `.intents/`. Solo orquesta, siempre a través de Nucleus, usando Temporal como motor de persistencia.
@@ -219,7 +221,6 @@ workspace/
         │   ├── .exp/
         │   ├── .dev/
         │   ├── .doc/
-        │   ├── .cor/
         │   └── .gen/                               ← intents del genesis (ver §5.7)
         │       └── .genesis-{name}-{uuid}/
         │           ├── gen_state.json
@@ -268,7 +269,7 @@ Sin este fix, el plugin no puede detectar ningún Nucleus y todo lo que depende 
 | Firmar un Mandate | Nucleus (interno) | — | — |
 | Ver estado de Mandates activos | ✅ | ✅ (read-only, Activity Bar) | ✅ (streaming) |
 | Crear intents `dev`/`doc` en contexto de Mandate | ✅ | ✅ (con contexto de código) | — |
-| Crear intents `exp`/`cor` organizacionales | ✅ | — | — |
+| Crear intents `exp` organizacionales | ✅ | — | — |
 | Pausar / reanudar / cancelar un Mandate | ✅ | — | ✅ (vía Alfred) |
 | Aprobar acciones que requieren decisión humana | ✅ | — | ✅ |
 | Navegar el filesystem de intents del workspace | — | ✅ | — |
@@ -502,7 +503,7 @@ Cuando todos los dominios están scaffoldeados:
 
 ### 5.7 El intent `.gen` — tipo nuevo de intent
 
-El Mandate Genesis requiere agregar `gen` al conjunto de tipos de intent válidos. El schema del Mandate Domain Spec v1.0.0 define `intentType: "exp | cor | dev | doc"`. **Esto requiere actualizar el schema y cualquier validación existente sobre ese campo.**
+El Mandate Genesis requiere agregar `gen` al conjunto de tipos de intent válidos. El schema del Mandate Domain Spec v1.0.0 definía `intentType: "exp | cor | dev | doc"` — `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. **Esto requiere actualizar el schema y cualquier validación existente sobre ese campo, retirando `cor` y agregando `gen`.**
 
 **Estructura en disco del intent `.gen`:**
 
@@ -530,7 +531,7 @@ brain intent create --type gen \
   [--nucleus-path <ruta_al_nucleus>]
 ```
 
-Este comando sigue el patrón de `brain intent create --type <tipo>` que ya existe para `dev`, `doc`, `exp`, `cor`. Nucleus lo invoca internamente. También puede usarse manualmente para recovery. A diferencia de los otros tipos, `--source` es obligatorio en la creación misma — el intent `.gen` no tiene razón de existir sin material para ingerir.
+Este comando sigue el patrón de `brain intent create --type <tipo>` que ya existe para `dev`, `doc`, `exp` (`cor` también existía en este patrón, pero fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). Nucleus lo invoca internamente. También puede usarse manualmente para recovery. A diferencia de los otros tipos, `--source` es obligatorio en la creación misma — el intent `.gen` no tiene razón de existir sin material para ingerir.
 
 **Decisión de implementación — un único intent `.gen` (recomendado):**
 
@@ -776,7 +777,7 @@ El Conductor es stateless: no acumula estado en memoria. Al abrirse, reconstruye
 
 **Perfil primario: el Master** — autoridad para crear y firmar Mandates. Puede ser el tech lead o fundador técnico. No necesariamente escribe código todos los días, pero entiende la arquitectura. Necesita ver el estado de todos los Mandates activos de un vistazo, crear Mandates sin fricciones técnicas, tomar decisiones cuando una Action requiere intervención humana, y confiar en que lo que ve es lo que realmente está corriendo.
 
-**Perfil secundario: el Architect** — puede observar Mandates e interactuar con Intents de coordinación (`cor`), pero no puede crear Mandates. Su vista es principalmente de observabilidad.
+**Perfil secundario: el Architect** — puede observar Mandates, pero no puede crear Mandates. Su vista es principalmente de observabilidad. (La interacción con Intents de coordinación `cor` que este perfil tenía fue removida — `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11; el rol de observabilidad del Architect sobre lo que Gravity gobierna hoy está propuesto pero sin ratificar.)
 
 ### 6.3 Las cuatro zonas del Conductor
 
@@ -933,7 +934,7 @@ El Event Bus Feed ocupa el tercio inferior y puede colapsarse. El Project Browse
 
 ### 6.6 Estados que requieren intervención humana — UX de decisión
 
-Cuando una Action de tipo `cor` requiere una decisión humana, el Conductor debe:
+*(Esta subsección describía el flujo de UX para cuando una Action de tipo `cor` requería una decisión humana. `cor` fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — así que esa Action-type ya no existe; el mecanismo de decisión humana equivalente sobre lo que hoy gobierna Gravity está propuesto pero sin ratificar. El resto de esta subsección describe UX genérica de decisión humana que sigue siendo relevante para cualquier Action que la requiera:)*
 - Resaltar el Mandate en el Monitor con indicador visual inequívoco + label de texto "Requiere tu decisión"
 - Mostrar notificación del sistema operativo si el Conductor no está en primer plano
 - En la vista de detalle, mostrar exactamente qué decisión se requiere con el contexto necesario
@@ -1120,7 +1121,7 @@ export const mandateSchemas = {
             required: ['description', 'intentType', 'projectPath'],
             properties: {
               description: { type: 'string' },
-              intentType: { type: 'string', enum: ['exp', 'dev', 'doc', 'cor', 'gen'] },
+              intentType: { type: 'string', enum: ['exp', 'dev', 'doc', 'gen'] }, // 'cor' deprecado 2026-09-02, ver AGENDA_MAESTRA §11
               projectPath: { type: 'string' }
             }
           }
@@ -1160,7 +1161,7 @@ El endpoint `GET /api/nucleus/onboarding-status` ya existe (confirmado en `nucle
 **Decisión crítica — ¿Un intent `.gen` o N intents `.gen`?** (ver §5.7): impacta la arquitectura de `waitIntentResult` y el MandateWorkflow. Debe resolverse antes de implementar la Fase 4.
   - **Actualización RESOLUCIÓN v1.3:** confirmado en código real — es **N Actions**, una por dominio confirmado (`type: run_intent`, `intentType: gen`, `payload.subPhase: scaffold`), armadas por `signMandateActivity` dentro de `operational.actions[]` de `mandate.json`. No es un intent monolítico. Ver D-B1/§6.2 de `BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md`.
 
-**Extensión de `intentType` en el schema del Mandate:** agregar `gen` al enum `exp | cor | dev | doc` en el Mandate Domain Spec y en todas las validaciones existentes.
+**Extensión de `intentType` en el schema del Mandate:** agregar `gen` al enum `exp | dev | doc` en el Mandate Domain Spec y en todas las validaciones existentes (`cor` fue retirado del enum — deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11).
 
 **Schema completo de `domain_proposal.json`:** necesario antes de implementar la Fase 2 y la pantalla de validación del Conductor.
   - **Actualización RESOLUCIÓN v1.3:** parcialmente cerrado. Campos confirmados en código: `id` (formato `dom_{slug}_{sufijo}`), `domainName`, `cohesionScore`, `suggestedActionCount`, `files`, y `dependsOn?` a nivel de `DomainCandidate` (aunque hoy nunca se puebla). Lo que sigue sin cerrar: el rango de 2–7 dominios que describe este documento no es real todavía — hoy `scaffoldDryRun` siempre devuelve exactamente 1 dominio (`input.Project`), porque no hay clustering real de Brain conectado. El schema de datos está listo para N; el productor de N dominios reales no existe.

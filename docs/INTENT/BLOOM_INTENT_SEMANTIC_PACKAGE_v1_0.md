@@ -26,57 +26,42 @@ Un BISP no es solo lo que se hizo en un intent. Es **lo que el sistema aprendió
 .bloom/
 └── .nucleus-{organization}/
     ├── .intents/
-    │   ├── .exp/
-    │   │   └── .{intent-name-uuid}/
-    │   │       ├── .exp_state.json
-    │   │       ├── .inquiry/
-    │   │       │   ├── .inquiry.json
-    │   │       │   ├── .context_exp_plan.json        ← PUNTO DE VECTORIZACIÓN 1
-    │   │       │   └── .files/
-    │   │       │       ├── .expbase.json
-    │   │       │       ├── .expbase_index.json
-    │   │       │       └── [optional files]
-    │   │       ├── .discovery/
-    │   │       │   └── .turn_X/
-    │   │       │       ├── .turn.json
-    │   │       │       ├── .context_exp_plan.json    ← PUNTO DE VECTORIZACIÓN 1
-    │   │       │       └── .files/
-    │   │       │           ├── .expbase.json
-    │   │       │           ├── .expbase_index.json
-    │   │       │           └── [optional files]
-    │   │       ├── .findings/
-    │   │       │   ├── .findings.json
-    │   │       │   ├── .context_exp_plan.json        ← PUNTO DE VECTORIZACIÓN 1
-    │   │       │   └── .files/
-    │   │       └── .pipeline/
-    │   │           ├── .inquiry/
-    │   │           │   ├── .payload.json
-    │   │           │   ├── .index.json               ← PUNTO DE VECTORIZACIÓN 2
-    │   │           │   └── .response/
-    │   │           │       ├── .raw_output.txt
-    │   │           │       └── .report.json
-    │   │           └── .discovery/
-    │   │               └── .turn_X/
-    │   │                   ├── .payload.json
-    │   │                   ├── .index.json           ← PUNTO DE VECTORIZACIÓN 2
-    │   │                   └── .response/
-    │   │                       ├── .raw_output.txt
-    │   │                       └── .report.json
-    │   │
-    │   └── .cor/
+    │   └── .exp/
     │       └── .{intent-name-uuid}/
-    │           ├── .semantic_interpretation/
-    │           │   ├── .interpretation.json
-    │           │   ├── .context_cor_plan.json        ← PUNTO DE VECTORIZACIÓN 1
+    │           ├── .exp_state.json
+    │           ├── .inquiry/
+    │           │   ├── .inquiry.json
+    │           │   ├── .context_exp_plan.json        ← PUNTO DE VECTORIZACIÓN 1
     │           │   └── .files/
-    │           │       ├── .intent_deltas.json
-    │           │       ├── .semantic_conflicts.json
-    │           │       └── .compatible_changes.json
+    │           │       ├── .expbase.json
+    │           │       ├── .expbase_index.json
+    │           │       └── [optional files]
+    │           ├── .discovery/
+    │           │   └── .turn_X/
+    │           │       ├── .turn.json
+    │           │       ├── .context_exp_plan.json    ← PUNTO DE VECTORIZACIÓN 1
+    │           │       └── .files/
+    │           │           ├── .expbase.json
+    │           │           ├── .expbase_index.json
+    │           │           └── [optional files]
+    │           ├── .findings/
+    │           │   ├── .findings.json
+    │           │   ├── .context_exp_plan.json        ← PUNTO DE VECTORIZACIÓN 1
+    │           │   └── .files/
     │           └── .pipeline/
-    │               └── .semantic_interpretation/
-    │                   ├── .payload.json
-    │                   ├── .index.json               ← PUNTO DE VECTORIZACIÓN 2
-    │                   └── .response/
+    │               ├── .inquiry/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json               ← PUNTO DE VECTORIZACIÓN 2
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       └── .report.json
+    │               └── .discovery/
+    │                   └── .turn_X/
+    │                       ├── .payload.json
+    │                       ├── .index.json           ← PUNTO DE VECTORIZACIÓN 2
+    │                       └── .response/
+    │                           ├── .raw_output.txt
+    │                           └── .report.json
     │
     └── .cache/
         ├── .semantic-index.json
@@ -220,7 +205,6 @@ Un BISP no es solo lo que se hizo en un intent. Es **lo que el sistema aprendió
 | `.exp` | inquiry | Pregunta de investigación vs expbase |
 | `.exp` | discovery/turn_X | Hallazgos acumulados vs nueva información |
 | `.exp` | findings | Síntesis total vs todos los archivos del intent |
-| `.cor` | semantic_interpretation | Intent deltas vs historial de intents relacionados |
 
 ---
 
@@ -290,7 +274,7 @@ ChromaDB vive dentro del Nucleus en `.cache/chroma/`. No es un servicio externo.
 |-----------|-----------|-----------|
 | `project-{uuid}/objectives` | Embedding del objetivo de cada intent | Mandate para evitar trabajo duplicado |
 | `project-{uuid}/payloads` | Embedding del payload de cada fase | context_plan para ranking de archivos |
-| `project-{uuid}/findings` | Embedding de findings y reports | `.cor` para semantic_interpretation |
+| `project-{uuid}/findings` | Embedding de findings y reports | *(era `.cor` para semantic_interpretation — `cor` deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11)* |
 | `nucleus-global` | Embeddings cross-project | Mandate para coordinación entre proyectos |
 
 ### 4.3 Relación con `.semantic-index.json` existente
@@ -427,34 +411,9 @@ En refinement, el paso 3 consulta ChromaDB contra el delta del turn anterior, no
 
 ---
 
-## 8. Aplicación en `.cor` — El Caso Más Potente
+## 8. Aplicación en `.cor` — sección removida
 
-El intent `.cor` es donde el BISP tiene mayor impacto porque ya tiene `semantic_interpretation` como fase explícita.
-
-### Sin BISP
-
-La fase `semantic_interpretation` le pide a la LLM que interprete semánticamente los deltas entre dos versiones. La LLM trabaja desde cero, con todo el contexto cargado en el prompt.
-
-### Con BISP
-
-```
-.cor semantic_interpretation
-    │
-    ├── ChromaDB compara embeddings de:
-    │     intent_deltas.json (left)  vs  intent_deltas.json (right)
-    │
-    ├── Identifica automáticamente:
-    │     semantic_conflicts  → similitud < 0.3 en zonas divergentes
-    │     compatible_changes  → similitud > 0.8 con diferencias menores
-    │
-    ├── El context_cor_plan.json rankea los conflictos
-    │     por severidad semántica, no por tamaño de diff
-    │
-    └── La LLM recibe SOLO los conflictos reales ordenados por impacto
-          Sin ruido. Sin contexto irrelevante.
-```
-
-El resultado en `semantic_conflicts.json` y `compatible_changes.json` tiene base vectorial real, no solo interpretación textual.
+*(Sección removida 2026-09-10 — describía la aplicación del BISP al intent `.cor` (`semantic_interpretation`) como "el caso más potente" de uso, con ejemplo completo de pipeline. `cor` fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Su función fue absorbida por Gravity; si el patrón de vectorización BISP tiene un caso de aplicación equivalente sobre lo que Gravity gobierna hoy, eso está propuesto pero sin ratificar.)*
 
 ---
 

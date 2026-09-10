@@ -122,6 +122,8 @@ Confirmación, no contradicción — pero vale la pena decirlo con más fuerza d
 
 Esto **no contradice** el catálogo — es una confirmación útil: `COR_Intent_Spec §1` ya admitía GAP #C1 (mecanismo de persistencia de `CorNucleusRecord` no fijado) y GAP #C2 (espacio de nombres de artefactos de `cor` en filesystem no definido). El truth confirma que, en efecto, no existe ningún `.cor_state.json` nuevo ni ningún registro equivalente a `CorNucleusRecord` en el sistema real — los dos GAP siguen exactamente donde estaban. Lo único que agrega el truth es la certeza de que el directorio legado sigue documentado (aunque desactivado) y que nadie lo reemplazó todavía por la estructura nueva.
 
+> **Confirmación posterior (2026-09-10):** control ratificó el 2026-09-02 que `cor` está deprecado, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Los dos GAP de arriba ya no están "abiertos a la espera de definirse" — quedan cerrados por descarte: no habrá `CorNucleusRecord` ni espacio de nombres nuevo para `cor`. Gravity absorbió el articulado de autorización que `cor` cubría; el reemplazo concreto para ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.
+
 ---
 
 ## Confirmación positiva — `freeze_to_mandate()` es real y consistente con lo que dice `COR_Intent_Spec`

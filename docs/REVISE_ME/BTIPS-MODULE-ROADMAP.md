@@ -143,7 +143,7 @@ sentinel cockpit --health
 **Razón:** Motor de ejecución de intents, context generation, Synapse server.
 
 **Contenido:**
-- Intent Execution Engine (dev, doc, exp, inf, cor)
+- Intent Execution Engine (dev, doc, exp, inf) — `cor` also listed here originally, deprecated 2026-09-02 by control, see AGENDA_MAESTRA.md §11
 - Context Generation Strategies (Android, iOS, React, Nucleus, etc.)
 - Profile Management (accounts, linked profiles)
 - Synapse Protocol Server (Host ↔ Brain communication)

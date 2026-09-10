@@ -22,7 +22,7 @@ Esto no es una frase decorativa — es una restricción de diseño que ya vive e
 
 - **Nucleus firma, pero no decide por nadie.** Es árbitro de identidad y gobernanza, no autor de intención (`§2.2 Nucleus Governance Layer`).
 - **El Companion da segunda opinión, nunca primera.** Por diseño, vive en un panel lateral aparte de la sesión principal del ingeniero — «Principio de Sesión Prístina» — precisamente para no contaminar ni sustituir el criterio del ingeniero con ruido de gobernanza automatizada (`§2.3 Companion`).
-- **El Conductor convierte conflicto técnico en decisión asistida, no en decisión automática.** El merge cognitivo consulta al modelo, pero es el ingeniero quien fuerza la reconciliación a través de un intent `cor` (`§2.4`).
+- **El Conductor convierte conflicto técnico en decisión asistida, no en decisión automática.** El merge cognitivo consulta al modelo, pero es el ingeniero quien fuerza la reconciliación. (El intent `cor` citado originalmente aquí fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11; el mecanismo equivalente hoy está propuesto pero sin ratificar.)
 - **La autoridad nunca se distribuye, aunque el acceso sí** — invariante ya explícito para Alfred y la app mobile (`§10.5`), y que Cognittuum eleva a ley general del sistema: ningún canal remoto, ningún agente, ningún loop autónomo adquiere autoridad. Solo la ejerce quien la tiene: el humano, a través de Nucleus.
 
 Los agentes, los loops y lo que venga como "ejército de synapse-simulator cognitivos" no son la fuente de desarrollo. Son **superficie de ejecución**, subordinada siempre a la intención firmada por un humano.
@@ -41,7 +41,7 @@ Cognittuum declara al Intent como **moneda de intercambio agnóstica** entre:
 
 Agnóstica significa que no depende de qué modelo, qué proveedor de IA, ni qué herramienta la ejecutó. El Intent sobrevive al modelo que lo originó. Esto es lo que le da al sistema **gobernanza** (todo queda firmado y trazable por Nucleus) y **continuidad** (el conocimiento no vive en memoria volátil de un modelo ni en un prompt efímero — vive en el filesystem, versionado, reconstruible).
 
-Los cinco tipos existentes (`dev`, `doc`, `exp`, `inf`, `cor`) no son categorías técnicas arbitrarias: son los cinco modos en que una decisión humana puede manifestarse en trabajo de ingeniería. Cognittuum no necesita inventar una sexta forma de expresar intención — necesita profundizar la fidelidad con la que estas cinco capturan **cómo piensa realmente un ingeniero experimentado**.
+Los cuatro tipos vigentes (`dev`, `doc`, `exp`, `inf`) no son categorías técnicas arbitrarias: son modos en que una decisión humana puede manifestarse en trabajo de ingeniería (`cor` también lo era, pero fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). Cognittuum no necesita inventar una nueva forma de expresar intención — necesita profundizar la fidelidad con la que estas capturan **cómo piensa realmente un ingeniero experimentado**.
 
 ---
 

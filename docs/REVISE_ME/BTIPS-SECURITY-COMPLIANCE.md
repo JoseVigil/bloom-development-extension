@@ -52,7 +52,7 @@ BTIPS implements a **three-tier role hierarchy** that mirrors enterprise securit
 #### **Architect Role** (Technical Lead)
 - **Capabilities:**
   - Create/manage Projects
-  - Execute `exp` (exploration) and `cor` (coordination) intents
+  - Execute `exp` (exploration) intents (`cor`/coordination also listed here originally — deprecated 2026-09-02 by control, no transition in progress, see `docs/CONTROL/AGENDA_MAESTRA.md` §11)
   - Review and approve `dev` intents from Specialists
   - Configure Project-level policies
   

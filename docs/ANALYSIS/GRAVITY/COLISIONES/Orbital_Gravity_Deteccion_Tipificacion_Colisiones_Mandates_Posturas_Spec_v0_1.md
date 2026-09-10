@@ -357,7 +357,7 @@ Los cinco gaps del cierre de boundary permanecen intactos (`docs/ANALYSIS/GRAVIT
 2. shape exacto de `promotedTo`;
 3. autoridad para iniciar promoción;
 4. identidad o reformulación de `expression` al promover;
-5. relación `RequireMaster()`/`cor`.
+5. relación `RequireMaster()`/`cor` — **actualizado 2026-09-10:** `cor` está deprecado desde 2026-09-02 (`docs/CONTROL/AGENDA_MAESTRA.md` §11), así que esta pregunta ya no es "¿cómo se relacionan?" sino qué mecanismo Gravity-nativo reemplaza a `cor` en ese punto — todavía sin ratificar.
 
 Una colisión puede motivar una postulación futura, pero este documento no decide cómo esa postura se promueve, quién la inicia ni cómo se reformula **[I]**.
 

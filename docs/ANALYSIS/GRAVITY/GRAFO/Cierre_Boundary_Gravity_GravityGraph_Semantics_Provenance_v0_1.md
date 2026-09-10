@@ -20,7 +20,7 @@
 
 | Término | Alcance fijado | Qué incluye | Qué NO incluye |
 |---|---|---|---|
-| **Gravity** | El sistema de gobernanza del criterio, en su totalidad | Lenguaje declarativo, resolución activa por turno, arbitraje, masa, promoción, `cor`, autoridad de firma por nivel — y cualquier plano futuro que gobierne criterio (Semantics, Provenance, lo que Trazabilidad Viva termine formalizando) | No es una estructura de datos — es el sistema. Nunca debe usarse como sinónimo de una persistencia concreta |
+| **Gravity** | El sistema de gobernanza del criterio, en su totalidad | Lenguaje declarativo, resolución activa por turno, arbitraje, masa, promoción, autoridad de firma por nivel — y cualquier plano futuro que gobierne criterio (Semantics, Provenance, lo que Trazabilidad Viva termine formalizando). (`cor` figuraba acá al cierre de este documento, 2026-09-01; fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — Gravity absorbió lo que cubría.) | No es una estructura de datos — es el sistema. Nunca debe usarse como sinónimo de una persistencia concreta |
 | **`GravityGraph`** (Grafo de Gravedad) | La estructura persistida que representa y preserva **Criterion + estructura gobernada + Provenance ratificada** | `GravityNode`/`gravityPostures[]` (Criterion); nodos estructurales `DOMAIN` y `GENE` sin Postures; proyecciones gobernadas de sus relaciones canónicas; la arista `PROMOTED_FROM` y sus denormalizaciones `promotedFrom`/`promotedTo` | Contenido semántico canónico de Domain/Gene; relaciones probabilísticas; cualquier tipo de arista de Provenance todavía no ratificado (`SUPPORTS`, `CONTRADICTS`, `EVIDENCES`, `CONFIRMS`, etc.) |
 | **Semantics** | Plano probabilístico, separado por diseño | BISP/ChromaDB — descubre relaciones posibles, nunca las certifica | Nunca se funde con `GravityGraph` ni se usa como sustituto de procedencia factual — axioma ya adoptado en la revisión anterior |
 | **Provenance** | Exigencia factual futura, sin estructura propia general todavía | **Excepción explícita: los precedentes ya ratificados quedan dentro de `GravityGraph`** (ver fila anterior) — no como una capa aparte pendiente, sino como la porción de Provenance que Gravity ya resolvió sin saberlo, antes de que el concepto tuviera nombre | La ontología completa (Criterion/Semantics/Provenance de la revisión anterior), Alfred, Sensor, cualquier tipo de arista nuevo — todo eso sigue sin diseñarse, tal como se pidió |
@@ -53,7 +53,7 @@ Eso significa que agregar `SUPPORTS`, `EVIDENCES`, `CONFIRMS` u otras aristas de
 | Shape exacto de `promotedTo` poblado | **Pendiente — nunca aparece con ejemplo no-null en el corpus** | Contraste con `promotedFrom`, que sí tiene shape completo con ejemplo (`Persistencia` §5.3) |
 | Quién puede iniciar/proponer una promoción | **Pendiente** | `Fundamentos` §30 solo confirma que la UI debe permitirlo, no quién específicamente |
 | Si el `expression` promovido debe ser idéntico al de origen o puede reformularse | **Pendiente — sin evidencia en ningún sentido** | Ausencia total en el corpus |
-| Relación entre `RequireMaster()` (stub) y el gate `cor` que autoriza promoción hacia `ORGANIZATION`/`NUCLEUS` | **Inferido con fuerza, no confirmado textualmente** | `cor` es "el único camino" hacia esos niveles (`Implementation Spec` §1.3); que `cor` dependa exactamente de `RequireMaster()` es la lectura más consistente con el resto del corpus, pero ningún documento lo dice en esas palabras exactas |
+| Relación entre `RequireMaster()` (stub) y el gate `cor` que autorizaba promoción hacia `ORGANIZATION`/`NUCLEUS` | **Superado — `cor` deprecado** | `cor` era "el único camino" hacia esos niveles al momento de este cierre (`Implementation Spec` §1.3, cita histórica); control confirmó el 2026-09-02 que `cor` está deprecado, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — el gate `cor` no se implementa. Qué gate reemplaza esa autorización para `ORGANIZATION`/`NUCLEUS` está propuesto pero sin ratificar. |
 
 ---
 
@@ -61,12 +61,17 @@ Eso significa que agregar `SUPPORTS`, `EVIDENCES`, `CONFIRMS` u otras aristas de
 
 Los cinco gaps de §4 fueron revisados contra el código real de `internal/gravity/` en la sesión de
 continuidad que siguió a este cierre — ninguno bloquea el próximo incremento del GravityGraph. En
-particular, el gap de `RequireMaster()`/`cor` (última fila) dejó de ser inferencia: `store.go` declara
-textualmente, en su propio mensaje de error, que la creación de `ORGANIZATION`/`NUCLEUS` está a la espera
-de "cor + Authorization module" — ninguno de los dos implementado todavía, rechazo intencional. El detalle
+particular, el gap de `RequireMaster()`/`cor` (última fila) dejó de ser inferencia: `store.go` declaraba
+textualmente, en su propio mensaje de error, que la creación de `ORGANIZATION`/`NUCLEUS` estaba a la espera
+de "cor + Authorization module" — ninguno de los dos implementado en ese momento, rechazo intencional. El detalle
 completo de esa reconciliación (qué está implementado, qué depende de qué, y el próximo paso concreto)
 queda en el tablero de seguimiento de Gravity/Orbital/Posture, no se repite acá para no duplicar la fuente
 de verdad de este documento, que sigue siendo el cierre de boundary en sí.
+
+> **Actualización posterior (2026-09-10):** control confirmó el 2026-09-02 que `cor` está deprecado, sin
+> transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. La espera de "cor + Authorization module" que citaba
+> `store.go` queda resuelta por descarte de uno de los dos lados: no habrá `cor`. Qué gate concreto
+> autoriza la creación de `ORGANIZATION`/`NUCLEUS` en su lugar está propuesto pero sin ratificar.
 
 ---
 

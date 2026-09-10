@@ -1404,7 +1404,9 @@ Este documento existe para que, cuando llegue el momento real de implementar `de
 > Postulación, GravityGraph), que hoy maneja el conjunto de posturas a nivel organización en su lugar. Esta
 > nota no describe el mecanismo de Gravity en detalle — eso vive en BTIPS §8 — solo dejá trazado que la fila
 > de `cor` en la tabla resumen (E.1) debe leerse como "descartado y reemplazado", no como "no implementado
-> todavía".
+> todavía". **Confirmación formal (2026-09-10):** control ratificó el descarte el 2026-09-02, sin transición
+> en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. El reemplazo funcional para lo que `cor` cubría en
+> ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.
 
 ---
 

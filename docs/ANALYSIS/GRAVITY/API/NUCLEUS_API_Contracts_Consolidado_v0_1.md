@@ -8,6 +8,8 @@
 **Fecha:** 2026-08-28
 **Alcance:** DTOs y contratos de API para (1) `intent_draft`, (2) respuesta de `validate_and_sign`, (3) consulta de Gravity activa, (4) evento de arbitraje + notificación, (5) propuesta de versionado del contrato de API.
 
+> ⚠️ **Nota de deprecación (2026-09-10):** `cor` (alias de citación **[COR v1.0]** / `COR_Intent_Spec_v1_0.md`, una de las cuatro fuentes de este catálogo) fue confirmado como **deprecado** por control el 2026-09-02, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Gravity absorbió el articulado de autorización de postulados y posturas que `cor` cubría. Las secciones de este catálogo que citaban a `cor` sólo como fuente para otro campo quedan como registro histórico; donde presentaban a `cor` mismo como DTO o contrato activo, el contenido fue removido y reemplazado por una nota puntual. El reemplazo funcional para lo que `cor` cubría en ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.
+
 ---
 
 ## 0. Método y convención de citas
@@ -27,7 +29,7 @@ Este documento es un trabajo de **consolidación, no de invención**. Cada campo
 | **[BTIPS]** | `BTIPS_Mandates_Agenticos_Spec_Unificada.md` |
 | **[MANDATE v1.2.0]** | `BLOOM_Mandate_Universal_Schema_v1_2_0.md` |
 | **[GRAVITY v0.1]** | `Orbital_Gravity_Implementation_Spec_v0_1.md` |
-| **[COR v1.0]** | `COR_Intent_Spec_v1_0.md` |
+| **[COR v1.0]** | `COR_Intent_Spec_v1_0.md` — **deprecado** 2026-09-02, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 |
 
 Las citas de la forma `[BTIPS §8.5]` señalan sección concreta. Cuando una fuente cita a su vez a un documento que **no** está entre los cuatro adjuntos (p. ej. `v1.1.0` de Mandate Universal Schema, o `MRG_Intent_Spec_v1_0.md`), se marca explícitamente como "citado pero no verificable con las fuentes disponibles" — el dato se incluye porque aparece nombrado en uno de los cuatro documentos, pero su definición original no pudo confirmarse contra el documento de origen real.
 
@@ -41,11 +43,11 @@ El ciclo turno a turno se describe en **[BTIPS §8.3]**, diagrama de secuencia: 
 
 | Campo | Tipo | Estado | Cita | Nota |
 |---|---|---|---|---|
-| `type` | enum: `exp \| dev \| tst \| mrg \| doc \| cor` | ✅ Confirmado | Matriz completa en **[BTIPS §8.6.1]** | `inf` existe como intent type (v6.0 §6️⃣) pero queda **fuera** de esta matriz agéntica por decisión explícita — no participa del ciclo `exp → dev → tst [→ mrg → tst]` **[BTIPS §8.6.1]** |
+| `type` | enum: `exp \| dev \| tst \| mrg \| doc \| cor` | ✅ Confirmado | Matriz completa en **[BTIPS §8.6.1]** | `inf` existe como intent type (v6.0 §6️⃣) pero queda **fuera** de esta matriz agéntica por decisión explícita — no participa del ciclo `exp → dev → tst [→ mrg → tst]` **[BTIPS §8.6.1]**. `cor` fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. |
 | `proposer_type` | string (valor confirmado: `"agent"`) | ⚠️ Ambigüedad detectada | **[BTIPS §8.3]** (prosa); **[COR §0, §3.1, §3.3]** | Ver §1.4 — inconsistencia de nombre con el campo `proposed_by` que aparece en los ejemplos JSON de `orbital_agentic_state.json` |
 | `target` | string (path o glob) | ✅ Confirmado | **[BTIPS §8.5]**, turnos 1, 4, 8 | Usado en ejemplos `exp`, `dev`, `tst` |
 | `source_refs` | string[] | ✅ Confirmado | **[BTIPS §8.2.1]** (regla de clasificación); **[BTIPS §8.5]**, turnos 6, 7 | Usado en ejemplos `dev` (mal clasificado) y `mrg` |
-| `payload` | objeto anidado, forma no fijada para tipos no-`cor` | ⚠️ Ambigüedad detectada | Nombrado en **[BTIPS §8.3]** (prosa del diagrama) | Ver §1.4 — ningún ejemplo JSON de `exp/dev/tst/mrg` muestra un wrapper `payload`; sólo `cor` lo tiene formalmente (§1.3) |
+| `payload` | objeto anidado, forma no fijada para tipos no-`cor` | ⚠️ Ambigüedad detectada | Nombrado en **[BTIPS §8.3]** (prosa del diagrama) | Ver §1.4 — ningún ejemplo JSON de `exp/dev/tst/mrg` muestra un wrapper `payload`; sólo `cor` lo tenía formalmente definido, en la interfaz removida de §1.3 (`cor` deprecado 2026-09-02, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11) |
 
 ### 1.2 Variantes por tipo — con los ejemplos de `orbital_agentic_state.json` (turnos)
 
@@ -83,35 +85,9 @@ Cita: **[BTIPS §8.5]**, turno 8. Posture material: "Ejecución de pruebas deter
 
 **`doc`** — sin ejemplo de shape concreto en ninguna de las cuatro fuentes. Aparece únicamente como entrada en `allowed_intent_types` (**[BTIPS §8.2]**) y en la matriz (**[BTIPS §8.6.1]**), nunca con un `intent_draft` de ejemplo. **No se infiere su forma por analogía con `exp`/`dev`** — sería invención. Queda documentado como *gap de fuente*, no como campo propuesto.
 
-### 1.3 Caso `cor` — rechazo explícito para agentes
+### 1.3 Caso `cor` — sección removida
 
-`cor` tiene una forma de draft propia y **nunca es válido si `proposer_type === "agent"`**, sin excepción y sin depender de la configuración del `capability_seam`:
-
-```typescript
-// [COR §4] — interfaz completa, citada literalmente
-interface CorIntentDraft {
-  type: "cor";
-  action: "read" | "write";              // AMBOS vetados para Agent Loop
-  target: string;                         // referencia a la regla de negocio/invariante/política
-  payload: {
-    rule_id: string;
-    proposed_change?: Record<string, unknown>;  // solo si action === "write"
-  };
-}
-```
-Cita: **[COR §4]** (TypeScript + JSON Schema draft-07 idénticos).
-
-Invariante de rechazo (✅ confirmado, cita textual):
-
-> "Si `proposer_type === "agent"` y `intent_draft.type === "cor"`, Nucleus rechaza **sin excepción**, antes de evaluar cualquier otro campo del draft." — **[COR §0]**, reafirmado en **[COR §3.1]**: *"`cor` no es un intent que un `capability_seam` pueda habilitar — está fuera del universo de intents proponibles por un Agent Loop a nivel de sistema, no a nivel de configuración."*
-
-El JSON Schema del draft en **[COR §4]** lo declara incluso como comentario estructural no evaluable por el propio schema:
-```jsonc
-// "x-nucleus-invariant": "proposer_type !== 'agent'"
-```
-Este chequeo ocurre en `validate_and_sign`, **antes** de que el JSON Schema del draft se evalúe — **[COR §1.1]**, **[COR §5]** (tabla de ciclo de vida, fila "Recepción del draft").
-
-Consistente con la matriz de **[BTIPS §8.6.1]**: `cor` → "Accesible por Agent Loop: **No** — `forbidden_intent_types`, Zero-Read/Zero-Write".
+*(Sección removida 2026-09-10 — describía la interfaz formal `CorIntentDraft` y el invariante de rechazo de `cor` para Agent Loops como mecanismo vigente. `cor` fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Su función de autorización fue absorbida por Gravity; el reemplazo concreto para ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.)*
 
 ### 1.4 Ambigüedades detectadas (no resueltas silenciosamente)
 
@@ -178,8 +154,9 @@ Se buscaron explícitamente todos los `reason_code` nombrados literalmente (como
 | `SCOPE_VIOLATION` | **[BTIPS §8.2.2, §8.3]**; referenciado también en **[COR §3.2]** | Escalación configurada por seam: `on_scope_violation: "reject_and_notify_human"` — **[BTIPS §8.2]**. |
 | `PATH_FORBIDDEN` | **[BTIPS §8.2.2, §8.3, §8.5]** turno 4; referenciado en **[COR §3.2]** | Escalación: `on_forbidden_path_touch: "reject_intent_hard_stop"` — **[BTIPS §8.2]**. |
 | `BUDGET_EXCEEDED` | **[BTIPS §8.2.2, §8.3]**; referenciado en **[COR §3.2]** | Escalación: `on_budget_exceeded: "pause_and_request_extension"` — **[BTIPS §8.2]**. |
-| `COR_FORBIDDEN_FOR_AGENT` | **[COR §1.1]** (interfaz `CorRejection` completa), **[COR §4]** (comentario de schema), **[COR §5]** (tabla de ciclo de vida) | Único `reason_code` cuyo shape de rechazo está completamente tipado en la fuente — ver §2.3.3. |
 | `GRAVITY_THRESHOLD_BREACHED` | **[MANDATE v1.2.0 §3]**; re-citado en **[GRAVITY v0.1 §3.3]** punto 2 | ⚠️ Ambas fuentes citan el origen de este código como `v1.1.0 §4`, documento **no incluido** entre los cuatro adjuntos — su definición completa (más allá del nombre y de que dispara con `verifiable: true` y puebla `posture_ref`) no pudo verificarse contra el documento de origen real. Se incluye porque el string aparece nombrado literalmente en dos de las cuatro fuentes entregadas. |
+
+> `COR_FORBIDDEN_FOR_AGENT` fue removido de la unión cerrada activa de arriba — describía un `reason_code` propio de `cor`, deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Ver también §2.3.3.
 
 #### 2.3.2 Código nombrado pero explícitamente **no ratificado** — no forma parte de la unión activa
 
@@ -187,18 +164,9 @@ Se buscaron explícitamente todos los `reason_code` nombrados literalmente (como
 |---|---|---|
 | `MERGE_CONFLICT_BUDGET_EXCEEDED` | **[BTIPS §8.1.1]**, bloque marcado *"Marca de ratificación pendiente"* | La propia fuente dice textualmente: *"Ese mecanismo de dry-run [...] vía `reason_code: MERGE_CONFLICT_BUDGET_EXCEEDED` **no forma parte de esta spec unificada** — es una propuesta de extensión hecha al formalizar BSIP-010, todavía sin firma."* Mezclarlo sin aviso en la unión cerrada activa violaría la disciplina de consolidación pedida. Se documenta aquí como candidato conocido, condicionado a que BSIP-010 se ratifique. |
 
-#### 2.3.3 Shape de rechazo completamente tipado — único caso con estructura íntegra en la fuente
+#### 2.3.3 Shape de rechazo completamente tipado — sección removida
 
-```typescript
-// [COR §1.1] — citado literalmente
-interface CorRejection {
-  reason_code: "COR_FORBIDDEN_FOR_AGENT";
-  proposer_type: "agent";
-  intent_draft_type: "cor";
-  rejected_at: "validate_and_sign";
-}
-```
-Para el resto de los `reason_code` de §2.3.1, las fuentes confirman el nombre del código y su condición de disparo, pero **no** un shape de payload de rechazo tan completo como éste — no se extrapola esa estructura a los demás códigos por analogía, para no inventar campos.
+*(Sección removida 2026-09-10 — definía la interfaz `CorRejection` de `cor`, deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Su función de autorización fue absorbida por Gravity; el reemplazo concreto está propuesto pero sin ratificar. Para el resto de los `reason_code` de §2.3.1, las fuentes confirman el nombre del código y su condición de disparo, pero no un shape de payload de rechazo tan completo como el que tenía `cor` — no se extrapola esa estructura a los demás códigos por analogía.)*
 
 #### 2.3.4 Gap — código de rechazo mencionado pero nunca nombrado literalmente
 
@@ -245,6 +213,8 @@ Este documento formaliza esa posture ya existente como el contrato de consulta �
 - **[BTIPS §8.2.2]**, sobre por qué `cor` es opaco incluso en lectura: *"Un agente que pudiera leer `cor` directamente podría enumerar con precisión los límites exactos del sistema (qué paths, qué presupuestos, qué reglas) en vez de descubrirlos indirectamente turno a turno vía rechazo."* Exponer el **grafo completo** de Gravity (todos los nodos `ORGANIZATION`/`PROJECT`/`MANDATE` activos, con sus `gravityPostures[]` íntegras, sus relaciones `PARENT_OF`/`INHERITS_FROM` — **[GRAVITY v0.1 §1.2, §1.4]**) sería estructuralmente el mismo vector de reconocimiento: un agente podría enumerar de una sola consulta todos los criterios y umbrales de toda la organización, en vez de descubrirlos turno a turno según lo que aplica a su intent concreto.
 - **[COR v1.0 §3.2]**, invariante de opacidad en lectura: *"Toda la telemetría que el agente recibe sobre límites del sistema llega **exclusivamente** filtrada [...] nunca por consulta directa a la regla de negocio cruda."* El mismo principio de "filtrado, nunca consulta cruda" es el que ya aplica **[GRAVITY v0.1 §2.4]** al contexto de Gravity.
 - **Contraste explícito que la propia fuente marca:** `Gravity` **no** es `cor` — **[GRAVITY v0.1 §3.4]** aclara sobre `ArbitrationEvent`: *"no es un `corEvent`: no hay promulgación de ley, no hay `CorNucleusRecord`, no hay Zero-Read. Es un evento de coordinación ordinaria, visible para ambos Mandates afectados **sin restricción especial de lectura**."* Es decir, Gravity en general no hereda automáticamente el Zero-Read de `cor` como régimen — pero el mecanismo de inyección al Agent Loop (§2.4) sí adopta, por elección de diseño ya tomada en la fuente, el mismo patrón de filtrado que evita la enumeración total. La justificación no es "Gravity es secreta como `cor`"; es "exponer el grafo completo al proponente de un intent es el mismo vector de reconocimiento que motivó Zero-Read en `cor`, aunque el régimen de gobierno detrás sea distinto y menos restrictivo para otros consumidores" (ver nota abajo).
+
+> ⚠️ Nota (2026-09-10): los tres párrafos anteriores citan la política de opacidad de `cor` en presente, como justificación histórica de diseño para la restricción de lectura de Gravity. `cor` fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — por lo que ese régimen de opacidad ya no rige por sí mismo; se preserva la cita porque explica el razonamiento de diseño que Gravity adoptó, no porque `cor` siga vigente.
 
 ### 3.2 Contrato — `resolve_active_gravity`
 
@@ -378,7 +348,7 @@ Y, para el caso de consulta explícita (siempre disponible, independientemente d
 |---|---|---|---|
 | **[BTIPS]** | v6.1 (+ Addendum 22 ago 2026, + Nota cruzada Gravity 27 ago 2026) | La taxonomía de intents y el modelo de gobierno de Mandates Agénticos | Registro de cambios, encabezado de §8️⃣ |
 | **[MANDATE v1.2.0]** | v1.2.0 (extiende v1.0.0, v1.0.1, v1.1.0 — "todos permanecen vigentes sin cambios") | El contrato `mandate.json` y su modelo de herencia de Gravity | Encabezado y registro de cambios |
-| **[COR v1.0]** | v1.0 (deriva de BSIP-009, **firma dual formal aún pendiente**) | El contrato específico del intent `cor` | Encabezado |
+| **[COR v1.0]** | v1.0 (deriva de BSIP-009, **firma dual formal aún pendiente**) | El contrato específico del intent `cor` — **deprecado** 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 | Encabezado |
 | **[GRAVITY v0.1]** | v0.1 ("borrador [...] exploratorio, no normativo todavía") | El modelo de grafo de Gravity, resolución por turno y arbitraje | Encabezado |
 
 Ninguno de estos cuatro números versiona "la API" como superficie única — cada uno versiona un sub-contrato distinto que la API compone: el schema de Mandate, la semántica de un tipo de intent particular, el modelo de coordinación. Son ejes de versionado **independientes por diseño** (los propios documentos lo dejan explícito: `v1.2.0` dice que `v1.0.0`–`v1.1.0` "permanecen vigentes sin cambios"; `GRAVITY v0.1` dice de sí mismo que "no reemplaza ni fija los addenda ya cerrados del Mandate Universal Schema [...] los extiende"). Un cambio en `COR` de v1.0 a v1.1 no implica necesariamente ningún cambio en la forma de `ValidateAndSignResponse` que un cliente de API consume, y viceversa.
@@ -402,6 +372,8 @@ Se propone un **cuarto eje de versionado**, propio del contrato de API expuesto 
 |---|---|---|---|---|
 | `2026-08.1` (línea base de este catálogo) | v6.1 + Addendum + Nota Gravity | v1.2.0 | v1.0 | v0.1 |
 
+> ⚠️ Nota (2026-09-10): la columna "Requiere COR ≥" describe la línea base histórica de este catálogo (2026-08.1). `cor` fue deprecado 2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — por lo que ese eje de versionado ya no aplica a un release futuro del contrato de API; qué lo reemplaza (si algo) queda sin definir aquí.
+
 Esta tabla es el mecanismo concreto para responder, sin ambigüedad, "¿qué versión de la API necesito para que `arbitration_triggered` sea un valor válido de `nucleus_decision`?" (respuesta: cualquier `nucleus_api_version` que declare `GRAVITY ≥ v0.1`) sin acoplar el número de versión de la API al número de versión de cada documento de schema individualmente.
 
 **Negociación:** se propone que el cliente declare la versión de API que soporta (header `X-Nucleus-Api-Version` o campo de handshake al abrir la sesión de Temporal), y que Nucleus rechace o degrade — nunca "adivine" — si el cliente no declara una versión compatible con los sub-contratos que el servidor tiene activos. Esto es consistente con la disciplina ya aplicada en las fuentes para el versionado de `mandate.json` mismo: **[COR §3.4]** ya establece que *"un Mandate marcado como v6.0 [...] es rechazado en su totalidad [...] no se ejecuta parcialmente ni se reinterpreta automáticamente"* — el mismo principio de rechazo explícito en vez de interpretación silenciosa se extiende aquí al contrato de API.
@@ -421,6 +393,8 @@ Estos gaps ya estaban abiertos en las fuentes y afectan directamente a los DTOs 
 | Firma dual formal (Master + Seguridad) de BSIP-009 sigue pendiente | Todo el intent `cor` (§1.3) | **[COR]**, encabezado y §9 |
 | Qué pasa si un arbitraje produce una tercera colisión (caso de segundo orden) | `ArbitrationEvent` (§4.1) | **[GRAVITY v0.1 §5]** |
 | Mecanismo exacto de firma para el nivel `PROJECT` en el grafo de Gravity — no especificado | Resolución de Gravity (§3) | **[GRAVITY v0.1 §5]** |
+
+> Nota (2026-09-10): las filas de esta tabla que referencian el intent `cor` documentan gaps abiertos en una fuente hoy deprecada (2026-09-02 por control, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11); se listan como registro histórico, no como trabajo pendiente activo sobre `cor`.
 
 ---
 

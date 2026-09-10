@@ -34,7 +34,7 @@ El intent `.gen` es el proceso de transformación del caos inicial al orden estr
 
 ### 1.2 Posición en la jerarquía de intents
 
-El BTIPS v5.0 define los siguientes tipos de intent existentes: `dev`, `doc`, `exp`, `inf`, `cor`. El intent `.gen` se agrega como un tipo nuevo con características propias:
+El BTIPS v5.0 (2026, fuente histórica) definía los siguientes tipos de intent: `dev`, `doc`, `exp`, `inf`, `cor` — de los cuales `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. El intent `.gen` se agrega como un tipo nuevo con características propias:
 
 | Propiedad | `.dev` | `.doc` | `.gen` |
 |---|---|---|---|

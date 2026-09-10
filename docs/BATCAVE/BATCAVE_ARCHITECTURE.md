@@ -134,8 +134,7 @@ Batcave no contiene lógica de negocio ni capacidad de interpretación. Es infra
     │   └── .security/
     │
     ├── .intents/
-    │   ├── .cor/
-    │   └── .exp/
+    │   └── .exp/            # (.cor/ deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11)
     │
     ├── .relations/
     │
@@ -571,7 +570,6 @@ Lo que Batcave enruta puede expresar cualquier acción que un intent o Mandate y
 | Acción | Tipo de instrucción | Efecto en el sistema local |
 |---|---|---|
 | Explorar una alternativa técnica | Intent `exp` | Nucleus instancia el intent, Brain lo ejecuta |
-| Coordinar un merge cognitivo | Intent `cor` | Nucleus orquesta la resolución entre intents conflictivos |
 | Desarrollar una feature | Intent `dev` | Nucleus delega al Project correspondiente |
 | Documentar una decisión | Intent `doc` | Nucleus persiste el conocimiento en el filesystem |
 | Ejecutar un proceso complejo de múltiples pasos | Mandate | Nucleus firma el contrato y lo persiste vía Temporal |
@@ -682,7 +680,7 @@ Batcave es el único punto del ecosistema Bloom que permite **operar el sistema 
 Esto lo convierte en el mecanismo central para:
 
 - **Supervisión remota**: consultar el estado de un Mandate en curso desde el teléfono mientras el sistema corre en la máquina de desarrollo.
-- **Aprobación de acciones**: recibir una notificación de que un intent `cor` requiere decisión humana y resolverlo desde la app.
+- **Aprobación de acciones**: recibir una notificación de que una Action requiere decisión humana y resolverla desde la app. (El ejemplo original usaba el intent `cor` para esto — deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11; el mecanismo equivalente hoy está propuesto pero sin ratificar.)
 - **Instrucción asíncrona**: iniciar un `exp` intent antes de llegar a la oficina para que Brain ya tenga resultados cuando el usuario se siente.
 - **Reporting bajo demanda**: pedir el reporte de estado del Nucleus desde mobile sin necesidad de abrir el Conductor.
 

@@ -53,7 +53,7 @@ El campo `DownloadURL` existe en `IonManifest` (`manifest.go`) pero su consumo r
 
 Metamorph es, en toda la documentación revisada, una herramienta 100% CLI (`METAMORPH_COMANDOS.md`, `metamorph_rollout_prompt.md`) — invocada manualmente o encadenada desde `build-all.py`. No hay ningún concepto de canal/prioridad "urgente" vs. "normal" — el único "canal" que existe es `channel: stable|beta` en el schema D1 del backend, que es de *estabilidad de release*, no de *urgencia*, y no tiene consumidor implementado del lado de Metamorph.
 
-Lo más cercano reutilizable: `BATCAVE_ARCHITECTURE.md` §9.7 ya describe "Aprobación de acciones: recibir una notificación de que un intent `cor` requiere decisión humana y resolverlo desde la app [mobile]" vía WebSocket/BlindJudge/RelayEngine — mecanismo real, pero para gobernanza de intents, no para actualizaciones de sistema. Podría eventualmente reutilizarse como transporte, pero eso es diseño nuevo.
+Lo más cercano reutilizable: `BATCAVE_ARCHITECTURE.md` §9.7 ya describe un mecanismo de "Aprobación de acciones: recibir una notificación de que [una Action] requiere decisión humana y resolverla desde la app [mobile]" vía WebSocket/BlindJudge/RelayEngine — mecanismo real, pero para gobernanza de intents, no para actualizaciones de sistema (el ejemplo original citaba el intent `cor` específicamente; deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). Podría eventualmente reutilizarse como transporte, pero eso es diseño nuevo.
 
 ---
 

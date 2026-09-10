@@ -395,9 +395,8 @@ This allows Metamorph to build a **complete system state map** before any operat
 │
 ├── .nucleus-myorg/                   # Nucleus repository (git)
 │   ├── .bloom/                       # Bloom runtime folder
-│   │   ├── .intents/                 # Intent storage
+│   │   ├── .intents/                 # Intent storage ('.cor/' deprecated 2026-09-02, see AGENDA_MAESTRA.md §11)
 │   │   │   ├── .exp/                 # Exploration intents
-│   │   │   ├── .cor/                 # Coordination intents
 │   │   │   └── .doc/                 # Documentation intents
 │   │   ├── config/
 │   │   │   └── nucleus.json          # Governance config

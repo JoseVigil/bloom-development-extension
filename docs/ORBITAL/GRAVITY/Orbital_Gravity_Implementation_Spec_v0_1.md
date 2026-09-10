@@ -1,5 +1,14 @@
 # Orbital · Gravity — Implementation Spec v0.1
 
+> **Corrección 2026-09-10:** `cor`/`COR_Intent_Spec_v1_0.md` es Intent Core, **deprecado** —
+> confirmado por control el 2026-09-02 (`docs/CONTROL/AGENDA_MAESTRA.md` §11). Gravity absorbió
+> el articulado de autorización de postulados y posturas que antes vivía en `cor`. Las menciones
+> de `cor` como "único canal" hacia `ORGANIZATION`/`NUCLEUS` en este documento describen un
+> mecanismo que ya no existe; el reemplazo Gravity-nativo (basado en `SignedBy`/roles, con
+> invariante de unicidad para `NUCLEUS`) está propuesto pero todavía **sin ratificar** — ver
+> `docs/CONTROL/AGENDA_MAESTRA.md` §11 para el estado vigente antes de tomar cualquier línea de
+> este documento como autorización activa.
+
 ## Persistencia en Grafo, Resolución por Turno y Arbitraje Centralizado sin `cor`
 
 **Tipo:** Especificación preliminar de implementación — inicio de nueva fase de investigación
@@ -7,7 +16,7 @@
 **Fecha:** 2026-08-28
 **Dominio:** Orbital · Gravity · Nucleus · Grafo de Coordinación
 **Fuente conceptual:** `Orbital — Fundamentos de Coordinación, Gravity e Interacción Gobernada.md` (documento fundacional revisado), en particular §8–§10 (jerarquía), §22 (promoción), §26 (arquitectura consolidada) y §34 (frontera de diseño, que deja explícitamente sin resolver "el mecanismo de resolución de conflictos" — este documento aborda esa deuda puntual, no el resto de la frontera)
-**Depende de:** `BLOOM_Mandate_Universal_Schema_v1_0_0/v1_0_1/v1_1_0/v1_2_0.md` (nivel Mandate y herencia de sub-Mandates, que este documento no reabre), `COR_Intent_Spec_v1_0.md`/`BSIP-009` (canal exclusivo de promulgación de ley global), `BTIPS_Mandates_Agenticos_Spec_Unificada.md` §8 (Capability Seam, loop turno a turno)
+**Depende de:** `BLOOM_Mandate_Universal_Schema_v1_0_0/v1_0_1/v1_1_0/v1_2_0.md` (nivel Mandate y herencia de sub-Mandates, que este documento no reabre), `COR_Intent_Spec_v1_0.md`/`BSIP-009` (**deprecado 2026-09-02, ya no es el canal de promulgación de ley global — ver banner de corrección arriba**), `BTIPS_Mandates_Agenticos_Spec_Unificada.md` §8 (Capability Seam, loop turno a turno)
 
 ---
 
@@ -52,19 +61,19 @@ Propiedades comunes a todo nodo:
 }
 ```
 
-### 1.3 Quién firma cada nivel — y dónde entra `cor`
+### 1.3 Quién firma cada nivel — y dónde entraba `cor` (deprecado)
 
-Esta tabla es la pieza que faltaba para que "coordinación sin depender de `cor`" no se lea como "gobernanza sin autoridad": `cor` sigue siendo el único canal para los dos niveles superiores; todo lo demás tiene autoridad propia, delegada, más liviana.
+Esta tabla es la pieza que faltaba para que "coordinación sin depender de `cor`" no se lea como "gobernanza sin autoridad": `cor` **era** el único canal para los dos niveles superiores hasta su deprecación (2026-09-02); todo lo demás tiene autoridad propia, delegada, más liviana. El reemplazo para `ORGANIZATION`/`NUCLEUS` está propuesto (Gravity-nativo, vía `SignedBy`/roles) pero sin ratificar — ver banner de corrección.
 
 | Nivel | Quién firma el nodo | Requiere `cor` | Análogo ya existente |
 |---|---|---|---|
 | `NUCLEUS` | Constitutivo — no se firma, es dado (Nivel 0 de `v1.1.0`) | N/A | Invariantes de protocolo |
-| `ORGANIZATION` | Operador humano con autoridad organizacional, vía canal privilegiado de Nucleus | **Sí, siempre** | Ley global — Nivel 1 de `v1.1.0` |
+| `ORGANIZATION` | Operador humano con autoridad organizacional, vía canal privilegiado de Nucleus | **Sí, siempre (hasta 2026-09-02 — `cor` deprecado, reemplazo sin ratificar)** | Ley global — Nivel 1 de `v1.1.0` |
 | `PROJECT` | Humano con autoridad de proyecto (Architect/Master, según roles ya definidos en BTIPS) | No | Nuevo — criterio de alcance intermedio, análogo en espíritu a `gravityPostures` de Mandate pero con alcance mayor |
 | `MANDATE` | El humano que firma el Mandate al crearlo | No | Ya existente — `v1.1.0` §2 |
 | `SESSION` | Se captura en vivo, durante la conversación, sin firma formal previa | No | Ya existente conceptualmente — Session Gravity del documento fundacional §8 |
 
-La consecuencia directa: **`cor` sigue siendo, sin excepción, el único camino hacia `ORGANIZATION` y `NUCLEUS`.** Todo lo que este documento agrega —resolución por turno, arbitraje— ocurre *por debajo* de esa frontera. No se propone ni se necesita ningún mecanismo nuevo que toque `cor`; se formaliza, en cambio, todo el espacio de coordinación que **no** requiere tocar la ley global para funcionar.
+La consecuencia directa **al momento de escribir este documento (2026-08-28)** era: `cor` sigue siendo, sin excepción, el único camino hacia `ORGANIZATION` y `NUCLEUS`. **Esto ya no es así desde el 2026-09-02** — `cor` está deprecado y ese camino queda sin mecanismo ratificado todavía (ver banner de corrección al inicio del documento). Todo lo que este documento agrega —resolución por turno, arbitraje— sigue ocurriendo *por debajo* de esa frontera, que continúa existiendo aunque `cor` ya no sea quien la cubre.
 
 ### 1.4 Tipos de arista
 
@@ -91,7 +100,7 @@ El documento fundacional describe la promoción (§22) como flujo conceptual: `S
   "fromNodeId": "mnd_8f2a1c",
   "toPostureId": "grv_org_0091",        // la postura promovida, nivel Organization
   "toNodeId": "org_root",
-  "promotedVia": "cor",              // único valor posible cuando toNodeId.nodeType ∈ {ORGANIZATION, NUCLEUS}
+  "promotedVia": "cor",              // DEPRECADO 2026-09-02 — cor ya no existe; valor de reemplazo sin ratificar (ver banner)
   "promotedBy": "human_operator",    // nunca "agent" — mismo invariante que R-13/R-16 de v1.1.0
   "occurredAt": "2026-09-15T10:00:00Z"
 }

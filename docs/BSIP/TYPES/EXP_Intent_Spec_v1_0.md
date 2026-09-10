@@ -199,7 +199,7 @@ hasta que se confirme cuál de las dos situaciones aplica.
 ## 7. Ejemplo de uso bajo un Mandate (abstracto, no canónico)
 
 BTIPS §7 establece el mecanismo general: un Mandate se descompone en Actions, y cada Action se materializa
-en un intent concreto (`exp`, `cor`, `dev`, `doc`) que Nucleus instancia y ejecuta. Bajo ese mecanismo
+en un intent concreto (`exp`, `dev`, `doc`) que Nucleus instancia y ejecuta (`cor` también aplicaba acá, pero fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). Bajo ese mecanismo
 genérico, un Mandate *podría* usar una instancia de `exp` para investigar una alternativa técnica antes de
 decidir si dispara un `dev` — el ejemplo que da el propio BTIPS es "explorar módulos sin uso (`exp`) →
 eliminar los identificados (`dev`) → actualizar la documentación (`doc`)".

@@ -264,8 +264,8 @@ Cuando `--correlate` está presente, el export cruza el ring buffer con los `man
   "total_active_minutes": 312,
   "intent_correlations": [
     {
-      "intent_id": "cor-abc-123",
-      "intent_type": "cor",
+      "intent_id": "dev-abc-123",
+      "intent_type": "dev",
       "started_at": "2026-06-11T09:15:00Z",
       "closed_at": "2026-06-11T11:42:00Z",
       "avg_energy_index": 0.81,

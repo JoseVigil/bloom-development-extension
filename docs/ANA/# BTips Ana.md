@@ -85,7 +85,7 @@ Actualmente existen:
 * `doc` → documentación
 * `inf` → información
 * `exp` → exploración
-* `cor` → corrección
+* `cor` → corrección (deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11)
 
 BTips Research no rompe esta regla.
 

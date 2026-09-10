@@ -12,6 +12,15 @@
 > por Nucleus, y autorización efectiva local propiedad de Nucleus. Las
 > superficies concretas de implementación continúan sin aprobar.
 
+> ⚠️ **Nota de deprecación adicional (2026-09-10):** este borrador usa el intent `cor` como ejemplo de
+> trabajo central en §0 y en varios pasajes (staging de decisiones, `CorNucleusRecord`, Invariante de
+> opacidad §3.2 de `COR_Intent_Spec_v1_0.md`). Control confirmó el 2026-09-02 que `cor` está
+> **deprecado**, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — y que Gravity absorbió el articulado de
+> autorización de postulados y posturas que `cor` cubría. El razonamiento general sobre "fuente de
+> autoridad vs. evidencia de ejecución" que este documento desarrolla usando `cor` como ejemplo puede
+> seguir siendo válido para cualquier intent, pero `cor` mismo ya no es el mecanismo vigente; el
+> reemplazo concreto para ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.
+
 **Cambios vs. v0.1:** incorpora hallazgo estructural a partir de `bloom_nucleus_tree.txt` y
 `bloom_project_tree.txt` — Nucleus no es un bloque opaco monolítico, tiene doble naturaleza (autoridad
 organizacional + proyecto propio que ejecuta sus propios intents). Esto resuelve una tensión que había

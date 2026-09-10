@@ -1125,7 +1125,7 @@ Misma estructura pero con fases `context` (en lugar de `briefing`) y `curation_N
 
 #### Ubicación en el nucleus
 
-Los intents `dev` y `doc` viven siempre dentro del proyecto (`project/.bloom/.intents/`), no en el nucleus. El nucleus tiene su propia carpeta `.intents/` para intents de exploración (`exp`) y correlación (`cor`), que son un sistema separado.
+Los intents `dev` y `doc` viven siempre dentro del proyecto (`project/.bloom/.intents/`), no en el nucleus. El nucleus tiene su propia carpeta `.intents/` para el intent de exploración (`exp`), un sistema separado. (Esa carpeta también tenía un directorio legado para `cor` — correlación — pero `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11.)
 ### 5.3 Ciclo de vida completo del pipeline
 
 El flujo principal para un intent `dev` es:

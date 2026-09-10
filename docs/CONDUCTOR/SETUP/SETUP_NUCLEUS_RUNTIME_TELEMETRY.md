@@ -25,7 +25,7 @@ En criollo: todo lo que sigue en este documento pasa **después** de que `setup/
 
 ## 1. Contexto General
 
-El **Supervisor** (`internal/supervisor/supervisor.go`) es el núcleo orquestador de Nucleus, el "Magistrado de Gobernanza" de la arquitectura BTIPS. Nucleus es la **conciencia organizacional** única por organización Bloom: no desarrolla features (eso es de Projects), sino que gobierna, explora y coordina via intents (`exp`, `inf`, `cor`, `doc`). El Supervisor convierte esta gobernanza en un **proceso de ingeniería reproducible**, levantando un runtime persistente y verificable.
+El **Supervisor** (`internal/supervisor/supervisor.go`) es el núcleo orquestador de Nucleus, el "Magistrado de Gobernanza" de la arquitectura BTIPS. Nucleus es la **conciencia organizacional** única por organización Bloom: no desarrolla features (eso es de Projects), sino que gobierna, explora y coordina via intents (`exp`, `inf`, `doc`; también incluía `cor`, deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). El Supervisor convierte esta gobernanza en un **proceso de ingeniería reproducible**, levantando un runtime persistente y verificable.
 
 Al ejecutar `nucleus dev-start` (desarrollo) o `nucleus service start` (producción, daemon NSSM en Windows), el Supervisor sigue una **secuencia de boot determinística y declarativa** (inspirada en reconciliación de Metamorph): verifica estados deseados vs. actuales, spawnea procesos con env vars inyectadas, monitorea via goroutines (`monitorProcess`), y actualiza telemetry global (`telemetry.json` en `logs/orchestration/`).
 

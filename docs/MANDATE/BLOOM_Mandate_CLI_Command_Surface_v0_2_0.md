@@ -37,7 +37,7 @@ Correcciones puntuales sobre v0.1.0:
 
 | Gap | Origen | Afecta a |
 |---|---|---|
-| G-1 | BTIPS define 5 intent types canónicos (`dev/doc/exp/inf/cor`). El Package Spec usa `dev/doc/gen/cor/exp` — `gen` no existe en la lista canónica de BTIPS. No está claro si `gen` es un sexto tipo real (el que registra Genes, mencionado en el Genesis contract del Universal Schema §5) o un error de nomenclatura por `inf`. | `mandate action add --intent-type`, todo el pipeline de Genes |
+| G-1 | BTIPS define 5 intent types canónicos (`dev/doc/exp/inf/cor`, de los cuales `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11). El Package Spec usa `dev/doc/gen/cor/exp` — `gen` no existe en la lista canónica de BTIPS. No está claro si `gen` es un sexto tipo real (el que registra Genes, mencionado en el Genesis contract del Universal Schema §5) o un error de nomenclatura por `inf`. | `mandate action add --intent-type`, todo el pipeline de Genes |
 
 ---
 
@@ -79,7 +79,7 @@ Los comandos que son operaciones estructurales puramente locales sobre el draft 
 nucleus mandate create --project <projectId> --name <name> --objective "<string>"
 nucleus mandate action add --mandate <mandateId>
   --type <run_intent|call_service|await_mandate>
-  --intent-type <dev|doc|exp|inf|cor>          # ⚠ ver G-1 — 'gen' pendiente de resolución
+  --intent-type <dev|doc|exp|inf>              # ⚠ ver G-1 — 'gen' pendiente de resolución; 'cor' deprecado 2026-09-02, ver AGENDA_MAESTRA §11
   --name <string> --description <string>
   --depends-on <actionId,...> --payload <payloadKey>
   --on-success <actionId|null> --on-failure <fail_mandate|actionId>
@@ -181,7 +181,7 @@ nucleus mandate status --mandate <mandateId>
 ```
 Autoridad: Nucleus inicia el Workflow de Temporal, orquesta Action → Intent
 Enrutamiento: por cada Action, Sentinel → EXECUTE_INTENT hacia Brain con el intentType
-              concreto de la Action (dev/doc/exp/cor — ver G-1 sobre 'gen'/'inf')
+              concreto de la Action (dev/doc/exp — ver G-1 sobre 'gen'/'inf'; 'cor' deprecado 2026-09-02, ver AGENDA_MAESTRA §11)
 Ejecución: Brain corre el ciclo de vida completo del intent (Recepción → Parsing →
            Contexto → Ejecución → Progreso → Finalización → Persistencia, BTIPS §2.6)
 Persistencia: Nucleus actualiza mandate_state.json.operationalState en cada
@@ -255,7 +255,7 @@ Local, sin chain — lectura/disparo de instalación de dependencias ya resuelta
 ```
 ```
 Autoridad: Nucleus define, al momento de crear la Action, si esa Action es "evidence-eligible"
-           (ej. una Action cuyo intentType es 'exp' o 'cor' suele producir una decisión;
+           (ej. una Action cuyo intentType es 'exp' suele producir una decisión — 'cor' también solía, pero fue deprecado 2026-09-02, ver AGENDA_MAESTRA §11;
            una Action 'dev' pura normalmente no)
 Enrutamiento: Sentinel, al recibir INTENT_COMPLETED de una Action marcada evidence-eligible,
               extrae el payload de salida y lo empuja a un buffer local append-only,
@@ -337,7 +337,7 @@ mandate pipeline run
 mandate sign                                (Nucleus, sin chain — autoridad exclusiva)
        │
        ▼
-mandate run ──────► Action → Intent (dev/doc/exp/cor) por Sentinel → Brain
+mandate run ──────► Action → Intent (dev/doc/exp) por Sentinel → Brain  [cor deprecado, ver AGENDA_MAESTRA §11]
        │                            │
        │                            ▼
        │                   Sentinel captura INTENT_COMPLETED

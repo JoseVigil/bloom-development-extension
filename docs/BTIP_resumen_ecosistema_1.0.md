@@ -91,8 +91,10 @@ paralelo y comparten módulos, pero tienen ciclos de vida independientes.
 
 ### 🎛️ Bloom Conductor
 La terminal de gobernanza. Interfaz standalone (Electron) donde se observa el
-Event Bus en tiempo real y se crean intents, especialmente los de coordinación
-(`cor`) para resolver conflictos entre cambios.
+Event Bus en tiempo real y se crean intents. (Un tipo de intent de
+coordinación, `cor`, existía para resolver conflictos entre cambios, pero fue
+deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 —
+absorbido por Gravity.)
 
 ### 🧩 VS Code Plugin
 La superficie de trabajo diaria del developer. A diferencia del Conductor,
@@ -135,7 +137,7 @@ La jerarquía completa tiene 4 niveles:
 Nivel 1 — Nucleus     Autoridad, gobernanza y firma
 Nivel 2 — Mandate     Entidad estratégica firmada, versionada
 Nivel 3 — Action      Unidad semántica dentro del Mandate
-Nivel 4 — Intent      Unidad de intención (dev/doc/exp/inf/cor/ing/dis)
+Nivel 4 — Intent      Unidad de intención (dev/doc/exp/inf/ing/dis)  [cor deprecado, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11]
 ```
 
 El Mandate no le habla directamente a los intents: le habla a sus **Actions**,
@@ -157,16 +159,17 @@ de Dominios (`dis`) → producir documentación inicial (`doc`).
 | Escritor directo en `.intents/` | Solicitante a Nucleus para crear intents |
 | Mutable post-creación | Inmutable — el contrato original nunca se altera |
 
-#### 🧪 Los 7 tipos de Intent
+#### 🧪 Los 6 tipos de Intent vigentes
 | Tipo | Para qué sirve |
 |---|---|
 | `dev` | Modificar código |
 | `doc` | Generar documentación |
 | `exp` | Explorar alternativas |
 | `inf` | Recolectar información |
-| `cor` | Coordinar cambios en conflicto |
 | `ing` | Incorporar material y sembrar el linaje de Genes |
 | `dis` | Curar la topología entre Dominios y Genes |
+
+*(Un séptimo tipo, `cor` — coordinar cambios en conflicto — fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Gravity absorbió su función.)*
 
 #### 🏛️ Mandates — además, el producto del ecosistema
 Por ser contratos firmados, versionados y autocontenidos, los Mandates son

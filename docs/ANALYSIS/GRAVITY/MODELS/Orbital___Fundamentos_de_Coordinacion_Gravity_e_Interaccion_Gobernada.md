@@ -4,7 +4,7 @@
 **Cognituum — Documento Fundacional**
 **Estado:** Conceptual / Fundacional
 **Dominio:** Orbital · Gravity · Paladin
-**Dependencias conceptuales:** BSIP · Intent Types · `cor` · Mandates · Nucleus · Paladin
+**Dependencias conceptuales:** BSIP · Intent Types · `cor` (**deprecado 2026-09-02, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — este documento todavía describe a `cor` como el canal constitucional vigente en las secciones 20-22 y en el Principio XIII; esa descripción quedó desactualizada, el reemplazo Gravity-nativo está propuesto pero sin ratificar**) · Mandates · Nucleus · Paladin
 **Origen:** evolución del dominio Agentic hacia coordinación gobernada por Intents y criterio persistente
 **Revisión:** incorporación de Gravity como campo semántico y normativo de interacción
 
@@ -923,15 +923,17 @@ El campo es generalizable.
 
 ---
 
-# 20. Gravity y `cor`
+# 20. Gravity y `cor` (deprecado 2026-09-02)
+
+> **Corrección 2026-09-10:** `cor` fue deprecado por control el 2026-09-02 (`docs/CONTROL/AGENDA_MAESTRA.md` §11) — Gravity absorbió el articulado de autorización de postulados y posturas que `cor` cubría. Esta sección describe la relación tal como fue concebida originalmente; el canal formal de promulgación hacia `ORGANIZATION`/`NUCLEUS` que describe ya no existe y su reemplazo Gravity-nativo está propuesto pero sin ratificar. Se conserva el texto original como registro de la intención fundacional, no como mecanismo vigente.
 
 Gravity y `cor` están profundamente relacionados, pero no son la misma cosa.
 
 Gravity expresa criterio.
 
-`cor` representa el canal formal mediante el cual determinadas modificaciones de gobernanza pueden ser promulgadas bajo autoridad de Nucleus.
+`cor` **representaba** el canal formal mediante el cual determinadas modificaciones de gobernanza podían ser promulgadas bajo autoridad de Nucleus.
 
-Por lo tanto:
+Por lo tanto, **hasta su deprecación**:
 
 > **Gravity expresa. `cor` promulga cuando la gobernanza lo requiere.**
 
@@ -945,7 +947,7 @@ Una postura Gravity puede existir como:
 
 Eso no significa que posea automáticamente autoridad global.
 
-Cuando una decisión necesita convertirse en ley de mayor alcance, debe atravesar la frontera de gobernanza correspondiente.
+Cuando una decisión necesita convertirse en ley de mayor alcance, debe atravesar la frontera de gobernanza correspondiente — el mecanismo concreto para eso está, desde 2026-09-02, sin ratificar (ver corrección en §20).
 
 ---
 
@@ -976,7 +978,7 @@ No significa:
 
 Una postura adquiere autoridad superior únicamente cuando atraviesa el mecanismo de gobernanza correspondiente.
 
-En el ámbito regulado por `cor`, esa promulgación depende de Nucleus y del canal autorizado.
+En el ámbito **que era** regulado por `cor`, esa promulgación dependía de Nucleus y del canal autorizado — `cor` está deprecado desde 2026-09-02 (ver §20); el canal de reemplazo no está ratificado todavía.
 
 Esto establece un principio:
 
@@ -1018,7 +1020,7 @@ Project Gravity
 Governance Candidate
       │
       ▼
-     cor
+     cor   ← deprecado 2026-09-02, reemplazo sin ratificar (ver §20)
       │
       ▼
 Nucleus / Organization Gravity
@@ -1121,7 +1123,7 @@ Orbital debe poder explicar algo más profundo:
 - qué modelo realizó cada operación;
 - qué evidencia produjo;
 - qué postura provocó una corrección;
-- qué `cor` modificó la gobernanza;
+- qué mecanismo de gobernanza (antes `cor`, deprecado 2026-09-02 — ver §20) modificó la gobernanza;
 - quién autorizó esa modificación;
 - qué trabajo posterior quedó afectado.
 
@@ -1295,9 +1297,9 @@ No toda conversación se convierte en Gravity.
 
 Una AI puede identificar criterio candidato sin poseer autoridad para convertirlo en ley.
 
-## XIII. `cor` preserva la frontera de gobernanza
+## XIII. La frontera de gobernanza se preserva mediante un canal autorizado (antes `cor`, deprecado 2026-09-02)
 
-La promulgación de determinadas posturas de alcance superior ocurre únicamente mediante el canal autorizado.
+La promulgación de determinadas posturas de alcance superior ocurre únicamente mediante el canal autorizado — ese canal era `cor`; desde su deprecación (ver §20, `docs/CONTROL/AGENDA_MAESTRA.md` §11) el reemplazo Gravity-nativo está propuesto pero sin ratificar. El principio en sí (que la promulgación de alcance superior requiere un canal autorizado y nunca queda a discreción del agente) se mantiene vigente independientemente de qué mecanismo concreto lo implemente.
 
 ## XIV. Gravity describe fuerzas, no necesariamente trayectorias
 

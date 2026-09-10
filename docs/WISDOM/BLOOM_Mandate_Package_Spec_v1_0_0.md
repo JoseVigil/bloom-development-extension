@@ -76,7 +76,7 @@ Distinto de `mandate.json`: describe el paquete como artefacto de distribución,
     "publisherKeyRef":     "string  — referencia a la clave pública usada para firmar (ver §6)"
   },
   "publishedAt":           "string  — ISO 8601",
-  "requiredIntentTypes":   ["string  — subconjunto de 'dev' | 'doc' | 'gen' | 'cor' | 'exp' que el Nucleus comprador debe soportar"],
+  "requiredIntentTypes":   ["string  — subconjunto de 'dev' | 'doc' | 'gen' | 'exp' que el Nucleus comprador debe soportar"],  // 'cor' deprecado 2026-09-02, ver AGENDA_MAESTRA §11
   "requiredSchemaVersion": "string  — mínima versión de BLOOM_Mandate_Universal_Schema compatible",
   "geneBlueprintCount":    "number  — cantidad de archivos en cognitive_assets/gene_blueprints/",
   "packageSizeBytes":      "number"

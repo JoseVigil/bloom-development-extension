@@ -1,3 +1,17 @@
+> **Corrección 2026-09-10, sin ratificar por control:** este documento define, en su changelog
+> v6.1 (línea ~26) y en §8.2/§8.2.2/§8.5, la semántica vigente de `cor` (Core/Governance,
+> Zero-Read/Zero-Write, `forbidden_intent_types: ["cor"]`) como uno de los tres pilares de
+> Gobernanza Orbital junto a `mrg` y `tst`. Control confirmó el 2026-09-02
+> (`docs/CONTROL/AGENDA_MAESTRA.md` §11) que `cor`/`COR_Intent_Spec_v1_0.md` — es decir, esta
+> misma semántica v6.1 que este documento define — es Intent Core, **deprecado**, y que Gravity
+> absorbió el articulado de autorización de postulados y posturas que `cor` cubría. Este banner
+> **no** reescribe la definición de `cor` en el cuerpo del documento ni decide qué reemplaza la
+> opacidad Zero-Read/Zero-Write que `cor` garantizaba sobre las reglas de gobierno — esa es una
+> decisión arquitectónica que excede una corrección de residual textual y queda pendiente de tu
+> decisión explícita. Todas las menciones de `cor` de acá en adelante (definición, matriz de
+> §8.6.1, `forbidden_intent_types`, roadmap de migración de Fase 1) deben leerse como la
+> especificación de un mecanismo ya deprecado, no como diseño vigente.
+
 ## 0️⃣ Encuadre CORPO / Enterprise Context
 
 > Esta sección no es boilerplate legal ni introducción de cortesía. Fija el marco bajo el cual todo lo que sigue debe leerse, implementarse y — más importante — auditarse cuando algo no encaje.

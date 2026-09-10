@@ -1,5 +1,11 @@
 # Orbital · Gravity — Persistencia del Grafo de Gravedad y Algoritmo de Recorrido
 
+> **Corrección 2026-09-10:** el intent `cor` (no la abreviatura de cita **Cor** = "Corolario — La
+> persona como fuente de Gravity.md" usada en este documento) está **deprecado** desde el
+> 2026-09-02 (`docs/CONTROL/AGENDA_MAESTRA.md` §11). La fila `ORGANIZATION` de la tabla §6.3 y el
+> ejemplo de `promotedVia` más abajo describen un mecanismo que ya no existe; su reemplazo
+> Gravity-nativo está propuesto pero sin ratificar.
+
 ## Especificación de Implementación v0.1 — de modelo de datos a sistema real
 
 **Tipo:** Especificación de implementación — lleva `Orbital_Gravity_Implementation_Spec_v0_1.md` §1–§2 a nivel de código y persistencia real
@@ -312,7 +318,7 @@ Se extiende cada elemento de `gravityPostures[]` (cada postura) con un campo `pr
   "promotedFrom": {
     "fromPostureId": "grv_0af4",
     "fromNodeId": "mnd_8f2a1c",
-    "promotedVia": "cor",
+    "promotedVia": "cor",  // DEPRECADO 2026-09-02 — cor ya no existe; valor de reemplazo sin ratificar (ver banner)
     "occurredAt": "2026-09-15T10:00:00Z"
   }  // | null si la postura nunca se originó como promoción
 }
@@ -366,7 +372,7 @@ Como no existe hoy ningún `GravityNode` real persistido (§0.2), este cambio de
 | `nodeType` | Rol(es) aceptados hoy | `roleBasis` estampado hoy | Rol(es) aceptados si Architect se formaliza | `roleBasis` tras formalización |
 |---|---|---|---|---|
 | `NUCLEUS` | N/A — constitutivo, no se firma (`Impl §1.3`) | N/A | Sin cambio | N/A |
-| `ORGANIZATION` | Operador humano vía `cor` (`Impl §1.3` — sin cambio, fuera de esta tabla) | `role_native` | Sin cambio | `role_native` |
+| `ORGANIZATION` | Operador humano vía `cor` — **deprecado 2026-09-02, reemplazo sin ratificar** (`Impl §1.3` — sin cambio, fuera de esta tabla) | `role_native` | Sin cambio | `role_native` |
 | **`PROJECT`** | **`master`** (único aceptado hoy) | **`role_interim`** | `architect` pasa a aceptarse; `master` permanece como aceptado si ningún Architect está asignado a ese Proyecto | `architect` firma con `role_native`; `master` (si se usa) sigue estampando `role_interim` únicamente si sustituye a un Architect ausente |
 | `MANDATE` | Quien firma el Mandate (`Mandate v1.1.0 §2`, sin cambio) | `role_native` | Sin cambio | `role_native` |
 | `SESSION` | N/A — sin firma formal (`Impl §1.3`) | N/A | Sin cambio | N/A |

@@ -12,6 +12,10 @@
 
 ---
 
+> ⚠️ **Nota de deprecación (2026-09-10):** este documento (v1.0.0, febrero 2026) define el Work Domain como los cuatro intents `.exp`, `.cor`, `dev`, `doc`. Control confirmó el 2026-09-02 que `cor` está **deprecado**, sin transición en curso — ver `docs/CONTROL/AGENDA_MAESTRA.md` §11. Gravity absorbió el articulado de autorización de postulados y posturas que `cor` cubría. Las menciones puntuales de `cor` de acá en adelante quedan anotadas; el Work Domain vigente es `.exp`, `dev`, `doc`. El reemplazo funcional para lo que `cor` cubría en ORGANIZATION/NUCLEUS está propuesto pero sin ratificar.
+
+---
+
 ## Tabla de Contenidos
 
 1. [Qué Estamos Construyendo](#1-qué-estamos-construyendo)
@@ -69,14 +73,14 @@ Un **Mandate** es un contrato estratégico firmado que declara un conjunto de ac
 | Dominio | Descripción | Runtime | Estado |
 |---|---|---|---|
 | Profile Domain | Workflows persistentes operativos asociados a perfiles/entornos. Gestionados por Temporal. Usados por Synapse. | Temporal | ✅ Existente |
-| Work Domain | Intents ejecutables: `.exp`, `.cor`, `dev`, `doc`. Ejecutados por Nucleus. | Nucleus | ✅ Definido — Workers pendientes |
+| Work Domain | Intents ejecutables: `.exp`, `dev`, `doc`. Ejecutados por Nucleus. (`.cor` deprecado 2026-09-02, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11) | Nucleus | ✅ Definido — Workers pendientes |
 | Strategic Domain | Mandates. Orquestan Work. Persistentes y firmados. | Temporal | 🔲 Este documento |
 
 ### 2.2 Estado Real del Sistema (Sin Supuestos)
 
 > ⚠️ **CORRECCIONES CRÍTICAS SOBRE EL ESTADO ACTUAL**
 >
-> - Los workers para intents (`.exp`, `.cor`, `dev`, `doc`) **NO existen aún**. Son trabajo pendiente.
+> - Los workers para intents (`.exp`, `dev`, `doc`) **NO existen aún**. Son trabajo pendiente. (`.cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11 — retirado de esta lista.)
 > - La task queue `profile-orchestration` **NO está confirmada** como operativa.
 > - Temporal está disponible como runtime pero el estado de los workers es desconocido.
 > - El Mandate Domain debe diseñarse como extensión aislada, sin asumir dependencias activas.
@@ -92,7 +96,7 @@ Motor de orquestación persistente. Maneja estado de workflows a largo plazo, re
 **Synapse**
 **No modificar.** Es el motor cognitivo del sistema. Gestiona el ciclo de vida de perfiles de navegador. Interactúa con Profile Domain. Mandate Domain es completamente independiente de Synapse.
 
-**Intents (`.exp`, `.cor`, `dev`, `doc`)**
+**Intents (`.exp`, `dev`, `doc`)** *(`.cor` deprecado 2026-09-02, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11)*
 Unidades operativas acotadas. Deterministas. Corto plazo. Producen artefactos en el filesystem. No orquestan. No mantienen narrativa. Su estructura de pipeline (`.pipeline/.response/report.json`) es el mecanismo de observación que usará Mandate.
 
 ### 2.4 Jerarquía de Dominio
@@ -108,7 +112,7 @@ Nivel 3 — Action
          Unidad semántica dentro del Mandate
 
 Nivel 4 — Intent
-         Unidad ejecutable concreta (exp / cor / dev / doc)
+         Unidad ejecutable concreta (exp / dev / doc)  [cor deprecado, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11]
 ```
 
 ### 2.5 Separación Absoluta de Dominios
@@ -142,17 +146,13 @@ Nivel 4 — Intent
     │   ├── security/
     │   └── quality/
     ├── .intents/
-    │   ├── .exp/
-    │   │   └── .{intent-name-uuid}/
-    │   │       ├── .exp_state.json
-    │   │       ├── .inquiry/
-    │   │       ├── .discovery/
-    │   │       ├── .findings/
-    │   │       └── .pipeline/
-    │   └── .cor/
+    │   └── .exp/
     │       └── .{intent-name-uuid}/
-    │           ├── .cor_state.json
-    │           └── [fases + pipeline]
+    │           ├── .exp_state.json
+    │           ├── .inquiry/
+    │           ├── .discovery/
+    │           ├── .findings/
+    │           └── .pipeline/
     ├── .cache/
     ├── .relations/
     ├── .ownership.json
@@ -225,7 +225,7 @@ Naturaleza: Firmada en creación. INMUTABLE post-creación. Solo Nucleus escribe
   "actions": [
     {
       "actionId":    "string → único dentro del mandate",
-      "intentType":  "string → exp | cor | dev | doc",
+      "intentType":  "string → exp | dev | doc",  // cor deprecado 2026-09-02, ver AGENDA_MAESTRA §11
       "description": "string → qué hace esta acción",
       "payload":     "object → parámetros para el intent (libre, coherente con el tipo)",
       "status":      "pending → estado inicial declarado. Estado real en mandate_state.json",
@@ -308,7 +308,7 @@ Naturaleza: Mutable. Propiedad exclusiva de MandateWorkflow.
     {
       "actionId":   "string",
       "intentId":   "string → ID del intent creado por Nucleus",
-      "intentType": "string → exp | cor | dev | doc",
+      "intentType": "string → exp | dev | doc",  // cor deprecado 2026-09-02, ver AGENDA_MAESTRA §11
       "status":     "completed | failed",
       "resultRef":  "string → path al report.json del intent. null si falló",
       "resolvedAt": "string → ISO8601"
@@ -653,7 +653,6 @@ Para continuar la implementación en el entorno real, estos son los archivos que
 |---|---|---|
 | Ejemplo real de `.exp_state.json` | Define el contrato de estado que `waitIntentResult` debe observar | 🔴 Crítico |
 | Ejemplo real de `.pipeline/.response/.report.json` (exp) | Confirma estructura del artefacto final del intent. Es el punto de integración de `waitIntentResult`. | 🔴 Crítico |
-| Ejemplo real de `.cor_state.json` + su `report.json` | Mismo motivo. El `cor` tiene pipeline más complejo. | 🔴 Crítico |
 | Cómo hoy Synapse dispara un intent (código o pseudocódigo) | Para que `createIntent` siga el mismo patrón de delegación a Nucleus sin romper nada. | 🔴 Crítico |
 
 ### 9.2 Archivos Importantes (No Bloqueantes para Diseño)
@@ -700,7 +699,7 @@ Para continuar la implementación en el entorno real, estos son los archivos que
 >
 > Antes de escribir código de `MandateWorkflow`, se necesita confirmar:
 >
-> 1. Estructura exacta de `.pipeline/.response/.report.json` para `.exp` y `.cor`
+> 1. Estructura exacta de `.pipeline/.response/.report.json` para `.exp` (`.cor` deprecado 2026-09-02, ver AGENDA_MAESTRA §11)
 > 2. Cómo un intent comunica su estado final (polling sobre `report.json` vs. señal Temporal)
 > 3. Qué campos de `report.json` confirman que el intent está `completed` o `failed`
 >

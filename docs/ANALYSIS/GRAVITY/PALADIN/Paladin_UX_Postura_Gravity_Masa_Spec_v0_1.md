@@ -1,5 +1,12 @@
 # Especificación UX/UI — Postura, Gravity Activa y Masa en Paladin
 
+> **Corrección 2026-09-10:** el intent `cor` (no la abreviatura de cita **Cor** = "Corolario — La
+> persona como fuente de Gravity.md" usada en este documento para otras citas) está **deprecado**
+> desde el 2026-09-02 (`docs/CONTROL/AGENDA_MAESTRA.md` §11). Las dos menciones de `cor` más
+> abajo (leyenda "requiere `cor`" en 1.4, nota "vía `cor`" en la fila 4 de la tabla de 3.2)
+> describen un mecanismo que ya no existe; el reemplazo para escalar a autoridad de Organization
+> está sin ratificar todavía.
+
 **Tipo:** Especificación de experiencia de usuario (UX/UI) — primera pieza de diseño de interfaz
 **Estado:** Borrador v0.1 — responde cuatro preguntas puntuales, no cierra el resto de la superficie de Paladin
 **Fecha:** 2026-08-28
@@ -53,7 +60,7 @@ Se elige el control retroactivo. La razón central no es de conveniencia de inte
 1. **Affordance:** ícono discreto (sugerido: un blasón o balanza — coherente con "Paladin") visible al pasar el cursor sobre cualquier mensaje propio ya enviado, o sobre una porción de texto seleccionada dentro de él.
 2. **Al activarse**, se abre un panel inline (no un modal de pantalla completa — la conversación permanece visible detrás, porque la Postura nace de ella):
    - **Criterio:** el texto del mensaje, pre-cargado y editable (el ingeniero puede depurar la frase antes de que quede fijada como posición).
-   - **Alcance propuesto:** Sesión (default, sin fricción — Impl §1.3), Mandate, Project u Organization. Solo se ofrecen los niveles para los que el ingeniero posee autoridad de firma (Impl §1.3, columna "Quién firma"); Organization aparece deshabilitado con la leyenda "requiere `cor`" si el ingeniero no tiene ese canal (Impl §1.3: *"`cor` sigue siendo, sin excepción, el único camino hacia `ORGANIZATION` y `NUCLEUS`"*).
+   - **Alcance propuesto:** Sesión (default, sin fricción — Impl §1.3), Mandate, Project u Organization. Solo se ofrecen los niveles para los que el ingeniero posee autoridad de firma (Impl §1.3, columna "Quién firma"); Organization aparece deshabilitado con la leyenda "requiere autorización de nivel Organization" (mecanismo Gravity-nativo sin ratificar aún — `cor`, la vía que citaba Impl §1.3 al momento de escribir esta spec, está deprecado desde 2026-09-02, ver banner de corrección).
    - **Confirmar postulación.**
 3. **Tras confirmar**, el mensaje original queda re-renderizado con un tratamiento visual distinto y permanente (borde/ícono de Postura) que lo separa del resto de la conversación — visualizando la distinción explícita de Cor: *"La conversación permite creatividad. La postura preserva criterio."* Ese tratamiento no desaparece al hacer scroll ni al reabrir la sesión.
 4. **Nunca se postula por omisión.** Ningún mensaje se convierte en Postura sin este acto explícito — coherente con Orb Principio XI (§28): "No toda conversación se convierte en Gravity."
@@ -111,7 +118,7 @@ Antes de diferenciar las seis, hay un eje binario que debe ser inconfundible en 
 | 1 | **Rechazar la acción** | ⛔ | "Rechazado por Gravity" | No | Detiene, cita la regla exacta que bloquea (id + texto + `origin`), no ofrece alternativa ejecutada — solo indica qué caminos quedan abiertos (pedir excepción, escalar, proponer cambio). Color reservado, no compartido con ningún otro caso. |
 | 2 | **Señalar el conflicto** | ⚠️ | "Conflicto detectado — sin ejecutar" | No | Describe la tensión entre el pedido y la(s) regla(s) en juego sin tomar partido; el turno queda abierto, a la espera de que el ingeniero elija entre las opciones 3–6. Es el único caso "neutral": no rechaza ni actúa. |
 | 3 | **Reinterpretar con alternativa compatible** | 🔁 | "Reinterpretado — no es tu pedido literal" | **Sí** (alternativa) | Bloque de dos líneas, siempre visible (no colapsable): **"Pediste:"** cita textual del pedido → **"Hice:"** la alternativa efectivamente ejecutada, con la regla que motivó el cambio. Este es el caso con mayor riesgo de confusión señalado en el pedido original, así que es el único con formato de doble línea obligatorio. |
-| 4 | **Solicitar elevación a autoridad mayor** | ⬆️ | "Requiere autoridad superior" | No | No ejecuta nada. Indica el nivel de autoridad necesario según Impl §1.3 (Project/Organization, con nota "vía `cor`" si aplica a Organization) y ofrece un control para iniciar esa solicitud humana — nunca un botón que la AI pueda resolver por sí misma (Orb §21: *"Una AI puede identificar Gravity. No puede otorgarse a sí misma autoridad sobre la gravedad que la gobierna."*). |
+| 4 | **Solicitar elevación a autoridad mayor** | ⬆️ | "Requiere autoridad superior" | No | No ejecuta nada. Indica el nivel de autoridad necesario según Impl §1.3 (Project/Organization; la nota histórica "vía `cor`" ya no aplica — `cor` está deprecado desde 2026-09-02, ver banner de corrección) y ofrece un control para iniciar esa solicitud humana — nunca un botón que la AI pueda resolver por sí misma (Orb §21: *"Una AI puede identificar Gravity. No puede otorgarse a sí misma autoridad sobre la gravedad que la gobierna."*). |
 | 5 | **Permitir una excepción, si existe autoridad** | 🔓 | "Ejecutado como excepción — autoridad: [nombre]" | **Sí** (literal) | Ejecuta el pedido tal como fue formulado, pero con un marcado permanente distinto al de una ejecución ordinaria (por ejemplo, borde dorado en vez del verde de éxito estándar) y nombra explícitamente qué autoridad habilitó la excepción. Nunca se renderiza igual que un turno sin conflicto — de lo contrario la excepción quedaría invisible en el historial. |
 | 6 | **Proponer modificar la Gravity vigente** | 📝 | "Propuesta de cambio — pendiente de promulgación" | No | No ejecuta el pedido original ni modifica ninguna regla. Abre el mismo flujo de postulación de la sección 1 (reutiliza el control "Postular"), pre-cargado con la regla candidata a modificar, dejando explícito que postular ≠ promulgar (Orb §21: *"La postulación significa: Esto parece una regla valiosa. No significa: Esta regla gobierna ahora la organización."*). |
 

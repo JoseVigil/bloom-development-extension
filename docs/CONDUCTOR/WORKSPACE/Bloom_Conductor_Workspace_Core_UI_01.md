@@ -84,7 +84,7 @@ Genesis Mandate y Mandate estándar son organismos completamente distintos. No e
 ### F-07 — Ecosistema de superficies coordinadas *(expandido)*
 
 #### Conductor (Workspace Core)
-Centro de mando determinista. La única superficie con autoridad para firmar Mandates, confirmar dominios, pausar workflows y aprobar decisiones de Actions `cor`. Recibe inputs ya filtrados por el proceso cognitivo del Companion — nunca el proceso en sí.
+Centro de mando determinista. La única superficie con autoridad para firmar Mandates, confirmar dominios, pausar workflows y aprobar decisiones que requieren intervención humana. Recibe inputs ya filtrados por el proceso cognitivo del Companion — nunca el proceso en sí. (El ejemplo original hablaba de Actions `cor` específicamente — `cor` fue deprecado 2026-09-02 por control, sin transición en curso, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11; el mecanismo equivalente hoy está propuesto pero sin ratificar.)
 
 #### Companion Panel — Cognituum Side Panel
 Componente nativo en el sidebar del build Chromium de Cortex. Se activa post-onboarding (`onboarding_complete`). Embebe webview de LLM solidario (Gemini en v1). Su rol es absorber la entropía del proceso humano de pensar: exploración conceptual, consultas de soporte, análisis visual de pestañas activas, síntesis de outputs del pipeline.
@@ -108,7 +108,7 @@ Este mecanismo mitiga el efecto secundario principal de la segregación: que el 
 
 ```
 Conductor detecta estado que requiere decisión humana
-    │  (Action cor, propuesta de dominios, error recuperable)
+    │  (propuesta de dominios, error recuperable — el ejemplo original incluía Action `cor`, deprecado 2026-09-02, ver `docs/CONTROL/AGENDA_MAESTRA.md` §11)
     ▼
 Conductor emite STORE_BRIEF con metadata del intent/mandate activo
     │  → Cortex persiste el brief en su store
