@@ -34,6 +34,7 @@ app.get('/v1/authority/human/callback', c => configuredAuthorityHumanResponse(c.
 app.post('/v1/authority/human/renew', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/human/logout', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/administration', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/initial-emission', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/actor/approve', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 
 app.get("/", (context) => context.json({ service: "bloom-backend", status: "ok" }));

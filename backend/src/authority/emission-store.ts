@@ -1,8 +1,10 @@
 import { canonicalizeJson, digestWire } from "./canonical";
-import { emitSnapshot, normalizeMetadata, normalizeState, wireVersion } from "./emission";
+import { emitSnapshot, normalizeMetadata, normalizeState, normalizeWireTime, wireVersion } from "./emission";
 import type { WireEmissionMetadata, WireEnvelope, WireFullContent } from "./schema";
+import type { InitialHumanIdentity } from "./administration";
 
 export type EmissionFailure = "cas_conflict" | "idempotency_conflict" | "recovery_required" | "initial_evidence_required" | "invalid_emission" | "emission_unavailable" | "version_ahead" | "audience_mismatch";
+export const AUTHORITY_EMISSION_TTL_MS = 4 * 60 * 1000;
 export class EmissionStoreError extends Error {
   constructor(readonly code: EmissionFailure) { super(`authority_${code}`); }
 }
@@ -86,9 +88,13 @@ export interface PersistEmissionInput {
   expectedVersion: string | null;
   metadata: WireEmissionMetadata;
   state: WireFullContent;
-  // Only explicit temporary test databases may start in 1B. Real onboarding is unavailable.
+  initialEmissionEvidence?: InitialEmissionEvidence;
+  /** Compatibility for existing internal test fixtures. New callers use initialEmissionEvidence. */
   initialFixtureEvidence?: { environment: "test"; reference: string };
 }
+export type InitialEmissionEvidence =
+  | { kind: "test-fixture"; environment: "test"; reference: string }
+  | { kind: "canonical"; identity: InitialHumanIdentity };
 
 /** Internal library only, never a mutation endpoint. Future administration must
  * combine its preconditions/audit/outbox with emission publication in one transaction. */
@@ -107,16 +113,40 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
     metadata = normalizeMetadata(input.metadata); state = normalizeState(input.state, metadata.organization_id);
     if (input.expectedVersion !== null && wireVersion(metadata.authority_version) !== wireVersion(input.expectedVersion) + 1n) throw new Error("next version required");
   } catch { throw new EmissionStoreError("invalid_emission"); }
+  const initialEvidence: InitialEmissionEvidence | undefined = input.initialEmissionEvidence
+    ?? (input.initialFixtureEvidence ? { kind: "test-fixture", ...input.initialFixtureEvidence } : undefined);
+  if (input.initialEmissionEvidence !== undefined && input.initialFixtureEvidence !== undefined)
+    throw new EmissionStoreError("invalid_emission");
   if (input.expectedVersion === null) {
-    if (signer.allowTestFixtures !== true || input.initialFixtureEvidence?.environment !== "test"
-      || typeof input.initialFixtureEvidence.reference !== "string" || !input.initialFixtureEvidence.reference.length)
-      throw new EmissionStoreError("initial_evidence_required");
-  } else if (input.initialFixtureEvidence !== undefined) throw new EmissionStoreError("invalid_emission");
+    if (initialEvidence?.kind === "test-fixture") {
+      if (signer.allowTestFixtures !== true || initialEvidence.environment !== "test"
+        || typeof initialEvidence.reference !== "string" || !initialEvidence.reference.length)
+        throw new EmissionStoreError("initial_evidence_required");
+    } else if (initialEvidence?.kind === "canonical") {
+      const identity = initialEvidence.identity;
+      const membership = state.memberships[0], assignment = state.role_assignments[0], role = state.role_definitions[0];
+      const canonicalPrincipal = structuredClone(identity.principal);
+      for (const external of canonicalPrincipal.external_identities) external.verified_at = normalizeWireTime(external.verified_at);
+      canonicalPrincipal.external_identities.sort((a,b)=>a.provider.localeCompare(b.provider)||a.subject.localeCompare(b.subject));
+      if (identity.organizationId !== metadata.organization_id || identity.source !== "canonical"
+        || state.principals.length !== 1 || canonicalizeJson(state.principals[0]) !== canonicalizeJson(canonicalPrincipal)
+        || state.memberships.length !== 1 || membership?.principal_id !== identity.principal.principal_id
+        || membership.organization_id !== metadata.organization_id || membership.status !== "active"
+        || membership.valid_until !== null || membership.valid_from !== membership.accepted_at
+        || state.role_definitions.length !== 1 || role?.role_id !== "master" || role.role_origin !== "builtin" || role.status !== "active"
+        || state.role_assignments.length !== 1 || assignment?.membership_id !== membership.membership_id
+        || assignment.role_id !== role.role_id || assignment.role_version !== role.role_version
+        || assignment.scope.type !== "organization" || assignment.scope.id !== metadata.organization_id
+        || assignment.status !== "active" || assignment.valid_until !== null
+        || assignment.valid_from !== membership.valid_from || assignment.accepted_at !== membership.accepted_at
+        || state.revocations.length !== 0) throw new EmissionStoreError("initial_evidence_required");
+    } else throw new EmissionStoreError("initial_evidence_required");
+  } else if (initialEvidence !== undefined) throw new EmissionStoreError("invalid_emission");
 
   const session = db.withSession("first-primary");
   const org = metadata.organization_id;
   const requestDigest = await digestWire({ metadata, state, expected_version: input.expectedVersion,
-    key_id: signer.keyId, initial_evidence: input.initialFixtureEvidence ?? null });
+    key_id: signer.keyId, initial_evidence: initialEvidence ?? null });
   const retry = async (): Promise<StoredEmission | null> => {
     const row = await session.prepare("SELECT * FROM authority_emissions WHERE organization_id = ? AND request_id = ?")
       .bind(org, input.requestId).first<EmissionRow>();
@@ -150,7 +180,7 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(org, metadata.authority_version, input.expectedVersion, input.requestId, requestDigest,
         canonicalizeJson(metadata), canonicalizeJson(state), stateDigest, fullJSON, deltaJSON,
-        input.initialFixtureEvidence ? canonicalizeJson(input.initialFixtureEvidence) : null);
+        initialEvidence ? canonicalizeJson(initialEvidence) : null);
   return { result: { metadata, state, stateDigest, full: fullJSON, delta: deltaJSON, baseVersion: input.expectedVersion }, statement, retry };
 }
 

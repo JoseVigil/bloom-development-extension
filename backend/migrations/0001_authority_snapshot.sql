@@ -4,7 +4,7 @@
 -- Tablas nuevas de fuente de verdad organizacional para el Authority Snapshot.
 -- Se agregan junto a `organizations`/`org_members` ya existentes (0000_initial.sql).
 --
--- SUPUESTO DE DISEÑO (documentar para revisión de Génesis): no tengo en esta sesión
+-- SUPUESTO DE DISEÑO (documentar para revisión de autoridad): no tengo en esta sesión
 -- `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`, así que el detalle interno de cada
 -- tabla (columnas exactas, además de las mencionadas explícitamente en el encargo) es mi
 -- inferencia razonable, no una copia del diseño físico. En particular agrego una columna

@@ -10,7 +10,7 @@
 // sesión, así que estos campos son mi inferencia razonable a partir de lo que el encargo
 // y la nota técnica describen (wire schema full/delta, versionado anti-downgrade,
 // catálogo de roles, envelope firmado). No son una transcripción del §4/§5/§7 reales —
-// Génesis debe confrontarlos contra el diseño físico antes de dar esto por cerrado.
+// Deben confrontarse contra el diseño físico antes de dar este contrato por cerrado.
 
 export interface AuthoritySnapshotPrincipal {
   id: string;

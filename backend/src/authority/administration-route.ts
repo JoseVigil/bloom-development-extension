@@ -2,13 +2,15 @@ import { githubAppProvider, HumanIdentityError } from './human-identity';
 import { beginHumanLogin, finishHumanLogin, resolveHumanSession, checkSessionCsrf, renewHumanSession, revokeHumanSession, initialHumanIdentity, sessionCommitGuard, type HumanServices } from './human-session-store';
 import { administerAuthority } from './administration-store';
 import { AdministrationError, type AdministrationCommand } from './administration';
-import { loadCurrentEmission, loadEmissionVersion, type EmissionSigner } from './emission-store';
+import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, type EmissionSigner } from './emission-store';
 import { wireVersion } from './emission';
-export interface HumanRouteServices extends HumanServices {origin:string;signer:EmissionSigner;}
+import { createInitialAuthorityEmission, InitialAuthorityEmissionError, initialEmissionGuardStatement } from './initial-emission';
+export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;}
 export interface HumanRouteEnv {
  DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;
  AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;
- AUTHORITY_SIGNING_KEY_PKCS8_B64:string;AUTHORITY_SIGNING_KEY_ID:string;
+  AUTHORITY_SIGNING_KEY_PKCS8_B64:string;AUTHORITY_SIGNING_KEY_ID:string;
+ AUTHORITY_ISSUER?:string;
 }
 const sessionCookie='__Host-authority-session',flowCookie='__Host-authority-flow';
 function cookie(request:Request,name:string){const matches=(request.headers.get('Cookie')??'').split(';').map(v=>v.trim()).filter(v=>v.startsWith(name+'='));return matches.length===1?matches[0].slice(name.length+1):'';}
@@ -47,6 +49,14 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    const result=await renewHumanSession(db,token,org,s);headers.append('Set-Cookie',setCookie(sessionCookie,result.token,900));
    return reply({organizationId:org,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt});
   }
+  if(path==='/v1/authority/initial-emission'){
+   if(!exact(body,['organizationId']))return reply({error:'invalid_request'},400);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   try{return reply(await createInitialAuthorityEmission(db,org,actor.principalId,{now:s.now,issuer:s.issuer??'',signer:s.signer,
+    initialIdentity:(o,id)=>initialHumanIdentity(db,o,id,s),commitGuard:(id,at,evidence)=>initialEmissionGuardStatement(db,actor,id,at,evidence)}));}catch(e){
+    if(e instanceof InitialAuthorityEmissionError)return reply({error:e.message},e.code==='already_exists'?409:e.code==='identity_not_ready'||e.code==='canonical_evidence_required'?403:503);throw e;
+   }
+  }
   if(path!=='/v1/authority/administration')return reply({error:'not_found'},404);
   if(!exact(body,['organizationId','requestId','expectedVersion','command'])||typeof body.requestId!=='string'||!body.requestId||body.requestId.length>200)return reply({error:'invalid_request'},400);
   try{wireVersion(body.expectedVersion);}catch{return reply({error:'invalid_version'},400);}
@@ -59,7 +69,7 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
   if(receipt&&receipt.actor_id!==actor.principalId)throw new AdministrationError('idempotency_conflict');
   const original=receipt?await loadEmissionVersion(db,org,receipt.authority_version):null;
   const now=s.now();
-  const metadata=original?.metadata??{...current.metadata,authority_version:String(wireVersion(body.expectedVersion)+1n),snapshot_id:crypto.randomUUID(),issued_at:now,not_before:now,expires_at:new Date(Date.parse(now)+240000).toISOString()};
+  const metadata=original?.metadata??{...current.metadata,authority_version:String(wireVersion(body.expectedVersion)+1n),snapshot_id:crypto.randomUUID(),issued_at:now,not_before:now,expires_at:new Date(Date.parse(now)+AUTHORITY_EMISSION_TTL_MS).toISOString()};
   const adminServices={now:s.now,signer:s.signer,allowTestFixtures:s.allowTestFixtures,verifyActor:async()=>actor,
     initialIdentity:(o:string,id:string)=>initialHumanIdentity(db,o,id,s),commitGuard:(a:Parameters<typeof sessionCommitGuard>[1],id:string,at:string,recipient?:Parameters<typeof sessionCommitGuard>[4])=>sessionCommitGuard(db,a,id,at,recipient)};
   const input={requestId:body.requestId,actorProof:token,expectedVersion:body.expectedVersion,metadata,command:body.command as AdministrationCommand};
@@ -84,7 +94,7 @@ export async function configuredAuthorityHumanResponse(env:HumanRouteEnv,request
   if(!env.AUTHORITY_HUMAN_ORIGIN||new URL(env.AUTHORITY_HUMAN_ORIGIN).origin!==env.AUTHORITY_HUMAN_ORIGIN||!env.AUTHORITY_HUMAN_SESSION_KEY_B64)throw new HumanIdentityError('configuration_missing');
   const provider=githubAppProvider({clientId:env.AUTHORITY_GITHUB_APP_CLIENT_ID??'',clientSecret:env.AUTHORITY_GITHUB_APP_CLIENT_SECRET??'',callbackUrl:env.AUTHORITY_HUMAN_ORIGIN+'/v1/authority/human/callback'});
   if(!env.AUTHORITY_SIGNING_KEY_PKCS8_B64||!env.AUTHORITY_SIGNING_KEY_ID)throw new HumanIdentityError('configuration_missing');
-  return authorityHumanResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),
+  return authorityHumanResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),
    signer:{keyId:env.AUTHORITY_SIGNING_KEY_ID,privateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer}});
  }catch{return new Response(JSON.stringify({error:'authority_human_configuration_unavailable'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});}
 }
