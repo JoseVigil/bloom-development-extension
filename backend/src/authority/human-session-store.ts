@@ -1,18 +1,18 @@
 import { HumanIdentityError, hashSecret, randomSecret, base64url, type HumanProvider } from './human-identity';
 import type { VerifiedHumanActor, InitialHumanIdentity } from './administration';
 export interface HumanServices {provider:HumanProvider;encryptionKey:string;now:()=>string;allowTestFixtures?:boolean;}
-interface Identity {organization_id:string;principal_id:string;subject:string;source_ref:string;evidence_kind:'canonical'|'test-fixture';revision:string;status:string;verified_at:string|null;display_handle:string;}
+export interface Identity {organization_id:string;principal_id:string;subject:string;source_ref:string;evidence_kind:'canonical'|'test-fixture';revision:string;status:string;verified_at:string|null;display_handle:string;}
 interface Session {session_id:string;token_hash:string;csrf_hash:string;organization_id:string;principal_id:string;identity_revision:string;provider_cipher:string;expires_at:string;absolute_expires_at:string;status:string;revision:string;}
 export interface SessionActor extends VerifiedHumanActor {sessionRevision:string;identityRevision:string;}
-function timestamp(s:HumanServices){const n=Date.parse(s.now());if(!Number.isFinite(n))throw new HumanIdentityError('clock_invalid');return n;}
-function permitted(s:HumanServices,i?:Identity){if((s.provider.source==='test-fixture'||i?.evidence_kind==='test-fixture')&&!s.allowTestFixtures)throw new HumanIdentityError('fixture_forbidden');}
-async function cipherKey(s:HumanServices){
+export function timestamp(s:HumanServices){const n=Date.parse(s.now());if(!Number.isFinite(n))throw new HumanIdentityError('clock_invalid');return n;}
+export function permitted(s:HumanServices,i?:Identity){if((s.provider.source==='test-fixture'||i?.evidence_kind==='test-fixture')&&!s.allowTestFixtures)throw new HumanIdentityError('fixture_forbidden');}
+export async function cipherKey(s:HumanServices){
  let bytes:Uint8Array;try{bytes=Uint8Array.from(atob(s.encryptionKey),c=>c.charCodeAt(0));}catch{throw new HumanIdentityError('configuration_invalid');}
  if(bytes.length!==32)throw new HumanIdentityError('configuration_missing');
  return crypto.subtle.importKey('raw',bytes,'AES-GCM',false,['encrypt','decrypt']);
 }
-async function seal(s:HumanServices,value:string,aad:string){const iv=crypto.getRandomValues(new Uint8Array(12));return base64url(iv)+'.'+base64url(new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(aad)},await cipherKey(s),new TextEncoder().encode(value))));}
-async function open(s:HumanServices,value:string,aad:string){
+export async function seal(s:HumanServices,value:string,aad:string){const iv=crypto.getRandomValues(new Uint8Array(12));return base64url(iv)+'.'+base64url(new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(aad)},await cipherKey(s),new TextEncoder().encode(value))));}
+export async function open(s:HumanServices,value:string,aad:string){
  const decode=(v:string)=>Uint8Array.from(atob(v.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
  try{const [iv,data]=value.split('.');return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(iv),additionalData:new TextEncoder().encode(aad)},await cipherKey(s),decode(data)));}catch{throw new HumanIdentityError('session_invalid');}
 }
@@ -40,7 +40,7 @@ export async function finishHumanLogin(db:D1Database,input:{state:string;browser
  if(!latest||latest.status!=='active'||latest.revision!==identity.revision||!latest.verified_at)throw new HumanIdentityError('identity_conflict');
  return issueSession(db,latest,grant.token,new Date(timestamp(s)+Math.min(grant.expiresIn,28800)*1000).toISOString(),s);
 }
-async function issueSession(db:D1Database,i:Identity,providerToken:string,absolute:string,s:HumanServices){
+export async function issueSession(db:D1Database,i:Identity,providerToken:string,absolute:string,s:HumanServices){
  const token=randomSecret(),csrf=randomSecret(),sessionId=crypto.randomUUID();
  const expiresAt=new Date(Math.min(timestamp(s)+900000,Date.parse(absolute))).toISOString();
  if(Date.parse(expiresAt)<=timestamp(s))throw new HumanIdentityError('session_expired');

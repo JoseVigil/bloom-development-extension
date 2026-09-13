@@ -1,5 +1,6 @@
 import { githubAppProvider, HumanIdentityError } from './human-identity';
 import { beginHumanLogin, finishHumanLogin, resolveHumanSession, checkSessionCsrf, renewHumanSession, revokeHumanSession, initialHumanIdentity, sessionCommitGuard, type HumanServices } from './human-session-store';
+import { beginGenesis, finishGenesis } from './genesis-store';
 import { administerAuthority } from './administration-store';
 import { AdministrationError, type AdministrationCommand } from './administration';
 import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, type EmissionSigner } from './emission-store';
@@ -25,14 +26,28 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
   if(request.method!=='GET'&&request.headers.get('Origin')!==s.origin)throw new HumanIdentityError('csrf_invalid');
   if(path==='/v1/authority/human/callback'&&request.method==='GET'){
    if(url.searchParams.getAll('state').length!==1||url.searchParams.getAll('code').length!==1)throw new HumanIdentityError('flow_invalid');
-   const result=await finishHumanLogin(db,{state:url.searchParams.get('state')!,code:url.searchParams.get('code')!,browser:cookie(request,flowCookie)},s);
+   const input={state:url.searchParams.get('state')!,code:url.searchParams.get('code')!,browser:cookie(request,flowCookie)};
+   // Login real de hoy no cambia en nada: finishHumanLogin sigue resolviendo en el
+   // primer intento, siempre. Sólo cuando falla específicamente con flow_invalid (no hay
+   // fila viva en authority_human_flows para este state/browser — ya validado como no
+   // siendo un error de input arriba) se intenta finishGenesis contra
+   // authority_genesis_flows (§2.3.3 del encargo de Génesis).
+   let result:{token:string;csrf:string;organizationId:string;principalId:string;expiresAt:string;created?:boolean};
+   try{result=await finishHumanLogin(db,input,s);}
+   catch(error){if(!(error instanceof HumanIdentityError)||error.code!=='flow_invalid')throw error;result=await finishGenesis(db,input,s);}
    headers.append('Set-Cookie',setCookie(flowCookie,'',0));headers.append('Set-Cookie',setCookie(sessionCookie,result.token,900));
-   return reply({organizationId:result.organizationId,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt});
+   return reply(result.created===undefined?{organizationId:result.organizationId,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt}
+    :{organizationId:result.organizationId,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt,created:result.created});
   }
   if(request.method!=='POST')return reply({error:'method_not_allowed'},405);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')return reply({error:'invalid_content_type'},400);
   const raw=await request.text();if(raw.length>65536)return reply({error:'request_too_large'},413);
   let body:any;try{body=JSON.parse(raw);}catch{return reply({error:'invalid_json'},400);}
+  if(path==='/v1/authority/genesis/login'){
+   // Sin organizationId en el body: la organización todavía no existe (§2.3.3).
+   if(!exact(body,[]))return reply({error:'invalid_request'},400);
+   const flow=await beginGenesis(db,s);headers.append('Set-Cookie',setCookie(flowCookie,flow.browser,300));return reply({authorizationUrl:flow.url});
+  }
   if(typeof body?.organizationId!=='string'||!body.organizationId)return reply({error:'invalid_org'},400);
   const org=body.organizationId;
   if(path==='/v1/authority/human/login'){
