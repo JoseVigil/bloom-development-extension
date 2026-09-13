@@ -12,7 +12,7 @@ import { beginHumanLogin,finishHumanLogin,resolveHumanSession,revokeHumanSession
 const root=resolve(fileURLToPath(new URL("../..",import.meta.url)));
 const vector=JSON.parse(readFileSync(join(root,"docs/ROLES/fixtures/authority_interop_v1.json"),"utf8"));
 const owner="p-😀",recipient="p-\uE000",now="2026-09-08T12:05:00Z";
-const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge"];
+const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate"];
 const signer={privateKeyPkcs8:Uint8Array.from(Buffer.from(vector.private_key_pkcs8_base64,"base64")).buffer,keyId:vector.key_id,allowTestFixtures:true};
 let mf:Miniflare,db:D1Database,temp:string,sequence=0;
 const services:AdministrationServices={signer,now:()=>now,allowTestFixtures:true,verifyActor:async(proof,organizationId)=>{

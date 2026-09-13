@@ -52,10 +52,24 @@ type ActorAttestation struct {
 	ChallengeDigest string    `json:"challenge_digest"`
 	IssuedAt        time.Time `json:"issued_at"`
 	ExpiresAt       time.Time `json:"expires_at"`
+	// Aditivo, SchemaVersion "1.1" (§2.3 del encargo de nacimiento de agente Orbital). Wire fields son
+	// obligatorios en este paquete (ver decodeWire, envelope.go) — nunca omitempty, aunque en "1.0"
+	// viajen como "" (VerifyActorAttestation exige que sea así, ver más abajo).
+	RunID          string `json:"run_id"`
+	DesignationID  string `json:"designation_id"`
+	CapabilitySeam string `json:"capability_seam"`
+}
+
+// allowedActorProofAudiences es una whitelist, no una eliminación del chequeo: agrega
+// "bloom.authority.orbital-context" a "bloom.authority.local-actor" sin abrir la validación a
+// cualquier audience arbitraria (§2.3 del encargo de nacimiento de agente Orbital).
+var allowedActorProofAudiences = map[string]struct{}{
+	"bloom.authority.local-actor":     {},
+	"bloom.authority.orbital-context": {},
 }
 
 func NewActorProof(org, installation, audience string) (*ActorProof, error) {
-	if org == "" || installation == "" || audience != "bloom.authority.local-actor" {
+	if _, ok := allowedActorProofAudiences[audience]; org == "" || installation == "" || !ok {
 		return nil, errors.New("invalid actor proof binding")
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -117,8 +131,16 @@ func VerifyActorAttestation(raw []byte, manifest *VerifiedTrustManifest, proof *
 		return zero, err
 	}
 	challengeSum := sha256.Sum256([]byte(challenge))
-	if a.Schema != "bloom.authority.actor-attestation" || a.SchemaVersion != "1.0" || a.AttestationID == "" || a.PrincipalID == "" || a.Issuer != manifest.Payload.Issuer || a.OrganizationID != proof.OrganizationID || a.InstallationID != proof.InstallationID || a.Audience != proof.Audience || a.ActorPublicKey != base64.RawURLEncoding.EncodeToString(proof.public) || a.ChallengeDigest != base64.RawURLEncoding.EncodeToString(challengeSum[:]) || a.IssuedAt.After(now) || !now.Before(a.ExpiresAt) {
+	if a.Schema != "bloom.authority.actor-attestation" || (a.SchemaVersion != "1.0" && a.SchemaVersion != "1.1") || a.AttestationID == "" || a.PrincipalID == "" || a.Issuer != manifest.Payload.Issuer || a.OrganizationID != proof.OrganizationID || a.InstallationID != proof.InstallationID || a.Audience != proof.Audience || a.ActorPublicKey != base64.RawURLEncoding.EncodeToString(proof.public) || a.ChallengeDigest != base64.RawURLEncoding.EncodeToString(challengeSum[:]) || a.IssuedAt.After(now) || !now.Before(a.ExpiresAt) {
 		return zero, errors.New("actor attestation binding or validity mismatch")
+	}
+	// "1.0" nunca lleva los campos de Orbital (ningún consumidor existente de bloom.authority.local-actor
+	// los completa hoy); "1.1" los exige completos — son el motivo de ser de esa versión de schema.
+	if a.SchemaVersion == "1.0" && (a.RunID != "" || a.DesignationID != "" || a.CapabilitySeam != "") {
+		return zero, errors.New("actor attestation schema version mismatch")
+	}
+	if a.SchemaVersion == "1.1" && (a.RunID == "" || a.DesignationID == "" || a.CapabilitySeam == "") {
+		return zero, errors.New("actor attestation orbital context fields required")
 	}
 	return a, nil
 }

@@ -4,8 +4,9 @@ import "testing"
 
 func TestBuiltinCatalogExact(t *testing.T) {
 	expected := map[string][]string{
-		"master":     {"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge"},
+		"master":     {"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate"},
 		"specialist": {"intent.create"},
+		"operator":   {"intent.create", "agent.issuer.designate"},
 	}
 	if len(BuiltinRoles) != len(expected) {
 		t.Fatal("unexpected built-in roles")

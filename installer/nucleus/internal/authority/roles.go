@@ -6,20 +6,26 @@ import (
 )
 
 const (
-	RoleMaster               = "master"
-	RoleSpecialist           = "specialist"
-	PermissionIntentCorMerge = "intent.cor.merge"
+	RoleMaster                     = "master"
+	RoleSpecialist                 = "specialist"
+	RoleOperator                   = "operator" // Working name (ex-delegate); scope-project admin. See Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md §1, §2.1.
+	PermissionIntentCorMerge       = "intent.cor.merge"
+	PermissionAgentIssuerDesignate = "agent.issuer.designate"
 )
 
-var PermissionsV1 = map[string]struct{}{"authority.membership.manage": {}, "authority.role_definition.manage": {}, "authority.assignment.manage": {}, "authority.binding.approve": {}, "authority.cutover.approve": {}, "mandate.create": {}, "mandate.sign": {}, "mandate.promote": {}, "mandate.install": {}, "intent.create": {}, PermissionIntentCorMerge: {}, "vault.key.read": {}, "vault.key.write": {}, "vault.key.delete": {}, "executor.command.execute": {}, "executor.filesystem.write": {}, "executor.network.access": {}, "executor.change.promote": {}}
+var PermissionsV1 = map[string]struct{}{"authority.membership.manage": {}, "authority.role_definition.manage": {}, "authority.assignment.manage": {}, "authority.binding.approve": {}, "authority.cutover.approve": {}, "mandate.create": {}, "mandate.sign": {}, "mandate.promote": {}, "mandate.install": {}, "intent.create": {}, PermissionIntentCorMerge: {}, PermissionAgentIssuerDesignate: {}, "vault.key.read": {}, "vault.key.write": {}, "vault.key.delete": {}, "executor.command.execute": {}, "executor.filesystem.write": {}, "executor.network.access": {}, "executor.change.promote": {}}
 var BuiltinRoles = map[string][]string{
 	RoleMaster: {
 		"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage",
 		"authority.binding.approve", "authority.cutover.approve",
 		"mandate.create", "mandate.sign", "mandate.promote", "mandate.install",
-		"intent.create", PermissionIntentCorMerge,
+		"intent.create", PermissionIntentCorMerge, PermissionAgentIssuerDesignate,
 	},
 	RoleSpecialist: {"intent.create"},
+	// scope-project admin (§2.1/§2.2 del encargo de nacimiento de agente Orbital): mismo piso que
+	// specialist (intent.create) más la capacidad nueva de pedir nacimiento de agente, evaluada contra
+	// el scope real de la asignación (decision.go scopeIncludes), nunca contra un scope fijo.
+	RoleOperator: {"intent.create", PermissionAgentIssuerDesignate},
 }
 var ScopeTypes = map[string]struct{}{"organization": {}, "project": {}, "mandate": {}, "intent": {}, "resource": {}, "environment": {}}
 

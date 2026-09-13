@@ -6,7 +6,7 @@ import type { WireFullContent } from "../src/authority/schema";
 
 const vector=JSON.parse(readFileSync(fileURLToPath(new URL("../../docs/ROLES/fixtures/authority_interop_v1.json",import.meta.url)),"utf8"));
 const now="2026-09-08T12:05:00Z", org="org-fixture", owner="p-😀", recipient="p-\uE000";
-const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge"];
+const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate"];
 function fixture():WireFullContent {
   const s=structuredClone(vector.base_state);
   s.principals[1].external_identities=[{provider:"github",subject:"recipient",display_handle:"recipient",status:"verified",verified_at:now}];

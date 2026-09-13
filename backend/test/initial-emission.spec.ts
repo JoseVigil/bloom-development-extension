@@ -12,7 +12,7 @@ import { beginHumanLogin, finishHumanLogin, initialHumanIdentity, resolveHumanSe
 let db:D1Database,mf:Miniflare,temp:string,sequence=0,privateKey:ArrayBuffer;
 const now="2026-09-10T12:00:00Z",masterPermissions=["authority.membership.manage","authority.role_definition.manage",
   "authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign",
-  "mandate.promote","mandate.install","intent.create","intent.cor.merge"];
+  "mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate"];
 const human:HumanServices={now:()=>now,encryptionKey:Buffer.alloc(32,4).toString("base64"),provider:{source:"github-app",
   authorize:()=>"https://github.test",exchange:async()=>({token:"ghu_initial",expiresIn:28800}),identify:async()=>({subject:"123",handle:"founder"})}};
 const signer=()=>({privateKeyPkcs8:privateKey,keyId:"issuer-key"});

@@ -2,7 +2,12 @@ import { base64ToBase64url, canonicalizeJson, digestWire, signCanonicalPayload }
 import type { WireDeltaOperation, WireEmissionMetadata, WireEnvelope, WireFullContent, WireSnapshotPayload } from "./schema";
 
 const collections = ["principals", "memberships", "role_definitions", "role_assignments", "revocations"] as const;
-const master = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge"];
+const master = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate"];
+// operator (ex-delegate, nombre de trabajo — Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md
+// §1, §2.1): scope-project admin. Mismo piso que specialist (intent.create) más la capacidad nueva de
+// pedir nacimiento de agente, evaluada contra el scope real de la asignación (ver agent-issuer.ts),
+// nunca contra un scope fijo. Espejo de installer/nucleus/internal/authority/roles.go BuiltinRoles.
+const operator = ["intent.create", "agent.issuer.designate"];
 const permissions = new Set([...master, "vault.key.read", "vault.key.write", "vault.key.delete", "executor.command.execute", "executor.filesystem.write", "executor.network.access", "executor.change.promote"]);
 const statuses = ["pending", "active", "suspended", "expired", "revoked"];
 const scopes = ["organization", "project", "mandate", "intent", "resource", "environment"];
@@ -78,9 +83,9 @@ export function normalizeState(input: WireFullContent, organizationId: string): 
     for (const p of r.permissions) if (!permissions.has(p)) fail("unknown permission or wildcard");
     unique(r.permissions, "permission"); r.permissions.sort(cmp);
     if (r.role_origin === "builtin") {
-      const expected = r.role_id === "master" ? master : r.role_id === "specialist" ? ["intent.create"] : null;
+      const expected = r.role_id === "master" ? master : r.role_id === "specialist" ? ["intent.create"] : r.role_id === "operator" ? operator : null;
       if (!expected || r.role_version !== "1" || expected.length !== r.permissions.length || expected.some(p => !r.permissions.includes(p))) fail("builtin contradiction");
-    } else if (["master", "specialist"].includes(r.role_id)) fail("reserved role");
+    } else if (["master", "specialist", "operator"].includes(r.role_id)) fail("reserved role");
   }
   unique(f.role_definitions.map(roleKey), "role version");
   for (const a of f.role_assignments) {
