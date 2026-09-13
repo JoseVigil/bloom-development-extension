@@ -39,6 +39,20 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    return reply(result.created===undefined?{organizationId:result.organizationId,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt}
     :{organizationId:result.organizationId,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt,created:result.created});
   }
+  if(path==='/v1/authority/administration/history'&&request.method==='GET'){
+   // Encargo_Implementacion_Recuperacion_Estado_Anterior_Autoridad_v1_0.md §2.2: sólo lectura de una
+   // versión histórica ya existente (loadEmissionVersion), mismo gate de sesión que la ruta de
+   // administración. Sin chequeo de CSRF adicional — es GET, igual que el callback de arriba.
+   const org=url.searchParams.get('organizationId')??'';
+   const version=url.searchParams.get('version')??'';
+   if(!org)return reply({error:'invalid_org'},400);
+   try{wireVersion(version);}catch{return reply({error:'invalid_version'},400);}
+   const token=cookie(request,sessionCookie);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   const historical=await loadEmissionVersion(db,org,version);
+   if(!historical)return reply({error:'not_found'},404);
+   return reply({authorityVersion:version,state:historical.state});
+  }
   if(request.method!=='POST')return reply({error:'method_not_allowed'},405);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')return reply({error:'invalid_content_type'},400);
   const raw=await request.text();if(raw.length>65536)return reply({error:'request_too_large'},413);
