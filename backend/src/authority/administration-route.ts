@@ -53,6 +53,14 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    if(!historical)return reply({error:'not_found'},404);
    return reply({authorityVersion:version,state:historical.state});
   }
+  if(path==='/v1/authority/genesis/login'&&request.method==='GET'){
+   // Encargo_Implementacion_Nucleus_Genesis_Bootstrap_v1_0.md §2.1: variante navegable
+   // del mismo beginGenesis que ya usa el POST de abajo — un navegador puede seguir
+   // este link directamente (302 + Location) en vez de hacer un fetch() y navegar a
+   // mano. Mismo flujo, misma fila en authority_genesis_flows, sin tocar beginGenesis.
+   const flow=await beginGenesis(db,s);headers.append('Set-Cookie',setCookie(flowCookie,flow.browser,300));
+   headers.set('Location',flow.url);return new Response(null,{status:302,headers});
+  }
   if(request.method!=='POST')return reply({error:'method_not_allowed'},405);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')return reply({error:'invalid_content_type'},400);
   const raw=await request.text();if(raw.length>65536)return reply({error:'request_too_large'},413);

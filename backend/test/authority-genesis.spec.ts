@@ -132,4 +132,39 @@ describe("Génesis / Primer Registro", () => {
     const secondBody = await secondCallback.json() as any;
     expect(secondBody).toMatchObject({ created: false, organizationId: body.organizationId });
   });
+
+  it("GET /v1/authority/genesis/login redirects the browser straight into the same flow as the POST", async () => {
+    // Encargo_Implementacion_Nucleus_Genesis_Bootstrap_v1_0.md §2.1: la CLI no puede
+    // completar este login por su cuenta (cookie atada al navegador que lo inició), así
+    // que abre el navegador directamente en esta variante GET. Mismo beginGenesis, mismo
+    // provider fixture, sólo cambia la forma de la respuesta (302 + Location en vez de
+    // JSON) para que un navegador la pueda seguir sin un fetch() intermedio.
+    const origin = "https://authority.test";
+    const routeServices: HumanRouteServices = { ...services, origin, issuer: "issuer-test", signer: signer() };
+    const start = await authorityHumanResponse(db, new Request(origin + "/v1/authority/genesis/login",
+      { method: "GET", headers: { Origin: origin } }), routeServices);
+    expect(start.status).toBe(302);
+    const location = start.headers.get("Location")!;
+    expect(location).toContain("https://fixture.test/?state=");
+    const flowCookie = start.headers.get("Set-Cookie")!.split(";")[0];
+    expect(flowCookie.startsWith("__Host-authority-flow=")).toBe(true);
+
+    const state = new URL(location).searchParams.get("state");
+    const callback = await authorityHumanResponse(db, new Request(origin + `/v1/authority/human/callback?state=${state}&code=grace`,
+      { headers: { Cookie: flowCookie } }), routeServices);
+    expect(callback.status).toBe(200);
+    const body = await callback.json() as any;
+    expect(body).toMatchObject({ created: true });
+    expect(body).not.toHaveProperty("token");
+  });
+
+  it("POST /v1/authority/genesis/login still returns JSON (200), untouched by the new GET branch", async () => {
+    const origin = "https://authority.test";
+    const routeServices: HumanRouteServices = { ...services, origin, issuer: "issuer-test", signer: signer() };
+    const start = await authorityHumanResponse(db, new Request(origin + "/v1/authority/genesis/login",
+      { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({}) }), routeServices);
+    expect(start.status).toBe(200);
+    const { authorizationUrl } = await start.json() as any;
+    expect(typeof authorizationUrl).toBe("string");
+  });
 });
