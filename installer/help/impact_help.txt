@@ -1,0 +1,26 @@
+IMPACT — Portable consequence evaluation for Cognituum
+SYSTEM: Command discovery and contracts
+EVALUATION: Explicit questions, evidence and consequences
+
+impact [flags] [SYSTEM]
+Portable consequence evaluator
+Impact evaluates explicit questions without granting authority or executing actions.
+  --help (bool, default="false", required=false): help for impact
+  --json (bool, default="false", required=false): Write structured response only to stdout
+  --json-help (bool, default="false", required=false): Render command metadata as JSON
+Examples:
+  impact --help
+  impact --json-help
+JSON response: {"name":"impact","commands":[],"flags":[]}
+
+impact assess [flags] [EVALUATION]
+Evaluate an explicit question against supplied criterion and evidence
+Evaluate coexistence, preservation, compliance or a registered future evaluator. The request identifies the question and version. An assessment is evidence, never authority to execute.
+  --help (bool, default="false", required=false): help for assess
+  --input (string, default="", required=true): EvaluationRequest JSON file (required)
+  --json (bool, default="false", required=false): Write structured response only to stdout
+  --json-help (bool, default="false", required=false): Render command metadata as JSON
+Examples:
+  impact assess --input request.json
+  impact assess --input request.json --json
+JSON response: {"contract":"impact/1","question":{"type":"coexistence","version":"1"},"questionText":"Explicit evaluation question","inputDigest":"sha256:...","evaluatorVersion":"1","findings":[],"coverage":{"evaluated":[],"undetermined":[],"complete":false},"indeterminacy":[],"reevaluateWhen":[]}

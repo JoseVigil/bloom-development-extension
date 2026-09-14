@@ -107,11 +107,11 @@ echo "============================================="
 # ───────────────────────────────────────────────────────────────
 
 case "${COMPONENT}" in
-    nucleus|sentinel|metamorph|sensor)
+    nucleus|sentinel|metamorph|sensor|impact)
         ;;
     *)
         echo "❌ Error: componente desconocido: '${COMPONENT}'"
-        echo "   Válidos: nucleus sentinel metamorph sensor"
+        echo "   Válidos: nucleus sentinel metamorph sensor impact"
         echo "❌ Componente desconocido: ${COMPONENT}" >> "${LOG_FILE}"
         exit 1
         ;;
@@ -177,6 +177,10 @@ fi
 
 # sensor produce "bloom-sensor" igual que en Windows (bloom-sensor.exe)
 case "${COMPONENT}" in
+    impact)
+        BINARY_NAME="impact"
+        BUILD_TARGET="main.go"
+        ;;
     sensor)
         BINARY_NAME="bloom-sensor"
         BUILD_TARGET="./cmd"
@@ -205,6 +209,9 @@ case "${COMPONENT}" in
         ;;
     metamorph)
         CORE_PKG="metamorph/internal/core"
+        ;;
+    impact)
+        CORE_PKG="impact/internal/core"
         ;;
 esac
 
@@ -250,6 +257,16 @@ HELP_JSON_RC=$?
 
 "${OUTPUT_BINARY}" --help > "${HELP_OUT_DIR}/${COMPONENT}_help.txt" 2>> "${LOG_FILE}"
 HELP_TXT_RC=$?
+
+if [[ "${COMPONENT}" == "impact" ]]; then
+    if [[ ${HELP_JSON_RC} -ne 0 || ${HELP_TXT_RC} -ne 0 ]]; then
+        echo "Impact help generation failed" >> "${LOG_FILE}"
+        exit 1
+    fi
+    mkdir -p "${PROJECT_ROOT}/installer/help"
+    cp "${HELP_OUT_DIR}/impact_help.json" "${PROJECT_ROOT}/installer/help/impact_help.json" || exit 1
+    cp "${HELP_OUT_DIR}/impact_help.txt" "${PROJECT_ROOT}/installer/help/impact_help.txt" || exit 1
+fi
 
 if [[ ${HELP_JSON_RC} -ne 0 ]]; then
     echo "⚠️  --json-help terminó con código ${HELP_JSON_RC} para ${COMPONENT}"

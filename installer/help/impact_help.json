@@ -1,0 +1,95 @@
+{
+  "name": "impact",
+  "syntax": "impact [flags]",
+  "description": "Portable consequence evaluator",
+  "long": "Impact evaluates explicit questions without granting authority or executing actions.",
+  "category": "SYSTEM",
+  "examples": "  impact --help\n  impact --json-help",
+  "json_response": {
+    "name": "impact",
+    "commands": [],
+    "flags": []
+  },
+  "flags": [
+    {
+      "name": "help",
+      "type": "bool",
+      "default": "false",
+      "description": "help for impact",
+      "required": false
+    },
+    {
+      "name": "json",
+      "type": "bool",
+      "default": "false",
+      "description": "Write structured response only to stdout",
+      "required": false
+    },
+    {
+      "name": "json-help",
+      "type": "bool",
+      "default": "false",
+      "description": "Render command metadata as JSON",
+      "required": false
+    }
+  ],
+  "commands": [
+    {
+      "name": "impact assess",
+      "syntax": "impact assess [flags]",
+      "description": "Evaluate an explicit question against supplied criterion and evidence",
+      "long": "Evaluate coexistence, preservation, compliance or a registered future evaluator. The request identifies the question and version. An assessment is evidence, never authority to execute.",
+      "category": "EVALUATION",
+      "examples": "  impact assess --input request.json\n  impact assess --input request.json --json",
+      "json_response": {
+        "contract": "impact/1",
+        "question": {
+          "type": "coexistence",
+          "version": "1"
+        },
+        "questionText": "Explicit evaluation question",
+        "inputDigest": "sha256:...",
+        "evaluatorVersion": "1",
+        "findings": [],
+        "coverage": {
+          "evaluated": [],
+          "undetermined": [],
+          "complete": false
+        },
+        "indeterminacy": [],
+        "reevaluateWhen": []
+      },
+      "flags": [
+        {
+          "name": "help",
+          "type": "bool",
+          "default": "false",
+          "description": "help for assess",
+          "required": false
+        },
+        {
+          "name": "input",
+          "type": "string",
+          "default": "",
+          "description": "EvaluationRequest JSON file (required)",
+          "required": true
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "default": "false",
+          "description": "Write structured response only to stdout",
+          "required": false
+        },
+        {
+          "name": "json-help",
+          "type": "bool",
+          "default": "false",
+          "description": "Render command metadata as JSON",
+          "required": false
+        }
+      ],
+      "commands": []
+    }
+  ]
+}

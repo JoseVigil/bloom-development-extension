@@ -1,0 +1,39 @@
+bloom-development-extension/
+└── impact/
+    ├── AGENTS.md
+    ├── README.md
+    ├── adapters/
+    │   ├── local/
+    │   │   └── local.go
+    │   ├── parity_test.go
+    │   └── server/
+    │       └── handler.go
+    ├── go.mod
+    ├── go.sum
+    ├── internal/
+    │   ├── assessment/
+    │   │   └── command.go
+    │   ├── cli/
+    │   │   ├── cli_test.go
+    │   │   ├── config.go
+    │   │   ├── help_renderer.go
+    │   │   └── root.go
+    │   ├── contracts/
+    │   │   └── contract.go
+    │   ├── core/
+    │   │   ├── core.go
+    │   │   ├── logger.go
+    │   │   ├── logger_test.go
+    │   │   ├── paths.go
+    │   │   ├── registry.go
+    │   │   ├── telemetry.go
+    │   │   └── telemetry_test.go
+    │   └── evaluation/
+    │       ├── coexistence.go
+    │       ├── compliance.go
+    │       ├── evaluate.go
+    │       ├── evaluate_test.go
+    │       └── preservation.go
+    ├── main.go
+    └── testdata/
+        └── assessment.json

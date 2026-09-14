@@ -360,6 +360,7 @@ BUILDS: dict[str, Path | None] = {
     "nucleus":   _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
     "sentinel":  _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
     "metamorph": _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
+    "impact":    _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
     "sensor":    _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
 
     # JS/Node: paths a sus directorios de proyecto
@@ -1772,7 +1773,7 @@ def _print_summary(results: list[StepResult]) -> int:
 
 ALL_STEP_NAMES = [
     "parser", "brain", "host", "nucleus", "sentinel", "metamorph",
-    "sensor", "setup", "workspace", "cortex", "bootstrap", "vsix",
+    "sensor", "impact", "setup", "workspace", "cortex", "bootstrap", "vsix",
 ]
 
 
@@ -2379,6 +2380,7 @@ def main() -> None:
         ("sentinel",  "Sentinel",  lambda: build_go_component("sentinel")),
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
         ("sensor",    "Sensor",    lambda: build_go_component("sensor")),
+        ("impact",    "Impact",    lambda: build_go_component("impact")),
         # Setup: npm install + electron-builder en installer/conductor/setup/
         ("setup",     "Setup",     build_setup),
         # Workspace: npm install + electron-builder en installer/conductor/workspace/

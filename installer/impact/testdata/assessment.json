@@ -1,0 +1,10 @@
+{
+  "contract": "impact/1",
+  "question": {"type": "coexistence", "version": "1"},
+  "context": {"subject": "example:service", "scope": "response", "domain": "real", "intent": "test", "resolution": "example:gravity-resolution@1"},
+  "postures": [
+    {"ref": "example:receiver@1/limit", "expression": "threshold latency <= 5 ms", "role": "baseline"},
+    {"ref": "example:candidate@1/limit", "expression": "threshold latency >= 10 ms", "role": "candidate"}
+  ],
+  "snapshot": {"ref": "example:snapshot@1", "facts": [], "complete": true, "missing": []}
+}

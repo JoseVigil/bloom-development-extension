@@ -5,20 +5,20 @@ setlocal EnableDelayedExpansion
 :: ============================================
 :: BLOOM - BUILD DE COMPONENTE PARAMETRIZADO
 :: Uso: build-component.bat <componente>
-:: Componentes validos: nucleus, sentinel, metamorph, sensor
+:: Componentes validos: nucleus, sentinel, metamorph, sensor, impact
 :: ============================================
 
 :: Validar argumento
 if "%~1"=="" (
     echo Uso: build-component.bat ^<componente^>
-    echo    Componentes validos: nucleus, sentinel, metamorph, sensor
+    echo    Componentes validos: nucleus, sentinel, metamorph, sensor, impact
     exit /b 1
 )
 set "COMPONENT=%~1"
 
 :: Validar que el componente es conocido
 set "VALID=0"
-for %%C in (nucleus sentinel metamorph sensor) do (
+for %%C in (nucleus sentinel metamorph sensor impact) do (
     if /i "%%C"=="%COMPONENT%" set "VALID=1"
 )
 if "%VALID%"=="0" (
@@ -133,6 +133,7 @@ if /i "%COMPONENT%"=="sensor" (
     set "BUILD_PKG=."
 )
 
+if /i "%COMPONENT%"=="impact" set "BUILD_PKG=main.go"
 pushd "!BUILD_DIR!"
 go build -p 1 -ldflags="-s -w -X !CORE_PKG!.buildNumber=%NEXT_BUILD% -X !CORE_PKG!.BuildDate=%BUILD_DATE% -X !CORE_PKG!.BuildTime=%BUILD_TIME%" -o "%OUTPUT_FILE%" !BUILD_PKG! >> "%LOG_FILE%" 2>&1
 set BUILD_RC=%ERRORLEVEL%
@@ -154,7 +155,16 @@ if exist "%PROJECT_ROOT%\installer\%COMPONENT%\%COMPONENT%-config.json" (
 :: ============================================
 for %%F in ("%OUTPUT_FILE%") do set "OUTPUT_FILE_ABS=%%~fF"
 "%OUTPUT_FILE_ABS%" --json-help > "%HELP_DIR%\%COMPONENT%_help.json" 2>> "%LOG_FILE%"
+if /i "%COMPONENT%"=="impact" if errorlevel 1 exit /b 1
 "%OUTPUT_FILE_ABS%" --help      > "%HELP_DIR%\%COMPONENT%_help.txt"  2>> "%LOG_FILE%"
+if /i "%COMPONENT%"=="impact" (
+    if errorlevel 1 exit /b 1
+    if not exist "%PROJECT_ROOT%\installer\help" mkdir "%PROJECT_ROOT%\installer\help"
+    copy /y "%HELP_DIR%\impact_help.json" "%PROJECT_ROOT%\installer\help\impact_help.json" >nul
+    if errorlevel 1 exit /b 1
+    copy /y "%HELP_DIR%\impact_help.txt" "%PROJECT_ROOT%\installer\help\impact_help.txt" >nul
+    if errorlevel 1 exit /b 1
+)
 
 :: ============================================
 :: REGISTRAR TELEMETRY
