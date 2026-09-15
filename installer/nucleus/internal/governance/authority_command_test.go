@@ -122,12 +122,35 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		authorityCommandRoots = authority.DevelopmentPinnedRoots
 		authorityCommandNow = func() time.Time { return time.Now().UTC() }
 	}()
-	services := defaultAuthorityServices(&core.Core{Paths: core.Paths{AppDataDir: appData}})
+	// LogsDir/TelemetryDir replican lo que core.InitPaths() arma en producción
+	// (filepath.Join(appDataDir, "logs")) — necesario porque el auto-encadenamiento de
+	// sync ahora usa core.InitLogger(&c.Paths, "MANDATE", ...) (mismo stream de
+	// telemetría "nucleus_mandate" que ya usa 'nucleus mandate install' manual); sin
+	// LogsDir, InitLogger escribiría con un path relativo vacío fuera de t.TempDir().
+	services := defaultAuthorityServices(&core.Core{Paths: core.Paths{AppDataDir: appData, LogsDir: filepath.Join(appData, "logs"), TelemetryDir: filepath.Join(appData, "logs")}})
 	for _, expected := range []string{"pending", "accepted", "replay", "error"} {
 		mandateMode = expected
 		report, err := services.Run("sync", nil)
 		if err != nil || !report.OK || report.Evidence["mandate_delivery"] != expected {
 			t.Fatalf("mode=%s report=%+v err=%v", expected, report, err)
+		}
+		// Auto-encadenamiento sync→install (Encargo_Implementacion_AutoEncadenamiento_
+		// Sync_Install_y_Validacion_Backend_v1_0.md §2.4): tanto "accepted" como "replay"
+		// deben terminar con el mandate materializado en disco de verdad — no alcanza con
+		// que el campo de evidencia diga true, hay que leer mandate.json del filesystem y
+		// confirmar el contenido exacto que sirvió el handler fake de /v1/mandate/bootstrap.
+		if expected == "accepted" || expected == "replay" {
+			if report.Evidence["mandate_installed"] != true {
+				t.Fatalf("mode=%s expected mandate_installed=true, report=%+v", expected, report)
+			}
+			mandatePath := filepath.Join(nucleusRoot, ".mandates", "mandate", "mandate.json")
+			got, readErr := os.ReadFile(mandatePath)
+			if readErr != nil {
+				t.Fatalf("mode=%s no pude leer el mandate.json materializado en %s: %v", expected, mandatePath, readErr)
+			}
+			if string(got) != "mandate" {
+				t.Fatalf("mode=%s contenido de mandate.json inesperado: got %q", expected, got)
+			}
 		}
 	}
 	if registrationCount != 4 {

@@ -16,6 +16,7 @@ import (
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/mandatedelivery"
+	"nucleus/internal/mandateinstall"
 )
 
 type AuthorityEvidenceReport struct {
@@ -164,7 +165,66 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 				report.Evidence["mandate_delivery"] = "error"
 				report.Evidence["mandate_delivery_error"] = deliveryErr.Error()
 			} else {
-				report.Evidence["mandate_delivery"] = deliveryResult
+				report.Evidence["mandate_delivery"] = deliveryResult.Status
+				// Auto-encadenamiento sync→install (Encargo_Implementacion_AutoEncadenamiento_
+				// Sync_Install_y_Validacion_Backend_v1_0.md §2.3): tanto "accepted" como
+				// "replay" ya pasaron Verify con éxito (la única diferencia entre ambos es si
+				// ese digest ya se había aceptado antes), así que MandateID está poblado en
+				// los dos casos — ver mandatedelivery.AcceptOutcome. Encadenar también en
+				// "replay" es lo que resuelve, sin migración especial, el caso de una
+				// instalación que ya sincronizó antes de este cambio. Una falla acá NO debe
+				// romper sync (el sync de autoridad ya terminó con éxito para cuando se llega
+				// a este bloque) — se reporta como advertencia en la evidencia, mismo criterio
+				// no-bloqueante que ya tiene mandate_delivery_error arriba; report.OK no se
+				// toca por esta rama.
+				if deliveryResult.Status == "accepted" || deliveryResult.Status == "replay" {
+					// Mismo stream de telemetría "nucleus_mandate" que ya usa el comando manual
+					// 'nucleus mandate install' (ver commands/mandate_install.go,
+					// core.InitLogger(&c.Paths, "MANDATE", ...)) — no se crea un stream nuevo.
+					// InitLogger registra/rota el stream en telemetry.json automáticamente
+					// (core/logger.go: rolloverLocked → tm.RegisterStream); este bloque sólo
+					// necesita escribir líneas, igual que ya hace runInstallMandate para la
+					// misma operación disparada a mano.
+					mandateLogger, loggerErr := core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)
+					if loggerErr != nil {
+						report.Evidence["mandate_installed"] = false
+						report.Evidence["mandate_install_error"] = fmt.Sprintf("no pude inicializar el logger de MANDATE: %v", loggerErr)
+					} else {
+						defer mandateLogger.Close()
+						receipt, receiptErr := mandateinstall.LoadLatestReceipt(c.Paths.AppDataDir, active.OrganizationID, identity.InstallationID, deliveryResult.MandateID)
+						if receiptErr != nil {
+							mandateLogger.Error("auto-instalación (desde authority sync) falló al leer el recibo: %v", receiptErr)
+							report.Evidence["mandate_installed"] = false
+							report.Evidence["mandate_install_error"] = receiptErr.Error()
+						} else if mandateDelivery, content, extractErr := mandateinstall.ExtractContent(receipt); extractErr != nil {
+							mandateLogger.Error("auto-instalación (desde authority sync) falló al extraer el contenido: %v", extractErr)
+							report.Evidence["mandate_installed"] = false
+							report.Evidence["mandate_install_error"] = extractErr.Error()
+						} else {
+							// mandatesRoot equivale a supervisor.LoadNucleusConfig().MandatesRoot()
+							// (<workspace>/.bloom/.nucleus-{org}/.mandates) pero se deriva de
+							// active.NucleusRoot, ya resuelto arriba por core.ResolveActiveOrgContext
+							// — evita un import de internal/supervisor y una segunda lectura de
+							// nucleus.json sólo para recomputar el mismo path.
+							mandatesRoot := filepath.Join(active.NucleusRoot, ".mandates")
+							path, alreadyInstalled, materializeErr := mandateinstall.MaterializeFile(mandatesRoot, mandateDelivery.Envelope.MandateID, content)
+							if materializeErr != nil {
+								mandateLogger.Error("auto-instalación (desde authority sync) falló al materializar: %v", materializeErr)
+								report.Evidence["mandate_installed"] = false
+								report.Evidence["mandate_install_error"] = materializeErr.Error()
+							} else {
+								if alreadyInstalled {
+									mandateLogger.Success("mandate %s ya estaba materializado en %s (auto-encadenado desde authority sync, idempotente)", mandateDelivery.Envelope.MandateID, path)
+								} else {
+									mandateLogger.Success("mandate %s materializado automáticamente en %s (auto-encadenado desde authority sync)", mandateDelivery.Envelope.MandateID, path)
+								}
+								report.Evidence["mandate_installed"] = true
+								report.Evidence["mandate_id"] = mandateDelivery.Envelope.MandateID
+								report.Evidence["mandate_path"] = path
+							}
+						}
+					}
+				}
 			}
 		case "decision":
 			report.Evidence["create_organization"] = "operation_permission_unmapped"

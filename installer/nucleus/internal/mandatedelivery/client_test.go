@@ -39,11 +39,11 @@ func TestClientS2SAndPending(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "receipts")
 			c := Client{BaseURL: server.URL, Signer: key, Context: ctx, Store: &Store{Root: root}}
 			result, err := c.Receive(context.Background())
-			if status == 200 && (err != nil || result != "accepted") {
-				t.Fatalf("%s %v", result, err)
+			if status == 200 && (err != nil || result.Status != "accepted") {
+				t.Fatalf("%+v %v", result, err)
 			}
-			if status == 404 && (err != nil || result != "pending") {
-				t.Fatalf("%s %v", result, err)
+			if status == 404 && (err != nil || result.Status != "pending") {
+				t.Fatalf("%+v %v", result, err)
 			}
 			if status == 502 && err == nil {
 				t.Fatal("accepted HTTP error")

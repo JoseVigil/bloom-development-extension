@@ -41,8 +41,8 @@ func TestProcessInterruption(t *testing.T) {
 			if stage == "after_rename" {
 				want = "replay"
 			}
-			if err != nil || result != want {
-				t.Fatalf("recovery: %s %v", result, err)
+			if err != nil || result.Status != want {
+				t.Fatalf("recovery: %+v %v", result, err)
 			}
 		})
 	}
@@ -116,13 +116,13 @@ func TestSeparateInstallationsAndReissue(t *testing.T) {
 	second := mutate(t, body, func(d *Delivery) { d.Envelope.InstallationID = "second" }, Domain)
 	other := ctx
 	other.InstallationID = "second"
-	if result, err := s.Accept(second, other); err != nil || result != "accepted" {
-		t.Fatalf("%s %v", result, err)
+	if result, err := s.Accept(second, other); err != nil || result.Status != "accepted" {
+		t.Fatalf("%+v %v", result, err)
 	}
 	reissued := mutate(t, body, func(d *Delivery) { d.Envelope.IssuedAt = "2026-09-07T12:00:01Z" }, Domain)
 	before := tree(t, s.Root)
-	if result, err := s.Accept(reissued, ctx); err != nil || result != "replay" {
-		t.Fatalf("%s %v", result, err)
+	if result, err := s.Accept(reissued, ctx); err != nil || result.Status != "replay" {
+		t.Fatalf("%+v %v", result, err)
 	}
 	if !reflect.DeepEqual(before, tree(t, s.Root)) {
 		t.Fatal("reissue mutated store")
@@ -150,7 +150,7 @@ func TestRecoveryAtPublicationBoundary(t *testing.T) {
 			if stage == "after_rename" {
 				expected = "replay"
 			}
-			if result != expected {
+			if result.Status != expected {
 				t.Fatal(result)
 			}
 		})

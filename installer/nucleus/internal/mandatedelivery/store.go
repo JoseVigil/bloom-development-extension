@@ -27,6 +27,19 @@ type Store struct {
 	hook func(string) error
 }
 
+// AcceptOutcome es el resultado de Store.Accept — expone el MandateID que Verify ya conoce
+// internamente apenas tiene éxito, tanto si el resultado final es "accepted" como
+// "replay" (Verify tuvo éxito en ambos casos; la única diferencia es si s.check() detecta
+// que ese digest ya se había aceptado antes). Poblar MandateID también en "replay" es lo
+// que le permite a una instalación que ya sincronizó ANTES de este cambio (su primer
+// Receive fue "accepted" bajo el código viejo, sin auto-instalar nada) materializar el
+// mandate en su primer sync bajo el código nuevo, sin ninguna migración especial — la
+// materialización es idempotente, así que dispararla de más en "replay" es gratis.
+type AcceptOutcome struct {
+	Status    string // "accepted" | "replay"
+	MandateID string
+}
+
 var processLock sync.Mutex
 
 func component(prefix, value string) string {
@@ -82,32 +95,32 @@ func (s *Store) check(e Envelope, ctx Context) (bool, error) {
 	})
 	return replay, err
 }
-func (s *Store) Accept(raw []byte, ctx Context) (string, error) {
+func (s *Store) Accept(raw []byte, ctx Context) (AcceptOutcome, error) {
 	d, _, err := Verify(raw, ctx)
 	if err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	if s == nil || s.Root == "" {
-		return "", errors.New("receipt root required")
+		return AcceptOutcome{}, errors.New("receipt root required")
 	}
 	processLock.Lock()
 	defer processLock.Unlock()
 	// Preliminary read prevents even directory/lock creation on known conflicts.
 	if replay, err := s.check(d.Envelope, ctx); err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	} else if replay {
-		return "replay", nil
+		return AcceptOutcome{Status: "replay", MandateID: d.Envelope.MandateID}, nil
 	}
 	// OS lock has no durable file; it also protects different processes.
 	unlock, err := lockStore(s.Root)
 	if err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	defer unlock()
 	if replay, err := s.check(d.Envelope, ctx); err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	} else if replay {
-		return "replay", nil
+		return AcceptOutcome{Status: "replay", MandateID: d.Envelope.MandateID}, nil
 	}
 	e := d.Envelope
 	now := time.Now().UTC()
@@ -117,16 +130,16 @@ func (s *Store) Accept(raw []byte, ctx Context) (string, error) {
 	receipt := Receipt{e.OrganizationID, e.InstallationID, e.MandateID, e.Version, e.Digest, e.KeyID, Domain, now, append([]byte(nil), raw...)}
 	data, err := json.Marshal(receipt)
 	if err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	target := s.path(e)
 	dir := filepath.Dir(target)
 	if err = os.MkdirAll(dir, 0700); err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	temp, err := os.CreateTemp(dir, ".delivery-*.tmp")
 	if err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	name := temp.Name()
 	defer os.Remove(name)
@@ -137,20 +150,20 @@ func (s *Store) Accept(raw []byte, ctx Context) (string, error) {
 		err = closeErr
 	}
 	if err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	if s.hook != nil {
 		if err = s.hook("before_rename"); err != nil {
-			return "", err
+			return AcceptOutcome{}, err
 		}
 	}
 	if err = publish(name, target); err != nil {
-		return "", err
+		return AcceptOutcome{}, err
 	}
 	if s.hook != nil {
 		if err = s.hook("after_rename"); err != nil {
-			return "", err
+			return AcceptOutcome{}, err
 		}
 	}
-	return "accepted", nil
+	return AcceptOutcome{Status: "accepted", MandateID: e.MandateID}, nil
 }
