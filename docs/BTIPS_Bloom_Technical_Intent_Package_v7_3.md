@@ -55,12 +55,6 @@ Sigue siendo simple, pero ahora **explica la pirámide**.
 
 ```mermaid
 flowchart LR
-    %% ─── Taxonomía de Intents v7.1 ───
-    %% Existe además una superficie constitucional (reglas, invariantes, política Zero-Read/Zero-Write, canal exclusivo humano/Nucleus) que no es un intent operativo
-    %% mrg -> Merge & Integration, absorbe por completo la funcionalidad de merge cognitivo
-    %% dev -> Execution Layer (Executor / Project Runners), local o remoto vía Alfred/Mobile
-    %% mrg -> Merge & Integration, Alfred/Mobile -> Execution Layer
-    %% tst -> Test Runner & Gate, Alfred/Mobile -> Execution Layer
     subgraph DevPC["💻 Developer PC"]
         User["👨‍💻 Usuario
         Developer"]
@@ -207,7 +201,6 @@ flowchart LR
         ConductorWorkspace <--> ProjectFolder
         ConductorWorkspace <--> NucleusFolder
 
-        %% Canal constitucional: reglas, invariantes y política de orquestación, Zero-Read/Zero-Write, exclusivo humano/Nucleus
         NucleusExe <--> PassThroughTerminal
         PassThroughTerminal --"canal constitucional
         (BSIP-009, solo humano)"--> Core
@@ -263,8 +256,6 @@ flowchart LR
     NucleusExe -.publica/consume via Batcave.-> Marketplace
     NucleusExe --"valida y descarga\nartefactos"--> BloomUpdateServer
 
-    %% mrg / tst — Merge & Integration / Test Runner & Gate: se originan en Alfred/Mobile
-    %% y se resuelven en la capa de ejecución local (Executor / Project Runners)
     AlfredRuntime <--"dev · mrg · tst
     (remoto)"--> AITAP
     AlfredMobile -."mrg / tst
@@ -1130,6 +1121,12 @@ Opera en tres fases propias:
 3. **Ratification:** presenta el mapa para aprobación o edición humana y consolida la topología confirmada.
 
 `dis` siempre pertenece a un Mandate. No ingiere material raw, no crea Genes y no modifica su linaje: trabaja exclusivamente sobre las relaciones de la topología semántica. Al igual que `ing`, degrada a resolución humana cuando la capa vectorial no está disponible.
+
+---
+
+### `asm` — Assembly Intent
+
+ASM reúne, valida, jerarquiza y organiza el contexto necesario para transformar una declaración humana situada en una propuesta fundamentada de Postulate. Consume un `AssemblyRequest` que mantiene separados **Location** —Organization, Project y foco desde donde el usuario decidió actuar— y la declaración humana que expresa qué quiere hacer allí. Valida las referencias recibidas, detecta información faltante o contradictoria y solicita su adquisición sin modificar Location ni inventar evidencia. Recupera el contexto pertinente de Domains, Genes, archivos y documentación; consulta la Gravity ya resuelta y su evidencia sin recalcularla; y, cuando corresponde, prepara el contexto que Impact necesita para evaluar consecuencias. Luego empaqueta el material mediante el mecanismo común de Intents, asegurando que cada elemento crítico planificado quede incluido o produzca un bloqueo trazable. Su resultado es un `AssemblyResult` con contexto, evidencia, cobertura, contradicciones, limitaciones y grado de preparación. A partir de ese resultado, ASM puede formular un `PostulateProposal`, pero no adoptarlo, sellarlo ni ejecutar lo propuesto.
 
 ---
 
