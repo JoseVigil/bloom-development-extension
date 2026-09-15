@@ -186,6 +186,15 @@ var allComponents = []component{
 		RestoreOnFailure: true,
 	},
 	{
+		// Impact is deployed as a component directory so its Cobra-generated
+		// help tree travels with the executable on every platform.
+		Key: "impact",
+		SourceFn: func(r string) string {
+			return nativeBin(r, "impact")
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "impact") },
+	},
+	{
 		Key: "cortex",
 		SourceFn: func(r string) string {
 			return filepath.Join(r, "installer", "native", "bin", "cortex", "bloom-cortex.blx")
@@ -1350,6 +1359,7 @@ Linux, and LaunchAgent on macOS.`,
   metamorph rollout --only workspace
   metamorph rollout --only setup
   metamorph rollout --only sensor
+  metamorph rollout --only impact
   metamorph rollout --only cortex
   metamorph rollout --only ionpump
   metamorph rollout --only vsix

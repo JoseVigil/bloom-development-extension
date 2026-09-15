@@ -8,7 +8,7 @@ set -euo pipefail
 # Uso (llamado por build-all.py):
 #   bash builds/unix/build-component.sh <component>
 #
-#   <component> es uno de: nucleus | sentinel | metamorph | sensor
+#   <component> es uno de: nucleus | sentinel | metamorph | sensor | impact
 #
 # Variables de entorno inyectadas por build-all.py:
 #   BLOOM_BUILD_NUMBER   → build number efectivo (base + offset plataforma)
@@ -23,7 +23,7 @@ COMPONENT="${1:-}"
 if [[ -z "${COMPONENT}" ]]; then
     echo "❌ Error: se requiere el nombre del componente como argumento."
     echo "   Uso: bash build-component.sh <component>"
-    echo "   Componentes válidos: nucleus sentinel metamorph sensor"
+    echo "   Componentes válidos: nucleus sentinel metamorph sensor impact"
     exit 1
 fi
 

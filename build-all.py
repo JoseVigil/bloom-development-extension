@@ -89,6 +89,7 @@ _BUILD_NUMBER_DIRS: dict[str, Path] = {
     "sentinel":         ROOT / "installer/sentinel/scripts",
     "metamorph":        ROOT / "installer/metamorph/scripts",
     "sensor":           ROOT / "installer/sensor/scripts",
+    "impact":           ROOT / "installer/impact/scripts",
     "host":             ROOT / "installer/host",
     "cortex":     ROOT / "installer/cortex/build-cortex",
     "workspace":  ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
@@ -1068,7 +1069,7 @@ def rollout_component(component: str) -> StepResult:
     """
     # Metamorph es el dueño del lifecycle productivo. Estos componentes no
     # deben duplicar aquí nombres de servicios, esperas ni reglas de restart.
-    if component in {"nucleus", "brain", "sensor"}:
+    if component in {"nucleus", "brain", "sensor", "impact"}:
         metamorph_name = "metamorph.exe" if IS_WINDOWS else "metamorph"
         candidates = [
             NUCLEUS_HOME / "bin" / "metamorph" / metamorph_name,
@@ -1134,7 +1135,7 @@ def rollout_component(component: str) -> StepResult:
 # PATH — registro de usuario en Windows, archivos de shell en macOS/Linux
 # ─────────────────────────────────────────────────────────────────────────────
 
-_PATH_COMPONENTS    = ("metamorph", "brain", "nucleus", "sentinel")
+_PATH_COMPONENTS    = ("metamorph", "brain", "nucleus", "sentinel", "impact")
 _ZSHRC_MARKER_BEGIN = "# >>> BloomNucleus PATH (managed by build-all.py) >>>"
 _ZSHRC_MARKER_END   = "# <<< BloomNucleus PATH <<<"
 
@@ -1673,7 +1674,7 @@ def get_contracts(bin_base: Path) -> dict:
     cond_version, cond_build = get_conductor_version(bin_base)
     contracts["conductor"] = f"{cond_version} (build {cond_build})"
 
-    for comp in ("nucleus", "sentinel", "metamorph", "sensor"):
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact"):
         build_info = ROOT / "installer" / comp / "internal" / "core" / "build_info.go"
         if build_info.exists():
             try:
@@ -2326,7 +2327,7 @@ def main() -> None:
     # Los componentes que entran en este build muestran "actual → próximo".
     # Los que se saltean muestran solo el valor actual.
     log(f"Build numbers ({_PLATFORM_SUFFIX}):")
-    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "setup", "workspace"):
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "host", "cortex", "setup", "workspace"):
         if comp == "cortex":
             meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
             try:
@@ -2365,7 +2366,7 @@ def main() -> None:
     # Definir todos los pasos en orden.
     # Setup, Workspace, Bootstrap y VSIX usan npm run; Cortex usa python3.
     # Brain y Host usan sus propios builders.
-    # Los 4 Go components usan build_go_component().
+    # Los componentes Go usan build_go_component().
     all_steps: list[tuple[str, str, Callable[[], StepResult]]] = [
         # parser: regenera desde GravityExpression.g4 y verifica (Go + TypeScript),
         # invocable en solitario con `--only parser`. A diferencia del gate de
@@ -2443,7 +2444,7 @@ def main() -> None:
         # vuelva a correr (y no regenere una segunda vez).
         steps = [(k, n, f) for k, n, f in steps if k != "parser"]
 
-    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel")
+    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel", "impact")
 
     total = len(steps)
 

@@ -146,6 +146,8 @@ installer/cortex/build-cortex/cortex.meta.json
 installer/host/build_info.h
 installer/host/build_number.effective.txt
 installer/host/build_number.txt
+installer/impact/scripts/build_number.effective.txt
+installer/impact/scripts/build_number.txt
 installer/metamorph/internal/core/build_info.go
 installer/sentinel/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt
@@ -170,6 +172,8 @@ installer/cortex/build-cortex/cortex.meta.json
 installer/host/build_info.h
 installer/host/build_number.effective.txt
 installer/host/build_number.txt
+installer/impact/scripts/build_number.effective.txt
+installer/impact/scripts/build_number.txt
 installer/metamorph/internal/core/build_info.go
 installer/sentinel/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt
@@ -192,6 +196,8 @@ installer/conductor/setup/version.json
 installer/cortex/build-cortex/build_number.effective.txt
 installer/cortex/build-cortex/build_number.txt
 installer/cortex/build-cortex/cortex.meta.json
+installer/impact/scripts/build_number.effective.txt
+installer/impact/scripts/build_number.txt
 installer/metamorph/internal/core/build_info.go
 installer/sentinel/internal/core/build_info.go
 installer/metamorph/scripts/build_number.effective.txt

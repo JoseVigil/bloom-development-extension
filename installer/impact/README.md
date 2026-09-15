@@ -134,11 +134,19 @@ No subprocess output enters the response JSON.
 builds the named entry file and generates help from the binary. Both outputs are
 copied to `installer/help/impact_help.{txt,json}`. Generation failures fail the
 Impact build. Nucleus must be available for required log registration.
-Impact uses the supplied BLOOM_BUILD_NUMBER or existing default 0; no new build
-counter files are introduced. Build/rollout of other components is not required
-by this implementation.
+Impact uses the shared build counter mechanism: `build_number.txt` is incremented
+once per build, the active platform offset is added, and the effective value is
+injected through `BLOOM_BUILD_NUMBER`. Platform offsets live in
+`scripts/build_number.{windows,linux,darwin}.txt`.
 
-Run `go test ./...` here and `go test ./gravity` in `installer/nucleus`.
+After a successful build, `build-all.py` delegates Impact deployment to
+`metamorph rollout --only impact`. Metamorph copies the complete native component
+directory to `<AppDataDir>/bin/impact`, preserving the executable and
+`help/impact_help.{txt,json}`. This selector requires an existing compatible
+Nucleus installation; it does not build Nucleus implicitly.
+
+Run `go test ./...` here and `go test ./gravity ./internal/gravity` in
+`installer/nucleus`.
 Tests cover question distinctions, invalid input, explicit unknowns, extensions,
 determinism, concurrent evaluations, three-way cycles, non-vacuous preservation,
 shared-fixture adapter parity, CLI metadata/help and stdout. Logging tests inject
