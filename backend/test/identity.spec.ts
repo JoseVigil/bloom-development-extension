@@ -1,24 +1,27 @@
 // backend/test/identity.spec.ts
 //
-// SUPUESTO: no tengo visibilidad en esta sesión del harness de test real del proyecto
-// (`backend/test/authority.spec.ts` original, `vitest.config.ts`, `wrangler.jsonc`).
-// Asumo `@cloudflare/vitest-pool-workers` con un binding `env.DB` (D1) igual al que usa
-// el resto del proyecto, y que las migraciones 0001 + 0002 ya fueron aplicadas
-// localmente antes de `npm test` (§4 del encargo: `wrangler d1 migrations apply
-// bloom-backend --local`). También asumo que existe una fila en `organizations` para
-// los ids usados acá — si el proyecto tiene un helper de setup para crear una
-// organización de test, usarlo en vez de los literales de abajo.
+// Reescrito para usar el arnés Miniflare + D1 real (mismo patrón que
+// mandate-publish.spec.ts / authority-genesis.spec.ts) en vez de `cloudflare:test`, que
+// requiere `@cloudflare/vitest-pool-workers` — no instalado ni configurado en este
+// proyecto (`vitest.config.mts` usa `defineConfig` de "vitest/config", no
+// `defineWorkersConfig`), lo que hacía que este archivo nunca pudiera ejecutarse, en
+// ninguna máquina, vía `npm test`. La lógica de cada test no cambió — sólo el
+// setup/teardown y el reemplazo de `env.DB` por la variable `db` del módulo.
 //
-// SUPUESTO adicional: el mensaje firmado se reconstruye acá de forma independiente de
-// `canonical.ts` (dominio + 0x00 + JSON con claves en orden alfabético), para no
-// encadenar la validez de estos tests a los detalles internos de esa implementación.
-// Si `canonicalizeJson` no es equivalente a "JSON.stringify con claves ordenadas
-// alfabéticamente" para este objeto plano de 5 campos string, estos tests fallarán aun
-// con una implementación correcta — en ese caso, reemplazar `canonicalPayload` de abajo
-// por una llamada directa a `canonicalizeJson` importada de `../src/authority/canonical`.
+// SUPUESTO (sin cambios respecto a la versión anterior): el mensaje firmado se
+// reconstruye acá de forma independiente de `canonical.ts` (dominio + 0x00 + JSON con
+// claves en orden alfabético), para no encadenar la validez de estos tests a los
+// detalles internos de esa implementación. Si `canonicalizeJson` no es equivalente a
+// "JSON.stringify con claves ordenadas alfabéticamente" para este objeto plano de 5
+// campos string, estos tests fallarán aun con una implementación correcta — en ese caso,
+// reemplazar `canonicalPayload` de abajo por una llamada directa a `canonicalizeJson`
+// importada de `../src/authority/canonical`.
 
-import { describe, it, expect } from "vitest";
-import { env } from "cloudflare:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { Miniflare, convertV4MiniflareOptions } from "miniflare";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   INSTALLATION_AUTH_DOMAIN,
   readInstallationAuthHeaders,
@@ -26,6 +29,43 @@ import {
   verifyInstallationSignature,
   type InstallationAuthHeaders,
 } from "../src/authority/identity";
+
+let db: D1Database, mf: Miniflare, temp: string;
+
+async function loadMigrations(files: string[]) {
+  for (const file of files) {
+    const sql = readFileSync(new URL("../migrations/" + file, import.meta.url), "utf8").replace(/--[^\r\n]*/g, "").trim();
+    for (const part of sql.split(/;\s*(?=(?:CREATE|ALTER|INSERT)\b)/i)) if (part.trim()) await db.prepare(part).run();
+  }
+}
+
+async function insertOrg(id: string) {
+  await db.prepare("INSERT INTO organizations(id,name,master_github_username,key_fingerprint,created_at) VALUES(?,?,?,?,?)")
+    .bind(id, "Test Org", "owner-" + id, "unassigned", 0).run();
+}
+
+beforeAll(async () => {
+  temp = mkdtempSync(join(tmpdir(), "identity-"));
+  mf = new Miniflare({
+    ...convertV4MiniflareOptions({
+      host: "127.0.0.1", cf: false, modules: true,
+      script: 'export default {fetch(){return new Response("fixture")}}',
+      compatibilityDate: "2026-08-29", d1Databases: { DB: "identity" },
+    }),
+    resourcePersistencePath: temp,
+  });
+  db = await mf.getD1Database("DB") as unknown as D1Database;
+  // 0000_initial.sql da `organizations` (FK de installation_keys); 0002 da
+  // `installation_keys`. Cada test arranca limpio vía DELETE FROM en beforeEach.
+  await loadMigrations(["0000_initial.sql", "0002_authority_security.sql"]);
+}, 60000);
+afterAll(async () => { await mf?.dispose(); if (temp) rmSync(temp, { recursive: true, force: true }); }, 30000);
+
+beforeEach(async () => {
+  for (const table of ["installation_keys", "organizations"]) await db.prepare(`DELETE FROM ${table}`).run();
+  await insertOrg("org_test_identity_1");
+  await insertOrg("org_test_identity_2");
+});
 
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -84,7 +124,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
     const { privateKey, publicKeyRawBase64 } = await generateInstallationKeypair();
     const installationId = "inst_roundtrip";
 
-    const registerResult = await registerInstallationKey(env.DB, {
+    const registerResult = await registerInstallationKey(db, {
       installationId,
       organizationId,
       publicKeyRaw: publicKeyRawBase64,
@@ -99,7 +139,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
       timestamp: new Date().toISOString(),
     });
 
-    const verified = await verifyInstallationSignature(env.DB, {
+    const verified = await verifyInstallationSignature(db, {
       organizationId,
       method: "GET",
       path: "/v1/authority/snapshot",
@@ -118,7 +158,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
       timestamp: new Date().toISOString(),
     });
 
-    const verified = await verifyInstallationSignature(env.DB, {
+    const verified = await verifyInstallationSignature(db, {
       organizationId,
       method: "GET",
       path: "/v1/authority/snapshot",
@@ -130,7 +170,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
   it("rechaza cuando la organización del request no coincide con la de la clave registrada", async () => {
     const { privateKey, publicKeyRawBase64 } = await generateInstallationKeypair();
     const installationId = "inst_cross_org";
-    await registerInstallationKey(env.DB, { installationId, organizationId, publicKeyRaw: publicKeyRawBase64 });
+    await registerInstallationKey(db, { installationId, organizationId, publicKeyRaw: publicKeyRawBase64 });
 
     // La instalación está registrada para `organizationId`, pero el request se firma y
     // se verifica declarando `otherOrganizationId`.
@@ -142,7 +182,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
       timestamp: new Date().toISOString(),
     });
 
-    const verified = await verifyInstallationSignature(env.DB, {
+    const verified = await verifyInstallationSignature(db, {
       organizationId: otherOrganizationId,
       method: "GET",
       path: "/v1/authority/snapshot",
@@ -154,7 +194,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
   it("rechaza si la firma fue alterada", async () => {
     const { privateKey, publicKeyRawBase64 } = await generateInstallationKeypair();
     const installationId = "inst_tampered";
-    await registerInstallationKey(env.DB, { installationId, organizationId, publicKeyRaw: publicKeyRawBase64 });
+    await registerInstallationKey(db, { installationId, organizationId, publicKeyRaw: publicKeyRawBase64 });
 
     const headers = await signInstallationRequest(privateKey, {
       installationId,
@@ -168,7 +208,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
       signatureBase64: headers.signatureBase64.slice(0, -4) + (headers.signatureBase64.slice(-4) === "AAAA" ? "BBBB" : "AAAA"),
     };
 
-    const verified = await verifyInstallationSignature(env.DB, {
+    const verified = await verifyInstallationSignature(db, {
       organizationId,
       method: "GET",
       path: "/v1/authority/snapshot",
@@ -180,7 +220,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
   it("rechaza si el timestamp está fuera de la ventana de ±120s", async () => {
     const { privateKey, publicKeyRawBase64 } = await generateInstallationKeypair();
     const installationId = "inst_stale_timestamp";
-    await registerInstallationKey(env.DB, { installationId, organizationId, publicKeyRaw: publicKeyRawBase64 });
+    await registerInstallationKey(db, { installationId, organizationId, publicKeyRaw: publicKeyRawBase64 });
 
     const staleTimestamp = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 minutos atrás
     const headers = await signInstallationRequest(privateKey, {
@@ -191,7 +231,7 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
       timestamp: staleTimestamp,
     });
 
-    const verified = await verifyInstallationSignature(env.DB, {
+    const verified = await verifyInstallationSignature(db, {
       organizationId,
       method: "GET",
       path: "/v1/authority/snapshot",
@@ -205,14 +245,14 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
     const second = await generateInstallationKeypair();
     const installationId = "inst_double_register";
 
-    const firstResult = await registerInstallationKey(env.DB, {
+    const firstResult = await registerInstallationKey(db, {
       installationId,
       organizationId,
       publicKeyRaw: first.publicKeyRawBase64,
     });
     expect(firstResult.ok).toBe(true);
 
-    const secondResult = await registerInstallationKey(env.DB, {
+    const secondResult = await registerInstallationKey(db, {
       installationId,
       organizationId,
       publicKeyRaw: second.publicKeyRawBase64,
