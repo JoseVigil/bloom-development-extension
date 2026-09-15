@@ -20,3 +20,38 @@ Go's other unit tests may sign mutations with the public test fixture key; the
 interoperability acceptance test never manufactures its own valid body.
 
 This is injected-dependency receipt verification, not productive bootstrap.
+
+## `mandate-publish-then-bootstrap-v1.json` — publish → bootstrap round-trip vector
+
+Added by the Encargo de Implementación — Auto-Encadenamiento `sync → install` y
+Validación Cruzada del Contrato con Backend (v1.0), §3.4. Unlike the vector above
+(built from a hand-written DB row), this one is generated from a real
+`publishMandate()` call followed by `resolveMandateDelivery()` on the *same*
+Miniflare D1 + fake-bucket `env` — no row is ever written by the test itself. It
+proves that what `nucleus mandate publish` causes Backend to store is exactly what
+`nucleus authority sync` receives back through `GET /v1/mandate/bootstrap`, which
+the two vectors tested in isolation never covered.
+
+The private key is a separate PUBLIC DETERMINISTIC TEST FIXTURE (32 bytes of 0x03,
+distinct from the 0x01 key above so the two vectors are never confused). Never a
+production key; never provisioned into a real installation or issuer.
+
+From `backend`, deliberately set `MANDATE_ROUNDTRIP_UPDATE_VECTOR=1` and run
+`node node_modules/vitest/vitest.mjs run test/mandate-publish.spec.ts` to
+(re)generate — this is also the required first-time bootstrap step, since the
+file does not exist until that command is run once. Unset the variable afterwards.
+Ordinary runs only read and reproduce the vector; a stale vector fails byte-for-byte
+comparison rather than being updated silently.
+
+Same field shapes as `mandate-delivery-v1.json` above, plus `mandate_id` (the id
+`publishMandate` assigned, echoed for convenience). `canonical_base64` is JCS of the
+unsigned envelope; `digest` hashes the raw artifact; `valid_body_base64` is the exact
+JSON body `GET /v1/mandate/bootstrap` would return; `wrong_domain_body_base64` is the
+same envelope re-signed under `BLOOM-AUTHORITY-SNAPSHOT-v1` (wrong domain), for a
+negative-verification check on the Go side.
+
+Go's `mandatedelivery/integration_test.go` should read this vector directly (`t.Skip`
+if the file does not exist yet, so the two coworks — Nucleus and Backend — can land
+in either order without blocking each other's build) and confirm `Verify` +
+`mandateinstall.ExtractContent` succeed on it, same pattern as the existing
+`TestTypeScriptInteroperability`.
