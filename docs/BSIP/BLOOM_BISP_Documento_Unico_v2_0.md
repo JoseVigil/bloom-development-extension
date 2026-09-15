@@ -14,13 +14,14 @@
 | v1.0 (Fuente de Verdad) | ago 2026 | Primera consolidación: fusiona `BLOOM_BISP_Session_Decisions_v1_2`, `ING_Intent_Spec_v1_1` y `DIS_Intent_Spec_v1_0` en Partes A–C + Apéndice. |
 | **v2.0 (este documento)** | sep 2026 | **Fusión final a archivo único.** Se incorporan como Partes D, E y F los tres documentos que hasta ahora vivían separados: `BLOOM_BISP_Companion_Integration_v2_0`, `BLOOM_Intent_Types_Gap_Analysis_v1_0` y `SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline_v0_1`. **Se retira `BLOOM_BISP_Session_Decisions_v1_1.md`** (contenido interno v1.2) de la carpeta: su contenido ya vivía íntegramente dentro de la Parte A desde la v1.0 de este documento — no aporta nada que no esté acá. Ningún schema, invariante, pseudocódigo, tabla o decisión fue alterado en esta fusión; solo se renumeraron encabezados (`0,1,2…` → `D.0, D.1, D.2…`, etc.) y se reescribieron las referencias cruzadas entre archivos como referencias internas a secciones de este mismo documento. |
 | v2.0 — parche puntual | sep 2026 | **Baseline congelada, con un único ajuste.** Se agrega una nota aclaratoria en E.6: `cor` no está "pendiente de implementar" — fue descartado por diseño y reemplazado por la lógica global de Gravity (BTIPS v7.2 §8). No se integran los specs formales de `dev`, `doc`, `exp`, `mrg` ni `tst` recibidos en esta sesión — quedan pendientes de una futura revisión de este documento. |
+| v2.0 — integración ASM | sep 2026 | Se incorpora como Parte G el contrato conceptual vigente del intent `asm/`: consumo de Location producido por Orrey, adquisición y ensamblado gobernado de contexto, consultas a Gravity e Impact, `AssemblyResult` y eventual `PostulateProposal`. No se congelan APIs, schemas físicos, fases persistidas, transporte ni implementación. |
 
 ## Nota de consolidación
 
-Este documento **no introduce decisiones nuevas**. Es la fusión, en un único archivo navegable, de seis
+Este documento **no introduce decisiones nuevas**. Es la fusión, en un único archivo navegable, de siete
 documentos que vivían separados en la carpeta `BSIP/`:
 
-| Documento fuente (retirado tras la fusión) | Versión consolidada | Qué aporta | Parte |
+| Documento fuente | Versión consolidada | Qué aporta | Parte |
 |---|---|---|---|
 | `BLOOM_BISP_Session_Decisions` | v1.2 | El protocolo BISP en sí: schema de `index.json`, persistencia, pipeline Brain–Ollama–ChromaDB, contratos de Synapse, invariantes de diseño. | A |
 | `ING_Intent_Spec` | v1.1 | Especificación completa del intent `ing/` (Ingesta). | B |
@@ -28,6 +29,7 @@ documentos que vivían separados en la carpeta `BSIP/`:
 | `BLOOM_BISP_Companion_Integration` | v2.0 | Cómo el Companion Cognitivo (panel lateral Chromium) consume el BISP, sin redefinirlo. | D |
 | `BLOOM_Intent_Types_Gap_Analysis` | v1.0 | Diagnóstico del estado real de `dev`, `doc`, `exp`, `cor`, `inf` — los tipos de intent que **no** corren sobre el motor BSIP genérico. | E |
 | `SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline` | v0.1 | Qué pasa con la *respuesta* de una IA de frontera a un BISP: Contrato D, protección Anti-EOT, recuperación headless. | F |
+| `ASM_Location_Research` | v0.2 | Contrato conceptual de `asm/`: recibe Location y declaración humana, adquiere contexto, consulta Gravity e Impact y produce un resultado capaz de fundamentar una propuesta de Postulate. | G |
 
 Donde los documentos originales se referenciaban entre sí cruzando archivos, esa referencia ahora apunta
 a una sección dentro de este mismo documento (por ejemplo, `§F.2.5` refiere a la Parte F, sección 2.5).
@@ -51,6 +53,9 @@ a una sección dentro de este mismo documento (por ejemplo, `§F.2.5` refiere a 
   motor BSIP genérico: `dev`, `doc`, `exp`, `cor`, `inf` (**Parte E**).
 - Qué pasa con la respuesta que una IA de frontera devuelve a un intent BISP: Contrato D, protección
   Anti-EOT, recuperación headless sin intervención humana (**Parte F**).
+- El contrato conceptual del intent `asm/`: consumo de Location producido por Orrey, adquisición y
+  ensamblado gobernado de contexto, consulta de Gravity e Impact y eventual formulación de una propuesta
+  de Postulate (**Parte G**).
 
 **Este documento no cubre, porque vive fuera de la carpeta `BSIP/` por diseño:**
 - La arquitectura general de Bloom (Nucleus, Mandates, Gravity, Batcave, Alfred, apps) — vive en
@@ -66,6 +71,7 @@ a una sección dentro de este mismo documento (por ejemplo, `§F.2.5` refiere a 
 - **Parte D** — Companion Cognitivo — Integración con el BISP (D.0–D.9)
 - **Parte E** — Intent Types — Gap Analysis: `dev`, `doc`, `exp`, `cor`, `inf` (E.0–E.8)
 - **Parte F** — BSIP Response & Recovery Protocol, Baseline v0.1 (F.0–F.6)
+- **Parte G** — Intent `asm/` — Assembly de contexto y propuesta de Postulate (G.0–G.10)
 
 ---
 
@@ -1878,10 +1884,228 @@ Baseline v0.1 formalmente concluido para los cuatro pilares descritos en §F.0. 
 
 ---
 
+# PARTE G — Intent `asm/` — Assembly de contexto y propuesta de Postulate
+
+> Fuente: `ASM_Location_Research_v0_2`. Esta Parte integra exclusivamente el contrato conceptual vigente
+> informado para ASM. No incorpora como dependencia ninguna versión anterior eliminada ni utiliza el spec
+> producido con posterioridad al research. No congela APIs, schemas físicos, fases persistidas, transporte,
+> serialización ni implementación.
+
+## G.0 Función y límites de ASM
+
+ASM recibe el punto de partida humano ubicado por Orrey, adquiere y prepara contexto dentro del alcance
+autorizado, consulta las restricciones normativas aplicables, solicita evaluación de consecuencias cuando
+corresponde y produce un resultado estructurado capaz de fundamentar una propuesta.
+
+Su responsabilidad termina en la formulación candidata: ASM puede producir un `PostulateProposal`, pero
+**no puede adoptarlo ni sellarlo**. La preparación del contexto, la readiness del resultado y la formulación
+de una propuesta no transfieren a ASM autoridad sobre el Postulate.
+
+El lead case vigente está limitado a actuar dentro de un Project. Para comenzar son obligatorios:
+
+- Organization.
+- Project.
+- Foco.
+- Declaración humana de lo que se quiere hacer allí.
+
+Sin esos cuatro elementos ASM solo puede producir diagnóstico. No generaliza por sí mismo el recorrido a
+otras ubicaciones ni interpreta un límite no informado como autorización ilimitada.
+
+## G.1 Separación entre contrato semántico y disponibilidad material
+
+La definición de ASM mantiene separados dos planos:
+
+| Plano | Qué expresa |
+|---|---|
+| `semantic_contract` | El significado, las responsabilidades y las condiciones que deben cumplir los contratos candidatos del recorrido. |
+| `availability_profile` | Qué capacidades cuentan hoy con evidencia material, qué integraciones no fueron demostradas y qué limitaciones permanecen abiertas. |
+
+Una capacidad exigida por el contrato semántico no se considera implementada por el solo hecho de estar
+documentada. De igual manera, una pieza existente no prueba por sí sola que el recorrido completo esté
+integrado y satisfaga el contrato.
+
+Los nombres `AssemblyRequest`, `AssemblyResult`, `PostulateProposal` e `ImpactRequest` designan contratos
+conceptuales candidatos. Sus representaciones físicas permanecen pendientes.
+
+## G.2 Entrada — `AssemblyRequest`
+
+`AssemblyRequest` vincula dos elementos que deben permanecer diferenciados:
+
+| Elemento | Responsabilidad |
+|---|---|
+| Location | Captura versionada e identificable de **dónde decidió actuar el usuario**, producida por Orrey. Para el lead case contiene Organization, Project y foco coherentes e inequívocos, además de anchors, relaciones, estados y evidencia recibidos. |
+| Declaración humana | Expresa **qué quiere hacer allí**. Es obligatoria y conserva su atribución; una reformulación de ASM debe distinguirse del texto aportado por el humano. |
+| Restricciones y límites | Delimitan alcance autorizado, fuentes permitidas, expansión, volumen, tiempo y condición de parada. Los datos no informados se registran como pendientes. |
+| Provenance | Mantiene separadas la procedencia y el momento de Location, declaración humana, restricciones, evidencia e inferencias. Lo inferido por ASM no adquiere autoría humana. |
+| Correlación | Vincula inequívocamente solicitud, captura y versión interpretable del contrato de entrada, sin congelar todavía un formato físico de identificador. |
+
+ASM valida la coherencia Organization–Project–foco, el vínculo y la autoría de la declaración, los permisos,
+los estados y revisiones de las referencias, y los límites aplicables.
+
+Si cambia la declaración humana, la nueva declaración conserva su propia atribución y relación con la
+solicitud previa. Si cambia el foco, Orrey debe producir una nueva captura de Location: ASM no modifica
+silenciosamente la Location recibida.
+
+## G.3 Adquisición y expansión de contexto
+
+ASM puede solicitar información faltante sin incorporar esa expansión dentro de Location. Cada solicitud
+de adquisición se mantiene separada y correlacionada con `AssemblyRequest`; declara:
+
+- La falta concreta.
+- El motivo de adquisición.
+- Su criticidad.
+- El alcance permitido.
+- Los límites y la condición de parada.
+
+Las respuestas amplían el contexto de trabajo con provenance propia. Antes de sustentar una conclusión o
+solicitar una evaluación, el contenido pertinente de toda referencia debe materializarse y verificarse en
+la medida exigida por su criticidad.
+
+ASM distingue los siguientes estados por referencia:
+
+| Estado | Tratamiento requerido |
+|---|---|
+| `resolved` | Comprobar suficiencia, acceso y vigencia; el nombre del estado no basta como evidencia. |
+| `changed` | Contrastar revisiones y determinar qué conclusiones requieren reevaluación. |
+| `stale` | Puede conservarse como antecedente histórico explícito, sin presentarlo como estado actual. |
+| `missing` | Permite omitir complementos; bloquea cuando la referencia es indispensable para una conclusión. |
+| `unauthorized` | Excluir el contenido sin intentar eludir permisos y registrar la limitación resultante. |
+| `ambiguous` | Exigir desambiguación cuando la ambigüedad afecta una conclusión necesaria. |
+| `unsupported` | Declarar la capacidad faltante y no simular que el recorrido fue ejecutado. |
+
+## G.4 Consulta normativa a Gravity
+
+ASM consulta al resolvedor normativo de Gravity mediante **scope, momento y referencias**:
+
+- **Scope:** Organization, Project y foco sobre los que se solicita resolución.
+- **Momento:** instante o corte de vigencia requerido, distinto del momento de recepción de la respuesta.
+- **Referencias:** recursos y antecedentes pertinentes, con identidad y revisión cuando existan.
+
+El resultado requerido comprende Postures aplicables, resolución y evidencia, junto con cobertura e
+impedimentos explícitos. ASM conserva y consume ese resultado, pero **no recalcula Gravity**, precedencias,
+autoridad ni aplicabilidad a partir de similitud o contenido aislado. Una lista vacía sin evidencia de
+resolución completa no demuestra que no existan Postures aplicables.
+
+Existe un resolvedor interno de Gravity, pero no se demostró todavía una interfaz general integrada con ASM
+que satisfaga todo este contrato.
+
+## G.5 Solicitud de evaluación a Impact
+
+Cuando el recorrido requiere evaluar consecuencias, ASM prepara conceptualmente un `ImpactRequest` con:
+
+- Pregunta de evaluación y resultado esperado.
+- Sujeto, scope y objetivo vinculados a `AssemblyRequest`.
+- Criterios/Postures y resolución normativa obtenida de Gravity.
+- Contexto y evidencia ya adquiridos.
+- Cobertura, faltantes y contradicciones.
+- Provenance y correlación con la solicitud y el estado de ensamblado utilizado.
+- Límites de validez y condiciones de reevaluación.
+
+Impact recibe contexto preparado y evalúa los hechos y criterios suministrados. **No resuelve anchors, no
+adquiere evidencia y no resuelve autoridad.** ASM incorpora sus findings, cobertura e indeterminaciones al
+resultado sin interpretar una evaluación parcial como ausencia de impacto ni como permiso para actuar.
+
+El núcleo de Impact ofrece evidencia material de evaluación sobre contexto suministrado. Permanece pendiente
+el mapeo al contrato físico existente y no se ha certificado una integración ASM–Impact end-to-end con
+provenance estructurada y revisiones externas verificables.
+
+## G.6 Jerarquización, ensamblado y condición de aceptación
+
+ASM jerarquiza el contexto adquirido y utiliza el mecanismo común de Intents para planificar y ensamblar el
+payload. Debe contrastar el contenido planificado con el contenido realmente incluido antes de declarar la
+readiness del resultado.
+
+Rige la siguiente condición de aceptación:
+
+> **Todo elemento crítico planificado debe quedar incluido o producir un bloqueo trazable.**
+
+El bloqueo identifica el elemento, su criticidad, la causa de la omisión, la conclusión afectada y la
+resolución pendiente. Impide declarar preparado el `AssemblyResult`. Un warning, un contador de archivos o
+la presencia nominal de la referencia sin contenido suficiente no satisfacen esta condición.
+
+El comportamiento observado de `PayloadBuilder` puede omitir una entrada cuyo contenido no logra recuperar,
+incluso si fue planificada como crítica. Por lo tanto, la condición anterior **no está implementada todavía**
+y constituye una brecha bloqueante para certificar el recorrido.
+
+## G.7 Salidas diferenciadas
+
+| Salida | Contenido | Límite |
+|---|---|---|
+| `AssemblyResult` | Correlación con solicitud y captura; contexto adquirido y seleccionado; evidencia y provenance; cobertura del objetivo; contradicciones y limitaciones; adquisiciones y decisiones pendientes; correspondencia entre plan y contenido ensamblado; resultados de Gravity e Impact cuando existan; readiness justificada. | Expresa lo conocido y la suficiencia del ensamblado. Puede existir bloqueado y no implica que haya una propuesta. |
+| `PostulateProposal` | Formulación candidata derivada de un `AssemblyResult` identificado; declaración humana atendida; alcance; fundamentos vinculados a evidencia; restricciones/Postures; consecuencias evaluadas o indeterminadas; limitaciones y decisiones pendientes. | ASM puede formularla, pero no adoptarla ni sellarla. No sustituye ni oculta el `AssemblyResult` que la fundamenta. |
+
+La readiness admite tres resultados conceptuales: **preparado**, **preparado con límites** o **bloqueado**.
+Un resultado bloqueado conserva valor como diagnóstico y trabajo independiente, pero no habilita presentar
+un `PostulateProposal` como listo. Un resultado preparado habilita la formulación candidata; no la obliga.
+
+## G.8 Trazabilidad de punta a punta
+
+ASM conserva la cadena:
+
+```text
+declaración humana + captura de Location
+    → adquisición y revisiones del contenido
+    → resolución de Gravity
+    → ImpactRequest y evaluación de Impact, cuando corresponda
+    → selección y payload efectivo
+    → AssemblyResult
+    → eventual PostulateProposal
+```
+
+Cada inferencia se distingue de los aportes humanos. Cada desconocido, omisión crítica, sustitución de
+evidencia, falta de cobertura o cambio de revisión conserva su dependencia y causa. Los cambios de evidencia,
+resolución o declaración invalidan las conclusiones dependientes y pueden exigir una nueva evaluación y un
+nuevo ensamblado; no alteran retroactivamente Location.
+
+## G.9 Recorrido y distribución de responsabilidades
+
+El recorrido conceptual acordado es:
+
+```text
+AssemblyRequest
+    → validación
+    → adquisición y consulta Gravity
+    → evaluación Impact cuando corresponda
+    → jerarquización y ensamblado
+    → verificación de inclusión crítica
+    → AssemblyResult
+    → eventual PostulateProposal
+```
+
+| Componente / actor | Responsabilidad |
+|---|---|
+| Humano | Declara qué quiere hacer y conserva la autoridad sobre alcance y decisiones. |
+| Orrey / Location | Produce y conserva la captura de dónde se decidió actuar. Un cambio de foco requiere una nueva captura. |
+| ASM | Valida, adquiere por canales autorizados, consulta, jerarquiza, ensambla, verifica suficiencia, produce `AssemblyResult` y puede formular `PostulateProposal`. |
+| Gravity | Resuelve Postures, precedencia, autoridad y aplicabilidad normativa. |
+| Impact | Evalúa consecuencias sobre contexto y criterios ya preparados. |
+| Intent / BSIP | Provee el mecanismo común de empaquetado, transporte y procesamiento. |
+| Postulate | Conserva fuera de ASM su adopción y sellado. |
+
+## G.10 Estado real y pendientes
+
+Esta Parte documenta una definición conceptual, no una integración operativa certificada. Permanecen
+pendientes:
+
+1. Interfaces físicas y serializaciones de los contratos candidatos.
+2. Canal y responsable efectivo de adquisición.
+3. Integración end-to-end entre Orrey, ASM, Gravity e Impact.
+4. Resolución normativa con scope, momento, referencias, cobertura y evidencia consumible por ASM.
+5. Mapeo de `ImpactRequest` al contrato físico existente de Impact.
+6. Provenance estructurada de punta a punta y revisiones externas verificables.
+7. Implementación de la garantía de inclusión de todo elemento crítico planificado.
+8. Pruebas de aceptación del recorrido completo, incluidos estados degradados y bloqueos.
+
+La revisión material disponible fue estática. Confirma capacidades parciales en Impact, Gravity y
+`PayloadBuilder`, pero no demuestra una implementación de ASM ni una integración operativa completa.
+
+---
+
 *BLOOM — BISP: Documento Único de Referencia · v2.0 · Septiembre 2026*
 *Fusiona, sin alterar decisiones: `BLOOM_BISP_Session_Decisions_v1_2` (Parte A), `ING_Intent_Spec_v1_1`
 (Parte B), `DIS_Intent_Spec_v1_0` (Parte C), `BLOOM_BISP_Companion_Integration_v2_0` (Parte D),
 `BLOOM_Intent_Types_Gap_Analysis_v1_0` (Parte E) y `SPECIFICATION_BSIP_Response_Recovery_Protocol_Baseline_v0_1`
-(Parte F). `BLOOM_BISP_Session_Decisions_v1_1.md` queda retirado de la carpeta: su contenido íntegro vive
+(Parte F), e incorpora `ASM_Location_Research_v0_2` como contrato conceptual del intent `asm/` (Parte G).
+`BLOOM_BISP_Session_Decisions_v1_1.md` queda retirado de la carpeta: su contenido íntegro vive
 en la Parte A desde la primera consolidación. Los tipos de intent dentro de `TYPES/` quedan fuera de esta
 fusión hasta la próxima sesión de revisión.*
