@@ -13,13 +13,28 @@ const (
 	PermissionAgentIssuerDesignate = "agent.issuer.designate"
 )
 
-var PermissionsV1 = map[string]struct{}{"authority.membership.manage": {}, "authority.role_definition.manage": {}, "authority.assignment.manage": {}, "authority.binding.approve": {}, "authority.cutover.approve": {}, "mandate.create": {}, "mandate.sign": {}, "mandate.promote": {}, "mandate.install": {}, "intent.create": {}, PermissionIntentCorMerge: {}, PermissionAgentIssuerDesignate: {}, "vault.key.read": {}, "vault.key.write": {}, "vault.key.delete": {}, "executor.command.execute": {}, "executor.filesystem.write": {}, "executor.network.access": {}, "executor.change.promote": {}}
+// NOTA — decisión de José, 2026-09-15 (Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md
+// §3 Q1): "create_organization" NO está en PermissionsV1 a propósito, no por omisión. Evaluate() deniega
+// scope.Type == "organization" cuya Scope.ID no coincide con el binding ya vinculado — estructuralmente
+// incompatible con la operación que crea esa organización. create_organization es además un evento único
+// de bootstrap por instalación, no recurrente como create_project. Antes de agregarla, releer esa decisión
+// — no es un gap accidental.
+var PermissionsV1 = map[string]struct{}{
+	"authority.membership.manage": {}, "authority.role_definition.manage": {}, "authority.assignment.manage": {},
+	"authority.binding.approve": {}, "authority.cutover.approve": {},
+	"mandate.create": {}, "mandate.sign": {}, "mandate.promote": {}, "mandate.install": {},
+	"intent.create": {}, PermissionIntentCorMerge: {}, PermissionAgentIssuerDesignate: {},
+	"vault.key.read": {}, "vault.key.write": {}, "vault.key.delete": {},
+	"executor.command.execute": {}, "executor.filesystem.write": {}, "executor.network.access": {}, "executor.change.promote": {},
+	"create_project": {}, // NUEVO — ver Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §1
+}
 var BuiltinRoles = map[string][]string{
 	RoleMaster: {
 		"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage",
 		"authority.binding.approve", "authority.cutover.approve",
 		"mandate.create", "mandate.sign", "mandate.promote", "mandate.install",
 		"intent.create", PermissionIntentCorMerge, PermissionAgentIssuerDesignate,
+		"create_project", // NUEVO
 	},
 	RoleSpecialist: {"intent.create"},
 	// scope-project admin (§2.1/§2.2 del encargo de nacimiento de agente Orbital): mismo piso que

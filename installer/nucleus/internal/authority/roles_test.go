@@ -4,7 +4,7 @@ import "testing"
 
 func TestBuiltinCatalogExact(t *testing.T) {
 	expected := map[string][]string{
-		"master":     {"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate"},
+		"master":     {"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate", "create_project"},
 		"specialist": {"intent.create"},
 		"operator":   {"intent.create", "agent.issuer.designate"},
 	}
@@ -70,5 +70,32 @@ func TestCustomRolesRejectReservedIDsAndWildcards(t *testing.T) {
 		if ValidateRoleDefinition(r) == nil {
 			t.Fatalf("expected rejection: %+v", r)
 		}
+	}
+}
+
+// TestCreateOrganizationDeliberatelyUnmapped is defensive: create_organization is intentionally absent
+// from PermissionsV1 and from BuiltinRoles[RoleMaster] (see the NOTA comment in roles.go and
+// Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §3 Q1). If a future change adds it back
+// without revisiting that decision, this test should fail instead of passing silently.
+func TestCreateOrganizationDeliberatelyUnmapped(t *testing.T) {
+	if _, ok := PermissionsV1["create_organization"]; ok {
+		t.Fatal("create_organization must not be in PermissionsV1 — see Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §3 Q1 before adding it")
+	}
+	if HasBuiltinPermission(RoleMaster, "create_organization") {
+		t.Fatal("create_organization must not be granted to master — see Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §3 Q1 before adding it")
+	}
+}
+
+// TestCreateProjectMappedOnlyToMaster confirms create_project is granted to master and to no other
+// builtin role.
+func TestCreateProjectMappedOnlyToMaster(t *testing.T) {
+	if !HasBuiltinPermission(RoleMaster, "create_project") {
+		t.Fatal("master must have create_project")
+	}
+	if HasBuiltinPermission(RoleSpecialist, "create_project") {
+		t.Fatal("specialist must not have create_project")
+	}
+	if HasBuiltinPermission(RoleOperator, "create_project") {
+		t.Fatal("operator must not have create_project")
 	}
 }

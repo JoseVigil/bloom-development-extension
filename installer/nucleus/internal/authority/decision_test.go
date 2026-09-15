@@ -69,6 +69,50 @@ func TestDecisionStoreFailureIsVisibleNotEvaluable(t *testing.T) {
 	}
 }
 
+// TestDecisionEvaluatesCreateProjectForMasterAndDeniesSpecialist is the end-to-end coverage for the
+// create_project mapping (Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §1): master is
+// allowed via permission_granted, specialist (which never receives create_project) is denied via
+// permission_not_granted. Uses a local fixture, parameterized by role, rather than decisionState/request
+// above so the existing intent.create-based tests are left untouched.
+func TestDecisionEvaluatesCreateProjectForMasterAndDeniesSpecialist(t *testing.T) {
+	now := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
+	stateForRole := func(roleID string, permissions []string) *DurableState {
+		return &DurableState{
+			Binding: Binding{"org", "issuer", "installation"},
+			Emission: &EmissionMetadata{
+				Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", SnapshotID: "s", Issuer: "issuer",
+				OrganizationID: "org", AuthorityVersion: "7", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute),
+				ExpiresAt: now.Add(time.Minute), Audience: Audience{"org", []string{"installation"}},
+			},
+			Monotonic: MonotonicState{HighWaterMark: "7", StateDigest: "digest"},
+			Projection: FullContent{
+				Principals: []Principal{{PrincipalID: "p", PrincipalType: "human", Status: "active", ExternalIdentities: []ExternalIdentity{{Provider: "github", Subject: "p", DisplayHandle: "p", Status: "verified", VerifiedAt: now.Add(-time.Hour)}}}},
+				Memberships: []Membership{{MembershipID: "m", PrincipalID: "p", OrganizationID: "org", Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}},
+				RoleDefinitions: []RoleDefinition{{RoleID: roleID, RoleVersion: "1", RoleOrigin: "builtin", DisplayName: roleID, Status: "active", Permissions: permissions}},
+				RoleAssignments: []RoleAssignment{{AssignmentID: "a", MembershipID: "m", RoleID: roleID, RoleVersion: "1", Scope: Scope{"project", "project-a"}, Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}},
+				Revocations: []Revocation{},
+			},
+		}
+	}
+	createProjectRequest := DecisionRequest{Operation: "create_project", PrincipalID: "p", Scope: Scope{"project", "project-a"}, At: now}
+
+	t.Run("master allow", func(t *testing.T) {
+		state := stateForRole(RoleMaster, BuiltinRoles[RoleMaster])
+		d := (DecisionEvaluator{state: state}).Evaluate(createProjectRequest)
+		if d.Outcome != DecisionAllow || d.Reason != "permission_granted" {
+			t.Fatalf("expected allow/permission_granted, got %+v", d)
+		}
+	})
+
+	t.Run("specialist deny", func(t *testing.T) {
+		state := stateForRole(RoleSpecialist, BuiltinRoles[RoleSpecialist])
+		d := (DecisionEvaluator{state: state}).Evaluate(createProjectRequest)
+		if d.Outcome != DecisionDeny || d.Reason != "permission_not_granted" {
+			t.Fatalf("expected deny/permission_not_granted, got %+v", d)
+		}
+	})
+}
+
 func TestDecisionReadsOnlyVerifierAcceptedStateAndCheckpoint(t *testing.T) {
 	now := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
 	p, pub, private := fullFixture(t, "7")
