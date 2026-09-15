@@ -149,6 +149,7 @@ hiddenimports = [
     'brain.commands.system.system_specs',
     'brain.commands.system.version_flags',
     'brain.commands.twitter.auth',
+    'brain.commands.twitter.publish',
     'brain.core',
     'brain.core.bisp.chroma_client',
     'brain.core.bisp.embedding_generator',
@@ -267,6 +268,7 @@ hiddenimports = [
     'brain.core.system.info_manager',
     'brain.core.system.metadata_manager',
     'brain.core.twitter.auth_manager',
+    'brain.core.twitter.tweet_publisher',
 ]
 
 # =============================================================================
@@ -312,8 +314,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
 datas += collect_data_files('chromadb')

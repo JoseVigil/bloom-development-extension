@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 class TwitterAuthManager:
     def __init__(self):
@@ -27,6 +27,22 @@ class TwitterAuthManager:
             "username": username,
             "updated_at": datetime.utcnow().isoformat()
         }), encoding='utf-8')
+
+    def get_access_token(self) -> Optional[str]:
+        """
+        Devuelve el access token guardado, o None si no hay cuenta autenticada.
+
+        Usado por TweetPublisher para autenticar contra la API v2 de X.
+        No valida si el token sigue vigente ni si tiene el scope tweet.write —
+        eso lo determina la respuesta de la API al momento de publicar.
+        """
+        if not self.creds_path.exists():
+            return None
+        try:
+            data = json.loads(self.creds_path.read_text(encoding='utf-8'))
+            return data.get("token")
+        except Exception:
+            return None
 
     def logout(self):
         if self.creds_path.exists():

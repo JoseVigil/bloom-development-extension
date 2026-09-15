@@ -814,6 +814,12 @@ def load_all_commands_explicit() -> CommandRegistry:
     except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load TwitterAuthCommand: {e}")
     
+    try:
+        from brain.commands.twitter.publish import TwitterPublishCommand
+        registry.register(TwitterPublishCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load TwitterPublishCommand: {e}")
+    
     return registry
 
 
@@ -948,4 +954,5 @@ def get_hiddenimports_list():
         'brain.commands.system.version_flags',
         'brain.commands.system.version_flags',
         'brain.commands.twitter.auth',
+        'brain.commands.twitter.publish',
     ]

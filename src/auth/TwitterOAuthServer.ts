@@ -20,7 +20,9 @@ export class TwitterOAuthServer {
     const codeChallenge = crypto.createHash('sha256').update(this.codeVerifier).digest('base64url');
     
     const config = this.getOAuthConfig();
-    const url = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${config.clientId}&redirect_uri=${encodeURIComponent(config.callback)}&scope=tweet.read%20users.read%20offline.access&state=state&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+    // scope incluye tweet.write: sin esto, el token resultante puede leer
+    // pero la API rechaza cualquier intento de publicar con 403.
+    const url = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${config.clientId}&redirect_uri=${encodeURIComponent(config.callback)}&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=state&code_challenge=${codeChallenge}&code_challenge_method=S256`;
     
     await vscode.env.openExternal(vscode.Uri.parse(url));
   }

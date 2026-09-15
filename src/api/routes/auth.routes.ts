@@ -502,9 +502,36 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /api/v1/auth/twitter/start
   fastify.get('/twitter/start', async (request, reply) => {
-    // Aquí lanzarías el flujo OAuth similar al de GitHub
-    // deps.twitterOAuthServer.startFlow();
-    return { ok: true, message: 'Twitter OAuth flow started' };
+    const deps = (fastify as any).deps;
+
+    if (!deps.twitterOAuthServer) {
+      return reply.code(503).send({
+        ok: false,
+        error: 'Twitter OAuth server not initialized. Please check server configuration.',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    try {
+      await deps.twitterOAuthServer.startFlow();
+
+      fastify.log.info('Twitter OAuth flow started successfully');
+
+      return {
+        ok: true,
+        message: 'OAuth flow started - check browser window for authorization',
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error: any) {
+      fastify.log.error('Failed to start Twitter OAuth flow:', error);
+
+      return reply.code(500).send({
+        ok: false,
+        error: error.message || 'Failed to start OAuth flow',
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
 };
