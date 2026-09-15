@@ -32,6 +32,8 @@ func createMandateCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(createStandardMandateSubcommand(c))
 	cmd.AddCommand(createBuildMandateSubcommand(c))
 	cmd.AddCommand(mandateStatusSubcommand(c))
+	cmd.AddCommand(createPublishMandateSubcommand(c))
+	cmd.AddCommand(createInstallMandateSubcommand(c))
 
 	return cmd
 }

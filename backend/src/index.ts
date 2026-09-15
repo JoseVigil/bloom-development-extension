@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { DeliveryError, resolveMandateDelivery } from './mandate-delivery';
+import { PublishError, publishMandate, type PublishMandateBody } from './mandate-publish';
 import { manifestEtag, resolveIonManifest } from "./manifest";
 import {
   readInstallationAuthHeaders,
@@ -134,6 +135,18 @@ app.get('/v1/mandate/bootstrap', verifyInstallationAuth, async (context) => {
   } catch (error) {
     if (error instanceof DeliveryError) return context.json({ error: error.message }, error.status);
     return context.json({ error: 'mandate_delivery_failed' }, 500);
+  }
+});
+
+app.post('/v1/mandate/publish', verifyInstallationAuth, async (context) => {
+  const organizationId = context.req.query('org')!;
+  const body = await context.req.json<PublishMandateBody>().catch(() => null);
+  try {
+    const result = await publishMandate(context.env, organizationId, body);
+    return context.json(result, 200);
+  } catch (error) {
+    if (error instanceof PublishError) return context.json({ error: error.message }, error.status);
+    return context.json({ error: 'mandate_publish_failed' }, 500);
   }
 });
 
