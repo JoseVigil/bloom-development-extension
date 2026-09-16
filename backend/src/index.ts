@@ -14,6 +14,7 @@ import { configuredAuthorityTrustResponse } from './authority/trust-route';
 import { AuthoritySyncObject } from './authority/sync-object';
 import { authorityEvidenceResponse } from './authority/evidence-route';
 import { authoritySyncResponse, relayAuthorityOutbox } from './authority/sync-route';
+import { authorityTenantSelfResponse } from './authority/tenant-self-route';
 
 // SUPUESTO: `AUTHORITY_SIGNING_KEY_PKCS8_B64` y `AUTHORITY_SIGNING_KEY_ID` en `Env` no
 // están confirmados contra el `Env` real del proyecto (no tengo el
@@ -193,6 +194,15 @@ app.post('/v1/authority/sync/challenge',verifyInstallationAuth,c=>authoritySyncR
 app.get('/v1/authority/sync/pull',verifyInstallationAuth,c=>authoritySyncResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
 app.get('/v1/authority/sync/notice',verifyInstallationAuth,c=>authoritySyncResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
 app.get('/v1/authority/evidence',verifyInstallationAuth,c=>authorityEvidenceResponse(c.env.DB,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
+
+// Sovereign Tenant Fase 5 (Nucleus) — Paso 3 / "Paso 0, bloqueante" (relayed by Jose,
+// 2026-09-16). Mismo criterio de autenticación que snapshot/trust-manifest/sync/evidence:
+// verifyInstallationAuth (firma S2S + ?org=), NUNCA checkServiceToken — ese token estático
+// está reservado exclusivamente al registro de instalación (ver comentario de
+// checkServiceToken más arriba), y esta ruta sólo tiene sentido después de que la
+// instalación ya registró su clave (se llama desde el mismo "sync" que ya usa snapshot/
+// trust-manifest firmados). Lógica de negocio en tenant-self-route.ts, no acá.
+app.get('/v1/authority/tenant/self',verifyInstallationAuth,c=>authorityTenantSelfResponse(c.env.DB,{organizationId:c.req.query('org')!}));
 
 app.get("/v1/authority/trust-bundle", verifyInstallationAuth, async (context) => {
   const organizationId = context.req.query("org")!;

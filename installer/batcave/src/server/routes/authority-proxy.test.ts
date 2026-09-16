@@ -236,4 +236,42 @@ describe('authority-proxy', () => {
     expect(JSON.stringify([(loggers.relay.info as any).mock.calls,(loggers.security.warn as any).mock.calls])).not.toContain('secret-signature');
     expect(JSON.stringify((loggers.relay.info as any).mock.calls)).not.toContain('opaque-secret-cursor');
   });
+
+  // Sovereign Tenant Fase 5 (Nucleus) — Paso 3 / "Paso 0, bloqueante" (relayed by Jose,
+  // 2026-09-16). Mismo grupo de autenticación S2S que snapshot/trust-manifest/evidence:
+  // firma de instalación + ?org=, nunca el token estático de registro, y sin
+  // HUMAN_PROOF_HEADERS (no depende de sesión humana como tenantOrganizations).
+  it('forwards GET tenant/self with S2S auth and org query, without logging the signature', async () => {
+    const bytes = JSON.stringify({ tenantId: 'tenant-xyz' });
+    fetchMock.mockResolvedValue(new Response(bytes, { status: 200, headers: { 'content-type': 'application/json' } }));
+    const loggers = fakeLoggers(), app = createAuthorityProxyRoutes(config, loggers);
+    const res = await app.request('/v1/authority/tenant/self?org=o', {
+      headers: { 'x-bloom-installation-id': 'i', 'x-bloom-timestamp': '1', 'x-bloom-signature': 'secret-signature' }
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe('https://backend.test/v1/authority/tenant/self?org=o');
+    const forwarded = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(forwarded.get('x-bloom-installation-id')).toBe('i');
+    expect(forwarded.get('x-bloom-signature')).toBe('secret-signature');
+    expect(await res.text()).toBe(bytes);
+    expect(JSON.stringify((loggers.relay.info as any).mock.calls)).not.toContain('secret-signature');
+  });
+
+  it('does not relay human-session credentials to tenant/self (S2S-only route)', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+    const app = createAuthorityProxyRoutes(config, fakeLoggers());
+    await app.request('/v1/authority/tenant/self?org=o', {
+      headers: { cookie: '__Host-authority-session=secret-cookie', origin: 'https://human.test', 'x-authority-csrf': 'secret-csrf' }
+    });
+    const forwarded = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(forwarded.has('cookie')).toBe(false);
+    expect(forwarded.has('origin')).toBe(false);
+    expect(forwarded.has('x-authority-csrf')).toBe(false);
+  });
+
+  it('does not fabricate registration authentication on tenant/self reads', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    const app = createAuthorityProxyRoutes(config, fakeLoggers());
+    await app.request('/v1/authority/tenant/self?org=o', { headers: { authorization: 'Bearer registration-only' } });
+    expect(fetchMock.mock.calls[0][1].headers.has('authorization')).toBe(false);
+  });
 });

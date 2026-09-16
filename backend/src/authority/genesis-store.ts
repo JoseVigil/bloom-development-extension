@@ -61,12 +61,23 @@ export async function finishGenesis(db: D1Database, input: { state: string; brow
   if (registry) return issueForIdentity(db, registry.organization_id, registry.principal_id, grant.token, absolute, s, false);
 
   const organizationId = crypto.randomUUID(), principalId = crypto.randomUUID(), now = s.now();
+  // Sovereign Tenant, Fase 2 (Propuesta_Arquitectura_Tenant_Soberano_v0_1.md §2.3.1,
+  // confirmada por Jose 2026-09-16): cada organización nueva nace ya perteneciendo a un
+  // tenant propio. `tenantId` es un UUID independiente de `organizationId` a propósito —
+  // a diferencia del backfill de Fase 1 (que reusó `organization.id` como `tenant.id`
+  // para lo legado, sin tabla de traducción), acá no hay legado que reconciliar: cada
+  // entidad recibe su propio id desde el origen. No se toca nada más de esta función —
+  // el invariante "un subject, una organización, una sola vez" (authority_genesis_registry)
+  // sigue exactamente igual, sólo se agrega el tenant a la misma transacción atómica.
+  const tenantId = crypto.randomUUID(), createdAt = Date.now();
   try {
-    // Atómico (db.batch, D1 todo-o-nada): organización + identidad canónica (verificada
-    // en el momento mismo de la creación, no en dos pasos) + ancla de registry.
+    // Atómico (db.batch, D1 todo-o-nada): tenant + organización + identidad canónica
+    // (verificada en el momento mismo de la creación, no en dos pasos) + ancla de registry.
     await db.batch([
-      db.prepare('INSERT INTO organizations(id,name,master_github_username,key_fingerprint,created_at) VALUES(?,?,?,?,?)')
-        .bind(organizationId, human.handle, human.handle, 'unassigned', Date.now()),
+      db.prepare('INSERT INTO tenants(id,name,master_github_username,key_fingerprint,created_at) VALUES(?,?,?,?,?)')
+        .bind(tenantId, human.handle, human.handle, 'unassigned', createdAt),
+      db.prepare('INSERT INTO organizations(id,name,master_github_username,key_fingerprint,created_at,tenant_id) VALUES(?,?,?,?,?,?)')
+        .bind(organizationId, human.handle, human.handle, 'unassigned', createdAt, tenantId),
       db.prepare(`INSERT INTO authority_human_identities(organization_id,principal_id,subject,source_ref,evidence_kind,revision,status,verified_at,display_handle)
         VALUES(?,?,?,'canonical:github','canonical','1','active',?,?)`).bind(organizationId, principalId, human.subject, now, human.handle),
       db.prepare('INSERT INTO authority_genesis_registry(subject,organization_id,principal_id,created_at) VALUES(?,?,?,?)')
@@ -75,9 +86,9 @@ export async function finishGenesis(db: D1Database, input: { state: string; brow
   } catch (error) {
     // Carrera real: dos requests simultáneos del mismo subject nuevo. El batch de D1 es
     // todo-o-nada, así que si el conflicto de PK en authority_genesis_registry hizo
-    // fallar este batch, no queda ningún estado parcial (la organización de este request
-    // tampoco quedó creada) — se cae al camino de "ya existe", nunca se asume éxito
-    // silencioso.
+    // fallar este batch, no queda ningún estado parcial (ni el tenant ni la organización
+    // de este request quedaron creados) — se cae al camino de "ya existe", nunca se asume
+    // éxito silencioso.
     const raced = await db.prepare('SELECT organization_id,principal_id FROM authority_genesis_registry WHERE subject=?')
       .bind(human.subject).first<{ organization_id: string; principal_id: string }>();
     if (!raced) throw error;

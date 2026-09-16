@@ -23,7 +23,7 @@ const RESPONSE_METADATA_HEADERS = [
   'age', 'vary', 'retry-after', 'x-correlation-id', 'www-authenticate'
 ] as const;
 
-/** Espejo exacto de las tres rutas ya fijas del lado Backend. */
+/** Espejo exacto de las rutas ya fijas del lado Backend. */
 const AUTHORITY_PATHS = {
   register: '/v1/authority/installations/register',
   snapshot: '/v1/authority/snapshot',
@@ -34,7 +34,15 @@ const AUTHORITY_PATHS = {
   syncChallenge: '/v1/authority/sync/challenge',
   syncPull: '/v1/authority/sync/pull',
   syncNotice: '/v1/authority/sync/notice',
-  evidence: '/v1/authority/evidence'
+  evidence: '/v1/authority/evidence',
+  // Fase 4 — Sovereign Tenant (Propuesta_Arquitectura_Tenant_Soberano_v0_1.md §2.4.4),
+  // autorizada por Jose 2026-09-16. Mismo path que el Backend real — no se inventa un
+  // esquema de URL distinto para Batcave, mismo criterio que el resto de esta tabla.
+  tenantOrganizations: '/v1/authority/tenant/organizations',
+  // Sovereign Tenant Fase 5 (Nucleus) — Paso 3 / "Paso 0, bloqueante" (relayed by Jose,
+  // 2026-09-16). Autenticación S2S pura (firma de instalación), mismo grupo que snapshot/
+  // trust-manifest/evidence — no lleva HUMAN_PROOF_HEADERS (no depende de sesión humana).
+  tenantSelf: '/v1/authority/tenant/self'
 } as const;
 
 function headersPresence(headers: Headers): Record<string, boolean> {
@@ -70,7 +78,12 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
       const authorization = c.req.header('authorization');
       if (authorization !== undefined) forwardHeaders.set('authorization', authorization);
     }
-    if (backendPath === AUTHORITY_PATHS.actorApprove) {
+    // actorApprove: prueba de posesión de sesión humana + CSRF, exigidos por el POST del
+    // Backend. tenantOrganizations: mismo motivo — tanto el GET (lista, requiere sesión
+    // activa) como el POST (crea hermana, requiere sesión + CSRF) del Backend dependen de
+    // la cookie de sesión humana; reenviarla también en el GET no relaja nada (el Backend
+    // igual exige sesión válida) y evita una rama de proxy distinta por verbo.
+    if (backendPath === AUTHORITY_PATHS.actorApprove || backendPath === AUTHORITY_PATHS.tenantOrganizations) {
       for (const name of HUMAN_PROOF_HEADERS) {
         const value = c.req.header(name);
         if (value !== undefined) forwardHeaders.set(name, value);
@@ -154,6 +167,9 @@ export function createAuthorityProxyRoutes(config: BatcaveConfig, loggers: Batca
   app.get(AUTHORITY_PATHS.syncPull, proxyHandler('GET', AUTHORITY_PATHS.syncPull, config, loggers));
   app.get(AUTHORITY_PATHS.syncNotice, proxyHandler('GET', AUTHORITY_PATHS.syncNotice, config, loggers));
   app.get(AUTHORITY_PATHS.evidence, proxyHandler('GET', AUTHORITY_PATHS.evidence, config, loggers));
+  app.get(AUTHORITY_PATHS.tenantOrganizations, proxyHandler('GET', AUTHORITY_PATHS.tenantOrganizations, config, loggers));
+  app.post(AUTHORITY_PATHS.tenantOrganizations, proxyHandler('POST', AUTHORITY_PATHS.tenantOrganizations, config, loggers));
+  app.get(AUTHORITY_PATHS.tenantSelf, proxyHandler('GET', AUTHORITY_PATHS.tenantSelf, config, loggers));
 
   return app;
 }

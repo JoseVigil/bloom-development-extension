@@ -185,7 +185,7 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 			trustAnchorID, trustAnchorPublicKey := manifest.Root()
 			trustAnchorFingerprint := trustAnchorFingerprintSHA256(trustAnchorPublicKey)
 			var tenantID *string
-			if id, tenantErr := fetchOrganizationTenantID(context.Background(), active.AuthorityBaseURL, serviceToken, authorityCommandHTTPClient); tenantErr != nil {
+			if id, tenantErr := authority.FetchOrganizationTenantID(context.Background(), active.AuthorityBaseURL, tenantSelfPath, binding, identity.PrivateKey, authorityCommandHTTPClient, authorityCommandNow()); tenantErr != nil {
 				report.Evidence["tenant_lookup_error"] = tenantErr.Error()
 				if governanceLogger != nil {
 					governanceLogger.Warning("tenant lookup falló (no bloqueante, %s no se actualiza): %v", tenantSelfPath, tenantErr)
@@ -194,6 +194,26 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 				tenantID = id
 				if tenantID != nil {
 					report.Evidence["tenant_id"] = *tenantID
+				}
+			}
+			// Ajuste pedido por Jose (2026-09-16), Sovereign Tenant Fase 5: además de
+			// .ownership.json (reconciliación criptográfica, abajo), anotar el mismo
+			// tenant_id como campo plano en la entrada de onboarding.organizations[] de
+			// config/nucleus.json que ya usa esta máquina para esta organización — para
+			// que interfaces gráficas (Conductor) puedan agrupar organizaciones por
+			// tenant sin leer .ownership.json por organización. Aditivo puro (ver
+			// core.RecordOrganizationTenantID): no cambia la forma del array de
+			// organizations, no anida por tenant. No-fatal, mismo criterio que el resto
+			// de este bloque — sólo se intenta cuando el lookup de arriba tuvo éxito
+			// (tenantID != nil), simétrico con ReconcileCanonicalOrganization.
+			if tenantID != nil {
+				if injectErr := core.RecordOrganizationTenantID(active.OrgSlug, active.OrganizationID, *tenantID); injectErr != nil {
+					report.Evidence["nucleus_config_tenant_injection_error"] = injectErr.Error()
+					if governanceLogger != nil {
+						governanceLogger.Warning("no pude anotar tenant_id en config/nucleus.json (org=%s, slug=%s): %v", active.OrganizationID, active.OrgSlug, injectErr)
+					}
+				} else {
+					report.Evidence["nucleus_config_tenant_injected"] = true
 				}
 			}
 			if reconcileErr := ReconcileCanonicalOrganization(active.NucleusRoot, active.OrganizationID, identity.InstallationID, binding.Issuer, trustAnchorID, trustAnchorFingerprint, tenantID, authorityCommandNow()); reconcileErr != nil {

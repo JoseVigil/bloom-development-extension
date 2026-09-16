@@ -6,6 +6,7 @@ import { AdministrationError, type AdministrationCommand } from './administratio
 import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, type EmissionSigner } from './emission-store';
 import { wireVersion } from './emission';
 import { createInitialAuthorityEmission, InitialAuthorityEmissionError, initialEmissionGuardStatement } from './initial-emission';
+import { createOrganizationUnderTenant, listTenantOrganizations, TenantStoreError } from './tenant-store';
 export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;}
 export interface HumanRouteEnv {
  DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;
@@ -61,6 +62,19 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    const flow=await beginGenesis(db,s);headers.append('Set-Cookie',setCookie(flowCookie,flow.browser,300));
    headers.set('Location',flow.url);return new Response(null,{status:302,headers});
   }
+  if(path==='/v1/authority/tenant/organizations'&&request.method==='GET'){
+   // Sovereign Tenant Fase 3 (§2.3.4 de la propuesta): lista las organizaciones
+   // hermanas de `organizationId` (la organización de origen ya autenticada por
+   // sesión). Sólo requiere sesión activa — no rol master: enumerar hermanas es de
+   // lectura, no una acción administrativa. Sin chequeo de CSRF, igual que el resto de
+   // las rutas GET de este archivo.
+   const org=url.searchParams.get('organizationId')??'';
+   if(!org)return reply({error:'invalid_org'},400);
+   const token=cookie(request,sessionCookie);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   const organizations=await listTenantOrganizations(db,org);
+   return reply({organizations});
+  }
   if(request.method!=='POST')return reply({error:'method_not_allowed'},405);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')return reply({error:'invalid_content_type'},400);
   const raw=await request.text();if(raw.length>65536)return reply({error:'request_too_large'},413);
@@ -94,6 +108,20 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
     if(e instanceof InitialAuthorityEmissionError)return reply({error:e.message},e.code==='already_exists'?409:e.code==='identity_not_ready'||e.code==='canonical_evidence_required'?403:503);throw e;
    }
   }
+  if(path==='/v1/authority/tenant/organizations'){
+   // Sovereign Tenant Fase 3 (§2.3.2-2.3.3 de la propuesta): crea una organización
+   // hermana dentro del mismo tenant que `organizationId` (la organización de origen,
+   // ya autenticada por sesión). El chequeo de rol master vive en tenant-store.ts
+   // (loadCurrentEmission + isActiveMaster) — no acá, mismo reparto de responsabilidad
+   // que initial-emission de arriba.
+   if(!exact(body,['organizationId','name']))return reply({error:'invalid_request'},400);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   try{return reply(await createOrganizationUnderTenant(db,org,actor,body.name,s),201);}catch(e){
+    if(e instanceof TenantStoreError)return reply({error:e.message},e.code==='not_authorized'?403:e.code==='invalid_request'?400:409);
+    if(e instanceof InitialAuthorityEmissionError)return reply({error:e.message},e.code==='already_exists'?409:e.code==='identity_not_ready'||e.code==='canonical_evidence_required'?403:503);
+    throw e;
+   }
+  }
   if(path!=='/v1/authority/administration')return reply({error:'not_found'},404);
   if(!exact(body,['organizationId','requestId','expectedVersion','command'])||typeof body.requestId!=='string'||!body.requestId||body.requestId.length>200)return reply({error:'invalid_request'},400);
   try{wireVersion(body.expectedVersion);}catch{return reply({error:'invalid_version'},400);}
@@ -123,6 +151,7 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
  }catch(error){
   if(error instanceof HumanIdentityError)return reply({error:error.message},error.code.startsWith('configuration')||error.code==='provider_unavailable'?503:error.code==='csrf_invalid'||error.code==='origin_invalid'?403:401);
   if(error instanceof AdministrationError)return reply({error:error.message},error.code.includes('conflict')?409:403);
+  if(error instanceof TenantStoreError)return reply({error:error.message},error.code==='not_authorized'?403:error.code==='invalid_request'?400:409);
   return reply({error:'authority_human_request_unavailable'},503);
  }
 }

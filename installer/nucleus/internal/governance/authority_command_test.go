@@ -115,10 +115,17 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 			sig := ed25519.Sign(issuerPrivate, append(append([]byte(mandatedelivery.Domain), 0), canonical...))
 			_ = json.NewEncoder(w).Encode(map[string]any{"envelope": map[string]string{"mandate_id": "mandate", "organization_id": "org-id", "installation_id": installationID, "mandate_version": "1", "mandate_digest": hex.EncodeToString(digest[:]), "issued_at": issued, "signature": base64.StdEncoding.EncodeToString(sig), "signing_key_id": "issuer-key"}, "mandate_base64": base64.StdEncoding.EncodeToString(artifact)})
 		case tenantSelfPath:
-			// Sovereign Tenant Fase 5 — Opción A: endpoint S2S de sólo lectura, mismo
-			// mecanismo de autenticación (Bearer AUTHORITY_SERVICE_TOKEN) que ya se
-			// verifica implícitamente en /v1/authority/installations/register vía el
-			// resto de este fake server.
+			// Sovereign Tenant Fase 5 — Opción A: endpoint S2S de sólo lectura,
+			// autenticado con verifyInstallationAuth (firma de instalación + ?org=),
+			// no con el Bearer estático de AUTHORITY_SERVICE_TOKEN (fix companion tras
+			// Cierre_Implementacion_Endpoint_TenantSelf_v1_0.md — ver
+			// authority.FetchOrganizationTenantID). Confirmar acá, no sólo confiar en
+			// que el caller mande algo: sin ?org= o sin firma, este handler nunca
+			// hubiera atrapado el bug original.
+			if r.URL.Query().Get("org") != "org-id" || r.Header.Get("X-Bloom-Installation-Id") == "" || r.Header.Get("X-Bloom-Signature") == "" || r.Header.Get("X-Bloom-Timestamp") == "" {
+				w.WriteHeader(401)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"tenantId": "tenant-xyz"})
 		}
 	}))
@@ -192,6 +199,36 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	}
 	if reconciled.Organization.TenantID == nil || *reconciled.Organization.TenantID != "tenant-xyz" {
 		t.Fatalf("tenant_id no reconciliado: %+v", reconciled.Organization)
+	}
+
+	// Ajuste pedido por Jose (2026-09-16): el mismo tenant_id ("tenant-xyz", servido
+	// por el fake tenantSelfPath de más arriba) también debe quedar anotado como campo
+	// plano en la entrada "acme" de onboarding.organizations dentro de config/
+	// nucleus.json — sin que la forma del array cambie (sigue siendo el mismo array
+	// plano sembrado al principio de este test, con un campo más) y sin perder
+	// authority_base_url ni el resto de los campos ya sembrados de esa organización.
+	nucleusConfigRaw, err := os.ReadFile(filepath.Join(appData, "config", "nucleus.json"))
+	if err != nil {
+		t.Fatalf("no pude leer config/nucleus.json: %v", err)
+	}
+	var nucleusConfig map[string]any
+	if err := json.Unmarshal(nucleusConfigRaw, &nucleusConfig); err != nil {
+		t.Fatalf("config/nucleus.json no es JSON válido: %v", err)
+	}
+	if got := nucleusConfig["authority_base_url"]; got != server.URL {
+		t.Fatalf("authority_base_url no se preservó: got %v", got)
+	}
+	onboarding, _ := nucleusConfig["onboarding"].(map[string]any)
+	organizations, _ := onboarding["organizations"].([]any)
+	if len(organizations) != 1 {
+		t.Fatalf("onboarding.organizations cambió de forma (se esperaba el mismo array plano de 1 elemento): %+v", organizations)
+	}
+	acme, _ := organizations[0].(map[string]any)
+	if acme["org_slug"] != "acme" || acme["organization_id"] != "org-id" || acme["workspace_path"] != workspace {
+		t.Fatalf("la entrada de acme perdió campos ya existentes: %+v", acme)
+	}
+	if acme["tenant_id"] != "tenant-xyz" {
+		t.Fatalf("tenant_id no se anotó en config/nucleus.json: %+v", acme)
 	}
 }
 

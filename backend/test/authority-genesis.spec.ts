@@ -22,7 +22,10 @@ const signer = () => ({ privateKeyPkcs8: privateKey, keyId: "issuer-key" });
 async function loadMigrations(files: string[]) {
   for (const file of files) {
     const sql = readFileSync(new URL("../migrations/" + file, import.meta.url), "utf8").replace(/--[^\r\n]*/g, "").trim();
-    for (const part of sql.split(/;\s*(?=(?:CREATE|ALTER|INSERT)\b)/i)) if (part.trim()) await db.prepare(part).run();
+    // Sovereign Tenant Fase 2: se agregó UPDATE al lookahead porque 0015_tenants.sql
+    // (necesario desde que finishGenesis inserta en `tenants`) tiene un backfill con
+    // UPDATE, que CREATE|ALTER|INSERT solo no reconocía.
+    for (const part of sql.split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE)\b)/i)) if (part.trim()) await db.prepare(part).run();
   }
 }
 async function genesisLogin(code: string, s: HumanServices = services) {
@@ -40,7 +43,7 @@ beforeAll(async () => {
     master_github_username TEXT NOT NULL, key_fingerprint TEXT NOT NULL, created_at INTEGER NOT NULL)`).run();
   await loadMigrations(["0001_authority_snapshot.sql", "0002_authority_security.sql", "0004_authority_emissions.sql",
     "0005_authority_administration.sql", "0006_authority_human_identity.sql", "0009_authority_role_definition_status.sql",
-    "0010_authority_initial_emission_guard.sql", "0013_authority_genesis.sql"]);
+    "0010_authority_initial_emission_guard.sql", "0013_authority_genesis.sql", "0015_tenants.sql"]);
   const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
   privateKey = await crypto.subtle.exportKey("pkcs8", pair.privateKey) as ArrayBuffer;
 }, 60000);

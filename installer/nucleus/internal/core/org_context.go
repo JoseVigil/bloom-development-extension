@@ -288,3 +288,121 @@ func ScanForNucleus() (workspacePath, slug, nucleusDir string, err error) {
 	}
 	return ScanForNucleusFrom(cwd)
 }
+
+// RecordOrganizationTenantID anota (o actualiza) el campo plano tenant_id en la
+// entrada de onboarding.organizations[] de config/nucleus.json que corresponde a
+// orgSlug — Sovereign Tenant Fase 5, ajuste pedido por Jose 2026-09-16, además de la
+// reconciliación criptográfica que ya persiste TenantID en .ownership.json (ver
+// governance/ownership_reconciliation.go). El propósito es exclusivamente de
+// presentación: que interfaces gráficas (Conductor) puedan agrupar organizaciones por
+// tenant sin leer .ownership.json de cada una.
+//
+// Deliberadamente aditivo — NO cambia la forma del array onboarding.organizations
+// (nada de anidar por tenant): ese array también lo escribe Conductor (Electron/JS,
+// fuera de este repo, confirmado en Cierre_Implementacion_Nucleus_Genesis_Bootstrap_
+// v1_0.md), así que restructurarlo necesitaría coordinar un cambio de schema con ese
+// código, no sólo con Nucleus. Por eso esta función lee y reescribe el archivo como
+// JSON genérico (map[string]any) — mismo criterio que ya documentaba el diseño de
+// writeActiveOrgContext en ese cierre — y toca únicamente la clave tenant_id dentro de
+// la entrada ya existente, preservando cualquier otro campo, de esa organización o de
+// cualquier otra sección del archivo (installation, system_map, binary_versions,
+// milestones, ...), sin conocerlos.
+//
+// Contrapartida aceptada, no nueva de este cambio: encoding/json ordena las claves de
+// un map[string]any alfabéticamente al serializar, así que el archivo puede terminar
+// con las claves en otro orden que el original. El orden de claves no tiene
+// significado en JSON; ningún lector confirmado de este archivo depende de él.
+//
+// Falla explícita (error) si orgSlug no aparece en onboarding.organizations, o si
+// aparece pero su organization_id no coincide con organizationID — mismo criterio
+// "fail closed on inconsistent data" que ya usa ResolveActiveOrgContext en este mismo
+// archivo, para no anotar tenant_id en la entrada equivocada. El caller (authority_
+// command.go, caso "sync") trata cualquier error de esta función como no-fatal.
+//
+// Idempotente: si la organización ya tiene exactamente ese tenant_id, no reescribe el
+// archivo.
+func RecordOrganizationTenantID(orgSlug, organizationID, tenantID string) error {
+	if orgSlug == "" || organizationID == "" || tenantID == "" {
+		return errors.New("record organization tenant id requires org slug, organization id and tenant id")
+	}
+
+	configPath := filepath.Join(ResolveAppDataDir(), "config", "nucleus.json")
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("no pude leer nucleus.json en %s: %w", configPath, err)
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return fmt.Errorf("nucleus.json inválido en %s: %w", configPath, err)
+	}
+
+	onboarding, ok := root["onboarding"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("nucleus.json en %s no tiene onboarding", configPath)
+	}
+	organizationsRaw, ok := onboarding["organizations"].([]any)
+	if !ok {
+		return fmt.Errorf("nucleus.json en %s no tiene onboarding.organizations", configPath)
+	}
+
+	var target map[string]any
+	for _, entry := range organizationsRaw {
+		candidate, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if slug, _ := candidate["org_slug"].(string); slug == orgSlug {
+			target = candidate
+			break
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("org_slug %q no existe en onboarding.organizations de %s", orgSlug, configPath)
+	}
+	if existingID, _ := target["organization_id"].(string); existingID != organizationID {
+		return fmt.Errorf(
+			"onboarding.organizations[org_slug=%q].organization_id=%q no coincide con %q — me niego a anotar tenant_id en la entrada equivocada",
+			orgSlug, existingID, organizationID,
+		)
+	}
+
+	if current, _ := target["tenant_id"].(string); current == tenantID {
+		return nil // idempotente: ya tiene exactamente este tenant_id.
+	}
+	target["tenant_id"] = tenantID
+
+	data, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("no pude serializar nucleus.json: %w", err)
+	}
+	return atomicWriteMachineConfig(configPath, append(data, '\n'))
+}
+
+// atomicWriteMachineConfig escribe config/nucleus.json de forma atómica (archivo
+// temporal en el mismo directorio + rename) — mismo principio que ya usan
+// governance/ownership_migration.go (atomicReplace) y blueprint.go (SaveBlueprint).
+// Sin flock: este archivo no tiene hoy ningún mecanismo de lock, ni de Conductor ni de
+// Nucleus (confirmado en Cierre_Implementacion_Nucleus_Genesis_Bootstrap_v1_0.md, "no
+// hay file locking acá, a diferencia de .ownership.json") — agregar uno unilateral acá
+// no protegería contra un escritor externo que no lo respeta, así que se deja como el
+// mismo gap ya conocido y documentado, no uno introducido por este cambio.
+func atomicWriteMachineConfig(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".nucleus.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err = tmp.Write(data); err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}

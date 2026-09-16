@@ -22,17 +22,11 @@ package governance
 // no hay nada real que extender, y hacerlo dos veces sería trabajo perdido.
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -158,50 +152,15 @@ func trustAnchorFingerprintSHA256(rootPublicKey ed25519.PublicKey) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// tenantSelfPath es la ruta S2S propuesta (Fase 5 §2 Opción A, pregunta abierta #3
-// de la Propuesta — "es una propuesta, no un cierre") para que Nucleus resuelva el
-// tenantId de la organización autenticada. El nombre final lo confirma cowork
-// BACKEND en el Paso 3 del Encargo — cambiarlo cuando esa pieza cierre es un cambio
-// de una sola constante.
+// tenantSelfPath es la ruta S2S que resuelve Nucleus para conocer el tenantId de la
+// organización autenticada. Confirmada y desplegada por cowork BACKEND
+// (Cierre_Implementacion_Endpoint_TenantSelf_v1_0.md, 2026-09-16): GET
+// /v1/authority/tenant/self, autenticada con verifyInstallationAuth — no con el token
+// estático de servicio. Ver authority.FetchOrganizationTenantID (paquete authority,
+// no este), que es quien de verdad la llama — el intento anterior de resolverla desde
+// governance mandaba sólo un Bearer estático sin ?org= ni firma, y nunca podía
+// autenticar contra este endpoint tal como quedó implementado. Se movió al paquete
+// authority porque necesita el signedRequest privado de SyncClient (mismo mecanismo
+// que ya usan trust-manifest y sync/pull) — governance no tiene acceso a eso, y no
+// debería tenerlo.
 const tenantSelfPath = "/v1/authority/tenant/self"
-
-// fetchOrganizationTenantID resuelve el tenantId vía el mismo mecanismo S2S (Bearer
-// AUTHORITY_SERVICE_TOKEN) que ya usa authority.RegisterInstallation — sin autoridad
-// nueva, sólo lectura informativa (Fase 5 §2: "sin firma criptográfica propia, sin
-// peso de autoridad"). Un error de red, un 404 (endpoint todavía no desplegado por
-// Backend/Batcave — Paso 3 sin cerrar) o una respuesta sin tenant_id se tratan igual:
-// (nil, err) — el caller (authority_command.go, caso "sync") lo reporta como no-fatal
-// y ReconcileCanonicalOrganization nunca borra un tenantId ya guardado por esto.
-func fetchOrganizationTenantID(ctx context.Context, baseURL, serviceToken string, httpClient *http.Client) (*string, error) {
-	if baseURL == "" || serviceToken == "" {
-		return nil, errors.New("ownership: tenant lookup requires authority base URL and service token")
-	}
-	target := strings.TrimRight(baseURL, "/") + tenantSelfPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+serviceToken)
-	client := httpClient
-	if client == nil {
-		client = &http.Client{}
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("tenant lookup HTTP %d", response.StatusCode)
-	}
-	var body struct {
-		TenantID string `json:"tenantId"`
-	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&body); err != nil {
-		return nil, fmt.Errorf("ownership: invalid tenant lookup response: %w", err)
-	}
-	if body.TenantID == "" {
-		return nil, errors.New("ownership: tenant lookup response missing tenant_id")
-	}
-	return &body.TenantID, nil
-}
