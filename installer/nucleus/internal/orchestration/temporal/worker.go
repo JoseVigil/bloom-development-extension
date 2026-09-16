@@ -19,6 +19,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"nucleus/internal/core"
+	authoritydecision "nucleus/internal/governance/decision"
 	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/activities"
 	"nucleus/internal/orchestration/temporal/bootstrap"
@@ -461,6 +462,20 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// y firma. No registra ni activa los adaptadores BSIP.
 			registerMandateGenesisSignatureActivities(mandateWorker)
 			registerGravityActivities(mandateWorker)
+
+			// Shadow observacional (remote_enforced, paso 1): evalúa create_project en
+			// paralelo a la decisión local real, sin gatear nada — ver
+			// Encargo_Implementacion_Activacion_InstallShadow_v1_0.md.
+			// AuthorizeGravityNodeCreation siempre devuelve la decisión local; esto solo
+			// alimenta el sink de observación (nucleus authority observation).
+			// Logging: reusa el logger ORCHESTRATION ya inicializado arriba en este mismo
+			// Run() (core.InitLogger(&c.Paths, "ORCHESTRATION", ...)), que ya se auto-registra
+			// como stream "nucleus_orchestration" en telemetry.json (core/logger.go:
+			// rolloverLocked → tm.RegisterStream) — no se crea archivo ni stream nuevo.
+			shadowConfig := authoritydecision.DefaultShadowConfiguration(c.Paths.AppDataDir)
+			stopShadow := authoritydecision.InstallShadow(shadowConfig)
+			defer stopShadow()
+			logger.Success("✅ Authority shadow observation instalado (create_project, connected=%t)", shadowConfig.Connected)
 
 			if err := mandateWorker.Start(); err != nil {
 				logger.Error("Fallo al iniciar mandate worker: %v", err)
