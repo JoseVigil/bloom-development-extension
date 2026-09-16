@@ -52,6 +52,38 @@ func TestNormalizeAndEffectiveLegacyView(t *testing.T) {
 	}
 }
 
+// Sovereign Tenant Fase 5 — TenantID es puramente aditivo: un documento BOUND
+// válido sigue siendo válido con TenantID == nil (endpoint de tenant caído o
+// nunca disponible) y con TenantID poblado (sync exitoso). Ninguno de los dos
+// casos debe cambiar el resultado de Validate() frente al comportamiento ya
+// probado en TestOwnershipModeBindingMatrixAndNoLegacyAfterCutover (paquete
+// governance) para el resto de los campos.
+func TestValidateAcceptsBoundDocumentWithAndWithoutTenantID(t *testing.T) {
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	canonicalID, issuer := "org-canonical", "issuer"
+	build := func(tenantID *string) *Document {
+		return &Document{
+			Schema:          SchemaName,
+			SchemaVersion:   SchemaVersion,
+			AuthorityMode:   AuthorityModeLocalLegacy,
+			Organization:    Organization{CanonicalID: &canonicalID, TenantID: tenantID},
+			Installation:    Installation{InstallationID: "installation"},
+			Binding:         Binding{State: BindingStateBound, IssuerID: &issuer, AcceptedAt: &now},
+			TrustBinding:    &TrustBinding{IssuerID: issuer, TrustAnchorID: "root", TrustAnchorFingerprintSHA256: "digest", BoundOrganizationID: canonicalID, BoundInstallationID: "installation", AcceptedAt: now},
+			LegacyAuthority: &LegacyAuthority{Owner: LegacyOwner{Source: "github_handle", Subject: "jose"}, EffectiveMarkers: []string{}},
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+	}
+	if err := Validate(build(nil)); err != nil {
+		t.Fatalf("BOUND without TenantID rejected: %v", err)
+	}
+	tenantID := "tenant-1"
+	if err := Validate(build(&tenantID)); err != nil {
+		t.Fatalf("BOUND with TenantID rejected: %v", err)
+	}
+}
+
 func TestValidateModeBindingMatrix(t *testing.T) {
 	legacy := &LegacyAuthority{Owner: LegacyOwner{Source: "github_handle", Subject: "jose"}, EffectiveMarkers: []string{}}
 	if err := ValidateModeBinding(AuthorityModeLocalLegacy, Binding{State: BindingStateUnbound}, legacy); err != nil {

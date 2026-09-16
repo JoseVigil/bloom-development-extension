@@ -159,6 +159,59 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 			report.Evidence["organization_id"] = active.OrganizationID
 			report.Evidence["authority_version"] = result.State.Monotonic.HighWaterMark
 			report.Evidence["state_digest"] = result.State.Monotonic.StateDigest
+			// Reconciliación de identidad de organización (+ Tenant, Sovereign Tenant
+			// Fase 5) — mismo call site que mandate_delivery abajo, mismos valores que
+			// ya están en scope (ningún fetch adicional para organizationId/
+			// installationId/issuer/trust anchor). Falla no-fatal — el sync de
+			// autoridad ya terminó con éxito para cuando se llega acá; ver
+			// ownership_reconciliation.go.
+			//
+			// Logging estructurado: mismo stream de telemetría "nucleus_governance" que
+			// ya usa 'nucleus auth link' (ver auth_link.go, core.InitLogger(&c.Paths,
+			// "GOVERNANCE", c.IsJSON)) — no un stream nuevo ni un archivo aparte. Es la
+			// categoría correcta porque 'authority' ya está registrado bajo GOVERNANCE
+			// (ver init() al final de este archivo) y esta operación es, en esencia,
+			// gobierno de identidad de organización — no delivery de mandates, que es
+			// por lo que el bloque de abajo sigue abriendo su propio logger "MANDATE" en
+			// lugar de reusar este. InitLogger registra/rota el stream en telemetry.json
+			// automáticamente (core/logger.go: rolloverLocked → tm.RegisterStream); acá
+			// sólo hace falta escribir las líneas, igual que ya hace runAuthLink.
+			governanceLogger, governanceLoggerErr := core.InitLogger(&c.Paths, "GOVERNANCE", c.IsJSON)
+			if governanceLoggerErr != nil {
+				report.Evidence["ownership_reconciliation_logger_error"] = governanceLoggerErr.Error()
+			} else {
+				defer governanceLogger.Close()
+			}
+			trustAnchorID, trustAnchorPublicKey := manifest.Root()
+			trustAnchorFingerprint := trustAnchorFingerprintSHA256(trustAnchorPublicKey)
+			var tenantID *string
+			if id, tenantErr := fetchOrganizationTenantID(context.Background(), active.AuthorityBaseURL, serviceToken, authorityCommandHTTPClient); tenantErr != nil {
+				report.Evidence["tenant_lookup_error"] = tenantErr.Error()
+				if governanceLogger != nil {
+					governanceLogger.Warning("tenant lookup falló (no bloqueante, %s no se actualiza): %v", tenantSelfPath, tenantErr)
+				}
+			} else {
+				tenantID = id
+				if tenantID != nil {
+					report.Evidence["tenant_id"] = *tenantID
+				}
+			}
+			if reconcileErr := ReconcileCanonicalOrganization(active.NucleusRoot, active.OrganizationID, identity.InstallationID, binding.Issuer, trustAnchorID, trustAnchorFingerprint, tenantID, authorityCommandNow()); reconcileErr != nil {
+				report.Evidence["ownership_reconciled"] = false
+				report.Evidence["ownership_reconciliation_error"] = reconcileErr.Error()
+				if governanceLogger != nil {
+					governanceLogger.Error("reconciliación de organización canónica (org=%s) falló: %v", active.OrganizationID, reconcileErr)
+				}
+			} else {
+				report.Evidence["ownership_reconciled"] = true
+				if governanceLogger != nil {
+					if tenantID != nil {
+						governanceLogger.Success("organización canónica reconciliada: org=%s tenant=%s", active.OrganizationID, *tenantID)
+					} else {
+						governanceLogger.Success("organización canónica reconciliada: org=%s (sin tenant)", active.OrganizationID)
+					}
+				}
+			}
 			deliveryClient := mandatedelivery.Client{BaseURL: active.AuthorityBaseURL, HTTP: authorityCommandHTTPClient, Signer: identity.PrivateKey, Context: mandatedelivery.Context{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID, Issuer: binding.Issuer, Trust: trust, Now: authorityCommandNow}, Store: &mandatedelivery.Store{Root: filepath.Join(dir, "mandate-delivery")}}
 			deliveryResult, deliveryErr := deliveryClient.Receive(context.Background())
 			if deliveryErr != nil {

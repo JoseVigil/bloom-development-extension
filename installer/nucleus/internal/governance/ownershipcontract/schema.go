@@ -57,6 +57,16 @@ type Organization struct {
 	LegacyLocator *string `json:"legacy_locator"`
 	Slug          *string `json:"slug"`
 	DisplayName   *string `json:"display_name"`
+	// TenantID — Sovereign Tenant Fase 5
+	// (Propuesta_Arquitectura_Fase5_Nucleus_TenantReconciliacion_v0_1.md). Igual que
+	// CanonicalID: informativo cuando está presente, nunca requerido por Validate() ni
+	// por ValidateModeBinding() en ningún BindingState — Tenant no es un estado
+	// autoritativo (decisión ya tomada en la Propuesta original de Tenant, §5/§6.4). Si
+	// el endpoint S2S que lo resuelve (Fase 5 §2 Opción A) fallara o no estuviera
+	// desplegado todavía, la reconciliación de organización sigue funcionando
+	// exactamente igual, sin degradarse — por eso este campo no participa de ningún
+	// invariante de Binding.
+	TenantID *string `json:"tenant_id"`
 }
 
 type Installation struct {

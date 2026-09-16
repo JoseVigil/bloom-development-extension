@@ -19,6 +19,7 @@ import (
 
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
+	"nucleus/internal/governance/ownershipcontract"
 	"nucleus/internal/mandatedelivery"
 )
 
@@ -45,6 +46,13 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(nucleusRoot, ".core", ".nucleus-config.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Sovereign Tenant Fase 5 — .ownership.json de un `nucleus init` real, todavía en
+	// formato legado (org_<timestamp> local, sin canonical_id). El sync de más abajo
+	// debe migrarlo y reconciliar canonical_id + tenant_id (ver
+	// ownership_reconciliation.go) sin que este test tenga que orquestar nada especial.
+	if err := os.WriteFile(filepath.Join(nucleusRoot, ".ownership.json"), []byte(`{"org_id":"org_legacy_local","owner_id":"jose","created_at":"2026-09-04T10:00:00Z","team_members":[]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,6 +114,12 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 			canonical, _ := authority.Canonicalize(mustJSON(payload))
 			sig := ed25519.Sign(issuerPrivate, append(append([]byte(mandatedelivery.Domain), 0), canonical...))
 			_ = json.NewEncoder(w).Encode(map[string]any{"envelope": map[string]string{"mandate_id": "mandate", "organization_id": "org-id", "installation_id": installationID, "mandate_version": "1", "mandate_digest": hex.EncodeToString(digest[:]), "issued_at": issued, "signature": base64.StdEncoding.EncodeToString(sig), "signing_key_id": "issuer-key"}, "mandate_base64": base64.StdEncoding.EncodeToString(artifact)})
+		case tenantSelfPath:
+			// Sovereign Tenant Fase 5 — Opción A: endpoint S2S de sólo lectura, mismo
+			// mecanismo de autenticación (Bearer AUTHORITY_SERVICE_TOKEN) que ya se
+			// verifica implícitamente en /v1/authority/installations/register vía el
+			// resto de este fake server.
+			_ = json.NewEncoder(w).Encode(map[string]string{"tenantId": "tenant-xyz"})
 		}
 	}))
 	defer server.Close()
@@ -155,6 +169,29 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	}
 	if registrationCount != 4 {
 		t.Fatalf("registration count=%d", registrationCount)
+	}
+
+	// Sovereign Tenant Fase 5 — el mismo sync que ya se probó arriba (4 corridas, una
+	// por cada mandateMode) debe haber dejado .ownership.json migrado y reconciliado:
+	// canonical_id == "org-id" (el organizationId real) y tenant_id == "tenant-xyz"
+	// (servido por el fake tenantSelfPath de más arriba), sin que este test haya tenido
+	// que orquestar nada aparte de escribir el .ownership.json legado inicial.
+	reconciledRaw, err := os.ReadFile(filepath.Join(nucleusRoot, ".ownership.json"))
+	if err != nil {
+		t.Fatalf("no pude leer .ownership.json reconciliado: %v", err)
+	}
+	var reconciled ownershipcontract.Document
+	if err := json.Unmarshal(reconciledRaw, &reconciled); err != nil {
+		t.Fatalf(".ownership.json reconciliado no es JSON válido: %v", err)
+	}
+	if reconciled.Binding.State != ownershipcontract.BindingStateBound {
+		t.Fatalf("binding state=%v, esperaba BOUND", reconciled.Binding.State)
+	}
+	if reconciled.Organization.CanonicalID == nil || *reconciled.Organization.CanonicalID != "org-id" {
+		t.Fatalf("canonical_id no reconciliado: %+v", reconciled.Organization)
+	}
+	if reconciled.Organization.TenantID == nil || *reconciled.Organization.TenantID != "tenant-xyz" {
+		t.Fatalf("tenant_id no reconciliado: %+v", reconciled.Organization)
 	}
 }
 
