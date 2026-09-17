@@ -1,6 +1,10 @@
 # BTIPS · GENES
 ## El ADN del Mandate — Especificación Conceptual v2.0
 
+> **Estado histórico:** este documento fue supersedido por
+> [`COGNITUUM_GENE_CONCEPT_v3_0.md`](COGNITUUM_GENE_CONCEPT_v3_0.md), fuente conceptual canónica vigente.
+> Se conserva sin reescritura como evidencia de la evolución del diseño.
+
 > *"Un gen es la memoria viva de lo que un mandate necesita para existir en el código."*
 
 ---

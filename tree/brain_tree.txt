@@ -1,6 +1,13 @@
 bloom-development-extension/
 └── brain/
-    ├── .venv/ [... virtual env]
+    ├── .pytest_cache/
+    │   ├── .gitignore
+    │   ├── CACHEDIR.TAG
+    │   ├── README.md
+    │   └── v/
+    │       └── cache/
+    │           ├── lastfailed
+    │           └── nodeids
     ├── ADDING_DEPENDENCIES.md
     ├── VERSION
     ├── __build__.py
@@ -37,6 +44,7 @@ bloom-development-extension/
     ├── build_number.windows.txt
     ├── cli/
     │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
     │   ├── base.py
     │   ├── categories.py
     │   ├── command_loader.py
@@ -44,10 +52,13 @@ bloom-development-extension/
     │   └── registry.py
     ├── commands/
     │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
     │   ├── ai/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── claude/
     │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
     │   │   │   ├── claude_keys_add.py
     │   │   │   ├── claude_keys_delete.py
     │   │   │   ├── claude_keys_list.py
@@ -55,6 +66,7 @@ bloom-development-extension/
     │   │   │   └── claude_keys_validate.py
     │   │   ├── gemini/
     │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
     │   │   │   ├── gemini_keys_add.py
     │   │   │   ├── gemini_keys_delete.py
     │   │   │   ├── gemini_keys_list.py
@@ -62,6 +74,7 @@ bloom-development-extension/
     │   │   │   └── gemini_keys_validate.py
     │   │   ├── openai/
     │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
     │   │   │   ├── openai_keys_add.py
     │   │   │   ├── openai_keys_delete.py
     │   │   │   ├── openai_keys_list.py
@@ -69,30 +82,37 @@ bloom-development-extension/
     │   │   │   └── openai_keys_validate.py
     │   │   └── xai/
     │   │       ├── __init__.py
+    │   │       ├── __pycache__/ [... cache]
     │   │       ├── xai_keys_add.py
     │   │       ├── xai_keys_delete.py
     │   │       ├── xai_keys_list.py
     │   │       ├── xai_keys_stats.py
     │   │       └── xai_keys_validate.py
     │   ├── bisp/
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── semantic_query.py
     │   │   └── vectorize.py
     │   ├── chrome/
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── chrome.py
     │   ├── context/
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── generate.py
     │   ├── extension/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── backups.py
     │   │   ├── install.py
     │   │   ├── update.py
     │   │   └── verify.py
     │   ├── filesystem/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── compress.py
     │   │   └── tree.py
     │   ├── github/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── auth.py
     │   │   ├── auth_login.py
     │   │   ├── auth_logout.py
@@ -104,6 +124,7 @@ bloom-development-extension/
     │   │   └── repos_list.py
     │   ├── health/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── dev_check.py
     │   │   ├── full_stack.py
     │   │   ├── native_ping.py
@@ -112,17 +133,22 @@ bloom-development-extension/
     │   ├── init.py
     │   ├── intent/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── add_turn.py
+    │   │   ├── advance_turn.py
     │   │   ├── build_payload.py
+    │   │   ├── commit_turn.py
     │   │   ├── create.py
     │   │   ├── delete.py
     │   │   ├── download.py
+    │   │   ├── effect_command_errors.py
     │   │   ├── finalize.py
     │   │   ├── freeze.py
     │   │   ├── get.py
     │   │   ├── hydrate.py
     │   │   ├── list.py
     │   │   ├── lock.py
+    │   │   ├── mark_effect_applied.py
     │   │   ├── merge.py
     │   │   ├── parse.py
     │   │   ├── plan.py
@@ -131,9 +157,11 @@ bloom-development-extension/
     │   │   ├── submit.py
     │   │   ├── unlock.py
     │   │   ├── update.py
-    │   │   └── validate.py
+    │   │   ├── validate.py
+    │   │   └── validate_contract.py
     │   ├── ionpump/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── auth.ion
     │   │   ├── ion.manifest.json
     │   │   ├── ionpump.py
@@ -143,9 +171,11 @@ bloom-development-extension/
     │   │   ├── ionpump_validate.py
     │   │   └── versions.json
     │   ├── logs/
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── logs.py
     │   ├── nucleus/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── create.py
     │   │   ├── create_exp_intent.py
     │   │   ├── delete.py
@@ -164,11 +194,13 @@ bloom-development-extension/
     │   │   └── sync.py
     │   ├── profile/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── accounts.py
     │   │   ├── profiles.py
     │   │   └── profiles_launches_command.py
     │   ├── project/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── add.py
     │   │   ├── clone_and_add.py
     │   │   ├── detect.py
@@ -176,16 +208,20 @@ bloom-development-extension/
     │   │   └── nucleus.py
     │   ├── runtime/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── run.py
     │   ├── server/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── server.py
     │   ├── synapse/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── synapse_host_cli.py
     │   │   └── synapse_host_init_cli.py
     │   ├── system/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── help_docs.py
     │   │   ├── info.py
     │   │   ├── info_flags.py
@@ -194,7 +230,9 @@ bloom-development-extension/
     │   │   └── version_flags.py
     │   └── twitter/
     │       ├── __init__.py
-    │       └── auth.py
+    │       ├── __pycache__/ [... cache]
+    │       ├── auth.py
+    │       └── publish.py
     ├── core/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
@@ -205,11 +243,13 @@ bloom-development-extension/
     │   ├── bloom_project_inspector.py
     │   ├── chrome/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── log_reader.py
     │   │   ├── mining_log_reader.py
     │   │   └── net_log_analyzer.py
     │   ├── context/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── detector.py
     │   │   ├── detector.py.backup
     │   │   ├── generate.py
@@ -239,6 +279,7 @@ bloom-development-extension/
     │   ├── download_manager.py
     │   ├── extension/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── manager.py
     │   ├── filesystem/
     │   │   ├── __init__.py
@@ -250,6 +291,7 @@ bloom-development-extension/
     │   │   └── tree_manager.py
     │   ├── git/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── executor.py
     │   │   └── repository.py
     │   ├── github/
@@ -259,15 +301,21 @@ bloom-development-extension/
     │   │   └── models.py
     │   ├── health/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── dev_environment_manager.py
     │   │   ├── full_stack_manager.py
     │   │   ├── native_host_manager.py
     │   │   ├── onboarding_status_manager.py
     │   │   └── websocket_status_manager.py
     │   ├── intent/
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── effect_ledger.py
+    │   │   ├── fs_contracts.py
     │   │   ├── merge_manager.py
     │   │   ├── recovery_manager.py
     │   │   ├── response_parser.py
+    │   │   ├── schema/
+    │   │   │   └── bsip_response_contrato_d_v0_1.json
     │   │   ├── staging_manager.py
     │   │   └── validation_manager.py
     │   ├── intent_manager.py
@@ -275,6 +323,7 @@ bloom-development-extension/
     │   ├── intent_types.py
     │   ├── ionpump/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── ionpump_executor.py
     │   │   ├── ionpump_ipc.py
     │   │   ├── ionpump_loader.py
@@ -289,9 +338,11 @@ bloom-development-extension/
     │   ├── nucleus_manager.py
     │   ├── profile/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── launch_history_reader.py
     │   │   ├── logic/
     │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
     │   │   │   ├── chrome_resolver.py
     │   │   │   ├── profile_store.py
     │   │   │   └── synapse_handler.py
@@ -303,52 +354,60 @@ bloom-development-extension/
     │   │   ├── session1_launcher.py
     │   │   └── web/
     │   │       ├── __init__.py
+    │   │       ├── __pycache__/ [... cache]
     │   │       ├── companion_generator.py
     │   │       ├── discovery_generator.py
-    │   │       ├── synapse_simulator_generator.py
     │   │       ├── landing_generator.py
+    │   │       ├── synapse_simulator_generator.py
     │   │       └── templates/
     │   │           ├── __init__.py
+    │   │           ├── __pycache__/ [... cache]
     │   │           ├── companion/
     │   │           │   ├── __init__.py
+    │   │           │   ├── __pycache__/ [... cache]
     │   │           │   ├── companion.js
     │   │           │   ├── companionProtocol.js
     │   │           │   ├── index.html
     │   │           │   └── styles.css
     │   │           ├── discovery/
     │   │           │   ├── __init__.py
+    │   │           │   ├── __pycache__/ [... cache]
     │   │           │   ├── discovery.js
     │   │           │   ├── discoveryProtocol.js
     │   │           │   ├── index.html
     │   │           │   ├── script.js
     │   │           │   └── styles.css
-    │   │           ├── synapse-simulator/
+    │   │           ├── landing/
     │   │           │   ├── __init__.py
-    │   │           │   ├── synapse-simulator.js
-    │   │           │   ├── synapseSimulatorProtocol.js
-    │   │           │   └── index.html
-    │   │           └── landing/
+    │   │           │   ├── __pycache__/ [... cache]
+    │   │           │   ├── data-loader.js
+    │   │           │   ├── index.html
+    │   │           │   ├── landing.js
+    │   │           │   ├── landingProtocol.js
+    │   │           │   ├── script.js
+    │   │           │   └── styles.css
+    │   │           └── synapse-simulator/
     │   │               ├── __init__.py
-    │   │               ├── data-loader.js
+    │   │               ├── __pycache__/ [... cache]
     │   │               ├── index.html
-    │   │               ├── landing.js
-    │   │               ├── landingProtocol.js
-    │   │               ├── script.js
-    │   │               └── styles.css
+    │   │               ├── synapse-simulator.js
+    │   │               └── synapseSimulatorProtocol.js
     │   ├── project/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── clone_manager.py
     │   │   ├── linker.py
     │   │   ├── models.py
     │   │   └── scanner.py
     │   ├── project_manager.py
     │   ├── server/
-    │   │   ├── __pycache__/ [... cache]
     │   │   ├── server_event_bus.py
     │   │   └── server_manager.py
     │   ├── synapse/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── handlers/
+    │   │   │   ├── __pycache__/ [... cache]
     │   │   │   └── api_key_handler.py
     │   │   ├── synapse_exceptions.py
     │   │   ├── synapse_host_init_manager.py
@@ -357,32 +416,42 @@ bloom-development-extension/
     │   │   └── synapse_protocol.py
     │   ├── system/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── help_docs_manager.py
     │   │   ├── info_manager.py
     │   │   └── metadata_manager.py
     │   └── twitter/
-    │       └── auth_manager.py
+    │       ├── auth_manager.py
+    │       └── tweet_publisher.py
     ├── entry.py
     ├── libs/ [... python vendored dependencies]
     ├── pyproject.toml
     ├── requirements.txt
-    └── shared/
-        ├── __init__.py
-        ├── __pycache__/ [... cache]
-        ├── context.py
-        ├── credentials/
-        │   ├── __init__.py
-        │   ├── __pycache__/ [... cache]
-        │   ├── base.py
-        │   ├── claude_manager.py
-        │   ├── gemini_manager.py
-        │   ├── github_manager.py
-        │   ├── openai_manager.py
-        │   ├── unified_manager.py
-        │   ├── vault.py
-        │   └── xai_manager.py
-        ├── environment.py
-        ├── github_types.py
-        ├── logger.py
-        ├── paths.py
-        └── runtime_resolver.py
+    ├── shared/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── context.py
+    │   ├── credentials/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── base.py
+    │   │   ├── claude_manager.py
+    │   │   ├── gemini_manager.py
+    │   │   ├── github_manager.py
+    │   │   ├── openai_manager.py
+    │   │   ├── unified_manager.py
+    │   │   ├── vault.py
+    │   │   └── xai_manager.py
+    │   ├── environment.py
+    │   ├── github_types.py
+    │   ├── logger.py
+    │   ├── paths.py
+    │   └── runtime_resolver.py
+    └── tests/
+        └── intent/
+            ├── __pycache__/ [... cache]
+            ├── test_cli_v2_suite.py
+            ├── test_effect_ledger.py
+            ├── test_effect_ledger_cli.py
+            ├── test_intent_state_transitions.py
+            └── test_validate_contract.py

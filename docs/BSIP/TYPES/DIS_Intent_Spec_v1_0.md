@@ -7,6 +7,13 @@
 `.pipeline/`), `BLOOM_BISP_Session_Decisions_v1_1.md` (Invariantes 1-5; mecanismo de `context_plan`/
 `index.json`, §5.1 y §5.2)
 
+> **Alineación normativa con Gene v3.0 (2026-09-17):** la fuente conceptual vigente es
+> `docs/GENES/COGNITUUM_GENE_CONCEPT_v3_0.md`. DIS puede leer Genes y Gene Revisions ratificadas, y puede
+> proponer reorganizaciones mediante Gene Contributions y decisiones Domain↔Gene. No modifica una Gene
+> Revision ratificada ni convierte similitud, clustering o un turno aprobado en estado material. La
+> ubicación física de la fuente canónica Nucleus-level permanece pendiente; `.cache/.semantic-index.json`
+> es una superficie transitoria, no la autoridad definitiva v3.0.
+
 ---
 
 ## Rationale: por qué existe `dis/` y por qué no es parte de `ing/`
@@ -276,6 +283,13 @@ Si `committed: false`, se abre `.turn_{X+1}/` con la propuesta ajustada — mism
 
 ## 5. Comportamiento de `.ratification/` (con turnos, `committed: false → true`)
 
+**Semántica v3.0:** el cierre ratifica las decisiones Domain y las Gene Contributions que correspondan.
+Las operaciones sobre Domains pueden actualizar la superficie transitoria de compatibilidad, pero un
+cambio funcional de Gene nunca muta una revisión ratificada: debe declarar `base_revision_id`,
+materializarse contra activos reales, verificarse y producir una Gene Revision nueva mediante commit
+canónico. Si la revisión base dejó de ser vigente, la Contribution queda en conflicto y no se aplica
+automáticamente. DIS tampoco decide identidad funcional únicamente por similitud.
+
 Al cerrar un turno de `.ratification/` con `committed: true`, Brain aplica sobre
 `.cache/.semantic-index.json` el mapa final tal como quedó escrito en el último turno de `.mapping/` — sin
 recalcular, sin revalidar, sin herencias. Por cada `operation` con `human_decision` en
@@ -346,6 +360,10 @@ formato propio de `dis/` que se aparte de este contrato.
 
 ### 7.1 `.genebase.json` (salida de `.discovery/`)
 
+> **Lectura v3.0:** `.genebase.json` es un snapshot derivado para discovery. Cada entrada debe poder
+> atribuirse a un Gene y una Gene Revision ratificada; no constituye una fuente canónica ni habilita la
+> mutación de esa revisión.
+
 ```json
 {
   "genes": [
@@ -364,7 +382,12 @@ formato propio de `dis/` que se aparte de este contrato.
 Sin campo `domain` — el linaje del Gene, tal como lo redefine `ING_Intent_Spec_v1_1.md §7.1`, nunca lo tuvo
 ni lo necesita.
 
-### 7.2 `.cache/.semantic-index.json` (única fuente de verdad de Domain↔Gene)
+### 7.2 `.cache/.semantic-index.json` (fuente operativa transitoria de Domain↔Gene)
+
+> **Enmienda v3.0:** el título y las reglas siguientes describen la autoridad transitoria del contrato
+> DIS v1.0. `.cache/.semantic-index.json` no es la fuente canónica definitiva; deberá convertirse en una
+> proyección reconstruible de identidades Domain/Gene y relaciones ratificadas a nivel Nucleus. Mientras
+> dure la transición, DIS conserva sus invariantes de IDs, N:M, ratificación y no-reuso.
 
 ```json
 {
@@ -386,7 +409,7 @@ ni lo necesita.
 - `domain_id` (clave del mapa): formato `dom_{slug}_{hex4}`, generado una vez, inmutable, nunca reutilizado
   aunque el Dominio deje de existir por merge o split (§7.3).
 - `name`: mutable. Renombrar un Dominio solo toca este campo, nunca la clave.
-- `genes[]`: única fuente de verdad de la relación N:M — un `gene_id` puede aparecer en el `genes[]` de más
+- `genes[]`: fuente operativa transitoria de la relación N:M — un `gene_id` puede aparecer en el `genes[]` de más
   de un `domain_id` simultáneamente (Gene cross-domain).
 - `origin_mandate_id`: obligatorio e inmutable. Identifica el Mandate donde se creó y ratificó la
   identidad; en merge/split es el Mandate ratificador. No se deriva de `first_created_by` ni de la

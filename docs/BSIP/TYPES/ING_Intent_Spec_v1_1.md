@@ -8,6 +8,14 @@
 de similitud 0.40 de la sección 2.6, PENDIENTE de calibración empírica), `DIS_Intent_Spec_v1_0.md`
 (intent que asume la propiedad de la topología de Dominios a partir de esta versión)
 
+> **Alineación normativa con Gene v3.0 (2026-09-17):** la fuente conceptual vigente es
+> `docs/GENES/COGNITUUM_GENE_CONCEPT_v3_0.md`. ING propone y ratifica **Gene Contributions**; una decisión
+> humana no presenta como materializada una revisión que todavía no existe. Después del merge se observan
+> activos y digests reales, se verifica su correspondencia con la decisión y sólo entonces un commit
+> canónico puede publicar una **Gene Revision** inmutable como `current`. Las referencias de este documento
+> a escritura directa de `gen.json`, deltas o estado vivo bajo el Mandate describen el contrato histórico
+> que deberá migrar en el encargo de persistencia; no fijan la fuente canónica física v3.0.
+
 ---
 
 ## Changelog v1.0 → v1.1
@@ -408,6 +416,18 @@ aislado con forma propia de fase.
 
 ### Efecto de `committed: true`
 
+**Semántica v3.0:** `committed: true` ratifica las Gene Contributions correspondientes a las entradas
+`approved` u `overridden`; no afirma todavía que exista una Gene Revision material. La identidad, función
+y relaciones pretendidas quedan autorizadas. La materialización post-merge observa los activos reales y
+sus digests; la verificación compara ese estado con la decisión ratificada; el commit canónico posterior
+publica una revisión inmutable como `current` mediante actualización atómica y protegida por la revisión
+base. Si `base_revision_id` dejó de coincidir con la revisión vigente, la Contribution queda en conflicto
+y no se aplica automáticamente.
+
+Los efectos de filesystem enumerados a continuación son la forma histórica v1.1. Hasta que se ratifique
+la persistencia física v3.0 deben leerse como obligaciones lógicas —crear o extender identidad, revisión y
+relación—, no como autorización para mantener el Gene canónico dentro del Mandate.
+
 Cuando el turno cierra con `committed: true`, Brain ejecuta, por cada entrada con
 `human_decision: "approved"` u `"overridden"`:
 
@@ -479,6 +499,11 @@ Mandate al cerrarse (Invariante 4 BISP).
 
 ### 7.1 `gen.json`
 
+> **Compatibilidad histórica:** este shape no es el schema físico definitivo de Gene v3.0. Sus campos
+> funcionales y de provenance siguen siendo evidencia útil, pero identidad estable, Gene Revisions
+> inmutables y Gene Contributions gobernadas pertenecen a la futura fuente canónica Nucleus-level. El
+> nombre y layout de esa fuente permanecen pendientes.
+
 ```json
 {
   "gene_id": "uuid",
@@ -521,6 +546,10 @@ delta producido por `ing/` se escribe con este formato. *(sin cambios respecto a
 
 ### 7.3 `.cache/.semantic-index.json`
 
+> **Compatibilidad transitoria v3.0:** este índice conserva en v1.1 la operación Domain↔Gene necesaria
+> para ING, pero ya no es la fuente canónica definitiva. El futuro contrato de persistencia deberá poder
+> reconstruirlo desde identidades, revisiones y relaciones ratificadas a nivel Nucleus.
+
 ```json
 {
   "updated_at": "ISO-8601",
@@ -557,7 +586,7 @@ delta producido por `ing/` se escribe con este formato. *(sin cambios respecto a
   válida — de hecho más válida ahora, porque `dis/` convierte el rename en una operación de rutina.
 - `name` es el único campo mutable — un rename (operación exclusiva de `dis/`) solo toca este campo, la
   clave del mapa no se mueve nunca.
-- `genes[]` es la única fuente de verdad de la relación N:M Domain↔Gene. Un `gene_id` puede aparecer en el
+- Durante la transición v1.1, `genes[]` es la única fuente operativa de la relación N:M Domain↔Gene. Un `gene_id` puede aparecer en el
   `genes[]` de más de un `domain_id` simultáneamente (Gene cross-domain) — situación que `ing/` nunca
   produce por sí mismo (siempre siembra una única arista), pero que `dis/` sí puede producir, y que
   `ing/.classification` debe tolerar sin error si la encuentra en una corrida posterior (simplemente

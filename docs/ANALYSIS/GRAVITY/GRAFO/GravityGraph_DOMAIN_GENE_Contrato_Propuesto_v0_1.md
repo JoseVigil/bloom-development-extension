@@ -5,6 +5,13 @@
 **Estado:** propuesta consolidada para ratificación; no implementada  
 **Naturaleza:** contrato técnico de coordinación, subordinado a las especificaciones normativas que deberán actualizarse
 
+> **Alineación normativa con Gene v3.0 (2026-09-17):** este contrato consume identidades, Gene Revisions
+> y relaciones previamente ratificadas por la fuente canónica rica a nivel Nucleus definida
+> conceptualmente en `docs/GENES/COGNITUUM_GENE_CONCEPT_v3_0.md`. GravityGraph produce una proyección
+> referencial gobernada y reconstruible. No es autoridad de la identidad funcional, revisión, scope,
+> activos, función, Contributions, linaje ni proyección semántica. El layout físico de la fuente canónica
+> y la forma definitiva de sus referencias siguen pendientes del encargo de persistencia.
+
 ## 1. Invariantes
 
 1. `DOMAIN` y `GENE` son nodos de primer orden del `GravityGraph`.
@@ -13,8 +20,11 @@
 4. Ninguno participa de `ResolveActive` ni de su spine cacheado.
 5. Solo existe una raíz: `NUCLEUS`.
 6. Todo `DOMAIN` pertenece a una instancia `.nucleus-{organization}` concreta.
-7. Todo `GENE` referencia un único `gen.json` canónico y conserva el Mandate que lo originó.
-8. `.semantic-index.json` es la única fuente de verdad de Domain↔Gene y Domain↔Mandate.
+7. Todo `GENE` referencia una identidad Gene canónica y la Gene Revision observada; conserva el Mandate
+   y el Intent de origen como provenance, no como ownership permanente.
+8. Las relaciones Domain↔Gene y Domain↔Mandate provienen de la fuente canónica ratificada. Durante la
+   transición, `.semantic-index.json` conserva su papel de compatibilidad, pero no es la autoridad física
+   definitiva de v3.0.
 9. Cualquier representación de esas relaciones dentro de Gravity es una proyección reconstruible.
 10. Nucleus sigue siendo el único escritor de `.gravity/`.
 11. La creación debe permanecer cerrada mientras no exista una operación gobernada específica.
@@ -45,6 +55,11 @@ type GeneRef struct {
     GenePath  string `json:"genePath"`
 }
 ```
+
+`GeneRef` representa el shape implementado en v0.1 y queda como compatibilidad transitoria. El contrato
+definitivo deberá identificar como mínimo el Gene, la Gene Revision observada, la referencia canónica y
+su digest, sin suponer que la identidad vive permanentemente bajo el Mandate de origen. Este documento no
+fija todavía ese schema físico.
 
 Las referencias deben ser relativas a la raíz de la instancia Nucleus y resolverse mediante rutas controladas. No deben aceptar rutas que escapen de esa raíz.
 
@@ -176,15 +191,22 @@ DOMAIN_MANDATE: {edgeType, domainId, mandateId, present}
 con el mismo hecho no cambia `materializedAt` ni `edgeVersion`; solo una mutación efectiva, protegida por
 CAS, incrementa la versión.
 
+En v3.0, `edgeVersion` y `nodeVersion` versionan la **proyección Gravity**. No son una Gene Revision ni
+una revisión de Domain. Cuando la futura relación canónica tenga identidad y versión propias, la arista
+debe conservar su referencia y fingerprint sin apropiarse de esa autoridad.
+
 No debe copiar nombres, centroides, funciones semánticas ni listas completas del índice.
 
 ## 6. Autoridad y resolución de conflictos
 
-Orden de autoridad:
+Orden de autoridad v3.0:
 
-1. `gen.json` para identidad y linaje del Gene.
-2. `.semantic-index.json` para existencia activa de Domains y relaciones Domain↔Gene/Domain↔Mandate.
+1. Fuente canónica Nucleus-level para identidad Gene, Gene Revisions y Contributions.
+2. Fuente canónica Nucleus-level para identidad Domain y relaciones ratificadas Domain↔Gene/Domain↔Mandate.
 3. `GravityGraph` para la representación gobernada y su historia estructural.
+
+Hasta que la persistencia v3.0 sea ratificada, `gen.json` y `.semantic-index.json` funcionan como seams
+transitorios de compatibilidad; no fijan el destino físico final.
 
 Si una arista Gravity contradice el índice:
 
@@ -205,6 +227,11 @@ Si una arista Gravity contradice el índice:
 | Merge de Domains | Superseder nodos fuente y sus relaciones; crear/confirmar destino |
 | Split de Domain | Superseder nodo fuente y sus relaciones; crear/confirmar destinos |
 | Retry sin cambio canónico | No producir duplicados ni incrementar versiones sin mutación efectiva |
+
+La creación o actualización del nodo `GENE` ocurre sólo después de `CANONICAL COMMIT`. Una identidad
+ratificada sin revisión material verificada todavía no puede presentarse como Gene Gravity Projection
+vigente. Un fallo de Gravity no revierte ni invalida el commit canónico; queda como divergencia pendiente
+de reconciliación desde la fuente.
 
 ## 8. Exclusión explícita de la resolución de posturas
 

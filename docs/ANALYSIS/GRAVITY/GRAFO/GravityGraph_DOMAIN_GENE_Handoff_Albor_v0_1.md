@@ -5,6 +5,12 @@
 **Estado:** consolidación arquitectónica para coordinación; no autoriza implementación  
 **Destinatario:** Albor / work Gravity
 
+> **Alineación normativa con Gene v3.0 (2026-09-17):** Gene es una identidad funcional durable dentro de
+> un Project. Gene Revisions son estados materiales inmutables y Gene Contributions atribuyen sus
+> transformaciones a Mandates e Intents. GravityGraph consume únicamente estado canónico ratificado y
+> produce una proyección referencial. El Mandate de origen permanece como provenance; no es propietario
+> permanente del Gene.
+
 ## 1. Mensaje ejecutivo
 
 Se identificó y confirmó un vacío estructural en el alcance vigente de Gravity: el cierre actual de Brain no describe ni gobierna por sí mismo los Genes ni la topología persistida en `.semantic-index.json`, mientras que ambas piezas participan directamente en cómo el sistema organiza, interpreta y opera sobre el conocimiento producido bajo un Mandate.
@@ -23,23 +29,31 @@ La investigación fue contrastada con el estado real de Brain, Nucleus, las espe
 
 ### 2.1 Fuente canónica de Genes
 
-El Gene conserva su linaje y contenido canónico en:
+El contrato histórico conservaba linaje y contenido en:
 
 ```text
 .mandates/{mandateId}/.genes/{geneId}/gen.json
 ```
 
-`gen.json` no contiene un Domain singular. Esa ausencia es deliberada: la relación Domain↔Gene es N:M y no puede representarse correctamente como una propiedad única del Gene.
+En v3.0 esa ruta queda como compatibilidad transitoria, no como fuente canónica física definitiva. La
+fuente rica debe vivir a nivel Nucleus y conservar identidad Gene, Gene Revisions inmutables, Gene
+Contributions y provenance. Su nombre y layout se decidirán en el encargo de persistencia.
+
+El Gene no contiene un Domain singular. Esa ausencia sigue siendo deliberada: la relación Domain↔Gene
+es N:M y no puede representarse correctamente como una propiedad única del Gene.
 
 ### 2.2 Fuente canónica de Domains y su topología
 
-La fuente de verdad de Domain↔Gene continúa siendo:
+La superficie transitoria de Domain↔Gene continúa siendo:
 
 ```text
 .cache/.semantic-index.json
 ```
 
-La especificación de `dis` confirma que ese índice contiene `domains`, sus `genes[]` y sus `mandates[]`, y que las operaciones de alta, baja, rename, merge y split se aplican sobre él.
+La especificación de `dis` confirma que ese índice contiene `domains`, sus `genes[]` y sus `mandates[]`,
+y que las operaciones de alta, baja, rename, merge y split se aplican sobre él. Gene v3.0 establece que
+`.cache/.semantic-index.json` no es la autoridad definitiva: deberá poder reconstruirse desde identidades
+y relaciones ratificadas a nivel Nucleus.
 
 ### 2.3 Alcance real de “Nucleus-wide”
 
@@ -87,10 +101,12 @@ esta enmienda.
 
 ### 3.2 `GENE`
 
-`GENE` es un nodo estructural de primer orden que representa un Gene materializado por un Mandate.
+`GENE` es un nodo estructural de primer orden que proyecta un Gene y la Gene Revision canónica observada.
 
-- Es hijo estructural de su `MANDATE` de origen.
-- Referencia su `gen.json` canónico.
+- Conserva su `MANDATE` de origen como procedencia estructural transitoria, no como ownership ni límite
+  de lifecycle.
+- La referencia implementada a `gen.json` queda como seam de compatibilidad hasta que se ratifique la
+  referencia canónica Gene + Revision + digest.
 - No replica su función semántica, archivos, embeddings ni historia.
 - No admite `gravityPostures[]` activas.
 - No entra en el spine de resolución de Gravity.
@@ -99,7 +115,11 @@ esta enmienda.
 
 Las relaciones Domain↔Gene y Domain↔Mandate no caben en `parentId`, porque son N:M y de contribución, no una jerarquía única.
 
-Si se materializan bajo `.gravity/.edges/`, deben tener estatus de **proyección gobernada, auditable y reconstruible**. La autoridad continúa siendo `.semantic-index.json`. Ante discrepancia, Nucleus debe rechazar el uso de la proyección o reconciliarla desde la fuente canónica; nunca declarar ganadora a la copia de Gravity.
+Si se materializan bajo `.gravity/.edges/`, deben tener estatus de **proyección gobernada, auditable y
+reconstruible**. Durante la transición, `.semantic-index.json` aporta los hechos operativos de esas
+relaciones; la autoridad definitiva v3.0 pertenecerá a la fuente canónica Nucleus-level. Ante discrepancia,
+Nucleus debe rechazar el uso de la proyección o reconciliarla desde la fuente canónica aplicable; nunca
+declarar ganadora a la copia de Gravity.
 
 ## 4. Qué no cambia
 
@@ -107,8 +127,10 @@ Si se materializan bajo `.gravity/.edges/`, deben tener estatus de **proyección
 - `DOMAIN` y `GENE` no alteran la precedencia jerárquica de las posturas.
 - `appliesTo[]` continúa filtrando por tipo de Intent, no por Domain o Gene.
 - `GravityPosture`, su gramática y el cálculo de Masa no cambian.
-- `gen.json` continúa siendo la fuente canónica del Gene.
-- `.semantic-index.json` continúa siendo la fuente canónica de la topología Domain↔Gene.
+- La fuente canónica Nucleus-level de Gene y sus revisiones permanece fuera de GravityGraph.
+- La fuente canónica Nucleus-level de relaciones Domain↔Gene permanece fuera de GravityGraph.
+- `gen.json` y `.semantic-index.json` se conservan como compatibilidad transitoria hasta el encargo de
+  persistencia v3.0.
 - No se habilita creación genérica de estos nodos por el hecho de documentarlos.
 - Este cierre no implementa ningún materializador ni cambia comportamiento productivo.
 
@@ -124,17 +146,24 @@ Cuando `dis` fusiona o divide Domains:
 - los Domains resultantes reciben nuevas identidades cuando así lo exige el contrato de `dis`;
 - la proyección se reconstruye a partir del estado canónico confirmado.
 
-Los estados semánticos o funcionales propios del Gene —por ejemplo `dormant`, `orphan` o `forked`— siguen perteneciendo a `gen.json`. Gravity registra vigencia estructural, no duplica la máquina de estados del Gene.
+Los estados semánticos o funcionales propios del Gene pertenecen a la fuente canónica rica, no a
+GravityGraph. Los estados históricos `dormant`, `orphan` o `forked` de `gen.json` deberán homologarse con
+el lifecycle v3.0 durante el encargo de persistencia; no se promueven automáticamente al nuevo contrato.
+Gravity registra vigencia estructural de su proyección y no duplica la máquina de estados del Gene.
 
 ## 6. Materialización futura
 
 La futura materialización debe respetar este orden:
 
-1. `ing` o `dis` confirma la escritura de los artefactos canónicos.
-2. Una operación gobernada de Nucleus crea o sincroniza los nodos y relaciones de Gravity.
-3. La operación es idempotente frente a retries.
-4. Una falla en Gravity no puede dejar que una proyección parcial se presente como verdad canónica.
-5. La reconciliación posterior siempre parte de `gen.json` y `.semantic-index.json`.
+1. La decisión humana ratifica identidad, función y relaciones pretendidas mediante Contributions.
+2. La materialización post-merge observa activos y digests reales.
+3. La verificación compara el estado material con la decisión ratificada.
+4. El commit canónico publica una Gene Revision inmutable y cambia `current_revision_id` de forma atómica.
+5. Sólo entonces una operación gobernada de Nucleus crea o sincroniza nodos y relaciones de Gravity.
+6. La operación es idempotente frente a retries.
+7. Una falla en Gravity no puede dejar que una proyección parcial se presente como verdad canónica.
+8. La reconciliación posterior siempre parte de la fuente canónica ratificada; durante la transición puede
+   resolver sus seams de compatibilidad.
 
 La ubicación del materializador —Brain, Activity de Nucleus u otro seam autorizado— queda pendiente de decisión. Este documento no la adjudica implícitamente.
 
