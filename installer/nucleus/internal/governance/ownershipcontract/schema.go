@@ -57,15 +57,18 @@ type Organization struct {
 	LegacyLocator *string `json:"legacy_locator"`
 	Slug          *string `json:"slug"`
 	DisplayName   *string `json:"display_name"`
-	// TenantID — Sovereign Tenant Fase 5
-	// (Propuesta_Arquitectura_Fase5_Nucleus_TenantReconciliacion_v0_1.md). Igual que
-	// CanonicalID: informativo cuando está presente, nunca requerido por Validate() ni
-	// por ValidateModeBinding() en ningún BindingState — Tenant no es un estado
-	// autoritativo (decisión ya tomada en la Propuesta original de Tenant, §5/§6.4). Si
-	// el endpoint S2S que lo resuelve (Fase 5 §2 Opción A) fallara o no estuviera
-	// desplegado todavía, la reconciliación de organización sigue funcionando
-	// exactamente igual, sin degradarse — por eso este campo no participa de ningún
-	// invariante de Binding.
+	// TenantID — Sovereign Tenant Fase 5, endurecido por decisión de Jose (2026-09-16,
+	// Propuesta_Secuenciacion_Endurecimiento_Validacion_TenantID_v0_1.md): Tenant pasa a
+	// ser un elemento de primera clase del modelo de identidad, igual que CanonicalID —
+	// Validate() lo exige, no vacío, para todo documento BOUND o REMOTE_LOCKED (ver más
+	// abajo). Depende de que el endpoint S2S que lo resuelve (Fase 5 §2 Opción A,
+	// GET /v1/authority/tenant/self) esté desplegado y de que cada instalación ya
+	// vinculada haya corrido un "nucleus authority sync" exitoso después de ese
+	// despliegue — sin ese orden, la reconciliación deja de poder persistir BOUND para
+	// cualquier instalación, no sólo para las legadas (ver
+	// Propuesta_Secuenciacion_Endurecimiento_Validacion_TenantID_v0_1.md). No hay
+	// excepción ni modo de gracia en Validate() para este campo — decisión explícita de
+	// Jose. ValidateModeBinding() no cambia: no examina campos de Organization.
 	TenantID *string `json:"tenant_id"`
 }
 
@@ -192,9 +195,10 @@ func Validate(document *Document) error {
 	}
 	if document.Binding.State == BindingStateBound || document.Binding.State == BindingStateRemoteLocked {
 		if document.Organization.CanonicalID == nil || *document.Organization.CanonicalID == "" ||
+			document.Organization.TenantID == nil || *document.Organization.TenantID == "" ||
 			document.Binding.IssuerID == nil || *document.Binding.IssuerID == "" ||
 			document.Binding.AcceptedAt == nil || document.TrustBinding == nil {
-			return errors.New("ownership: bound state requires canonical identity and trust binding")
+			return errors.New("ownership: bound state requires canonical identity, tenant and trust binding")
 		}
 		t := document.TrustBinding
 		if t.IssuerID != *document.Binding.IssuerID ||

@@ -93,8 +93,24 @@ func shadowDecisionRequest(operation GovernedOperation, nodeID string, parentID 
 		return request
 	}
 	request.PrincipalID = view.Owner.Subject
-	if parentID != nil {
-		request.Scope = authority.Scope{Type: "organization", ID: *parentID}
+	// Scope.ID viene del Organization.CanonicalID reconciliado (Sovereign Tenant Fase 5,
+	// ReconcileCanonicalOrganization en internal/governance/ownership_reconciliation.go) —
+	// el mismo id que DecisionEvaluator.Evaluate compara contra state.Binding.OrganizationID
+	// (internal/authority/decision.go). El valor de Scope.ID ya no sale de parentID (org_<timestamp>
+	// local, que nunca coincide con state.Binding.OrganizationID — ver
+	// Propuesta_Diseno_Correccion_ScopeID_CreateProject_InstallShadow_v0_1.md, decisión de José
+	// 2026-09-17), pero el chequeo `parentID != nil` se mantiene a propósito: sigue siendo la señal
+	// de si esta operación tiene noción de padre/scope en absoluto. create_organization pasa
+	// parentID=nil siempre, por diseño (authorizeGravityNodeCreationLocal rechaza cualquier padre
+	// para esa operación — ver Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md
+	// §1), y debe seguir sin Scope aunque CanonicalID ya esté reconciliado: mapearla implicaría un
+	// scope_outside_binding evaluable para una operación que authorizeGravityNodeCreationLocal nunca
+	// deja pasar con padre, lo cual sería señal falsa, no real. Sin CanonicalID reconciliado (create_project
+	// en una instalación que nunca corrió "nucleus authority sync"), Scope también queda vacío:
+	// Evaluate() lo reporta como scope_invalid, honesto, en vez de un scope_outside_binding falso.
+	if parentID != nil && analysis.Canonical != nil && analysis.Canonical.Organization.CanonicalID != nil &&
+		*analysis.Canonical.Organization.CanonicalID != "" {
+		request.Scope = authority.Scope{Type: "organization", ID: *analysis.Canonical.Organization.CanonicalID}
 	}
 	return request
 }

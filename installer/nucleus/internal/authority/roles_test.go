@@ -73,16 +73,18 @@ func TestCustomRolesRejectReservedIDsAndWildcards(t *testing.T) {
 	}
 }
 
-// TestCreateOrganizationDeliberatelyUnmapped is defensive: create_organization is intentionally absent
-// from PermissionsV1 and from BuiltinRoles[RoleMaster] (see the NOTA comment in roles.go and
-// Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §3 Q1). If a future change adds it back
-// without revisiting that decision, this test should fail instead of passing silently.
+// TestCreateOrganizationDeliberatelyUnmapped is defensive: create_organization is permanently absent from
+// PermissionsV1 and from BuiltinRoles[RoleMaster] — not a temporary gap. See the NOTA comment in roles.go
+// and Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md for the three independent
+// reasons (identity reconciliation insufficient by itself, temporal ordering, structurally empty Scope). If
+// a future change adds it back without reading that investigation first, this test should fail instead of
+// passing silently.
 func TestCreateOrganizationDeliberatelyUnmapped(t *testing.T) {
 	if _, ok := PermissionsV1["create_organization"]; ok {
-		t.Fatal("create_organization must not be in PermissionsV1 — see Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §3 Q1 before adding it")
+		t.Fatal("create_organization must not be in PermissionsV1 — see Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md before adding it")
 	}
 	if HasBuiltinPermission(RoleMaster, "create_organization") {
-		t.Fatal("create_organization must not be granted to master — see Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §3 Q1 before adding it")
+		t.Fatal("create_organization must not be granted to master — see Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md before adding it")
 	}
 }
 

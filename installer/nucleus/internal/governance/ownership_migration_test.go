@@ -103,7 +103,13 @@ func TestOwnershipModeBindingMatrixAndNoLegacyAfterCutover(t *testing.T) {
 	now := testTime()
 	canonical := "org"
 	issuer := "issuer"
-	o := &CanonicalOwnership{Schema: OwnershipSchema, SchemaVersion: OwnershipSchemaVersion, AuthorityMode: AuthorityRemoteEnforced, Organization: OwnershipOrganization{CanonicalID: &canonical}, Installation: OwnershipInstallation{InstallationID: "installation"}, Binding: OwnershipBinding{State: BindingRemoteLocked, IssuerID: &issuer, AcceptedAt: &now, RemoteLockedAt: &now}, TrustBinding: &TrustBinding{IssuerID: issuer, TrustAnchorID: "root", TrustAnchorFingerprintSHA256: "digest", BoundOrganizationID: canonical, BoundInstallationID: "installation", AcceptedAt: now}, CreatedAt: now, UpdatedAt: now}
+	// Sovereign Tenant Fase 5 endurecido: Validate() exige TenantID no vacío para
+	// todo documento BOUND/REMOTE_LOCKED (Encargo_Implementacion_Endurecimiento_
+	// Validacion_TenantID_v1_0.md) — sin este campo, ValidateCanonicalOwnership
+	// rechaza este documento REMOTE_LOCKED antes de llegar a lo que el test
+	// realmente ejercita (el corte de legacy authority en remote_enforced).
+	tenant := "tenant-test"
+	o := &CanonicalOwnership{Schema: OwnershipSchema, SchemaVersion: OwnershipSchemaVersion, AuthorityMode: AuthorityRemoteEnforced, Organization: OwnershipOrganization{CanonicalID: &canonical, TenantID: &tenant}, Installation: OwnershipInstallation{InstallationID: "installation"}, Binding: OwnershipBinding{State: BindingRemoteLocked, IssuerID: &issuer, AcceptedAt: &now, RemoteLockedAt: &now}, TrustBinding: &TrustBinding{IssuerID: issuer, TrustAnchorID: "root", TrustAnchorFingerprintSHA256: "digest", BoundOrganizationID: canonical, BoundInstallationID: "installation", AcceptedAt: now}, CreatedAt: now, UpdatedAt: now}
 	if err := ValidateCanonicalOwnership(o); err != nil {
 		t.Fatal(err)
 	}

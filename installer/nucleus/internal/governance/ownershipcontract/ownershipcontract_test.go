@@ -43,6 +43,11 @@ func TestNormalizeAndEffectiveLegacyView(t *testing.T) {
 	doc.LegacyAuthority = nil
 	canonicalID, issuer := "org-canonical", "issuer"
 	doc.Organization.CanonicalID = &canonicalID
+	// Sovereign Tenant Fase 5 endurecido: Validate() exige TenantID no vacío para
+	// todo documento BOUND/REMOTE_LOCKED — sin esto, este doc REMOTE_LOCKED sería
+	// rechazado antes de llegar al corte de legacy authority que el test ejercita.
+	tenantID := "tenant-test"
+	doc.Organization.TenantID = &tenantID
 	doc.Binding.IssuerID = &issuer
 	doc.Binding.AcceptedAt = &now
 	doc.Binding.RemoteLockedAt = &now
@@ -52,13 +57,14 @@ func TestNormalizeAndEffectiveLegacyView(t *testing.T) {
 	}
 }
 
-// Sovereign Tenant Fase 5 — TenantID es puramente aditivo: un documento BOUND
-// válido sigue siendo válido con TenantID == nil (endpoint de tenant caído o
-// nunca disponible) y con TenantID poblado (sync exitoso). Ninguno de los dos
-// casos debe cambiar el resultado de Validate() frente al comportamiento ya
-// probado en TestOwnershipModeBindingMatrixAndNoLegacyAfterCutover (paquete
-// governance) para el resto de los campos.
-func TestValidateAcceptsBoundDocumentWithAndWithoutTenantID(t *testing.T) {
+// Sovereign Tenant Fase 5 — endurecido por decisión de Jose (2026-09-16,
+// Propuesta_Secuenciacion_Endurecimiento_Validacion_TenantID_v0_1.md,
+// Encargo_Implementacion_Endurecimiento_Validacion_TenantID_v1_0.md): TenantID
+// deja de ser puramente aditivo. Un documento BOUND o REMOTE_LOCKED sin
+// TenantID (nil o cadena vacía) ahora es rechazado por Validate() — sin
+// excepción ni modo de gracia. Sólo un TenantID válido y no vacío permite que
+// el documento sea aceptado.
+func TestValidateRequiresTenantIDForBoundDocument(t *testing.T) {
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	canonicalID, issuer := "org-canonical", "issuer"
 	build := func(tenantID *string) *Document {
@@ -75,12 +81,16 @@ func TestValidateAcceptsBoundDocumentWithAndWithoutTenantID(t *testing.T) {
 			UpdatedAt:       now,
 		}
 	}
-	if err := Validate(build(nil)); err != nil {
-		t.Fatalf("BOUND without TenantID rejected: %v", err)
+	if err := Validate(build(nil)); err == nil {
+		t.Fatal("BOUND without TenantID accepted")
+	}
+	empty := ""
+	if err := Validate(build(&empty)); err == nil {
+		t.Fatal("BOUND with empty TenantID accepted")
 	}
 	tenantID := "tenant-1"
 	if err := Validate(build(&tenantID)); err != nil {
-		t.Fatalf("BOUND with TenantID rejected: %v", err)
+		t.Fatalf("BOUND with valid TenantID rejected: %v", err)
 	}
 }
 

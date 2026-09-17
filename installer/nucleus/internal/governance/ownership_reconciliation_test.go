@@ -89,6 +89,35 @@ func TestReconcileCanonicalOrganizationBindsFromLegacyAndIsIdempotent(t *testing
 	}
 }
 
+// Sovereign Tenant Fase 5 — Validate() endurecido (Encargo_Implementacion_
+// Endurecimiento_Validacion_TenantID_v1_0.md, decisión de Jose 2026-09-16): el
+// primer bind de una instalación legada sin tenantID (endpoint de tenant aún
+// no desplegado, o sync corrido antes de que exista) debe fallar — no puede
+// persistir un documento BOUND sin tenant, sin excepción ni modo de gracia. El
+// documento debe quedar en su estado previo (UNBOUND, el que
+// migrateOwnershipLocked ya había persistido antes de intentar la
+// reconciliación), nunca en BOUND.
+func TestReconcileCanonicalOrganizationFailsFirstBindWithoutTenant(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".ownership.json")
+	raw := []byte(`{"org_id":"org_legacy_local","owner_id":"jose","created_at":"2026-09-04T10:00:00Z","team_members":[]}`)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	nucleusRoot := filepath.Dir(path)
+	acceptedAt := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+
+	if err := ReconcileCanonicalOrganization(nucleusRoot, "org-real", "installation-1", "issuer-1", "root-key", "root-fingerprint", nil, acceptedAt); err == nil {
+		t.Fatal("primer bind sin tenantID aceptado")
+	}
+	document, err := LoadCanonicalOwnership(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Binding.State == ownershipcontract.BindingStateBound {
+		t.Fatalf("binding state=%v tras fallo, no debería quedar BOUND sin tenant", document.Binding.State)
+	}
+}
+
 func TestReconcileCanonicalOrganizationNeverOverwritesSilentlyOnOrganizationChange(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".ownership.json")
 	raw := []byte(`{"org_id":"org_legacy_local","owner_id":"jose","created_at":"2026-09-04T10:00:00Z","team_members":[]}`)

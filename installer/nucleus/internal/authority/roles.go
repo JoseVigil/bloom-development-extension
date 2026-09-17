@@ -13,12 +13,26 @@ const (
 	PermissionAgentIssuerDesignate = "agent.issuer.designate"
 )
 
-// NOTA — decisión de José, 2026-09-15 (Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md
-// §3 Q1): "create_organization" NO está en PermissionsV1 a propósito, no por omisión. Evaluate() deniega
-// scope.Type == "organization" cuya Scope.ID no coincide con el binding ya vinculado — estructuralmente
-// incompatible con la operación que crea esa organización. create_organization es además un evento único
-// de bootstrap por instalación, no recurrente como create_project. Antes de agregarla, releer esa decisión
-// — no es un gap accidental.
+// NOTA — límite permanente de diseño, confirmado 2026-09-17
+// (Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md, revisado con la reconciliación
+// de identidad de Sovereign Tenant Fase 5 ya construida): "create_organization" NO está en PermissionsV1, y
+// esto no es un pendiente. Tres motivos independientes, cualquiera de los tres ya alcanza para excluirla:
+//  1. Identidad: Organization.CanonicalID ya se reconcilia de verdad (ver
+//     internal/governance/ownership_reconciliation.go), pero esa reconciliación corre dentro de
+//     "nucleus authority sync", que exige una organización YA vinculada — no resuelve nada para la
+//     organización que todavía no existe.
+//  2. Orden temporal: Evaluate() exige un state.json ya aceptado, atado a un Binding.OrganizationID
+//     conocido; ese state.json sólo existe después de que la organización ya se creó en el Backend (misma
+//     transacción que la identidad humana, finishGenesis). No hay momento evaluable entre "la organización
+//     no existe" y "ya se creó".
+//  3. Scope estructuralmente vacío: authorizeGravityNodeCreationLocal rechaza cualquier parentID para
+//     create_organization (governance/decision/decision.go), así que shadowDecisionRequest
+//     (governance/decision/shadow_activation.go) nunca arma un Scope — Evaluate() la rechazaría siempre con
+//     scope_invalid, sin comparar organización alguna. Mapearla hoy sería un permiso permanentemente
+//     inerte, no un mapeo parcial.
+//
+// Antes de agregarla, releer Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md — no
+// es un gap accidental ni algo que la reconciliación de identidad por sí sola pueda destrabar.
 var PermissionsV1 = map[string]struct{}{
 	"authority.membership.manage": {}, "authority.role_definition.manage": {}, "authority.assignment.manage": {},
 	"authority.binding.approve": {}, "authority.cutover.approve": {},
