@@ -34,6 +34,26 @@ func executeAuthority(t *testing.T, jsonMode bool, name string, service Authorit
 	return out.String(), err
 }
 
+func TestResolveCutoverPrincipalRequiresExactlyOneVerifiedLegacyIdentity(t *testing.T) {
+	at := time.Date(2026, 9, 18, 1, 0, 0, 0, time.UTC)
+	principal := func(id, subject string) authority.Principal {
+		return authority.Principal{PrincipalID: id, Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Subject: subject, Status: "verified", VerifiedAt: at.Add(-time.Hour)}}}
+	}
+	state := &authority.DurableState{Projection: authority.FullContent{Principals: []authority.Principal{principal("p1", "legacy")}, Memberships: []authority.Membership{{MembershipID: "m1", PrincipalID: "p1", OrganizationID: "org", Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)}}, RoleAssignments: []authority.RoleAssignment{{AssignmentID: "a1", MembershipID: "m1", RoleID: "master", RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org"}, Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)}}, RoleDefinitions: []authority.RoleDefinition{{RoleID: "master", RoleVersion: "1", RoleOrigin: "builtin", Status: "active", Permissions: authority.BuiltinRoles[authority.RoleMaster]}}}}
+	if got, err := resolveCutoverPrincipal(state, "legacy", "org", at); err != nil || got != "p1" {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+	if _, err := resolveCutoverPrincipal(state, "", "org", at); err == nil {
+		t.Fatal("empty legacy subject accepted")
+	}
+	state.Projection.Principals = append(state.Projection.Principals, principal("p2", "legacy"))
+	state.Projection.Memberships = append(state.Projection.Memberships, authority.Membership{MembershipID: "m2", PrincipalID: "p2", OrganizationID: "org", Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)})
+	state.Projection.RoleAssignments = append(state.Projection.RoleAssignments, authority.RoleAssignment{AssignmentID: "a2", MembershipID: "m2", RoleID: "master", RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org"}, Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)})
+	if _, err := resolveCutoverPrincipal(state, "legacy", "org", at); err == nil {
+		t.Fatal("ambiguous legacy identity accepted")
+	}
+}
+
 func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testing.T) {
 	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	rootPublic, rootPrivate, _ := ed25519.GenerateKey(rand.Reader)
@@ -56,7 +76,8 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		t.Fatal(err)
 	}
 
-	registrationCount, mandateMode := 0, "pending"
+	registrationCount, projectClaimCount, mandateMode := 0, 0, "pending"
+	projectID := "11111111-1111-4111-8111-111111111111"
 	var installationID string
 	var server *httptest.Server
 	signEnvelope := func(payload any, domain, keyID string, private ed25519.PrivateKey) []byte {
@@ -87,7 +108,7 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		case "/v1/authority/sync/challenge":
 			_ = json.NewEncoder(w).Encode(map[string]any{"challenge": "challenge", "organization_id": "org-id", "installation_id": installationID, "issued_at": now, "expires_at": now.Add(time.Minute)})
 		case "/v1/authority/sync/pull":
-			content := authority.FullContent{Principals: []authority.Principal{}, Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{}}
+			content := authority.FullContent{Principals: []authority.Principal{{PrincipalID: "principal-jose", PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Provider: "github", Subject: "jose", Status: "verified", VerifiedAt: now.Add(-time.Hour)}}}}, Memberships: []authority.Membership{{MembershipID: "membership-jose", PrincipalID: "principal-jose", OrganizationID: "org-id", Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}}, RoleDefinitions: []authority.RoleDefinition{{RoleID: authority.RoleMaster, RoleVersion: "1", RoleOrigin: "builtin", DisplayName: "Master", Status: "active", Permissions: authority.BuiltinRoles[authority.RoleMaster]}}, RoleAssignments: []authority.RoleAssignment{{AssignmentID: "assignment-jose", MembershipID: "membership-jose", RoleID: authority.RoleMaster, RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org-id"}, Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}}, Revocations: []authority.Revocation{}}
 			contentRaw, _ := json.Marshal(content)
 			p := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", Kind: "full", SnapshotID: "snapshot", Issuer: "issuer", OrganizationID: "org-id", AuthorityVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), Audience: authority.Audience{OrganizationID: "org-id", InstallationIDs: []string{installationID}}, Content: contentRaw}
 			snapshot := signEnvelope(p, "BLOOM-AUTHORITY-SNAPSHOT-v1", "issuer-key", issuerPrivate)
@@ -127,10 +148,28 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"tenantId": "tenant-xyz"})
+		case "/v1/authority/projects/" + projectID + "/claim":
+			if r.Method != http.MethodPut || r.URL.Query().Get("org") != "org-id" || r.Header.Get("X-Bloom-Signature") == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			projectClaimCount++
+			status := authority.ProjectAlreadyClaimed
+			if projectClaimCount == 1 {
+				status = authority.ProjectClaimed
+				w.WriteHeader(http.StatusCreated)
+			}
+			_ = json.NewEncoder(w).Encode(authority.ProjectClaim{Status: status, OrganizationID: "org-id", TenantID: "tenant-xyz", ProjectID: projectID, Revision: "1", SourceRef: "installation:" + installationID, EvidenceKind: "canonical", ClaimedAt: now.Add(-time.Minute)})
+		case "/v1/authority/projects/" + projectID + "/binding":
+			if r.Method != http.MethodGet || r.URL.Query().Get("org") != "org-id" || r.Header.Get("X-Bloom-Signature") == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(authority.ProjectBinding{Status: "bound", OrganizationID: "org-id", TenantID: "tenant-xyz", ProjectID: projectID, Revision: "1", SourceRef: "installation:" + installationID, EvidenceKind: "canonical", ClaimedAt: now.Add(-time.Minute), CheckedAt: now, ValidUntil: now.Add(time.Hour)})
 		}
 	}))
 	defer server.Close()
-	config := map[string]any{"authority_base_url": server.URL, "onboarding": map[string]any{"active_org_slug": "acme", "organizations": []map[string]string{{"org_slug": "acme", "organization_id": "org-id", "workspace_path": workspace}}}}
+	config := map[string]any{"authority_base_url": server.URL, "onboarding": map[string]any{"active_org_slug": "acme", "organizations": []map[string]any{{"org_slug": "acme", "organization_id": "org-id", "workspace_path": workspace, "projects": []map[string]string{{"project_id": projectID, "name": "Canonical project"}}}}}}
 	if err := os.MkdirAll(filepath.Join(appData, "config"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -177,6 +216,13 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	if registrationCount != 4 {
 		t.Fatalf("registration count=%d", registrationCount)
 	}
+	if projectClaimCount != 4 {
+		t.Fatalf("project claim count=%d", projectClaimCount)
+	}
+	receipts, err := (&authority.ProjectBindingStore{Path: filepath.Join(appData, "authority", "project-bindings.json")}).Load()
+	if err != nil || len(receipts) != 1 || receipts[0].ProjectID != projectID {
+		t.Fatalf("canonical project receipt missing: %+v err=%v", receipts, err)
+	}
 
 	// Sovereign Tenant Fase 5 — el mismo sync que ya se probó arriba (4 corridas, una
 	// por cada mandateMode) debe haber dejado .ownership.json migrado y reconciliado:
@@ -191,8 +237,8 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	if err := json.Unmarshal(reconciledRaw, &reconciled); err != nil {
 		t.Fatalf(".ownership.json reconciliado no es JSON válido: %v", err)
 	}
-	if reconciled.Binding.State != ownershipcontract.BindingStateBound {
-		t.Fatalf("binding state=%v, esperaba BOUND", reconciled.Binding.State)
+	if reconciled.Binding.State != ownershipcontract.BindingStateRemoteLocked {
+		t.Fatalf("binding state=%v, esperaba REMOTE_LOCKED", reconciled.Binding.State)
 	}
 	if reconciled.Organization.CanonicalID == nil || *reconciled.Organization.CanonicalID != "org-id" {
 		t.Fatalf("canonical_id no reconciliado: %+v", reconciled.Organization)

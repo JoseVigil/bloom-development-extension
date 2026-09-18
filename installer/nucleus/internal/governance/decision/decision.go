@@ -1,6 +1,7 @@
 package decision
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"nucleus/internal/authority"
@@ -16,6 +17,7 @@ type AuthorityMode string
 
 const ModeLocalLegacy AuthorityMode = "local_legacy"
 const ModeShadowRemote AuthorityMode = "shadow_remote"
+const ModeRemoteEnforced AuthorityMode = "remote_enforced"
 
 type GovernedOperation string
 
@@ -27,6 +29,22 @@ const (
 type DecisionBasis string
 
 const BasisLocalLegacy DecisionBasis = "local_legacy"
+const BasisRemoteAuthority DecisionBasis = "remote_authority"
+
+const projectBindingClockSkew = time.Minute
+
+var (
+	ErrProjectBindingRequired     = errors.New("project_binding_required")
+	ErrProjectBindingUnavailable  = errors.New("project_binding_unavailable")
+	ErrProjectBindingExpired      = errors.New("project_binding_expired")
+	ErrProjectBindingRevoked      = errors.New("project_binding_revoked")
+	ErrProjectBindingConflict     = errors.New("project_binding_conflict")
+	ErrRemoteAuthorityUnavailable = errors.New("remote_authority_unavailable")
+	ErrRemoteStateExpired         = errors.New("remote_state_expired")
+	ErrRemotePermissionDenied     = errors.New("remote_permission_denied")
+	ErrRemoteIdentityAmbiguous    = errors.New("remote_identity_ambiguous")
+	ErrAuthorityModeInvalid       = errors.New("authority_mode_invalid")
+)
 
 // GovernedCreationDecision is sealed: its zero value is invalid, and only
 // this package can populate its fields after local-legacy verification.
@@ -63,19 +81,47 @@ func (d GovernedCreationDecision) ParentObservedVersion() *uint64 {
 }
 
 func EffectiveAuthorityMode() (AuthorityMode, error) {
-	return ModeLocalLegacy, nil
+	nucleusRoot, err := core.ResolveNucleusRoot("")
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrAuthorityModeInvalid, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(nucleusRoot, ".ownership.json"))
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrAuthorityModeInvalid, err)
+	}
+	analysis, err := ownershipcontract.Analyze(raw)
+	if err != nil {
+		return "", fmt.Errorf("%w: validate ownership: %v", ErrAuthorityModeInvalid, err)
+	}
+	if analysis.Canonical == nil {
+		if analysis.Source != ownershipcontract.SourceCanonical && analysis.LegacyFacts != nil {
+			return ModeLocalLegacy, nil
+		}
+		return "", ErrAuthorityModeInvalid
+	}
+	switch analysis.Canonical.AuthorityMode {
+	case ownershipcontract.AuthorityModeLocalLegacy:
+		return ModeLocalLegacy, nil
+	case ownershipcontract.AuthorityModeShadowRemote:
+		return ModeShadowRemote, nil
+	case ownershipcontract.AuthorityModeRemoteEnforced:
+		return ModeRemoteEnforced, nil
+	default:
+		return "", ErrAuthorityModeInvalid
+	}
 }
 
 type RemoteEvaluator interface {
 	Evaluate(authority.DecisionRequest) authority.AuthorityDecision
 }
 type ShadowConfiguration struct {
-	Evaluator   RemoteEvaluator
-	Request     func(GovernedOperation, string, *string, *uint64) authority.DecisionRequest
-	Sink        authority.ShadowSink
-	Now         func() time.Time
-	CommittedAt func(authority.AuthorityDecision) time.Time
-	Connected   bool
+	Evaluator      RemoteEvaluator
+	Request        func(GovernedOperation, string, *string, *uint64) authority.DecisionRequest
+	Sink           authority.ShadowSink
+	Now            func() time.Time
+	CommittedAt    func(authority.AuthorityDecision) time.Time
+	Connected      bool
+	ProjectBinding func(context.Context, string) (authority.ProjectBinding, error)
 }
 
 var shadowState struct {
@@ -103,6 +149,86 @@ func currentShadow() *ShadowConfiguration {
 }
 
 func AuthorizeGravityNodeCreation(operation GovernedOperation, nodeID string, parentID *string, parentObservedVersion *uint64) (GovernedCreationDecision, error) {
+	mode, modeErr := EffectiveAuthorityMode()
+	if modeErr != nil {
+		return GovernedCreationDecision{}, modeErr
+	}
+	if mode == ModeRemoteEnforced {
+		if operation != OpCreateProject {
+			return GovernedCreationDecision{}, fmt.Errorf("%w: operation_permission_unmapped", ErrRemotePermissionDenied)
+		}
+		configuration := currentShadow()
+		if configuration == nil || !configuration.Connected || configuration.Evaluator == nil || configuration.Request == nil {
+			return GovernedCreationDecision{}, ErrRemoteAuthorityUnavailable
+		}
+		root, err := core.ResolveNucleusRoot("")
+		if err != nil {
+			return GovernedCreationDecision{}, fmt.Errorf("%w: %v", ErrAuthorityModeInvalid, err)
+		}
+		raw, err := os.ReadFile(filepath.Join(root, ".ownership.json"))
+		if err != nil {
+			return GovernedCreationDecision{}, fmt.Errorf("%w: %v", ErrAuthorityModeInvalid, err)
+		}
+		analysis, err := ownershipcontract.Analyze(raw)
+		if err != nil || analysis.Canonical == nil || analysis.Canonical.AuthorityMode != ownershipcontract.AuthorityModeRemoteEnforced || analysis.Canonical.Binding.State != ownershipcontract.BindingStateRemoteLocked || analysis.Canonical.Organization.CanonicalID == nil || analysis.Canonical.Organization.TenantID == nil || analysis.Canonical.TrustBinding == nil {
+			return GovernedCreationDecision{}, ErrAuthorityModeInvalid
+		}
+		ownership := analysis.Canonical
+		if ownership.Binding.IssuerID == nil || *ownership.Binding.IssuerID != ownership.TrustBinding.IssuerID || ownership.TrustBinding.BoundOrganizationID != *ownership.Organization.CanonicalID || ownership.TrustBinding.BoundInstallationID != ownership.Installation.InstallationID {
+			return GovernedCreationDecision{}, ErrAuthorityModeInvalid
+		}
+		now := time.Now().UTC()
+		if configuration.Now != nil {
+			now = configuration.Now().UTC()
+		}
+		request := configuration.Request(operation, nodeID, parentID, parentObservedVersion)
+		request.At = now
+		preflight := request
+		preflight.PrincipalID = ""
+		stateCheck := configuration.Evaluator.Evaluate(preflight)
+		if stateCheck.Reason == "state_expired" {
+			return GovernedCreationDecision{}, ErrRemoteStateExpired
+		}
+		if stateCheck.Reason == "state_unavailable" || stateCheck.Reason == "state_not_yet_valid" {
+			return GovernedCreationDecision{}, ErrRemoteAuthorityUnavailable
+		}
+		if configuration.ProjectBinding == nil {
+			return GovernedCreationDecision{}, ErrProjectBindingUnavailable
+		}
+		binding, bindErr := configuration.ProjectBinding(context.Background(), nodeID)
+		if bindErr != nil {
+			return GovernedCreationDecision{}, classifyBindingError(bindErr)
+		}
+		validationNow := time.Now().UTC()
+		if configuration.Now != nil {
+			validationNow = configuration.Now().UTC()
+		}
+		if binding.Status != "bound" || binding.OrganizationID != *analysis.Canonical.Organization.CanonicalID || binding.TenantID != *analysis.Canonical.Organization.TenantID || binding.ProjectID != nodeID || binding.EvidenceKind != "canonical" || binding.Revision != "1" || !validInstallationSource(binding.SourceRef) || binding.ClaimedAt.IsZero() || binding.CheckedAt.IsZero() || binding.ClaimedAt.After(binding.CheckedAt) || binding.CheckedAt.After(validationNow.Add(projectBindingClockSkew)) {
+			return GovernedCreationDecision{}, ErrProjectBindingConflict
+		}
+		if binding.ValidUntil.IsZero() || !validationNow.Before(binding.ValidUntil) {
+			return GovernedCreationDecision{}, ErrProjectBindingExpired
+		}
+		request.At = validationNow
+		remote := configuration.Evaluator.Evaluate(request)
+		if remote.Reason == "state_expired" {
+			return GovernedCreationDecision{}, ErrRemoteStateExpired
+		}
+		if remote.Outcome != authority.DecisionAllow || remote.Reason != "permission_granted" {
+			if remote.Reason == "state_unavailable" {
+				return GovernedCreationDecision{}, ErrRemoteAuthorityUnavailable
+			}
+			if remote.Reason == "principal_required" {
+				return GovernedCreationDecision{}, ErrRemoteIdentityAmbiguous
+			}
+			return GovernedCreationDecision{}, fmt.Errorf("%w: %s", ErrRemotePermissionDenied, remote.Reason)
+		}
+		gravityRoot, err := filepath.Abs(filepath.Join(root, ".gravity"))
+		if err != nil {
+			return GovernedCreationDecision{}, err
+		}
+		return GovernedCreationDecision{operation: operation, gravityRoot: gravityRoot, nodeID: nodeID, parentID: cloneStringPointer(parentID), parentObservedVersion: cloneUint64Pointer(parentObservedVersion), basis: BasisRemoteAuthority, decidedAt: remote.EvaluatedAt}, nil
+	}
 	local, localErr := authorizeGravityNodeCreationLocal(operation, nodeID, parentID, parentObservedVersion)
 	configuration := currentShadow()
 	if configuration == nil {
@@ -127,6 +253,35 @@ func AuthorizeGravityNodeCreation(operation GovernedOperation, nodeID string, pa
 		value.shadow = &record
 	}
 	return value, err
+}
+
+func validInstallationSource(value string) bool {
+	return len(value) > len("installation:") && value[:len("installation:")] == "installation:"
+}
+
+func classifyBindingError(err error) error {
+	var typed *authority.ProjectClaimError
+	if errors.As(err, &typed) {
+		switch typed.Code {
+		case "project_binding_required":
+			return ErrProjectBindingRequired
+		case "project_binding_expired":
+			return ErrProjectBindingExpired
+		case "project_binding_revoked":
+			return ErrProjectBindingRevoked
+		case "project_binding_conflict":
+			return ErrProjectBindingConflict
+		}
+	}
+	switch err.Error() {
+	case "project_binding_expired":
+		return ErrProjectBindingExpired
+	case "project_binding_revoked":
+		return ErrProjectBindingRevoked
+	case "project_binding_conflict":
+		return ErrProjectBindingConflict
+	}
+	return ErrProjectBindingUnavailable
 }
 
 func authorizeGravityNodeCreationLocal(operation GovernedOperation, nodeID string, parentID *string, parentObservedVersion *uint64) (GovernedCreationDecision, error) {

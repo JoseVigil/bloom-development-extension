@@ -1,13 +1,17 @@
 package activities
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.temporal.io/sdk/testsuite"
 
+	"nucleus/internal/authority"
+	authoritydecision "nucleus/internal/governance/decision"
 	"nucleus/internal/gravity"
 )
 
@@ -213,6 +217,48 @@ func TestEnsureGravityMandateNodeActivityFailsClosedWhenOrganizationMissing(t *t
 	}); err == nil {
 		t.Fatal("expected error when ORGANIZATION node does not exist, got nil")
 	}
+}
+
+func TestEnsureGravityMandateNodeActivityPreservesModeFailureCause(t *testing.T) {
+	nucleusRoot, mandatesRoot, _, projectID := gravitySpineFixture(t)
+	if err := os.WriteFile(filepath.Join(nucleusRoot, ".ownership.json"), []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runEnsureGravityMandateNode(t, EnsureGravityMandateNodeInput{MandatesRoot: mandatesRoot, MandateID: "mandate-x", ProjectID: projectID})
+	if err == nil || !strings.Contains(err.Error(), "authority_mode_invalid") {
+		t.Fatalf("mode cause lost: %v", err)
+	}
+}
+
+func TestEnsureGravityMandateNodeActivityGatesPreexistingProjectAndPreservesRevocation(t *testing.T) {
+	nucleusRoot, mandatesRoot, orgID, projectID := gravitySpineFixture(t)
+	remote := `{"schema":"bloom.organization.ownership","schema_version":"1.0","authority_mode":"remote_enforced","organization":{"canonical_id":"org-fixture","legacy_org_id":"legacy","legacy_locator":null,"slug":"acme","display_name":null,"tenant_id":"tenant"},"installation":{"installation_id":"ownership-installation"},"binding":{"state":"REMOTE_LOCKED","issuer_id":"issuer","accepted_at":"2026-09-17T10:00:00Z","remote_locked_at":"2026-09-17T10:01:00Z"},"trust_binding":{"issuer_id":"issuer","trust_anchor_id":"root","trust_anchor_fingerprint_sha256":"fingerprint","bound_organization_id":"org-fixture","bound_installation_id":"ownership-installation","accepted_at":"2026-09-17T10:00:00Z"},"legacy_authority":null,"migration":null,"created_at":"2026-09-17T09:00:00Z","updated_at":"2026-09-17T10:01:00Z"}`
+	if err := os.WriteFile(filepath.Join(nucleusRoot, ".ownership.json"), []byte(remote), 0600); err != nil {
+		t.Fatal(err)
+	}
+	store, _ := gravity.NewStore(nucleusRoot)
+	projectPath := filepath.Join(store.Root, ".organization", orgID, ".project", projectID, "node.json")
+	seedNodeDirect(t, projectPath, gravity.GravityNode{NodeID: projectID, NodeType: gravity.NodeProject, ParentID: &orgID, Status: gravity.NodeActive})
+	called := false
+	restore := authoritydecision.InstallShadow(&authoritydecision.ShadowConfiguration{Connected: true, ProjectBinding: func(context.Context, string) (authority.ProjectBinding, error) {
+		called = true
+		return authority.ProjectBinding{}, &authority.ProjectClaimError{Code: "project_binding_revoked"}
+	}, Evaluator: activityEvaluator(func(authority.DecisionRequest) authority.AuthorityDecision {
+		return authority.AuthorityDecision{Outcome: authority.DecisionAllow, Reason: "permission_granted"}
+	}), Request: func(authoritydecision.GovernedOperation, string, *string, *uint64) authority.DecisionRequest {
+		return authority.DecisionRequest{}
+	}})
+	defer restore()
+	_, err := runEnsureGravityMandateNode(t, EnsureGravityMandateNodeInput{MandatesRoot: mandatesRoot, MandateID: "mandate-x", ProjectID: projectID})
+	if err == nil || !strings.Contains(err.Error(), "project_binding_revoked") || !called {
+		t.Fatalf("preexisting project bypassed live gate or lost cause: %v", err)
+	}
+}
+
+type activityEvaluator func(authority.DecisionRequest) authority.AuthorityDecision
+
+func (f activityEvaluator) Evaluate(r authority.DecisionRequest) authority.AuthorityDecision {
+	return f(r)
 }
 
 // ─────────────────────────────────────────────────────────────────────────

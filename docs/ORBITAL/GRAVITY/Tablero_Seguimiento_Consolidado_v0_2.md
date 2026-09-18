@@ -1,10 +1,9 @@
-# Tablero de Seguimiento Consolidado — Gravity / Orbital / Posture (v0.47)
+# Tablero de Seguimiento Consolidado — Gravity / Orbital / Posture (v0.48)
 
-**Estado a:** 2026-09-17
-**Reemplaza a:** v0.46. Cierra `create_organization` definitivamente como límite permanente y corrige la
-señal de `InstallShadow` para `create_project` — ver §Z.23.
-No autoriza `remote_enforced`, cutover, despliegue ni credenciales productivas: ese invariante sigue intacto
-y no cambia con este cierre (ver §Z.20/§Z.21/§Z.22/§Z.23 para el detalle de por qué).
+**Estado a:** 2026-09-18
+**Reemplaza a:** v0.47. Cierra el último gap de seguridad del `ProjectID` productor real mediante claim/binding canónico y habilita formalmente el estado arquitectónico `remote_enforced` — ver §Z.24.
+
+La aprobación alcanza el código y sus invariantes de seguridad verificados independientemente. No implica despliegue productivo, migración de ambientes, publicación de artefactos ni provisión de credenciales.
 
 ---
 
@@ -472,3 +471,84 @@ Queda un único ítem abierto:
    apalancamiento de todo el research" — bloquea en cadena PROJECT → MANDATE-en-Gravity → SESSION →
    resolución de Postures activas. Sin encargo de implementación todavía, sólo investigación. Frente:
    **Orbital/Gravity**, alcance mayor, no relacionado con la identidad de organización.
+
+## §Z.24 — Claim/binding canónico de ProjectID y cutover a `remote_enforced`: cerrado
+
+Génesis Control auditó independientemente el código real, el diff completo y el flujo de punta a punta:
+
+`nucleus.json → claim S2S firmado → evidencia canónica Backend → receipt diagnóstico local → cutover REMOTE_LOCKED/remote_enforced → gate Gravity PROJECT`.
+
+### Identidad y claim canónico
+
+Conductor conserva la experiencia offline-first y continúa generando localmente el UUID del proyecto. En el siguiente ciclo de sincronización, Nucleus descubre todos los proyectos de la organización activa desde `nucleus.json` y presenta cada UUID al Backend mediante una petición S2S firmada con la instalación Ed25519 autenticada.
+
+Backend adopta el UUID mediante `PUT /v1/authority/projects/{project_id}/claim`. La persistencia establece unicidad global e inmutabilidad del claim, resuelve organización y tenant desde la identidad autenticada —nunca desde datos declarados por el cliente— y crea atómicamente la evidencia canónica correspondiente.
+
+Las carreras concurrentes convergen en un único claim. Una reclamación cruzada entre organizaciones falla con conflicto y nunca libera ni reasigna el UUID original.
+
+### Replay multiinstalación y evidencia operativa
+
+Una segunda instalación activa de la misma organización puede reproducir el claim sin exigir que el `source_ref` original le pertenezca. El claim conserva la instalación originaria y Backend sólo responde `already_claimed` después de garantizar que exista exactamente una evidencia operativa compatible.
+
+La evidencia ausente se reconstruye, la vencida puede renovarse mediante replay autorizado y la revocada nunca se reactiva. Actualizaciones de cero filas, evidencia contradictoria, tenant divergente y reclamaciones cruzadas fallan cerrado.
+
+`GET /v1/authority/projects/{project_id}/binding` entrega únicamente evidencia viva, canónica, vigente y coincidente con claim, organización y tenant. La petición está autenticada y firmada sobre el path exacto.
+
+### Receipts locales
+
+Nucleus conserva `project-bindings.json` únicamente como recibo diagnóstico del resultado del claim. El receipt no contiene `principal_id`, no es leído por el gate y no puede conceder identidad, permiso ni autoridad aunque sea editado localmente.
+
+La única fuente de autoridad efectiva para el binding de un proyecto es la evidencia viva obtenida del Backend mediante el canal S2S autenticado.
+
+### Cutover
+
+El cutover exige evidencia concreta y coincidente de:
+
+- organización y tenant canónicos;
+- issuer y trust binding;
+- snapshot aceptado y vigente;
+- checkpoint consistente con versión y digest del snapshot;
+- principal canónico único con `create_project`;
+- conjunto exacto de proyectos locales;
+- binding Backend vivo y vigente para cada proyecto requerido.
+
+Ante cualquier ausencia o contradicción, `.ownership.json` permanece byte a byte intacto. Cuando todas las precondiciones se cumplen, una única escritura atómica publica simultáneamente:
+
+- `AuthorityMode = remote_enforced`;
+- `Binding.State = REMOTE_LOCKED`;
+- `RemoteLockedAt`;
+- eliminación completa de `LegacyAuthority`.
+
+El cutover es idempotente.
+
+### Gate efectivo de Gravity
+
+En `remote_enforced`, toda operación Gravity `PROJECT` pasa obligatoriamente por el gate remoto, incluso cuando el nodo PROJECT ya existe.
+
+El gate:
+
+- vuelve a validar `.ownership.json`, identidad, tenant y trust binding;
+- carga el snapshot/checkpoint aceptado;
+- resuelve el principal exclusivamente desde el estado canónico;
+- obtiene binding vivo desde Backend;
+- valida estado `bound`, organización, tenant, proyecto, revisión, evidencia canónica, `source_ref`, `ClaimedAt`, `CheckedAt` y `ValidUntil`;
+- aplica una tolerancia explícita de clock skew de un minuto;
+- captura T1 después del GET S2S;
+- evalúa binding, snapshot, membresías, roles, ventanas de validez y revocaciones contra T1;
+- sólo concede una decisión sellada con base `remote_authority`.
+
+Una autoridad válida durante la latencia continúa autorizada. Un snapshot vencido o una revocación efectiva en T1 fallan cerrado. Transporte, expiración, revocación, conflicto, identidad ambigua, estado ausente y permisos insuficientes preservan causas estables.
+
+No existe fallback a `local_legacy` desde `remote_enforced`. Una falla de resolución, lectura, análisis o verificación termina en denegación.
+
+`create_organization` permanece deliberadamente fuera del mapeo remoto como límite arquitectónico permanente establecido en §Z.23.
+
+### Validación independiente
+
+- Backend project-claim: 25/25.
+- Paquetes Nucleus Authority, Core, Governance, Decision, Gravity y Activities: verdes.
+- Pruebas integradas de sync, cutover y PROJECT preexistente: verdes.
+- `go vet` de Authority, Governance y Decision: verde.
+- `gofmt` y `git diff --check`: limpios.
+
+**Resultado:** el gap del “ProjectID productor real” queda cerrado y la arquitectura alcanza formalmente el estado `remote_enforced`.

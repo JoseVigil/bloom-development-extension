@@ -18,7 +18,7 @@ func writeLocalLegacyFixture(t *testing.T, nucleusRoot, ownerID string) {
 	}
 }
 
-func TestShadowDecisionRequestUsesOwnershipOwnerAsPrincipal(t *testing.T) {
+func TestShadowDecisionRequestDoesNotUseLocalOwnershipAsPrincipal(t *testing.T) {
 	nucleusRoot := t.TempDir()
 	t.Setenv("BLOOM_NUCLEUS_ROOT", nucleusRoot)
 	writeLocalLegacyFixture(t, nucleusRoot, "owner-x")
@@ -30,8 +30,8 @@ func TestShadowDecisionRequestUsesOwnershipOwnerAsPrincipal(t *testing.T) {
 	if request.Operation != string(OpCreateProject) {
 		t.Fatalf("operation = %q", request.Operation)
 	}
-	if request.PrincipalID == "" {
-		t.Fatal("expected a non-empty PrincipalID from .ownership.json")
+	if request.PrincipalID != "" {
+		t.Fatal("local ownership must not grant a remote principal")
 	}
 	// .ownership.json legado (pre-migración canónica) no tiene Organization.CanonicalID
 	// reconciliado todavía — Scope debe quedar vacío, nunca caer de vuelta al org_<timestamp>

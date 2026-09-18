@@ -210,11 +210,26 @@ func EnsureGravityMandateNodeActivity(ctx context.Context, input EnsureGravityMa
 	}
 
 	projPath := filepath.Join(filepath.Dir(orgPath), ".project", input.ProjectID, "node.json")
+	mode, modeErr := authoritydecision.EffectiveAuthorityMode()
+	if modeErr != nil {
+		return EnsureGravityMandateNodeResult{}, fmt.Errorf("EnsureGravityMandateNodeActivity: authority mode unavailable: %w", modeErr)
+	}
+	var remoteDecision authoritydecision.GovernedCreationDecision
+	if mode == authoritydecision.ModeRemoteEnforced {
+		observedVersion := orgNode.NodeVersion
+		remoteDecision, err = authoritydecision.AuthorizeGravityNodeCreation(authoritydecision.OpCreateProject, input.ProjectID, &orgID, &observedVersion)
+		if err != nil {
+			return EnsureGravityMandateNodeResult{}, fmt.Errorf("EnsureGravityMandateNodeActivity: %w", err)
+		}
+	}
 	projNode, err := store.ReadNode(projPath)
 	projectCreated := false
 	if os.IsNotExist(err) {
 		observedVersion := orgNode.NodeVersion
 		decision, authErr := authoritydecision.AuthorizeGravityNodeCreation(authoritydecision.OpCreateProject, input.ProjectID, &orgID, &observedVersion)
+		if mode == authoritydecision.ModeRemoteEnforced {
+			decision, authErr = remoteDecision, nil
+		}
 		if authErr != nil {
 			logger.Error("[GRAVITY] PROJECT creation denied", "project_id", input.ProjectID, "organization_id", orgID, "error", authErr)
 			return EnsureGravityMandateNodeResult{}, fmt.Errorf("EnsureGravityMandateNodeActivity: PROJECT creation denied: %w", authErr)

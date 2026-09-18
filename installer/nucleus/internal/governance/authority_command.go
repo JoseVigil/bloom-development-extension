@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
+	"nucleus/internal/governance/ownershipcontract"
 	"nucleus/internal/mandatedelivery"
 	"nucleus/internal/mandateinstall"
 )
@@ -216,6 +217,7 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 					report.Evidence["nucleus_config_tenant_injected"] = true
 				}
 			}
+			reconciliationOK := false
 			if reconcileErr := ReconcileCanonicalOrganization(active.NucleusRoot, active.OrganizationID, identity.InstallationID, binding.Issuer, trustAnchorID, trustAnchorFingerprint, tenantID, authorityCommandNow()); reconcileErr != nil {
 				report.Evidence["ownership_reconciled"] = false
 				report.Evidence["ownership_reconciliation_error"] = reconcileErr.Error()
@@ -223,6 +225,7 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 					governanceLogger.Error("reconciliación de organización canónica (org=%s) falló: %v", active.OrganizationID, reconcileErr)
 				}
 			} else {
+				reconciliationOK = true
 				report.Evidence["ownership_reconciled"] = true
 				if governanceLogger != nil {
 					if tenantID != nil {
@@ -232,6 +235,112 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 					}
 				}
 			}
+			projects, catalogErr := core.DiscoverActiveOrganizationProjects(active)
+			bindingEvidence := map[string]any{"claimed": []string{}, "already_claimed": []string{}, "pending": []string{}, "conflicts": []string{}}
+			report.Evidence["project_bindings"] = bindingEvidence
+			if catalogErr != nil {
+				report.OK = false
+				report.Evidence["project_catalog_error"] = catalogErr.Error()
+				return report, AuthorityCommandError{"project_catalog_invalid"}
+			}
+			claimed := []string{}
+			already := []string{}
+			pending := []string{}
+			conflicts := []string{}
+			confirmed := []string{}
+			bindingStore := &authority.ProjectBindingStore{Path: filepath.Join(dir, "project-bindings.json")}
+			legacySubject := ""
+			if reconciliationOK {
+				ownershipRaw, ownerErr := os.ReadFile(filepath.Join(active.NucleusRoot, ".ownership.json"))
+				if ownerErr != nil {
+					return report, AuthorityCommandError{"ownership_principal_unavailable"}
+				}
+				ownershipAnalysis, ownerErr := ownershipcontract.Analyze(ownershipRaw)
+				if ownerErr != nil {
+					return report, AuthorityCommandError{"ownership_principal_unavailable"}
+				}
+				ownerView, ownerErr := ownershipcontract.EffectiveLegacyView(ownershipAnalysis)
+				if ownerErr == nil && ownerView.Owner.Subject != "" {
+					legacySubject = ownerView.Owner.Subject
+				}
+			}
+			bindings := []authority.ProjectBinding{}
+			for _, project := range projects {
+				claim, claimErr := syncClient.ClaimProject(context.Background(), project.ProjectID)
+				if claimErr != nil {
+					var typed *authority.ProjectClaimError
+					if errors.As(claimErr, &typed) && typed.Status == 409 {
+						conflicts = append(conflicts, project.ProjectID)
+					} else {
+						pending = append(pending, project.ProjectID)
+					}
+					continue
+				}
+				if saveErr := bindingStore.Save(claim, authorityCommandNow()); saveErr != nil {
+					pending = append(pending, project.ProjectID)
+					continue
+				}
+				live, liveErr := syncClient.GetProjectBinding(context.Background(), project.ProjectID)
+				if liveErr != nil {
+					pending = append(pending, project.ProjectID)
+					continue
+				}
+				bindings = append(bindings, live)
+				confirmed = append(confirmed, project.ProjectID)
+				if claim.Status == authority.ProjectClaimed {
+					claimed = append(claimed, project.ProjectID)
+				} else {
+					already = append(already, project.ProjectID)
+				}
+			}
+			bindingEvidence["claimed"] = claimed
+			bindingEvidence["already_claimed"] = already
+			bindingEvidence["pending"] = pending
+			bindingEvidence["conflicts"] = conflicts
+			if len(pending) > 0 || len(conflicts) > 0 {
+				report.OK = false
+				if len(conflicts) > 0 {
+					return report, AuthorityCommandError{"project_binding_conflict"}
+				}
+				return report, AuthorityCommandError{"project_binding_pending"}
+			}
+			required := make([]string, 0, len(projects))
+			for _, project := range projects {
+				required = append(required, project.ProjectID)
+			}
+			if tenantID != nil && reconciliationOK {
+				mode, modeErr := EffectiveAuthorityMode()
+				if modeErr != nil {
+					report.OK = false
+					report.Evidence["cutover_error"] = modeErr.Error()
+					return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
+				}
+				if mode == ModeRemoteEnforced {
+					report.Evidence["effective_mode"] = string(ModeRemoteEnforced)
+					report.Evidence["cutover"] = false
+					goto cutoverComplete
+				}
+				principalID, principalErr := resolveCutoverPrincipal(result.State, legacySubject, active.OrganizationID, authorityCommandNow())
+				if principalErr != nil {
+					report.OK = false
+					report.Evidence["cutover_error"] = principalErr.Error()
+					return report, AuthorityCommandError{"remote_identity_ambiguous"}
+				}
+				var cp authority.Checkpoint
+				cpRaw, cpErr := os.ReadFile(checkpoint)
+				if cpErr != nil || json.Unmarshal(cpRaw, &cp) != nil {
+					report.OK = false
+					return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
+				}
+				if cutoverErr := CutoverRemoteEnforced(active.NucleusRoot, RemoteEnforcedCutoverEvidence{OrganizationID: active.OrganizationID, TenantID: *tenantID, IssuerID: binding.Issuer, TrustAnchorID: trustAnchorID, TrustAnchorFingerprint: trustAnchorFingerprint, AuthorityVersion: result.State.Monotonic.HighWaterMark, StateDigest: result.State.Monotonic.StateDigest, CheckpointHighWaterMark: cp.HighWaterMark, CheckpointStateDigest: cp.StateDigest, PrincipalID: principalID, Snapshot: result.State, SnapshotExpiresAt: result.State.Emission.ExpiresAt, ProjectBindings: bindings, RequiredProjectIDs: required}, authorityCommandNow()); cutoverErr != nil {
+					report.OK = false
+					report.Evidence["cutover_error"] = cutoverErr.Error()
+					return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
+				}
+				report.Evidence["effective_mode"] = string(ModeRemoteEnforced)
+				report.Evidence["cutover"] = true
+			}
+		cutoverComplete:
 			deliveryClient := mandatedelivery.Client{BaseURL: active.AuthorityBaseURL, HTTP: authorityCommandHTTPClient, Signer: identity.PrivateKey, Context: mandatedelivery.Context{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID, Issuer: binding.Issuer, Trust: trust, Now: authorityCommandNow}, Store: &mandatedelivery.Store{Root: filepath.Join(dir, "mandate-delivery")}}
 			deliveryResult, deliveryErr := deliveryClient.Receive(context.Background())
 			if deliveryErr != nil {
@@ -349,6 +458,28 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 		}
 		return report, nil
 	}}
+}
+
+func resolveCutoverPrincipal(state *authority.DurableState, subject, organizationID string, at time.Time) (string, error) {
+	if state == nil || subject == "" {
+		return "", errors.New("remote_identity_ambiguous")
+	}
+	values := []string{}
+	for _, p := range state.Projection.Principals {
+		matched := false
+		for _, x := range p.ExternalIdentities {
+			if x.Subject == subject && x.Status == "verified" && !x.VerifiedAt.After(at) {
+				matched = true
+			}
+		}
+		if matched && principalCanCreateProject(state, p.PrincipalID, organizationID, at) {
+			values = append(values, p.PrincipalID)
+		}
+	}
+	if len(values) != 1 {
+		return "", errors.New("remote_identity_ambiguous")
+	}
+	return values[0], nil
 }
 
 func init() {

@@ -17,7 +17,7 @@ var (
 )
 
 func (s *Store) CreateGovernedNode(decision authoritydecision.GovernedCreationDecision, node GravityNode) error {
-	if decision.Basis() != authoritydecision.BasisLocalLegacy || decision.DecidedAt().IsZero() {
+	if (decision.Basis() != authoritydecision.BasisLocalLegacy && decision.Basis() != authoritydecision.BasisRemoteAuthority) || decision.DecidedAt().IsZero() {
 		return ErrInvalidGovernedDecision
 	}
 	if !sameGravityPath(decision.GravityRoot(), s.Root) {

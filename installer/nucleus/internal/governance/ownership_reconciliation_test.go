@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"nucleus/internal/authority"
 	"nucleus/internal/governance/ownershipcontract"
 )
 
@@ -166,5 +167,83 @@ func TestReconcileCanonicalOrganizationNeverOverwritesSilentlyOnOrganizationChan
 	}
 	if string(persisted) != string(again) {
 		t.Fatal("DIVERGENT ya establecido fue reescrito de nuevo")
+	}
+}
+
+func TestCutoverRemoteEnforcedIsExplicitAtomicAndIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".ownership.json")
+	if err := os.WriteFile(path, []byte(`{"org_id":"legacy","owner_id":"jose","created_at":"2026-09-04T10:00:00Z","team_members":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Dir(path)
+	tenant := "tenant"
+	at := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	if err := ReconcileCanonicalOrganization(root, "org", "installation", "issuer", "root", "fingerprint", &tenant, at); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	state := &authority.DurableState{Binding: authority.Binding{OrganizationID: "org", Issuer: "issuer"}, Monotonic: authority.MonotonicState{HighWaterMark: "1", StateDigest: "digest"}, Emission: &authority.EmissionMetadata{OrganizationID: "org", Issuer: "issuer", AuthorityVersion: "1", NotBefore: at.Add(-time.Hour), ExpiresAt: at.Add(time.Hour)}, Projection: authority.FullContent{
+		Principals:      []authority.Principal{{PrincipalID: "principal", Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Subject: "jose", Status: "verified", VerifiedAt: at.Add(-time.Hour)}}}},
+		Memberships:     []authority.Membership{{MembershipID: "membership", PrincipalID: "principal", OrganizationID: "org", Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)}},
+		RoleAssignments: []authority.RoleAssignment{{AssignmentID: "assignment", MembershipID: "membership", RoleID: "master", RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org"}, Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)}},
+		RoleDefinitions: []authority.RoleDefinition{{RoleID: "master", RoleVersion: "1", RoleOrigin: "builtin", Status: "active", Permissions: authority.BuiltinRoles[authority.RoleMaster]}},
+	}}
+	bad := RemoteEnforcedCutoverEvidence{OrganizationID: "org", TenantID: "tenant", IssuerID: "issuer", TrustAnchorID: "root", TrustAnchorFingerprint: "fingerprint", AuthorityVersion: "1", StateDigest: "digest", CheckpointHighWaterMark: "1", CheckpointStateDigest: "digest", PrincipalID: "principal", Snapshot: state, SnapshotExpiresAt: at.Add(time.Hour), RequiredProjectIDs: []string{"project"}}
+	if err := CutoverRemoteEnforced(root, bad, at); err == nil {
+		t.Fatal("cutover without project confirmation accepted")
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Fatal("failed cutover changed ownership")
+	}
+	good := bad
+	good.ProjectBindings = []authority.ProjectBinding{{Status: "bound", OrganizationID: "org", TenantID: "tenant", ProjectID: "project", Revision: "1", SourceRef: "installation:origin", EvidenceKind: "canonical", ClaimedAt: at.Add(-time.Hour), CheckedAt: at, ValidUntil: at.Add(time.Hour)}}
+	if err := CutoverRemoteEnforced(root, good, at); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := LoadCanonicalOwnership(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.AuthorityMode != ownershipcontract.AuthorityModeRemoteEnforced || doc.Binding.State != ownershipcontract.BindingStateRemoteLocked || doc.LegacyAuthority != nil {
+		t.Fatalf("invalid cutover: %+v", doc)
+	}
+	persisted, _ := os.ReadFile(path)
+	if err := CutoverRemoteEnforced(root, good, at.Add(30*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := os.ReadFile(path)
+	if string(persisted) != string(again) {
+		t.Fatal("idempotent cutover rewrote ownership")
+	}
+}
+
+func TestCutoverRejectsConcreteEvidenceMismatchWithoutWriting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".ownership.json")
+	if err := os.WriteFile(path, []byte(`{"org_id":"legacy","owner_id":"jose","created_at":"2026-09-04T10:00:00Z","team_members":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	root, tenant, at := filepath.Dir(path), "tenant", time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	if err := ReconcileCanonicalOrganization(root, "org", "installation", "issuer", "root", "fingerprint", &tenant, at); err != nil {
+		t.Fatal(err)
+	}
+	state := &authority.DurableState{Binding: authority.Binding{OrganizationID: "org", Issuer: "issuer"}, Monotonic: authority.MonotonicState{HighWaterMark: "1", StateDigest: "digest"}, Emission: &authority.EmissionMetadata{OrganizationID: "org", Issuer: "issuer", AuthorityVersion: "1", NotBefore: at.Add(-time.Hour), ExpiresAt: at.Add(time.Hour)}, Projection: authority.FullContent{Principals: []authority.Principal{{PrincipalID: "principal", Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Subject: "jose", Status: "verified", VerifiedAt: at.Add(-time.Hour)}}}}, Memberships: []authority.Membership{{MembershipID: "m", PrincipalID: "principal", OrganizationID: "org", Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)}}, RoleAssignments: []authority.RoleAssignment{{AssignmentID: "a", MembershipID: "m", RoleID: "master", RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org"}, Status: "active", ValidFrom: at.Add(-time.Hour), AcceptedAt: at.Add(-time.Hour)}}, RoleDefinitions: []authority.RoleDefinition{{RoleID: "master", RoleVersion: "1", RoleOrigin: "builtin", Status: "active", Permissions: authority.BuiltinRoles[authority.RoleMaster]}}}}
+	base := RemoteEnforcedCutoverEvidence{OrganizationID: "org", TenantID: "tenant", IssuerID: "issuer", TrustAnchorID: "root", TrustAnchorFingerprint: "fingerprint", AuthorityVersion: "1", StateDigest: "digest", CheckpointHighWaterMark: "1", CheckpointStateDigest: "digest", PrincipalID: "principal", Snapshot: state, SnapshotExpiresAt: at.Add(time.Hour), RequiredProjectIDs: []string{"project"}, ProjectBindings: []authority.ProjectBinding{{Status: "bound", OrganizationID: "org", TenantID: "tenant", ProjectID: "project", Revision: "1", SourceRef: "installation:origin", EvidenceKind: "canonical", ClaimedAt: at.Add(-time.Hour), CheckedAt: at, ValidUntil: at.Add(time.Hour)}}}
+	for _, mutate := range []func(*RemoteEnforcedCutoverEvidence){
+		func(e *RemoteEnforcedCutoverEvidence) { e.CheckpointStateDigest = "other" },
+		func(e *RemoteEnforcedCutoverEvidence) { e.ProjectBindings[0].CheckedAt = at.Add(time.Second) },
+		func(e *RemoteEnforcedCutoverEvidence) { e.ProjectBindings = nil },
+	} {
+		e := base
+		e.ProjectBindings = append([]authority.ProjectBinding(nil), base.ProjectBindings...)
+		mutate(&e)
+		before, _ := os.ReadFile(path)
+		if err := CutoverRemoteEnforced(root, e, at); err == nil {
+			t.Fatal("inconsistent evidence accepted")
+		}
+		after, _ := os.ReadFile(path)
+		if string(before) != string(after) {
+			t.Fatal("failed cutover changed ownership")
+		}
 	}
 }

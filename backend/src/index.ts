@@ -15,6 +15,7 @@ import { AuthoritySyncObject } from './authority/sync-object';
 import { authorityEvidenceResponse } from './authority/evidence-route';
 import { authoritySyncResponse, relayAuthorityOutbox } from './authority/sync-route';
 import { authorityTenantSelfResponse } from './authority/tenant-self-route';
+import { claimProject, getProjectBinding, ProjectClaimError } from './authority/project-claim';
 
 // SUPUESTO: `AUTHORITY_SIGNING_KEY_PKCS8_B64` y `AUTHORITY_SIGNING_KEY_ID` en `Env` no
 // están confirmados contra el `Env` real del proyecto (no tengo el
@@ -203,6 +204,30 @@ app.get('/v1/authority/evidence',verifyInstallationAuth,c=>authorityEvidenceResp
 // instalación ya registró su clave (se llama desde el mismo "sync" que ya usa snapshot/
 // trust-manifest firmados). Lógica de negocio en tenant-self-route.ts, no acá.
 app.get('/v1/authority/tenant/self',verifyInstallationAuth,c=>authorityTenantSelfResponse(c.env.DB,{organizationId:c.req.query('org')!}));
+
+app.put('/v1/authority/projects/:projectId/claim', verifyInstallationAuth, async context => {
+  const organizationId = context.req.query('org')!;
+  const installationId = context.req.header('X-Bloom-Installation-Id')!;
+  try {
+    const claimed = await claimProject(context.env.DB, organizationId, installationId, context.req.param('projectId'));
+    context.header('Cache-Control', 'no-store');
+    return context.json(claimed, claimed.status === 'claimed' ? 201 : 200);
+  } catch (error) {
+    if (error instanceof ProjectClaimError) return context.json({error: error.message}, error.status);
+    return context.json({error: 'project_claim_failed'}, 500);
+  }
+});
+
+app.get('/v1/authority/projects/:projectId/binding', verifyInstallationAuth, async context => {
+  try {
+    const binding = await getProjectBinding(context.env.DB, context.req.query('org')!, context.req.header('X-Bloom-Installation-Id')!, context.req.param('projectId'));
+    context.header('Cache-Control', 'no-store');
+    return context.json(binding, 200);
+  } catch (error) {
+    if (error instanceof ProjectClaimError) return context.json({error: error.message}, error.status);
+    return context.json({error: 'project_binding_unavailable'}, 503);
+  }
+});
 
 app.get("/v1/authority/trust-bundle", verifyInstallationAuth, async (context) => {
   const organizationId = context.req.query("org")!;

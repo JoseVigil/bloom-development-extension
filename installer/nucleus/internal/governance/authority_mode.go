@@ -6,6 +6,7 @@ type AuthorityMode = authoritydecision.AuthorityMode
 
 const ModeLocalLegacy = authoritydecision.ModeLocalLegacy
 const ModeShadowRemote = authoritydecision.ModeShadowRemote
+const ModeRemoteEnforced = authoritydecision.ModeRemoteEnforced
 
 type GovernedOperation = authoritydecision.GovernedOperation
 
@@ -17,6 +18,7 @@ const (
 type DecisionBasis = authoritydecision.DecisionBasis
 
 const BasisLocalLegacy = authoritydecision.BasisLocalLegacy
+const BasisRemoteAuthority = authoritydecision.BasisRemoteAuthority
 
 type GovernedCreationDecision = authoritydecision.GovernedCreationDecision
 type ShadowConfiguration = authoritydecision.ShadowConfiguration

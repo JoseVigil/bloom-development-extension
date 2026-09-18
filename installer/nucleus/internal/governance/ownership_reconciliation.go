@@ -26,12 +26,152 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"nucleus/internal/authority"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/gofrs/flock"
 	"nucleus/internal/governance/ownershipcontract"
 )
+
+type RemoteEnforcedCutoverEvidence struct {
+	OrganizationID          string
+	TenantID                string
+	IssuerID                string
+	TrustAnchorID           string
+	TrustAnchorFingerprint  string
+	AuthorityVersion        string
+	StateDigest             string
+	CheckpointHighWaterMark string
+	CheckpointStateDigest   string
+	PrincipalID             string
+	Snapshot                *authority.DurableState
+	SnapshotExpiresAt       time.Time
+	ProjectBindings         []authority.ProjectBinding
+	RequiredProjectIDs      []string
+}
+
+// CutoverRemoteEnforced is deliberately separate from ordinary reconciliation.
+// The caller must explicitly attest every precondition established in the same
+// successful sync. A single atomic replacement publishes the new mode.
+func CutoverRemoteEnforced(nucleusRoot string, evidence RemoteEnforcedCutoverEvidence, at time.Time) error {
+	if nucleusRoot == "" || evidence.OrganizationID == "" || evidence.TenantID == "" || evidence.IssuerID == "" || evidence.TrustAnchorID == "" || evidence.TrustAnchorFingerprint == "" || evidence.AuthorityVersion == "" || evidence.StateDigest == "" || evidence.PrincipalID == "" || evidence.Snapshot == nil {
+		return errors.New("ownership: remote_enforced cutover preconditions missing")
+	}
+	when := at.UTC()
+	if evidence.Snapshot.Emission == nil || !evidence.SnapshotExpiresAt.Equal(evidence.Snapshot.Emission.ExpiresAt) || when.Before(evidence.Snapshot.Emission.NotBefore) || !when.Before(evidence.SnapshotExpiresAt) {
+		return errors.New("ownership: accepted snapshot expired")
+	}
+	if evidence.Snapshot.Binding.OrganizationID != evidence.OrganizationID || evidence.Snapshot.Binding.Issuer != evidence.IssuerID || evidence.Snapshot.Emission.OrganizationID != evidence.OrganizationID || evidence.Snapshot.Emission.Issuer != evidence.IssuerID || evidence.Snapshot.Emission.AuthorityVersion != evidence.AuthorityVersion || evidence.Snapshot.Monotonic.HighWaterMark != evidence.AuthorityVersion || evidence.Snapshot.Monotonic.StateDigest != evidence.StateDigest || evidence.CheckpointHighWaterMark != evidence.AuthorityVersion || evidence.CheckpointStateDigest != evidence.StateDigest {
+		return errors.New("ownership: snapshot/checkpoint evidence inconsistent")
+	}
+	if !principalCanCreateProject(evidence.Snapshot, evidence.PrincipalID, evidence.OrganizationID, when) {
+		return errors.New("ownership: canonical principal lacks create_project")
+	}
+	confirmed := map[string]bool{}
+	for _, binding := range evidence.ProjectBindings {
+		if binding.Status != "bound" || binding.OrganizationID != evidence.OrganizationID || binding.TenantID != evidence.TenantID || binding.ProjectID == "" || binding.Revision != "1" || binding.EvidenceKind != "canonical" || !validProjectBindingSource(binding.SourceRef) || binding.ClaimedAt.IsZero() || binding.CheckedAt.IsZero() || binding.CheckedAt.After(when) || !when.Before(binding.ValidUntil) {
+			return errors.New("ownership: contradictory project binding")
+		}
+		if confirmed[binding.ProjectID] {
+			return errors.New("ownership: duplicate project binding")
+		}
+		confirmed[binding.ProjectID] = true
+	}
+	required := map[string]bool{}
+	for _, id := range evidence.RequiredProjectIDs {
+		if id == "" || required[id] || !confirmed[id] {
+			return fmt.Errorf("ownership: project binding not confirmed: %s", id)
+		}
+		required[id] = true
+	}
+	if len(confirmed) != len(required) {
+		return errors.New("ownership: confirmed project set differs from required set")
+	}
+	path := filepath.Join(nucleusRoot, ".ownership.json")
+	lock := flock.New(path + ownershipTransitionLockSuffix)
+	if err := lock.Lock(); err != nil {
+		return err
+	}
+	defer lock.Unlock()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	analysis, err := ownershipcontract.Analyze(raw)
+	if err != nil || analysis.Canonical == nil {
+		return errors.New("ownership: canonical bound identity required for cutover")
+	}
+	document := analysis.Canonical
+	if err := verifyMigrationEvidence(path, document); err != nil {
+		return err
+	}
+	if document.AuthorityMode == ownershipcontract.AuthorityModeRemoteEnforced && document.Binding.State == ownershipcontract.BindingStateRemoteLocked {
+		return nil
+	}
+	if document.Binding.State != ownershipcontract.BindingStateBound || document.Organization.CanonicalID == nil || document.Organization.TenantID == nil || document.TrustBinding == nil {
+		return errors.New("ownership: canonical bound identity required for cutover")
+	}
+	if *document.Organization.CanonicalID != evidence.OrganizationID || *document.Organization.TenantID != evidence.TenantID || document.Binding.IssuerID == nil || *document.Binding.IssuerID != evidence.IssuerID || document.TrustBinding.IssuerID != evidence.IssuerID || document.TrustBinding.TrustAnchorID != evidence.TrustAnchorID || document.TrustBinding.TrustAnchorFingerprintSHA256 != evidence.TrustAnchorFingerprint || document.TrustBinding.BoundOrganizationID != evidence.OrganizationID {
+		return errors.New("ownership: identity/trust evidence mismatch")
+	}
+	document.AuthorityMode = ownershipcontract.AuthorityModeRemoteEnforced
+	document.Binding.State = ownershipcontract.BindingStateRemoteLocked
+	document.Binding.RemoteLockedAt = &when
+	document.LegacyAuthority = nil
+	document.UpdatedAt = when
+	return persistCanonicalOwnershipLocked(path, document)
+}
+
+func validProjectBindingSource(value string) bool {
+	return len(value) > len("installation:") && value[:len("installation:")] == "installation:"
+}
+
+func principalCanCreateProject(state *authority.DurableState, principalID, organizationID string, at time.Time) bool {
+	principalOK := false
+	for _, p := range state.Projection.Principals {
+		if p.PrincipalID == principalID && p.Status == "active" {
+			for _, x := range p.ExternalIdentities {
+				if x.Status == "verified" && !x.VerifiedAt.After(at) {
+					principalOK = true
+				}
+			}
+		}
+	}
+	if !principalOK {
+		return false
+	}
+	revoked := func(kind, id string) bool {
+		for _, r := range state.Projection.Revocations {
+			if r.TargetType == kind && r.TargetID == id && !at.Before(r.EffectiveAt) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, m := range state.Projection.Memberships {
+		if m.PrincipalID != principalID || m.OrganizationID != organizationID || m.Status != "active" || at.Before(m.ValidFrom) || (m.ValidUntil != nil && !at.Before(*m.ValidUntil)) || at.Before(m.AcceptedAt) || revoked("membership", m.MembershipID) {
+			continue
+		}
+		for _, a := range state.Projection.RoleAssignments {
+			if a.MembershipID != m.MembershipID || a.Status != "active" || a.Scope.Type != "organization" || a.Scope.ID != organizationID || at.Before(a.ValidFrom) || (a.ValidUntil != nil && !at.Before(*a.ValidUntil)) || at.Before(a.AcceptedAt) || revoked("role_assignment", a.AssignmentID) {
+				continue
+			}
+			for _, role := range state.Projection.RoleDefinitions {
+				if role.RoleID == a.RoleID && role.RoleVersion == a.RoleVersion && role.Status == "active" && !revoked("role_definition", role.RoleID) {
+					for _, permission := range role.Permissions {
+						if permission == "create_project" {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
 
 // ReconcileCanonicalOrganization enseña a .ownership.json el organizationId real
 // (Organization.CanonicalID) y, cuando está disponible, el tenantId (Organization.
@@ -125,6 +265,11 @@ func reconcileCanonicalOrganizationLocked(path, organizationID, installationID, 
 
 	bindingStable := document.Binding.State == ownershipcontract.BindingStateBound &&
 		document.Binding.IssuerID != nil && *document.Binding.IssuerID == issuerID
+	remoteStable := document.AuthorityMode == ownershipcontract.AuthorityModeRemoteEnforced &&
+		document.Binding.State == ownershipcontract.BindingStateRemoteLocked && trustStable && !tenantChanged
+	if remoteStable {
+		return nil
+	}
 
 	if bindingStable && trustStable && !tenantChanged {
 		return nil // idempotente: mismos valores ya aceptados, no reescribe.

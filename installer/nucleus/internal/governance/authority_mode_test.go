@@ -8,6 +8,7 @@ import (
 )
 
 func TestEffectiveAuthorityModeIsLocalLegacy(t *testing.T) {
+	validLocalLegacyRoot(t)
 	mode, err := EffectiveAuthorityMode()
 	if err != nil {
 		t.Fatal(err)
@@ -18,11 +19,45 @@ func TestEffectiveAuthorityModeIsLocalLegacy(t *testing.T) {
 }
 
 func TestInstallingShadowCannotChangeEffectiveMode(t *testing.T) {
+	validLocalLegacyRoot(t)
 	restore := InstallAuthorityShadow(&ShadowConfiguration{})
 	defer restore()
 	mode, err := EffectiveAuthorityMode()
 	if err != nil || mode != ModeLocalLegacy {
 		t.Fatalf("shadow changed effective mode: %q %v", mode, err)
+	}
+}
+
+func TestEffectiveAuthorityModeFailsClosedWhenRootCannotResolve(t *testing.T) {
+	t.Setenv("BLOOM_NUCLEUS_ROOT", filepath.Join(t.TempDir(), "missing"))
+	if mode, err := EffectiveAuthorityMode(); err == nil || mode != "" {
+		t.Fatalf("expected authority_mode_invalid, mode=%q err=%v", mode, err)
+	}
+	if _, err := AuthorizeGravityNodeCreation(OpCreateOrganization, "org", nil, nil); err == nil {
+		t.Fatal("legacy authorization called after mode resolution failure")
+	}
+}
+
+func TestEffectiveAuthorityModeNeverFallsBackForInvalidOwnership(t *testing.T) {
+	for _, tc := range []struct{ name, raw string }{
+		{"absent", ""},
+		{"invalid json", "{"},
+		{"unknown schema", `{"schema":"unknown","schema_version":"1","authority_mode":"local_legacy"}`},
+		{"invalid mode binding", `{"schema":"bloom.organization.ownership","schema_version":"1.0","authority_mode":"remote_enforced","organization":{"canonical_id":null,"legacy_org_id":"legacy","legacy_locator":null,"slug":null,"display_name":null,"tenant_id":null},"installation":{"installation_id":"i"},"binding":{"state":"UNBOUND","issuer_id":null,"accepted_at":null,"remote_locked_at":null},"trust_binding":null,"legacy_authority":null,"migration":null,"created_at":"2026-09-18T00:00:00Z","updated_at":"2026-09-18T00:00:00Z"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("BLOOM_NUCLEUS_ROOT", root)
+			if tc.raw != "" {
+				writeRegularFile(t, filepath.Join(root, ".ownership.json"), tc.raw)
+			}
+			if mode, err := EffectiveAuthorityMode(); err == nil || mode != "" {
+				t.Fatalf("unexpected fallback: mode=%q err=%v", mode, err)
+			}
+			if _, err := AuthorizeGravityNodeCreation(OpCreateOrganization, "org", nil, nil); err == nil {
+				t.Fatal("legacy path authorized invalid ownership")
+			}
+		})
 	}
 }
 

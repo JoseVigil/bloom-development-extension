@@ -22,6 +22,7 @@
 package decision
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
@@ -55,6 +56,18 @@ func DefaultShadowConfiguration(appDataDir string) *ShadowConfiguration {
 		Request:   shadowDecisionRequest,
 		Sink:      &authority.ObservationStore{Path: observationsPath},
 		Connected: stateErr == nil && checkpointErr == nil,
+		ProjectBinding: func(ctx context.Context, projectID string) (authority.ProjectBinding, error) {
+			active, err := core.ResolveActiveOrgContext()
+			if err != nil {
+				return authority.ProjectBinding{}, err
+			}
+			identity, err := authority.LoadOrCreateLocalIdentity(filepath.Join(dir, "identity.json"))
+			if err != nil {
+				return authority.ProjectBinding{}, err
+			}
+			client := &authority.SyncClient{BaseURL: active.AuthorityBaseURL, Binding: authority.Binding{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID}, InstallationPrivateKey: identity.PrivateKey}
+			return client.GetProjectBinding(ctx, projectID)
+		},
 		// Now y CommittedAt se dejan sin asignar a propósito: AuthorizeGravityNodeCreation
 		// ya defaultea ambos a time.Now().UTC() (líneas 111-124) y no hay una
 		// noción de "commit" fuera del ciclo de sync/notice, que este call
@@ -88,11 +101,11 @@ func shadowDecisionRequest(operation GovernedOperation, nodeID string, parentID 
 	if err != nil {
 		return request
 	}
-	view, err := ownershipcontract.EffectiveLegacyView(analysis)
-	if err != nil || view.Owner.Subject == "" {
-		return request
+	view, viewErr := ownershipcontract.EffectiveLegacyView(analysis)
+	legacySubject := ""
+	if viewErr == nil {
+		legacySubject = view.Owner.Subject
 	}
-	request.PrincipalID = view.Owner.Subject
 	// Scope.ID viene del Organization.CanonicalID reconciliado (Sovereign Tenant Fase 5,
 	// ReconcileCanonicalOrganization en internal/governance/ownership_reconciliation.go) —
 	// el mismo id que DecisionEvaluator.Evaluate compara contra state.Binding.OrganizationID
@@ -111,6 +124,39 @@ func shadowDecisionRequest(operation GovernedOperation, nodeID string, parentID 
 	if parentID != nil && analysis.Canonical != nil && analysis.Canonical.Organization.CanonicalID != nil &&
 		*analysis.Canonical.Organization.CanonicalID != "" {
 		request.Scope = authority.Scope{Type: "organization", ID: *analysis.Canonical.Organization.CanonicalID}
+	}
+	statePath := filepath.Join(core.ResolveAppDataDir(), "authority", "state.json")
+	checkpointPath := filepath.Join(core.ResolveAppDataDir(), "authority", "checkpoint.json")
+	state, stateErr := (&authority.Store{Path: statePath}).Load()
+	if stateErr != nil || state == nil {
+		return request
+	}
+	candidates := []string{}
+	for _, principal := range state.Projection.Principals {
+		if principal.Status != "active" {
+			continue
+		}
+		matched := legacySubject == ""
+		if legacySubject != "" {
+			matched = false
+			for _, external := range principal.ExternalIdentities {
+				if external.Status == "verified" && external.Subject == legacySubject && !external.VerifiedAt.After(now) {
+					matched = true
+				}
+			}
+		}
+		if !matched {
+			continue
+		}
+		probe := request
+		probe.PrincipalID = principal.PrincipalID
+		decision := (authority.DecisionEvaluator{Store: &authority.Store{Path: statePath}, Checkpoint: &authority.CheckpointStore{Path: checkpointPath}}).Evaluate(probe)
+		if decision.Outcome == authority.DecisionAllow && decision.Reason == "permission_granted" {
+			candidates = append(candidates, principal.PrincipalID)
+		}
+	}
+	if len(candidates) == 1 {
+		request.PrincipalID = candidates[0]
 	}
 	return request
 }
