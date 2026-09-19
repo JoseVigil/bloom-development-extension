@@ -1,12 +1,14 @@
 package vault
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/zalando/go-keyring"
 	"nucleus/internal/core"
 )
 
@@ -28,13 +30,65 @@ func newFakeKeyring() *fakeKeyring {
 	return &fakeKeyring{store: map[string]string{}}
 }
 
+func TestCheckAvailabilityPreservesMasterGate(t *testing.T) {
+	withTempHome(t)
+	fake := withFakeKeyring(t)
+	for _, role := range []core.Role{core.RoleUnknown, core.RoleSpecialist} {
+		available, code := checkKeyAvailability("anthropic-key:default", role)
+		if available || code != "VAULT_ACCESS_DENIED" || len(fake.calls) != 0 {
+			t.Fatalf("unauthorized check reached keyring: available=%v code=%s", available, code)
+		}
+	}
+}
+
+func TestCheckAvailabilityLockedAbsentAndPresent(t *testing.T) {
+	withTempHome(t)
+	fake := withFakeKeyring(t)
+	writeVaultStatus(t, true)
+	if ok, code := checkKeyAvailability("anthropic-key:default", core.RoleMaster); ok || code != "VAULT_LOCKED" {
+		t.Fatalf("expected locked: %v %s", ok, code)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatal("locked check reached keyring")
+	}
+	writeVaultStatus(t, false)
+	if ok, code := checkKeyAvailability("anthropic-key:default", core.RoleMaster); ok || code != "CREDENTIAL_NOT_FOUND" {
+		t.Fatalf("expected absent: %v %s", ok, code)
+	}
+	fake.store[vaultServiceName()+"/anthropic-key:default"] = "fixture-secret-never-output"
+	if ok, code := checkKeyAvailability("anthropic-key:default", core.RoleMaster); !ok || code != "" {
+		t.Fatalf("expected available: %v %s", ok, code)
+	}
+}
+
+func TestCheckCommandDoesNotOutputSecret(t *testing.T) {
+	root := withTempHome(t)
+	fake := withFakeKeyring(t)
+	writeVaultStatus(t, false)
+	if err := os.WriteFile(filepath.Join(root, ".master"), []byte("master"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fake.store[vaultServiceName()+"/anthropic-key:default"] = "fixture-secret-never-output"
+	command := createVaultCheckCommand(&core.Core{IsJSON: true})
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	command.SetArgs([]string{"anthropic-key:default"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if output.String() != "{\"available\":true,\"code\":\"\"}\n" {
+		t.Fatalf("unexpected output: %q", output.String())
+	}
+}
+
 func (f *fakeKeyring) Get(service, key string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "get:"+service+":"+key)
 	v, ok := f.store[service+"/"+key]
 	if !ok {
-		return "", errors.New("secret not found")
+		return "", keyring.ErrNotFound
 	}
 	return v, nil
 }
@@ -66,23 +120,12 @@ func withFakeKeyring(t *testing.T) *fakeKeyring {
 	return fk
 }
 
-// withTempHome points os.UserHomeDir() (via $HOME) at a fresh temp dir so
-// GetVaultPath()/saveVaultStatus() never touch the real filesystem, and
-// resets it after the test.
+// withTempHome isolates Vault state through the test-only root override.
 func withTempHome(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
-	original, hadOriginal := os.LookupEnv("HOME")
-	if err := os.Setenv("HOME", tmp); err != nil {
-		t.Fatalf("failed to set HOME: %v", err)
-	}
-	t.Cleanup(func() {
-		if hadOriginal {
-			os.Setenv("HOME", original)
-		} else {
-			os.Unsetenv("HOME")
-		}
-	})
+	// Test-only context; never change real authority or machine configuration.
+	t.Setenv("BLOOM_NUCLEUS_ROOT", tmp)
 	return tmp
 }
 
@@ -151,7 +194,7 @@ func TestNonMasterRole_RejectedWithoutTouchingKeyring(t *testing.T) {
 
 	t.Run("RequestKey", func(t *testing.T) {
 		fk := withFakeKeyring(t)
-		_, err := RequestKey(keyID, core.RoleUser, ScopeReadOnly)
+		_, err := RequestKey(keyID, core.RoleSpecialist, ScopeReadOnly)
 		if !errors.Is(err, ErrUnauthorized) {
 			t.Fatalf("RequestKey() with a non-master role: want ErrUnauthorized, got %v", err)
 		}
@@ -162,7 +205,7 @@ func TestNonMasterRole_RejectedWithoutTouchingKeyring(t *testing.T) {
 
 	t.Run("SetKey", func(t *testing.T) {
 		fk := withFakeKeyring(t)
-		err := SetKey(keyID, "value", core.RoleUser, ScopeWrite)
+		err := SetKey(keyID, "value", core.RoleSpecialist, ScopeWrite)
 		if !errors.Is(err, ErrUnauthorized) {
 			t.Fatalf("SetKey() with a non-master role: want ErrUnauthorized, got %v", err)
 		}
@@ -173,7 +216,7 @@ func TestNonMasterRole_RejectedWithoutTouchingKeyring(t *testing.T) {
 
 	t.Run("DeleteKey", func(t *testing.T) {
 		fk := withFakeKeyring(t)
-		err := DeleteKey(keyID, core.RoleUser, ScopeDelete)
+		err := DeleteKey(keyID, core.RoleSpecialist, ScopeDelete)
 		if !errors.Is(err, ErrUnauthorized) {
 			t.Fatalf("DeleteKey() with a non-master role: want ErrUnauthorized, got %v", err)
 		}

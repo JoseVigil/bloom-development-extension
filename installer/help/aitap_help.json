@@ -1,0 +1,88 @@
+{
+  "app": "aitap",
+  "tagline": "Router centralizado de acceso a proveedores de IA para el ecosistema Bloom",
+  "schema_version": "1.0",
+  "vault_owner": "nucleus",
+  "vault_note": "aitap solo guarda referencias (key_id) y politica de ruteo. El secreto real vive en Nucleus Vault (OS Keyring).",
+  "categories": {
+    "system": {
+      "description": "Version, status e introspeccion del servicio AITap",
+      "commands": [
+        {
+          "name": "version",
+          "category": "system",
+          "description": "Muestra la version instalada de AITap",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap system version"
+          ]
+        },
+        {
+          "name": "status",
+          "category": "system",
+          "description": "Estado de AITAP y sus integraciones pendientes",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap system status"
+          ]
+        }
+      ]
+    },
+    "keys": {
+      "description": "Referencias a credenciales por proveedor (Gemini, Claude, OpenAI, xAI) - nunca el secreto real",
+      "commands": [
+        {
+          "name": "list",
+          "category": "keys",
+          "description": "Lista referencias de keys registradas por proveedor (placeholder)",
+          "requires_vault": true,
+          "aliases": [],
+          "examples": [
+            "aitap keys list"
+          ]
+        }
+      ]
+    },
+    "route": {
+      "description": "Politica de ruteo entre proveedores y estado del circuit breaker",
+      "commands": [
+        {
+          "name": "status",
+          "category": "route",
+          "description": "Estado del primer vertical de routing determinístico",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap route status"
+          ]
+        },
+        {
+          "name": "decide",
+          "category": "route",
+          "description": "Produce una decisión abstracta, determinística y auditable",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap route decide --request request.json"
+          ]
+        },
+        {
+          "name": "supply",
+          "category": "route",
+          "description": "Invoke Intelligence Supply with durable accounting and replay",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap --json route supply --request request.json"
+          ]
+        }
+      ]
+    },
+    "health": {
+      "description": "Chequeos de salud de AITap y de su conexion con Nucleus Vault",
+      "commands": []
+    }
+  }
+}

@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
 """
-Genera aitap_help.json y aitap_help.txt LOCALMENTE en installer/aitap/help/.
-
-IMPORTANTE: a proposito NO escribe en installer/help/ (el directorio
-compartido con nucleus/sentinel/metamorph/sensor). Esa es la convencion a la
-que aitap deberia migrar eventualmente (ver installer/nucleus/scripts/build-darwin.sh:
-`nucleus --json-help > installer/help/nucleus_help.json`), pero todavia no se
-decidio como/cuando aitap entra al pipeline de build compartido. Hasta que se
-decida, el output queda local para no ensuciar ese directorio con contenido
-prematuro.
+Genera aitap_help.json y aitap_help.txt en installer/help/, el directorio
+compartido por las aplicaciones del ecosistema.
 
 Para aitap, en vez de invocar un binario compilado, se captura render_help()
 in-process (mismo truco que brain/core/system/help_docs_manager.py) para no
@@ -24,7 +17,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 AITAP_ROOT = SCRIPT_DIR.parent
-HELP_DIR = AITAP_ROOT / "help"
+HELP_DIR = AITAP_ROOT.parent / "help"
 
 sys.path.insert(0, str(AITAP_ROOT / "src"))
 

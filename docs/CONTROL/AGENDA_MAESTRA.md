@@ -54,7 +54,7 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 | # | Tema | Estado consolidado | Próximo paso concreto | Dependencia inmediata |
 |---|---|---|---|---|
-| 1 | Mandate Genesis | Mandate desacoplado de Genesis en workflow, eventos y CLI; Genesis permanece como tipo/recorrido de negocio; composición funcional cerrada | Validar el renombre en Go y consolidar action graph y contratos durables para iniciar el vertical | Brain; Temporal; AITAP; Executor; Nucleus/Core |
+| 1 | Mandate Genesis | Implementación completada y validada de forma controlada; aceptación E2E bloqueada | Resolver bootstrap legítimo de autoridad Master para Vault y ejecutar E2E real aislado con Anthropic | GENESIS CONTROL; Nucleus Vault; AITAP; Anthropic |
 | 2 | Core UI Redesign | Sidebar y Profiles cerrados | Definir/armar panel derecho, Home y Wisdom tras diagnóstico | Switch de organización; Alfred; contrato de Mandate |
 | 3 | BSIP Response | Validador aislado listo; formato de patch con evidencia inicial | Ejecutar batería de adherencia antes de cerrar schema | Modelos de frontera; OpenCode; canal API/web |
 | 4 | AITAP | Frontera arquitectónica cerrada; scaffold incompleto | Resolver integración real de Contrato D y alta de dispositivos | BSIP Response; Nucleus; Alfred |
@@ -73,33 +73,11 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 **Estado actual**
 
-El bloqueador de resolución de workspace del watcher, activo hasta el 25 de agosto, está corregido y verificado en el binario desplegado — no solo en diseño. La causa real no era un campo faltante en `nucleus.json`: fue una regresión de esquema — el watcher buscaba los campos planos obsoletos (`onboarding.workspace_org`/`workspace_path`), mientras el onboarding ya escribía el esquema multi-organización vigente (`active_org_slug` + `organizations[].workspace_path`). El fallback por filesystem tampoco podía resolverlo porque el servicio arranca desde el directorio del binario (`AppData\...\bin\nucleus`), sin ancestro común con el workspace real.
+**IMPLEMENTACIÓN COMPLETADA; ACEPTACIÓN E2E BLOQUEADA.**
 
-Corrección ya desplegada: `LoadMachineNucleusConfig()` lee correctamente el esquema anidado (`mandate_config.go`), deriva `MandatesRoot` sin depender del CWD, y usa el scan por filesystem únicamente como fallback de desarrollo (`service.go`). Confirmado con logs reales de producción de cuatro días distintos (25, 26, 27 y 29 de agosto), incluyendo el despacho efectivo de `MandateBuildWorkflow` — no solo la resolución del path.
+Quedaron implementados y validados de forma controlada el lifecycle durable de `ing`, el canal Brain ↔ AITAP para propuestas `dis.mapping`, la persistencia, el reinicio y el replay sin duplicación.
 
-Se detectó y corrigió, en el mismo trabajo, una regresión equivalente en `dev-start` (mismo campo plano obsoleto). El alcance actual de esta resolución de workspace es más amplio de lo que se creía — comparten el mismo mecanismo centralizado (`ResolveActiveOrgContext()`/`ResolveNucleusRoot()`) los comandos de Mandates, Vault, Ownership, Blueprint, Alfred y metadata de Nucleus. Sin evidencia de fallo en ninguno de ellos hoy.
-
-Riesgo residual, no bloqueante: instalaciones legacy que conserven únicamente el esquema plano podrían fallar si el servicio arranca antes de que Conductor las migre. No amerita acción ahora — queda como endurecimiento futuro opcional si se confirma que existen instalaciones en ese estado.
-
-La abstracción queda corregida de forma explícita: **Mandate es la entidad genérica; Genesis es un tipo y un recorrido funcional particular, no una clase técnica distinta de Mandate ni el nombre de su infraestructura compartida**. La misma construcción genérica atiende los tipos `genesis`, `domain_expansion` y `standard`; no corresponde crear una implementación de Mandate por cada label o determinación de negocio.
-
-El saneamiento nominal fue materializado en tres commits sobre `main`: Fase 2 en `61dec985`, actualización documental en `9c5e6d33` y Fase 3 CLI en `55e589d9`. El workflow compartido es ahora `MandateBuildWorkflow`, los eventos runtime usan `mandate:build:*` y la creación por CLI se invoca mediante `nucleus mandate build`. Permanecen correctamente ligados a Genesis el valor de `MandateType`, la familia `BaseGenesisID` que ancla `domain_expansion` a un Mandate Genesis, las actividades específicas del tipo y las superficies de Onboarding que sólo crean ese tipo. Los documentos forenses fechados conservan los nombres históricos; `GENESIS_RENAME_INDEX.md` traduce esas referencias al estado actual.
-
-La composición funcional canónica de un Genesis completo queda fijada así:
-
-```text
-ing → dis → doc → exp/evaluación → [dev condicional] → exp/reevaluación → completed
-```
-
-`ing/`, `dis/`, `doc/` y la evaluación técnica mediante `exp/` son obligaciones semánticas. `dis/` admite el fast-path `no_changes_required`. `dev/` se dispara únicamente cuando `exp/` devuelve `remediation_required` con findings estructurados y, después de cualquier `dev/`, una nueva evaluación `exp/` es obligatoria. Genesis solo puede quedar `completed` cuando `ing == completed`, `dis in [completed, no_changes_required]`, `doc == completed` y `latest_exp.result == ready`.
-
-El Work existente debe continuar, sin duplicarse, bajo el nombre **MANDATE GENESIS — CLI + AITAP + EXECUTOR END-TO-END**. Su Etapa A previa sigue siendo insumo válido, pero el canal prioritario del primer vertical cambia: ya no depende de Synapse ni de Synapse Simulator. La ruta primaria es CLI → Nucleus/Temporal → Brain → AITAP para suministro cognitivo → Executor cuando exista actuación local autorizada → persistencia Brain/Nucleus → continuidad Temporal → observación durable en Core. La CLI es superficie de control, observación y recovery; no es dueña del workflow.
-
-El Work independiente **SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES** continúa con su investigación y diseño, pero deja de ser precondición de Genesis. Synapse queda como canal alternativo posterior sobre los mismos contratos.
-
-El ownership general queda fijado: Nucleus gobierna y autoriza; Temporal orquesta Actions durablemente; Brain conserva el ciclo de vida, identidad, persistencia e interpretación de Intents; AITAP conserva Gateway, referencias de Vault y Contabilidad sin ejecutar código ni tocar filesystem; Executor implementa la Execution Layer sobre trabajo definido y autorizado, sin decidir si Genesis necesita `dev`; Core proyecta el estado durable.
-
-La verificación de contrato con AUTHORIZATION quedó completada para el canal CLI: Specialist y Unknown son rechazados sin estado parcial ni dispatch a Temporal; Master pasa por un único punto de entrada (`requireMandateMaster → governance.RequireMaster`) y crea `mandate_state.json`. AUTHORIZATION, roles y gates no fueron modificados por la corrección del watcher; el despacho de `MandateBuildWorkflow` desde el `MandatesRoot` correcto quedó confirmado en producción.
+No están validados el E2E real aislado con Anthropic, la resolución productiva de la credencial Anthropic mediante Nucleus Vault ni la aceptación funcional completa del primer Mandate Genesis. Genesis permanece no habilitado y no puede declararse cerrado hasta completar esa corrida E2E real.
 
 **Fuentes de verdad**
 
@@ -111,10 +89,7 @@ La verificación de contrato con AUTHORIZATION quedó completada para el canal C
 
 **Próximo paso concreto**
 
-1. Consolidar la representación exacta del action graph y la transición durable Mandate ↔ Action ↔ Intent.
-2. Definir schemas de output de `doc/` y `exp/`, incluidos `remediation_required`, findings estructurados y `ready`.
-3. Cerrar autorización Nucleus → Executor y observabilidad en Core.
-4. Elegir motor Temporal específico o genérico sin reabrir la composición funcional, y recién entonces aprobar la implementación del vertical.
+Determinar el mecanismo o estado legítimo de autoridad Master que debe permitir a Nucleus Vault autorizar la resolución de la referencia de credencial Anthropic solicitada por AITAP, y ejecutar después la corrida E2E real aislada del primer Mandate Genesis.
 
 **Entorno recomendado**
 
@@ -132,10 +107,10 @@ Coordinación entre los Works de Genesis, AITAP y Executor hasta cerrar sus cont
 
 **Decisiones/riesgos abiertos**
 
-- Permanecen abiertos el action graph, motor Temporal, schemas `doc`/`exp`, transición durable, autorización Nucleus → Executor, findings que habilitan `dev` y representación en Core.
+- Bloqueador único: falta determinar el mecanismo o estado legítimo de autoridad Master que permita a Nucleus Vault autorizar la resolución de la referencia de credencial Anthropic solicitada por AITAP. Su ownership pertenece a GENESIS CONTROL; no es una regresión del lifecycle durable ni del canal Brain ↔ AITAP.
 - La creación de Mandates todavía tiene dos implementaciones: `createBuildMandate` en CLI/Go y `createMandateHandler` en API/Node construyen `mandate_state.json` por caminos separados. Unificarlas bajo una sola fuente de verdad es un rediseño posterior, no parte del renombre.
 - La barrida nominal, `gofmt` y TypeScript `tsc --noEmit` fueron reportados en verde durante las fases del saneamiento. `go build` y `go test` no pudieron ejecutarse por falta de acceso al proxy de módulos; deben correrse localmente antes de declarar el cambio completamente verde. Los binarios y artefactos precompilados permanecen pendientes de rebuild y despliegue.
-- El bloqueador de resolución de workspace del watcher está resuelto y verificado en producción (ver Estado actual). El E2E CLI Master ya no está bloqueado por esta causa — sigue pendiente de QA manual end-to-end formal, no de infraestructura. El E2E API de creación de Mandates sigue sin aceptarse como válido hasta que el handler Node/TypeScript y el boundary Go→Node de AUTH-FIX-02 estén cerrados (sin cambios respecto a lo ya registrado en Tema 9).
+- El E2E real aislado con Anthropic permanece pendiente y es la condición de aceptación funcional completa del primer Mandate Genesis.
 - Estas decisiones precisan la implementación, pero no pueden alterar la composición funcional sin volver a AGENDA FOLLOWUP.
 - Elevar a esta agenda solamente blockers transversales reales encontrados por cualquiera de los dos Works.
 - D-25: confirmar si hace falta separar `GenesisTab` de `StandardMandateTab` o unificar en un `MandateTab` orientado por estado.
@@ -676,13 +651,12 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
 |---|---|---|---|
-| Alta | 1 + 4 + Executor | Consolidar `MANDATE GENESIS — CLI + AITAP + EXECUTOR END-TO-END`: action graph, outputs `doc`/`exp`, transiciones durables y autorización | Composición funcional cerrada; coordinación entre los tres Works |
+| Alta | 1 | Resolver bootstrap legítimo Master → Nucleus Vault → AITAP y ejecutar aceptación E2E Anthropic del primer Mandate Genesis | Implementación controlada validada; Genesis no habilitado hasta la corrida E2E real |
 | Media | Synapse Simulator | Continuar `SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES` como canal alternativo posterior | Sin dependencia sobre el primer vertical Genesis |
 | Alta | 5 | Certificación operativa de instalación/servicio OpenCode en Windows, macOS y Linux | Acceso a los tres sistemas; confirmar comando real de `serve` |
 | Alta | 3 + 5 | Batería de adherencia API/web y OpenCode para decidir formato de patch, checksum y scope usando `validate-contract` | Prompt de ejecución pendiente de preparar; acceso a modelos, OpenCode y comando local |
 | Alta | 7 | Corregir §2.2 de Vault Storage y migrar referencias desde la remediación anterior | GitHub App + Device Flow confirmado; mapear referencias a migrar |
 | Alta | 8 | Migración de arquitectura/auth de Batcave a GitHub App + Device Flow | Corregir primero la regresión de Vault Storage y confirmar scopes mínimos |
-| Alta | 1 | Resolver workspace Nucleus activo para el watcher de Mandates y verificar inicio de Temporal con Master | `onboarding.workspace_org` ausente y fallback por filesystem falla desde el servicio |
 | Alta | 9 | Preflight fail-closed sobre instalaciones existentes y verificación de `dev-start` | Próxima instalación completa; no borrar artefactos de prueba todavía |
 | P0 | 9 | `AUTH-FIX-02`: completar gate del handler API Node/TypeScript y boundary Go→Node; el tramo CLI ya está cerrado | Asignar Work; no aceptar E2E API de creación real antes del cierre |
 | P1 | 9 | `AUTH-MODULE-01` para promoción/materialización/finalización productiva | Cierre de `AUTH-FIX-02` completo |
@@ -719,3 +693,4 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 | 2026-09-04 | 12 | Se distribuyó la versión material corregida de `BLOOM_REMOTE_AUTHORITY_PHYSICAL_DESIGN_v0_1.md`, con `PHY-DEC-011/012`, §20 normativo de `.ownership.json` y cuatro criterios adicionales de aprobación. | Actualización del usuario; diseño físico corregido | Se sustituye la referencia anterior: el diseño completo vuelve a estado sometido a revisión hasta la aprobación expresa de los criterios 13–16 del §22. Se abre homologación obligatoria por frontera contra `.ownership.json`. |
 | 2026-09-04 | 12 | NUCLEUS reportó (commit `3210f218`) la implementación y validación de la Fase 1 física de Remote Authority dentro de su propia frontera: `ownershipcontract`, migración durable de ownership, markers fail-closed, decisión sellada de Gravity y el módulo `internal/authority` (Authority Snapshot, JCS, firma Ed25519, full/delta, high-water mark, catálogo de roles v1 sin `architect`); Supervisor/SynapseSimulator ya validan por la capa canónica. `shadow_remote`, `remote_enforced`, cutover, Backend, transporte de Batcave y consumidores en Brain/Temporal permanecen sin activar. | Work NUCLEUS, reportado por el usuario | Se actualiza el Tema 12: se registra la Fase 1 de Nucleus como implementación material (no propuesta), se diferencia de lo pendiente por Work, y se añade revisión de impacto para Backend, Batcave, Genesis, Brain/Temporal, Metamorph, Conductor, Vault, Executor, Gravity y Core/UI. Ninguna escritura queda autorizada por este reporte. |
 | 2026-09-07 | 1 | Se corrigió el acoplamiento técnico que trataba Genesis como nombre de la infraestructura compartida de Mandates. `MandateBuildWorkflow`, `mandate:build:*` y `nucleus mandate build` son ahora los nombres genéricos; `genesis` se conserva como `MandateType`, recorrido funcional y contexto específico donde corresponde. | Commits `61dec985`, `9c5e6d33` y `55e589d9`; `docs/MANDATE/GENESIS_RENAME_INDEX.md` | Se fija en Agenda que Mandate es la entidad genérica y Genesis un tipo/label. Quedan abiertos la doble implementación CLI/Go vs. API/Node, la ejecución local de `go build`/`go test` y el rebuild de artefactos antes de declarar el saneamiento completamente validado y desplegado. |
+| 2026-09-19 | 1 | Reporte directo: lifecycle durable de `ing`, Brain ↔ AITAP para `dis.mapping`, persistencia, reinicio y replay sin duplicación implementados y validados de forma controlada. | Reporte directo del usuario | Se actualiza Tema 1 a IMPLEMENTACIÓN COMPLETADA; ACEPTACIÓN E2E BLOQUEADA. El único bloqueo registrado es bootstrap legítimo de autoridad Master para que Nucleus Vault autorice la referencia Anthropic solicitada por AITAP; ownership: GENESIS CONTROL. |

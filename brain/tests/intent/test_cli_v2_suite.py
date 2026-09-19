@@ -13,6 +13,7 @@ COMMAND_FILES = [
     if path.name not in {"__init__.py", "effect_command_errors.py"}
 ]
 REQUIRED_EFFECT_COMMANDS = {
+    "supply.py",
     "mark_effect_applied.py",
     "commit_turn.py",
     "advance_turn.py",

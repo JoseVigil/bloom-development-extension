@@ -19,6 +19,7 @@ from brain.core.intent_state_manager import (
     InvalidTransitionError,
     PhaseNotActiveError,
     IntentAlreadyTerminatedError,
+    _atomic_write_json,
 )
 from brain.core.intent_types import get_intent_type_spec
 from brain.core.intent.effect_ledger import EffectLedgerManager
@@ -369,6 +370,9 @@ class IntentManager:
         intent_type = _itype(state_data)
         mgr = IntentStateManager.load(intent_path)
 
+        if mgr.phase_active != ("reception" if intent_type == "ing" else "discovery"):
+            raise ValueError("Hydration is only permitted in reception/discovery")
+
         if intent_type == "ing":
             content_payload = self._write_ing_reception_content(
                 project_root, intent_path, state_data, files, verbose
@@ -419,12 +423,10 @@ class IntentManager:
         rawbase_index_entries = []
         stats = {"total_files": 0, "total_size_kb": 0.0}
 
-        for file_path_str in files_to_process:
+        for file_path_str in sorted(files_to_process):
             full_path = project_root / file_path_str
             if not full_path.exists():
-                if verbose:
-                    print(f"⚠️ Warning: File skipped (not found): {file_path_str}")
-                continue
+                raise ValueError(f"Received file is missing: {file_path_str}")
 
             ext = full_path.suffix.lower().replace('.', '')
             lang_map = {'py': 'python', 'js': 'javascript', 'ts': 'typescript', 'md': 'markdown'}
@@ -449,11 +451,8 @@ class IntentManager:
             stats["total_files"] += 1
             stats["total_size_kb"] += file_size / 1024
 
-        with open(reception_dir / ".rawbase.json", 'w', encoding="utf-8") as f:
-            json.dump({"files": rawbase_entries}, f, indent=2, ensure_ascii=False)
-
-        with open(reception_dir / ".rawbase_index.json", 'w', encoding="utf-8") as f:
-            json.dump({"index": rawbase_index_entries}, f, indent=2, ensure_ascii=False)
+        _atomic_write_json(reception_dir / ".rawbase.json", {"files": rawbase_entries})
+        _atomic_write_json(reception_dir / ".rawbase_index.json", {"index": rawbase_index_entries})
 
         return {
             "stats": {
@@ -1696,6 +1695,9 @@ class IntentManager:
         project_root = self._find_bloom_project(nucleus_path)
         intent_path, state_data, _ = self._locate_intent(project_root, intent_id, folder_name)
         mgr = IntentStateManager.load(intent_path)
+
+        if (intent_path / ".classification/.turn_1/.request.json").exists() or (intent_path / ".mapping/.turn_1/.request.json").exists():
+            raise ValueError("Supply-owned turns require intent supply with explicit human decisions")
         turn_dir = intent_path / f".{phase_name}" / f".turn_{turn_number}"
         ledger = EffectLedgerManager(turn_dir)
         ledger.assert_identity(
@@ -1716,6 +1718,8 @@ class IntentManager:
         except (FileNotFoundError, json.JSONDecodeError) as exc:
             raise ValueError(f"cannot load persisted turn control '{control_file}': {exc}") from exc
         ledger_ref = ".effect_ledger.json"
+        if control.get("proposal") != ledger_data["effects_payload"]:
+            raise ValueError("turn proposal differs from verified ledger payload")
         effects_digest = ledger_data["effects_digest"]
         already_committed = bool(control.get("committed", False))
         if already_committed:
@@ -1815,6 +1819,13 @@ class IntentManager:
             "ledger_state": ledger_data["state"],
             "state_advanced": True,
         }
+
+    def supply_intent(self, *, intent_root: Path, semantic_index: Path,
+                      decisions=None, ing_result=None, policy_version="genesis-runtime-intelligence/v2"):
+        """Explicit local intelligence boundary; no Mandate workflow transition."""
+        from brain.core.intent.genesis_intelligence import GenesisIntelligence
+        return GenesisIntelligence(intent_root, semantic_index, policy_version=policy_version).run(
+            decisions=decisions, ing_result=ing_result)
 
     def finalize_intent(
         self,

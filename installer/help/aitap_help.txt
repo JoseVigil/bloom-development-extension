@@ -1,0 +1,29 @@
+
+aitap — Router centralizado de acceso a proveedores de IA para el ecosistema 
+Bloom
+
+USAGE
+  aitap [OPTIONS] <category> <command> 
+
+GLOBAL OPTIONS
+  --json          Output en JSON
+  --json-help     Referencia completa en JSON (AI-native)
+  --verbose       Logging detallado
+  --help          Esta ayuda
+
+aitap no es dueno del vault — Nucleus lo es. Solo guarda referencias y politica
+de ruteo.
+
+                            Categorias de comandos                             
++-----------------------------------------------------------------------------+
+| Categoria | Descripcion                            | Comandos               |
+|-----------+----------------------------------------+------------------------|
+| system    | Version, status e introspeccion del    | version, status        |
+|           | servicio AITap                         |                        |
+| keys      | Referencias a credenciales por         | list                   |
+|           | proveedor (Gemini, Claude, OpenAI,     |                        |
+|           | xAI) - nunca el secreto real           |                        |
+| route     | Politica de ruteo entre proveedores y  | status, decide, supply |
+|           | estado del circuit breaker             |                        |
++-----------------------------------------------------------------------------+
+

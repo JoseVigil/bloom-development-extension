@@ -10,12 +10,13 @@ from aitap.cli.registry import CommandRegistry
 from aitap.commands.keys.keys_list import KeysListCommand
 from aitap.commands.route.route_status import RouteStatusCommand
 from aitap.commands.route.route_decide import RouteDecideCommand
+from aitap.commands.route.intelligence_supply import IntelligenceSupplyCommand
 from aitap.commands.system.status import StatusCommand
 from aitap.commands.system.version import VersionCommand
 
 
 def discover_commands() -> CommandRegistry:
     registry = CommandRegistry()
-    for command_cls in (VersionCommand, StatusCommand, KeysListCommand, RouteStatusCommand, RouteDecideCommand):
+    for command_cls in (VersionCommand, StatusCommand, KeysListCommand, RouteStatusCommand, RouteDecideCommand, IntelligenceSupplyCommand):
         registry.register(command_cls())
     return registry

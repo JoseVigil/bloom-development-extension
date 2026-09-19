@@ -26,6 +26,34 @@ class RoutingEngine:
     policy: dict[str, Any]
     registry: dict[str, Any]
 
+    def supply_routes(self, request: dict[str, Any]) -> list[dict[str, Any]]:
+        """Route intelligence directly, without selecting an execution runtime."""
+        if request["routing"]["policy_version"] != self.policy["policy_version"]:
+            raise RoutingError("policy version mismatch")
+        rule = self.policy.get("intelligence_supply", {})
+        backends = {b["backend_id"]: b for b in self.registry["intelligence_backends"]}
+        routes = []
+        for backend_id in dict.fromkeys([rule.get("backend_id"), *rule.get("fallback", [])]):
+            backend = backends.get(backend_id)
+            if not backend or backend.get("supply_enabled") is not True:
+                continue
+            if backend["health"] == "unavailable" or backend["provider"] != "anthropic":
+                continue
+            if set(request["routing"]["required_capabilities"]) - set(backend["capabilities"]):
+                continue
+            if request["routing"]["privacy"] != backend["privacy"]:
+                continue
+            identity = {"logical_inference_id": request["logical_inference_id"],
+                        "policy": self.policy, "registry": self.registry, "backend": backend_id}
+            routes.append({"routing_decision_id": "rd-" + _digest(identity)[:32],
+                           "logical_inference_id": request["logical_inference_id"],
+                           "policy_version": self.policy["policy_version"],
+                           "registry_snapshot_id": self.registry["snapshot_id"],
+                           "effective_intelligence": dict(backend)})
+        if not routes:
+            raise RoutingError("no eligible direct intelligence route")
+        return routes
+
     @classmethod
     def from_files(cls, policy_path: Path, registry_path: Path) -> "RoutingEngine":
         return cls(json.loads(policy_path.read_text(encoding="utf-8")), json.loads(registry_path.read_text(encoding="utf-8")))

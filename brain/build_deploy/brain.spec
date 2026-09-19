@@ -105,6 +105,7 @@ hiddenimports = [
     'brain.commands.intent.recover',
     'brain.commands.intent.stage',
     'brain.commands.intent.submit',
+    'brain.commands.intent.supply',
     'brain.commands.intent.unlock',
     'brain.commands.intent.update',
     'brain.commands.intent.validate',
@@ -204,8 +205,10 @@ hiddenimports = [
     'brain.core.health.native_host_manager',
     'brain.core.health.onboarding_status_manager',
     'brain.core.health.websocket_status_manager',
+    'brain.core.intelligence_supply',
     'brain.core.intent.effect_ledger',
     'brain.core.intent.fs_contracts',
+    'brain.core.intent.genesis_intelligence',
     'brain.core.intent.merge_manager',
     'brain.core.intent.recovery_manager',
     'brain.core.intent.response_parser',
@@ -314,8 +317,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
 ]
 
 datas += collect_data_files('chromadb')

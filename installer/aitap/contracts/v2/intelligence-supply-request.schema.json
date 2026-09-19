@@ -1,0 +1,144 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "cognituum.intelligence-supply/v1"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "logical_inference_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "consumer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "type": "object",
+      "properties": {
+        "intent_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "intent_type": {
+          "enum": [
+            "ing",
+            "dis"
+          ]
+        },
+        "mandate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phase": {
+          "enum": [
+            "classification",
+            "mapping"
+          ]
+        },
+        "turn_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      },
+      "required": [
+        "intent_id",
+        "intent_type",
+        "mandate_id",
+        "phase",
+        "turn_id"
+      ],
+      "additionalProperties": false
+    },
+    "input_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "routing": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "const": "policy"
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "privacy": {
+          "const": "approved_cloud"
+        }
+      },
+      "required": [
+        "mode",
+        "policy_version",
+        "required_capabilities",
+        "privacy"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "request_id",
+    "logical_inference_id",
+    "consumer_id",
+    "intent",
+    "input_digest",
+    "payload",
+    "routing"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "intent": {
+            "properties": {
+              "intent_type": {
+                "const": "ing"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "properties": {
+              "phase": {
+                "const": "classification"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "intent": {
+            "properties": {
+              "phase": {
+                "const": "mapping"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

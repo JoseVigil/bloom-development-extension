@@ -1,0 +1,74 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "bloom.ing-result/v1"
+    },
+    "intent_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mandate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "const": "done"
+    },
+    "classification_turn": {
+      "type": "string",
+      "minLength": 1
+    },
+    "consolidation_turn": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "accepted_contributions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "uniqueItems": true
+    },
+    "rejected_clusters": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "semantic_index_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "effect_ledger_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "completed_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "intent_id",
+    "mandate_id",
+    "status",
+    "classification_turn",
+    "consolidation_turn",
+    "input_digest",
+    "accepted_contributions",
+    "rejected_clusters",
+    "semantic_index_digest",
+    "effect_ledger_digest",
+    "completed_at"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

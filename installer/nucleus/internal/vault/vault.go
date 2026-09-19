@@ -16,10 +16,10 @@ import (
 )
 
 type VaultStatus struct {
-	Locked       bool      `json:"locked"`
-	KeyCount     int       `json:"key_count"`
-	LastAccess   time.Time `json:"last_access"`
-	MasterKeyID  string    `json:"master_key_id"`
+	Locked      bool      `json:"locked"`
+	KeyCount    int       `json:"key_count"`
+	LastAccess  time.Time `json:"last_access"`
+	MasterKeyID string    `json:"master_key_id"`
 }
 
 type VaultKey struct {
@@ -318,6 +318,7 @@ func createVaultCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(createVaultUnlockCommand(c))
 	cmd.AddCommand(createVaultStatusCommand(c))
 	cmd.AddCommand(createVaultRequestCommand(c))
+	cmd.AddCommand(createVaultCheckCommand(c))
 	cmd.AddCommand(createVaultSetCommand(c))
 	cmd.AddCommand(createVaultDeleteCommand(c))
 
@@ -428,6 +429,54 @@ nucleus --json vault status`,
 					fmt.Printf("Master Key: %s\n", status.MasterKeyID)
 				}
 			}
+		},
+	}
+}
+
+// checkKeyAvailability never returns credential material to its caller.
+func checkKeyAvailability(keyID string, role Role) (bool, string) {
+	if role != core.RoleMaster {
+		return false, "VAULT_ACCESS_DENIED"
+	}
+	status, err := GetVaultStatus()
+	if err != nil {
+		return false, "VAULT_CONTEXT_INVALID"
+	}
+	if status.Locked {
+		return false, "VAULT_LOCKED"
+	}
+	value, err := RequestKey(keyID, role, ScopeReadOnly)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return false, "CREDENTIAL_NOT_FOUND"
+	}
+	if err != nil {
+		return false, "VAULT_UNAVAILABLE"
+	}
+	available := value != ""
+	value = ""
+	if !available {
+		return false, "CREDENTIAL_NOT_FOUND"
+	}
+	return true, ""
+}
+
+func createVaultCheckCommand(c *core.Core) *cobra.Command {
+	return &cobra.Command{
+		Use: "check <key-id>", Short: "Check credential availability without returning its value",
+		Args: cobra.ExactArgs(1), SilenceErrors: true, SilenceUsage: true,
+		Annotations: map[string]string{"category": "VAULT", "json_response": `{"available":true,"code":""}`},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			available, code := checkKeyAvailability(args[0], core.GetUserRole())
+			// Do not echo arguments, backend errors, hashes or secret values.
+			payload, _ := json.Marshal(struct {
+				Available bool   `json:"available"`
+				Code      string `json:"code"`
+			}{available, code})
+			fmt.Fprintln(cmd.OutOrStdout(), string(payload))
+			if !available {
+				return errors.New(code)
+			}
+			return nil
 		},
 	}
 }

@@ -1,0 +1,174 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "cognituum.inference-accounting/v1"
+    },
+    "logical_inference_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "request_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "consumer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "type": "object",
+      "properties": {
+        "intent_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "intent_type": {
+          "enum": [
+            "ing",
+            "dis"
+          ]
+        },
+        "mandate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phase": {
+          "enum": [
+            "classification",
+            "mapping"
+          ]
+        },
+        "turn_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      },
+      "required": [
+        "intent_id",
+        "intent_type",
+        "mandate_id",
+        "phase",
+        "turn_id"
+      ],
+      "additionalProperties": false
+    },
+    "input_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "state": {
+      "enum": [
+        "pending",
+        "in_flight",
+        "failed",
+        "completed"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "cognituum.intelligence-supply-result/v1"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logical_inference_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "routing_decision_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "routing_decision": {
+          "type": "object"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_response": {
+          "type": "string"
+        },
+        "raw_response_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "additionalProperties": false
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "accounting_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "const": "completed"
+        }
+      },
+      "required": [
+        "schema_version",
+        "request_id",
+        "logical_inference_id",
+        "routing_decision_id",
+        "routing_decision",
+        "provider",
+        "model",
+        "raw_response",
+        "raw_response_digest",
+        "usage",
+        "latency_ms",
+        "accounting_ref",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "error": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "logical_inference_id",
+    "request_digest",
+    "consumer_id",
+    "intent",
+    "input_digest",
+    "attempts",
+    "state"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -104,8 +104,9 @@ Dos implementaciones del mismo contrato, segun lenguaje:
 - Python (`brain`, `aitap`): typer + `CommandRegistry`/`BaseCommand`/
   `CommandCategory` + `render_help()` con modos texto/JSON/AI-native.
 
-`installer/aitap` todavia NO vuelca a `installer/help/` compartido — es a
-proposito, ver `installer/aitap/README.md`.
+AITAP se empaqueta como aplicación Python standalone mediante
+`build-all.py --only aitap` y vuelca su ayuda dual en `installer/help/`, según
+el contrato documentado en `installer/aitap/README.md`.
 
 ## Contexto scoped por directorio (mas especifico gana)
 

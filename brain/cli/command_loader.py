@@ -437,6 +437,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load SubmitCommand: {e}")
     
     try:
+        from brain.commands.intent.supply import SupplyCommand
+        registry.register(SupplyCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load SupplyCommand: {e}")
+    
+    try:
         from brain.commands.intent.unlock import UnlockCommand
         registry.register(UnlockCommand())
     except (ImportError, AttributeError) as e:
@@ -896,6 +902,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.recover',
         'brain.commands.intent.stage',
         'brain.commands.intent.submit',
+        'brain.commands.intent.supply',
         'brain.commands.intent.unlock',
         'brain.commands.intent.update',
         'brain.commands.intent.validate',

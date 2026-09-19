@@ -14,6 +14,7 @@ Estructura esperada:
   │       ├── build-component.sh
   │       └── build-host.sh
   └── installer/
+      ├── aitap/
       ├── nucleus/
       ├── sentinel/
       ├── metamorph/
@@ -25,6 +26,7 @@ Estructura esperada:
 USO:
   python3 build-all.py                   # build completo
   python3 build-all.py --only nucleus    # solo un componente Go
+  python3 build-all.py --only aitap      # solo AITAP (Python/PyInstaller)
   python3 build-all.py --only workspace  # solo Conductor/workspace
   python3 build-all.py --skip host       # saltar host (C++)
 """
@@ -349,6 +351,10 @@ BUILDS: dict[str, Path | None] = {
         if IS_WINDOWS
         else ROOT / "builds/unix/build-brain.sh"
     ),
+
+    # AITAP: aplicación Python empaquetada con PyInstaller mediante su builder
+    # multiplataforma propio.
+    "aitap": ROOT / "installer/aitap/scripts/build.py",
 
     # Host (C++): solo macOS/Linux — None en Windows indica skip explícito
     "host": (
@@ -766,6 +772,38 @@ def build_brain() -> StepResult:
     if code != 0:
         return StepResult("Brain", False, error=out)
     return StepResult("Brain", True, output=out)
+
+
+def build_aitap() -> StepResult:
+    """Empaqueta AITAP y genera sus ayudas desde el artefacto resultante."""
+    build_script = BUILDS["aitap"]
+    if not build_script or not build_script.exists():
+        return StepResult("AITAP", False, error=f"Script no encontrado: {build_script}")
+
+    python_exe = sys.executable
+    dependency_check = subprocess.run(
+        [python_exe, "-c", "import PyInstaller, jsonschema, rich, typer"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if dependency_check.returncode != 0:
+        log("  Instalando dependencias de AITAP y PyInstaller ...")
+        code, out = run_streaming(
+            [python_exe, "-m", "pip", "install", "-e", str(ROOT / "installer/aitap"), "pyinstaller"],
+            cwd=ROOT,
+        )
+        if code != 0:
+            return StepResult("AITAP", False, error=out)
+
+    log(f"Empaquetando AITAP con {build_script.name} ...")
+    code, out = run_streaming(
+        [python_exe, str(build_script)],
+        cwd=build_script.parent,
+        env={**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)},
+    )
+    if code != 0:
+        return StepResult("AITAP", False, error=out)
+    return StepResult("AITAP", True, output=out)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1773,7 +1811,7 @@ def _print_summary(results: list[StepResult]) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 ALL_STEP_NAMES = [
-    "parser", "brain", "host", "nucleus", "sentinel", "metamorph",
+    "parser", "brain", "aitap", "host", "nucleus", "sentinel", "metamorph",
     "sensor", "impact", "setup", "workspace", "cortex", "bootstrap", "vsix",
 ]
 
@@ -2365,7 +2403,7 @@ def main() -> None:
 
     # Definir todos los pasos en orden.
     # Setup, Workspace, Bootstrap y VSIX usan npm run; Cortex usa python3.
-    # Brain y Host usan sus propios builders.
+    # Brain, AITAP y Host usan sus propios builders.
     # Los componentes Go usan build_go_component().
     all_steps: list[tuple[str, str, Callable[[], StepResult]]] = [
         # parser: regenera desde GravityExpression.g4 y verifica (Go + TypeScript),
@@ -2377,6 +2415,7 @@ def main() -> None:
         # cualquier otro componente intente llamar `nucleus telemetry register`.
         ("nucleus",   "Nucleus",   lambda: build_go_component("nucleus")),
         ("brain",     "Brain",     build_brain),
+        ("aitap",     "AITAP",     build_aitap),
         ("host",      "Host",      build_host),
         ("sentinel",  "Sentinel",  lambda: build_go_component("sentinel")),
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),

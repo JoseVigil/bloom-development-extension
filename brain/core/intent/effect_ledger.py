@@ -20,6 +20,12 @@ from typing import Any, Protocol
 LEDGER_FILENAME = ".effect_ledger.json"
 LEDGER_SCHEMA_VERSION = "1.0"
 
+_LOGICAL_ING_OBLIGATIONS = (
+    "contributions_ratified",
+    "transient_semantic_index_verified",
+    "materialization_obligations_recorded",
+)
+
 _OBLIGATIONS_BY_TYPE = {
     "ing": (
         "gene_lineage_materialized",
@@ -73,6 +79,8 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2, ensure_ascii=False)
             handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp_path, path)
     except BaseException:
         try:
@@ -100,10 +108,13 @@ class EffectLedgerManager:
         turn_id: str,
         control_ref: str,
         effect_payload: list[dict[str, Any]],
+        logical_contributions: bool = False,
     ) -> "EffectLedgerManager":
         """Create an idempotent pending ledger from the approved turn result."""
         if intent_type not in _OBLIGATIONS_BY_TYPE:
             raise EffectLedgerError(f"intent_type '{intent_type}' has no effect-ledger obligations")
+        if logical_contributions and intent_type != "ing":
+            raise EffectLedgerError("logical Contributions apply only to ing")
         manager = cls(turn_dir)
         identity = {
             "intent_id": intent_id,
@@ -113,7 +124,8 @@ class EffectLedgerManager:
         }
         payload_digest = _sha256(effect_payload)
         effects = []
-        for obligation in _OBLIGATIONS_BY_TYPE[intent_type]:
+        obligations = _LOGICAL_ING_OBLIGATIONS if logical_contributions else _OBLIGATIONS_BY_TYPE[intent_type]
+        for obligation in obligations:
             effects.append({
                 "effect_id": _sha256({**identity, "obligation": obligation})[:24],
                 "obligation": obligation,
@@ -140,9 +152,13 @@ class EffectLedgerManager:
                 "reason": "Awaiting Workspace Core freshness audit approval",
             },
         }
+        if logical_contributions:
+            document["closure_semantics"] = "logical_contributions"
+            document["physical_materialization"] = "pending"
         if manager.path.exists():
             existing = manager.load()
-            if existing["identity"] != identity or existing["effects_payload"] != effect_payload:
+            if (existing["identity"] != identity or existing["effects_payload"] != effect_payload
+                    or existing.get("closure_semantics") != document.get("closure_semantics")):
                 raise EffectLedgerError(f"ledger collision at '{manager.path}'")
             return manager
         _atomic_write_json(manager.path, document)
@@ -162,6 +178,34 @@ class EffectLedgerManager:
             raise EffectLedgerError(f"effect ledger missing fields: {sorted(missing)}")
         if document["schema_version"] != LEDGER_SCHEMA_VERSION:
             raise EffectLedgerError(f"unsupported effect ledger schema: {document['schema_version']}")
+        try:
+            identity = document["identity"]
+            logical = document.get("closure_semantics") == "logical_contributions"
+            if document.get("closure_semantics") not in (None, "logical_contributions"):
+                raise ValueError("unknown closure semantics")
+            if logical and (identity["intent_type"] != "ing" or document.get("physical_materialization") != "pending"):
+                raise ValueError("invalid logical closure")
+            obligations = _LOGICAL_ING_OBLIGATIONS if logical else _OBLIGATIONS_BY_TYPE[identity["intent_type"]]
+            if document["ledger_id"] != _sha256(identity)[:32]:
+                raise ValueError("ledger identity digest mismatch")
+            if [e["obligation"] for e in document["effects"]] != list(obligations):
+                raise ValueError("obligation set mismatch")
+            if document["effects_digest"] != _sha256(document["effects"]):
+                raise ValueError("effects digest mismatch")
+            for effect in document["effects"]:
+                if effect["effect_id"] != _sha256({**identity, "obligation": effect["obligation"]})[:24]:
+                    raise ValueError("effect identity mismatch")
+                if effect["payload_digest"] != _sha256(document["effects_payload"]):
+                    raise ValueError("payload digest mismatch")
+                if effect["status"] not in ("pending", "applied"):
+                    raise ValueError("unknown effect status")
+                if effect["status"] == "applied":
+                    verification = effect["verification"]
+                    if (verification["verified"] is not True or not verification["evidence"]
+                            or verification["evidence_digest"] != _sha256(verification["evidence"])):
+                        raise ValueError("invalid verification evidence")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise EffectLedgerError(f"ledger integrity verification failed: {exc}") from exc
         return document
 
     def mark_effect_applied(self, effect_id: str, evidence: dict[str, Any]) -> dict[str, Any]:
@@ -205,6 +249,24 @@ class EffectLedgerManager:
         pending = [item["obligation"] for item in document["effects"] if item["status"] != "applied"]
         if pending:
             raise PendingEffectsError(f"pending effect obligations: {pending}")
+        if document.get("closure_semantics") == "logical_contributions":
+            from brain.core.intelligence_supply import digest, read_json
+            for effect in document["effects"]:
+                evidence = effect["verification"]["evidence"]
+                try:
+                    plan_path = self.turn_dir / ".files/.parsed_result.json"
+                    if Path(evidence["plan_ref"]).resolve() != plan_path.resolve():
+                        raise ValueError("evidence references a foreign plan")
+                    plan = read_json(plan_path)
+                    index = read_json(evidence["semantic_index_ref"])
+                    if (digest(plan) != evidence["plan_digest"]
+                            or digest(index) != evidence["semantic_index_digest"]
+                            or digest(plan["index"]) != evidence["semantic_index_digest"]
+                            or plan["decisions_digest"] != digest(document["effects_payload"])
+                            or evidence["physical_materialization"] != "pending"):
+                        raise ValueError("logical closure evidence mismatch")
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise EffectLedgerError("logical closure evidence verification failed") from exc
         return document
 
     def assert_identity(

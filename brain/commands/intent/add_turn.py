@@ -130,6 +130,11 @@ class AddTurnCommand(BaseCommand):
                             gc, "--proposal must be a JSON array of objects"
                         )
 
+                if close_phase and actor != "user" and parsed_proposal and any(
+                    item.get("human_decision") is not None for item in parsed_proposal if isinstance(item, dict)
+                ):
+                    self._handle_error(gc, "AI cannot grant human decisions")
+
                 # 4. Verbose logging
                 if gc.verbose:
                     typer.echo(f"💬 Adding turn to intent...", err=True)

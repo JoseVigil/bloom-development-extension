@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Builder multiplataforma de AITAP."""
+
+from __future__ import annotations
+
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+AITAP_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(os.environ.get("BLOOM_PROJECT_ROOT", AITAP_ROOT.parents[1])).resolve()
+
+
+def platform_dir() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "windows":
+        return "win64" if machine in {"amd64", "x86_64"} else "win32"
+    if system == "darwin":
+        return "darwin_arm64" if machine == "arm64" else "darwin_x64"
+    if system == "linux":
+        return "linux_arm64" if machine in {"aarch64", "arm64"} else "linux_x64"
+    raise RuntimeError(f"Sistema operativo no soportado: {system}")
+
+
+def run(command: list[str], cwd: Path | None = None) -> None:
+    print("  >", " ".join(command), flush=True)
+    subprocess.run(command, cwd=cwd, check=True)
+
+
+def main() -> int:
+    try:
+        import PyInstaller  # noqa: F401
+        import jsonschema  # noqa: F401
+        import rich  # noqa: F401
+        import typer  # noqa: F401
+    except ImportError as exc:
+        print(
+            "Falta una dependencia de build. Ejecutar: "
+            f"{sys.executable} -m pip install -e {AITAP_ROOT} pyinstaller",
+            file=sys.stderr,
+        )
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    output_dir = REPO_ROOT / "installer" / "native" / "bin" / platform_dir() / "aitap"
+    temp_root = REPO_ROOT / ".tmp" / "aitap-pyinstaller" / str(os.getpid())
+    dist_root = temp_root / "dist"
+    work_root = temp_root / "work"
+
+    shutil.rmtree(output_dir, ignore_errors=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    run([
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--distpath",
+        str(dist_root),
+        "--workpath",
+        str(work_root),
+        str(AITAP_ROOT / "aitap.spec"),
+    ], cwd=AITAP_ROOT)
+
+    built_dir = dist_root / "aitap"
+    if not built_dir.is_dir():
+        raise RuntimeError(f"PyInstaller no produjo {built_dir}")
+    shutil.copytree(built_dir, output_dir)
+
+    executable = output_dir / ("aitap.exe" if os.name == "nt" else "aitap")
+    help_dir = output_dir / "help"
+    shared_help_dir = REPO_ROOT / "installer" / "help"
+    help_dir.mkdir(parents=True, exist_ok=True)
+    shared_help_dir.mkdir(parents=True, exist_ok=True)
+
+    json_help = subprocess.run(
+        [str(executable), "--json-help"], capture_output=True, text=True, check=True
+    )
+    parsed = json.loads(json_help.stdout)
+    if not isinstance(parsed, dict):
+        raise RuntimeError("--json-help no devolvió un objeto JSON")
+    text_help = subprocess.run(
+        [str(executable), "--help"], capture_output=True, text=True, check=True
+    )
+    if not text_help.stdout.strip():
+        raise RuntimeError("--help devolvió contenido vacío")
+
+    outputs = {
+        "aitap_help.json": json_help.stdout,
+        "aitap_help.txt": text_help.stdout,
+    }
+    for name, content in outputs.items():
+        (help_dir / name).write_text(content, encoding="utf-8")
+        (shared_help_dir / name).write_text(content, encoding="utf-8")
+
+    print(f"AITAP empaquetado: {executable}")
+    print(f"Help generado: {help_dir}")
+    print(f"Help compartido: {shared_help_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

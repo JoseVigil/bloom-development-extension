@@ -65,3 +65,17 @@ def test_advance_rejects_uncommitted_control(tmp_path):
     control = json.loads(turn.control_file.read_text(encoding="utf-8"))
     assert control["commit_requested"] is True
 
+
+def test_logical_ledger_cannot_claim_physical_materialization(tmp_path):
+    from brain.core.intent.effect_ledger import EffectLedgerManager, EffectLedgerError
+    turn, root = _commit_turn(tmp_path)
+    ledger = EffectLedgerManager.create(turn_dir=turn.turn_dir, intent_id="i", intent_type="ing",
+        stage="consolidation", turn_id="1", control_ref=".consolidation.json", effect_payload=[],
+        logical_contributions=True)
+    document = ledger.load()
+    assert document["physical_materialization"] == "pending"
+    assert "gene_lineage_materialized" not in {e["obligation"] for e in document["effects"]}
+    document["effects"] = []
+    ledger.path.write_text(json.dumps(document))
+    with pytest.raises(EffectLedgerError, match="integrity"):
+        ledger.assert_all_applied()

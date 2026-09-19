@@ -1,6 +1,15 @@
 {
   "schema_version": "cognituum.routing-policy/v2",
   "policy_version": "genesis-runtime-intelligence/v2",
+  "intelligence_supply": {
+    "backend_id": "anthropic_api", "fallback": [], "max_attempts": 1,
+    "budget": {
+      "mandate_id": "6f4e9a31-52c7-4e8d-9a16-7d204bc38f51",
+      "max_usd": "1.00", "max_total_tokens": 50000,
+      "max_inferences": 2, "input_margin_tokens": 1024
+    },
+    "max_output_tokens": 4096, "max_input_bytes": 131072, "timeout_seconds": 60, "retry_delay_seconds": 1
+  },
   "stages": {
     "ing": {"runtime_id": "codex_cli", "backend_id": "openai_api", "runtime_fallback": ["opencode"], "intelligence_fallback": []},
     "dis": {"runtime_id": "claude_code_cli", "backend_id": "anthropic_api", "runtime_fallback": ["opencode"], "intelligence_fallback": []},

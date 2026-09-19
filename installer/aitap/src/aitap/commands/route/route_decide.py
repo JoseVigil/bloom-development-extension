@@ -6,6 +6,7 @@ import typer
 from aitap.cli.base import BaseCommand, CommandMetadata
 from aitap.cli.categories import CommandCategory
 from aitap.routing import RoutingEngine, RoutingError
+from aitap.runtime_paths import resource_root
 
 
 class RouteDecideCommand(BaseCommand):
@@ -24,7 +25,7 @@ class RouteDecideCommand(BaseCommand):
             policy: Path | None = typer.Option(None, "--policy", exists=True, readable=True),
             registry: Path | None = typer.Option(None, "--registry", exists=True, readable=True),
         ):
-            root = Path(__file__).resolve().parents[4]
+            root = resource_root()
             policy_path = policy or root / "policies" / "genesis-runtime-intelligence-v2.json"
             registry_path = registry or root / "registry" / "genesis-pilot-v2.json"
             try:

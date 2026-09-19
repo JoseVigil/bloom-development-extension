@@ -1,0 +1,1 @@
+"""Opaque Intelligence Supply boundary."""

@@ -5,12 +5,29 @@
     "_comment": "output_dir es LOCAL a proposito (./help, no ../help). Todavia no escribimos al installer/help/ compartido con nucleus/sentinel/metamorph/sensor -- eso depende de una decision de pipeline de build que no se tomo todavia. Cuando se tome, cambiar a '../help'.",
     "output_dir": "./help",
     "variants": [
-      { "file": "aitap_help.txt", "description": "Human help (full, all commands)", "mode": "text", "full": true },
-      { "file": "aitap_help.json", "description": "AI-native JSON schema (full, all commands)", "mode": "ai", "full": true }
+      {
+        "file": "aitap_help.txt",
+        "description": "Human help (full, all commands)",
+        "mode": "text",
+        "full": true
+      },
+      {
+        "file": "aitap_help.json",
+        "description": "AI-native JSON schema (full, all commands)",
+        "mode": "ai",
+        "full": true
+      }
     ]
   },
   "vault": {
     "owner": "nucleus",
     "note": "aitap nunca guarda secretos. Solo referencias (key_id) y politica de ruteo. El valor real de las keys vive exclusivamente en Nucleus Vault (OS Keyring), accedido via 'nucleus vault' subprocess, igual que brain/shared/credentials/vault.py hace hoy para Gemini."
+  },
+  "intelligence_supply": {
+    "state_directory_environment": "AITAP_STATE_DIR",
+    "credential_references": {
+      "credential-ref://anthropic/default": "anthropic-key:default"
+    },
+    "real_provider_tests": "explicit opt-in and token budget required"
   }
 }

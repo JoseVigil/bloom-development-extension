@@ -111,6 +111,8 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
             f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp_path, path)  # atómico en POSIX y en Windows (mismo volumen)
     except BaseException:
         try:

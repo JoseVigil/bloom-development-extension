@@ -1,0 +1,40 @@
+{
+  "schema_version": "cognituum.intelligence-supply/v1",
+  "request_id": "isr-279784a6e2250e93bd83e15394540b91",
+  "logical_inference_id": "sha256:279784a6e2250e93bd83e15394540b91d8d40703ea2f7fe0634a3d3aa7f3bdb2",
+  "consumer_id": "brain",
+  "intent": {
+    "intent_id": "dis-example",
+    "intent_type": "dis",
+    "mandate_id": "MND-EXAMPLE",
+    "phase": "mapping",
+    "turn_id": "1"
+  },
+  "input_digest": "sha256:4c98d70a60c8e461401cfa5dda981a63bf30d0d5ecaf0e83ab8937de3b318537",
+  "payload": {
+    "instruction": "Return only {\"operations\": []} for this transport example. This is not an ING/DIS acceptance test.",
+    "context": {},
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "maxItems": 0
+        }
+      },
+      "required": [
+        "operations"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "routing": {
+    "mode": "policy",
+    "policy_version": "genesis-runtime-intelligence/v2",
+    "required_capabilities": [
+      "text.generate",
+      "structured_output"
+    ],
+    "privacy": "approved_cloud"
+  }
+}
