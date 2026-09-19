@@ -79,7 +79,7 @@ ASM no crea, ratifica ni autoriza Postulates. Su frontera termina en `AssemblyRe
 - **Impact** es una capacidad analítica invocable: evalúa una pregunta delimitada sobre contexto y evidencia suministrados.
 - **Monitor** observa actividad runtime, selecciona situaciones evaluables e invoca evaluadores. No sustituye a Impact ni gobierna la ejecución.
 
-## 5. Daily vigente — 2026-09-17
+## 5. Daily vigente — 2026-09-18
 
 | Work | Entorno | Propósito | Último avance comprobado | Estado vigente | Trabajo en curso | Bloqueo operativo | Dependencias reales | Siguiente acción | Evidencia | Escalamiento a Agenda |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -89,7 +89,7 @@ ASM no crea, ratifica ni autoriza Postulates. Su frontera termina en `AssemblyRe
 | `IMPACT` | Codex | Evaluar consecuencias, compatibilidad, preservación o cumplimiento sobre evidencia y preguntas delimitadas. | Existe una aplicación Go material en `installer/impact`: contrato `impact/1`, motor determinista, evaluadores `coexistence`, `preservation` y `compliance`, adapters local/server, CLI, ayuda, logging, telemetría, build multiplataforma y rollout Metamorph. Integrada mediante commits `4362cf80` y `e2ae2f94`. | `VERIFICACIÓN` | Validar consumidores e integración real sin ampliar la frontera del motor. | No hay consumidores productivos acreditados. Impact no adquiere evidencia, resuelve Location/Gravity, monitorea ni gobierna ejecución. | Contexto preparado por callers; Gravity pública para criterios ya situados; futura invocación desde ASM, Monitor u otros consumidores autorizados. | Definir y verificar el primer consumidor real conservando la paridad local/server y la naturaleza stateless. | `installer/impact/README.md`; `installer/impact/AGENTS.md`; código y tests bajo `installer/impact/`; commits citados. | **REQUIERE ACTUALIZACIÓN EN AGENDA:** Impact ya es aplicación material; debe separarse de Monitor y de cualquier ownership de ejecución. |
 | `MONITOR` | Codex | Infraestructura runtime persistente de observación, selección de situaciones evaluables e invocación de evaluadores. | Research de lectura concluyó que la aplicación es viable y que Nucleus podría supervisar su proceso sin poseer sus criterios. Se falsó WebSocket sin replay como fuente suficiente. | `INVESTIGACIÓN` | Ninguna implementación material registrada. | Falta un contrato uniforme de eventos recuperables con secuencia/generación, cursor, replay y detección explícita de huecos. Tampoco existe aplicación Monitor. | Productores runtime; eventos recuperables; estado durable propio; contrato idempotente con Impact; política de supervisión/reinicio. | Diseñar el contrato mínimo de eventos y recuperación antes de proponer archivos de implementación. | Work `MONITOR`; código inspeccionado de Nucleus supervisor, Brain EventBus, bootstrap/WebSocket y Execution Event schema. | **REQUIERE ACTUALIZACIÓN EN AGENDA:** abrir Monitor como Work separado de Impact y fuera del loop obligatorio de Intents. |
 | `ORRERY` | Codex | Espacio navegable de Cognituum y productor futuro de una captura durable de posición cognitiva. | El Research de Location quedó cerrado. El soporte material end-to-end permanece `NOT_SUPPORTED`. Existe un prototipo visual PlayCanvas, pero no una captura durable ni `LocationRef` productiva. Se definieron ocho estados por referencia, incluido `unverifiable`, y gaps A1–A5, B1–B3 y C1–C3. | `DEFINICIÓN CONTRACTUAL` | Preparación del primer vertical read-only posterior al cierre del research. | Faltan schema/productor de captura, persistencia recuperable, resolución por referencia, reapertura y cadena canónica Domain/Gene. | Organization/Project coherentes; fuentes Domain/Gene; atribución/autorización; resolver por referencia; entrega validable a ASM. | Decidir y autorizar el primer encargo read-only, sin presentar el prototipo como soporte productivo. | `docs/ANALYSIS/ORRERY/LOCATION/ORRERY_LOCATION_MATERIAL_CLOSURE_v1_1.md`; prototipo en `installer/conductor/workspace/core/orrery/`; Works `ORRERY` y `ORRERY LOCATION MATERIAL CLOSURE`. | **REQUIERE ACTUALIZACIÓN EN AGENDA:** research cerrado no equivale a implementación; Location sigue `NOT_SUPPORTED` end-to-end. |
-| `GENESIS CONTROL` | Claude Cowork, acceso pendiente | Control y continuidad del desarrollo productivo de Genesis. | No se pudo acceder al reporte vigente del Work literal. La información histórica de Agenda no basta para reconstruir su ejecución actual. | `BLOQUEADO PARA RECONCILIACIÓN` | No registrable desde este tablero hasta recibir el reporte vigente. | Falta acceso o devolución actual. Esta condición no afirma que Genesis esté técnicamente bloqueado. | Identidad del Work, hitos recientes, ejecución actual, blockers reales y siguiente acción. | Obtener reporte de continuidad del propio Work y contrastarlo con código/evidencia antes de actualizar. | Referencia declarada por José; Work no accesible desde el inventario actual. | Pendiente. No modificar prioridades de Genesis hasta reconciliar el reporte vigente. |
+| `GENESIS CONTROL` | Codex | Control, reconciliación y cierre verificable del recorrido Genesis sobre Governance, Gravity y Remote Authority. | Cierre integral publicado: claim/binding S2S de `ProjectID` con unicidad global y replay multiinstalación; receipts locales sin autoridad; cutover atómico a `REMOTE_LOCKED + remote_enforced` sin `LegacyAuthority`; gate remoto fail-closed para todo Gravity PROJECT, incluido el preexistente. Auditoría terminal aprobada y Tablero consolidado en v0.48. | `CERRADO` | Ninguno dentro del alcance del Work. | Sin bloqueos propios. Fallos globales preexistentes y despliegue productivo pertenecen a trabajos separados. | Backend y Nucleus materializados; evidencia remota vigente; Gravity PROJECT; contratos de Authority. | Ninguna acción propia. Conservar la evidencia del cierre y derivar cualquier despliegue o remediación global a un Work separado. | Commit `25a8bc0042c28b57fe927ddff39f68a4ad170d53` en `main` y `origin/main`; 23 archivos técnicos más `docs/ORBITAL/GRAVITY/Tablero_Seguimiento_Consolidado_v0_2.md` v0.48. | **REQUIERE ACTUALIZACIÓN EN AGENDA:** cerrar el gap canónico de `ProjectID`, registrar el cutover alcanzable y el enforcement remoto obligatorio de Gravity PROJECT, sin presentar despliegue productivo como realizado. |
 | `BACKEND` | Identidad de entorno en conflicto: tarea Codex accesible y Work Claude Cowork declarado | Backend de Cognituum; el alcance vigente debe obtenerse del Work correcto, sin inferir fronteras por asociación. | La tarea Codex `BACKEND` y el repositorio muestran avances materiales de Authority, Initial Authority Emission y contratos relacionados. No se confirmó que esa tarea sea el mismo Work de Claude Cowork pedido para el daily. | `BLOQUEADO PARA RECONCILIACIÓN DE IDENTIDAD` | No fusionar estados de ambos entornos. | Falta identificar el Work Claude Cowork vigente y determinar qué evidencia comparte con la tarea Codex. Esta condición no afirma bloqueo técnico. | Título/ID o devolución de Cowork; alcance literal; commits/archivos atribuibles; bloqueos y siguiente paso propios. | Recibir el reporte vigente de Cowork y comparar su evidencia con la tarea Codex y el repositorio. | Tarea Codex `BACKEND`; código bajo `backend/`; referencia declarada a Cowork. | **REQUIERE ACTUALIZACIÓN EN AGENDA** una vez reconciliada la identidad: Authority/Backend avanzó más que el estado maestro actualmente resumido. |
 
 ## 6. Asuntos abiertos de reconciliación
@@ -104,19 +104,6 @@ Se necesita:
 4. Último resultado o devolución del Work.
 5. Archivos, commits, pruebas o documentos producidos.
 6. Trabajo actual, bloqueos y próxima acción.
-
-### GENESIS CONTROL
-
-Se necesita:
-
-1. Enlace, ID o exportación del Work de Claude Cowork.
-2. Fecha del último corte.
-3. Hitos terminados con evidencia.
-4. Ejecución actualmente en curso.
-5. Blockers técnicos reales, diferenciados de investigaciones paralelas.
-6. Dependencias materiales comprobadas.
-7. Próxima acción concreta.
-8. Cambios que deban escalarse a la Agenda Maestra.
 
 ### BACKEND
 
@@ -140,11 +127,31 @@ Esta cola no modifica `AGENDA_MAESTRA.md`. Requiere una autorización separada:
 3. Registrar IMPACT como aplicación material separada de Monitor.
 4. Abrir MONITOR como infraestructura runtime todavía en investigación.
 5. Registrar el cierre del research Orrery/Location sin presentar Location como soportada.
-6. Reconciliar `GENESIS CONTROL` antes de cambiar estado, prioridad o dependencias de Genesis.
+6. Reconciliar en Agenda el cierre publicado por `GENESIS CONTROL`, incluido `ProjectID`, `REMOTE_LOCKED + remote_enforced` y el gate Gravity PROJECT; despliegue productivo permanece separado.
 7. Reconciliar los dos BACKEND antes de consolidar sus avances en el roadmap maestro.
 8. Identificar el Work `CODEX` antes de asignarle propósito o impacto estratégico.
 
-## 8. Historial de daily
+## 8. Informe preliminar de reconciliación a Agenda
+
+AGENDA FOLLOWUP informa cambios materiales que vuelven parcialmente obsoleto el estado registrado en `AGENDA_MAESTRA.md`:
+
+- `GENES`: G1 está materialmente implementado en el working tree y se encuentra en verificación. G2, G3 y el primer Gene productivo siguen pendientes.
+- `IMPACT`: ya existe como aplicación Go integrada al build y rollout; todavía faltan consumidores productivos.
+- `ASM`: alcanzó definición contractual mediante research, ADR y roadmap; no tiene implementación física autorizada y su frontera termina en `AssemblyResult / contexto preparado`.
+- `MONITOR`: concluyó su investigación inicial; la aplicación material todavía no existe.
+- `ORRERY / Location`: el research está cerrado, pero el soporte end-to-end permanece `NOT_SUPPORTED`.
+- `Authority / Backend / Nucleus`: existen avances materiales posteriores al estado reflejado actualmente en Agenda.
+- `GENESIS CONTROL`: cerró y publicó en `origin/main` el gap canónico de `ProjectID`, el cutover a `REMOTE_LOCKED + remote_enforced` y el gate remoto fail-closed de Gravity PROJECT. No acredita despliegue productivo.
+
+Este informe no cambia prioridades, dependencias estructurales ni roadmap. La modificación de `AGENDA_MAESTRA.md` queda condicionada a:
+
+1. identificar el Work literal `CODEX`;
+2. identificar cuál es el `BACKEND` vigente y reconciliar los dos entornos;
+3. reconciliar los Works contra los doce temas existentes;
+4. aprobar cuáles requieren temas propios y cuáles pertenecen a temas actuales;
+5. presentar una propuesta archivo por archivo y sección por sección para autorización expresa de José.
+
+## 9. Historial de daily
 
 Las entradas se agregan en orden cronológico y no se sobrescriben.
 
@@ -160,3 +167,10 @@ Las entradas se agregan en orden cronológico y no se sobrescriben.
 - CODEX, GENESIS CONTROL y BACKEND quedaron bloqueados únicamente para reconciliación del tablero.
 - Se abrió la cola de asuntos que podrían requerir una actualización posterior de Agenda Maestra.
 
+### 2026-09-18 — Cierre integral de GENESIS CONTROL
+
+- `GENESIS CONTROL` pasó de reconciliación pendiente a `CERRADO` en Codex.
+- Se verificó el commit `25a8bc0042c28b57fe927ddff39f68a4ad170d53` en `main` y `origin/main`.
+- Quedaron registrados el claim/binding S2S canónico de `ProjectID`, el cutover atómico `REMOTE_LOCKED + remote_enforced`, la eliminación de autoridad en receipts locales y el gate remoto obligatorio de Gravity PROJECT.
+- El Work no conserva pendientes propios; fallos globales anteriores y despliegue productivo permanecen fuera de su cierre.
+- Se emitió a Agenda un informe preliminar de reconciliación. La edición de Agenda Maestra continúa condicionada a identificar `CODEX`, reconciliar `BACKEND` y aprobar el mapa de incorporación.

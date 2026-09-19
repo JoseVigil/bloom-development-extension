@@ -24,6 +24,7 @@
 | Alfred es multi-instancia | Cerrada | Existe un Alfred por dispositivo y cada instancia consume AITAP directamente; el renderer de Electron no recibe credenciales. |
 | GitHub App + Device Flow | Cerrada | Es el patrón para Cortex y para la segunda app de Batcave. Las referencias a OAuth clásico son deuda documental/técnica a corregir, no alternativas vigentes. |
 | PALADIN es el producto Cognituum para ingenieros | Cerrada | El Work de distribución para el sujeto individual adopta el nombre PALADIN. No implica un fork de Cognituum ni define todavía el nombre del producto o composición organizacional. |
+| PALADIN. COMMAND RESPECT. Make ANY AI follow your decisions. | Cerrada | PALADIN preserva la vigencia de decisiones humanas entre modelos, proveedores, agentes, herramientas y sesiones; detecta y explica contradicciones, y sólo el humano puede confirmarlas, modificarlas o exceptuarlas. Es criterio rector de arquitectura y priorización, no definición de ICP, interfaz, schema ni topología técnica definitiva. |
 | Agenda maestra | Cerrada | Solo se actualiza en esta sesión mediante reportes del usuario. |
 
 ## Material para Resolución Arquitectónica Transversal
@@ -470,6 +471,14 @@ El Work dedicado a la forma de distribución de Cognituum para desarrolladores e
 
 El principio de producto presentado establece una sola plataforma Cognituum con distintas formas de habitarla. El sujeto individual conserva capacidades reales de Mandates y Wisdom dentro de su identidad personal; la organización agrega gobierno institucional, miembros, roles, coordinación, auditoría y administración del conocimiento organizacional.
 
+**Propósito, promesa y demostración**
+
+El propósito rector de PALADIN es **Command Respect**: preservar la vigencia de las decisiones humanas a través de ejecuciones cognitivas reemplazables. Su promesa es **Make ANY AI follow your decisions.** La arquitectura de plataforma única, composición mediante Metamorph y autoridad de Nucleus es habilitante de esa promesa; no es el propósito final del producto.
+
+La demostración requerida es un vertical end-to-end en el que: (1) el humano fija una decisión; (2) el sistema conserva alcance y vigencia; (3) dos ejecuciones cognitivas reemplazables la reciben sin memoria conversacional compartida; (4) una contradice la decisión de forma técnicamente plausible; (5) PALADIN identifica y explica la contradicción; (6) el humano confirma, modifica o exceptúa; y (7) la resolución durable gobierna una ejecución posterior.
+
+Para ese primer vertical, “ANY AI” significa portabilidad demostrable entre ejecutores reemplazables; no afirma todavía integración universal ni una cantidad definida de proveedores.
+
 La dirección arquitectónica candidata mantiene las fronteras existentes: Nucleus determina identidad, políticas y capacidades autorizadas; Metamorph materializa la composición local mediante instalación, actualización, retiro, verificación de salud y rollback. Metamorph no decide si el sujeto pertenece a una organización ni concede capacidades.
 
 PALADIN no debe implementarse como un fork ni como una lista rígida de binarios seleccionada unilateralmente por Metamorph. La separación entre composición instalada y autorización efectiva permanece obligatoria: Metamorph controla qué componentes están presentes; Nucleus controla qué acciones están permitidas.
@@ -478,19 +487,15 @@ PALADIN no debe implementarse como un fork ni como una lista rígida de binarios
 
 - Manifiesto de la Sabiduría Técnica de Cognituum, compartido por el usuario en AGENDA FOLLOWUP.
 - Principio de Distribución de Cognituum — Una plataforma. Dos formas de habitarla, compartido por el usuario en AGENDA FOLLOWUP.
+- `docs/CALL_TO_ACTION/PALADIN_COMMAND_RESPECT_POSITIONING_02.md` — propósito y promesa del producto.
+- `docs/PALADIN/PALADIN_FOUNDATION_AND_PRELIMINARY_ROADMAP_v0_1.md` — composición, distribución y arquitectura preliminar.
 - `docs/GOVERNANCE/ARCHITECTURE/COGNITUUM_RESPONSIBILITY_BOUNDARIES.md`
 
 **Próximo paso concreto**
 
-Cerrar la gobernanza antes de diseñar o implementar:
+Preparar, antes de abrir implementación, un inventario factual para definir el corte mínimo del primer vertical demostrable: qué mecanismos durables ya preservan decisiones; qué componentes las propagan a ejecutores distintos; dónde puede detectarse una contradicción; cómo vuelve hoy la decisión al humano; qué existe materialmente y qué es sólo diseño. La salida debe proponer responsabilidades, contratos, evidencia, huecos reales, pruebas y criterios de aceptación para aprobación de José.
 
-1. Identidad autoritativa del sujeto individual y organizacional.
-2. Contrato y cadena de confianza de la composición deseada.
-3. Sustrato mínimo de bootstrap con Nucleus y Metamorph.
-4. Componentes físicamente separables frente a capacidades protegidas en runtime.
-5. Comportamiento offline, expiración, revocación y rollback.
-6. Transiciones PALADIN → organización, organización → PALADIN y organización A → B.
-7. Propiedad, transferencia, conservación y retiro de Mandates, Wisdom y datos institucionales.
+La gobernanza de composición, bootstrap, cadena de confianza, transiciones y propiedad de conocimiento sigue vigente como infraestructura habilitante de Command Respect; no se la convierte en prerequisito automático del primer vertical sin evidencia específica.
 
 **Dependencias cruzadas**
 
@@ -505,7 +510,9 @@ Cerrar la gobernanza antes de diseñar o implementar:
 **Decisiones/riesgos abiertos**
 
 - PALADIN queda confirmado como nombre del producto para ingenieros.
+- El propósito de producto es Command Respect y su promesa es “Make ANY AI follow your decisions”. La pregunta transversal para evaluar una propuesta es: **¿este trabajo aumenta la cantidad de trabajo que una persona puede delegar sin repetir, vigilar ni reconstruir sus decisiones?** La respuesta no amplía automáticamente el alcance ni elimina gates de autorización propios.
 - No está definido todavía el nombre del producto o composición para organizaciones.
+- No están cerrados el ICP, la interpretación comercial absoluta de “ANY AI”, cantidad de proveedores, formato canónico de decisión, dueño técnico de detectar contradicciones, UX de resolución humana, métricas/umbrales ni la relación técnica definitiva entre Posture, Gravity, Mandates, Impact y PALADIN.
 - No está cerrado quién produce, autoriza y firma la composición que recibe Metamorph.
 - No está cerrado qué capacidades requieren componentes distintos y cuáles permanecen en binarios compartidos con gates de Nucleus.
 - El cambio de composición no puede borrar ni transferir conocimiento como efecto secundario.
@@ -685,6 +692,7 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
+| Alta | 10 | Relevamiento factual y propuesta del primer vertical demostrable de Command Respect | No asignar responsabilidades técnicas definitivas ni declarar bloqueantes otros Works sin evidencia directa |
 | Alta | 11 | Integración productiva de Gravity: workflow Temporal, validación autoritativa Nucleus y empaquetado en Conductor Workspace Core | Persistencia, resolución, masa y parser dual implementados; no crear componente parser independiente |
 | Media | 11 | Evaluar si `BLOOM_Mandate_Package_Spec_v1_0_0.md` y `BLOOM_Cognitive_Evidence_Model_v1_0_0.md` requieren investigación propia o se relacionan con Wisdom | Ninguna — solo decidir si se abre |
 | Alta | 12 | Homologación por frontera del diseño físico corregido (incluido §20 de `.ownership.json`) y de la Fase 1 física ya implementada por Nucleus (`ownershipcontract`, `authority`, migración durable, markers, decisión sellada de Gravity) | Diseño sometido a aprobación final; Fase 1 de Nucleus reportada pero no extiende autorización de escritura a otros Works; cada Work reporta impacto y presenta lista exacta de archivos antes de escribir |
