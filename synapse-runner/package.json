@@ -1,0 +1,35 @@
+{
+  "name": "synapse-runner",
+  "version": "0.1.0",
+  "description": "E2E UI-driven onboarding & diagnostic harness for Bloom (Electron/Conductor + Chromium/Discovery + Side Panel/Companion + CLI brain contingency). See docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_E2E_Architecture_Dossier.md for the architecture this implements.",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "preflight": "ts-node scripts/preflight-check.ts",
+    "test": "npm run preflight && playwright test",
+    "test:no-preflight": "playwright test",
+    "test:headed": "npm run preflight && playwright test --headed",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "synapse-runner",
+    "playwright",
+    "e2e",
+    "onboarding",
+    "diagnostics"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/chrome": "^0.0.280",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
