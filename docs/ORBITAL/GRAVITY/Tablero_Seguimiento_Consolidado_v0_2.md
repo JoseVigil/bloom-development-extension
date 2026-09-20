@@ -1,7 +1,8 @@
-# Tablero de Seguimiento Consolidado — Gravity / Orbital / Posture (v0.48)
+# Tablero de Seguimiento Consolidado — Gravity / Orbital / Posture (v0.49)
 
-**Estado a:** 2026-09-18
-**Reemplaza a:** v0.47. Cierra el último gap de seguridad del `ProjectID` productor real mediante claim/binding canónico y habilita formalmente el estado arquitectónico `remote_enforced` — ver §Z.24.
+**Estado a:** 2026-09-20
+**Reemplaza a:** v0.48. Cierra la aceptación E2E real del primer Mandate Genesis (bloqueo local de autoridad
+Master para Nucleus Vault, sin relación con `remote_enforced`) — ver §Z.25.
 
 La aprobación alcanza el código y sus invariantes de seguridad verificados independientemente. No implica despliegue productivo, migración de ambientes, publicación de artefactos ni provisión de credenciales.
 
@@ -552,3 +553,72 @@ No existe fallback a `local_legacy` desde `remote_enforced`. Una falla de resolu
 - `gofmt` y `git diff --check`: limpios.
 
 **Resultado:** el gap del “ProjectID productor real” queda cerrado y la arquitectura alcanza formalmente el estado `remote_enforced`.
+
+## §Z.25 — Mandate Genesis: aceptación E2E real lograda; bloqueo Vault/AITAP resuelto (gate local `core.RoleMaster`, sin relación con `remote_enforced`)
+
+José pidió, en handoff directo ("Estado real de Mandate Genesis"), diagnosticar en modo sólo lectura el único
+bloqueador registrado para aceptar el primer Mandate Genesis real: AITAP no podía resolver la referencia de
+credencial Anthropic vía Nucleus Vault. Ownership del hallazgo: GENESIS CONTROL. Explícitamente fuera de
+alcance para esta ronda: OpenCode, Orrery/Location, ASM, Monitor, Genes, Gravity, refactor general de AITAP,
+rediseño de Genesis/Vault/Remote Authority.
+
+### Diagnóstico (código real, no el reporte)
+
+`installer/aitap/src/aitap/vault/client.py::VaultClient.resolve()` ejecuta `nucleus --json vault request
+anthropic-key:default` como subproceso. El gate (`installer/nucleus/internal/vault/vault.go::
+createVaultRequestCommand`) exige `core.GetUserRole() == core.RoleMaster`; `core.GetUserRole()`
+(`internal/core/metadata.go::detectUserRole`) es un chequeo puramente **local**: busca el marcador `.master`
+dentro del nucleus root que resuelve `ResolveNucleusRoot`, y cae cerrado a `RoleUnknown` si no puede resolver
+ningún workspace — mismo mensaje de error que un rechazo real ("requires master role").
+
+El marcador `.master` se crea correctamente en el onboarding (`nucleus create --master` →
+`activateMasterMarkerAndOwnership`, `internal/governance/ownership.go`) — esa mitad del mecanismo nunca fue
+el problema. El punto material de ruptura: Brain corre como servicio TCP persistente
+(`brain_poller.go` confirma que escucha en `127.0.0.1:5678`), arrancado por `startBrainServer()`
+(`internal/supervisor/service.go`) sin `cmd.Env` explícito — hereda el entorno del proceso Nucleus que lo
+lanza (típicamente sin `BLOOM_NUCLEUS_PATH` bajo systemd/NSSM). Todo lo que Brain shellea después (AITAP, y
+el `nucleus vault request` que AITAP invoca) hereda ese mismo entorno vacío, así que `ResolveNucleusRoot`
+nunca encuentra el `.bloom/.nucleus-{slug}/` real y Vault rechaza al dueño legítimo de la máquina. Mismo
+patrón ya diagnosticado y corregido dos veces en el mismo archivo (`CheckVaultStatus()`, spawn de
+`bundle.js`/API, ambos con comentario propio fechado 2026-08-12) — nunca aplicado al spawn de Brain.
+
+No se propuso ni se creó ningún mecanismo nuevo de autoridad ("Bootstrap" u otro): la corrección propaga un
+mecanismo ya existente (`BLOOM_NUCLEUS_PATH` vía `getWorkspacePath()`, ya definido en `dev_start.go`) al único
+punto donde nunca llegaba.
+
+### Implementación
+
+José aprobó el diagnóstico y autorizó la corrección mínima. **Implementada por Control directamente sobre el
+dispositivo real**, verificada releyendo el contenido byte a byte después del commit (no confiando en la
+respuesta del commit): `internal/supervisor/service.go`, `startBrainServer()` — una línea, mismo patrón ya
+probado en el archivo:
+
+```go
+cmd.Env = append(os.Environ(), "BLOOM_NUCLEUS_PATH="+getWorkspacePath())
+```
+
+Ningún otro archivo tocado.
+
+### Validación
+
+`go build ./internal/supervisor/... && go vet ./internal/supervisor/...` — verde, corrido por José. Criterio
+de Aceptación E2E (definido por José, cumplido en este orden): reinicio completo de servicios (para que Brain
+levantara ya con el entorno corregido) → creación de un Mandate Genesis real contra Anthropic → Vault autorizó
+la credencial → reinicio de servicios a mitad de la corrida, continuidad verificada sin pérdida de estado ni
+duplicación de operaciones. José declaró la prueba E2E **ACEPTADA**.
+
+Cierre completo: `Cierre_Diagnostico_Correccion_Bloqueo_E2E_Mandate_Genesis_AITAP_Vault_v1_0.md`.
+
+### Alcance y no-alcance
+
+Esto resuelve exclusivamente el gate **local** `core.RoleMaster` de Vault para el proceso Brain y todo lo que
+Brain shellea — un mecanismo enteramente distinto y sin relación con `AuthorityMode`/`remote_enforced`
+(Sovereign Tenant, §Z.15–§Z.23; cutover cerrado en §Z.24). No se tocó `internal/authority`,
+`internal/governance/decision` ni ningún camino de `AuthorizeGravityNodeCreation`; ese invariante sigue
+intacto tal como lo dejó §Z.24. Esta corrida E2E no autoriza cutover adicional, despliegue general ni
+provisión de credenciales fuera de este caso puntual.
+
+**Efecto neto:** Mandate Genesis real, contra Anthropic, queda operativo de punta a punta — lifecycle durable
+de `ing`, canal Brain↔AITAP para `dis.mapping`, persistencia, reinicio y replay sin duplicación (ya validados
+en rondas controladas previas) más, ahora, la resolución productiva de la credencial Anthropic vía Nucleus
+Vault y la aceptación funcional completa de una corrida real aislada.
