@@ -1,0 +1,72 @@
+bloom-development-extension/
+└── ANALYSIS/
+    ├── BACKEND/
+    │   ├── GRAVITY/
+    │   │   ├── GravityGraph_Fundamentos_Base_v0_1.md
+    │   │   ├── Investigacion_Gravity_Mandate_Compatibility_v0_1.md
+    │   │   └── Mandate_Server_Compatibilidad_Gravity_Introduccion_v0_1.md
+    │   ├── INSTALLER_METAMORPH/
+    │   │   └── Investigacion_Installer_Metamorph_Autoupdate_v0_1.md
+    │   └── ROLES/
+    │       ├── Authority_Snapshot-Fase2_BackendAutoridad_Remota.md
+    │       ├── BACKEND_Requerimiento_Autoridad_Organizacional_Roles_v0_1.md
+    │       ├── Cierre_Implementacion_Correccion_ScopeID_CreateProject_InstallShadow_v1_0.md
+    │       ├── Cierre_Investigacion_Roles_Organizacionales_y_Nomenclatura_Agente_v0_1.md
+    │       ├── Contexto_Decision_Autoridad_Organizacional_Roles_v0_1.md
+    │       ├── Encargo_Diseno_Contratos_Nacimiento_Agente_Orbital_v0_2.md
+    │       ├── Encargo_Implementacion_Correccion_ScopeID_CreateProject_InstallShadow_v1_0.md
+    │       ├── Encargo_Implementacion_Fisica_Fase2_Backend_v0_1.md
+    │       ├── Investigacion_Catalogo_Completo_Roles_Organizacionales_v0_1.md
+    │       ├── Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md
+    │       ├── Nota_Tecnica_Analisis_Fase4_Escrituras_y_Onboarding_Primer_Principal_v0_2.md
+    │       ├── Nota_Tecnica_Riesgos_Ejecucion_Encargo_Fase2_Backend_v0_1.md
+    │       ├── Propuesta_Diseno_Correccion_ScopeID_CreateProject_InstallShadow_v0_1.md
+    │       ├── Verificacion_Tecnica_Archivos_Go_Reverificacion_v0_1.md
+    │       └── _to_delete/
+    │           └── Nota_Tecnica_Analisis_Fase4_Escrituras_y_Bootstrap_v0_1_superseded_1788924659.md
+    ├── BSIP/
+    │   └── ASM/
+    │       ├── ASM_Location_Research_v0_2.md
+    │       ├── ASM_PRE_MANDATE_EXECUTION_ADR_v0_1.md
+    │       └── ASM_PRE_MANDATE_EXECUTION_ROADMAP_I3_I7_v0_1.md
+    ├── GRAVITY/
+    │   ├── API/
+    │   │   ├── NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md
+    │   │   └── NUCLEUS_API_Contracts_Consolidado_v0_1.md
+    │   ├── COLISIONES/
+    │   │   └── Orbital_Gravity_Deteccion_Tipificacion_Colisiones_Mandates_Posturas_Spec_v0_1.md
+    │   ├── GENES/
+    │   │   └── Investigacion_Gravity_Genes_Domains_Puntos_Creacion_v0_1.md
+    │   ├── GRAFO/
+    │   │   ├── Cierre_Boundary_Gravity_GravityGraph_Semantics_Provenance_v0_1.md
+    │   │   ├── GravityGraph_DOMAIN_GENE_Contrato_Propuesto_v0_1.md
+    │   │   ├── GravityGraph_DOMAIN_GENE_Handoff_Albor_v0_1.md
+    │   │   ├── GravityGraph_Domains_Genes_Postures_Provenance_and_Persistence_Audit_v0_1.md
+    │   │   ├── Investigacion_GravityGraph_DomainGene_Relacion_v0_1.md
+    │   │   └── Orbital_Gravity_Persistencia_Grafo_Implementation_Spec_v0_1.md
+    │   ├── GRAMMAR/
+    │   │   ├── Orbital_Gravity_Expression_Grammar_Parser_Spec_v0_1.md
+    │   │   └── Orbital_Gravity_Parser_Guia_Operativa_v0_1.md
+    │   ├── MODELS/
+    │   │   ├── Corolario___La_persona_como_fuente_de_Gravity.md
+    │   │   ├── Orbital___Fundamentos_de_Coordinacion_Gravity_e_Interaccion_Gobernada.md
+    │   │   └── Paladin_Client_Object_Model_v0_1.md
+    │   ├── ORBITAL/
+    │   │   ├── Cowork_Instrucciones_Lanzamiento_Research_Orrery.md
+    │   │   ├── Encargo_Investigacion_Creacion_Agentes_y_Acoplamiento_Orbital_Gravity_Intents_v0_1.md
+    │   │   ├── Glosario_Contexto_Cognituum_para_Cowork.md
+    │   │   ├── Orrery_Research_Brief_Interfaz_Principal_v0_1.md
+    │   │   └── Orrery_Research_Resultados_v0_1.md
+    │   ├── PALADIN/
+    │   │   └── Paladin_UX_Postura_Gravity_Masa_Spec_v0_1.md
+    │   ├── ROSETA/
+    │   │   └── Rosetta_Stone_Investigacion_Marcos_Externos_v0_1.md
+    │   └── SESSION/
+    │       ├── Gravity_SESSION_MandateGenesis_Handoff_Investigacion_v0_1.md
+    │       └── Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md
+    ├── INTEGRATION_HUMAN_TECHNICAL_REALITY_v0_1.md
+    ├── ORRERY/
+    │   └── LOCATION/
+    │       └── ORRERY_LOCATION_MATERIAL_CLOSURE_v1_1.md
+    └── WISDOM/
+        └── WISDOM_DEVELOPMENT_SCOPE_v0_1.md

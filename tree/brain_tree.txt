@@ -155,6 +155,7 @@ bloom-development-extension/
     │   │   ├── recover.py
     │   │   ├── stage.py
     │   │   ├── submit.py
+    │   │   ├── supply.py
     │   │   ├── unlock.py
     │   │   ├── update.py
     │   │   ├── validate.py
@@ -307,15 +308,20 @@ bloom-development-extension/
     │   │   ├── native_host_manager.py
     │   │   ├── onboarding_status_manager.py
     │   │   └── websocket_status_manager.py
+    │   ├── intelligence_supply.py
     │   ├── intent/
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── effect_ledger.py
     │   │   ├── fs_contracts.py
+    │   │   ├── genesis_intelligence.py
     │   │   ├── merge_manager.py
     │   │   ├── recovery_manager.py
     │   │   ├── response_parser.py
     │   │   ├── schema/
-    │   │   │   └── bsip_response_contrato_d_v0_1.json
+    │   │   │   ├── bsip_response_contrato_d_v0_1.json
+    │   │   │   ├── dis_mapping_result_v1.json
+    │   │   │   ├── ing_classification_result_v1.json
+    │   │   │   └── ing_result_v1.json
     │   │   ├── staging_manager.py
     │   │   └── validation_manager.py
     │   ├── intent_manager.py
@@ -451,7 +457,11 @@ bloom-development-extension/
         └── intent/
             ├── __pycache__/ [... cache]
             ├── test_cli_v2_suite.py
+            ├── test_dis_mapping_supply.py
             ├── test_effect_ledger.py
             ├── test_effect_ledger_cli.py
+            ├── test_ing_dis_supply_e2e.py
+            ├── test_ing_lifecycle.py
+            ├── test_intelligence_supply.py
             ├── test_intent_state_transitions.py
             └── test_validate_contract.py
