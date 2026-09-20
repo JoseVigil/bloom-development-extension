@@ -521,7 +521,7 @@
     "dev:webview": "cd webview/app && npm run dev",
     "build:webview": "cd webview/app && npm install && npm run build",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src",
     "test": "node test-installation.js",
     "test:gravity-parser": "tsc --strict --target ES2020 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/gravity-parser-test contracts/gravity/parser.test.ts && node .tmp/gravity-parser-test/parser.test.js",
     "clean": "rimraf out installer/native/bin/* src/bridge/bin webview/btip-explorer/build",

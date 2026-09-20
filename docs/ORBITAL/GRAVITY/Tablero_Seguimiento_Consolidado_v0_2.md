@@ -1,8 +1,8 @@
-# Tablero de Seguimiento Consolidado — Gravity / Orbital / Posture (v0.49)
+# Tablero de Seguimiento Consolidado — Gravity / Orbital / Posture (v0.50)
 
 **Estado a:** 2026-09-20
-**Reemplaza a:** v0.48. Cierra la aceptación E2E real del primer Mandate Genesis (bloqueo local de autoridad
-Master para Nucleus Vault, sin relación con `remote_enforced`) — ver §Z.25.
+**Reemplaza a:** v0.49. Cierra el Tema 1 (Mandate Genesis) al 100%: D-27 (step `mandate_genesis` triplicado) y
+la unificación de creación de Mandates (Go/CLI vs Node/API) — ver §Z.26.
 
 La aprobación alcanza el código y sus invariantes de seguridad verificados independientemente. No implica despliegue productivo, migración de ambientes, publicación de artefactos ni provisión de credenciales.
 
@@ -622,3 +622,91 @@ provisión de credenciales fuera de este caso puntual.
 de `ing`, canal Brain↔AITAP para `dis.mapping`, persistencia, reinicio y replay sin duplicación (ya validados
 en rondas controladas previas) más, ahora, la resolución productiva de la credencial Anthropic vía Nucleus
 Vault y la aceptación funcional completa de una corrida real aislada.
+
+## §Z.26 — D-27 y unificación de creación de Mandates: cerrado. Tema 1 (Mandate Genesis) cerrado al 100%
+
+Con §Z.25 aceptado, quedaban 3 puntos abiertos de los 4 que la Agenda Maestra listaba para cerrar el Tema 1 en
+sentido estricto (el 4°, D-25/Core UI, José lo sacó de alcance explícitamente para un cowork aparte): validación
+completa build/test, D-27, y unificación de creación de Mandates. Los dos primeros se cerraron en el paso
+anterior de esta misma sesión (ver más arriba: ESLint corregido, `TestRegisterGravityActivities` actualizado
+contra el registro real de `registerGravityActivities` — confirmado no colateral de §Z.24, sino de un cowork
+distinto y ya cerrado, nodo SESSION/MANDATE de Gravity, 2026-09-02). Esta sección cierra los dos restantes.
+
+### D-27 — "el step `mandate_genesis` está triplicado y es vulnerable a drift"
+
+Diagnóstico con código real trazado: no hay 2 sino **3 implementaciones independientes** de cómo arrancar un
+Mandate Genesis, y solo 2 estaban sincronizadas:
+
+1. **CLI (Go)** — `mandate.go:createBuildMandate()`: escribe `mandate_state.json`; el watcher de Nucleus
+   (`mandate_watcher.go`, fsnotify) dispara el build.
+2. **API (Node)** — `create-mandate.handler.ts:createMandateHandler()`: mismo mecanismo, mismo watcher. Wireada
+   y viva (`mandates.routes.ts: POST /mandates → createMandateHandler`).
+3. **Cliente Temporal directo (Node)** — `src/temporal/client.ts:startMandateBuildWorkflow()` +
+   `src/workflows/mandate-build-workflow.types.ts`: un tercer camino que ignoraba el mecanismo archivo+watcher
+   y arrancaba el workflow de Temporal directo, con `taskQueue: 'nucleus-mandates'` hardcodeado — pero el
+   worker Go (`worker.go`) solo escucha `"mandate-orchestration"`. Si esto se hubiera invocado, el workflow
+   habría quedado colgado en Temporal sin worker que lo tomara.
+
+Verificado antes de tocar nada que la vía #3 no estaba wireada a ningún route (`mandates.routes.ts` no la
+importa; `server.ts` no menciona Temporal) — código huérfano, no un camino compitiendo en runtime, pero
+presente en el repo y drifteado, exactamente el riesgo que D-27 señala.
+
+**Resolución, ejecutada por José en su propio entorno tras la autorización de Control, verificada por Control
+contra el dispositivo real después:**
+
+```
+rm -f src/temporal/client.ts src/workflows/mandate-build-workflow.types.ts
+```
+
+`device_list_dir` sobre `src/temporal/` y `src/workflows/` confirma ambos directorios vacíos — los dos
+archivos ya no existen en el repo real. Ningún otro archivo tocado.
+
+### Unificación de creación de Mandates (Go/CLI vs Node/API)
+
+Diff real, campo por campo, entre los dos productores de `mandate_state.json` que sí quedan
+(`mandate.go:initialBuildMandateState()` vs `create-mandate.handler.ts`), cruzado contra quién lee cada campo
+de vuelta (`mandate_watcher.go`, `list-mandates.handler.ts`). Resultado: ya compartían mecanismo y la mayoría
+de los campos — no hacía falta una reescritura, solo 3 diferencias reales:
+
+| Campo | Go (CLI) | Node (API), antes | Uso real verificado |
+|---|---|---|---|
+| `currentStatus` | no existe | `'building'` (duplicaba `status`) | Nadie lo necesita para operar — `list-mandates.handler.ts` ya toleraba su ausencia (cae a `status` sin warning); solo generaba riesgo de drift si algún día divergía de `status`. |
+| `createdAt` | sí | no existía | Usado para mostrar fecha de creación en `GET /mandates` (`list-mandates.handler.ts`) — los mandates creados vía API salían sin esa fecha. |
+| `docsProvided` | sí (`[]` si no hay `--docs`) | no existía | No leído de vuelta por el watcher ni por las activities de Go auditadas — pero el shape debía coincidir igual para no dejar un productor con forma distinta. |
+
+**Fix aplicado** (`create-mandate.handler.ts`, rama GENESIS/DOMAIN_EXPANSION únicamente — la rama `standard`,
+que usa `mandate_draft.json` y no pasa por el watcher, no se tocó):
+
+```diff
+-    status: 'building' as const,
+-    currentStatus: 'building' as const,
+-    currentPhase: 'ingest' as const,
+-    stateVersion: 1,
+-    updatedAt: now,
++    status: 'building' as const,
++    currentPhase: 'ingest' as const,
++    stateVersion: 1,
++    createdAt: now,
++    updatedAt: now,
++    docsProvided: [] as string[],
+```
+
+Cero cambios en Go, en el watcher, ni en el endpoint de lectura (ya toleraba ambas formas). Commiteado y
+releído byte a byte contra el dispositivo real — confirmado.
+
+### Alcance y no-alcance
+
+Ninguno de los dos puntos tocó `internal/authority`, `internal/governance/decision`, Temporal en general (el
+worker sigue igual), ni ningún invariante de `AuthorityMode`/`remote_enforced` (§Z.24 sigue intacto). D-27 fue
+puramente eliminación de código muerto y desalineado; la unificación fue un ajuste de 3 campos en un único
+archivo, sin tocar el mecanismo de creación en sí.
+
+### Efecto neto — Tema 1 (Mandate Genesis) cerrado al 100%
+
+De los 4 puntos que la Agenda Maestra listaba para cerrar el Tema 1 en sentido estricto: validación
+build/test (cerrado, con el modelo de validación de `build-all.py` como autoridad, per instrucción explícita
+de José), D-27 (cerrado, esta sección), unificación de creación de Mandates (cerrado, esta sección), y D-25
+(sacado de alcance por José, cowork aparte de Core UI). No queda ningún punto abierto de este bloque. El
+Mandate Genesis real —creación (CLI o API, ahora con shape idéntico), build (`MandateBuildWorkflow`), firma,
+ejecución, resolución de credencial Anthropic vía Vault, continuidad ante reinicio— queda operativo y cerrado
+de punta a punta.

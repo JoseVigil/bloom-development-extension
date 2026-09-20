@@ -63,13 +63,33 @@ func TestRegisterMandateGenesisSignatureActivities(t *testing.T) {
 func TestRegisterGravityActivities(t *testing.T) {
 	registrar := &capturingActivityRegistrar{}
 	registerGravityActivities(registrar)
-	if got, want := len(registrar.registered), 1; got != want {
+
+	if got, want := len(registrar.registered), 4; got != want {
 		t.Fatalf("registered activities = %d, want %d", got, want)
 	}
-	if reflect.ValueOf(registrar.registered[0]).Pointer() != reflect.ValueOf(activities.ResolveActiveGravityActivity).Pointer() {
-		t.Fatal("ResolveActiveGravityActivity was not registered")
+
+	tests := []struct {
+		name     string
+		index    int
+		expected interface{}
+		optName  string
+	}{
+		{name: "ResolveActiveGravityActivity", index: 0, expected: activities.ResolveActiveGravityActivity, optName: "resolveActiveGravityActivity"},
+		{name: "EnsureGravityMandateNodeActivity", index: 1, expected: activities.EnsureGravityMandateNodeActivity, optName: "ensureGravityMandateNodeActivity"},
+		{name: "CreateGravitySessionActivity", index: 2, expected: activities.CreateGravitySessionActivity, optName: "createGravitySessionActivity"},
+		{name: "PersistExecutionGravityActivity", index: 3, expected: activities.PersistExecutionGravityActivity, optName: "persistExecutionGravityActivity"},
 	}
-	if registrar.options[0].Name != "resolveActiveGravityActivity" {
-		t.Fatalf("activity name = %q", registrar.options[0].Name)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotIdentity := reflect.ValueOf(registrar.registered[tt.index]).Pointer()
+			wantIdentity := reflect.ValueOf(tt.expected).Pointer()
+			if gotIdentity != wantIdentity {
+				t.Fatalf("registered function identity = 0x%x, want 0x%x", gotIdentity, wantIdentity)
+			}
+			if registrar.options[tt.index].Name != tt.optName {
+				t.Fatalf("activity name = %q, want %q", registrar.options[tt.index].Name, tt.optName)
+			}
+		})
 	}
 }
