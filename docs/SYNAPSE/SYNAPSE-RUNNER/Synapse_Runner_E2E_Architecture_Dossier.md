@@ -4,6 +4,70 @@
 
 ---
 
+## 0. Repositorio e Índice de Rutas (paso obligatorio previo)
+
+**Raíz única del repo:** `/home/jose/repos/bloom-development-extension` (Electron/Conductor, extensión Cortex, y el CLI Python `brain` conviven en un solo repo, no dos).
+
+**⚠️ Hallazgo estructural a confirmar antes de tocar código:** los archivos de Companion y Discovery existen duplicados en dos ubicaciones:
+- **Source/templates:** `brain/core/profile/web/templates/{companion,discovery,synapse-simulator}/...`
+- **Runtime empaquetado:** `installer/cortex/extension/...` (ahí vive `background-companion.js`, `manifest.json`, `protocols/companion.schema.json`)
+
+Esto sugiere un **paso de build que copia templates → extensión empaquetada**. Los archivos de `templates/companion/` auditados en esta sesión (`companion.js`, `companionProtocol.js`, `index.html`, `styles.css`) son probablemente el *source*, no necesariamente idénticos al artefacto que el navegador carga en runtime. **Antes de tocar este código, buscar el script de build** (candidatos: `grep -rn "templates/companion" --include="*.js" --include="*.json" .` desde la raíz, o revisar `package.json`/`Makefile`/scripts de `installer/`) y confirmar si `templates/` y `cortex/extension/` se mantienen sincronizados automáticamente o manualmente.
+
+### Rutas confirmadas (relativas a la raíz del repo)
+
+**A. Electron / Conductor**
+```
+installer/conductor/workspace/main_conductor.js
+installer/conductor/workspace/onboarding/preload_onboarding.js
+installer/conductor/workspace/onboarding/renderer/steps/step-identity.js
+installer/conductor/workspace/onboarding/ipc/onboarding-handlers.js
+installer/conductor/workspace/ipc/workspace-synapse-handlers.js
+```
+
+**B. Chromium / Discovery**
+```
+brain/core/profile/web/templates/discovery/discoveryProtocol.js
+brain/core/profile/web/templates/synapse-simulator/synapse-simulator.js
+installer/conductor/workspace/shared/synapse-simulator.html
+installer/native/config/onboarding/onboarding_steps.json
+installer/conductor/workspace/onboarding/milestone-registry.js
+installer/conductor/workspace/onboarding/milestone-reactor.js
+installer/cortex/extension/manifest.json
+```
+🔴 `scenarios/discovery_happy_path.json` — **NO EXISTE** en el repo. Eliminar como referencia o reemplazar por un archivo de escenarios real si existe con otro nombre.
+🔴 `validate-scenario.js` — **NO EXISTE** en el repo. Ídem.
+
+**C. Companion**
+```
+brain/core/profile/web/templates/companion/companionProtocol.js
+brain/core/profile/web/templates/companion/index.html
+brain/core/profile/web/templates/companion/styles.css
+brain/core/profile/web/templates/companion/companion.js
+installer/cortex/extension/background-companion.js
+installer/cortex/extension/protocols/companion.schema.json
+```
+```
+installer/cortex/extension/background.js
+```
+
+**D. Synapse Intent / Submit (CLI Python)**
+```
+brain/commands/intent/submit.py
+brain/core/intent_manager.py
+brain/core/synapse/synapse_manager.py
+brain/core/synapse/synapse_protocol.py
+brain/core/synapse/synapse_ipc_server.py
+brain/commands/synapse/synapse_host_cli.py
+brain/commands/intent/build_payload.py
+brain/commands/intent/download.py
+```
+```
+brain/core/context_planning/payload_builder.py
+```
+
+---
+
 ## 1. Nueva Consigna / Requerimiento Concreto
 
 **Objetivo:** Validar la hipótesis de automatización del onboarding **exclusivamente desde las capas de UI** (Electron Desktop / Conductor + Chromium / Discovery + Side Panel / Companion) sin inyectar eventos sintéticos directamente por protocolo (`POST /api/internal/system-event`). El objetivo es descubrir si el flujo puede automatizarse de punta a punta como un usuario real, usando la captura de eventos/IPCs únicamente como capa de **observabilidad y aserciones** — y, adicionalmente, como **sistema de diagnóstico y detección temprana de fallas** en todo el pipeline (ver Sección 6).
@@ -24,22 +88,28 @@
 
 ### 2A. Capa Electron / Conductor (UI Desktop y Flujo Orchestrator)
 
-| Archivo | Rol |
-|---|---|
-| `main_conductor.js` | Ciclo de vida principal de Electron, creación de ventanas, listeners IPC, orquestación del onboarding. |
-| `preload_onboarding.js` | Bridge IPC expuesto al renderer (`window.onboarding` / `window.electronAPI`). |
-| `renderer/steps/step-identity.js` | Lógica de UI de Electron que reacciona a milestones de identidad y navegación. |
-| `onboarding-handlers.js` / `workspace-synapse-handlers.js` | Manejadores de eventos Synapse/Brain del lado de Conductor. |
+| Archivo | Ruta relativa | Rol |
+|---|---|---|
+| `main_conductor.js` | `installer/conductor/workspace/main_conductor.js` | Ciclo de vida principal de Electron, creación de ventanas, listeners IPC, orquestación del onboarding. |
+| `preload_onboarding.js` | `installer/conductor/workspace/onboarding/preload_onboarding.js` | Bridge IPC expuesto al renderer (`window.onboarding` / `window.electronAPI`). |
+| `step-identity.js` | `installer/conductor/workspace/onboarding/renderer/steps/step-identity.js` | Lógica de UI de Electron que reacciona a milestones de identidad y navegación. |
+| `onboarding-handlers.js` | `installer/conductor/workspace/onboarding/ipc/onboarding-handlers.js` | Manejadores de eventos Synapse/Brain del lado de Conductor. |
+| `workspace-synapse-handlers.js` | `installer/conductor/workspace/ipc/workspace-synapse-handlers.js` | Manejadores de eventos Synapse/Brain a nivel workspace (nótese: carpeta `ipc/` distinta a la de `onboarding-handlers.js`). |
 
 ### 2B. Capa Chromium / Discovery (Extensión y Protocolo de Cliente)
 
-| Archivo | Rol |
-|---|---|
-| `discoveryProtocol.js` | Definición formal de eventos y manifest del protocolo entre Discovery, Sentinel y Brain. |
-| `synapse-simulator.js` | Lógica interna del cliente de simulación y puente con el background script. |
-| `onboarding_steps.json` | Definición de pasos y secuencia del wizard de onboarding. |
-| `milestone-registry.js` / `milestone-reactor.js` | Mapeo y reacción ante eventos que completan pasos/milestones. |
-| `background.js` | **Confirmado (auditado):** router principal Synapse/Discovery/onboarding. Native messaging host (TCP 5678 vía `bloom-host.exe`), handshake de 3 fases (`NONE → EXTENSION_READY → HOST_READY → CONFIRMED`), gestión de tabs Discovery/Landing/SynapseSimulator, bridge al debug panel (`forwardToDebugPanel()` → `http://localhost:48215/api/internal/system-event`, WebSocket `ws://localhost:4124`). Hace `import './background-companion.js'` — **no** contiene lógica del Companion. |
+| Archivo | Ruta relativa | Rol |
+|---|---|---|
+| `discoveryProtocol.js` | `brain/core/profile/web/templates/discovery/discoveryProtocol.js` | Definición formal de eventos y manifest del protocolo entre Discovery, Sentinel y Brain. |
+| `synapse-simulator.js` | `brain/core/profile/web/templates/synapse-simulator/synapse-simulator.js` | Lógica interna del cliente de simulación y puente con el background script. |
+| `synapse-simulator.html` | `installer/conductor/workspace/shared/synapse-simulator.html` | Panel de observabilidad — WebSocket `ws://localhost:4124`. |
+| `onboarding_steps.json` | `installer/native/config/onboarding/onboarding_steps.json` | Definición de pasos y secuencia del wizard de onboarding. |
+| `milestone-registry.js` | `installer/conductor/workspace/onboarding/milestone-registry.js` | Mapeo de eventos que completan pasos/milestones. |
+| `milestone-reactor.js` | `installer/conductor/workspace/onboarding/milestone-reactor.js` | Reacción ante milestones completados. |
+| `manifest.json` (extensión) | `installer/cortex/extension/manifest.json` | Manifest de la extensión Cortex (Discovery + Companion comparten la misma extensión). |
+| `background.js` | `installer/cortex/extension/background.js` | **Confirmado por código (auditado):** router principal Synapse/Discovery/onboarding. Native messaging host (TCP 5678 vía `bloom-host.exe`), handshake de 3 fases (`NONE → EXTENSION_READY → HOST_READY → CONFIRMED`), gestión de tabs Discovery/Landing/SynapseSimulator, bridge al debug panel (`forwardToDebugPanel()` → `http://localhost:48215/api/internal/system-event`, WebSocket `ws://localhost:4124`). Hace `import './background-companion.js'` — **no** contiene lógica del Companion. |
+
+🔴 `scenarios/discovery_happy_path.json` y `validate-scenario.js` — **no existen en el repo** (ver Sección 0). Removidos como referencia operativa; si existe un equivalente con otro nombre, agregarlo aquí tras confirmarlo.
 
 ### 2C. Synapse Intent Submission (CLI Layer — Python)
 
@@ -47,16 +117,18 @@
 
 El Submit Simulator —la capa que permitiría disparar y observar el submit de un intent de forma UI-driven, fiel al resto de la arquitectura del PoC— **no existe todavía**. Lo que hay hoy es la implementación operativa real del pipeline por CLI, que se documenta como **contingencia temporal**, no como solución definitiva.
 
-| Archivo | Rol | Estado |
-|---|---|---|
-| `brain/commands/intent/submit.py` | Comando `brain intent submit`. Capa delgada: valida args, delega en `IntentManager`. Confirmado sin equivalente en UI. | ✅ Operativo — uso como contingencia |
-| `brain/core/intent_manager.py` | Orquesta `submit_intent()`. | 🔶 No auditado |
-| `brain/core/synapse/synapse_manager.py` | `socket.create_connection(("127.0.0.1", 5678))`, publica al EventBus TCP de Brain (ej. `ACCOUNT_REGISTERED`). | ✅ Confirmado por grep |
-| `brain/core/synapse/synapse_protocol.py`, `synapse_ipc_server.py` | Protocolo/transporte del bridge. | 🔶 Referenciados, no auditados |
-| `brain/commands/synapse/synapse_host_cli.py` | Levanta el Listener Loop (`brain synapse host`) — debe estar corriendo para que `submit` llegue a destino. | ✅ Confirmado |
-| `brain/commands/intent/build_payload.py` + `core/context_planning/payload_builder.py` | Arma el payload que `submit` envía (paso previo del pipeline). | 🔶 No auditado |
-| `brain/commands/intent/download.py` | Recibe la respuesta posterior al submit, puerto distinto al 5678. | 🔶 No auditado |
-| **Submit Simulator (UI-driven)** | Módulo que debe orquestar la construcción/serialización de TONs/payloads + la interacción DOM que hoy hace `submit.py` por CLI. | 🚧 **PENDING / FEATURE EN DISEÑO** |
+| Archivo | Ruta relativa | Rol | Estado |
+|---|---|---|---|
+| `submit.py` | `brain/commands/intent/submit.py` | Comando `brain intent submit`. Capa delgada: valida args, delega en `IntentManager`. Confirmado sin equivalente en UI. | ✅ Operativo — uso como contingencia |
+| `intent_manager.py` | `brain/core/intent_manager.py` | Orquesta `submit_intent()`. | 🔶 No auditado |
+| `synapse_manager.py` | `brain/core/synapse/synapse_manager.py` | `socket.create_connection(("127.0.0.1", 5678))`, publica al EventBus TCP de Brain (ej. `ACCOUNT_REGISTERED`). | ✅ Confirmado por grep |
+| `synapse_protocol.py` | `brain/core/synapse/synapse_protocol.py` | Protocolo del bridge. | 🔶 Referenciado, no auditado |
+| `synapse_ipc_server.py` | `brain/core/synapse/synapse_ipc_server.py` | Transporte del bridge. | 🔶 Referenciado, no auditado |
+| `synapse_host_cli.py` | `brain/commands/synapse/synapse_host_cli.py` | Levanta el Listener Loop (`brain synapse host`) — debe estar corriendo para que `submit` llegue a destino. | ✅ Confirmado |
+| `build_payload.py` | `brain/commands/intent/build_payload.py` | Arma el payload que `submit` envía (paso previo del pipeline). | 🔶 No auditado |
+| `payload_builder.py` | `brain/core/context_planning/payload_builder.py` | Lógica de serialización del payload — candidato natural a reusar en el Submit Simulator. | 🔶 No auditado |
+| `download.py` | `brain/commands/intent/download.py` | Recibe la respuesta posterior al submit, puerto distinto al 5678. | 🔶 No auditado |
+| **Submit Simulator (UI-driven)** | *(no existe — a crear)* | Módulo que debe orquestar la construcción/serialización de TONs/payloads + la interacción DOM que hoy hace `submit.py` por CLI. | 🚧 **PENDING / FEATURE EN DISEÑO** |
 
 **Requerimientos arquitectónicos del Submit Simulator (a especificar en sesión de diseño futura, no a implementar ahora):**
 
@@ -67,12 +139,16 @@ El Submit Simulator —la capa que permitiría disparar y observar el submit de 
 
 ### 2D. Companion — Extensión (Side Panel + Engine Channel)
 
-| Archivo | Rol |
-|---|---|
-| `companionProtocol.js` | Manifiesto v2.0.0. Tres canales: `commands` (Side Panel→background, confiable), `reports` (background→Side Panel, confiable), `engineChannel` (background↔tab de Gemini, marcado `trust: 'untrusted-dom'`). |
-| `index.html` / `styles.css` | Markup y estilos del Side Panel (Bloom UI): toolbar de estado del motor, header de Mandate, área de respuesta refinada, expander de log técnico. |
-| `companion.js` | Lógica del Side Panel: Port `'companion-link'` con reconexión y backoff, sincronización inicial (`GET_ENGINE_STATUS`), relay de comandos externos vía `COMPANION_RELAY_COMMAND`. |
-| **`background-companion.js`** | **Orquestador real del Companion.** Detalle completo abajo. |
+| Archivo | Ruta relativa | Rol |
+|---|---|---|
+| `companionProtocol.js` | `brain/core/profile/web/templates/companion/companionProtocol.js` | Manifiesto v2.0.0. Tres canales: `commands` (Side Panel→background, confiable), `reports` (background→Side Panel, confiable), `engineChannel` (background↔tab de Gemini, marcado `trust: 'untrusted-dom'`). |
+| `index.html` | `brain/core/profile/web/templates/companion/index.html` | Markup del Side Panel (Bloom UI): toolbar de estado del motor, header de Mandate, área de respuesta refinada, expander de log técnico. |
+| `styles.css` | `brain/core/profile/web/templates/companion/styles.css` | Estilos del Side Panel. |
+| `companion.js` | `brain/core/profile/web/templates/companion/companion.js` | Lógica del Side Panel: Port `'companion-link'` con reconexión y backoff, sincronización inicial (`GET_ENGINE_STATUS`), relay de comandos externos vía `COMPANION_RELAY_COMMAND`. |
+| **`background-companion.js`** | `installer/cortex/extension/background-companion.js` | **Orquestador real del Companion.** Detalle completo abajo. |
+| `companion.schema.json` | `installer/cortex/extension/protocols/companion.schema.json` | Schema formal de payload referenciado por `companionProtocol.js` — referencia de diseño para el TON del Submit Simulator. |
+
+⚠️ Ver nota de Sección 0: los 4 primeros archivos de esta tabla viven en `templates/companion/` (source), mientras que `background-companion.js` y el schema viven en `installer/cortex/extension/` (runtime empaquetado). Confirmar si son sincronizados por build antes de asumir que son el mismo artefacto que carga el navegador.
 
 **Mecánica confirmada de `background-companion.js`:**
 
@@ -235,3 +311,4 @@ El reporte de cada paso fallido debe indicar **en qué capa específica** falló
 4. Confirmar si `synapse-simulator.html` expone una categoría de error explícita distinta de `sentinel`/`brain`/`synapse`.
 5. Corregir la discrepancia de documentación: `ENGINE_RESPONSE_ERROR` se emite en código pero no está en `knownReasons` de `companionProtocol.js` v2.0.0.
 6. Diseñar formalmente el Submit Simulator UI-driven (Sección 2C) como su propia iniciativa, una vez cerrado este PoC.
+7. Confirmar si `brain/core/profile/web/templates/{companion,discovery,synapse-simulator}/` y `installer/cortex/extension/` se sincronizan por un paso de build automático o manual (ver nota en Sección 0).
