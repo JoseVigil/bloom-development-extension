@@ -123,10 +123,11 @@ export async function createMandateHandler(
     source: (body as any).source,
     baseGenesisId: (body as any).baseGenesis,
     status: 'building' as const,
-    currentStatus: 'building' as const,
     currentPhase: 'ingest' as const,
     stateVersion: 1,
+    createdAt: now,
     updatedAt: now,
+    docsProvided: [] as string[],
     signature: {
       status: 'not_ready' as const,
       intentId: null,

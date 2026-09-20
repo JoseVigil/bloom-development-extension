@@ -13,20 +13,28 @@
  * archivo es la corrección: agrega los 4 pasos server-side previos
  * (00a-00d) que preceden a Electron.
  *
- * IMPORTANTE: agregar 00a-00d acá es documentación/esquema, NO
- * implementación. La Superficie 0 (browser genérico pre-Electron) que
- * ejecutaría estos 4 pasos sigue como stub — ver
- * `src/surfaces/phase0-generic-browser.ts` — porque la Sección 14.1 del
- * Requerimiento Integrado (¿aplica AUTHORITY_BOUNDARY.md §1 a un arnés de
- * Playwright automatizando login/registro GitHub?) sigue sin decidirse.
- * Ver también §15 (Próximos Pasos) del mismo documento, que es lo que este
- * archivo implementa.
+ * ACTUALIZACIÓN 2026-09-20: 00a y 00b YA ESTÁN IMPLEMENTADOS — dejaron de
+ * ser stub. La Sección 14.1 (¿aplica AUTHORITY_BOUNDARY.md §1 a un arnés de
+ * Playwright automatizando login/registro GitHub?) no se resolvió eligiendo
+ * una de las dos opciones que dejaba abiertas — se esquivó por completo
+ * replicando el patrón del Synapse Simulator del lado del backend: un modo
+ * fixture HTTP (`AUTHORITY_ALLOW_TEST_FIXTURES`, sólo dev, nunca en un
+ * despliegue real) que inyecta el estado interno post-login directamente,
+ * sin navegar nunca a github.com. Ver el comentario completo en
+ * `src/surfaces/phase0-generic-browser.ts` (que, pese al nombre heredado,
+ * ya no usa Playwright ni ningún browser para 00a/00b — son dos llamadas
+ * HTTP puras).
+ *
+ * 00c y 00d siguen en `implementedInRunner: false`, pero por motivos
+ * DISTINTOS y no relacionados con AUTHORITY_BOUNDARY.md — ver sus `notes`
+ * individuales abajo y el comentario de `executePhase0Download()` en
+ * `phase0-generic-browser.ts`.
  */
 
 export type FlowPhase = 'fase0-server' | 'fase1-4-local';
 
 export type FlowSurface =
-  | 'superficie-0-browser-generico' // stub — ver phase0-generic-browser.ts
+  | 'superficie-0-browser-generico' // 00a/00b implementados (HTTP fixture, sin browser); 00c/00d stub — ver phase0-generic-browser.ts
   | 'superficie-1-electron-conductor'
   | 'superficie-2-chromium-discovery'
   | 'superficie-3-companion-side-panel'
@@ -64,9 +72,13 @@ export const FLOW_MATRIX: FlowStep[] = [
     eventGenerated: 'POST/GET /v1/authority/genesis/login',
     receiverOrWaitMechanism: 'Backend crea organización + identidad atómicamente',
     status: 'construido',
-    implementedInRunner: false,
+    implementedInRunner: true,
     externalBoundaryId: 1,
-    notes: 'Registro y login son el mismo evento — no hay alta separada (genesis-store.ts).',
+    notes:
+      'Registro y login son el mismo evento — no hay alta separada (genesis-store.ts). Implementado como HTTP puro ' +
+      '(sin browser) vía runPhase0FixtureRegistration()/beginPhase0FixtureRegistration() en ' +
+      'phase0-generic-browser.ts, contra el backend en modo AUTHORITY_ALLOW_TEST_FIXTURES=true — nunca navega a ' +
+      'github.com, la frontera #1 nunca se cruza de verdad (se esquiva por inyección de fixture).',
   },
   {
     id: '00b',
@@ -77,8 +89,11 @@ export const FLOW_MATRIX: FlowStep[] = [
     eventGenerated: 'GET /v1/authority/human/callback',
     receiverOrWaitMechanism: "Backend emite sesión (__Host-authority-session)",
     status: 'construido',
-    implementedInRunner: false,
+    implementedInRunner: true,
     externalBoundaryId: 1,
+    notes:
+      'Implementado como HTTP puro (sin browser) vía finishPhase0FixtureRegistration() en ' +
+      'phase0-generic-browser.ts — mismo mecanismo de inyección de fixture que 00a, misma frontera esquivada.',
   },
   {
     id: '00c',
@@ -91,7 +106,9 @@ export const FLOW_MATRIX: FlowStep[] = [
     status: 'construido_alcance_limitado',
     implementedInRunner: false,
     notes:
-      'Sin ruta de descubrimiento público de releaseId para un humano anónimo — ver §11/§13 del Requerimiento Integrado.',
+      'Bloqueo DISTINTO al de 00a/00b (no es AUTHORITY_BOUNDARY.md): sin ruta de descubrimiento público de ' +
+      'releaseId para un humano anónimo — ver §11/§13 del Requerimiento Integrado y executePhase0Download() ' +
+      'en phase0-generic-browser.ts.',
   },
   {
     id: '00d',
@@ -265,7 +282,10 @@ export const EXTERNAL_BOUNDARIES: ExternalBoundary[] = [
     name: 'Login GitHub del backend (Auth Code+PKCE, GitHub App propia del backend)',
     phase: 'fase0-server',
     automatedByRunner: false,
-    notes: 'Pasos 00a-00b — bloqueado por Superficie 0 (stub), pendiente decisión §14.1.',
+    notes:
+      'Pasos 00a-00b — deliberadamente NUNCA automatizada (nunca navega a github.com): el backend en modo ' +
+      'AUTHORITY_ALLOW_TEST_FIXTURES=true inyecta el estado post-login por fixture, esquivando la frontera ' +
+      'en vez de cruzarla. Ver phase0-generic-browser.ts. Sección 14.1 resuelta 2026-09-20.',
   },
   {
     id: 2,

@@ -59,4 +59,14 @@ export const env = {
   runnerWatchdogSlackMs: optionalInt('RUNNER_WATCHDOG_SLACK_MS', 5_000),
   conductorExePathOverride: process.env.CONDUCTOR_EXE_PATH || undefined,
   bloomNucleusBaseDirOverride: process.env.BLOOM_NUCLEUS_BASE_DIR_OVERRIDE || undefined,
+  /**
+   * Origin del backend Cloudflare Worker (Fase 0 server-side, pasos 00a/00b)
+   * corriendo en modo fixture (`AUTHORITY_ALLOW_TEST_FIXTURES=true` en
+   * backend/.dev.vars — ver ese archivo). Debe coincidir EXACTO con el
+   * `AUTHORITY_HUMAN_ORIGIN` configurado del lado del backend: se usa tal
+   * cual como base de las URLs y como header `Origin` en el POST (chequeo
+   * de CSRF de administration-route.ts). Ver
+   * src/surfaces/phase0-generic-browser.ts.
+   */
+  backendOrigin: required('SYNAPSE_BACKEND_ORIGIN', 'http://localhost:8787'),
 };

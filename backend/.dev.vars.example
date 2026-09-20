@@ -1,0 +1,21 @@
+# Copiar a .dev.vars (no versionado, ver .gitignore) para desarrollo local con
+# `npm run dev` / `wrangler dev`. Cloudflare Workers lee `.dev.vars` SOLO en
+# `wrangler dev`: `wrangler deploy` nunca lo incluye, por lo que ninguna variable
+# definida acá puede llegar a un despliegue real por accidente.
+#
+# AUTHORITY_ALLOW_TEST_FIXTURES
+#
+# Activa el modo fixture de /v1/authority/human/*: reemplaza el HumanProvider real
+# de GitHub por `testFixtureProvider()` (backend/src/authority/human-identity.ts),
+# que inyecta directamente el estado interno post-login sin nunca navegar a
+# github.com ni hacer un fetch saliente. Es el mismo patrón que usa el Synapse
+# Simulator del lado de la extensión: inyección de estado interno, nunca
+# automatización de una superficie externa real (ver AUTHORITY_BOUNDARY.md §1).
+#
+# Sólo el string exacto "true" activa el modo — cualquier otro valor (incluyendo
+# no definir la variable) deja el sistema usando siempre el provider real de
+# GitHub. Usado por el Synapse Runner (synapse-runner/) para ejercitar Fase 0
+# (pasos 00a/00b) sin depender de un browser ni de credenciales reales.
+#
+# NUNCA activar en un entorno que sirva tráfico real.
+AUTHORITY_ALLOW_TEST_FIXTURES=true

@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect } from '../fixtures/synapse-runner-fixture';
 import {
+  beginPhase0FixtureRegistration,
+  finishPhase0FixtureRegistration,
+  type Phase0RegistrationResult,
+} from '../../src/surfaces/phase0-generic-browser';
+import { env } from '../../src/config/env';
+import {
   launchConductor,
   installMilestoneBuffer,
   waitForMilestone,
@@ -19,24 +25,40 @@ import { getExtensionIdFromNucleusJson } from '../../src/config/bloom-paths';
 /**
  * Suite E2E de onboarding UI-driven — implementa la Matriz de Flujo
  * completa (`src/config/flow-matrix.ts`, `FLOW_MATRIX`; Requerimiento
- * Integrado §6, que renumera el §3 del dossier original), pasos 01 a 11 —
- * las Fases 1-4 (local). Este archivo controla 4 de las 5 superficies
- * (Requerimiento Integrado §7): Electron/Conductor, Chromium/Discovery,
- * Side Panel/Companion, y CLI `brain` como contingencia del paso 06.
+ * Integrado §6, que renumera el §3 del dossier original), pasos 00 a 11 —
+ * Fase 0 server-side (00a/00b reales) + Fases 1-4 (local). Este archivo
+ * controla las 5 superficies (Requerimiento Integrado §7): Superficie 0
+ * (registro/login vía HTTP puro contra el backend en modo fixture, sin
+ * browser), Electron/Conductor, Chromium/Discovery, Side Panel/Companion, y
+ * CLI `brain` como contingencia del paso 06.
  *
- * La Superficie 0 (browser genérico pre-Electron, pasos 00a-00d, Fase 0
- * server-side) precede a este flujo pero NO corre acá — sigue como stub
- * documentado, ver `tests/e2e/phase0-server-onboarding.spec.ts` y
- * `src/surfaces/phase0-generic-browser.ts`. Este spec asume que Fase 0 ya
- * ocurrió (instalador ya corrido, `nucleus authority sync` ya ejecutado) y
- * arranca directamente en "01. Launch" de Electron, igual que antes de esta
- * actualización — la diferencia es que ahora esa asunción queda explícita
- * en vez de implícita.
+ * La Superficie 0 SÍ corre acá de verdad, como pasos `00a`/`00b`, antes de
+ * "01. Launch" — dos llamadas HTTP puras (sin browser, sin Playwright)
+ * contra el backend en modo fixture (`AUTHORITY_ALLOW_TEST_FIXTURES=true`,
+ * sólo `.dev.vars`, ver `backend/.dev.vars.example`), que inyectan
+ * directamente el estado que un login real de GitHub habría producido, sin
+ * tocar nunca github.com. Ver el comentario completo en
+ * `src/surfaces/phase0-generic-browser.ts` — ahí se explica cómo esto
+ * esquiva por completo la Sección 14.1 del Requerimiento Integrado
+ * (¿aplica `AUTHORITY_BOUNDARY.md` §1?) en vez de resolverla eligiendo una
+ * de las dos opciones que dejaba abiertas. El paso 00c (descarga) sigue
+ * bloqueado — por un motivo no relacionado, ver
+ * `tests/e2e/phase0-server-onboarding.spec.ts`.
+ *
+ * A partir de "01. Launch" este spec asume que Fase 0 LOCAL ya ocurrió de
+ * verdad (instalador ya corrido, `nucleus authority sync` ya ejecutado) —
+ * los pasos 00a/00b de acá prueban el registro server-side de verdad, pero
+ * no están conectados con el estado local que asumen las Superficies 1-4
+ * (Electron/Discovery/Companion/CLI): son dos journeys todavía
+ * independientes en este PoC, tal como ya documenta 00d en
+ * `flow-matrix.ts`.
  *
  * Cada paso corre envuelto en `synapseRunner.runStep()` — el bundle de
  * diagnóstico de 4 capas correlacionadas (Sección 6 del dossier / §9 del
  * Requerimiento Integrado) se produce para TODOS los pasos, no solo los que
- * fallan, desde el primer commit de este Runner (consigna, punto 4).
+ * fallan, desde el primer commit de este Runner (consigna, punto 4). La
+ * Superficie 0 es la excepción documentada: no tiene capa de diagnóstico
+ * propia todavía (§14.4, pendiente) — su paso sólo deja log por consola.
  *
  * CDP endpoint: hardcodeado a un valor de placeholder razonable
  * (localhost:9222) — el puerto real que usa Sentinel para levantar
@@ -48,18 +70,41 @@ import { getExtensionIdFromNucleusJson } from '../../src/config/bloom-paths';
 const CDP_ENDPOINT = process.env.SYNAPSE_RUNNER_CDP_ENDPOINT ?? 'http://localhost:9222';
 const DISCOVERY_URL_PATTERN = /discovery\/index\.html|chrome-extension:\/\/.+\/discovery\//;
 
-test.describe('synapse-runner — onboarding E2E local (UI-driven, Fases 1-4 de 5 superficies — Fase 0 server-side es stub aparte)', () => {
+test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0 server-side real + Fases 1-4 local)', () => {
+  let phase0Registration: Phase0RegistrationResult | undefined;
   let conductor: ConductorHandle;
   let discovery: DiscoverySurface;
   let companion: CompanionSurface | undefined;
 
   test.afterEach(async () => {
+    // Orden inverso al de apertura. 00a/00b no abren ningún proceso — son
+    // HTTP puro — así que no hay nada que cerrar de la Superficie 0 acá.
     await companion?.close();
     await discovery?.close();
     await conductor?.close();
   });
 
   test('flujo completo de onboarding + activación del Companion', async ({ synapseRunner }) => {
+    // ---- Paso 00a: Génesis — inicia el registro (HTTP puro, sin browser) ----
+    // POST /v1/authority/genesis/login contra el backend en modo fixture
+    // (AUTHORITY_ALLOW_TEST_FIXTURES=true) — nunca navega a github.com, nunca
+    // hace un fetch saliente a un proveedor externo. Ver el comentario
+    // completo en src/surfaces/phase0-generic-browser.ts.
+    const genesisFlow = await synapseRunner.runStep('00a', undefined, () =>
+      beginPhase0FixtureRegistration(env.backendOrigin),
+    );
+
+    // ---- Paso 00b: Callback — el backend inyecta el estado post-login y ----
+    // ---- emite sesión (HTTP puro, sin browser) ----
+    // GET /v1/authority/human/callback?state=&code=<subject-fixture>. Un
+    // subject nuevo por corrida (randomUUID) simula un fundador
+    // registrándose por primera vez.
+    phase0Registration = await synapseRunner.runStep('00b', undefined, () =>
+      finishPhase0FixtureRegistration(env.backendOrigin, genesisFlow, randomUUID()),
+    );
+    expect(phase0Registration.organizationId).toBeTruthy();
+    expect(phase0Registration.created).toBe(true);
+
     // ---- Paso 01: Launch (Electron UI → onboarding:launch-discovery) ----
     await synapseRunner.runStep('01_launch', undefined, async () => {
       conductor = await launchConductor();

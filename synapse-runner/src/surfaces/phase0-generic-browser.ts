@@ -1,97 +1,231 @@
 /**
- * Superficie 0 — Browser genérico pre-Electron (sin extensión Cortex).
+ * Superficie 0 — Fase 0 server-side (registro/login GitHub + descarga del
+ * instalador), pasos 00a-00d de la Matriz de Flujo
+ * (`src/config/flow-matrix.ts`, `FLOW_MATRIX` con `phase: 'fase0-server'`).
  *
- * STUB DOCUMENTADO — NO FUNCIONAL. No implementar lógica real acá todavía.
- *
- * Cubre, cuando exista, los pasos 00a-00c de la Matriz de Flujo
- * (`src/config/flow-matrix.ts`, `FLOW_MATRIX` con `phase: 'fase0-server'`):
- * registro/login GitHub contra el backend, y descarga del instalador. El
- * paso 00d (instalación + `nucleus authority sync`) corre en el sistema
- * operativo, fuera de cualquier browser — no es responsabilidad de esta
- * superficie ni de Playwright en general.
- *
- * ─────────────────────────────────────────────────────────────────────────
- * POR QUÉ ES UN STUB (no lo conviertas en funcional sin lo siguiente)
- * ─────────────────────────────────────────────────────────────────────────
- * El Requerimiento Integrado (§14.1) deja explícitamente sin decidir si
- * `docs/CORTEX/AUTHORITY_BOUNDARY.md` §1 aplica a esta superficie. Esa
- * sección es agnóstica de componente ("aplica igual si el ejecutor es la
- * extensión de Chrome, el backend, o el Cognituum Runner local") pero
- * nunca menciona "arnés de pruebas" como categoría — no decide la pregunta
- * por sí misma. Dos lecturas quedaron presentadas, sin inclinar la balanza,
- * y AMBAS siguen abiertas:
- *
- *   Opción A — Playwright sujeto a la restricción: esta superficie se
- *     detiene en la puerta de GitHub y usa una sesión ya autenticada
- *     inyectada por fixture, nunca un login real automatizado.
- *
- *   Opción B — Playwright fuera de alcance por ser herramienta de QA, no
- *     un componente de producción: se automatizaría un login de prueba
- *     contra una cuenta de test dedicada, con las debidas precauciones de
- *     secreto. Riesgo documentado: si este arnés se reutiliza como base de
- *     un flujo de producto real, la línea entre "sólo QA" y "el sistema" se
- *     vuelve difícil de sostener retroactivamente.
- *
- * Esta decisión es de José, no de esta sesión ni de ninguna futura sesión
- * de implementación por su cuenta. NO tomes partido acá — si estás por
- * escribir código real en este archivo, primero confirmá con José cuál
- * opción rige, y documentá la decisión tomada (con fecha y quién la tomó,
- * al estilo de la decisión ya registrada sobre TenantID en
- * `ownershipcontract/schema.go` — Requerimiento Integrado §3.5) antes de
- * implementar nada.
+ * El nombre de archivo ("browser") es histórico — viene de la primera
+ * versión de esta superficie, que sí pensaba abrir un Chromium real vía
+ * Playwright para automatizar la pantalla de GitHub. Esa idea era un error
+ * de concepto (confundía el arnés de pruebas con el Synapse Simulator — ver
+ * `brain/core/profile/web/templates/synapse-simulator/`) y quedó
+ * descartada: 00a/00b de ESTE archivo ya NO usan Playwright, NI ningún
+ * browser, ni tocan github.com. Se mantiene el nombre del archivo para no
+ * romper las referencias existentes (flow-matrix.ts, specs, otras
+ * superficies) — lo único que importa es que `FlowSurface` en
+ * `flow-matrix.ts` sigue llamando a esto "superficie-0-browser-generico" a
+ * nivel arquitectónico/documental, independientemente de cómo esté
+ * implementada.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * PUNTO DE INSERCIÓN
+ * CÓMO SE RESOLVIÓ LA SECCIÓN 14.1 (AUTHORITY_BOUNDARY.md §1)
  * ─────────────────────────────────────────────────────────────────────────
- * Cuando la decisión de §14.1 se tome, la forma esperada de esta superficie
- * (a confirmar contra el shape real de `attachToCompanionSidePanel` /
- * `connectToDiscovery` en las otras superficies, por consistencia) es:
+ * El Requerimiento Integrado (§14.1) dejaba dos opciones abiertas: (A)
+ * Playwright sujeto a la restricción, deteniéndose en la puerta de GitHub
+ * con una sesión ya autenticada inyectada; o (B) Playwright fuera de
+ * alcance, automatizando un login de prueba contra una cuenta dedicada.
+ * José (2026-09-20) no eligió ninguna de las dos: en vez de forzar a
+ * Playwright a navegar y tipear en páginas externas de GitHub, se adoptó el
+ * mismo patrón que ya usa el Synapse Simulator del lado de la extensión —
+ * inyección de estado por protocolo interno, nunca automatización de una
+ * superficie externa real. Del lado del backend eso se implementa como un
+ * modo fixture HTTP: `AUTHORITY_ALLOW_TEST_FIXTURES=true` (sólo
+ * `.dev.vars`, nunca en un despliegue real — ver
+ * `backend/src/authority/administration-route.ts#configuredAuthorityHumanResponse`
+ * y `backend/.dev.vars.example`) activa `testFixtureProvider()`
+ * (`backend/src/authority/human-identity.ts`), que nunca genera una URL de
+ * github.com y nunca hace un fetch saliente.
  *
- *   1. `chromium.launch()` — SIN cargar la extensión Cortex (a diferencia
- *      de `discovery-chromium.ts`, que asume Cortex ya instalada). Ver
- *      dossier/Requerimiento Integrado §7, superficie 0.
- *   2. Navegar a la landing pública de registro — URL/dominio TODAVÍA no
- *      confirmado por José (§13 del Requerimiento Integrado: "no hay
- *      `routes` en `wrangler.jsonc`"; puede que Fase 0 tenga que arrancar
- *      desde una superficie ya autenticada de otro componente en vez de
- *      una landing anónima real — ver §14.3, también pendiente).
- *   3. Ejecutar el paso 00a (registro/login GitHub) — SÓLO bajo la opción
- *      que José elija en §14.1.
- *   4. Ejecutar el paso 00b (autorización GitHub, frontera externa #1 —
- *      ver `EXTERNAL_BOUNDARIES` en flow-matrix.ts).
- *   5. Ejecutar el paso 00c (descarga del instalador) — bloqueado también
- *      por §14.3: sin descubrimiento público de `releaseId`, este paso
- *      puede requerir que el Runner ya conozca un `releaseId` de test en
- *      vez de descubrirlo desde la UI.
- *   6. Cerrar/descartar este browser ANTES de levantar las superficies 1-4
- *      (`electron-conductor.ts`, etc.) — éstas asumen la extensión Cortex
- *      ya instalada, algo que esta superficie explícitamente NO tiene.
+ * Con esto, 00a y 00b dejan de estar bloqueados por §14.1 — el dilema no se
+ * "resolvió" en el sentido de elegir A o B, se esquivó por completo. Nunca
+ * se cruza `AUTHORITY_BOUNDARY.md` §1 porque nunca se toca la superficie de
+ * un proveedor externo — el backend, corriendo en modo fixture, inyecta él
+ * mismo el estado que ese login real habría producido.
  *
- * Observabilidad: la Fase 0 hoy NO tiene una capa de diagnóstico propia
- * (Requerimiento Integrado §14.4 — también pendiente, no bloqueante). Si
- * se implementa antes de que exista una Capa 0 dedicada, esta superficie
- * debería al menos loguear status codes y cuerpos JSON de las respuestas
- * HTTP del backend al DiagnosticBus como un layer ad-hoc, en vez de no
- * reportar nada — pero definir esa Capa 0 formalmente es una decisión de
- * diseño futura, no de esta sesión.
+ * ─────────────────────────────────────────────────────────────────────────
+ * 00a + 00b — `runPhase0FixtureRegistration()`: HTTP puro, sin browser
+ * ─────────────────────────────────────────────────────────────────────────
+ * Dos llamadas HTTP directas contra el backend (con `AUTHORITY_ALLOW_TEST_FIXTURES=true`
+ * ya activo del lado del servidor), replicando exactamente el journey que
+ * ya prueba `backend/test/authority-genesis.spec.ts`:
+ *
+ *   00a — POST /v1/authority/genesis/login (body vacío: la organización
+ *         todavía no existe) → { authorizationUrl } + cookie de flow
+ *         (`__Host-authority-flow`). `beginGenesis()` en el backend.
+ *
+ *   00b — GET /v1/authority/human/callback?state=&code=<subject-fixture>,
+ *         con la cookie de flow del paso anterior → el backend crea
+ *         organización + tenant + identidad atómicamente (primera vez que
+ *         se ve ese subject) y emite sesión (`__Host-authority-session`).
+ *         Cae en `finishGenesis()` porque no hay fila en
+ *         `authority_human_flows` para ese state (ver el comentario en
+ *         `administration-route.ts` sobre el fallback finishHumanLogin →
+ *         finishGenesis).
+ *
+ * `code` es un subject arbitrario elegido por este harness — con
+ * `testFixtureProvider()`, `identify(token)` devuelve `{subject: token}`
+ * tal cual, así que ese string ES el subject que queda registrado. Cada
+ * corrida usa un subject nuevo (`crypto.randomUUID()` por defecto) para que
+ * cada ejecución de la suite registre una organización nueva, igual que un
+ * fundador registrándose por primera vez — no reintentar con el mismo
+ * subject entre corridas si se quiere simular "founder nuevo" cada vez.
+ *
+ * Nada de esto navega a github.com, nada hace un fetch saliente a un
+ * proveedor externo, y nada de esto funciona si el backend no tiene
+ * `AUTHORITY_ALLOW_TEST_FIXTURES=true` — contra un backend real (sin ese
+ * flag) esto falla cerrado con 503, igual que prueba
+ * `backend/test/authority-administration-route.spec.ts`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 00c — SIGUE BLOQUEADO, pero por un motivo DISTINTO y NO relacionado con
+ * AUTHORITY_BOUNDARY.md
+ * ─────────────────────────────────────────────────────────────────────────
+ * `executePhase0Download()` sigue lanzando siempre. La descarga
+ * (`GET /v1/releases/:releaseId/download`) no cruza ninguna frontera
+ * externa — es una llamada al propio backend, servida desde R2 — así que
+ * tampoco necesitaría browser ni fixture. El bloqueo real es otro: no
+ * existe todavía una ruta de descubrimiento público de `releaseId` para un
+ * humano anónimo recién registrado (§11/§13 del Requerimiento Integrado).
+ * No confundir los dos bloqueos — ver el comentario de la función.
+ *
+ * 00d (instalar + `nucleus authority sync`) es manual incluso en el flujo
+ * real, corre en el sistema operativo del usuario, y nunca fue ni será
+ * responsabilidad de este archivo ni de Playwright — ver `flow-matrix.ts`.
  */
 
-import type { DiagnosticBus } from '../diagnostics/diagnostic-bus';
+export const PHASE0_REGISTRATION_STATUS = 'IMPLEMENTED_VIA_FIXTURE_INJECTION' as const;
+export const PHASE0_DOWNLOAD_STATUS = 'STUB_BLOCKED_RELEASE_ID_DISCOVERY' as const;
 
-export const PHASE0_SURFACE_STATUS = 'STUB_PENDING_DECISION_14_1' as const;
+const FLOW_COOKIE_NAME = '__Host-authority-flow';
+const SESSION_COOKIE_NAME = '__Host-authority-session';
+
+function extractCookie(headers: Headers, name: string): string | undefined {
+  // getSetCookie() es la API moderna (Node 18.15+/undici) que separa
+  // múltiples Set-Cookie sin que un fetch los concatene mal — el backend
+  // devuelve dos en 00b (limpia flow + setea sesión). Con fallback manual
+  // por si el runtime no la expone.
+  const raw =
+    typeof headers.getSetCookie === 'function'
+      ? headers.getSetCookie()
+      : (headers.get('set-cookie') ?? '').split(/,(?=\s*__Host-)/);
+  const match = raw.find((v) => v.trim().startsWith(`${name}=`));
+  return match?.split(';')[0].trim();
+}
+
+export interface Phase0GenesisFlow {
+  authorizationUrl: string;
+  flowCookie: string;
+}
 
 /**
- * Punto de entrada esperado de la Superficie 0. Lanza siempre — es
- * deliberado: evita que alguien la llame por error creyendo que ya hace
- * algo. Reemplazar esta función es EXACTAMENTE el punto de inserción
- * descripto arriba, una vez resuelta la Sección 14.1.
+ * Paso 00a — POST /v1/authority/genesis/login. Sin `organizationId`: la
+ * organización todavía no existe (Génesis, no login de una ya existente).
+ * Requiere que el backend tenga `AUTHORITY_ALLOW_TEST_FIXTURES=true`
+ * (ver `backend/.dev.vars.example`) — contra un backend sin ese flag esto
+ * devuelve 503 (fail-closed, `testFixtureProvider` nunca se activa solo).
  */
-export async function runPhase0GenericBrowser(_bus: DiagnosticBus): Promise<never> {
+export async function beginPhase0FixtureRegistration(backendOrigin: string): Promise<Phase0GenesisFlow> {
+  const response = await fetch(`${backendOrigin}/v1/authority/genesis/login`, {
+    method: 'POST',
+    headers: { Origin: backendOrigin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `[phase0] 00a: POST /v1/authority/genesis/login devolvió ${response.status} — ¿el backend tiene ` +
+        'AUTHORITY_ALLOW_TEST_FIXTURES=true en .dev.vars? Ver backend/.dev.vars.example.',
+    );
+  }
+  const body = (await response.json()) as { authorizationUrl?: string };
+  const flowCookie = extractCookie(response.headers, FLOW_COOKIE_NAME);
+  if (!body.authorizationUrl || !flowCookie) {
+    throw new Error('[phase0] 00a: respuesta del backend sin authorizationUrl o sin cookie de flow.');
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[phase0-generic-browser] 00a ok (${PHASE0_REGISTRATION_STATUS}) — flow de génesis iniciado, sin tocar github.com.`);
+  return { authorizationUrl: body.authorizationUrl, flowCookie };
+}
+
+export interface Phase0RegistrationResult {
+  organizationId: string;
+  principalId: string;
+  sessionCookie: string;
+  csrf: string;
+  expiresAt: string;
+  created: boolean;
+}
+
+/**
+ * Paso 00b — GET /v1/authority/human/callback?state=&code=<fixtureSubject>,
+ * con la cookie de flow de `beginPhase0FixtureRegistration()`. `fixtureSubject`
+ * es el subject que `testFixtureProvider().identify()` va a devolver tal
+ * cual — es lo que decide qué organización/identidad queda registrada.
+ */
+export async function finishPhase0FixtureRegistration(
+  backendOrigin: string,
+  flow: Phase0GenesisFlow,
+  fixtureSubject: string,
+): Promise<Phase0RegistrationResult> {
+  const state = new URL(flow.authorizationUrl).searchParams.get('state');
+  if (!state) throw new Error('[phase0] 00b: la authorizationUrl de 00a no trae ?state=.');
+  const url = `${backendOrigin}/v1/authority/human/callback?state=${encodeURIComponent(state)}&code=${encodeURIComponent(fixtureSubject)}`;
+  const response = await fetch(url, { method: 'GET', headers: { Cookie: flow.flowCookie } });
+  if (!response.ok) {
+    throw new Error(`[phase0] 00b: GET /v1/authority/human/callback devolvió ${response.status}.`);
+  }
+  const body = (await response.json()) as {
+    organizationId?: string;
+    principalId?: string;
+    csrf?: string;
+    expiresAt?: string;
+    created?: boolean;
+  };
+  const sessionCookie = extractCookie(response.headers, SESSION_COOKIE_NAME);
+  if (!body.organizationId || !body.principalId || !body.csrf || !body.expiresAt || !sessionCookie) {
+    throw new Error('[phase0] 00b: respuesta del backend incompleta (falta organizationId/principalId/csrf/expiresAt/session cookie).');
+  }
+  // eslint-disable-next-line no-console
+  console.log(
+    `[phase0-generic-browser] 00b ok (${PHASE0_REGISTRATION_STATUS}) — organización ${body.organizationId} ` +
+      `${body.created ? 'creada' : 'ya existía'} por inyección de fixture, sin tocar github.com.`,
+  );
+  return {
+    organizationId: body.organizationId,
+    principalId: body.principalId,
+    sessionCookie,
+    csrf: body.csrf,
+    expiresAt: body.expiresAt,
+    created: body.created ?? false,
+  };
+}
+
+/**
+ * Orquesta 00a + 00b en una sola llamada — el caso común para
+ * `onboarding-flow.spec.ts`, que no necesita el resultado intermedio de
+ * 00a por separado. `fixtureSubject` por defecto es un UUID nuevo por
+ * corrida (ver el comentario de cabecera de este archivo).
+ */
+export async function runPhase0FixtureRegistration(
+  backendOrigin: string,
+  fixtureSubject: string = crypto.randomUUID(),
+): Promise<Phase0RegistrationResult> {
+  const flow = await beginPhase0FixtureRegistration(backendOrigin);
+  return finishPhase0FixtureRegistration(backendOrigin, flow, fixtureSubject);
+}
+
+/**
+ * Paso 00c — GET /v1/releases/:releaseId/download. SIEMPRE lanza hoy, pero
+ * por un motivo TOTALMENTE DISTINTO al de 00a/00b (ver el comentario de
+ * cabecera de este archivo): no hay todavía descubrimiento público de
+ * `releaseId`. No es un bloqueo de AUTHORITY_BOUNDARY.md ni requiere
+ * ninguna decisión de José — es un gap de producto separado (§11/§13 del
+ * Requerimiento Integrado).
+ */
+export async function executePhase0Download(): Promise<never> {
   throw new Error(
-    '[phase0-generic-browser] Superficie 0 es un stub — no implementada. ' +
-      'Bloqueada por una decisión pendiente de José (Requerimiento Integrado §14.1: ' +
-      '¿aplica AUTHORITY_BOUNDARY.md §1 a un arnés de Playwright automatizando login/registro ' +
-      'GitHub del backend?). Ver el comentario de este archivo para las dos opciones presentadas ' +
-      'y el punto de inserción exacto una vez que se decida.',
+    `[phase0-generic-browser] Paso 00c (${PHASE0_DOWNLOAD_STATUS}) no implementado — GET ` +
+      '/v1/releases/:releaseId/download no tiene todavía una ruta de descubrimiento público de releaseId ' +
+      'para un humano anónimo recién registrado (Requerimiento Integrado §11/§13). Distinto del bloqueo que ' +
+      'tenían 00a/00b: ESTO no es AUTHORITY_BOUNDARY.md — 00a/00b ya corren de verdad vía ' +
+      'runPhase0FixtureRegistration() en este mismo archivo.',
   );
 }

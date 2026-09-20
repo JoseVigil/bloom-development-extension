@@ -82,4 +82,30 @@ describe('isolated human/admin HTTP journey on temporary D1',()=>{
   const r=await configuredAuthorityHumanResponse({DB:db,AUTHORITY_SIGNING_KEY_ID:'',AUTHORITY_SIGNING_KEY_PKCS8_B64:''},new Request(origin+'/v1/authority/human/login'));
   expect(r.status).toBe(503);expect(await r.text()).not.toContain('test-fixture');
  });
+ it('AUTHORITY_ALLOW_TEST_FIXTURES=="true" drives the real Worker entry point through the full login journey without a GitHub App configured',async()=>{
+  const org=await initialize();
+  const env={DB:db,AUTHORITY_HUMAN_ORIGIN:origin,AUTHORITY_HUMAN_SESSION_KEY_B64:Buffer.alloc(32,7).toString('base64'),
+   AUTHORITY_SIGNING_KEY_ID:vector.key_id,AUTHORITY_SIGNING_KEY_PKCS8_B64:vector.private_key_pkcs8_base64,
+   AUTHORITY_ALLOW_TEST_FIXTURES:'true'};
+  const start=await configuredAuthorityHumanResponse(env,new Request(origin+'/v1/authority/human/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({organizationId:org})}));
+  expect(start.status).toBe(200);
+  const data=await start.json() as any;
+  // Nunca una URL de github.com: la propia forma de la authorizationUrl es la prueba de
+  // que el boundary nunca se cruza en modo fixture.
+  expect(new URL(data.authorizationUrl).hostname).toBe('fixture.invalid');
+  const state=new URL(data.authorizationUrl).searchParams.get('state');
+  const flowCookie=start.headers.get('Set-Cookie')!.split(';')[0];
+  const callback=await configuredAuthorityHumanResponse(env,new Request(origin+`/v1/authority/human/callback?state=${state}&code=123456789`,{headers:{Cookie:flowCookie}}));
+  expect(callback.status).toBe(200);
+  const body=await callback.json() as any;
+  expect(body.organizationId).toBe(org);expect(body.principalId).toBe(owner);expect(body.csrf).toBeTruthy();
+ },30000);
+ it('only the exact string "true" activates fixture mode — any other value keeps the real GitHub provider and fails closed without its credentials',async()=>{
+  const org=await initialize();
+  const env={DB:db,AUTHORITY_HUMAN_ORIGIN:origin,AUTHORITY_HUMAN_SESSION_KEY_B64:Buffer.alloc(32,7).toString('base64'),
+   AUTHORITY_SIGNING_KEY_ID:vector.key_id,AUTHORITY_SIGNING_KEY_PKCS8_B64:vector.private_key_pkcs8_base64,
+   AUTHORITY_ALLOW_TEST_FIXTURES:'1'};
+  const r=await configuredAuthorityHumanResponse(env,new Request(origin+'/v1/authority/human/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({organizationId:org})}));
+  expect(r.status).toBe(503);expect(await r.text()).not.toContain('test-fixture');
+ });
 });

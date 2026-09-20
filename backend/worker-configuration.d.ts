@@ -12,4 +12,7 @@ interface Env {
   AUTHORITY_ISSUER?: string;
   AUTHORITY_ROOT_KEY_ID?: string;
   AUTHORITY_ROOT_PUBLIC_KEY_B64URL?: string;
+  // Sólo local, vía .dev.vars (wrangler dev). Nunca en wrangler.jsonc ni en un
+  // despliegue real: wrangler deploy no lee .dev.vars. Ver README.md § Modo fixture.
+  AUTHORITY_ALLOW_TEST_FIXTURES?: string;
 }

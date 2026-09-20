@@ -1,4 +1,4 @@
-import { githubAppProvider, HumanIdentityError } from './human-identity';
+import { githubAppProvider, testFixtureProvider, HumanIdentityError } from './human-identity';
 import { beginHumanLogin, finishHumanLogin, resolveHumanSession, checkSessionCsrf, renewHumanSession, revokeHumanSession, initialHumanIdentity, sessionCommitGuard, type HumanServices } from './human-session-store';
 import { beginGenesis, finishGenesis } from './genesis-store';
 import { administerAuthority } from './administration-store';
@@ -13,6 +13,10 @@ export interface HumanRouteEnv {
  AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;
   AUTHORITY_SIGNING_KEY_PKCS8_B64:string;AUTHORITY_SIGNING_KEY_ID:string;
  AUTHORITY_ISSUER?:string;
+ // Sólo development: nunca debe llegar a un despliegue real. Ver .dev.vars.example
+ // y README.md § Modo fixture. Comparación estricta contra 'true' en
+ // configuredAuthorityHumanResponse — cualquier otro valor falla cerrado.
+ AUTHORITY_ALLOW_TEST_FIXTURES?:string;
 }
 const sessionCookie='__Host-authority-session',flowCookie='__Host-authority-flow';
 function cookie(request:Request,name:string){const matches=(request.headers.get('Cookie')??'').split(';').map(v=>v.trim()).filter(v=>v.startsWith(name+'='));return matches.length===1?matches[0].slice(name.length+1):'';}
@@ -158,9 +162,16 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
 export async function configuredAuthorityHumanResponse(env:HumanRouteEnv,request:Request){
  try{
   if(!env.AUTHORITY_HUMAN_ORIGIN||new URL(env.AUTHORITY_HUMAN_ORIGIN).origin!==env.AUTHORITY_HUMAN_ORIGIN||!env.AUTHORITY_HUMAN_SESSION_KEY_B64)throw new HumanIdentityError('configuration_missing');
-  const provider=githubAppProvider({clientId:env.AUTHORITY_GITHUB_APP_CLIENT_ID??'',clientSecret:env.AUTHORITY_GITHUB_APP_CLIENT_SECRET??'',callbackUrl:env.AUTHORITY_HUMAN_ORIGIN+'/v1/authority/human/callback'});
+  // Comparación estricta: sólo el string exacto 'true' activa el modo fixture. Cualquier
+  // otro valor (incluyendo '1', 'TRUE', undefined en producción real) deja el gate cerrado
+  // y usa siempre el provider real de GitHub. Ver AUTHORITY_BOUNDARY.md §1 — este flag
+  // existe exclusivamente para reemplazar la navegación real a github.com por una
+  // inyección de estado interna, nunca para sortear el boundary en un entorno real.
+  const fixtureMode=env.AUTHORITY_ALLOW_TEST_FIXTURES==='true';
+  const provider=fixtureMode?testFixtureProvider():githubAppProvider({clientId:env.AUTHORITY_GITHUB_APP_CLIENT_ID??'',clientSecret:env.AUTHORITY_GITHUB_APP_CLIENT_SECRET??'',callbackUrl:env.AUTHORITY_HUMAN_ORIGIN+'/v1/authority/human/callback'});
   if(!env.AUTHORITY_SIGNING_KEY_PKCS8_B64||!env.AUTHORITY_SIGNING_KEY_ID)throw new HumanIdentityError('configuration_missing');
-  return authorityHumanResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),
+  if(fixtureMode)console.warn('[authority] AUTHORITY_ALLOW_TEST_FIXTURES activo: login de GitHub simulado por inyección de estado, sin tocar github.com. NUNCA debe estar activo en un despliegue real.');
+  return authorityHumanResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),allowTestFixtures:fixtureMode,
    signer:{keyId:env.AUTHORITY_SIGNING_KEY_ID,privateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer}});
  }catch{return new Response(JSON.stringify({error:'authority_human_configuration_unavailable'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});}
 }

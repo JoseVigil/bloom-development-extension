@@ -37,3 +37,30 @@ export function githubAppProvider(config:GitHubAppConfig, transport:typeof fetch
   return {subject:String(data.id),handle:data.login};
  }};
 }
+/**
+ * Proveedor de identidad humana para modo fixture (pruebas E2E / desarrollo).
+ *
+ * Replica, del lado del Backend, el mismo patrón que el Synapse Simulator usa
+ * del lado de la extensión: en vez de automatizar la superficie real de un
+ * proveedor externo (github.com), inyecta directamente el estado interno
+ * post-condición que ese flujo real produciría. Nunca emite una URL de
+ * github.com, nunca hace un fetch saliente, y nunca decodifica un token real.
+ *
+ * Solo queda accesible cuando `configuredAuthorityHumanResponse` decide activar
+ * el modo fixture (ver administration-route.ts), lo cual a su vez exige la
+ * variable de entorno estricta `AUTHORITY_ALLOW_TEST_FIXTURES==='true'` Y que
+ * `human-session-store.ts`'s `permitted()` reciba `allowTestFixtures:true` —
+ * doble cierre: selección de provider + flag explícito de sesión.
+ */
+export function testFixtureProvider():HumanProvider {
+ return {source:'test-fixture',authorize(state,challenge){
+  const url=new URL('https://fixture.invalid/authorize');
+  url.search=new URLSearchParams({state,code_challenge:challenge,code_challenge_method:'S256'}).toString();return url.href;
+ },async exchange(code,_verifier){
+  if(!code)throw new HumanIdentityError('flow_invalid');
+  return {token:code,expiresIn:28800};
+ },async identify(token){
+  if(!token)throw new HumanIdentityError('provider_invalid');
+  return {subject:token,handle:`fixture-${token}`};
+ }};
+}
