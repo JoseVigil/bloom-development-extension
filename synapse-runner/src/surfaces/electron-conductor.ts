@@ -4,7 +4,12 @@ import { env } from '../config/env';
 import { getBloomPaths } from '../config/bloom-paths';
 
 /**
- * Superficie 1 — `_electron.launch()`, ventana Conductor (Sección 4, punto 1).
+ * Superficie 1 de 5 — `_electron.launch()`, ventana Conductor (Sección 4,
+ * punto 1 del dossier / §7 del Requerimiento Integrado). Asume que la Fase
+ * 0 server-side (pasos 00a-00d — registro, login GitHub del backend,
+ * descarga e instalación) ya terminó antes de este launch; esa fase vive en
+ * `src/surfaces/phase0-generic-browser.ts` como stub, todavía sin
+ * implementar.
  *
  * El bridge IPC real (window.onboarding / window.electronAPI) lo expone
  * installer/conductor/workspace/onboarding/preload_onboarding.js — este

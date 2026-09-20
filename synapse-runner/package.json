@@ -1,7 +1,7 @@
 {
   "name": "synapse-runner",
   "version": "0.1.0",
-  "description": "E2E UI-driven onboarding & diagnostic harness for Bloom (Electron/Conductor + Chromium/Discovery + Side Panel/Companion + CLI brain contingency). See docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_E2E_Architecture_Dossier.md for the architecture this implements.",
+  "description": "E2E UI-driven onboarding & diagnostic harness for Bloom, five surfaces (0: generic browser / Fase 0 server-side, stub + 1-4: Electron/Conductor, Chromium/Discovery, Side Panel/Companion, CLI brain contingency). See docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_Requerimiento_Integrado_v1_0.md for the current architecture this implements.",
   "private": true,
   "type": "commonjs",
   "scripts": {

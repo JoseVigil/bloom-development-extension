@@ -4,18 +4,22 @@ import { StepDiagnosticSession } from '../diagnostics/correlator';
 import { attachEventBusListener, waitForEventBusOpen, type EventBusListenerHandle } from '../diagnostics/layer3-eventbus-ws';
 import { env } from '../config/env';
 import type { DiagnosticBundle } from '../diagnostics/types';
+import { KNOWN_LIMITATION_FOUNDER_ONLY } from '../config/flow-matrix';
 
 /**
  * SynapseRunner — orquestador central.
  *
  * Implementa el principio de diseño de la Sección 6 de forma estructural
  * (consigna punto 4: "como parte estructural del Runner, no como un
- * añadido posterior"): CUALQUIER paso de la Matriz de Flujo (Sección 3) se
- * ejecuta envuelto en runStep(), que abre una StepDiagnosticSession antes
- * de tocar ninguna superficie y la cierra después — así que aunque el
- * spec de Playwright en sí no le preste atención a diagnósticos, el bundle
- * de correlación de 4 capas se produce igual, para CADA paso, desde el
- * primer commit.
+ * añadido posterior"): CUALQUIER paso de la Matriz de Flujo completa
+ * (`src/config/flow-matrix.ts`, `FLOW_MATRIX` — Requerimiento Integrado §6,
+ * renumera el §3 del dossier original) se ejecuta envuelto en runStep(),
+ * que abre una StepDiagnosticSession antes de tocar ninguna superficie y la
+ * cierra después — así que aunque el spec de Playwright en sí no le preste
+ * atención a diagnósticos, el bundle de correlación de 4 capas se produce
+ * igual, para CADA paso, desde el primer commit. Esto vale también para los
+ * pasos 00a-00d de Fase 0 (server-side) cuando dejen de ser stub — ver
+ * tests/e2e/phase0-server-onboarding.spec.ts.
  */
 export class SynapseRunner {
   readonly bus = new DiagnosticBus();
@@ -85,6 +89,12 @@ export class SynapseRunner {
       '     usa el CLI real (brain intent submit) como testigo fuera de banda,',
       '     NO como interacción UI — no lo cuentes como cobertura UI-driven',
       '     hasta que exista el Submit Simulator (Sección 2C, PENDING).',
+      '',
+      '  ⚠️  Fase 0 (server-side, pasos 00a-00d) NO corrió en esta suite —',
+      '     sigue siendo un stub (Superficie 0), bloqueado por una decisión',
+      '     pendiente de José. Ver tests/e2e/phase0-server-onboarding.spec.ts.',
+      '',
+      `  ⚠️  Limitación conocida: ${KNOWN_LIMITATION_FOUNDER_ONLY}`,
       '═══════════════════════════════════════════════════════════',
       '',
     ];

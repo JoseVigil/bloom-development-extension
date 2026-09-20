@@ -907,6 +907,17 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(brainBin)
+	// FIX (bloqueo E2E Mandate Genesis, diagnóstico Génesis Control): sin esto,
+	// Brain hereda el env del proceso Nucleus que lo lanza (systemd/NSSM, casi
+	// siempre sin BLOOM_NUCLEUS_PATH) y cmd.Dir apunta al directorio del
+	// binario, no al workspace real. Todo lo que Brain shellea después —AITAP,
+	// y el "nucleus vault request" que AITAP invoca para resolver la
+	// credencial Anthropic— hereda ese mismo entorno y ResolveNucleusRoot()
+	// nunca encuentra el .bloom/.nucleus-{slug}/ real, así que detectUserRole()
+	// cae a RoleUnknown y Vault responde "requires master role" aunque el
+	// marcador .master exista. Mismo patrón ya corregido en este archivo para
+	// CheckVaultStatus() y para el spawn de bundle.js — ver esos comentarios.
+	cmd.Env = append(os.Environ(), "BLOOM_NUCLEUS_PATH="+getWorkspacePath())
 	setSvelteProcAttr(cmd) // detach del grupo de procesos del padre
 
 	if err := cmd.Start(); err != nil {

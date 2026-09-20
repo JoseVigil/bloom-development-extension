@@ -1,8 +1,11 @@
 import { chromium, type Browser, type Page } from '@playwright/test';
 
 /**
- * Superficie 2 — `chromium.connectOverCDP()`, tab Discovery (Sección 4,
- * punto 2).
+ * Superficie 2 de 5 — `chromium.connectOverCDP()`, tab Discovery (Sección
+ * 4, punto 2 del dossier / §7 del Requerimiento Integrado). La Superficie 0
+ * (browser genérico pre-Electron, Fase 0 server-side) es anterior a ésta en
+ * el tiempo pero vive aparte — ver `src/surfaces/phase0-generic-browser.ts`
+ * — y se cierra/descarta antes de que este módulo entre en juego.
  *
  * Nucleus/Sentinel spawnean su propio Chromium con un perfil dedicado
  * (Sección 1) — este módulo NO lanza Chromium, se conecta a la instancia

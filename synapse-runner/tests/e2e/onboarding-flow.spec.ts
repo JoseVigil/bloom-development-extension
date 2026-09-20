@@ -18,25 +18,37 @@ import { getExtensionIdFromNucleusJson } from '../../src/config/bloom-paths';
 
 /**
  * Suite E2E de onboarding UI-driven — implementa la Matriz de Flujo
- * (Sección 3 del dossier), pasos 01 a 11, controlando las 4 superficies
- * (Sección 4): Electron/Conductor, Chromium/Discovery, Side Panel/Companion,
- * y CLI `brain` como contingencia del paso 06.
+ * completa (`src/config/flow-matrix.ts`, `FLOW_MATRIX`; Requerimiento
+ * Integrado §6, que renumera el §3 del dossier original), pasos 01 a 11 —
+ * las Fases 1-4 (local). Este archivo controla 4 de las 5 superficies
+ * (Requerimiento Integrado §7): Electron/Conductor, Chromium/Discovery,
+ * Side Panel/Companion, y CLI `brain` como contingencia del paso 06.
+ *
+ * La Superficie 0 (browser genérico pre-Electron, pasos 00a-00d, Fase 0
+ * server-side) precede a este flujo pero NO corre acá — sigue como stub
+ * documentado, ver `tests/e2e/phase0-server-onboarding.spec.ts` y
+ * `src/surfaces/phase0-generic-browser.ts`. Este spec asume que Fase 0 ya
+ * ocurrió (instalador ya corrido, `nucleus authority sync` ya ejecutado) y
+ * arranca directamente en "01. Launch" de Electron, igual que antes de esta
+ * actualización — la diferencia es que ahora esa asunción queda explícita
+ * en vez de implícita.
  *
  * Cada paso corre envuelto en `synapseRunner.runStep()` — el bundle de
- * diagnóstico de 4 capas correlacionadas (Sección 6) se produce para TODOS
- * los pasos, no solo los que fallan, desde el primer commit de este Runner
- * (consigna, punto 4).
+ * diagnóstico de 4 capas correlacionadas (Sección 6 del dossier / §9 del
+ * Requerimiento Integrado) se produce para TODOS los pasos, no solo los que
+ * fallan, desde el primer commit de este Runner (consigna, punto 4).
  *
  * CDP endpoint: hardcodeado a un valor de placeholder razonable
  * (localhost:9222) — el puerto real que usa Sentinel para levantar
  * Chromium no fue confirmado en esta sesión (no era un punto bloqueante de
- * la Sección 7). Ajustar vía SYNAPSE_RUNNER_CDP_ENDPOINT si difiere.
+ * la Sección 7 del dossier). Ajustar vía SYNAPSE_RUNNER_CDP_ENDPOINT si
+ * difiere.
  */
 
 const CDP_ENDPOINT = process.env.SYNAPSE_RUNNER_CDP_ENDPOINT ?? 'http://localhost:9222';
 const DISCOVERY_URL_PATTERN = /discovery\/index\.html|chrome-extension:\/\/.+\/discovery\//;
 
-test.describe('synapse-runner — onboarding E2E (UI-driven, 4 superficies)', () => {
+test.describe('synapse-runner — onboarding E2E local (UI-driven, Fases 1-4 de 5 superficies — Fase 0 server-side es stub aparte)', () => {
   let conductor: ConductorHandle;
   let discovery: DiscoverySurface;
   let companion: CompanionSurface | undefined;
@@ -71,14 +83,17 @@ test.describe('synapse-runner — onboarding E2E (UI-driven, 4 superficies)', ()
       return surface;
     });
 
-    // ---- Paso 03: OAuth GitHub (frontera externa #1) ----
+    // ---- Paso 03: OAuth GitHub (frontera externa #2 de 6 — Repo Ops, no ----
+    // ---- confundir con la #1, login GitHub del backend en Fase 0/00b)  ----
     await synapseRunner.runStep('03_oauth_github', undefined, async () => {
-      // Frontera externa real — Sección 4. La automatización de la pantalla
-      // de consentimiento de GitHub queda fuera del alcance de este PoC
-      // (requiere credenciales de test dedicadas); se asume una sesión de
-      // GitHub ya autorizada en el perfil de Chromium usado por el Runner,
-      // tal como recomienda tratar las fronteras externas sin saltear el
-      // circuito de eventos del cliente (consigna, punto 3).
+      // Frontera externa real — ver EXTERNAL_BOUNDARIES en flow-matrix.ts.
+      // El pipeline completo cruza SEIS fronteras externas confirmadas, no
+      // tres ni cuatro (Requerimiento Integrado §4). La automatización de
+      // la pantalla de consentimiento de GitHub queda fuera del alcance de
+      // este PoC (requiere credenciales de test dedicadas); se asume una
+      // sesión de GitHub ya autorizada en el perfil de Chromium usado por
+      // el Runner, tal como recomienda tratar las fronteras externas sin
+      // saltear el circuito de eventos del cliente (consigna, punto 3).
       await waitForMilestone(conductor.mainWindow, 'milestone:reached');
     });
 

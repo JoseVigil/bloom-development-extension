@@ -1,14 +1,22 @@
 # synapse-runner
 
 Suite de testing E2E UI-driven para el onboarding de Bloom, y sistema de
-diagnóstico/detección temprana de fallas para todo el pipeline
-Electron/Conductor + Chromium/Discovery + Side Panel/Companion + CLI `brain`.
+diagnóstico/detección temprana de fallas para todo el pipeline — desde un
+browser genérico sin nada instalado (Fase 0, server-side) hasta
+Electron/Conductor + Chromium/Discovery + Side Panel/Companion + CLI `brain`
+(Fases 1-4, local).
 
-Implementa el dossier
-[`docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_E2E_Architecture_Dossier.md`](../docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_E2E_Architecture_Dossier.md),
-que es la fuente de verdad de esta suite. Este README documenta qué de ese
-dossier quedó resuelto durante la implementación, y qué queda
-deliberadamente abierto.
+**Fuente de verdad actual:**
+[`docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_Requerimiento_Integrado_v1_0.md`](../docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_Requerimiento_Integrado_v1_0.md)
+— integra, sin reemplazarlos en disco, el encargo original de Fase 0, la
+investigación server-side ya verificada contra código real, y el dossier de
+arquitectura de Fases 1-4. Los tres documentos fuente (ese encargo, esa
+investigación, y el
+[dossier original](../docs/SYNAPSE/SYNAPSE-RUNNER/Synapse_Runner_E2E_Architecture_Dossier.md))
+quedan intactos en disco como referencia histórica — este README y el
+código de `synapse-runner/` son lo que se actualiza cuando cambia el
+esquema. Esta sección y las siguientes reflejan la incorporación de Fase 0
+al esquema local (Requerimiento Integrado §15 "Próximos Pasos").
 
 **Independiente del código de producción que audita** — vive en la raíz del
 repo (`synapse-runner/`), no dentro de `installer/` ni de ninguna otra
@@ -18,11 +26,21 @@ carpeta existente.
 
 ## Por qué existe
 
-Objetivo (Sección 1 del dossier): validar si el onboarding puede
-automatizarse **exclusivamente desde las capas de UI** (sin inyectar eventos
-sintéticos por protocolo), usando la captura de eventos/IPCs como capa de
-observabilidad — y, además, como **sistema de diagnóstico y detección
-temprana de fallas** en todo el pipeline (Sección 6).
+Objetivo actualizado (Requerimiento Integrado §2): validar la hipótesis de
+automatización end-to-end **desde un browser genérico sin nada instalado**
+hasta la finalización del onboarding local, cruzando dos capas
+fundamentalmente distintas:
+
+- **Fase 0 (server-side):** browser genérico → registro/login GitHub contra
+  el backend → descarga del instalador. Sin extensión Cortex instalada
+  todavía. **Sigue como stub** — ver "Fase 0" más abajo.
+- **Fases 1-4 (local):** Electron/Conductor + Chromium/Discovery + Side
+  Panel/Companion + CLI de Synapse Intent — esto sí está implementado, y es
+  lo que documentaba el objetivo original del dossier: automatizar
+  **exclusivamente desde las capas de UI** (sin inyectar eventos sintéticos
+  por protocolo), usando la captura de eventos/IPCs como capa de
+  observabilidad — y, además, como **sistema de diagnóstico y detección
+  temprana de fallas** en todo el pipeline (Sección 6 del dossier).
 
 La arquitectura de observabilidad (`src/diagnostics/`) no es un agregado
 posterior: es lo primero que se construyó, y todo paso de la suite corre
@@ -36,22 +54,28 @@ negocio.
 ```
 src/
   config/          bloom-paths.ts (resolución de paths BloomNucleus, ver
-                   más abajo), env.ts, selectors.ts
+                   más abajo), env.ts, selectors.ts,
+                   flow-matrix.ts   — esquema tipado de la Matriz de Flujo
+                                      completa (00a-00d + 01-11) y de las
+                                      6 fronteras externas — NUEVO
   diagnostics/      Capas 1-4 + Correlator + Reporter (Sección 6 del dossier)
   preflight/        extension-parity-check.ts (resuelve el punto 7),
                      environment-check.ts (falla rápido si el entorno no
                      está levantado)
-  surfaces/         Las 4 superficies de la Sección 4:
-                       electron-conductor.ts   — _electron.launch()
-                       discovery-chromium.ts   — chromium.connectOverCDP()
-                       companion-panel.ts      — Target CDP del Side Panel
-                       submit-cli.ts           — CLI `brain` (contingencia)
+  surfaces/         Las 5 superficies (Requerimiento Integrado §7):
+                       phase0-generic-browser.ts — Superficie 0, STUB — NUEVO
+                       electron-conductor.ts   — Superficie 1, _electron.launch()
+                       discovery-chromium.ts   — Superficie 2, chromium.connectOverCDP()
+                       companion-panel.ts      — Superficie 3, Target CDP del Side Panel
+                       submit-cli.ts           — Superficie 4, CLI `brain` (contingencia)
   runner/           SynapseRunner — orquestador, envuelve cada paso en una
                      StepDiagnosticSession
 tests/
   fixtures/         fixture de Playwright que engancha SynapseRunner
-  e2e/              onboarding-flow.spec.ts — Matriz de Flujo (Sección 3),
-                     pasos 01-11
+  e2e/              onboarding-flow.spec.ts — Fases 1-4 (pasos 01-11)
+                     phase0-server-onboarding.spec.ts — Fase 0 (pasos
+                       00a-00d), test.fixme() — punto de inserción marcado,
+                       NO implementado — NUEVO
 scripts/
   preflight-check.ts   `npm run preflight` — chequeos de entorno standalone
 ```
@@ -75,6 +99,140 @@ apunta a la capa específica, con el trazo crudo adjunto. `reporter.ts`
 persiste cada bundle a `diagnostics-output/` a medida que se produce (no al
 final), para no perder visibilidad si el propio proceso de Playwright
 crashea a mitad de corrida.
+
+Nota: esta arquitectura de 4 capas cubre las Fases 1-4 (local). La Fase 0
+(server-side) **no tiene hoy una capa de observabilidad propia** — ver
+"Fase 0" más abajo y Requerimiento Integrado §14.4 (decisión pendiente, no
+bloqueante).
+
+---
+
+## Cinco superficies (no cuatro)
+
+El dossier original definía cuatro superficies controladas simultáneamente
+por Playwright. La Fase 0 agrega una quinta, **anterior** a las otras
+cuatro en el tiempo (Requerimiento Integrado §7):
+
+| # | Superficie | Archivo | Estado en este Runner |
+|---|---|---|---|
+| 0 | Browser genérico (`chromium.launch()`, sin extensión Cortex) — pasos 00a-00c | `src/surfaces/phase0-generic-browser.ts` | 🚧 **STUB** — bloqueada por decisión pendiente de José, §14.1 (ver "Decisiones pendientes" abajo) |
+| 1 | `_electron.launch()` — ventana Conductor | `src/surfaces/electron-conductor.ts` | ✅ Implementada |
+| 2 | `chromium.connectOverCDP()` — tab Discovery | `src/surfaces/discovery-chromium.ts` | ✅ Implementada |
+| 3 | Target CDP del Side Panel (Companion) | `src/surfaces/companion-panel.ts` | ✅ Implementada |
+| 4 | Proceso CLI como testigo (`brain intent submit`, contingencia) | `src/surfaces/submit-cli.ts` | ✅ Implementada (fuera de banda) |
+
+La Superficie 0 debe cerrarse/descartarse antes de levantar las
+Superficies 1-4, ya que éstas asumen la extensión Cortex ya instalada —
+cosa que la Superficie 0, por definición, todavía no tiene.
+
+---
+
+## Fase 0 — server-side (pasos 00a-00d) — STUB, no implementada
+
+La investigación de Fase 0 confirmó que el onboarding **no** empieza al
+arrancar Electron — antes hay una etapa server-side completa. La Matriz de
+Flujo completa (`src/config/flow-matrix.ts`, `FLOW_MATRIX`) ahora arranca en
+`00a`, no en `01`:
+
+| Paso | Qué hace | Estado en el backend | ¿Implementado en el Runner? |
+|---|---|---|---|
+| 00a. Registro server-side | Login/registro GitHub contra el backend (`POST/GET /v1/authority/genesis/login`) | ✅ CONSTRUIDO | ❌ No — stub |
+| 00b. Autorización GitHub (backend) | Autorizar la GitHub App propia del backend | ✅ CONSTRUIDO | ❌ No — stub |
+| 00c. Descarga del instalador | `GET /v1/releases/:releaseId/download` | ⚠️ CONSTRUIDO, sin descubrimiento público de `releaseId` para un humano anónimo | ❌ No — stub |
+| 00d. Instalación + `nucleus authority sync` | Ejecutar instalador, `nucleus init` manual, `sync` | ✅ CONSTRUIDO — pasos manuales, no automáticos incluso en el flujo real | ❌ No — stub, y ni siquiera correspondería a un browser (corre en el SO) |
+
+**Por qué es un stub y no una implementación real:** Requerimiento
+Integrado §14.1 deja explícitamente sin decidir si `AUTHORITY_BOUNDARY.md`
+§1 aplica a un arnés de Playwright automatizando login/registro GitHub del
+backend. Esa sección es agnóstica de componente pero nunca menciona "arnés
+de pruebas" como categoría — no se resuelve sola. Dos opciones quedaron
+presentadas, sin inclinar la balanza, y **ninguna de las dos fue elegida
+acá**:
+
+- **Opción A** — Playwright sujeto a la restricción: la Superficie 0 se
+  detendría en la puerta de GitHub y usaría una sesión ya autenticada
+  inyectada por fixture, nunca un login real automatizado.
+- **Opción B** — Playwright fuera de alcance por ser herramienta de QA:
+  se automatizaría un login de prueba contra una cuenta dedicada. Riesgo
+  documentado: si el arnés se reutiliza como base de un flujo de producto
+  real, la línea entre "sólo QA" y "el sistema" se vuelve difícil de
+  sostener retroactivamente.
+
+El punto de inserción para cuando esta decisión se tome está listo y
+marcado en `src/surfaces/phase0-generic-browser.ts` (lanza siempre, a
+propósito, con un mensaje que explica por qué) y en
+`tests/e2e/phase0-server-onboarding.spec.ts` (`test.fixme()` por cada paso
+00a-00d, así que `npx playwright test --list` sigue mostrando estos 4 pasos
+como pendientes explícitos en vez de que desaparezcan del inventario).
+
+Relacionado, también pendiente de José y no bloqueante: §14.3 (de dónde
+arranca Fase 0 sin una landing pública/dominio confirmado — afecta en
+particular al paso 00c) y §14.4 (si vale la pena definir una Capa 0 de
+observabilidad para Fase 0, hoy inexistente).
+
+---
+
+## Fronteras externas — seis, no tres ni cuatro
+
+El pipeline completo (Fase 0 + Fases 1-4) cruza **seis** fronteras externas
+confirmadas (Requerimiento Integrado §4; esquema tipado en
+`EXTERNAL_BOUNDARIES` de `src/config/flow-matrix.ts`). Cualquier diseño de
+Playwright que cuente menos está incompleto:
+
+| # | Frontera | Fase | ¿Automatizada por este Runner? |
+|---|---|---|---|
+| 1 | Login GitHub del backend (Auth Code+PKCE, GitHub App propia del backend) | 0 | ❌ No — bloqueada por la Superficie 0 (stub) |
+| 2 | Repo Ops (GitHub App + Device Flow, Cortex/Discovery) | 1-4, paso 03 | ✅ Sí (asume sesión ya autorizada, no automatiza credenciales reales) |
+| 3 | Batcave Auth (control plane Codespaces) | Transversal, fuera del onboarding de usuario final | ❌ No — fuera del camino crítico |
+| 4 | GitHub App instalada por organización | Transversal | ❌ No — sin ruta HTTP dedicada auditada |
+| 5 | Detección de cuenta Google (Companion) | 1-4, paso 04 | ✅ Sí |
+| 6 | Tab de Gemini (`gemini.google.com`, DOM de tercero `untrusted-dom`) | 1-4, paso 10 | ✅ Sí (selectores ⚠️ sin verificar — ver Puntos abiertos) |
+
+**Regla de oro (Requerimiento Integrado §4):** `ACCOUNT_REGISTERED` es la
+cuenta **Google** del Companion (frontera #5), nunca el registro de cuenta
+del servidor (frontera #1, Fase 0). Son mecanismos y credenciales
+completamente distintos — no comparten client id, secret, ni callback entre
+sí. No confundirlos al leer logs o bundles de diagnóstico.
+
+---
+
+## Limitación conocida — sólo el usuario fundador
+
+**Este PoC (incluida la Superficie 0, cuando deje de ser stub) sólo puede
+simular el flujo del usuario FUNDADOR — nunca a un segundo miembro
+invitado.** No es una limitación de diseño del Runner: es que **ese camino
+no existe en el backend actual** (Requerimiento Integrado §14.2). El código
+soporta la forma (`administration.ts` / `administration-store.ts`), pero no
+hay ningún camino en el repo que cree una identidad verificada para una
+segunda persona distinta dentro de una organización ya existente — los dos
+únicos `INSERT INTO authority_human_identities` del repo son para el mismo
+fundador.
+
+Esto queda registrado en código como `KNOWN_LIMITATION_FOUNDER_ONLY` en
+`src/config/flow-matrix.ts`, e impreso en el resumen final de cada corrida
+(`SynapseRunner.stop()`) para que no se pierda de vista. No es bloqueante
+para lo que este PoC sí prueba (el flujo del fundador de punta a punta) —
+pero cualquier automatización futura de un flujo multi-usuario debe
+resolver primero este gap en el backend, no en el Runner.
+
+---
+
+## Decisiones pendientes de José (no tomadas por esta actualización)
+
+Estas decisiones son explícitamente de José, no de código — este Runner no
+toma partido, sólo deja los puntos de inserción listos:
+
+- **§14.1 — ¿Aplica `AUTHORITY_BOUNDARY.md` §1 a la Superficie 0?** Ver
+  "Fase 0" arriba. Condiciona directamente cómo se implementa
+  `phase0-generic-browser.ts`.
+- **§14.3 — Landing pública / punto de entrada sin cuenta.** Sin esto
+  confirmado, el paso 00c (descarga del instalador) no tiene forma de
+  descubrir un `releaseId` real desde la UI.
+- **§14.4 — ¿Vale la pena una Capa 0 de observabilidad dedicada para Fase
+  0?** Hoy esa fase no tiene ninguna capa de diagnóstico propia — un
+  eventual `phase0-generic-browser.ts` funcional tendría que apoyarse en
+  las respuestas HTTP directas del backend nada más, salvo que se decida
+  construir algo mejor.
 
 ---
 
@@ -103,6 +261,19 @@ Requisitos para que la suite corra de punta a punta:
 ---
 
 ## Resolución del punto bloqueante (Sección 7, punto 7)
+
+> **Nota de transparencia (añadida al incorporar Fase 0):** el Requerimiento
+> Integrado (§1 y §12.6) sigue listando este punto como *"aún sin
+> confirmar"* / *"sigue sin confirmarse"*, heredado tal cual del dossier
+> original — esa integración fue una investigación separada de Fase 0
+> server-side que explícitamente **no re-verificó** los hallazgos de Fases
+> 1-4 (su propia regla de precedencia, §0: *"Ningún hallazgo de las Fases
+> 1-4 fue re-verificado en esta integración"*). La resolución de abajo sí
+> viene de leer el código real (`profile_create.py` y los 4 `*_generator.py`)
+> en una sesión anterior de este mismo proyecto `synapse-runner`, y sigue
+> vigente — no hay contradicción real, sólo dos documentos que no se
+> vieron entre sí. Si en el futuro se re-verifica esto desde cero, avisar
+> para reconciliar ambas fuentes.
 
 > *"Confirmar si `brain/core/profile/web/templates/{companion,discovery,synapse-simulator}/`
 > y `installer/cortex/extension/` se sincronizan por un paso de build
@@ -197,6 +368,22 @@ consigna, en vez de asumirlos:
    de inserción: cuando el módulo UI-driven exista, reemplaza
    `runSubmitTestimony()` sin tocar el resto del Runner (el diagnostic bus
    ya espera el shape `cli_submit_result`).
+
+## Puntos abiertos nuevos — de la integración de Fase 0 (Requerimiento Integrado §11/§13)
+
+No bloqueantes, heredados sin resolver de la integración server-side (no
+resueltos por esta actualización, tal como pide la consigna):
+
+7. **Landing pública / dominio sin cuenta, y descubrimiento de `releaseId`.**
+   Ver "Fase 0" y "Decisiones pendientes de José" arriba (§14.3). Bloquea en
+   la práctica el paso 00c cuando la Superficie 0 deje de ser stub.
+
+8. **Tamaño en bytes de `~/.local/share/BloomNucleus/bin`** y **cadencia de
+   polling de `nucleus authority sync` en producción.** Datos pendientes de
+   José (§13), sin impacto en el código de este Runner hoy.
+
+9. **Capa 0 de observabilidad para Fase 0** (§14.4) — ver "Fase 0" arriba.
+   Item de diseño futuro, explícitamente no bloqueante.
 
 ## Otras cosas sin verificar contra un browser/proceso real (no vienen de la Sección 7, surgieron al implementar)
 

@@ -4,8 +4,11 @@ import { env } from '../config/env';
 import type { CliSubmitResultEvent } from '../diagnostics/types';
 
 /**
- * Superficie 4 — "Proceso CLI como testigo, no como UI" (Sección 4, punto
- * 4). Paso 06-contingencia de la Matriz (Sección 3).
+ * Superficie 4 de 5 — "Proceso CLI como testigo, no como UI" (Sección 4,
+ * punto 4 del dossier / §7 del Requerimiento Integrado). Paso
+ * 06-contingencia de la Matriz de Flujo completa (`src/config/flow-matrix.ts`).
+ * La Superficie 0 (stub, Fase 0 server-side) es la única de las 5 que no
+ * corre en este spec — ver `src/surfaces/phase0-generic-browser.ts`.
  *
  * El Submit Simulator UI-driven NO existe todavía (Sección 2C — PENDING /
  * FEATURE EN DISEÑO). Este módulo es DELIBERADAMENTE el único punto de

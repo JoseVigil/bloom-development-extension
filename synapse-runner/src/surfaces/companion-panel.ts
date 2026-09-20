@@ -3,8 +3,9 @@ import type { DiagnosticBus } from '../diagnostics/diagnostic-bus';
 import { attachCompanionPortListener, type CompanionPortHandle } from '../diagnostics/layer1-companion-port';
 
 /**
- * Superficie 3 — Target del Side Panel (Companion) dentro de la misma
- * conexión CDP (Sección 4, punto 3).
+ * Superficie 3 de 5 — Target del Side Panel (Companion) dentro de la misma
+ * conexión CDP (Sección 4, punto 3 del dossier / §7 del Requerimiento
+ * Integrado).
  *
  * Chrome expone los Side Panels como su propio Target en el protocolo CDP,
  * DISTINTO de las tabs normales — hay que enumerarlo
