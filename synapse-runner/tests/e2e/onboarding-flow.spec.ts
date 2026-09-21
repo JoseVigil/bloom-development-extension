@@ -5,6 +5,7 @@ import {
   finishPhase0FixtureRegistration,
   type Phase0RegistrationResult,
 } from '../../src/surfaces/phase0-generic-browser';
+import { injectBackendIdentityCheck } from '../../src/surfaces/backend-identity-check';
 import { env } from '../../src/config/env';
 import {
   launchConductor,
@@ -45,13 +46,24 @@ import { getExtensionIdFromNucleusJson } from '../../src/config/bloom-paths';
  * bloqueado — por un motivo no relacionado, ver
  * `tests/e2e/phase0-server-onboarding.spec.ts`.
  *
- * A partir de "01. Launch" este spec asume que Fase 0 LOCAL ya ocurrió de
- * verdad (instalador ya corrido, `nucleus authority sync` ya ejecutado) —
- * los pasos 00a/00b de acá prueban el registro server-side de verdad, pero
- * no están conectados con el estado local que asumen las Superficies 1-4
- * (Electron/Discovery/Companion/CLI): son dos journeys todavía
+ * Los pasos 00a/00b de arriba (Fase 0 SERVER-SIDE) prueban el registro
+ * contra el backend Cloudflare de verdad, pero siguen sin estar conectados
+ * con el estado local que arranca Conductor — son dos journeys todavía
  * independientes en este PoC, tal como ya documenta 00d en
- * `flow-matrix.ts`.
+ * `flow-matrix.ts`; este spec sigue asumiendo que el instalador ya corrió y
+ * que Conductor ya está instalado antes de `launchConductor()`.
+ *
+ * Entre 00b y "01. Launch" corre además `backend_identity_check` — step 0
+ * del wizard LOCAL de Conductor (Auth 1, distinto de 00a/00b: éste vive
+ * dentro de Electron, vía IPC, no HTTP directo desde el Runner). Como el
+ * contrato real de ese backend todavía no existe, se completa por
+ * inyección directa del Synapse Simulator — ver
+ * `src/surfaces/backend-identity-check.ts` y
+ * `Encargo_Modificacion_Runner_Incorporacion_Step_BackendIdentityCheck_v1_0.md`
+ * (`ANALYSIS/CONDUCTOR/ONBOARDING/`, Project BTIPS). Desde que
+ * `nucleus_create.requires` incluye `backend_identity_validated`, este paso
+ * es un gate real: "Launch Discovery" no es alcanzable en la UI hasta que
+ * se complete.
  *
  * Cada paso corre envuelto en `synapseRunner.runStep()` — el bundle de
  * diagnóstico de 4 capas correlacionadas (Sección 6 del dossier / §9 del
@@ -105,10 +117,35 @@ test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0
     expect(phase0Registration.organizationId).toBeTruthy();
     expect(phase0Registration.created).toBe(true);
 
+    // ---- Paso backend_identity_check: step 0 del wizard LOCAL de Conductor ----
+    // (Auth 1 — solo identidad, corre antes que nucleus_create; no confundir
+    // con 00a/00b de arriba, que son Fase 0 SERVER-SIDE por HTTP directo sin
+    // Electron. Ver el comentario de cabecera de
+    // src/surfaces/backend-identity-check.ts.) Electron ya abre el wizard
+    // directo en esta pantalla en un onboarding nuevo, porque
+    // nucleus_create.requires ahora incluye 'backend_identity_validated'
+    // (Encargo_Modificacion_Runner_Incorporacion_Step_BackendIdentityCheck_v1_0.md
+    // §2) — "Launch Discovery" no es alcanzable todavía en este punto.
+    conductor = await launchConductor();
+    await installMilestoneBuffer(conductor.mainWindow);
+
+    await synapseRunner.runStep('backend_identity_check', undefined, async () => {
+      // Sin contrato de backend real todavía (§4/§9 del encargo) — el único
+      // mecanismo hoy para completar este step es la inyección directa del
+      // Synapse Simulator, confirmada ya implementada del lado de Conductor.
+      // 'master_new_org' — el único branch que este PoC puede ejercitar de
+      // punta a punta (mismo KNOWN_LIMITATION_FOUNDER_ONLY que 00a/00b).
+      await injectBackendIdentityCheck(conductor.mainWindow, { branch: 'master_new_org' });
+      // El botón "Continuar →" arranca disabled (onboarding.html) y
+      // step-backend-identity.js lo habilita recién al recibir el milestone
+      // — Playwright espera la actionability (no-disabled) antes de poder
+      // clickearlo, así que este click ya funciona como la espera del
+      // milestone sin necesitar waitForMilestone() explícito antes.
+      await conductor.mainWindow.click('#btn-continue-backend-identity');
+    });
+
     // ---- Paso 01: Launch (Electron UI → onboarding:launch-discovery) ----
     await synapseRunner.runStep('01_launch', undefined, async () => {
-      conductor = await launchConductor();
-      await installMilestoneBuffer(conductor.mainWindow);
       await conductor.mainWindow.click('text=Launch Discovery').catch(() => {
         // El texto exacto del botón no fue confirmado contra el DOM real
         // (Sección 0 auditó archivos, no runtime). Ver README.

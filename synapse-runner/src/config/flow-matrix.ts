@@ -29,6 +29,17 @@
  * DISTINTOS y no relacionados con AUTHORITY_BOUNDARY.md — ver sus `notes`
  * individuales abajo y el comentario de `executePhase0Download()` en
  * `phase0-generic-browser.ts`.
+ *
+ * ACTUALIZACIÓN 2026-09-21: nuevo step `backend_identity_check`, incorporado
+ * por `Encargo_Modificacion_Runner_Incorporacion_Step_BackendIdentityCheck_v1_0.md`
+ * (Project BTIPS). Es el step 0 del wizard LOCAL de Conductor (Auth 1, solo
+ * identidad) — NO es lo mismo que 00a/00b (Fase 0 SERVER-SIDE, HTTP puro):
+ * este corre DENTRO de Electron, después de `launchConductor()`, y antes de
+ * "01. Launch" (que ahora queda gateado por él — ver la nota del step '01').
+ * José ya lo implementó del lado cliente de Conductor; acá solo se
+ * incorpora al esquema y se completa vía inyección del Synapse Simulator
+ * mientras el backend real de identidad no exista — ver
+ * `src/surfaces/backend-identity-check.ts`.
  */
 
 export type FlowPhase = 'fase0-server' | 'fase1-4-local';
@@ -124,6 +135,34 @@ export const FLOW_MATRIX: FlowStep[] = [
     notes: 'Pasos manuales, no automáticos, incluso en el flujo real (authority_command.go).',
   },
   {
+    // Encargo_Modificacion_Runner_Incorporacion_Step_BackendIdentityCheck_v1_0.md
+    // (2026-09-21, Project BTIPS) — step 0 del wizard LOCAL de Conductor
+    // (Auth 1, solo identidad). NO confundir con 00a/00b de arriba (Fase 0
+    // SERVER-SIDE, HTTP puro sin Electron) — este step vive DENTRO de
+    // Electron, vía IPC. Contrato confirmado por lectura directa del código
+    // real de Conductor (milestone-registry.js, milestone-reactor.js,
+    // preload_onboarding.js, ipc/onboarding-handlers.js,
+    // step-backend-identity.js, onboarding.html) — no del documento de
+    // diseño solamente. El backend real de identidad no existe todavía
+    // (evento Cortex 'IDENTITY_VALIDATED' es provisorio) — se completa por
+    // inyección directa del Synapse Simulator, ver
+    // src/surfaces/backend-identity-check.ts.
+    id: 'backend_identity_check',
+    phase: 'fase1-4-local',
+    surface: 'superficie-1-electron-conductor',
+    actorOrSurface: 'Electron UI (Conductor) — step 0 del wizard local',
+    humanActionSimulated: 'Login de identidad contra el backend nuevo (Auth 1) — sin token, sin Vault',
+    eventGenerated: "IPC synapse-simulator:inject-milestone → milestone:reached {stepId:'backend_identity_check', branch, orgId?, role?}",
+    receiverOrWaitMechanism:
+      'milestone-reactor.js::_onBackendIdentityCheckComplete() persiste la rama en nucleus.json y habilita "Continuar →"',
+    status: 'construido',
+    implementedInRunner: true,
+    notes:
+      'Implementado en src/surfaces/backend-identity-check.ts (injectBackendIdentityCheck/injectBackendIdentityCheckFailure). ' +
+      'Este PoC solo ejercita branch "master_new_org" (mismo KNOWN_LIMITATION_FOUNDER_ONLY que 00a/00b). Auth 1 ≠ Auth 2 ' +
+      '(github_app_auth, pasos 02/03 abajo) — restricción de diseño cerrada, dos autenticaciones independientes.',
+  },
+  {
     id: '01',
     phase: 'fase1-4-local',
     surface: 'superficie-1-electron-conductor',
@@ -133,6 +172,10 @@ export const FLOW_MATRIX: FlowStep[] = [
     receiverOrWaitMechanism: 'Brain/Nucleus — spawnea Chromium + perfil',
     status: 'construido',
     implementedInRunner: true,
+    notes:
+      'Gateado desde 2026-09-21 por backend_identity_check: nucleus_create.requires ahora incluye ' +
+      "'backend_identity_validated', así que Electron abre el wizard directo en esa pantalla en un onboarding " +
+      'nuevo — "Launch Discovery" no es alcanzable hasta completar el step anterior.',
   },
   {
     id: '02',
