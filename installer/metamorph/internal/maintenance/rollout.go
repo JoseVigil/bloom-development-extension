@@ -195,8 +195,11 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "impact") },
 	},
 	{
-		// Monitor: same shape as Impact — deployed as a component directory
-		// so its Cobra-generated help tree travels with the executable.
+		// Monitor, like Impact, is deployed as a component directory so its
+		// Cobra-generated help tree travels with the executable on every
+		// platform. It is a standalone Go binary with no dependency on any
+		// other component -- no OS service to stop/start, no PreDeployFn or
+		// PostDeployFn, and no Platforms filter, since it ships cross-platform.
 		Key: "monitor",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "monitor")
