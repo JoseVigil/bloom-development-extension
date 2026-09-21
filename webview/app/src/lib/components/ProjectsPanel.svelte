@@ -2,18 +2,19 @@
   import { onMount } from 'svelte';
   import { listNuclei, listNucleusProjects, addProject } from '$lib/api';
   import { onboardingStore } from '$lib/stores/onboarding';
+  import { regimeStore } from '$lib/stores/regimeStore';
   import { createEventDispatcher } from 'svelte';
   import { fade, slide, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  
+
   const dispatch = createEventDispatcher();
-  
+
   interface Nucleus {
     id: string;
     org: string;
     path: string;
   }
-  
+
   interface Project {
     id: string;
     name: string;
@@ -21,7 +22,7 @@
     strategy?: string;
     description?: string;
   }
-  
+
   let nuclei: Nucleus[] = [];
   let selectedNucleusPath = '';
   let projects: Project[] = [];
@@ -35,28 +36,28 @@
   let error = '';
   let showAdvanced = false;
   let searchQuery = '';
-  
+
   // Filtered projects based on search
   $: filteredProjects = searchQuery
-    ? projects.filter(p => 
+    ? projects.filter(p =>
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.path.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : projects;
-  
+
   async function loadNuclei() {
     loading = true;
     error = '';
-    
+
     try {
       const result = await listNuclei();
       nuclei = result.nuclei || [];
-      
+
       if (nuclei.length > 0 && !selectedNucleusPath) {
         selectedNucleusPath = nuclei[0].path || nuclei[0].id;
         await loadProjects();
       }
-      
+
     } catch (e) {
       error = e instanceof Error ? e.message : 'Error al cargar Nuclei';
       console.error('Error loading nuclei:', e);
@@ -65,13 +66,13 @@
       initialLoad = false;
     }
   }
-  
+
   async function loadProjects() {
     if (!selectedNucleusPath) return;
-    
+
     loadingProjects = true;
     error = '';
-    
+
     try {
       const result = await listNucleusProjects(selectedNucleusPath);
       projects = result.projects || [];
@@ -82,44 +83,44 @@
       loadingProjects = false;
     }
   }
-  
+
   async function handleCreate() {
     if (!newProjectPath.trim() || !selectedNucleusPath) return;
-    
+
     creating = true;
     error = '';
-    
+
     try {
       const params: any = {
         project_path: newProjectPath.trim(),
         nucleus_path: selectedNucleusPath
       };
-      
+
       if (newProjectName.trim()) {
         params.name = newProjectName.trim();
       }
-      
+
       if (newProjectStrategy !== 'auto') {
         params.strategy = newProjectStrategy;
       }
-      
+
       await addProject(params);
-      
+
       // Clear form
       newProjectPath = '';
       newProjectName = '';
       newProjectStrategy = 'auto';
       showAdvanced = false;
-      
+
       // Reload projects
       await loadProjects();
-      
+
       // Refresh onboarding status
       await onboardingStore.refresh();
-      
+
       // Dispatch success event
       dispatch('added');
-      
+
     } catch (e) {
       error = e instanceof Error ? e.message : 'Error al agregar proyecto';
       console.error('Error adding project:', e);
@@ -127,7 +128,7 @@
       creating = false;
     }
   }
-  
+
   function handleBrowse() {
     // In Electron environment, trigger file dialog
     if (typeof window !== 'undefined' && (window as any).api?.selectDirectory) {
@@ -141,7 +142,17 @@
       alert('En la versión de escritorio, esto abriría un selector de archivos. Por ahora, ingresa la ruta manualmente.');
     }
   }
-  
+
+  // Gateway UX — Entrada B (Spec_Implementacion_Integracion_Core_Orrery_v1_0.md
+  // §1.6). `Project` (arriba) no tiene hoy tenantId/organizationId ni
+  // evidencia de binding — regimeStore.enterEspacial() ya sabe degradar a
+  // Entrada A cuando ese id no resuelve contra el árbol real, así que este
+  // botón puede wirearse ahora sin esperar a que ese gap de backend se
+  // cierre (ver Spec §1.8, gap listado explícitamente).
+  function handleViewInOrrery(project: Project) {
+    regimeStore.enterEspacial({ projectId: project.id });
+  }
+
   onMount(loadNuclei);
 </script>
 
@@ -164,7 +175,7 @@
       </svg>
       <h3>Primero crea un Nucleus</h3>
       <p>Necesitas al menos un Nucleus antes de poder agregar proyectos</p>
-      <button 
+      <button
         class="secondary-button"
         on:click={() => dispatch('needsNucleus')}
       >
@@ -180,11 +191,11 @@
         </svg>
         Selecciona Nucleus
       </label>
-      
+
       <div class="select-wrapper">
-        <select 
+        <select
           id="nucleus-select"
-          bind:value={selectedNucleusPath} 
+          bind:value={selectedNucleusPath}
           on:change={loadProjects}
           disabled={loading}
         >
@@ -194,7 +205,7 @@
             </option>
           {/each}
         </select>
-        
+
         <button
           class="refresh-button"
           on:click={loadProjects}
@@ -202,10 +213,10 @@
           title="Actualizar proyectos"
           type="button"
         >
-          <svg 
-            width="16" 
-            height="16" 
-            viewBox="0 0 16 16" 
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
             fill="currentColor"
             class:spinning={loadingProjects}
           >
@@ -215,12 +226,12 @@
         </button>
       </div>
     </div>
-    
+
     <!-- Projects List -->
     <div class="section">
       <div class="section-header">
         <h3>Proyectos ({projects.length})</h3>
-        
+
         {#if projects.length > 0}
           <div class="search-box">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -235,7 +246,7 @@
           </div>
         {/if}
       </div>
-      
+
       {#if initialLoad || loadingProjects}
         <!-- Skeleton loader -->
         <div class="skeleton-list">
@@ -258,7 +269,7 @@
       {:else}
         <div class="projects-list">
           {#each filteredProjects as project, i (project.id)}
-            <div 
+            <div
               class="project-card"
               in:fly={{ y: 20, duration: 300, delay: i * 50, easing: cubicOut }}
             >
@@ -267,10 +278,10 @@
                   <path d="M1 2.5A1.5 1.5 0 012.5 1h1.586a1.5 1.5 0 011.06.44l.415.414A.5.5 0 006.207 2H12.5A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 010 12.5v-10z"/>
                 </svg>
               </div>
-              
+
               <div class="project-info">
                 <div class="project-name">{project.name}</div>
-                
+
                 <div class="project-meta">
                   <span class="meta-item">
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
@@ -278,30 +289,44 @@
                     </svg>
                     {project.strategy || 'auto'}
                   </span>
-                  
+
                   <code class="project-path">{project.path}</code>
                 </div>
-                
+
                 {#if project.description}
                   <div class="project-description">{project.description}</div>
                 {/if}
               </div>
+
+              <button
+                type="button"
+                class="orrery-link-button"
+                on:click={() => handleViewInOrrery(project)}
+                title="Ver en Orrery"
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+                  <circle cx="10" cy="10" r="2" />
+                  <ellipse cx="10" cy="10" rx="8" ry="3.2" />
+                  <ellipse cx="10" cy="10" rx="8" ry="3.2" transform="rotate(60 10 10)" />
+                </svg>
+                Ver en Orrery
+              </button>
             </div>
           {/each}
         </div>
       {/if}
     </div>
-    
+
     <!-- Add Project Form -->
     <div class="section">
       <h3>Agregar proyecto</h3>
-      
+
       <div class="add-form">
         <div class="input-group">
           <label for="project-path">
             Ruta del proyecto *
           </label>
-          
+
           <div class="path-input-group">
             <input
               id="project-path"
@@ -310,7 +335,7 @@
               placeholder="/ruta/a/mi-proyecto"
               disabled={creating}
             />
-            
+
             <button
               type="button"
               class="browse-button"
@@ -324,22 +349,22 @@
               Examinar
             </button>
           </div>
-          
+
           <p class="hint">
             Ruta absoluta al directorio del proyecto local
           </p>
         </div>
-        
+
         <div class="advanced-toggle">
           <button
             type="button"
             class="toggle-button"
             on:click={() => showAdvanced = !showAdvanced}
           >
-            <svg 
-              width="14" 
-              height="14" 
-              viewBox="0 0 16 16" 
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
               fill="currentColor"
               style="transform: rotate({showAdvanced ? 90 : 0}deg); transition: transform 0.2s;"
             >
@@ -348,7 +373,7 @@
             Opciones avanzadas
           </button>
         </div>
-        
+
         {#if showAdvanced}
           <div class="advanced-fields" transition:slide={{ duration: 300 }}>
             <div class="input-group">
@@ -367,7 +392,7 @@
                 Si no se especifica, se usará el nombre del directorio
               </p>
             </div>
-            
+
             <div class="input-group">
               <label for="project-strategy">
                 Estrategia de detección
@@ -390,7 +415,7 @@
             </div>
           </div>
         {/if}
-        
+
         {#if error}
           <div class="error-message" transition:slide={{ duration: 200 }}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -399,7 +424,7 @@
             {error}
           </div>
         {/if}
-        
+
         <button
           class="add-button"
           on:click={handleCreate}
@@ -427,13 +452,13 @@
     flex-direction: column;
     gap: 2rem;
   }
-  
+
   .section {
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
-  
+
   .section-label {
     display: flex;
     align-items: center;
@@ -443,12 +468,12 @@
     color: #374151;
     margin-bottom: 0.5rem;
   }
-  
+
   .select-wrapper {
     display: flex;
     gap: 0.75rem;
   }
-  
+
   select {
     flex: 1;
     padding: 0.75rem;
@@ -459,18 +484,18 @@
     cursor: pointer;
     transition: all 0.2s ease;
   }
-  
+
   select:focus {
     outline: none;
     border-color: #4f46e5;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
   }
-  
+
   select:disabled {
     background: #f3f4f6;
     cursor: not-allowed;
   }
-  
+
   .refresh-button {
     display: inline-flex;
     align-items: center;
@@ -484,26 +509,26 @@
     color: #6b7280;
     transition: all 0.15s ease;
   }
-  
+
   .refresh-button:hover:not(:disabled) {
     background: #f9fafb;
     border-color: #9ca3af;
     color: #374151;
   }
-  
+
   .refresh-button:disabled {
     cursor: not-allowed;
     opacity: 0.5;
   }
-  
+
   .refresh-button svg.spinning {
     animation: spin 0.8s linear infinite;
   }
-  
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
-  
+
   .section-header {
     display: flex;
     align-items: center;
@@ -511,27 +536,27 @@
     flex-wrap: wrap;
     gap: 1rem;
   }
-  
+
   h3 {
     margin: 0;
     font-size: 1.125rem;
     font-weight: 600;
     color: #111827;
   }
-  
+
   .search-box {
     position: relative;
     display: flex;
     align-items: center;
   }
-  
+
   .search-box svg {
     position: absolute;
     left: 0.75rem;
     color: #9ca3af;
     pointer-events: none;
   }
-  
+
   .search-input {
     padding: 0.5rem 0.75rem 0.5rem 2.5rem;
     border: 1px solid #d1d5db;
@@ -540,28 +565,28 @@
     width: 200px;
     transition: all 0.2s ease;
   }
-  
+
   .search-input:focus {
     outline: none;
     border-color: #4f46e5;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
     width: 250px;
   }
-  
+
   /* Skeleton Loader */
   .skeleton-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
   }
-  
+
   .skeleton-item {
     padding: 1rem;
     background: #f9fafb;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
   }
-  
+
   .skeleton-line {
     height: 1rem;
     background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
@@ -569,21 +594,21 @@
     border-radius: 4px;
     animation: shimmer 1.5s infinite;
   }
-  
+
   .skeleton-line.wide {
     width: 60%;
     margin-bottom: 0.5rem;
   }
-  
+
   .skeleton-line.narrow {
     width: 40%;
   }
-  
+
   @keyframes shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
-  
+
   /* Empty States */
   .empty-state,
   .empty-projects {
@@ -595,19 +620,19 @@
     text-align: center;
     color: #9ca3af;
   }
-  
+
   .empty-state h3 {
     color: #6b7280;
     margin-top: 1rem;
   }
-  
+
   .empty-state p,
   .empty-projects p {
     margin: 0;
     font-weight: 500;
     color: #6b7280;
   }
-  
+
   .empty-state span,
   .empty-projects span {
     font-size: 0.875rem;
@@ -620,7 +645,7 @@
   .empty-state.error-state p {
     color: #b91c1c;
   }
-  
+
   .secondary-button {
     margin-top: 1rem;
     padding: 0.75rem 1.5rem;
@@ -633,7 +658,7 @@
     cursor: pointer;
     transition: all 0.2s ease;
   }
-  
+
   .secondary-button:hover:not(:disabled) {
     background: #f9fafb;
     border-color: #9ca3af;
@@ -643,16 +668,17 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
-  
+
   /* Projects List */
   .projects-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
   }
-  
+
   .project-card {
     display: flex;
+    align-items: center;
     gap: 1rem;
     padding: 1rem;
     background: white;
@@ -660,12 +686,12 @@
     border-radius: 10px;
     transition: all 0.2s ease;
   }
-  
+
   .project-card:hover {
     border-color: #cbd5e1;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   }
-  
+
   .project-icon {
     display: flex;
     align-items: center;
@@ -677,26 +703,26 @@
     color: #6b7280;
     flex-shrink: 0;
   }
-  
+
   .project-info {
     flex: 1;
     min-width: 0;
   }
-  
+
   .project-name {
     font-weight: 600;
     font-size: 0.9375rem;
     color: #111827;
     margin-bottom: 0.375rem;
   }
-  
+
   .project-meta {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
   }
-  
+
   .meta-item {
     display: inline-flex;
     align-items: center;
@@ -708,7 +734,7 @@
     font-weight: 500;
     color: #6b7280;
   }
-  
+
   .project-path {
     font-size: 0.75rem;
     color: #9ca3af;
@@ -717,14 +743,36 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  
+
   .project-description {
     margin-top: 0.5rem;
     font-size: 0.875rem;
     color: #6b7280;
     line-height: 1.5;
   }
-  
+
+  .orrery-link-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+    padding: 0.5rem 0.875rem;
+    background: white;
+    color: #374151;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+
+  .orrery-link-button:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+  }
+
   /* Add Form */
   .add-form {
     display: flex;
@@ -735,13 +783,13 @@
     border: 2px solid #e5e7eb;
     border-radius: 12px;
   }
-  
+
   .input-group {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
-  
+
   label {
     display: flex;
     align-items: center;
@@ -750,18 +798,18 @@
     font-size: 0.9375rem;
     color: #374151;
   }
-  
+
   .optional {
     font-size: 0.75rem;
     font-weight: 400;
     color: #9ca3af;
   }
-  
+
   .path-input-group {
     display: flex;
     gap: 0.75rem;
   }
-  
+
   input[type="text"],
   input[type="search"] {
     flex: 1;
@@ -772,18 +820,18 @@
     transition: all 0.2s ease;
     background: white;
   }
-  
+
   input:focus {
     outline: none;
     border-color: #4f46e5;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
   }
-  
+
   input:disabled {
     background: #f3f4f6;
     cursor: not-allowed;
   }
-  
+
   .browse-button {
     display: inline-flex;
     align-items: center;
@@ -799,27 +847,27 @@
     transition: all 0.2s ease;
     white-space: nowrap;
   }
-  
+
   .browse-button:hover:not(:disabled) {
     background: #f9fafb;
     border-color: #9ca3af;
   }
-  
+
   .browse-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
-  
+
   .hint {
     margin: 0;
     font-size: 0.8125rem;
     color: #6b7280;
   }
-  
+
   .advanced-toggle {
     padding-top: 0.5rem;
   }
-  
+
   .toggle-button {
     display: inline-flex;
     align-items: center;
@@ -833,18 +881,18 @@
     padding: 0;
     transition: color 0.15s ease;
   }
-  
+
   .toggle-button:hover {
     color: #374151;
   }
-  
+
   .advanced-fields {
     display: flex;
     flex-direction: column;
     gap: 1rem;
     padding-top: 0.5rem;
   }
-  
+
   .error-message {
     display: flex;
     align-items: flex-start;
@@ -857,12 +905,12 @@
     font-size: 0.875rem;
     line-height: 1.5;
   }
-  
+
   .error-message svg {
     flex-shrink: 0;
     margin-top: 0.125rem;
   }
-  
+
   .add-button {
     display: inline-flex;
     align-items: center;
@@ -878,18 +926,18 @@
     cursor: pointer;
     transition: all 0.2s ease;
   }
-  
+
   .add-button:hover:not(:disabled) {
     background: #4338ca;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
   }
-  
+
   .add-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
-  
+
   .spinner {
     display: inline-block;
     width: 1rem;

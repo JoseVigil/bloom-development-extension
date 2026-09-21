@@ -32,7 +32,16 @@ const config = {
       base: ''
     },
     alias: {
-      $contracts: '../../contracts'
+      $contracts: '../../contracts',
+      // Integración formal Orrery — Spec_Implementacion_Integracion_Core_Orrery_v1_0.md
+      // §1.4. Orrery es un paquete npm separado (installer/conductor/workspace/core/orrery,
+      // su propio package.json/vite.config.ts, sin workspace ni dependencia declarada
+      // hacia/desde este paquete). Se reutiliza el mismo mecanismo ya establecido acá
+      // para $contracts — un alias de Vite/SvelteKit hacia el código fuente de un
+      // directorio hermano del monorepo — en vez de introducir un nuevo mecanismo de
+      // enlace (npm link, workspace). $orrery/main resuelve a mountOrreryScene() sin
+      // que webview/app dependa de un paso de build o instalación adicional.
+      $orrery: '../../installer/conductor/workspace/core/orrery/src'
     }
   }
 };

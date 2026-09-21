@@ -5,8 +5,10 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import MandateTab from '$lib/components/MandateTab.svelte';
   import LedgerPanel from '$lib/components/LedgerPanel.svelte';
+  import OrreryContainer from '$lib/components/OrreryContainer.svelte';
   import { tabsStore, activeTab } from '$lib/stores/tabs';
   import { mandateStore, createReconciliationCoordinator } from '$lib/stores/mandateStore';
+  import { regimeStore } from '$lib/stores/regimeStore';
   import { websocketStore } from '$lib/stores/websocket';
   import { listMandates } from '$lib/api';
   import { runPendingGenesisLaunch } from '$lib/bootstrap/genesisLaunch';
@@ -130,7 +132,17 @@
   </div>
 {:else}
   <div class="btip-layout">
-    {#if showSidebar}
+    <!--
+      Punto de montaje del régimen Espacial — Spec_Implementacion_Integracion_Core_Orrery_v1_0.md
+      §1.4. Hermano de .main-container / .content-full, NUNCA anidado dentro
+      de ellos (v0.1 §2.1/§0: nunca layout compartido con paneles del
+      régimen Panel; v0.2 §4.3: un único árbol de escena por sesión, 100%
+      viewport). Los dos regímenes son mutuamente excluyentes por
+      construcción — este {#if}/{:else if} nunca los renderiza a la vez.
+    -->
+    {#if $regimeStore.regime === 'espacial' && $regimeStore.activeTree}
+      <OrreryContainer tree={$regimeStore.activeTree} on:exit={() => regimeStore.exitEspacial()} />
+    {:else if showSidebar}
       <div class="main-container">
         <Sidebar />
 

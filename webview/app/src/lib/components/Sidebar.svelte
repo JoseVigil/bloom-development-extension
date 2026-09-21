@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { tabsStore, activeTab } from '$lib/stores/tabs';
+  import { regimeStore } from '$lib/stores/regimeStore';
 
   // ============================================================================
   // Sidebar fusionado — Opción 3 (plan-migracion-shell-v1-addendum.md, §2.3 / §6.1)
@@ -36,6 +37,12 @@
   //   SVG que btips_workspace_v3.html. Home, Wisdom y Settings son iconos
   //   nuevos, dibujados en la misma familia visual (viewBox 20x20,
   //   stroke-width 1.4, sin relleno) para no romper la identidad.
+  //
+  // Gateway UX — Entrada A (Spec_Implementacion_Integracion_Core_Orrery_v1_0.md
+  //   §1.5): botón "Orrery", no un <a href> — el régimen Espacial no es una
+  //   ruta de SvelteKit, es un modo de la aplicación que regimeStore
+  //   alterna. Sin `seed`: resuelve al último anchor visitado en la sesión
+  //   o, en su ausencia, la raíz del scope soberano activo (v0.1 §3.1.A).
   // ============================================================================
 
   type NavItem = {
@@ -92,6 +99,13 @@
   function handleNavClick() {
     tabsStore.clearActive();
   }
+
+  function handleOrreryClick() {
+    // No se llama a tabsStore.clearActive(): activar régimen Espacial ya
+    // reemplaza toda la vista (ver +layout.svelte), no hay tab de ruta que
+    // desactivar en el sentido de handleNavClick.
+    regimeStore.enterEspacial();
+  }
 </script>
 
 <aside class="sidebar" role="navigation" aria-label="Main navigation">
@@ -132,6 +146,22 @@
         <span class="nav-tooltip">{item.label}</span>
       </a>
     {/each}
+
+    <button
+      type="button"
+      class="nav-item"
+      class:active={$regimeStore.regime === 'espacial'}
+      aria-pressed={$regimeStore.regime === 'espacial'}
+      aria-label="Orrery"
+      on:click={handleOrreryClick}
+    >
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+        <circle cx="10" cy="10" r="2" />
+        <ellipse cx="10" cy="10" rx="8" ry="3.2" />
+        <ellipse cx="10" cy="10" rx="8" ry="3.2" transform="rotate(60 10 10)" />
+      </svg>
+      <span class="nav-tooltip">Orrery</span>
+    </button>
   </nav>
 
   <div class="sidebar-bottom">
@@ -259,6 +289,10 @@
     transition: background var(--duration-fast) var(--ease-system);
     flex-shrink: 0;
     text-decoration: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
   }
 
   .nav-item:hover {
