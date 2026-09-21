@@ -65,11 +65,36 @@ const path = require('path');
 //     usuario vuelve a nucleus_create sin importar cuánto haya avanzado.
 const FALLBACK_STEPS = [
   {
+    // SYNC (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+    // PuntoInsercion_v1_0.md, §4/§6.2): step 0 nuevo, Auth 1 — validación de
+    // identidad contra el backend nuevo, ANTES de que exista workspace o
+    // Vault. No maneja ningún token/secreto (ver §5 del doc: Auth 1 es
+    // identidad pura, el token operativo real sigue viniendo de
+    // github_app_auth/Auth 2, ya existente más abajo). requires: [] a
+    // propósito — es el nuevo primer step del SSOT.
+    id:                 'backend_identity_check',
+    label:              'Validar identidad',
+    screen:             'backend-identity-check',
+    vault_required:     false,
+    requires:           [],
+    produces:           'backend_identity_validated',
+    verify:             'json_field',
+    verifyArgs:         { field: 'onboarding.backend_identity_validated' },
+    blocking:           true,
+    cortex_events:      ['IDENTITY_VALIDATED'],
+    conductor_reaction: 'markStepComplete',
+  },
+  {
+    // CAMBIO OBLIGATORIO (§6.2 del doc citado arriba): requires pasa de []
+    // a ['backend_identity_validated']. Sin este cambio, resolveEntryPoint()
+    // podría devolver nucleus_create como entry point aunque el step 0
+    // nunca se haya resuelto — el requires vacío se satisface trivialmente,
+    // el orden del array por sí solo no basta para bloquear el avance.
     id:                 'nucleus_create',
     label:              'Configurar workspace',
     screen:             'nucleus-create',
     vault_required:     false,
-    requires:           [],
+    requires:           ['backend_identity_validated'],
     produces:           'workspace_path',
     verify:             'fs_marker',
     // SYNC (auditoría 17/07/2026, Bug #8): este fallback seguía con el

@@ -33,7 +33,7 @@ import { setStepperActive, setStepperEstablished, refreshStepperPendingStates } 
 // un step del SSOT: 'entry', 'nucleus-init', 'milestone' y 'launch' son
 // screens de transición/sistema, no steps del backend.
 const SCREEN_IDS = new Set([
-  'entry', 'workspace', 'nucleus-init', 'identity', 'vault',
+  'entry', 'backend-identity-check', 'workspace', 'nucleus-init', 'identity', 'vault',
   'project', 'mandate', 'milestone', 'launch',
 ]);
 
@@ -49,6 +49,11 @@ const SCREEN_IDS = new Set([
 // Si el HTML alguna vez agrega una screen-providers real, este es el único
 // lugar que hay que tocar.
 const STEP_SCREEN = {
+  // SYNC (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+  // PuntoInsercion_v1_0.md §6.3): step 0 nuevo, Auth 1. Sin nodo de sidebar
+  // propio a propósito (ver STEP_NODE más abajo) — corre antes de que el
+  // sidebar tenga sentido (no hay workspace ni org todavía).
+  backend_identity_check: 'backend-identity-check',
   github_app_auth: 'identity',
   nucleus_create: 'workspace',
   vault_init: 'vault',
@@ -327,7 +332,12 @@ export async function resumeFromEntryPoint() {
 // Workspace por completo. Corregido para reflejar el orden real:
 // nucleus_create → vault_init → github_app_auth → google_auth/ai_provider_setup → project_create.
 const FALLBACK_STEPS = [
-  { id: 'nucleus_create', view: 'workspace', requires: [], produces: 'workspace_path' },
+  // SYNC (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+  // PuntoInsercion_v1_0.md §4/§6.2): step 0 nuevo, Auth 1 — ver el mismo
+  // comentario en milestone-registry.js::FALLBACK_STEPS. nucleus_create
+  // pasa a requerir 'backend_identity_validated'.
+  { id: 'backend_identity_check', view: 'backend-identity-check', requires: [], produces: 'backend_identity_validated' },
+  { id: 'nucleus_create', view: 'workspace', requires: ['backend_identity_validated'], produces: 'workspace_path' },
   { id: 'vault_init', view: 'identity', requires: ['workspace_path'], produces: 'vault_initialized' },
   { id: 'github_app_auth', view: 'identity', requires: ['vault_initialized'], produces: 'github_app_token' },
   { id: 'google_auth', view: 'providers', requires: ['vault_initialized'], produces: 'google_account' },

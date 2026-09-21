@@ -22,7 +22,11 @@ const log = getLogger('onboarding');
 // v3.1.0 (2026-07-25): 'project_create' retirado, partido en 'project_select'
 // (produces project_name) + 'mandate_genesis' (produces genesis_mandate_id) —
 // ver MANDATE-STEP-IMPLEMENTATION-PROMPT.md.
+// v3.2.0 (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+// PuntoInsercion_v1_0.md): 'backend_identity_check' agregado como step 0
+// (Auth 1, validación de identidad contra el backend nuevo, sin token local).
 const ONBOARDING_STEP_IDS = [
+  'backend_identity_check',
   'nucleus_create',
   'vault_init',
   'github_app_auth',
@@ -85,6 +89,61 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     } catch (err) {
       log.error('[IPC] onboarding:launch-discovery — FAILED:', err.message);
       return { success: false, error: err.message };
+    }
+  });
+
+  // ── HANDLER: Disparar validación de identidad contra el backend (Auth 1, step 0) ──
+  //
+  // Ver Investigacion_Onboarding_ValidacionGitHub_ServerSide_PuntoInsercion_v1_0.md
+  // §2 y §4. El contrato HTTP/WS real con el backend de identidad está
+  // explícitamente fuera de alcance de ese documento (§9) — no está definido
+  // todavía qué URL abrir ni qué transporte usar para llegar a él. Este
+  // handler deja lista la plomería IPC (persistencia de "intento iniciado",
+  // forma de la respuesta) para que, cuando ese contrato se cierre, alcance
+  // con reemplazar el cuerpo de este try{} por la llamada real — el resto
+  // del flujo (handler dedicado en milestone-reactor.js, resume, simulador)
+  // ya no requiere cambios.
+  //
+  // En desarrollo, mientras el backend real no existe, el step se completa
+  // vía synapse-simulator.html (optgroup "backend-auth", ver §8 del doc).
+  ipcMain.handle('onboarding:validate-backend-identity', async () => {
+    log.info('[IPC] onboarding:validate-backend-identity');
+    try {
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      data.onboarding.started    = true;
+      data.onboarding.started_at = data.onboarding.started_at || new Date().toISOString();
+      data.onboarding.backend_identity_check_started_at = new Date().toISOString();
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+    } catch (e) {
+      log.warn('[IPC] onboarding:validate-backend-identity — no se pudo persistir el intento:', e.message);
+    }
+    log.warn('[IPC] onboarding:validate-backend-identity — contrato con el backend real todavía no definido (ver §9 del doc de diseño); en desarrollo, completar este step vía synapse-simulator.html.');
+    return { success: true, pending: true, note: 'backend contract not implemented yet — use dev simulator' };
+  });
+
+  // ── HANDLER: Polling de respaldo para backend_identity_check ────────────
+  //
+  // Mismo patrón de tres capas (push + pull autoritativo + poll) que ya usa
+  // onboarding:poll-identity para github_app_auth — ver §3.1 y §6.8 del doc
+  // citado arriba. Lee el resultado que el handler dedicado del reactor
+  // (milestone-reactor.js::_onBackendIdentityCheckComplete) ya persistió.
+  ipcMain.handle('onboarding:poll-backend-identity', async () => {
+    log.info('[IPC] onboarding:poll-backend-identity');
+    try {
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const validated = !!nucleusData.onboarding?.backend_identity_validated;
+      return {
+        success: true,
+        validated,
+        branch: nucleusData.onboarding?.backend_identity_branch || null,
+        orgId:  nucleusData.onboarding?.backend_identity_org_id || null,
+        role:   nucleusData.onboarding?.backend_identity_role   || null,
+      };
+    } catch (err) {
+      log.error('[IPC] onboarding:poll-backend-identity — FAILED:', err.message);
+      return { success: false, validated: false };
     }
   });
 
@@ -945,6 +1004,30 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   //   }
   ipcMain.handle('onboarding:get-resume-state', async () => {
     log.info('[IPC] onboarding:get-resume-state');
+
+    // DECISIÓN CERRADA (Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+    // PuntoInsercion_v1_0.md §6.9): no se da soporte a instalaciones con
+    // onboarding parcial generado ANTES de este cambio (completed_steps no
+    // vacío pero sin backend_identity_validated, porque ese campo no existía
+    // cuando ese progreso se generó). No hay backfill ni migración — se
+    // fuerza un reseteo del bloque "onboarding" de nucleus.json para que el
+    // flujo arranque limpio desde el step 0 nuevo, igual que una instalación
+    // nueva. El resto de nucleus.json (master_profile, etc.) no se toca.
+    try {
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const completedSteps = nucleusData.onboarding?.completed_steps || [];
+      const hasLegacyProgress = completedSteps.length > 0 && !nucleusData.onboarding?.backend_identity_validated;
+      if (hasLegacyProgress) {
+        log.warn('[IPC] onboarding:get-resume-state — instalación legacy detectada (progreso previo sin backend_identity_validated) — forzando reseteo de onboarding.*');
+        nucleusData.onboarding = {};
+        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
+      }
+    } catch (e) {
+      // nucleus.json no existe todavía o no es legible — no hay nada que
+      // resetear, resolveEntryPoint ya maneja ese caso como arranque limpio.
+      log.info('[IPC] onboarding:get-resume-state — sin nucleus.json previo/legible, no aplica chequeo de legacy:', e.message);
+    }
+
     try {
       const { stepId, produced } = resolveEntryPoint(getRegistry().steps, NUCLEUS_JSON);
 
@@ -1033,6 +1116,40 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       return { success: false, error: err.message };
     }
   });
+  // ── HANDLER: SynapseSimulator — inyectar step-ui-update (fase ERROR) ────
+  // Solo disponible en builds de desarrollo (!app.isPackaged).
+  //
+  // §8.4/§8.5 del doc de diseño: el escenario "fallo del servidor" para
+  // backend_identity_check NO debe modelarse como milestone (no hay
+  // `produces` real) — necesita su propio canal de fase, análogo a
+  // synapse-simulator:inject-milestone pero para 'onboarding:step-ui-update'.
+  //
+  // Payload: { stepId: string, phase: string, data?: object }
+  // Ejemplo: { stepId: 'backend_identity_check', phase: 'ERROR', data: { reason: 'timeout' } }
+  ipcMain.handle('synapse-simulator:inject-step-update', async (event, { stepId, phase, data = {} }) => {
+    if (app.isPackaged) {
+      log.warn('[SYNAPSE_SIMULATOR] inject-step-update rechazado — build empaquetado');
+      return { success: false, error: 'synapse-simulator not available in production builds' };
+    }
+    if (!stepId || typeof stepId !== 'string') {
+      return { success: false, error: 'stepId is required' };
+    }
+    if (!phase || typeof phase !== 'string') {
+      return { success: false, error: 'phase is required' };
+    }
+    try {
+      const win = getWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('onboarding:step-ui-update', { stepId, phase, ...data, _ts: Date.now() });
+      }
+      log.info(`[SYNAPSE_SIMULATOR] inject-step-update ok — "${stepId}" phase: "${phase}"`);
+      return { success: true, stepId, phase };
+    } catch (err) {
+      log.error(`[SYNAPSE_SIMULATOR] inject-step-update error — "${stepId}":`, err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   // ── HANDLER: Persistir datos de GitHub para el mecanismo de resume ──────────
   // Llamado por el renderer cuando el milestone de github_app_auth llega con payload
   // completo y Brain no escribió github_username en nucleus.json por su cuenta.

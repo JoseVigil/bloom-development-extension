@@ -31,6 +31,7 @@ import { setUserEmail } from './renderer/core/shared-state.js';
 // Los steps se registran a sí mismos contra navigation.js/ipc-bridge.js con
 // solo importarlos (side-effect imports) — por eso no hace falta usar
 // ningún export de estos módulos acá abajo.
+import './renderer/steps/step-backend-identity.js';
 import './renderer/steps/step-workspace.js';
 import './renderer/steps/step-identity.js';
 import './renderer/steps/step-vault.js';
@@ -43,6 +44,7 @@ import './renderer/steps/step-milestone.js';
 import { onWorkspacePathInput, onWorkspaceOrgInput, onWorkspaceOrgBlur, continueWorkspace, selectWorkspaceFolder } from './renderer/steps/step-workspace.js';
 import { handleIdentityBtn, openInfo, closeInfo, toggleAccount } from './renderer/steps/step-identity.js';
 import { enterSystem } from './renderer/steps/step-milestone.js';
+import { continueBackendIdentity } from './renderer/steps/step-backend-identity.js';
 
 // navigation.js no importa ui-stepper "hacia arriba" para no generar un
 // ciclo — el bootstrap cablea la conexión una sola vez, acá.
@@ -63,6 +65,12 @@ window.switchTab = switchTab;
 window.selectWorkspaceFolder = selectWorkspaceFolder;
 window.continueWorkspace = continueWorkspace;
 window.enterSystem = enterSystem;
+window.continueBackendIdentity = continueBackendIdentity;
+// SYNC (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+// PuntoInsercion_v1_0.md §6.1): con 'backend_identity_check' agregado como
+// primer elemento del SSOT, getFirstStepId() lo devuelve automáticamente —
+// no hace falta tocar esta función, el "Start" de screen-entry ahora navega
+// al step 0 nuevo solo por el orden del array de origen.
 window.startOnboarding = () => {
   const firstStepId = navigation.getFirstStepId();
   if (!firstStepId) {

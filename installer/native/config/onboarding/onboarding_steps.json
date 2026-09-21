@@ -1,13 +1,27 @@
 {
   "_version": "3.1.0",
   "_comment": "SSOT único de steps de onboarding — Bloom Conductor. Consumido por MilestoneRegistry (Main, vía fs) y expuesto al Renderer vía IPC (getStepsConfig). Cualquier cambio de orden, requires o verificación se hace acá, no en onboarding.js.",
-  "_changelog": "v3.0.0 (2026-07-10): Migración GitHub App / Device Flow. Retirado el step 'github_auth' (PAT clásico, GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED). Reemplazado por 'github_app_auth', reordenado DESPUÉS de vault_init (el token de la App se guarda en el Vault — Nucleus debe Authorize() antes de tocar el Keyring real, ver BTIPS-VAULT-MULTIKEY-ANALYSIS.md v1.1 y milestone-registry.js FALLBACK_STEPS). google_auth migrado de GOOGLE_AUTH_COMPLETE (nunca implementado) a ACCOUNT_REGISTERED:google discriminado por 'service'. v3.1.0 (2026-08-11 — D-22, BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6): 'mandate_genesis' deja de crear el mandate real (eso pasa a Core, ver D-23) y pasa a ser pantalla puramente explicativa. produces/verifyArgs.field cambian de 'genesis_mandate_id' a 'mandate_screen_acknowledged' — mismo mecanismo verify:'json_field', sin tipo nuevo. Este JSON es el SSOT en disco: si diverge del fallback hardcoded de milestone-registry.js (o de la copia embebida en navigation.js), el fallback pierde — sincronizar los tres ante cualquier cambio futuro.",
+  "_changelog": "v3.0.0 (2026-07-10): Migración GitHub App / Device Flow. Retirado el step 'github_auth' (PAT clásico, GITHUB_PAT_DETECTED/GITHUB_TOKEN_STORED). Reemplazado por 'github_app_auth', reordenado DESPUÉS de vault_init (el token de la App se guarda en el Vault — Nucleus debe Authorize() antes de tocar el Keyring real, ver BTIPS-VAULT-MULTIKEY-ANALYSIS.md v1.1 y milestone-registry.js FALLBACK_STEPS). google_auth migrado de GOOGLE_AUTH_COMPLETE (nunca implementado) a ACCOUNT_REGISTERED:google discriminado por 'service'. v3.1.0 (2026-08-11 — D-22, BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6): 'mandate_genesis' deja de crear el mandate real (eso pasa a Core, ver D-23) y pasa a ser pantalla puramente explicativa. produces/verifyArgs.field cambian de 'genesis_mandate_id' a 'mandate_screen_acknowledged' — mismo mecanismo verify:'json_field', sin tipo nuevo. v3.2.0 (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_PuntoInsercion_v1_0.md): nuevo step 0 'backend_identity_check' (Auth 1 — solo identidad contra el backend nuevo, SIN token local, ver §5 del doc). nucleus_create.requires pasa de [] a ['backend_identity_validated'] (§6.2) para que el motor de resume no pueda saltear la validación nueva. Instalaciones con progreso previo a este cambio (completed_steps no vacío sin backend_identity_validated) se resetean, no se migran (§6.9, ver onboarding-handlers.js → onboarding:get-resume-state). Este JSON es el SSOT en disco: si diverge del fallback hardcoded de milestone-registry.js (o de la copia embebida en navigation.js), el fallback pierde — sincronizar los tres ante cualquier cambio futuro.",
   "steps": [
+    {
+      "id": "backend_identity_check",
+      "view": "backend-identity-check",
+      "label": "Validar identidad",
+      "requires": [],
+      "produces": "backend_identity_validated",
+      "verify": "json_field",
+      "verifyArgs": {
+        "field": "onboarding.backend_identity_validated"
+      },
+      "blocking": true,
+      "cortex_events": ["IDENTITY_VALIDATED"],
+      "conductor_reaction": "markStepComplete"
+    },
     {
       "id": "nucleus_create",
       "view": "workspace",
       "label": "Crear Nucleus",
-      "requires": [],
+      "requires": ["backend_identity_validated"],
       "produces": "workspace_path",
       "verify": "fs_marker",
       "verifyArgs": {

@@ -1446,6 +1446,34 @@ body::after {
     </div>
   </div>
 
+  <!-- SCREEN 0: Backend identity check (backend_identity_check — Auth 1).
+       Ver Investigacion_Onboarding_ValidacionGitHub_ServerSide_PuntoInsercion_v1_0.md
+       §5: SOLO identidad, ningún token se maneja en esta pantalla. -->
+  <div class="screen" id="screen-backend-identity-check">
+    <div class="screen-inner fade-up">
+
+      <div class="stage-label">Verificación de cuenta</div>
+      <h2 class="stage-title" id="backend-identity-title">Validando tu cuenta…</h2>
+      <p class="stage-body" id="backend-identity-body">
+        Estamos confirmando tu identidad contra el servidor antes de continuar con la configuración local.
+      </p>
+
+      <div class="ws-preview" id="backend-identity-status" style="display:none;">
+        <div class="ws-preview-row">
+          <span class="ws-preview-key">Estado</span>
+          <span class="ws-preview-val" id="backend-identity-status-val">—</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-continue-backend-identity" disabled onclick="continueBackendIdentity()">
+        Continuar
+      </button>
+
+      <div class="ws-error" id="backend-identity-error"></div>
+
+    </div>
+  </div>
+
   <!-- SCREEN 1: Workspace (nucleus_create) -->
   <div class="screen" id="screen-workspace">
     <div class="screen-inner fade-up">

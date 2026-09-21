@@ -12,7 +12,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('onboarding', {
-  // Paso 0: lanzar Chrome con Discovery page en modo registro
+  // ── Paso 0 real: validación de identidad contra el backend (Auth 1) ──────
+  // Ver Investigacion_Onboarding_ValidacionGitHub_ServerSide_PuntoInsercion_
+  // v1_0.md §2/§4. El contrato real con el backend todavía no está definido
+  // (§9) — este canal deja la plomería lista, ver onboarding-handlers.js.
+  validateBackendIdentity: () => ipcRenderer.invoke('onboarding:validate-backend-identity'),
+  pollBackendIdentity:     () => ipcRenderer.invoke('onboarding:poll-backend-identity'),
+
+  // Paso 0 (legacy): lanzar Chrome con Discovery page en modo registro
   launchDiscovery: (params) => ipcRenderer.invoke('onboarding:launch-discovery', params),
 
   // Conductor → Chrome: navegar a un step específico
@@ -132,4 +139,11 @@ contextBridge.exposeInMainWorld('onboarding', {
   //   window.onboarding.injectMilestone({ stepId: 'github_auth', data: { username: 'test' } })
   //
   injectMilestone: (params) => ipcRenderer.invoke('synapse-simulator:inject-milestone', params),
+
+  // injectStepUpdate — igual que injectMilestone pero para el canal de fase
+  // 'onboarding:step-ui-update' (ESTABLISHED/IN_PROGRESS/ERROR). Necesario
+  // para simular escenarios que no son un milestone real (ej: "fallo del
+  // servidor" en backend_identity_check — ver
+  // Investigacion_Onboarding_ValidacionGitHub_ServerSide_PuntoInsercion_v1_0.md §8.4).
+  injectStepUpdate: (params) => ipcRenderer.invoke('synapse-simulator:inject-step-update', params),
 });

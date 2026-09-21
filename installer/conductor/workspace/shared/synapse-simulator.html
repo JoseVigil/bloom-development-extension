@@ -724,6 +724,12 @@ body::after {
     <div id="sim-bar">
       <span id="sim-label">Simulate →</span>
       <select id="sim-select">
+        <optgroup label="backend-auth">
+          <option value='{"category":"backend-auth","event":"IDENTITY_VALIDATED","stepId":"backend_identity_check","data":{"branch":"master_new_org","userId":"sim-user-1"}}'>backend-auth · login exitoso (master, cuenta nueva)</option>
+          <option value='{"category":"backend-auth","event":"IDENTITY_VALIDATED","stepId":"backend_identity_check","data":{"branch":"invited_existing_org","orgId":"sim-org-1","role":"specialist"}}'>backend-auth · login exitoso (invitado a org existente)</option>
+          <option value='{"category":"backend-auth","event":"IDENTITY_VALIDATED","stepId":"backend_identity_check","data":{"branch":"no_organization"}}'>backend-auth · login exitoso (sin organización)</option>
+          <option value='{"category":"backend-auth","event":"IDENTITY_VALIDATION_FAILED","stepId":"backend_identity_check","phase":"ERROR","reason":"timeout"}'>backend-auth · fallo del servidor (timeout)</option>
+        </optgroup>
         <optgroup label="synapse">
           <option value='{"category":"synapse","event":"GITHUB_DEVICE_CODE","data":{"user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","expires_in":900},"profile_id":"2183af25"}'>synapse · GITHUB_DEVICE_CODE</option>
           <option value='{"category":"synapse","event":"GITHUB_APP_AUTHORIZED","data":{"username":"octocat","token_fingerprint":"ghu_simulatedFingerprint","scopes":"contents:write,administration:write,members:read"},"profile_id":"2183af25"}'>synapse · GITHUB_APP_AUTHORIZED</option>
@@ -788,6 +794,10 @@ let rawEntries    = [];
 const MAX_RAW_ENTRIES = 500;
 
 const filters = {
+  // SYNC (2026-09-21 — Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+  // PuntoInsercion_v1_0.md §8): categoría nueva para simular backend_identity_check
+  // (Paso 0 / Auth 1) — no hay evento Cortex real que reproducir todavía.
+  'backend-auth': { on: true, count: 0, color: '#D46A9F' },
   synapse:  { on: true, count: 0, color: '#378ADD' },
   brain:    { on: true, count: 0, color: '#4ADE80' },
   sentinel: { on: true, count: 0, color: '#F0A040' },
@@ -797,6 +807,8 @@ const filters = {
 };
 
 const EVENT_LEVELS = {
+  IDENTITY_VALIDATED:        'success',
+  IDENTITY_VALIDATION_FAILED:'error',
   DISCOVERY_COMPLETE:      'success',
   GITHUB_APP_AUTHORIZED:   'success',
   API_KEY_REGISTERED:      'success',
@@ -1259,6 +1271,32 @@ async function fireSimEvent() {
   const val = document.getElementById('sim-select').value;
   let payload;
   try { payload = JSON.parse(val); } catch { return; }
+
+  // Categoría backend-auth (Paso 0 / Auth 1) — ver Investigacion_Onboarding_
+  // ValidacionGitHub_ServerSide_PuntoInsercion_v1_0.md §8.2/§8.3: no existe
+  // backend real ni evento Cortex que reproducir todavía, así que en vez de
+  // intentar el POST a /api/internal/system-event (que requeriría inventar
+  // un evento Cortex inexistente) se inyecta directo al reactor de Main vía
+  // el mismo bypass dev-only que ya usa este panel para milestones
+  // (window.onboarding.injectMilestone), o su análogo para fases de error
+  // (injectStepUpdate) — ambos expuestos por preload_onboarding.js en la
+  // ventana padre (este archivo corre en un iframe dentro de onboarding.html).
+  if (payload.category === 'backend-auth') {
+    try {
+      const bridge = window.parent?.onboarding;
+      if (!bridge) throw new Error('window.parent.onboarding no disponible');
+      if (payload.phase === 'ERROR') {
+        await bridge.injectStepUpdate({ stepId: payload.stepId, phase: 'ERROR', data: { reason: payload.reason } });
+      } else {
+        await bridge.injectMilestone({ stepId: payload.stepId, data: payload.data || {} });
+      }
+      log('info', 'Sim backend-auth → ' + JSON.stringify(payload));
+    } catch (err) {
+      log('warn', 'Sim backend-auth failed: ' + err.message);
+    }
+    ingestEvent({ ...payload, timestamp: Date.now() });
+    return;
+  }
 
   // POST to real endpoint. On success the WS broadcast brings the event
   // back via system_event — skip local ingest to avoid duplicates.

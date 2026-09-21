@@ -93,6 +93,11 @@ class MilestoneReactor {
     // _onGithubAuthComplete() (con la lógica de abrir Landing y de incluir
     // username/org en el milestone) quedaba muerto en la práctica.
     this._handlers = {
+      // DECISIÓN CERRADA (Investigacion_Onboarding_ValidacionGitHub_ServerSide_
+      // PuntoInsercion_v1_0.md §6.6): handler dedicado obligatorio, no
+      // _defaultReaction() — las ramas "invitado" y "sin organización"
+      // necesitan transportar datos propios (orgId/role/branch) al renderer.
+      backend_identity_check: (enriched) => this._onBackendIdentityCheckComplete(enriched),
       github_app_auth:   (enriched) => this._onGithubAuthComplete(enriched),
       nucleus_create:    (enriched) => this._onNucleusCreateComplete(enriched),
       vault_init:        (enriched) => this._onVaultInitComplete(enriched),
@@ -417,6 +422,50 @@ class MilestoneReactor {
       fs.writeFileSync(this._NUCLEUS_JSON, JSON.stringify(data, null, 2));
     } catch (e) {
       this._logger.warn('[MilestoneReactor] _setOwnershipStatus: no se pudo persistir —', e.message);
+    }
+  }
+
+  // ── backend_identity_check (Auth 1, step 0) ──────────────────────────────
+  //
+  // Handler dedicado — DECISIÓN CERRADA, §6.6 del doc de diseño citado en el
+  // constructor. A diferencia de _defaultReaction() (que solo persiste el
+  // step y emite `data: {}`), este handler persiste y transporta la rama
+  // resuelta por el backend (master/invitado/sin-organización) y sus datos
+  // asociados, para que step-backend-identity.js (renderer) pueda bifurcar
+  // la UI sin releer nucleus.json por separado.
+  //
+  // Auth 1 es SOLO identidad (§5 del doc): enriched.data nunca trae ni debe
+  // traer ningún token — no hay nada que copiar al Vault acá.
+  async _onBackendIdentityCheckComplete(enriched) {
+    this._log(`_onBackendIdentityCheckComplete (branch: ${enriched.data?.branch || 'n/a'})`);
+    await this._persistStepComplete('backend_identity_check', this._registry.getStep('backend_identity_check'));
+
+    const branch = enriched.data?.branch || null;
+    const orgId  = enriched.data?.orgId  || null;
+    const role   = enriched.data?.role   || null;
+    this._setBackendIdentityData({ branch, orgId, role });
+
+    this._emitMilestone('backend_identity_check', { branch, orgId, role });
+    this._emitStepUiUpdate('backend_identity_check', { phase: 'ESTABLISHED' });
+  }
+
+  /**
+   * Persiste la rama de identidad resuelta por el backend y sus datos
+   * asociados. Mismo patrón que _setOwnershipStatus() — lectura/escritura
+   * directa de nucleus.json para un campo que _persistStepComplete() (genérico)
+   * no cubre, porque no es un simple booleano de "produces".
+   */
+  _setBackendIdentityData({ branch, orgId, role }) {
+    try {
+      const data = JSON.parse(fs.readFileSync(this._NUCLEUS_JSON, 'utf8'));
+      data.onboarding = data.onboarding || {};
+      if (branch) data.onboarding.backend_identity_branch = branch;
+      if (orgId)  data.onboarding.backend_identity_org_id = orgId;
+      if (role)   data.onboarding.backend_identity_role   = role;
+      data.onboarding.updated_at = new Date().toISOString();
+      fs.writeFileSync(this._NUCLEUS_JSON, JSON.stringify(data, null, 2));
+    } catch (e) {
+      this._logger.warn('[MilestoneReactor] _setBackendIdentityData: no se pudo persistir —', e.message);
     }
   }
 
