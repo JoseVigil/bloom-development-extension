@@ -879,13 +879,47 @@ async function deployAllSystemBinaries(win) {
       'Metamorph'
     );
 
+    // ── IMPACT / MONITOR / AITAP (binarios estáticos Go — sin servicio, sin dependencias) ──
+    // Mismo patrón que Sentinel/Metamorph: se copian dentro del hito 'binaries',
+    // no tienen milestone propio ni service-installer.
+    logger.info('\n📊 IMPACT');
+    if (await fs.pathExists(paths.impactSource)) {
+      results.impact = await copyDirectorySafe(paths.impactSource, paths.impactDir, 'Impact');
+    } else {
+      logger.warn(`⚠️ Impact source not found at: ${paths.impactSource}, skipping`);
+      results.impact = { success: false, skipped: true };
+    }
+
+    logger.info('\n📈 MONITOR');
+    if (await fs.pathExists(paths.monitorSource)) {
+      results.monitor = await copyDirectorySafe(paths.monitorSource, paths.monitorDir, 'Monitor');
+    } else {
+      logger.warn(`⚠️ Monitor source not found at: ${paths.monitorSource}, skipping`);
+      results.monitor = { success: false, skipped: true };
+    }
+
+    logger.info('\n🤖 AITAP');
+    if (await fs.pathExists(paths.aitapSource)) {
+      results.aitap = await copyDirectorySafe(paths.aitapSource, paths.aitapDir, 'AITap');
+    } else {
+      logger.warn(`⚠️ AITap source not found at: ${paths.aitapSource}, skipping`);
+      results.aitap = { success: false, skipped: true };
+    }
+
     // En macOS asegurar permisos en todos los binarios Go
     if (process.platform === 'darwin') {
-      for (const bin of [paths.nucleusExe, paths.sentinelExe, paths.metamorphExe]) {
+      for (const bin of [paths.nucleusExe, paths.sentinelExe, paths.metamorphExe, paths.impactExe, paths.monitorExe, paths.aitapExe]) {
         if (await fs.pathExists(bin)) await fs.chmod(bin, 0o755);
       }
     }
-    
+
+    // En Linux, marcar ejecutables (sin esto los binarios Go copiados pueden perder +x)
+    if (process.platform === 'linux') {
+      for (const bin of [paths.impactExe, paths.monitorExe, paths.aitapExe]) {
+        if (await fs.pathExists(bin)) await fs.chmod(bin, 0o755);
+      }
+    }
+
     // ========================================================================
     // 6. CORTEX (Extension Package)
     // ========================================================================

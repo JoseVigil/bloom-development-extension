@@ -102,6 +102,39 @@ const getResourcePath = (resourceName) => {
       }
       return primaryMetamorph;
     }
+    case 'impact': {
+      const primaryImpact = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'impact');
+      if (platform === 'darwin') {
+        const fs = require('fs');
+        if (!fs.existsSync(primaryImpact)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'impact');
+        }
+      }
+      return primaryImpact;
+    }
+    case 'monitor': {
+      const primaryMonitor = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'monitor');
+      if (platform === 'darwin') {
+        const fs = require('fs');
+        if (!fs.existsSync(primaryMonitor)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'monitor');
+        }
+      }
+      return primaryMonitor;
+    }
+    case 'aitap': {
+      const primaryAitap = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'aitap');
+      if (platform === 'darwin') {
+        const fs = require('fs');
+        if (!fs.existsSync(primaryAitap)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'aitap');
+        }
+      }
+      return primaryAitap;
+    }
     case 'brain': {
       if (platform === 'darwin') {
         const fs = require('fs');
@@ -247,7 +280,25 @@ const paths = {
     ? path.join(baseDir, 'bin', 'metamorph', 'metamorph.exe')
     : path.join(baseDir, 'bin', 'metamorph', 'metamorph'),
   metamorphConfig: path.join(baseDir, 'bin', 'metamorph', 'metamorph-config.json'),
-  
+
+  // Impact (static Go binary — no service, no dependencies)
+  impactDir: path.join(baseDir, 'bin', 'impact'),
+  impactExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'impact', 'impact.exe')
+    : path.join(baseDir, 'bin', 'impact', 'impact'),
+
+  // Monitor (static Go binary — no service, no dependencies)
+  monitorDir: path.join(baseDir, 'bin', 'monitor'),
+  monitorExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'monitor', 'monitor.exe')
+    : path.join(baseDir, 'bin', 'monitor', 'monitor'),
+
+  // AITap (static Go binary — no service, no dependencies)
+  aitapDir: path.join(baseDir, 'bin', 'aitap'),
+  aitapExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'aitap', 'aitap.exe')
+    : path.join(baseDir, 'bin', 'aitap', 'aitap'),
+
   // Brain (AI Engine)
   brainDir: path.join(baseDir, 'bin', 'brain'),
   brainExe,
@@ -381,6 +432,9 @@ const paths = {
   sentinelSource: getResourcePath('sentinel'),
   sentinelConfigSource: getResourcePath('sentinel-config'),
   metamorphSource: getResourcePath('metamorph'),
+  impactSource: getResourcePath('impact'),
+  monitorSource: getResourcePath('monitor'),
+  aitapSource: getResourcePath('aitap'),
   brainSource: getResourcePath('brain'),
   hostSource: getResourcePath('host'),
   nssmSource: getResourcePath('nssm'),

@@ -72,6 +72,18 @@
           "to": "metamorph"
         },
         {
+          "from": "../../native/bin/linux_x64/impact",
+          "to": "impact"
+        },
+        {
+          "from": "../../native/bin/linux_x64/monitor",
+          "to": "monitor"
+        },
+        {
+          "from": "../../native/bin/linux_x64/aitap",
+          "to": "aitap"
+        },
+        {
           "from": "../../native/bin/linux_x64/brain",
           "to": "brain"
         },
@@ -136,6 +148,18 @@
         {
           "from": "../../native/bin/win64/metamorph",
           "to": "metamorph"
+        },
+        {
+          "from": "../../native/bin/win64/impact",
+          "to": "impact"
+        },
+        {
+          "from": "../../native/bin/win64/monitor",
+          "to": "monitor"
+        },
+        {
+          "from": "../../native/bin/win64/aitap",
+          "to": "aitap"
         },
         {
           "from": "../../native/bin/win64/brain",
@@ -207,6 +231,18 @@
         {
           "from": "../../native/bin/darwin_${arch}/metamorph",
           "to": "metamorph"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/impact",
+          "to": "impact"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/monitor",
+          "to": "monitor"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/aitap",
+          "to": "aitap"
         },
         {
           "from": "../../native/bin/darwin_${arch}/brain",
@@ -282,6 +318,9 @@
       "**/nucleus/**/*",
       "**/sentinel/**/*",
       "**/metamorph/**/*",
+      "**/impact/**/*",
+      "**/monitor/**/*",
+      "**/aitap/**/*",
       "**/brain/**/*",
       "**/runtime/**/*",
       "**/native/**/*",

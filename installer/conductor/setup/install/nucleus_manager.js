@@ -43,6 +43,9 @@ const _binariesComponents = _isDarwin
       nucleus:   ['nucleus', 'nucleus-governance.json'],
       sentinel:  ['sentinel'],  // solo el binario — config en config/sentinel/, verificada aparte
       metamorph: ['metamorph'],
+      impact:    ['impact'],   // estático, sin servicio ni dependencias — mismo patrón que sentinel
+      monitor:   ['monitor'],  // estático, sin servicio ni dependencias — mismo patrón que sentinel
+      aitap:     ['aitap'],    // estático, sin servicio ni dependencias — mismo patrón que sentinel
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama'],
       opencode:  ['opencode'],
@@ -58,6 +61,9 @@ const _binariesComponents = _isDarwin
       nucleus:   ['nucleus.exe', 'nucleus-governance.json', 'help'],
       sentinel:  ['sentinel.exe', 'sentinel-config.json', 'help'],
       metamorph: ['metamorph.exe', 'help', 'metamorph-config.json'],
+      impact:    ['impact.exe', 'help'],
+      monitor:   ['monitor.exe', 'help'],
+      aitap:     ['aitap.exe', 'help'],
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama.exe', 'lib'],
       opencode:  ['opencode.exe'],
