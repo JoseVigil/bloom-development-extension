@@ -90,6 +90,86 @@
         }
       ],
       "commands": []
+    },
+    {
+      "name": "impact info",
+      "syntax": "impact info [flags]",
+      "description": "Display detailed system information",
+      "long": "",
+      "category": "SYSTEM",
+      "examples": "  impact info\n  impact --json info",
+      "json_response": {
+        "name": "Impact",
+        "version": "1.0.0",
+        "build_number": 2,
+        "os": "linux",
+        "arch": "amd64",
+        "go_version": "go1.24.0"
+      },
+      "flags": [
+        {
+          "name": "help",
+          "type": "bool",
+          "default": "false",
+          "description": "help for info",
+          "required": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "default": "false",
+          "description": "Write structured response only to stdout",
+          "required": false
+        },
+        {
+          "name": "json-help",
+          "type": "bool",
+          "default": "false",
+          "description": "Render command metadata as JSON",
+          "required": false
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "impact version",
+      "syntax": "impact version [flags]",
+      "description": "Display version and build information",
+      "long": "Display detailed version information including build number, date, and time.\n\nExample:\n  impact version\n  impact --json version",
+      "category": "SYSTEM",
+      "examples": "  impact version\n  impact --json version",
+      "json_response": {
+        "name": "Impact",
+        "version": "1.0.0",
+        "build_number": 2,
+        "build_date": "2026-02-13",
+        "build_time": "11:29:00",
+        "full_version": "v1.0.0-build.2"
+      },
+      "flags": [
+        {
+          "name": "help",
+          "type": "bool",
+          "default": "false",
+          "description": "help for version",
+          "required": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "default": "false",
+          "description": "Write structured response only to stdout",
+          "required": false
+        },
+        {
+          "name": "json-help",
+          "type": "bool",
+          "default": "false",
+          "description": "Render command metadata as JSON",
+          "required": false
+        }
+      ],
+      "commands": []
     }
   ]
 }

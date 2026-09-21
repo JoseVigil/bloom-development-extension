@@ -1809,6 +1809,67 @@ def _print_summary(results: list[StepResult]) -> int:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DESTINO EN NATIVE/ — dónde quedó cada binario recién compilado, antes de
+# mostrar el detalle de versiones que trae `metamorph inspect`.
+#
+# Solo cubre los componentes que efectivamente salen a _DEV_BIN_BASE/<key>/
+# (Go components, Brain, Host, Setup, Workspace). Aitap, Cortex, Bootstrap y
+# Vsix tienen destinos propios (no siguen este patrón) y se omiten acá.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_NATIVE_BIN_COMPONENTS = (
+    "nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor",
+    "brain", "host", "setup", "workspace",
+)
+
+
+def _print_native_destinations(ran_keys: list[str]) -> None:
+    """
+    Imprime, para TODOS los componentes que alojan su salida en
+    installer/native/bin/<arch>/<comp>/ (no solo los de este build — mismo
+    criterio de cobertura completa que usa metamorph inspect más abajo), la
+    ruta real y si el binario (y su carpeta help/, cuando aplica) están ahí.
+    Los que corrieron en este build puntual se marcan con "← este build".
+    """
+    ran_set = set(ran_keys)
+
+    log("")
+    log(_sep())
+    try:
+        base_rel = _DEV_BIN_BASE.relative_to(ROOT)
+    except ValueError:
+        base_rel = _DEV_BIN_BASE
+    log(f"Destino en native/ ({base_rel})")
+    log(_sep())
+
+    for key in _NATIVE_BIN_COMPONENTS:
+        comp_dir = _DEV_BIN_BASE / key
+        try:
+            rel = comp_dir.relative_to(ROOT)
+        except ValueError:
+            rel = comp_dir
+
+        built_marker = "  ← este build" if key in ran_set else ""
+
+        if not comp_dir.exists():
+            log(f"  ⊘  {key:<12} sin output en {rel}{built_marker}")
+            continue
+
+        files = sorted(f.name for f in comp_dir.iterdir() if f.is_file())
+        has_help = (comp_dir / "help").is_dir()
+        if not files and not has_help:
+            log(f"  ⚠  {key:<12} {rel}  (carpeta vacía){built_marker}")
+            continue
+
+        detail = ", ".join(files) if files else "(sin archivos sueltos)"
+        help_note = " + help/" if has_help else ""
+        log(f"  ✅ {key:<12} {rel}{help_note}{built_marker}")
+        log(f"      {detail}")
+
+    log("")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ARGPARSE — soporte para --only y --skip
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2531,6 +2592,8 @@ def main() -> None:
     log(f"Capturando versiones → {_PLATFORM_SUFFIX}_versions.txt ...")
     log(_sep())
     capture_versions()
+
+    _print_native_destinations([key for key, _, _ in steps])
 
     log("")
     log(_sep())

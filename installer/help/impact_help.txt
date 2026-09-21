@@ -24,3 +24,43 @@ Examples:
   impact assess --input request.json
   impact assess --input request.json --json
 JSON response: {"contract":"impact/1","question":{"type":"coexistence","version":"1"},"questionText":"Explicit evaluation question","inputDigest":"sha256:...","evaluatorVersion":"1","findings":[],"coverage":{"evaluated":[],"undetermined":[],"complete":false},"indeterminacy":[],"reevaluateWhen":[]}
+
+impact info [flags] [SYSTEM]
+Display detailed system information
+
+  --help (bool, default="false", required=false): help for info
+  --json (bool, default="false", required=false): Write structured response only to stdout
+  --json-help (bool, default="false", required=false): Render command metadata as JSON
+Examples:
+  impact info
+  impact --json info
+JSON response: {
+  "name": "Impact",
+  "version": "1.0.0",
+  "build_number": 2,
+  "os": "linux",
+  "arch": "amd64",
+  "go_version": "go1.24.0"
+}
+
+impact version [flags] [SYSTEM]
+Display version and build information
+Display detailed version information including build number, date, and time.
+
+Example:
+  impact version
+  impact --json version
+  --help (bool, default="false", required=false): help for version
+  --json (bool, default="false", required=false): Write structured response only to stdout
+  --json-help (bool, default="false", required=false): Render command metadata as JSON
+Examples:
+  impact version
+  impact --json version
+JSON response: {
+  "name": "Impact",
+  "version": "1.0.0",
+  "build_number": 2,
+  "build_date": "2026-02-13",
+  "build_time": "11:29:00",
+  "full_version": "v1.0.0-build.2"
+}

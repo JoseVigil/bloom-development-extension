@@ -219,6 +219,25 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			versionField: "version",
 			buildField:   "build",
 		},
+		{
+			// Impact (Portable Consequence Evaluator). Same contract as Metamorph:
+			// impact/internal/system/version.go emits {name, version, build_number, ...}.
+			name:         "Impact",
+			path:         filepath.Join("bin", "impact", core.ExeName("impact")),
+			versionArgs:  []string{"--json", "version"},
+			infoArgs:     []string{"--json", "info"},
+			versionField: "version",
+			buildField:   "build_number",
+		},
+		{
+			// Monitor (Local Persistent Runtime Observer). Same contract as Impact/Metamorph.
+			name:         "Monitor",
+			path:         filepath.Join("bin", "monitor", core.ExeName("monitor")),
+			versionArgs:  []string{"--json", "version"},
+			infoArgs:     []string{"--json", "info"},
+			versionField: "version",
+			buildField:   "build_number",
+		},
 	}
 }
 

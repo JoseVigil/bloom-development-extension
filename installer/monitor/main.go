@@ -5,6 +5,7 @@ import (
 	"monitor/internal/cli"
 	"monitor/internal/core"
 	_ "monitor/internal/status"
+	_ "monitor/internal/system"
 	"os"
 )
 

@@ -195,6 +195,15 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "impact") },
 	},
 	{
+		// Monitor: same shape as Impact — deployed as a component directory
+		// so its Cobra-generated help tree travels with the executable.
+		Key: "monitor",
+		SourceFn: func(r string) string {
+			return nativeBin(r, "monitor")
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "monitor") },
+	},
+	{
 		Key: "cortex",
 		SourceFn: func(r string) string {
 			return filepath.Join(r, "installer", "native", "bin", "cortex", "bloom-cortex.blx")
@@ -1360,6 +1369,7 @@ Linux, and LaunchAgent on macOS.`,
   metamorph rollout --only setup
   metamorph rollout --only sensor
   metamorph rollout --only impact
+  metamorph rollout --only monitor
   metamorph rollout --only cortex
   metamorph rollout --only ionpump
   metamorph rollout --only vsix

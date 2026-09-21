@@ -5,6 +5,7 @@ import (
 	_ "impact/internal/assessment"
 	"impact/internal/cli"
 	"impact/internal/core"
+	_ "impact/internal/system"
 	"os"
 )
 
