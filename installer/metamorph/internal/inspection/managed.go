@@ -238,6 +238,21 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			versionField: "version",
 			buildField:   "build_number",
 		},
+		{
+			// AITap (Intelligence/Execution Routing). Python/PyInstaller, not Go —
+			// its "version"/"info" commands live under the "system" category
+			// (aitap system version / aitap system info), so --json goes before
+			// the subcommand tree, not right before "version" like the Go apps.
+			// Same JSON field names as Impact/Monitor/Metamorph: version /
+			// build_number. Build number comes from src/aitap/_build_info.py,
+			// regenerated at build time (no -ldflags equivalent in PyInstaller).
+			name:         "AITap",
+			path:         filepath.Join("bin", "aitap", core.ExeName("aitap")),
+			versionArgs:  []string{"--json", "system", "version"},
+			infoArgs:     []string{"--json", "system", "info"},
+			versionField: "version",
+			buildField:   "build_number",
+		},
 	}
 }
 
@@ -481,9 +496,9 @@ func inspectSetup(binary *ManagedBinary, exePath string) (*ManagedBinary, error)
 //
 // Two-pass strategy:
 //  1. `--json version` — JSON output; extracts version, build (string), channel.
-//                        Example: {"build": "57", "channel": "stable", "version": "1.0.0"}
+//     Example: {"build": "57", "channel": "stable", "version": "1.0.0"}
 //  2. `--json info`    — JSON output; enriches the result with capabilities and requires
-//                        stored in binary.SensorInfo.
+//     stored in binary.SensorInfo.
 //
 // Note: bloom-sensor requires --json BEFORE the subcommand.
 func inspectSensor(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {

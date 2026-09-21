@@ -16,7 +16,7 @@ aitap no es dueno del vault — Nucleus lo es. Solo guarda referencias y politic
 ┏━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Categoria ┃ Descripcion                                                        ┃ Comandos               ┃
 ┡━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ system    │ Version, status e introspeccion del servicio AITap                 │ version, status        │
+│ system    │ Version, status e introspeccion del servicio AITap                 │ version, info, status  │
 │ keys      │ Referencias a credenciales por proveedor (Gemini, Claude, OpenAI,  │ list                   │
 │           │ xAI) - nunca el secreto real                                       │                        │
 │ route     │ Politica de ruteo entre proveedores y estado del circuit breaker   │ status, decide, supply │

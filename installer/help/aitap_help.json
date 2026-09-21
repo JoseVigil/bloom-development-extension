@@ -15,7 +15,19 @@
           "requires_vault": false,
           "aliases": [],
           "examples": [
-            "aitap system version"
+            "aitap system version",
+            "aitap --json system version"
+          ]
+        },
+        {
+          "name": "info",
+          "category": "system",
+          "description": "Muestra informacion detallada del sistema para AITap",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap system info",
+            "aitap --json system info"
           ]
         },
         {

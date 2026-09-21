@@ -93,6 +93,7 @@ _BUILD_NUMBER_DIRS: dict[str, Path] = {
     "sensor":           ROOT / "installer/sensor/scripts",
     "impact":           ROOT / "installer/impact/scripts",
     "monitor":          ROOT / "installer/monitor/scripts",
+    "aitap":            ROOT / "installer/aitap/scripts",
     "host":             ROOT / "installer/host",
     "cortex":     ROOT / "installer/cortex/build-cortex",
     "workspace":  ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
@@ -797,11 +798,18 @@ def build_aitap() -> StepResult:
         if code != 0:
             return StepResult("AITAP", False, error=out)
 
+    # Incrementar y resolver build number antes de lanzar el script — mismo
+    # patrón que Brain/Go: build.py lee BLOOM_BUILD_NUMBER y regenera
+    # src/aitap/_build_info.py antes de invocar PyInstaller, para que el
+    # binario empaquetado reporte el build number correcto vía version/info.
+    _increment_build_number("aitap")
+    aitap_env = inject_build_number_env("aitap", {**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)})
+
     log(f"Empaquetando AITAP con {build_script.name} ...")
     code, out = run_streaming(
         [python_exe, str(build_script)],
         cwd=build_script.parent,
-        env={**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)},
+        env=aitap_env,
     )
     if code != 0:
         return StepResult("AITAP", False, error=out)
@@ -1813,13 +1821,15 @@ def _print_summary(results: list[StepResult]) -> int:
 # mostrar el detalle de versiones que trae `metamorph inspect`.
 #
 # Solo cubre los componentes que efectivamente salen a _DEV_BIN_BASE/<key>/
-# (Go components, Brain, Host, Setup, Workspace). Aitap, Cortex, Bootstrap y
-# Vsix tienen destinos propios (no siguen este patrón) y se omiten acá.
+# (Go components, Brain, Host, Setup, Workspace, AITAP — confirmado en
+# installer/aitap/scripts/build.py: output_dir = .../native/bin/<arch>/aitap/,
+# con su propia carpeta help/, igual que los componentes Go). Cortex, Bootstrap
+# y Vsix tienen destinos propios (no siguen este patrón) y se omiten acá.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NATIVE_BIN_COMPONENTS = (
     "nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor",
-    "brain", "host", "setup", "workspace",
+    "brain", "host", "setup", "workspace", "aitap",
 )
 
 
@@ -2428,7 +2438,7 @@ def main() -> None:
     # Los componentes que entran en este build muestran "actual → próximo".
     # Los que se saltean muestran solo el valor actual.
     log(f"Build numbers ({_PLATFORM_SUFFIX}):")
-    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor", "host", "cortex", "setup", "workspace"):
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor", "aitap", "host", "cortex", "setup", "workspace"):
         if comp == "cortex":
             meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
             try:
@@ -2547,7 +2557,7 @@ def main() -> None:
         # vuelva a correr (y no regenere una segunda vez).
         steps = [(k, n, f) for k, n, f in steps if k != "parser"]
 
-    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel", "impact", "sensor", "monitor")
+    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel", "impact", "sensor", "monitor", "aitap")
 
     total = len(steps)
 

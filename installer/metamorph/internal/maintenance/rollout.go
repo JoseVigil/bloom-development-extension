@@ -195,16 +195,23 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "impact") },
 	},
 	{
-		// Monitor, like Impact, is deployed as a component directory so its
-		// Cobra-generated help tree travels with the executable on every
-		// platform. It is a standalone Go binary with no dependency on any
-		// other component -- no OS service to stop/start, no PreDeployFn or
-		// PostDeployFn, and no Platforms filter, since it ships cross-platform.
+		// Monitor: same shape as Impact — deployed as a component directory
+		// so its Cobra-generated help tree travels with the executable.
 		Key: "monitor",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "monitor")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "monitor") },
+	},
+	{
+		// AITap: Python/PyInstaller, not Go, but its build.py writes to the same
+		// installer/native/bin/<arch>/aitap/ layout (binary + help/), so it
+		// deploys the same way as Impact/Monitor — a component directory copy.
+		Key: "aitap",
+		SourceFn: func(r string) string {
+			return nativeBin(r, "aitap")
+		},
+		DestFn: func(b string) string { return filepath.Join(b, "bin", "aitap") },
 	},
 	{
 		Key: "cortex",
@@ -1373,6 +1380,7 @@ Linux, and LaunchAgent on macOS.`,
   metamorph rollout --only sensor
   metamorph rollout --only impact
   metamorph rollout --only monitor
+  metamorph rollout --only aitap
   metamorph rollout --only cortex
   metamorph rollout --only ionpump
   metamorph rollout --only vsix
