@@ -92,6 +92,7 @@ _BUILD_NUMBER_DIRS: dict[str, Path] = {
     "metamorph":        ROOT / "installer/metamorph/scripts",
     "sensor":           ROOT / "installer/sensor/scripts",
     "impact":           ROOT / "installer/impact/scripts",
+    "monitor":          ROOT / "installer/monitor/scripts",
     "host":             ROOT / "installer/host",
     "cortex":     ROOT / "installer/cortex/build-cortex",
     "workspace":  ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
@@ -369,6 +370,7 @@ BUILDS: dict[str, Path | None] = {
     "metamorph": _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
     "impact":    _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
     "sensor":    _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
+    "monitor":   _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
 
     # JS/Node: paths a sus directorios de proyecto
     # ¡NO usar build_script() para estos — tienen build_node() propio!
@@ -1812,7 +1814,7 @@ def _print_summary(results: list[StepResult]) -> int:
 
 ALL_STEP_NAMES = [
     "parser", "brain", "aitap", "host", "nucleus", "sentinel", "metamorph",
-    "sensor", "impact", "setup", "workspace", "cortex", "bootstrap", "vsix",
+    "sensor", "impact", "monitor", "setup", "workspace", "cortex", "bootstrap", "vsix",
 ]
 
 
@@ -2365,7 +2367,7 @@ def main() -> None:
     # Los componentes que entran en este build muestran "actual → próximo".
     # Los que se saltean muestran solo el valor actual.
     log(f"Build numbers ({_PLATFORM_SUFFIX}):")
-    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "host", "cortex", "setup", "workspace"):
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor", "host", "cortex", "setup", "workspace"):
         if comp == "cortex":
             meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
             try:
@@ -2421,6 +2423,7 @@ def main() -> None:
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
         ("sensor",    "Sensor",    lambda: build_go_component("sensor")),
         ("impact",    "Impact",    lambda: build_go_component("impact")),
+        ("monitor",   "Monitor",   lambda: build_go_component("monitor")),
         # Setup: npm install + electron-builder en installer/conductor/setup/
         ("setup",     "Setup",     build_setup),
         # Workspace: npm install + electron-builder en installer/conductor/workspace/
@@ -2483,7 +2486,7 @@ def main() -> None:
         # vuelva a correr (y no regenere una segunda vez).
         steps = [(k, n, f) for k, n, f in steps if k != "parser"]
 
-    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel", "impact")
+    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel", "impact", "sensor", "monitor")
 
     total = len(steps)
 

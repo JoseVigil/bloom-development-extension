@@ -5,20 +5,20 @@ setlocal EnableDelayedExpansion
 :: ============================================
 :: BLOOM - BUILD DE COMPONENTE PARAMETRIZADO
 :: Uso: build-component.bat <componente>
-:: Componentes validos: nucleus, sentinel, metamorph, sensor, impact
+:: Componentes validos: nucleus, sentinel, metamorph, sensor, impact, monitor
 :: ============================================
 
 :: Validar argumento
 if "%~1"=="" (
     echo Uso: build-component.bat ^<componente^>
-    echo    Componentes validos: nucleus, sentinel, metamorph, sensor, impact
+    echo    Componentes validos: nucleus, sentinel, metamorph, sensor, impact, monitor
     exit /b 1
 )
 set "COMPONENT=%~1"
 
 :: Validar que el componente es conocido
 set "VALID=0"
-for %%C in (nucleus sentinel metamorph sensor impact) do (
+for %%C in (nucleus sentinel metamorph sensor impact monitor) do (
     if /i "%%C"=="%COMPONENT%" set "VALID=1"
 )
 if "%VALID%"=="0" (
