@@ -183,6 +183,15 @@ var allComponents = []component{
 			}
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "setup") },
+		PostDeployFn: func(c *core.Core, repoRoot, dst string, dryRun bool) error {
+			// Same non-setuid chrome-sandbox issue as workspace (both are
+			// electron-builder Linux "dir" targets bundling their own Chromium).
+			if dryRun || runtime.GOOS != "linux" {
+				return nil
+			}
+			applySandboxSetuid("setup", filepath.Join(dst, "chrome-sandbox"))
+			return nil // never fails the rollout; applySandboxSetuid already warns
+		},
 	},
 	{
 		// sensor source must point to the component directory (not the binary
@@ -533,19 +542,72 @@ func applySandboxSetuid(componentLabel, sandbox string) {
 	if _, err := os.Stat(sandbox); err != nil {
 		return // nothing to do, e.g. this build didn't ship a sandbox helper
 	}
-	if err := os.Chown(sandbox, 0, 0); err != nil {
-		// Non-fatal, and never via sudo: Metamorph never elevates itself or
-		// prompts for a password (see ensureElevated) -- this one operation is
-		// a kernel-enforced root-only action with no non-root equivalent, so
-		// the best this can do is tell whoever is watching what to run.
-		fmt.Fprintf(os.Stderr,
-			"⚠️  %s: no se pudo dejar chrome-sandbox en root:4755 (%v). Sin esto, Chromium no arranca en este kernel ni con --no-sandbox (AppArmor bloquea userns_create). Corré una vez, a mano:\n   sudo chown root:root %s\n   sudo chmod 4755 %s\n",
-			componentLabel, err, sandbox, sandbox)
+
+	// Already root:4755 (e.g. a prior fix already ran) -- nothing to do.
+	if sandboxAlreadyFixed(sandbox) {
 		return
 	}
-	if err := os.Chmod(sandbox, 0o4755); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️  %s: chown chrome-sandbox ok pero chmod 4755 falló: %v\n", componentLabel, err)
+
+	// Fast path: Metamorph is running as root (unusual, but if it happens,
+	// just do it directly instead of shelling out).
+	if err := os.Chown(sandbox, 0, 0); err == nil {
+		if chmodErr := os.Chmod(sandbox, 0o4755); chmodErr != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  %s: chown chrome-sandbox ok pero chmod 4755 falló: %v\n", componentLabel, chmodErr)
+		}
+		return
 	}
+
+	// Normal path: Metamorph runs unprivileged and never elevates itself or
+	// silently shells out to bare `sudo` (see ensureElevated) -- chown-to-root
+	// is a kernel-enforced root-only action with no non-root equivalent, so
+	// this raises the same native graphical privilege dialog the rest of the
+	// installer uses (install/installer.js's runPrivileged(), backed by the
+	// sudo-prompt package): on Linux that's pkexec/polkit, which is what
+	// sudo-prompt itself invokes under the hood. No external script, no
+	// separate service -- the dialog is triggered in-process, here, same as
+	// runPrivileged does from Node.
+	if err := elevateAndFixSandbox(sandbox); err == nil {
+		return
+	} else {
+		fmt.Fprintf(os.Stderr,
+			"⚠️  %s: no se pudo dejar chrome-sandbox en root:4755 (%v). Sin esto, Chromium no arranca en este kernel ni con --no-sandbox (AppArmor bloquea userns_create).\n",
+			componentLabel, err)
+	}
+}
+
+// elevateAndFixSandbox pops the native polkit authentication dialog via
+// pkexec -- the same mechanism sudo-prompt uses on Linux -- and runs the
+// chown+chmod as root inside that one elevated call. No sudoers entry, no
+// cached session, and no separate helper binary or unit file: this asks
+// for authorization every time it's actually needed (i.e. whenever the
+// sandbox isn't already fixed -- sandboxAlreadyFixed short-circuits the
+// common case above), exactly like the Electron installer's own
+// runPrivileged()/sudo-prompt call does for its privileged steps.
+func elevateAndFixSandbox(sandbox string) error {
+	if _, err := exec.LookPath("pkexec"); err != nil {
+		return fmt.Errorf("pkexec not found: %w", err)
+	}
+	script := fmt.Sprintf("chown root:root %s && chmod 4755 %s", sandbox, sandbox)
+	cmd := exec.Command("pkexec", "sh", "-c", script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// sandboxAlreadyFixed reports whether sandbox is already owned by root
+// with the setuid bit set, so applySandboxSetuid can skip the pkexec
+// round-trip (and its dialog) on the common case (nothing changed since
+// the last fix).
+func sandboxAlreadyFixed(sandbox string) bool {
+	info, err := os.Stat(sandbox)
+	if err != nil {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false
+	}
+	return stat.Uid == 0 && stat.Gid == 0 && info.Mode().Perm() == 0o755 && info.Mode()&os.ModeSetuid != 0
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -35,7 +35,7 @@
   "build": {
     "appId": "com.bloom.conductor.installer",
     "productName": "bloom-setup",
-    "copyright": "Copyright © 2024 BTIP Studio",
+    "copyright": "Copyright \u00a9 2024 BTIP Studio",
     "linux": {
       "target": [
         {
@@ -102,6 +102,10 @@
         {
           "from": "../../native/bin/linux_x64/conductor",
           "to": "conductor"
+        },
+        {
+          "from": "shared_node_modules",
+          "to": "node_modules"
         }
       ]
     },
@@ -192,6 +196,10 @@
         {
           "from": "../../native/opencode/win64",
           "to": "opencode"
+        },
+        {
+          "from": "shared_node_modules",
+          "to": "node_modules"
         }
       ]
     },
@@ -263,6 +271,10 @@
         {
           "from": "../../native/bin/darwin_${arch}/conductor",
           "to": "conductor"
+        },
+        {
+          "from": "shared_node_modules",
+          "to": "node_modules"
         }
       ]
     },
@@ -304,7 +316,6 @@
       "version.json",
       "app.manifest",
       "package.json",
-      "!node_modules/**/*",
       "!**/*.map"
     ],
     "directories": {
