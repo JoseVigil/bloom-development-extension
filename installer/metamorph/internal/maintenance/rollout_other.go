@@ -189,8 +189,11 @@ func launchctlIsLoaded(name string) (bool, error) {
 }
 
 // sudoChown changes ownership of path to uid:gid using the system sudo command.
-// It is used on Linux for chrome-sandbox. Non-fatal: if sudo is unavailable or
-// fails, the caller should log a warning and continue.
+// Not currently called anywhere: kept only because it predates this pass and
+// removing it isn't this change's job. Metamorph never invokes sudo itself
+// (see ensureElevated) -- if you're reaching for this, that's a sign the
+// caller should instead do what applySandboxSetuid in rollout.go does: act
+// only within normal-user privileges and tell the human what to run by hand.
 func sudoChown(path string, uid, gid int) error {
 	cmd := exec.Command("sudo", "chown", fmt.Sprintf("%d:%d", uid, gid), path)
 	cmd.Stdout = os.Stdout

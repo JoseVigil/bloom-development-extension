@@ -1,14 +1,14 @@
 {
-  "name": "bloom-nucleus-installer",
-  "product_name": "Bloom Nucleus Installer",
+  "name": "bloom-workspace",
+  "product_name": "Bloom Workspace",
   "version": "1.0.0",
-  "build": 138,
-  "full_version": "1.0.0+build.138",
+  "build": 139,
+  "full_version": "1.0.0+build.139",
   "channel": "stable",
-  "built_at": "2026-06-10T20:18:40.888Z",
-  "git_commit": "b0d3f5d",
+  "built_at": "2026-09-21T20:17:07.307Z",
+  "git_commit": "85b5bac",
   "platform": "linux",
   "arch": "win64",
-  "node_version": "v18.19.1",
-  "electron_version": "^28.0.0"
+  "node_version": "v22.22.3",
+  "electron_version": "^28.3.3"
 }

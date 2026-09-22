@@ -14,7 +14,18 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 120_000,
+  // 240s (era 120s) — confirmado esta sesión: launchConductor() espera hasta
+  // 150s por firstWindow() (bootServices()/`nucleus dev-start` en
+  // main_conductor.js tiene su propio timeout interno de 120s — "Temporal
+  // cold start + Brain + Control Plane", comentario del archivo real). Con
+  // el timeout global en 120s, el test entero moría ANTES de que ese wait de
+  // 150s pudiera resolver o fallar por sí mismo — el fallo real observado
+  // fue "Test timeout of 120000ms exceeded", no un TimeoutError de
+  // firstWindow(), y Playwright mata el proceso a la fuerza en ese punto sin
+  // darle chance de reportar la causa real. 240s = 150s del wait de Conductor
+  // + margen para 00a/00b y los pasos posteriores (backend_identity_check,
+  // 01_launch, etc.).
+  timeout: 240_000,
   fullyParallel: false,
   workers: 1,
   retries: 0,

@@ -37,7 +37,27 @@ export async function launchConductor(): Promise<ConductorHandle> {
     // en sí es solo la ventana desktop.
   });
 
-  const mainWindow = await app.firstWindow();
+  // Diagnóstico (confirmado esta sesión leyendo installer/conductor/shared/logger.js
+  // línea 275): cada línea que loguea main_conductor.js —getLogger('onboarding')/
+  // getLogger('core')— también pasa por console.log, no solo al archivo de logs.
+  // Playwright NO reenvía por default el stdout/stderr del proceso Electron
+  // lanzado a la consola del test — sin este forward, los mensajes [BOOT]/
+  // [HANDOFF] reales (incluido cualquier fallo silencioso de `nucleus dev-start`
+  // dentro de bootServices()) quedan invisibles y un timeout de firstWindow()
+  // no dice nada sobre la causa real.
+  const proc = app.process();
+  proc.stdout?.on('data', (chunk: Buffer) => process.stdout.write(`[conductor] ${chunk}`));
+  proc.stderr?.on('data', (chunk: Buffer) => process.stderr.write(`[conductor:err] ${chunk}`));
+
+  // Timeout ampliado (confirmado esta sesión leyendo main_conductor.js): la
+  // ventana —onboarding o core— recién se crea DESPUÉS de que bootServices()
+  // resuelve, y bootServices() (spawnea `nucleus dev-start`) tiene su propio
+  // timeout interno de 120s ("Temporal cold start + Brain + Control Plane",
+  // comentario del archivo real). El default de Playwright para firstWindow()
+  // es 30s — más corto que ese boot en frío, y cortó antes de tiempo en la
+  // corrida real de esta sesión (TimeoutError a los 30000ms). Se amplía acá a
+  // 150s (120s de bootServices + margen) en vez de en cada call site.
+  const mainWindow = await app.firstWindow({ timeout: 150_000 });
   await mainWindow.waitForLoadState('domcontentloaded');
 
   return {

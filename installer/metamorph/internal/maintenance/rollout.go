@@ -153,6 +153,18 @@ var allComponents = []component{
 			}
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "workspace") },
+		PostDeployFn: func(c *core.Core, repoRoot, dst string, dryRun bool) error {
+			// electron-builder ships chrome-sandbox as a plain, non-setuid
+			// file every build, so this has to be reapplied after every
+			// rollout, not just once at install time. Linux only -- darwin's
+			// bloom-workspace.app doesn't ship this helper (macOS sandboxing
+			// doesn't use it), and Windows has no equivalent at all.
+			if dryRun || runtime.GOOS != "linux" {
+				return nil
+			}
+			applySandboxSetuid("workspace", filepath.Join(dst, "chrome-sandbox"))
+			return nil // never fails the rollout; applySandboxSetuid already warns
+		},
 	},
 	{
 		Key: "setup",
@@ -491,17 +503,49 @@ func chromePostExtract(dst string) error {
 			return nil
 		})
 		// chrome-sandbox requires setuid root.
-		sandbox := filepath.Join(dst, "chrome-sandbox")
-		if _, err := os.Stat(sandbox); err == nil {
-			if err := os.Chown(sandbox, 0, 0); err != nil {
-				// Non-fatal: log via stderr and document --no-sandbox.
-				fmt.Fprintf(os.Stderr, "⚠️  chrome: chown chrome-sandbox failed (run as root or use --no-sandbox): %v\n", err)
-			} else {
-				_ = os.Chmod(sandbox, 0o4755)
-			}
-		}
+		applySandboxSetuid("chrome", filepath.Join(dst, "chrome-sandbox"))
 	}
 	return nil
+}
+
+// applySandboxSetuid makes sandbox (a chrome-sandbox binary) root:root with
+// mode 4755, which is what Chromium's classic SUID sandbox needs to work.
+// This matters beyond "avoid running unsandboxed": on kernels where AppArmor
+// restricts unprivileged user-namespace creation (Ubuntu 22.04+ since the
+// 2024 security backport, and 24.04+ by default), Chromium falling back to
+// --no-sandbox still crashes -- it still attempts userns_create for part of
+// its own isolation, and AppArmor denies that for an unconfined binary. The
+// SUID sandbox is the one path that avoids userns entirely, so it is the
+// only thing that reliably works on those kernels, not just the safer one.
+//
+// componentLabel is only used in log messages (e.g. "chrome", "workspace").
+//
+// Three attempts, in order, all non-fatal -- a failure here must never abort
+// a rollout:
+//  1. os.Chown/os.Chmod directly, in case rollout itself is already running
+//     as root (e.g. a future privileged install path).
+//  2. sudo chown/chmod, which prompts on the terminal when rollout is run
+//     interactively (the normal case) -- one password prompt per rollout.
+//  3. If both fail (no TTY, sudo not configured, etc.), print the exact
+//     manual command so whoever is watching can run it by hand, the same
+//     two commands that already unblock this today.
+func applySandboxSetuid(componentLabel, sandbox string) {
+	if _, err := os.Stat(sandbox); err != nil {
+		return // nothing to do, e.g. this build didn't ship a sandbox helper
+	}
+	if err := os.Chown(sandbox, 0, 0); err != nil {
+		// Non-fatal, and never via sudo: Metamorph never elevates itself or
+		// prompts for a password (see ensureElevated) -- this one operation is
+		// a kernel-enforced root-only action with no non-root equivalent, so
+		// the best this can do is tell whoever is watching what to run.
+		fmt.Fprintf(os.Stderr,
+			"⚠️  %s: no se pudo dejar chrome-sandbox en root:4755 (%v). Sin esto, Chromium no arranca en este kernel ni con --no-sandbox (AppArmor bloquea userns_create). Corré una vez, a mano:\n   sudo chown root:root %s\n   sudo chmod 4755 %s\n",
+			componentLabel, err, sandbox, sandbox)
+		return
+	}
+	if err := os.Chmod(sandbox, 0o4755); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️  %s: chown chrome-sandbox ok pero chmod 4755 falló: %v\n", componentLabel, err)
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
