@@ -3,7 +3,7 @@
   "productName": "Bloom Workspace",
   "version": "1.0.0",
   "description": "Bloom Nucleus Workspace - Post-installation workspace",
-  "main": "diagnostic-entry.js",
+  "main": "main_conductor.js",
   "author": {
     "name": "BTIP Studio",
     "email": "support@btip.studio"
@@ -170,7 +170,6 @@
     },
     "files": [
       "main_conductor.js",
-      "diagnostic-entry.js",
       "onboarding/**/*",
       "core/**/*",
       "assets/**/*",
