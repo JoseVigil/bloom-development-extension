@@ -38,8 +38,22 @@ app.post('/v1/authority/human/renew', c => configuredAuthorityHumanResponse(c.en
 app.post('/v1/authority/human/logout', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/genesis/login', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.get('/v1/authority/genesis/login', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+// Diseño P (Propuesta_Diseno_Retorno_Genesis_y_Hallazgo_Invitaciones_v0_1.md §3.3,
+// autorizada por Jose 2026-09-22): poll de Conductor contra el resultado de génesis,
+// autenticado sólo por el secreto `browser` — misma familia de rutas que login/callback
+// de arriba, mismo dispatch por path dentro de configuredAuthorityHumanResponse.
+app.get('/v1/authority/genesis/result', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/administration', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/initial-emission', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+// Sovereign Tenant Fase 3 (Propuesta_Arquitectura_Tenant_Soberano_v0_1.md §2.3.2-§2.3.4):
+// ambos verbos ya existen y están probados dentro de administration-route.ts
+// (authorityHumanResponse ya los despacha, ver createOrganizationUnderTenant/
+// listTenantOrganizations en tenant-store.ts) pero, hallazgo de esta sesión, nunca
+// habían quedado montados acá — sin esto, Hono nunca llega a invocar ese dispatch y la
+// ruta 404 siempre, pese a que sus propios tests (que llaman authorityHumanResponse
+// directo) pasan igual. Fix aditivo, mismo patrón que el resto de este bloque.
+app.get('/v1/authority/tenant/organizations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/tenant/organizations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/actor/approve', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 
 app.get("/", (context) => context.json({ service: "bloom-backend", status: "ok" }));

@@ -1,6 +1,6 @@
 import { githubAppProvider, testFixtureProvider, HumanIdentityError } from './human-identity';
 import { beginHumanLogin, finishHumanLogin, resolveHumanSession, checkSessionCsrf, renewHumanSession, revokeHumanSession, initialHumanIdentity, sessionCommitGuard, type HumanServices } from './human-session-store';
-import { beginGenesis, finishGenesis } from './genesis-store';
+import { beginGenesis, finishGenesis, pollGenesisResult } from './genesis-store';
 import { administerAuthority } from './administration-store';
 import { AdministrationError, type AdministrationCommand } from './administration';
 import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, type EmissionSigner } from './emission-store';
@@ -65,6 +65,19 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    // mano. Mismo flujo, misma fila en authority_genesis_flows, sin tocar beginGenesis.
    const flow=await beginGenesis(db,s);headers.append('Set-Cookie',setCookie(flowCookie,flow.browser,300));
    headers.set('Location',flow.url);return new Response(null,{status:302,headers});
+  }
+  if(path==='/v1/authority/genesis/result'&&request.method==='GET'){
+   // Diseño P (Propuesta_Diseno_Retorno_Genesis_y_Hallazgo_Invitaciones_v0_1.md §3.3,
+   // autorizada por Jose 2026-09-22): el secreto `browser` (mismo que ya devuelve
+   // beginGenesis, tanto vía el POST como vía el GET navegable de abajo) ES la prueba de
+   // posesión — no hace falta sesión ni CSRF, mismo criterio que finishGenesis ya aplica.
+   // 202 "pending" cubre por igual "todavía no terminó", "no existe" y "expiró" — nunca
+   // se distingue cuál, mismo criterio anti-enumeración que el resto de
+   // authority_genesis_flows. 200 entrega el GenesisResult completo, una única vez.
+   const browser=url.searchParams.get('browser')??'';
+   const result=await pollGenesisResult(db,browser,s.now);
+   if(!result)return reply({status:'pending'},202);
+   return reply(result,200);
   }
   if(path==='/v1/authority/tenant/organizations'&&request.method==='GET'){
    // Sovereign Tenant Fase 3 (§2.3.4 de la propuesta): lista las organizaciones
