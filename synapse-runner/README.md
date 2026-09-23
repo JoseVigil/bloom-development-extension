@@ -1,3 +1,160 @@
+> ## ⚠️ HANDOFF para Codex — verificación pendiente de Backend Authority (roles builtin + migraciones 0016/0019)
+>
+> **Esta sección no tiene relación con Synapse Runner ni con el resto de este documento.** José la agregó acá a propósito, como punto de entrega, porque la sesión de Claude Code (Cowork) que hizo todo el trabajo descripto abajo se quedó sin acceso de terminal al dispositivo real (el puente `device_bash` dejó de estar disponible en esa sesión) y sin tokens para seguir. El código ya está escrito y guardado en el repo — **sin commit, sin push**. Lo único que falta es correr la verificación real contra la máquina y, si el resultado coincide con lo esperado, comitear y pushear. Borrar esta sección del README una vez que eso esté hecho.
+>
+> Todo lo que sigue en este bloque (§A a §H) es autocontenido — no hace falta abrir ningún otro documento para ejecutar la verificación, aunque en §H se listan las fuentes completas por si hace falta más contexto o algo no cuadra.
+
+---
+
+## §A. Contexto completo — qué pasó y por qué
+
+Todo esto arrancó al verificar la implementación de **Invitaciones a Organización Ajena, Fase A+B** (esquema + creación/listado/revocación de invitaciones, para que alguien pueda invitar a una identidad de GitHub a unirse a una organización que no es la suya). Al correr la suite de tests contra una base D1 real aparecieron, en cadena, tres problemas distintos — cada uno se investigó y se corrigió antes de pasar al siguiente:
+
+**1. Migración `0016_authority_project_claims.sql` no aplicaba.** Tenía un `REFERENCES installation_keys(installation_id)` sobre una columna que sólo tiene un índice único **parcial** en la tabla referenciada (no una UNIQUE/PK completa) — SQLite rechaza eso como `foreign key mismatch`, pero **sólo** cuando la FK se enforced de verdad bajo `PRAGMA foreign_keys = ON`, que es justo lo que hace `wrangler d1 migrations apply` (los arneses de `vitest` nunca cargan ese pragma, por eso el bug nunca apareció en `npm test`, sólo en `db:migrate:local`). Como Wrangler aplica las migraciones en orden y corta en el primer error, esto dejaba **`0017` y `0018` sin aplicar nunca** contra una base limpia.
+   - **Corrección:** se sacó la `REFERENCES` de esa columna en `0016`. No se pierde ninguna validación real — el código (`project-claim.ts`) y el propio guard fail-closed de esa migración ya exigen lo mismo por otra vía.
+   - Hallazgo relacionado, señalado pero **no corregido** (fuera de alcance): `0008_authority_sync.sql` tiene el mismo patrón exacto y el mismo defecto latente, hoy inerte porque nada inserta ahí con `foreign_keys` activado.
+
+**2. Cinco errores de `npm run typecheck`**, en dos archivos que no tienen nada que ver con invitaciones:
+   - `src/authority/recovery.ts` (4 errores, `TS18048` — posible `undefined`): dos guard clauses usaban `deny(...)` como statement suelto en vez de `return deny(...)` — el compilador sólo narrowea la variable si la llamada está en posición de `return`/`throw`. Se corrigió con el mismo idiom ya usado en `administration.ts`.
+   - `test/identity.spec.ts` (1 error, `TS2345`): `crypto.subtle.exportKey(...)` devuelve `ArrayBuffer | JsonWebKey` bajo los tipos de Workers, y se pasaba directo donde se esperaba `ArrayBuffer`. Se agregó `as ArrayBuffer`, mismo cast que ya usa `tenant-organizations.spec.ts` para el mismo caso.
+
+**3. El hallazgo grande: ninguna organización podía otorgar `specialist` ni `operator`.** `authority-invitations.spec.ts` fallaba con `authority_invitation_role_unavailable` al intentar crear una invitación con rol `specialist`. La causa, confirmada leyendo el código:
+   - El motor de autorización (`propose_assignment` en `administration.ts`, y `createInvitation` en `invitation-store.ts`) busca el rol a otorgar en `state.role_definitions` — el **estado firmado de la organización** — nunca en la tabla global `role_definitions` de la base (que sí lista `master`/`specialist`/`operator` como catálogo builtin visible globalmente).
+   - La génesis (`initial-emission.ts`) sembraba en ese estado **sólo `master`**. `define_role` sólo acepta roles propios de la organización (`role_origin: "organization"`), así que no había ningún camino de producción para que `specialist` u `operator` llegaran al estado de una organización.
+   - **Consecuencia real:** ninguna organización podía otorgar `specialist` ni `operator` a nadie — ni por invitación, ni por el mecanismo normal de `propose_assignment`/`accept` ya probado en producción. Tampoco era alcanzable el permiso de Nacimiento de Agente Orbital (`agent.issuer.designate`, vía `operator`).
+   - **Por qué nadie lo había visto antes:** los tests que "probaban" el otorgamiento de `specialist` armaban el estado inicial a mano con evidencia de fixture de test, que acepta cualquier estado y ya traía `specialist` sembrado. El spec de invitaciones fue el primero en pasar por una génesis real y después intentar otorgar `specialist`.
+   - Nota importante: la tabla global de la base **no puede** ser la fuente del motor de todas formas, porque Nucleus (el cliente Go) verifica sin conexión, sólo con lo que viene en el estado firmado — tanto `normalizeState` (TypeScript) como `validateProjection` (Go) exigen que toda asignación apunte a una definición presente en el mismo estado.
+
+Este tercer hallazgo disparó un encargo de diseño formal (ver §H) que evaluó tres alternativas y una cuarta, y José aprobó la Alternativa 4 — descripta en §B.
+
+## §B. Qué se decidió — reconciliación determinista del catálogo builtin
+
+**Alternativa aprobada:** una única función pura, `withBuiltinCatalog(state)`, que agrega al estado de una organización los roles builtin (`master`, `specialist`, `operator`) que falten, tomados de una constante en el código (`BUILTIN_ROLE_CATALOG` en `emission.ts`) — nunca de la tabla de la base ni de un input del caller. Se aplica en cada punto donde el Backend **produce** estado nuevo (génesis, y cada comando administrativo), nunca al leerlo o validarlo, para no invalidar emisiones históricas.
+
+Reglas de diseño, por si hace falta juzgar un caso borde no cubierto:
+- **R1:** todo estado que el Backend produce contiene el catálogo builtin completo.
+- **R2:** el catálogo es código, nunca la tabla de la base — la fila de `master` en la base queda sólo como interruptor de activación de la génesis (`activeMaster`).
+- **R3:** la reconciliación corre sólo al producir estado, nunca al leer/validar uno ya firmado.
+- **R4:** ninguna guarda de otorgamiento cambia (`grantable`, `selfGrant`, `scopeVerified`) — que un rol esté *disponible* en el estado no significa que se pueda *otorgar*.
+- **R5:** la génesis sigue siendo determinista, con un único fundador asignado como `master`. Sólo cambia la validación estructural de "exactamente una definición de rol" a "exactamente el catálogo builtin completo".
+
+**Efecto práctico:** una organización nueva nace con `master`, `specialist` y `operator` ya definidos en su estado. Las organizaciones que ya existen reciben las definiciones que les faltan en su próxima emisión administrativa (el delta trae sólo dos *upsert*: `operator` y `specialist`) — **sin migración**.
+
+## §C. Paso 0 — divergencia grave entre el catálogo TypeScript y el catálogo Go
+
+Durante el diseño de lo anterior apareció, y se verificó ejecutando, un hallazgo lateral serio: el rol `master` de **Go** (`installer/nucleus/internal/authority/roles.go`) tenía **13 permisos** (incluye `create_project`, agregado en un encargo anterior de mapeo Gravity), mientras que el `master` de **TypeScript** (`emission.ts`) tenía **12**. Con eso, **Go rechazaba toda emisión real del Backend** con `built-in permissions contradict catalog` — es decir, Nucleus no podía validar ninguna emisión real, de ninguna organización.
+
+- Se evaluó sacar `create_project` de Go. Se descartó tras correr los tests: ese permiso es el requisito del cutover a `remote_enforced` ("principal canónico único con `create_project`") — sin él, `nucleus authority sync` corta con `remote_identity_ambiguous` antes de entregar el mandate. **Ese cambio no se aplicó.**
+- **Decisión final de José:** agregar `create_project` al `master` v1 de TypeScript, para que coincida exactamente con Go.
+  - `emission.ts`: el `master` pasa a 13 permisos.
+  - Migración nueva **`backend/migrations/0019_authority_master_create_project.sql`**: actualiza la fila global de `master` en la base (sembrada originalmente por `0013` con 12 permisos).
+  - `installer/nucleus/internal/authority/roles_test.go`: test nuevo `TestBuiltinCatalogMatchesBackend`, que falla si los dos catálogos (TS y Go) vuelven a divergir en el futuro. **`roles.go` no se tocó.**
+
+**Consecuencia que hay que tener en cuenta al verificar (ver §D):** una emisión guardada en la D1 local **antes** de este cambio (con el `master` viejo de 12 permisos) ya no decodifica contra el código nuevo y cae en `recovery_required`. Ningún ambiente tiene emisiones reales que valga la pena conservar — por eso el primer paso de la verificación es resetear la D1 local, no sólo migrarla.
+
+## §D. Archivos tocados — referencia completa
+
+| Archivo | Qué cambió |
+|---|---|
+| `backend/migrations/0016_authority_project_claims.sql` | Se quitó la `REFERENCES installation_keys(installation_id)` de la FK rota. |
+| `backend/src/authority/recovery.ts` | `return deny(...)` en dos guard clauses (antes: `deny(...)` como statement suelto). |
+| `backend/test/identity.spec.ts` | `as ArrayBuffer` en el resultado de `crypto.subtle.exportKey(...)`. |
+| `backend/src/authority/emission.ts` | `BUILTIN_ROLE_CATALOG` (fuente única del contenido builtin, `master` ahora con 13 permisos) + función `withBuiltinCatalog(state)`. `normalizeState` usa el mismo catálogo. |
+| `backend/src/authority/administration.ts` | Al entrar a `evaluateAdministration`, el estado se reconcilia con el catálogo builtin antes de evaluar cualquier comando. |
+| `backend/src/authority/invitation-store.ts` | `createInvitation` valida el rol pedido contra el estado ya reconciliado (vista de sólo lectura, no persiste nada nuevo). |
+| `backend/src/authority/initial-emission.ts` | El estado v1 de una organización nueva se arma con el catálogo builtin completo, no sólo `master`. `activeMaster` usa la fila de la base sólo como interruptor de activación. |
+| `backend/src/authority/emission-store.ts` | La guarda canónica de v1 exige `role_definitions` = catálogo builtin exacto + exactamente una asignación `master`. |
+| `backend/migrations/0019_authority_master_create_project.sql` (nuevo) | Actualiza la fila global de `master` en la base para incluir `create_project` (paridad con Go). |
+| `installer/nucleus/internal/authority/roles_test.go` | Test nuevo `TestBuiltinCatalogMatchesBackend` — falla si TS y Go vuelven a divergir. |
+| `backend/test/authority-administration.spec.ts` | +6 casos de reconciliación del catálogo builtin. |
+| `backend/test/authority-administration-store.spec.ts` | +1 caso: organización existente con sólo `master` → delta con dos *upsert* (`operator`, `specialist`). |
+| `backend/test/initial-emission.spec.ts` | +6 casos de rechazo de la nueva guarda canónica de v1. |
+| `backend/test/authority-invitations.spec.ts` | **Test nuevo (a2):** génesis real → membership → otorgar `specialist` → accept, todo por HTTP — el test que faltaba para probar el flujo completo de punta a punta. **Tests (b) y (c) corregidos:** sembraban roles con un `INSERT` directo en una tabla que nunca llega al estado firmado — ahora usan el comando real `define_role`, vía un helper nuevo `defineOrgRole`. Lo que cada test afirma no cambió, sólo cómo arma el fixture. |
+| Fixtures de `master` en 7 specs | Actualizados a 13 permisos. En particular, `authority-snapshot-route.spec.ts` tenía un fixture con sólo **11** permisos — un catálogo todavía más viejo — que era la causa real de una falla que se había registrado como "aislada y sin relación" (`authority_invalid_emission` en el test *"delivers an administrative membership/grant/revocation journey to Go"*). Queda resuelta. |
+| `authority-genesis.spec.ts`, `tenant-genesis.spec.ts`, `authority-genesis-result.spec.ts` | Ahora cargan la migración `0019` en su propio `loadMigrations`. |
+
+## §E. Paso 0 real de la verificación — resetear la D1 local
+
+**No saltear este paso.** Por lo explicado en §C, cualquier emisión que ya exista en la D1 local de `backend/` con el `master` viejo (12 permisos) va a fallar al decodificar contra el código nuevo.
+
+```bash
+cd backend
+rm -rf .wrangler/state/v3/d1
+```
+
+Esa es la ruta estándar donde Wrangler guarda el estado de D1 local para desarrollo. Si en esta máquina el estado vive en otro lado (confirmarlo con `find . -iname "*.sqlite*" -path "*wrangler*" 2>/dev/null` desde `backend/`, o revisando `wrangler.jsonc`), borrar ese directorio en su lugar. Alternativa más quirúrgica, si no se quiere borrar todo: `DELETE FROM authority_emissions; DELETE FROM authority_emission_heads;` (o como se llamen las tablas de cabecera de emisión) contra la D1 local — pero borrar el directorio completo es más simple y es lo verificado.
+
+## §F. Comandos a correr, en este orden exacto
+
+```bash
+# (ya reseteada la D1 local en el paso anterior)
+cd backend
+npm run db:migrate:local
+npm run typecheck
+npm test
+
+cd ../installer/nucleus
+go test ./internal/authority/... ./internal/governance/...
+```
+
+Si hace falta re-verificar sólo invitaciones en aislamiento en algún momento:
+```bash
+cd backend
+npx vitest run test/authority-invitations.spec.ts
+```
+
+## §G. Resultado esperado, y qué hacer con lo que salga
+
+Esto es lo que se obtuvo corriendo todo en una copia aislada del repo (Miniflare/D1 reales + Go 1.24), porque el puente al dispositivo real no estuvo disponible en la sesión que hizo el trabajo. **Hace falta confirmarlo en la máquina real** — es exactamente la tarea que le queda a Codex.
+
+| Comando | Resultado esperado |
+|---|---|
+| `npm run db:migrate:local` | `0019` aplica sin error, junto con todo lo anterior |
+| `npm run typecheck` | los mismos ~111 errores de siempre (sólo tipos `node:*`/`ImportMeta`, preexistentes), ninguno nuevo |
+| `npm test` | **293 tests pasan / 11 fallan** (la línea de base antes de todo este trabajo era 27 fallas) |
+| `go test ./internal/authority/... ./internal/governance/...` | **todo en verde**, incluido el `TestBuiltinCatalogMatchesBackend` nuevo |
+
+**Las 11 fallas esperadas son preexistentes y conocidas — ninguna la introduce este trabajo, y no hay que intentar arreglarlas ahora:**
+- **10** en `authority-genesis.spec.ts` y `tenant-genesis.spec.ts`: un gap de arnés de test ya identificado y ya verificado como solución (agregar la migración `0017_authority_genesis_result.sql` al `loadMigrations` de esos dos specs) pero **deliberadamente no aplicado todavía** — quedó fuera de alcance de este trabajo, es una decisión pendiente de José, no un bug.
+- **1** en `authority-trust.spec.ts` → `TestTrustManifestBackendInterop` ("*exchanges freshly signed trust and actor artifacts with Go*", `missing or unknown wire property`) — ya fallaba antes de todo esto, sin diagnóstico todavía, no relacionada.
+
+**Si el resultado coincide exactamente con la tabla de arriba:**
+
+1. Confirmar con `git status` que los archivos modificados/nuevos coinciden con la lista de §D (más los archivos de este README).
+2. Comitear **el código de backend/nucleus** (no este README, ver nota al final) con este mensaje, ya redactado y listo, sin comillas dobles:
+
+```
+Fix authority role assignment and complete organization invitations phase A and B. Adds the invitation schema and endpoints (create, list, revoke) with their Batcave proxy routes, backed by a new invitation-store module and full test coverage including a CSRF-checked end-to-end HTTP flow. Fixes a foreign key mismatch in migration 0016 that blocked local D1 migrations from applying past that point, which had silently left migrations 0017 and 0018 never applied against a clean database, plus five related TypeScript errors in recovery.ts and identity.spec.ts. Resolves a deeper structural gap this surfaced: initial emissions only ever seeded the master role, so no organization could ever grant specialist or operator to anyone, through invitations or through the normal propose and accept flow. Introduces a deterministic builtin role catalog reconciliation applied at every point the backend produces state, in genesis and in administration commands, so new and existing organizations end up with the full builtin catalog without a migration and without touching any authorization guard. Also fixes a latent parity break between the TypeScript and Go builtin master role definitions, thirteen permissions in Go against twelve in TypeScript, that made Nucleus reject every real emission, by aligning TypeScript to include create_project and adding a Go test that will catch the two catalogs drifting apart again. Includes migration 0019, updated fixtures across the test suite, a real genesis-to-specialist-grant invitation test, and corrections to two invitation tests that had been seeding roles directly into a table the signed state never reads.
+```
+
+3. Push a la rama de trabajo actual (**nunca a `main`/`master` sin confirmar con José primero**, y nunca con `--force`).
+
+**Si el resultado NO coincide** (otro número de tests, fallas nuevas, algo que no está en la lista de "esperadas"): **no improvisar una corrección.** Documentar exactamente qué comando y qué salida difiere de lo esperado, y leer los documentos de §H antes de tocar nada — casi seguro la respuesta ya está ahí. Si after eso sigue sin quedar claro, es momento de frenar y preguntarle a José, no de adivinar sobre código de autorización.
+
+**Nota sobre el commit de este README:** este archivo se modifica y se comitea aparte, con su propio mensaje — no lo mezcles con el commit del código de backend/nucleus de arriba.
+
+## §H. Qué queda abierto (no resolver acá, sólo tenerlo presente)
+
+- **Fase C de invitaciones (redención vía OAuth)** ya no está bloqueada por el vacío de roles builtin, pero sigue bloqueada por el `invitationCommitGuard` (ver `Cierre_Implementacion_FaseAB_Invitaciones_y_Correccion_ActorSintetico_v1_0.md` §2) y requiere autorización explícita de José antes de escribir código.
+- El fix del gap de arnés de `0017` en los dos specs de génesis (§G) es trivial y ya está verificado, pero sigue pendiente de decisión — no aplicarlo sin que José lo pida.
+- `TestTrustManifestBackendInterop` sigue sin diagnosticar.
+- Detalle menor: Go reserva como id de rol de organización sólo `master`/`specialist` (no `operator`) — señalado, no corregido.
+
+**Documentos fuente completos**, en `docs/ANALYSIS/` de este repo y en el proyecto BTIPS de Claude, por si hace falta más profundidad que lo que ya está inline en esta sección (rutas relativas a la raíz del repo):
+
+- `docs/ANALYSIS/CONDUCTOR/ONBOARDING/Traspaso_RUNNER_Invitaciones_FaseAB_Ejecucion_v1_0.md` — el traspaso original de Fase A+B.
+- `docs/ANALYSIS/CONDUCTOR/ONBOARDING/Cierre_Implementacion_FaseAB_Invitaciones_y_Correccion_ActorSintetico_v1_0.md` — implementación de Fase A+B y el hallazgo de `invitationCommitGuard` (Fase C).
+- `docs/ANALYSIS/CONDUCTOR/ONBOARDING/Recepcion_RUNNER_TraspasoInvitacionesFaseAB_v0_1.md` y `Cierre_Verificacion_RUNNER_InvitacionesFaseAB_v1_0.md` — primera corrida de verificación y sus resultados.
+- `docs/ANALYSIS/CONDUCTOR/ONBOARDING/Encargo_BACKEND_Correccion_Migracion0016_y_Typecheck_v1_0.md` y `Cierre_Correccion_Migracion0016_y_Typecheck_v1_0.md` — el bug de la migración 0016 y su corrección.
+- `docs/ANALYSIS/CONDUCTOR/ONBOARDING/Investigacion_BACKEND_Analisis_ResultadosSuite_PostCorreccion0016_v1_0.md` — el hallazgo original del gap de roles builtin (§4).
+- `docs/ANALYSIS/BACKEND/ROLES/Encargo_Diseno_Resolucion_AsignacionRolesBuiltin_v1_0.md` — el encargo de diseño formal.
+- `docs/ANALYSIS/BACKEND/ROLES/Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md` — las tres alternativas evaluadas y la decisión (Alternativa 4).
+- `docs/ANALYSIS/BACKEND/ROLES/Cierre_Implementacion_ReconciliacionCatalogoBuiltin_Pasos1a5_v1_0.md` — el cierre técnico completo de la implementación.
+- `docs/ANALYSIS/CONDUCTOR/ONBOARDING/Devolucion_RUNNER_ResolucionRolesBuiltin_y_ParidadCatalogo_v1_0.md` — la devolución completa que resume todo lo de arriba (fuente directa de esta sección del README).
+- `docs/ANALYSIS/BACKEND/ROLES/Investigacion_Estructura_Tenant_Organizacion_Roles_v0_1.md` y `Propuesta_Resolucion_Inconsistencias_Investigacion_TenantOrganizacionRoles_v0_1.md` — la investigación estructural previa de Tenant/Organización/Roles que sirvió de base.
+
+---
+
 # synapse-runner
 
 Suite de testing E2E UI-driven para el onboarding de Bloom, y sistema de
