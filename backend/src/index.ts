@@ -54,6 +54,14 @@ app.post('/v1/authority/initial-emission', c => configuredAuthorityHumanResponse
 // directo) pasan igual. Fix aditivo, mismo patrón que el resto de este bloque.
 app.get('/v1/authority/tenant/organizations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/tenant/organizations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+// Invitaciones a organización ajena, Fase B (Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
+// §2/§4, aprobada por Jose 2026-09-22). Mismo despacho por path dentro de
+// configuredAuthorityHumanResponse que el resto de este bloque — montado explícitamente
+// acá para no repetir el bug encontrado con tenant/organizations (Fase 3 Sovereign
+// Tenant: dispatch ya implementado y probado, pero nunca montado en este router).
+app.get('/v1/authority/tenant/invitations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/tenant/invitations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/tenant/invitations/revoke', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/actor/approve', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 
 app.get("/", (context) => context.json({ service: "bloom-backend", status: "ok" }));

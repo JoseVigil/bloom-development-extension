@@ -87,7 +87,7 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
 
 async function generateInstallationKeypair() {
   const keypair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as CryptoKeyPair;
-  const publicKeyRaw = await crypto.subtle.exportKey("raw", keypair.publicKey);
+  const publicKeyRaw = await crypto.subtle.exportKey("raw", keypair.publicKey) as ArrayBuffer;
   return { privateKey: keypair.privateKey, publicKeyRawBase64: toBase64(publicKeyRaw) };
 }
 

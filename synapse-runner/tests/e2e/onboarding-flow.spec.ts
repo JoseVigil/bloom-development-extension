@@ -21,7 +21,7 @@ import {
 } from '../../src/surfaces/companion-panel';
 import { runSubmitTestimony } from '../../src/surfaces/submit-cli';
 import { SELECTORS, assertSelectorConfigured } from '../../src/config/selectors';
-import { getExtensionIdFromNucleusJson } from '../../src/config/bloom-paths';
+import { getExtensionIdFromNucleusJson, resetOnboardingState } from '../../src/config/bloom-paths';
 
 /**
  * Suite E2E de onboarding UI-driven — implementa la Matriz de Flujo
@@ -126,10 +126,37 @@ test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0
     // nucleus_create.requires ahora incluye 'backend_identity_validated'
     // (Encargo_Modificacion_Runner_Incorporacion_Step_BackendIdentityCheck_v1_0.md
     // §2) — "Launch Discovery" no es alcanzable todavía en este punto.
+    // FIX (2026-09-22 — diagnóstico "el wizard saltea backend_identity_check
+    // y arranca directo en Workspace"): sin este reset, nucleus.json arrastra
+    // el completed_steps de la corrida ANTERIOR de este mismo test, y
+    // resolution-engine.js resuelve el entry point a 'nucleus_create' en vez
+    // de 'backend_identity_check' — el wizard resume correctamente, pero el
+    // test deja de probar el step que le interesa. Ver
+    // resetOnboardingState() en bloom-paths.ts para el detalle completo.
+    resetOnboardingState();
+
     conductor = await launchConductor();
     await installMilestoneBuffer(conductor.mainWindow);
 
     await synapseRunner.runStep('backend_identity_check', undefined, async () => {
+      // FIX (2026-09-22 — diagnóstico "botón nunca se habilita"): en un
+      // onboarding fresco (nada producido todavía), resumeFromEntryPoint()
+      // (renderer/core/navigation.js) NO navega directo al primer step del
+      // SSOT — a propósito muestra screen-entry (el botón "Start"), y solo
+      // navega al step real recién cuando el usuario clickea Start
+      // (startOnboarding() → navigation.navigateTo(firstStepId)). Sin este
+      // click, la app queda parada en screen-entry: el onEnter de
+      // backend_identity_check (triggerBackendIdentityCheck, que dispara
+      // window.onboarding.validateBackendIdentity() y arranca el poll de
+      // respaldo) nunca corre, y el registro de
+      // conductor_onboarding_*.log lo confirma — se ve
+      // "navigation → screen-entry" y nunca
+      // "navigation → screen-backend-identity-check". Confirmado contra
+      // onboarding.html: el botón real es
+      // <button class="btn-primary" onclick="startOnboarding()">Start</button>
+      // dentro de <div class="screen active" id="screen-entry">.
+      await conductor.mainWindow.click('#screen-entry .btn-primary');
+
       // Sin contrato de backend real todavía (§4/§9 del encargo) — el único
       // mecanismo hoy para completar este step es la inyección directa del
       // Synapse Simulator, confirmada ya implementada del lado de Conductor.

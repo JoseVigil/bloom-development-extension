@@ -42,7 +42,22 @@ const AUTHORITY_PATHS = {
   // Sovereign Tenant Fase 5 (Nucleus) — Paso 3 / "Paso 0, bloqueante" (relayed by Jose,
   // 2026-09-16). Autenticación S2S pura (firma de instalación), mismo grupo que snapshot/
   // trust-manifest/evidence — no lleva HUMAN_PROOF_HEADERS (no depende de sesión humana).
-  tenantSelf: '/v1/authority/tenant/self'
+  tenantSelf: '/v1/authority/tenant/self',
+  // Diseño P (Propuesta_Diseno_Retorno_Genesis_y_Hallazgo_Invitaciones_v0_1.md §3.4,
+  // autorizada por Jose 2026-09-22): poll de Conductor durante génesis, antes de que
+  // exista instalación registrada. No lleva S2S_HEADERS (no hay firma todavía) ni
+  // HUMAN_PROOF_HEADERS (no depende de cookie de sesión) — el único crédito es el query
+  // param `browser`, que el reenvío genérico de `targetUrl.search` ya cubre sin ningún
+  // caso especial.
+  genesisResult: '/v1/authority/genesis/result',
+  // Invitaciones a organización ajena, Fase B/D (Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
+  // §4, aprobada por Jose 2026-09-22): mismo criterio que tenantOrganizations arriba —
+  // dependen de sesión humana + CSRF, nunca de firma de instalación. `tenantInvitationsRevoke`
+  // es una ruta de path fijo a propósito (sin segmento dinámico `:id` — ver el comentario
+  // en administration-route.ts), así que este proxy no necesita ningún soporte nuevo de
+  // segmento de path para espejarla.
+  tenantInvitations: '/v1/authority/tenant/invitations',
+  tenantInvitationsRevoke: '/v1/authority/tenant/invitations/revoke'
 } as const;
 
 function headersPresence(headers: Headers): Record<string, boolean> {
@@ -83,7 +98,8 @@ function proxyHandler(method: 'GET' | 'POST', backendPath: string, config: Batca
     // activa) como el POST (crea hermana, requiere sesión + CSRF) del Backend dependen de
     // la cookie de sesión humana; reenviarla también en el GET no relaja nada (el Backend
     // igual exige sesión válida) y evita una rama de proxy distinta por verbo.
-    if (backendPath === AUTHORITY_PATHS.actorApprove || backendPath === AUTHORITY_PATHS.tenantOrganizations) {
+    if (backendPath === AUTHORITY_PATHS.actorApprove || backendPath === AUTHORITY_PATHS.tenantOrganizations
+      || backendPath === AUTHORITY_PATHS.tenantInvitations || backendPath === AUTHORITY_PATHS.tenantInvitationsRevoke) {
       for (const name of HUMAN_PROOF_HEADERS) {
         const value = c.req.header(name);
         if (value !== undefined) forwardHeaders.set(name, value);
@@ -170,6 +186,10 @@ export function createAuthorityProxyRoutes(config: BatcaveConfig, loggers: Batca
   app.get(AUTHORITY_PATHS.tenantOrganizations, proxyHandler('GET', AUTHORITY_PATHS.tenantOrganizations, config, loggers));
   app.post(AUTHORITY_PATHS.tenantOrganizations, proxyHandler('POST', AUTHORITY_PATHS.tenantOrganizations, config, loggers));
   app.get(AUTHORITY_PATHS.tenantSelf, proxyHandler('GET', AUTHORITY_PATHS.tenantSelf, config, loggers));
+  app.get(AUTHORITY_PATHS.genesisResult, proxyHandler('GET', AUTHORITY_PATHS.genesisResult, config, loggers));
+  app.get(AUTHORITY_PATHS.tenantInvitations, proxyHandler('GET', AUTHORITY_PATHS.tenantInvitations, config, loggers));
+  app.post(AUTHORITY_PATHS.tenantInvitations, proxyHandler('POST', AUTHORITY_PATHS.tenantInvitations, config, loggers));
+  app.post(AUTHORITY_PATHS.tenantInvitationsRevoke, proxyHandler('POST', AUTHORITY_PATHS.tenantInvitationsRevoke, config, loggers));
 
   return app;
 }

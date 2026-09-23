@@ -1,5 +1,5 @@
 import { canonicalizeJson, digestWire } from "./canonical";
-import { emitSnapshot, normalizeMetadata, normalizeState, normalizeWireTime, wireVersion } from "./emission";
+import { emitSnapshot, normalizeMetadata, normalizeState, normalizeWireTime, withBuiltinCatalog, wireVersion } from "./emission";
 import type { WireEmissionMetadata, WireEnvelope, WireFullContent } from "./schema";
 import type { InitialHumanIdentity } from "./administration";
 
@@ -124,7 +124,11 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
         throw new EmissionStoreError("initial_evidence_required");
     } else if (initialEvidence?.kind === "canonical") {
       const identity = initialEvidence.identity;
-      const membership = state.memberships[0], assignment = state.role_assignments[0], role = state.role_definitions[0];
+      const membership = state.memberships[0], assignment = state.role_assignments[0];
+      const role = state.role_definitions.find(r => r.role_id === "master" && r.role_origin === "builtin");
+      // R5: role_definitions de v1 = exactamente el catálogo builtin compilado, nada más ni nada menos.
+      const catalogOnly = normalizeState(withBuiltinCatalog({ principals: state.principals, memberships: [],
+        role_definitions: [], role_assignments: [], revocations: [] }), metadata.organization_id).role_definitions;
       const canonicalPrincipal = structuredClone(identity.principal);
       for (const external of canonicalPrincipal.external_identities) external.verified_at = normalizeWireTime(external.verified_at);
       canonicalPrincipal.external_identities.sort((a,b)=>a.provider.localeCompare(b.provider)||a.subject.localeCompare(b.subject));
@@ -133,7 +137,8 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
         || state.memberships.length !== 1 || membership?.principal_id !== identity.principal.principal_id
         || membership.organization_id !== metadata.organization_id || membership.status !== "active"
         || membership.valid_until !== null || membership.valid_from !== membership.accepted_at
-        || state.role_definitions.length !== 1 || role?.role_id !== "master" || role.role_origin !== "builtin" || role.status !== "active"
+        || canonicalizeJson(state.role_definitions) !== canonicalizeJson(catalogOnly)
+        || !role || role.status !== "active"
         || state.role_assignments.length !== 1 || assignment?.membership_id !== membership.membership_id
         || assignment.role_id !== role.role_id || assignment.role_version !== role.role_version
         || assignment.scope.type !== "organization" || assignment.scope.id !== metadata.organization_id

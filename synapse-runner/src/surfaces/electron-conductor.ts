@@ -1,5 +1,6 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { env } from '../config/env';
 import { getBloomPaths } from '../config/bloom-paths';
 
@@ -28,10 +29,29 @@ export interface ConductorHandle {
 }
 
 export async function launchConductor(): Promise<ConductorHandle> {
-  const exePath = resolveConductorExePath();
+  // MODO DE LANZAMIENTO (confirmado esta sesión con una corrida real contra
+  // el build empaquetado, ya con el bug de extraFiles resuelto): el canal
+  // `synapse-simulator:inject-milestone` que usa injectBackendIdentityCheck()
+  // —y en general cualquier step que dependa del Synapse Simulator— está
+  // deshabilitado a propósito cuando `app.isPackaged === true`
+  // ("synapse-simulator not available in production builds", log real de
+  // ipc/onboarding-handlers.js). No es un bug: es la guarda de seguridad
+  // correcta para no exponer inyección de milestones en un build que un
+  // usuario real podría correr. Por diseño, este test SOLO puede correr
+  // contra Conductor en modo dev (electron . --no-sandbox — el mismo
+  // comando que workspace/package.json expone como "dev:linux" y que ya se
+  // confirmó funcionando en esta máquina). El build empaquetado
+  // (CONDUCTOR_EXE_PATH) sigue disponible detrás de
+  // CONDUCTOR_USE_PACKAGED_BUILD=true en .env para cuando lo que se quiera
+  // probar sea específicamente el empaquetado en sí (no pasos que dependan
+  // del simulador).
+  const launchArgs = env.useConductorPackagedBuild
+    ? resolvePackagedLaunchArgs()
+    : resolveDevLaunchArgs();
 
   const app = await electron.launch({
-    executablePath: exePath,
+    executablePath: launchArgs.executablePath,
+    args: launchArgs.args,
     // Nucleus/Sentinel spawnean su propio Chromium por fuera de Electron
     // (Sección 1: "Brain/Nucleus — spawnea Chromium + perfil") — Conductor
     // en sí es solo la ventana desktop.
@@ -69,6 +89,15 @@ export async function launchConductor(): Promise<ConductorHandle> {
   };
 }
 
+interface ConductorLaunchArgs {
+  executablePath: string;
+  args: string[];
+}
+
+function resolvePackagedLaunchArgs(): ConductorLaunchArgs {
+  return { executablePath: resolveConductorExePath(), args: [] };
+}
+
 function resolveConductorExePath(): string {
   if (env.conductorExePathOverride) {
     if (!existsSync(env.conductorExePathOverride)) {
@@ -86,6 +115,78 @@ function resolveConductorExePath(): string {
     throw new Error(
       `[electron-conductor] No se encontró el ejecutable de Conductor en ${candidate}. ` +
         `Seteá CONDUCTOR_EXE_PATH en .env si tu instalación de desarrollo usa otra ruta.`,
+    );
+  }
+  return candidate;
+}
+
+/**
+ * Modo dev — default de este Runner (ver comentario en launchConductor()).
+ * Replica exactamente `npm run dev:linux` de
+ * installer/conductor/workspace/package.json (`electron . --no-sandbox`),
+ * pero apuntando el binario `electron` y el directorio de la app por ruta
+ * absoluta, ya que este proceso corre con cwd en synapse-runner/, no en
+ * workspace/.
+ */
+function resolveDevLaunchArgs(): ConductorLaunchArgs {
+  const workspaceDir = resolveConductorWorkspaceDir();
+  const electronBin = resolveElectronBinary(workspaceDir);
+
+  const args = [workspaceDir];
+  // --no-sandbox: mismo flag que dev:linux en package.json. Confirmado esta
+  // sesión que alcanza para el electron de node_modules (a diferencia del
+  // build empaquetado, donde --no-sandbox NO alcanza y hace falta el
+  // chrome-sandbox setuid root — ver installer/metamorph rollout.go,
+  // applySandboxSetuid()). Solo en linux/darwin: dev:linux vs dev (mac) del
+  // package.json distinguen esto; en Windows no aplica sandbox de este tipo.
+  if (process.platform !== 'win32') {
+    args.push('--no-sandbox');
+  }
+
+  return { executablePath: electronBin, args };
+}
+
+function resolveConductorWorkspaceDir(): string {
+  if (env.conductorWorkspaceRepoPathOverride) {
+    if (!existsSync(env.conductorWorkspaceRepoPathOverride)) {
+      throw new Error(
+        `[electron-conductor] CONDUCTOR_WORKSPACE_REPO_PATH apunta a un directorio inexistente: ` +
+          `${env.conductorWorkspaceRepoPathOverride}`,
+      );
+    }
+    return env.conductorWorkspaceRepoPathOverride;
+  }
+
+  // synapse-runner/ e installer/conductor/workspace/ son hermanos dentro
+  // del mismo repo (bloom-development-extension). __dirname acá es
+  // synapse-runner/src/surfaces — tres niveles arriba es la raíz del repo.
+  const candidate = join(__dirname, '..', '..', '..', 'installer', 'conductor', 'workspace');
+  if (!existsSync(join(candidate, 'main_conductor.js'))) {
+    throw new Error(
+      `[electron-conductor] No se encontró installer/conductor/workspace/main_conductor.js relativo a ` +
+        `${candidate}. Seteá CONDUCTOR_WORKSPACE_REPO_PATH en .env si tu checkout tiene otra estructura.`,
+    );
+  }
+  return candidate;
+}
+
+function resolveElectronBinary(workspaceDir: string): string {
+  // Layout real del paquete npm "electron" instalado en workspace/node_modules
+  // (confirmado por package.json: "electron": "^28.3.3" en devDependencies).
+  const relByPlatform: Record<string, string> = {
+    linux: join('node_modules', 'electron', 'dist', 'electron'),
+    darwin: join('node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron'),
+    win32: join('node_modules', 'electron', 'dist', 'electron.exe'),
+  };
+  const rel = relByPlatform[process.platform];
+  if (!rel) {
+    throw new Error(`[electron-conductor] Plataforma no soportada para modo dev: ${process.platform}`);
+  }
+  const candidate = join(workspaceDir, rel);
+  if (!existsSync(candidate)) {
+    throw new Error(
+      `[electron-conductor] No se encontró el binario de electron en ${candidate}. ` +
+        `Corré "npm install" en installer/conductor/workspace/ (mismo paso que dev:linux necesita).`,
     );
   }
   return candidate;

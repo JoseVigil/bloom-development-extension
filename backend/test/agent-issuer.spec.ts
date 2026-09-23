@@ -7,7 +7,7 @@ import type { WireFullContent } from "../src/authority/schema";
 
 const now = "2026-09-12T12:00:00Z";
 const org = "org-fixture";
-const master = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate"];
+const master = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate", "create_project"];
 const operator = ["intent.create", "agent.issuer.designate"];
 
 const humanPrincipal = (id: string) => ({ principal_id: id, principal_type: "human" as const, status: "active" as const,

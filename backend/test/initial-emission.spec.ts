@@ -6,13 +6,15 @@ import { join } from "node:path";
 import app from "../src/index";
 import { authorityHumanResponse } from "../src/authority/administration-route";
 import { createInitialAuthorityEmission, initialEmissionGuardStatement } from "../src/authority/initial-emission";
-import { loadCurrentEmission } from "../src/authority/emission-store";
+import { loadCurrentEmission, prepareEmission } from "../src/authority/emission-store";
+import { withBuiltinCatalog } from "../src/authority/emission";
+import type { WireFullContent } from "../src/authority/schema";
 import { beginHumanLogin, finishHumanLogin, initialHumanIdentity, resolveHumanSession, revokeHumanSession, type HumanServices } from "../src/authority/human-session-store";
 
 let db:D1Database,mf:Miniflare,temp:string,sequence=0,privateKey:ArrayBuffer;
 const now="2026-09-10T12:00:00Z",masterPermissions=["authority.membership.manage","authority.role_definition.manage",
   "authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign",
-  "mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate"];
+  "mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate","create_project"];
 const human:HumanServices={now:()=>now,encryptionKey:Buffer.alloc(32,4).toString("base64"),provider:{source:"github-app",
   authorize:()=>"https://github.test",exchange:async()=>({token:"ghu_initial",expiresIn:28800}),identify:async()=>({subject:"123",handle:"founder"})}};
 const signer=()=>({privateKeyPkcs8:privateKey,keyId:"issuer-key"});
@@ -68,12 +70,39 @@ describe("Initial Authority Emission",()=>{
   },20000);
   it("rejects an organization without an active installation",async()=>{const f=await createOrg({installation:false});await expect(createInitialAuthorityEmission(db,f.org,"founder",services(f))).rejects.toThrow("authority_initial_emission_configuration_unavailable");});
   it("publishes the exact v1 projection once",async()=>{const f=await createOrg();const result=await createInitialAuthorityEmission(db,f.org,"founder",services(f));expect(result).toMatchObject({authorityVersion:"1",status:"committed"});const emission=(await loadCurrentEmission(db,f.org))!;
-    expect(emission.state).toMatchObject({principals:[{principal_id:"founder",principal_type:"human",status:"active"}],memberships:[{principal_id:"founder",organization_id:f.org,status:"active"}],role_definitions:[{role_id:"master",role_version:"1",role_origin:"builtin",status:"active"}],role_assignments:[{role_id:"master",role_version:"1",scope:{type:"organization",id:f.org},status:"active"}],revocations:[]});
+    expect(emission.state).toMatchObject({principals:[{principal_id:"founder",principal_type:"human",status:"active"}],memberships:[{principal_id:"founder",organization_id:f.org,status:"active"}],role_definitions:[{role_id:"master",role_version:"1",role_origin:"builtin",status:"active"},{role_id:"operator",role_version:"1",role_origin:"builtin",status:"active"},{role_id:"specialist",role_version:"1",role_origin:"builtin",status:"active"}],role_assignments:[{role_id:"master",role_version:"1",scope:{type:"organization",id:f.org},status:"active"}],revocations:[]});
+    expect(emission.state.role_definitions).toHaveLength(3);expect(emission.state.role_assignments).toHaveLength(1);
     expect(emission.metadata.expires_at).toBe("2026-09-10T12:04:00Z");expect((await db.prepare("SELECT COUNT(*) n FROM authority_initial_emission_commits WHERE organization_id=?").bind(f.org).first<{n:number}>())?.n).toBe(1);
     await expect(createInitialAuthorityEmission(db,f.org,"founder",services(f))).rejects.toThrow("authority_initial_emission_already_exists");});
   it("publishes v1 through the complete authenticated HTTP path",async()=>{const f=await createOrg(),origin="https://authority.test";const response=await authorityHumanResponse(db,new Request(origin+"/v1/authority/initial-emission",{method:"POST",headers:{Origin:origin,"Content-Type":"application/json","X-Authority-CSRF":f.login.csrf,Cookie:`__Host-authority-session=${f.login.token}`},body:JSON.stringify({organizationId:f.org})}),{...f.hs,origin,issuer:"issuer-test",signer:signer()});expect(response.status).toBe(200);expect(await response.json()).toMatchObject({authorityVersion:"1",status:"committed"});expect((await loadCurrentEmission(db,f.org))?.metadata.authority_version).toBe("1");});
   it("does not require an issuer for unrelated human routes",async()=>{const f=await createOrg(),origin="https://authority.test";const response=await authorityHumanResponse(db,new Request(origin+"/v1/authority/human/renew",{method:"POST",headers:{Origin:origin,"Content-Type":"application/json","X-Authority-CSRF":f.login.csrf,Cookie:`__Host-authority-session=${f.login.token}`},body:JSON.stringify({organizationId:f.org})}),{...f.hs,origin,signer:signer()});expect(response.status).toBe(200);});
   it("allows exactly one concurrent publisher and never creates v2",async()=>{const f=await createOrg(),outcomes=await Promise.allSettled([createInitialAuthorityEmission(db,f.org,"founder",services(f)),createInitialAuthorityEmission(db,f.org,"founder",services(f))]);expect(outcomes.filter(v=>v.status==="fulfilled")).toHaveLength(1);expect(String((outcomes.find(v=>v.status==="rejected") as PromiseRejectedResult).reason)).toContain("authority_initial_emission_already_exists");expect((await db.prepare("SELECT group_concat(authority_version) versions FROM authority_emissions WHERE organization_id=?").bind(f.org).first())?.versions).toBe("1");});
+  // Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md R5: la guarda canónica acepta
+  // como role_definitions EXACTAMENTE el catálogo builtin compilado — ni uno de más, ni de menos,
+  // ni alterado — y sigue exigiendo una única asignación `master`.
+  it("canonical v1 guard accepts exactly the builtin catalog and nothing else",async()=>{
+    const f=await createOrg();
+    const base=():WireFullContent=>withBuiltinCatalog({principals:[f.identity.principal],
+      memberships:[{membership_id:"m",principal_id:"founder",organization_id:f.org,status:"active",valid_from:now,valid_until:null,accepted_at:now}],
+      role_definitions:[],role_assignments:[{assignment_id:"a",membership_id:"m",role_id:"master",role_version:"1",scope:{type:"organization",id:f.org},status:"active",valid_from:now,valid_until:null,accepted_at:now}],revocations:[]});
+    const attempt=(state:WireFullContent)=>prepareEmission(db,{requestId:`guard-${crypto.randomUUID()}`,expectedVersion:null,
+      metadata:{schema:"bloom.authority.snapshot",schema_version:"1.0",snapshot_id:crypto.randomUUID(),issuer:"issuer-test",organization_id:f.org,authority_version:"1",
+        issued_at:now,not_before:now,expires_at:"2026-09-10T12:04:00Z",audience:{organization_id:f.org,installation_ids:[`installation-${sequence}`]}},
+      state,initialEmissionEvidence:{kind:"canonical",identity:f.identity}},signer());
+    await expect(attempt(base())).resolves.toBeTruthy();
+    const onlyMaster=base();onlyMaster.role_definitions=onlyMaster.role_definitions.filter(r=>r.role_id==="master");
+    await expect(attempt(onlyMaster)).rejects.toThrow("authority_initial_evidence_required");
+    const missing=base();missing.role_definitions=missing.role_definitions.filter(r=>r.role_id!=="operator");
+    await expect(attempt(missing)).rejects.toThrow("authority_initial_evidence_required");
+    const extra=base();extra.role_definitions.push({role_id:"org:extra",role_version:"1",role_origin:"organization",display_name:"x",status:"active",permissions:["intent.create"]});
+    await expect(attempt(extra)).rejects.toThrow("authority_initial_evidence_required");
+    const altered=base();altered.role_definitions.find(r=>r.role_id==="specialist")!.status="suspended";
+    await expect(attempt(altered)).rejects.toThrow("authority_initial_evidence_required");
+    const second=base();second.role_assignments.push({...second.role_assignments[0],assignment_id:"a2",role_id:"specialist"});
+    await expect(attempt(second)).rejects.toThrow("authority_initial_evidence_required");
+    const notMaster=base();notMaster.role_assignments[0].role_id="specialist";
+    await expect(attempt(notMaster)).rejects.toThrow("authority_initial_evidence_required");
+  });
   it("registers only the normative endpoint",async()=>{const env={} as Env,ctx={waitUntil(){},passThroughOnException(){},props:{}} as unknown as ExecutionContext;const init=await app.fetch(new Request("https://worker.test/v1/authority/initial-emission",{method:"POST"}),env,ctx);expect(init.status).toBe(503);const old=await app.fetch(new Request("https://worker.test/v1/authority/"+"gene"+"sis",{method:"POST"}),env,ctx);expect(old.status).toBe(404);});
   it("has no functional dependency on unrelated domains",()=>{const source=readFileSync(join(process.cwd(),"src/authority/initial-emission.ts"),"utf8");expect(source).not.toMatch(/from ["'][^"']*(mandate|intent|wisdom|gravity)/i);});
 });

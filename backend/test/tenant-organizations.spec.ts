@@ -34,7 +34,7 @@ let db: D1Database, mf: Miniflare, temp: string, sequence = 0, privateKey: Array
 const now = "2026-09-16T12:00:00Z";
 const masterPermissions = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage",
   "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote",
-  "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate"];
+  "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate", "create_project"];
 const human: HumanServices = { now: () => now, encryptionKey: Buffer.alloc(32, 7).toString("base64"),
   provider: { source: "github-app", authorize: () => "https://github.test", exchange: async (code: string) => ({ token: code, expiresIn: 28800 }),
     identify: async (token: string) => ({ subject: token, handle: `user-${token}` }) } };

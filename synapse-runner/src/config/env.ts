@@ -58,6 +58,24 @@ export const env = {
   engineResponseTimeoutMsFallback: optionalInt('ENGINE_RESPONSE_TIMEOUT_MS_FALLBACK', 45_000),
   runnerWatchdogSlackMs: optionalInt('RUNNER_WATCHDOG_SLACK_MS', 5_000),
   conductorExePathOverride: process.env.CONDUCTOR_EXE_PATH || undefined,
+  /**
+   * Por default (false) el Runner lanza Conductor en modo dev
+   * (installer/conductor/workspace/ vía electron . --no-sandbox), no el
+   * build empaquetado — confirmado esta sesión que
+   * synapse-simulator:inject-milestone (usado por backend_identity_check y,
+   * en general, cualquier step simulado) está deshabilitado a propósito
+   * cuando app.isPackaged es true. Poner CONDUCTOR_USE_PACKAGED_BUILD=true
+   * en .env solo si lo que se quiere probar es específicamente el build
+   * empaquetado (CONDUCTOR_EXE_PATH) en sí, no pasos que dependan del
+   * simulador.
+   */
+  useConductorPackagedBuild: process.env.CONDUCTOR_USE_PACKAGED_BUILD === 'true',
+  /**
+   * Override del directorio installer/conductor/workspace/ para modo dev.
+   * Por default se resuelve solo (ruta relativa a este mismo repo) — solo
+   * hace falta setear esto si el checkout tiene una estructura distinta.
+   */
+  conductorWorkspaceRepoPathOverride: process.env.CONDUCTOR_WORKSPACE_REPO_PATH || undefined,
   bloomNucleusBaseDirOverride: process.env.BLOOM_NUCLEUS_BASE_DIR_OVERRIDE || undefined,
   /**
    * Origin del backend Cloudflare Worker (Fase 0 server-side, pasos 00a/00b)

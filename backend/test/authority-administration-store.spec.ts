@@ -12,14 +12,14 @@ import { beginHumanLogin,finishHumanLogin,resolveHumanSession,revokeHumanSession
 const root=resolve(fileURLToPath(new URL("../..",import.meta.url)));
 const vector=JSON.parse(readFileSync(join(root,"docs/ROLES/fixtures/authority_interop_v1.json"),"utf8"));
 const owner="p-😀",recipient="p-\uE000",now="2026-09-08T12:05:00Z";
-const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate"];
+const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate","create_project"];
 const signer={privateKeyPkcs8:Uint8Array.from(Buffer.from(vector.private_key_pkcs8_base64,"base64")).buffer,keyId:vector.key_id,allowTestFixtures:true};
 let mf:Miniflare,db:D1Database,temp:string,sequence=0;
 const services:AdministrationServices={signer,now:()=>now,allowTestFixtures:true,verifyActor:async(proof,organizationId)=>{
   const principalId=proof==="owner"?owner:proof==="recipient"?recipient:null;
   return principalId?{principalId,organizationId,sessionId:`fixture-${proof}`,expiresAt:"2026-09-09T00:00:00Z",source:"test-fixture"}:null;
 }};
-async function initialize() {
+async function initialize(options:{masterOnly?:boolean}={}) {
   const org=`admin-test-${++sequence}`;await db.prepare("INSERT INTO organizations VALUES (?)").bind(org).run();
   const state=structuredClone(vector.base_state),metadata=structuredClone(vector.metadata.base);
   metadata.organization_id=org;metadata.audience.organization_id=org;metadata.issued_at=now;metadata.not_before=now;
@@ -28,6 +28,7 @@ async function initialize() {
   state.memberships.push({...state.memberships[0],membership_id:"m-target",principal_id:recipient});
   state.role_definitions.push({role_id:"master",role_version:"1",role_origin:"builtin",display_name:"Master",status:"active",permissions:master},
     {role_id:"specialist",role_version:"1",role_origin:"builtin",display_name:"Specialist",status:"active",permissions:["intent.create"]});
+  if(options.masterOnly)state.role_definitions=state.role_definitions.filter((r:any)=>r.role_origin!=="builtin"||r.role_id==="master");
   state.role_assignments.push({...state.role_assignments[0],assignment_id:"owner-master",role_id:"master",role_version:"1",scope:{type:"organization",id:org}});
   await persistEmission(db,{requestId:"fixture",expectedVersion:null,metadata,state,initialFixtureEvidence:{environment:"test",reference:"authority-admin"}},signer);
   return org;
@@ -94,6 +95,22 @@ describe("administrative commit on temporary D1",()=>{
     expect((await loadCurrentEmission(db,org))!.state.role_assignments.find(a=>a.assignment_id==="target-grant")).toMatchObject({status:"active",accepted_at:now});
     expect(await counts(org)).toEqual({emissions:3,requests:2,audit:2,outbox:2,head:accepted.authorityVersion});
     expect((await db.prepare("SELECT status,accepted_version FROM authority_admin_proposals WHERE organization_id=?").bind(org).first())).toEqual({status:"accepted",accepted_version:accepted.authorityVersion});
+  });
+  // Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.3 paso 5: organización
+  // existente con v1 de sólo `master` — su próximo comando emite un delta que agrega sólo las
+  // definiciones builtin faltantes (upsert), sin tocar nada previo.
+  it("reconciles the builtin catalog of a master-only organization in its next administrative emission",async()=>{
+    const org=await initialize({masterOnly:true});
+    expect((await loadCurrentEmission(db,org))!.state.role_definitions.some(r=>r.role_id==="specialist")).toBe(false);
+    const proposed=await administerAuthority(db,await request(org,"propose",grant(org)),services);
+    const current=(await loadCurrentEmission(db,org))!;
+    expect(current.state.role_definitions.filter(r=>r.role_origin==="builtin").map(r=>r.role_id).sort()).toEqual(["master","operator","specialist"]);
+    const delta=JSON.parse(current.delta!);
+    expect(delta.payload.content.operations.map((o:any)=>`${o.operation}:${o.collection}:${o.entity_id}`).sort())
+      .toEqual(["upsert:role_definitions:operator","upsert:role_definitions:specialist"]);
+    await administerAuthority(db,await request(org,"accept",{kind:"accept",proposalId:"proposal"},"recipient"),services);
+    expect((await loadCurrentEmission(db,org))!.state.role_assignments.find(a=>a.assignment_id==="target-grant")).toMatchObject({role_id:"specialist",status:"active"});
+    expect(proposed.status).toBe("pending");
   });
   it("revalidates a grantor whose authority was revoked before acceptance",async()=>{
     const org=await initialize();await administerAuthority(db,await request(org,"propose",grant(org)),services);

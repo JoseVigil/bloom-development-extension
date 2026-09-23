@@ -7,7 +7,19 @@ import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, ty
 import { wireVersion } from './emission';
 import { createInitialAuthorityEmission, InitialAuthorityEmissionError, initialEmissionGuardStatement } from './initial-emission';
 import { createOrganizationUnderTenant, listTenantOrganizations, TenantStoreError } from './tenant-store';
+import { createInvitation, listInvitations, revokeInvitation, InvitationStoreError, type InvitationStoreFailure } from './invitation-store';
 export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;}
+// Invitaciones a organización ajena, Fase B (Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
+// §2/§4, aprobada por Jose 2026-09-22). Mismo esquema de mapeo a status HTTP que ya usan
+// TenantStoreError/InitialAuthorityEmissionError en este archivo (ternarias inline) —
+// como acá son 4 códigos en vez de 2, se extrae a una función para no repetirla en las
+// tres rutas nuevas.
+function invitationStatus(code:InvitationStoreFailure):number{
+ if(code==='invalid_request')return 400;
+ if(code==='invitation_unavailable')return 404;
+ if(code==='organization_unavailable')return 409;
+ return 403; // not_authorized | role_unavailable | scope_unverifiable
+}
 export interface HumanRouteEnv {
  DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;
  AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;
@@ -92,6 +104,18 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    const organizations=await listTenantOrganizations(db,org);
    return reply({organizations});
   }
+  if(path==='/v1/authority/tenant/invitations'&&request.method==='GET'){
+   // Invitaciones a organización ajena, Fase B (§4 del diseño): a diferencia del listado
+   // de tenant/organizations de arriba, esto NO es de lectura abierta a cualquier
+   // miembro — mismo gate de autorización que crear una invitación (invitation-store.ts:
+   // canInvite), desviación deliberada señalada explícitamente en el diseño (§4, nota).
+   const org=url.searchParams.get('organizationId')??'';
+   if(!org)return reply({error:'invalid_org'},400);
+   const token=cookie(request,sessionCookie);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   try{const invitations=await listInvitations(db,org,actor,s);return reply({invitations});}
+   catch(e){if(e instanceof InvitationStoreError)return reply({error:e.message},invitationStatus(e.code));throw e;}
+  }
   if(request.method!=='POST')return reply({error:'method_not_allowed'},405);
   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/json')return reply({error:'invalid_content_type'},400);
   const raw=await request.text();if(raw.length>65536)return reply({error:'request_too_large'},413);
@@ -139,6 +163,32 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
     throw e;
    }
   }
+  if(path==='/v1/authority/tenant/invitations'){
+   // Invitaciones a organización ajena, Fase B (§2/§4 del diseño). Todos los campos
+   // opcionales del diseño (scopeId/invitedSubject/validUntil/expiresInSeconds) se piden
+   // igual, nulleables — mismo criterio "presente siempre, null cuando no aplica" que ya
+   // usa el resto del wire schema de este backend (ver WireRoleAssignment.valid_until en
+   // schema.ts) en vez de claves opcionales, que `exact()` no soporta y que este
+   // dispatcher no usa en ningún otro lado.
+   if(!exact(body,['organizationId','roleId','roleVersion','scopeType','scopeId','invitedSubject','validUntil','expiresInSeconds']))return reply({error:'invalid_request'},400);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   try{const created=await createInvitation(db,org,actor,{roleId:body.roleId,roleVersion:body.roleVersion,scopeType:body.scopeType,
+    scopeId:body.scopeId??undefined,invitedSubject:body.invitedSubject??undefined,validUntil:body.validUntil??undefined,
+    expiresInSeconds:body.expiresInSeconds??undefined},{now:s.now,origin:s.origin});
+    return reply(created,201);
+   }catch(e){if(e instanceof InvitationStoreError)return reply({error:e.message},invitationStatus(e.code));throw e;}
+  }
+  if(path==='/v1/authority/tenant/invitations/revoke'){
+   // Sin segmento de path dinámico a propósito (`:id`): este dispatcher entero no usa
+   // parámetros de path en ningún lado (todo va por query en GET o por body en POST,
+   // ver tenant/organizations arriba) — mismo criterio acá, `invitationId` va en el body.
+   // Evita además inventar soporte de segmento dinámico en el proxy de Batcave (Fase D),
+   // que hoy tampoco lo tiene para ninguna ruta.
+   if(!exact(body,['organizationId','invitationId'])||typeof body.invitationId!=='string'||!body.invitationId)return reply({error:'invalid_request'},400);
+   const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   try{return reply(await revokeInvitation(db,org,actor,body.invitationId,s));}
+   catch(e){if(e instanceof InvitationStoreError)return reply({error:e.message},invitationStatus(e.code));throw e;}
+  }
   if(path!=='/v1/authority/administration')return reply({error:'not_found'},404);
   if(!exact(body,['organizationId','requestId','expectedVersion','command'])||typeof body.requestId!=='string'||!body.requestId||body.requestId.length>200)return reply({error:'invalid_request'},400);
   try{wireVersion(body.expectedVersion);}catch{return reply({error:'invalid_version'},400);}
@@ -169,6 +219,7 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
   if(error instanceof HumanIdentityError)return reply({error:error.message},error.code.startsWith('configuration')||error.code==='provider_unavailable'?503:error.code==='csrf_invalid'||error.code==='origin_invalid'?403:401);
   if(error instanceof AdministrationError)return reply({error:error.message},error.code.includes('conflict')?409:403);
   if(error instanceof TenantStoreError)return reply({error:error.message},error.code==='not_authorized'?403:error.code==='invalid_request'?400:409);
+  if(error instanceof InvitationStoreError)return reply({error:error.message},invitationStatus(error.code));
   return reply({error:'authority_human_request_unavailable'},503);
  }
 }

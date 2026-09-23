@@ -101,3 +101,24 @@ func TestCreateProjectMappedOnlyToMaster(t *testing.T) {
 		t.Fatal("operator must not have create_project")
 	}
 }
+
+// TestBuiltinCatalogMatchesBackend pins parity with backend/src/authority/emission.ts
+// BUILTIN_ROLE_CATALOG (Paso 0 de Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md, 2026-09-23).
+// Until then the Backend emitted master v1 with 12 permissions and this catalog rejected every real
+// emission ("built-in permissions contradict catalog"). Changing a builtin here without the identical
+// change in the Backend (and vice versa) breaks every snapshot again.
+func TestBuiltinCatalogMatchesBackend(t *testing.T) {
+	backend := map[string][]string{
+		"master":     {"authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate", "create_project"},
+		"operator":   {"intent.create", "agent.issuer.designate"},
+		"specialist": {"intent.create"},
+	}
+	if len(BuiltinRoles) != len(backend) {
+		t.Fatalf("builtin role count differs from Backend: %d vs %d", len(BuiltinRoles), len(backend))
+	}
+	for role, permissions := range backend {
+		if err := ValidateRoleDefinition(RoleDefinition{RoleID: role, RoleVersion: "1", RoleOrigin: "builtin", Permissions: permissions}); err != nil {
+			t.Fatalf("Backend %s v1 rejected by Nucleus: %v", role, err)
+		}
+	}
+}

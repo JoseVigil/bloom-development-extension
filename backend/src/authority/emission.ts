@@ -2,12 +2,30 @@ import { base64ToBase64url, canonicalizeJson, digestWire, signCanonicalPayload }
 import type { WireDeltaOperation, WireEmissionMetadata, WireEnvelope, WireFullContent, WireSnapshotPayload } from "./schema";
 
 const collections = ["principals", "memberships", "role_definitions", "role_assignments", "revocations"] as const;
-const master = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate"];
+// master v1 — idéntico carácter por carácter a installer/nucleus/internal/authority/roles.go
+// BuiltinRoles[RoleMaster] (13 permisos). `create_project` agregado 2026-09-23 (Paso 0 de
+// Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md, decisión de Jose): Go ya lo tenía desde
+// Encargo_Implementacion_Mapeo_Gravity_CreateProject_y_Cierre_P3_v1_0.md y rechazaba toda emisión con
+// 12 ("built-in permissions contradict catalog"). Es el permiso que exige el cutover a remote_enforced.
+// Consecuencia aceptada: una emisión persistida ANTES de este cambio (master con 12) ya no decodifica
+// (recovery_required). Ver migración 0019.
+const master = ["authority.membership.manage", "authority.role_definition.manage", "authority.assignment.manage", "authority.binding.approve", "authority.cutover.approve", "mandate.create", "mandate.sign", "mandate.promote", "mandate.install", "intent.create", "intent.cor.merge", "agent.issuer.designate", "create_project"];
 // operator (ex-delegate, nombre de trabajo — Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md
 // §1, §2.1): scope-project admin. Mismo piso que specialist (intent.create) más la capacidad nueva de
 // pedir nacimiento de agente, evaluada contra el scope real de la asignación (ver agent-issuer.ts),
 // nunca contra un scope fijo. Espejo de installer/nucleus/internal/authority/roles.go BuiltinRoles.
 const operator = ["intent.create", "agent.issuer.designate"];
+const specialist = ["intent.create"];
+/** Catálogo builtin — única fuente de verdad TS del contenido de cada rol builtin
+ * (Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.1 R2). Espejo de
+ * installer/nucleus/internal/authority/roles.go BuiltinRoles. Nunca se lee de la base. */
+export const BUILTIN_ROLE_CATALOG: readonly Readonly<{ role_id: string; role_version: string; display_name: string; permissions: readonly string[] }>[] = Object.freeze([
+  Object.freeze({ role_id: "master", role_version: "1", display_name: "Master", permissions: Object.freeze([...master]) }),
+  Object.freeze({ role_id: "operator", role_version: "1", display_name: "Operator", permissions: Object.freeze([...operator]) }),
+  Object.freeze({ role_id: "specialist", role_version: "1", display_name: "Specialist", permissions: Object.freeze([...specialist]) }),
+]);
+const builtinPermissions = (roleId: string, roleVersion: string) =>
+  BUILTIN_ROLE_CATALOG.find(r => r.role_id === roleId && r.role_version === roleVersion)?.permissions ?? null;
 const permissions = new Set([...master, "vault.key.read", "vault.key.write", "vault.key.delete", "executor.command.execute", "executor.filesystem.write", "executor.network.access", "executor.change.promote"]);
 const statuses = ["pending", "active", "suspended", "expired", "revoked"];
 const scopes = ["organization", "project", "mandate", "intent", "resource", "environment"];
@@ -83,9 +101,9 @@ export function normalizeState(input: WireFullContent, organizationId: string): 
     for (const p of r.permissions) if (!permissions.has(p)) fail("unknown permission or wildcard");
     unique(r.permissions, "permission"); r.permissions.sort(cmp);
     if (r.role_origin === "builtin") {
-      const expected = r.role_id === "master" ? master : r.role_id === "specialist" ? ["intent.create"] : r.role_id === "operator" ? operator : null;
-      if (!expected || r.role_version !== "1" || expected.length !== r.permissions.length || expected.some(p => !r.permissions.includes(p))) fail("builtin contradiction");
-    } else if (["master", "specialist", "operator"].includes(r.role_id)) fail("reserved role");
+      const expected = builtinPermissions(r.role_id, r.role_version);
+      if (!expected || expected.length !== r.permissions.length || expected.some(p => !r.permissions.includes(p))) fail("builtin contradiction");
+    } else if (BUILTIN_ROLE_CATALOG.some(b => b.role_id === r.role_id)) fail("reserved role");
   }
   unique(f.role_definitions.map(roleKey), "role version");
   for (const a of f.role_assignments) {
@@ -109,6 +127,24 @@ export function normalizeState(input: WireFullContent, organizationId: string): 
   f.role_assignments.sort((a, b) => cmp(a.assignment_id, b.assignment_id));
   f.revocations.sort((a, b) => cmp(a.revocation_id, b.revocation_id));
   return f;
+}
+/** Regla R1 (Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.1): agrega al
+ * estado cada rol builtin del catálogo compilado que falte, con status "active". Nunca
+ * modifica ni quita una definición existente, y nunca re-agrega un builtin cuyo role_id
+ * tenga una revocación `role_definition`. Pura y determinista.
+ *
+ * Se aplica SÓLO donde el Backend PRODUCE estado (emisión inicial canónica,
+ * evaluateAdministration) o como vista de sólo lectura (createInvitation) — NUNCA dentro
+ * de normalizeState/decodeEmission (R3): exigirlo al leer invalidaría emisiones históricas. */
+export function withBuiltinCatalog(input: WireFullContent): WireFullContent {
+  const state = structuredClone(input);
+  for (const b of BUILTIN_ROLE_CATALOG) {
+    if (state.role_definitions.some(r => r.role_id === b.role_id && r.role_version === b.role_version)) continue;
+    if (state.revocations.some(r => r.target_type === "role_definition" && r.target_id === b.role_id)) continue;
+    state.role_definitions.push({ role_id: b.role_id, role_version: b.role_version, role_origin: "builtin",
+      display_name: b.display_name, status: "active", permissions: [...b.permissions] });
+  }
+  return state;
 }
 export async function stateDigest(state: WireFullContent, organizationId: string): Promise<string> {
   return digestWire(normalizeState(state, organizationId));

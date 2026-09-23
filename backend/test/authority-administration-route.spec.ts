@@ -5,7 +5,7 @@ import {authorityHumanResponse,configuredAuthorityHumanResponse,type HumanRouteS
 import {persistEmission,loadCurrentEmission} from '../src/authority/emission-store';
 const vector=JSON.parse(readFileSync(new URL('../../docs/ROLES/fixtures/authority_interop_v1.json',import.meta.url),'utf8'));
 const origin='https://authority.test',now='2026-09-08T12:05:00Z',owner='p-😀';
-const master=['authority.membership.manage','authority.role_definition.manage','authority.assignment.manage','authority.binding.approve','authority.cutover.approve','mandate.create','mandate.sign','mandate.promote','mandate.install','intent.create','intent.cor.merge','agent.issuer.designate'];
+const master=['authority.membership.manage','authority.role_definition.manage','authority.assignment.manage','authority.binding.approve','authority.cutover.approve','mandate.create','mandate.sign','mandate.promote','mandate.install','intent.create','intent.cor.merge','agent.issuer.designate','create_project'];
 let db:D1Database,mf:Miniflare,temp:string,n=0;
 const services:HumanRouteServices={origin,now:()=>now,encryptionKey:Buffer.alloc(32,4).toString('base64'),allowTestFixtures:true,
  signer:{privateKeyPkcs8:Uint8Array.from(Buffer.from(vector.private_key_pkcs8_base64,'base64')).buffer,keyId:vector.key_id,allowTestFixtures:true},

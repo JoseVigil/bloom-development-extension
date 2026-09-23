@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { env } from './env';
@@ -114,6 +114,41 @@ export function getMasterProfileExtensionPath(paths: BloomPaths = getBloomPaths(
   }
 
   return master.extension_path;
+}
+
+/**
+ * Resetea el estado del wizard de onboarding en nucleus.json a "nunca
+ * arrancado", borrando la clave `onboarding` por completo.
+ *
+ * POR QUÉ EXISTE (diagnóstico 2026-09-22 — "el test saltea backend_identity_check
+ * y arranca directo en Workspace"): resolution-engine.js::resolveEntryPoint()
+ * calcula el step de entrada leyendo nucleus.json de disco, NO resetea nada
+ * por su cuenta. Confirmado: sin este reset, una corrida de
+ * onboarding-flow.spec.ts que ya dejó `onboarding.completed_steps:
+ * ["backend_identity_check"]` en nucleus.json (de una corrida anterior)
+ * hace que la corrida SIGUIENTE arranque directo en 'nucleus_create' — el
+ * wizard hace exactamente lo correcto (resume real), pero el test deja de
+ * ejercitar backend_identity_check, que es justamente lo que se quiere
+ * probar. Confirmado también que borrar la clave completa es seguro:
+ * resolution-engine.js hace `if (nucleusData.onboarding)` antes de tocarla, y
+ * con la clave ausente arranca desde cero como una instalación nunca
+ * iniciada (mismo resultado que `onboarding:get-resume-state` devolvió en
+ * el primer boot de la sesión: `{"stepId":"backend_identity_check","produced":[]}`).
+ * No toca ninguna otra clave de nucleus.json (installation, system_map,
+ * master_profile, etc.) —esas no son estado del wizard.
+ *
+ * Llamar SIEMPRE al principio de un test que ejercita el wizard de
+ * onboarding desde cero, antes de `launchConductor()`.
+ */
+export function resetOnboardingState(paths: BloomPaths = getBloomPaths()): void {
+  if (!existsSync(paths.nucleusJson)) {
+    throw new Error(`[bloom-paths] nucleus.json no encontrado en ${paths.nucleusJson} — no se puede resetear.`);
+  }
+  const raw = readFileSync(paths.nucleusJson, 'utf-8');
+  const data = JSON.parse(raw) as Record<string, unknown>;
+  delete data.onboarding;
+  data.updated_at = new Date().toISOString();
+  writeFileSync(paths.nucleusJson, JSON.stringify(data, null, 2));
 }
 
 export function getExtensionIdFromNucleusJson(paths: BloomPaths = getBloomPaths()): string {

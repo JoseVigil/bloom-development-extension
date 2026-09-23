@@ -274,4 +274,48 @@ describe('authority-proxy', () => {
     await app.request('/v1/authority/tenant/self?org=o', { headers: { authorization: 'Bearer registration-only' } });
     expect(fetchMock.mock.calls[0][1].headers.has('authorization')).toBe(false);
   });
+
+  // Diseño P (Propuesta_Diseno_Retorno_Genesis_y_Hallazgo_Invitaciones_v0_1.md §3.4),
+  // autorizada por Jose 2026-09-22. A diferencia de todo lo de arriba, esta ruta se
+  // llama ANTES de que exista ninguna instalación registrada — el único crédito es el
+  // query param `browser`, que el reenvío genérico de query string ya cubre.
+  it('forwards the browser query param on GET genesis/result without requiring any auth header', async () => {
+    const bytes = JSON.stringify({ status: 'pending' });
+    fetchMock.mockResolvedValue(new Response(bytes, { status: 202, headers: { 'content-type': 'application/json' } }));
+    const app = createAuthorityProxyRoutes(config, fakeLoggers());
+    const res = await app.request('/v1/authority/genesis/result?browser=opaque-secret');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://backend.test/v1/authority/genesis/result?browser=opaque-secret');
+    expect(res.status).toBe(202);
+    expect(await res.text()).toBe(bytes);
+  });
+
+  it('does not relay S2S signature headers or human-session credentials on genesis/result', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+    const app = createAuthorityProxyRoutes(config, fakeLoggers());
+    await app.request('/v1/authority/genesis/result?browser=b', {
+      headers: {
+        'x-bloom-installation-id': 'i', 'x-bloom-timestamp': '1', 'x-bloom-signature': 'secret-signature',
+        cookie: '__Host-authority-session=secret-cookie', origin: 'https://human.test', 'x-authority-csrf': 'secret-csrf'
+      }
+    });
+    const forwarded = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(forwarded.has('cookie')).toBe(false);
+    expect(forwarded.has('origin')).toBe(false);
+    expect(forwarded.has('x-authority-csrf')).toBe(false);
+    // Los tres headers S2S no tienen ningún caso especial que los excluya en esta ruta,
+    // así que se reenvían igual que a cualquier otra — inofensivo (Backend no los exige
+    // acá) y evita una rama de proxy distinta sólo para esta ruta.
+    expect(forwarded.get('x-bloom-signature')).toBe('secret-signature');
+  });
+
+  it('never distinguishes pending from ready by anything other than the backend status code', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: 'pending' }), { status: 202 }));
+    const app = createAuthorityProxyRoutes(config, fakeLoggers());
+    const pending = await app.request('/v1/authority/genesis/result?browser=b');
+    expect(pending.status).toBe(202);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ organizationId: 'o', created: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const ready = await app.request('/v1/authority/genesis/result?browser=b');
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toEqual({ organizationId: 'o', created: true });
+  });
 });

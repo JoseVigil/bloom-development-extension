@@ -1,6 +1,6 @@
 import { canonicalizeJson } from "./canonical";
 import { AUTHORITY_EMISSION_TTL_MS, EmissionStoreError, loadCurrentEmission, prepareEmission, type EmissionSigner } from "./emission-store";
-import { normalizeWireTime } from "./emission";
+import { BUILTIN_ROLE_CATALOG, normalizeWireTime, withBuiltinCatalog } from "./emission";
 import type { InitialHumanIdentity } from "./administration";
 import type { WireFullContent, WireRoleDefinition } from "./schema";
 
@@ -19,16 +19,21 @@ export interface InitialAuthorityEmissionServices {
 export interface InitialAuthorityEmissionResult { authorityVersion: string; stateDigest: string; status: "committed" }
 interface RoleRow { version: number; definition: string; status: string }
 
+/** La fila global `role_definitions` (organization_id IS NULL, key='master') conserva sólo su
+ * rol de interruptor de activación de la génesis (Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md
+ * §4.1 R2): ausente, no activa o contradictoria con el catálogo compilado → master_role_unavailable.
+ * El CONTENIDO emitido sale siempre del catálogo compilado (BUILTIN_ROLE_CATALOG), nunca de la base. */
 function activeMaster(row: RoleRow | null): WireRoleDefinition {
   if (!row || row.status !== "active") throw new InitialAuthorityEmissionError("master_role_unavailable");
   let definition: unknown;
   try { definition = JSON.parse(row.definition); } catch { throw new InitialAuthorityEmissionError("master_role_unavailable"); }
   const value = definition as Partial<WireRoleDefinition>;
-  if (!value || typeof value !== "object" || !Array.isArray(value.permissions))
+  const catalog = BUILTIN_ROLE_CATALOG.find(r => r.role_id === "master" && r.role_version === String(row.version));
+  if (!value || typeof value !== "object" || !Array.isArray(value.permissions) || !catalog
+    || value.permissions.length !== catalog.permissions.length || catalog.permissions.some(p => !value.permissions!.includes(p)))
     throw new InitialAuthorityEmissionError("master_role_unavailable");
-  return { role_id: "master", role_version: String(row.version), role_origin: "builtin",
-    display_name: typeof value.display_name === "string" ? value.display_name : "Master",
-    status: "active", permissions: value.permissions };
+  return { role_id: "master", role_version: catalog.role_version, role_origin: "builtin",
+    display_name: catalog.display_name, status: "active", permissions: [...catalog.permissions] };
 }
 
 export async function createInitialAuthorityEmission(db: D1Database, organizationId: string, principalId: string,
@@ -47,13 +52,15 @@ export async function createInitialAuthorityEmission(db: D1Database, organizatio
   if (!installations.results.length) throw new InitialAuthorityEmissionError("configuration_unavailable");
 
   const now = normalizeWireTime(services.now()), membershipId = crypto.randomUUID(), assignmentId = crypto.randomUUID();
-  const state: WireFullContent = { principals: [evidence.principal],
+  // R1/R5: v1 = un principal, una membership, UNA asignación `master` en scope organización,
+  // y como role_definitions exactamente el catálogo builtin compilado (determinista).
+  const state: WireFullContent = withBuiltinCatalog({ principals: [evidence.principal],
     memberships: [{ membership_id: membershipId, principal_id: principalId, organization_id: organizationId,
       status: "active", valid_from: now, valid_until: null, accepted_at: now }],
     role_definitions: [role],
     role_assignments: [{ assignment_id: assignmentId, membership_id: membershipId, role_id: role.role_id,
       role_version: role.role_version, scope: { type: "organization", id: organizationId }, status: "active",
-      valid_from: now, valid_until: null, accepted_at: now }], revocations: [] };
+      valid_from: now, valid_until: null, accepted_at: now }], revocations: [] });
   const requestId = `initial-authority-emission:${organizationId}`;
   try {
     const prepared = await prepareEmission(db, { requestId, expectedVersion: null,

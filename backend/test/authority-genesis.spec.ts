@@ -43,7 +43,7 @@ beforeAll(async () => {
     master_github_username TEXT NOT NULL, key_fingerprint TEXT NOT NULL, created_at INTEGER NOT NULL)`).run();
   await loadMigrations(["0001_authority_snapshot.sql", "0002_authority_security.sql", "0004_authority_emissions.sql",
     "0005_authority_administration.sql", "0006_authority_human_identity.sql", "0009_authority_role_definition_status.sql",
-    "0010_authority_initial_emission_guard.sql", "0013_authority_genesis.sql", "0015_tenants.sql"]);
+    "0010_authority_initial_emission_guard.sql", "0013_authority_genesis.sql", "0015_tenants.sql", "0019_authority_master_create_project.sql"]);
   const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
   privateKey = await crypto.subtle.exportKey("pkcs8", pair.privateKey) as ArrayBuffer;
 }, 60000);

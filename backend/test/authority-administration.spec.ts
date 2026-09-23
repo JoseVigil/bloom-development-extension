@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { evaluateAdministration, type AdministrationCommand, type VerifiedHumanActor, type AdministrationContext } from "../src/authority/administration";
 import type { WireFullContent } from "../src/authority/schema";
+import { normalizeState } from "../src/authority/emission";
 
 const vector=JSON.parse(readFileSync(fileURLToPath(new URL("../../docs/ROLES/fixtures/authority_interop_v1.json",import.meta.url)),"utf8"));
 const now="2026-09-08T12:05:00Z", org="org-fixture", owner="p-😀", recipient="p-\uE000";
-const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate"];
+const master=["authority.membership.manage","authority.role_definition.manage","authority.assignment.manage","authority.binding.approve","authority.cutover.approve","mandate.create","mandate.sign","mandate.promote","mandate.install","intent.create","intent.cor.merge","agent.issuer.designate","create_project"];
 function fixture():WireFullContent {
   const s=structuredClone(vector.base_state);
   s.principals[1].external_identities=[{provider:"github",subject:"recipient",display_handle:"recipient",status:"verified",verified_at:now}];
@@ -152,5 +153,49 @@ describe("bounded organizational administration",()=>{
     expect(()=>run({...grant(),permissions:["*"]} as unknown as AdministrationCommand)).toThrow("invalid_command");
     const command=grant();if(command.kind!=="propose_assignment")throw Error();command.scope={type:"resource",id:"resource"};
     expect(()=>run(command)).toThrow("scope_unverifiable");
+  });
+});
+
+// Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.1 (R1-R4): reconciliación
+// determinista del catálogo builtin en evaluateAdministration.
+describe("builtin catalog reconciliation (R1-R4)",()=>{
+  // Organización "existente": su estado sólo tiene `master` — la forma exacta que produjo la
+  // génesis antes de este cambio.
+  const masterOnly=()=>{const s=fixture();s.role_definitions=s.role_definitions.filter(r=>r.role_origin!=="builtin"||r.role_id==="master");return s;};
+  const builtinIds=(s:WireFullContent)=>s.role_definitions.filter(r=>r.role_origin==="builtin").map(r=>r.role_id).sort();
+  it("grants specialist on a master-only state, materializing only the missing builtin definitions",()=>{
+    const before=masterOnly();const proposal=run(grant(),before);
+    expect(builtinIds(proposal.state)).toEqual(["master","operator","specialist"]);
+    const accepted=run({kind:"accept",proposalId:"proposal"},proposal.state,actor(recipient),{...context(),proposal:proposal.proposal});
+    expect(accepted.state.role_assignments.some(a=>a.assignment_id==="target-grant"&&a.role_id==="specialist")).toBe(true);
+    // Nada preexistente cambia: todas las definiciones previas siguen idénticas.
+    for(const r of normalizeState(before,org).role_definitions)expect(accepted.state.role_definitions).toContainEqual(r);
+    expect(accepted.state.role_definitions.length).toBe(before.role_definitions.length+2);
+  });
+  it("reconciles on any administrative command, not only grants",()=>{
+    const result=run({kind:"suspend_membership",membershipId:"m-target"},masterOnly());
+    expect(builtinIds(result.state)).toEqual(["master","operator","specialist"]);
+  });
+  it("never modifies an existing builtin definition (a suspended specialist stays suspended and is not grantable)",()=>{
+    const s=fixture();s.role_definitions.find(r=>r.role_id==="specialist")!.status="suspended";
+    expect(()=>run(grant(),s)).toThrow("role_unavailable");
+    const result=run({kind:"suspend_membership",membershipId:"m-target"},s);
+    expect(result.state.role_definitions.filter(r=>r.role_id==="specialist")).toEqual([expect.objectContaining({status:"suspended"})]);
+  });
+  it("never re-adds a builtin whose role_id carries a role_definition revocation",()=>{
+    const s=masterOnly();s.revocations.push({revocation_id:"rv-specialist",target_type:"role_definition",target_id:"specialist",effective_at:now,recorded_in_authority_version:"1",reason_code:"TEST"});
+    expect(()=>run(grant(),s)).toThrow("role_unavailable");
+    expect(builtinIds(run({kind:"suspend_membership",membershipId:"m-target"},s).state)).toEqual(["master","operator"]);
+  });
+  it("does not relax grant guards: a grantor lacking the builtin's permissions still cannot grant it",()=>{
+    const s=masterOnly();
+    s.role_definitions.push({role_id:"assigner",role_version:"1",role_origin:"organization",display_name:"assigner",status:"active",permissions:["authority.assignment.manage"]});
+    s.role_assignments.push({...s.role_assignments.find(a=>a.assignment_id==="owner-master")!,assignment_id:"recipient-assigner",membership_id:"m-target",role_id:"assigner"});
+    const command:AdministrationCommand={...grant(),assignmentId:"x",proposalId:"x"} as AdministrationCommand;
+    // recipient holds authority.assignment.manage but not intent.create → operator/specialist not grantable by them.
+    expect(()=>run({...command,membershipId:s.memberships[0].membership_id} as AdministrationCommand,s,actor(recipient))).toThrow("grant_exceeds_authority");
+  });
+  it("is deterministic across the double evaluation used by administerAuthority",()=>{
+    const s=masterOnly();expect(JSON.stringify(run(grant(),s).state)).toBe(JSON.stringify(run(grant(),s).state));
   });
 });

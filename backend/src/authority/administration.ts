@@ -1,4 +1,4 @@
-import { normalizeState, normalizeWireTime, wireVersion } from "./emission";
+import { normalizeState, normalizeWireTime, withBuiltinCatalog, wireVersion } from "./emission";
 import type { WireFullContent, WireMembership, WireRoleAssignment, WireRoleDefinition, WirePrincipal } from "./schema";
 
 export class AdministrationError extends Error {
@@ -72,7 +72,10 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
   const org = context.organizationId, now = authorityInstant(context.now);
   const effectiveAt = normalizeWireTime(context.effectiveAt ?? context.now);
   if (authorityInstant(effectiveAt) > now) deny("invalid_decision_time");
-  const state = normalizeState(input, org), command = structuredClone(commandInput);
+  // R1 (Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.1): toda decisión se
+  // evalúa, y todo estado se emite, con el catálogo builtin completo. Sólo agrega definiciones;
+  // no otorga nada — grantable/selfGrant/scopeVerified siguen decidiendo (R4).
+  const state = normalizeState(withBuiltinCatalog(normalizeState(input, org)), org), command = structuredClone(commandInput);
   validateCommand(command); wireVersion(context.authorityVersion);
   if (!actor || actor.organizationId !== org || !actor.sessionId || authorityInstant(actor.expiresAt) <= now
     || !["backend-session","test-fixture"].includes(actor.source)

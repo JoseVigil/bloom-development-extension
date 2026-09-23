@@ -22,7 +22,7 @@ const deny = (code: string): never => { throw new RecoveryError(code); };
 export function buildMembershipRestoration(historical: WireFullContent, membershipId: string,
   freshId: string, now: string): MembershipProposalCommand {
   const m = historical.memberships.find(m => m.membership_id === membershipId);
-  if (!m || m.status !== "active") deny("membership_unavailable");
+  if (!m || m.status !== "active") return deny("membership_unavailable");
   return { kind: "propose_membership", proposalId: freshId, membershipId: freshId, principalId: m.principal_id, validFrom: now, validUntil: null };
 }
 
@@ -39,7 +39,7 @@ export function buildMembershipRestoration(historical: WireFullContent, membersh
 export function buildAssignmentRestoration(historical: WireFullContent, assignmentId: string,
   freshId: string, membershipId: string, now: string): AssignmentProposalCommand {
   const a = historical.role_assignments.find(a => a.assignment_id === assignmentId);
-  if (!a || a.status !== "active") deny("assignment_unavailable");
+  if (!a || a.status !== "active") return deny("assignment_unavailable");
   return { kind: "propose_assignment", proposalId: freshId, assignmentId: freshId, membershipId,
     roleId: a.role_id, roleVersion: a.role_version, scope: a.scope, validFrom: now, validUntil: null };
 }
