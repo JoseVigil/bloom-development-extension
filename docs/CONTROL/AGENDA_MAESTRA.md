@@ -145,6 +145,7 @@ Claude Code para inspección y cambios Svelte/Electron verificables. Claude Web 
 - Tema 1: el contrato y estados de Mandate determinan la UI de Mandate.
 - Tema 6: Alfred ocupa el bloque inferior del panel derecho.
 - Tema 8 / D-21: el switch de organización debe respetar la gobernanza de organización activa.
+- ORRERY / Location: la futura UX de navegación debe derivarse del contraste físico sobre datos genuinos, relaciones estructurales explícitas, provenance y autoridad verificable; no de proximidad visual, embeddings ni fixtures sintéticos.
 
 **Decisiones/riesgos abiertos**
 
@@ -647,6 +648,39 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 
 ---
 
+## Estado coordinado — ORRERY / Location
+
+**Estado actual**
+
+Las investigaciones ORRERY UI, ORRERY DOCS, ORRERY, Location v1.1 y Source Authority fueron consolidadas. Esto es consolidación de investigación, no una nueva auditoría ni implementación. El research de Location está materialmente cerrado y no depende de antecedentes no localizados; el soporte end-to-end de Location no se considera habilitado por ese cierre.
+
+La base conservada distingue autoridad canónica, registros, copias, proyecciones, índices, cache y datos visuales; preserva estados de resolución como `unverifiable`; y prohíbe sustituir silenciosamente una revisión capturada por la revisión actual. Project→Repository queda ratificado como `0..N`, con vínculos explícitos, identidad, provenance y vigencia. Navigation State es mutable y de sesión; LocationSnapshot es una captura verificable. Context, Focus y Anchors permanecen independientes, y reachability requiere relaciones estructurales explícitas y autorizadas.
+
+Gene↔Document conserva el requisito **GENE KNOWLEDGE CONSISTENCY INVARIANT**: ningún cambio material alcanza `CURRENT` sin una Knowledge Determination gobernada y verificable (`document_remains_valid` o `document_requires_update`). Esto incluye Genesis, pero no acredita cumplimiento físico actual sin prueba.
+
+**Dependencia y disparador**
+
+ORRERY espera datos genuinos producidos por Onboarding y Mandate Genesis sobre un Project real representativo. Un proceso terminado o un fixture sintético no bastan. La evidencia debe incluir, cuando exista, identidades, revisiones, relaciones, ubicaciones de artefactos, provenance y el recorrido realmente producido, incluidos fallos y ausencias. Cuando AGENDA reciba esa materialización, debe vincularla con la tarea ORRERY consolidada para retomar el contraste físico.
+
+**Orden posterior**
+
+Auditar `Nucleus → GravityGraph → ING/DIS → BISP/Chroma → semantic-index → Location → Orrery`, distinguiendo código presente, runtime materializado, contrato solamente, datos no materializados, gap físico y demo. Luego reconciliar Navigation State, Source Authority y Location, y derivar la UI/UX de Workspace Core de esos resultados.
+
+**Frentes abiertos**
+
+- Navegación del conjunto articulado Organization/Project/Repositories, Domains/Genes, archivos, documentación, relaciones, revisiones y provenance.
+- Documentación nativa y actualización en tiempo real con autoridad verificable; control humano situado e incidencias.
+- Nacimiento de Navigation State, identidad de Relationship, evidencia de traversal y reconciliación de anchors degradados con Location.
+- Garantías físicas Gene↔Document F1–F6/V1–V5, explicación canónica de Domain y actualización/invalidation de vistas.
+- `DomainRevision` y `StructuralFinding` permanecen pendientes y no fueron ratificados por esta consolidación.
+
+**Fuentes de coordinación**
+
+- `docs/ANALYSIS/ORRERY/LOCATION/ORRERY_LOCATION_MATERIAL_CLOSURE_v1_1.md`
+- Tarea ORRERY consolidada `01a0a6d5-617d-7dd2-a316-f3e3c3107920`, fechada 2026-09-23. Es distinta de la tarea ORRERY centrada en PlayCanvas; el índice consolidado vive en su conversación y no en un archivo nuevo.
+
+---
+
 ## Cola de prompts para sesiones externas
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
@@ -664,6 +698,7 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 | Pendiente de autorización | 9 | Limpieza del Mandate de prueba `b15bcdf4...` y carpeta temporal asociada | Autorización explícita de borrado |
 | Media | 4 + 6 | Diseño de identidad y alta de dispositivos AITAP/Alfred | Definir caso mobile sin Nucleus local |
 | Media | 2 | Diagnóstico del panel derecho de Core | Acceso a resolver de organización y componentes reales |
+| En espera de evidencia | ORRERY / Location | Contraste físico del recorrido Nucleus → GravityGraph → ING/DIS → BISP/Chroma → semantic-index → Location → Orrery | Datos genuinos de Onboarding + primer Mandate Genesis en un Project real; no fixtures sintéticos |
 | Media | 5 | Diseño de Implementation Layer de OpenCode | Contrato de gobernanza con Nucleus por definir |
 | Alta | 10 | Gobernanza de PALADIN y distribución por composición: identidad, contrato, bootstrap, transiciones y ownership de conocimiento | Nombre PALADIN confirmado; no iniciar implementación antes del cierre de gobernanza |
 | Alta | 10 | Relevamiento factual y propuesta del primer vertical demostrable de Command Respect | No asignar responsabilidades técnicas definitivas ni declarar bloqueantes otros Works sin evidencia directa |
@@ -694,3 +729,4 @@ Se informa que Nucleus implementó y validó (commit `3210f218`) la Fase 1 físi
 | 2026-09-04 | 12 | NUCLEUS reportó (commit `3210f218`) la implementación y validación de la Fase 1 física de Remote Authority dentro de su propia frontera: `ownershipcontract`, migración durable de ownership, markers fail-closed, decisión sellada de Gravity y el módulo `internal/authority` (Authority Snapshot, JCS, firma Ed25519, full/delta, high-water mark, catálogo de roles v1 sin `architect`); Supervisor/SynapseSimulator ya validan por la capa canónica. `shadow_remote`, `remote_enforced`, cutover, Backend, transporte de Batcave y consumidores en Brain/Temporal permanecen sin activar. | Work NUCLEUS, reportado por el usuario | Se actualiza el Tema 12: se registra la Fase 1 de Nucleus como implementación material (no propuesta), se diferencia de lo pendiente por Work, y se añade revisión de impacto para Backend, Batcave, Genesis, Brain/Temporal, Metamorph, Conductor, Vault, Executor, Gravity y Core/UI. Ninguna escritura queda autorizada por este reporte. |
 | 2026-09-07 | 1 | Se corrigió el acoplamiento técnico que trataba Genesis como nombre de la infraestructura compartida de Mandates. `MandateBuildWorkflow`, `mandate:build:*` y `nucleus mandate build` son ahora los nombres genéricos; `genesis` se conserva como `MandateType`, recorrido funcional y contexto específico donde corresponde. | Commits `61dec985`, `9c5e6d33` y `55e589d9`; `docs/MANDATE/GENESIS_RENAME_INDEX.md` | Se fija en Agenda que Mandate es la entidad genérica y Genesis un tipo/label. Quedan abiertos la doble implementación CLI/Go vs. API/Node, la ejecución local de `go build`/`go test` y el rebuild de artefactos antes de declarar el saneamiento completamente validado y desplegado. |
 | 2026-09-19 | 1 | Reporte directo: lifecycle durable de `ing`, Brain ↔ AITAP para `dis.mapping`, persistencia, reinicio y replay sin duplicación implementados y validados de forma controlada. | Reporte directo del usuario | Se actualiza Tema 1 a IMPLEMENTACIÓN COMPLETADA; ACEPTACIÓN E2E BLOQUEADA. El único bloqueo registrado es bootstrap legítimo de autoridad Master para que Nucleus Vault autorice la referencia Anthropic solicitada por AITAP; ownership: GENESIS CONTROL. |
+| 2026-09-23 | ORRERY / Location | Se consolidaron las investigaciones ORRERY UI, ORRERY DOCS, ORRERY, Location v1.1 y Source Authority. Location queda cerrado como research, no como capacidad end-to-end soportada. | Tarea ORRERY consolidada `01a0a6d5-617d-7dd2-a316-f3e3c3107920` y `ORRERY_LOCATION_MATERIAL_CLOSURE_v1_1.md` | Se registra el estado sin crear un Tema nuevo ni declarar implementación. La continuidad queda condicionada a datos genuinos de Onboarding y Mandate Genesis para realizar el contraste físico. |
