@@ -32,11 +32,14 @@ BTIPS convierte la interacción con IA en un **proceso de ingeniería**, no en u
 
 ### 🌐 Organización Bloom
 
-* **1 solo Nucleus**
-* **N Projects**
-* **Todos comparten el mismo runtime local**
+* **1 Tenant puede agrupar N Organizations**
+* **Cada Organization tiene 1 solo Nucleus**
+* **Cada Organization contiene N Projects**
+* **Los Projects de una Organization comparten el mismo runtime local**
 * **El Nucleus no desarrolla features**
   👉 **Gobierna, explora y coordina**
+
+El **Tenant** es una agrupación administrativa liviana que permite reunir organizaciones relacionadas bajo un mismo paraguas. No introduce jerarquía ni autoridad entre ellas: cada Organization conserva de forma independiente sus miembros, roles, permisos, Nucleus y Projects. Compartir Tenant no habilita acceso ni herencia de autoridad entre organizaciones hermanas.
 
 Pensalo así:
 
@@ -242,11 +245,18 @@ flowchart LR
         Marketplace["🌐 Wisdom\nMandates Marketplace"]
         GeminiAPI["🔷 Gemini API
         Google"]
+        GitHubOAuth["🔑 GitHub OAuth\nIdentidad canónica"]
+        AccountServer["🏢 Account & Organization Server"]
+        Tenant["Tenant\nAgrupación administrativa"]
+        Organization["Organization\nMembresía · roles · permisos · autoridad\nMaster · Specialist · Operator"]
         AlfredMobile --"WebSocket
         QR + nonce"--> BlindJudge
         BloomUpdateServer --"manifests firmados\nion recipes"--> Batcave
         Marketplace --"snapshot de autoridad
         (no implementado)"--> Batcave
+        GitHubOAuth --> AccountServer
+        AccountServer --> Tenant
+        Tenant --"groups"--> Organization
     end
 
     ExternalAIAPI <--> GeminiAPI
@@ -260,6 +270,10 @@ flowchart LR
     (remoto)"--> AITAP
     AlfredMobile -."mrg / tst
     solicitud remota".-> AlfredRuntime
+
+    AccountServer --"identity · membership · roles"--> Batcave
+    Organization --"1 per organization"--> NucleusExe
+    User <--"UI web: permisos · wisdom · alfred (eventual)"--> AccountServer
 ```
 
 ## 2. ARQUITECTURA DE BLOOM
@@ -281,7 +295,7 @@ La operación de BTIPS se apoya en servicios persistentes que independizan la l�
 
 Nucleus es la autoridad de gobierno, identidad y firma del sistema. Actúa como el puente entre la voluntad del propietario y las capacidades del ecosistema, sin convertirse en motor cognitivo, scheduler ni ejecutor técnico.
 
-*   **Identity & Role Management:** Gestiona la jerarquía de poder. El catálogo de roles reconoce `Master`, `Specialist` y `Unknown`; `Architect` aparece en documentación histórica pero no forma parte de este catálogo (ver 🔟 Autoridad Organizacional Remota). Nucleus valida quién tiene permiso para ejecutar acciones sensibles en intersección con las posturas de Gravity vigentes (ver 8️⃣ Gravity) y con las políticas de Vault y Executor.
+*   **Identity & Role Enforcement:** El servidor conserva la fuente de verdad de identidades, memberships, catálogo de roles y asignaciones. Nucleus consume ese estado remoto, verifica su vigencia y aplica la autorización efectiva a las operaciones locales en intersección con las posturas de Gravity vigentes (ver 8️⃣ Gravity) y con las políticas de Vault y Executor. Nucleus no crea cuentas, Tenants, Organizations, invitaciones ni asignaciones de roles. El catálogo built-in reconoce `Master`, `Specialist` y `Operator`; `Unknown` describe una identidad o relación no reconocida, no un rol otorgable. `Architect` aparece en documentación histórica pero no forma parte del catálogo vigente (ver 🔟 Autoridad Organizacional Remota).
 *   **Vault Authority:** Es el dueño del ciclo de vida de las credenciales. Las almacena mediante el mecanismo seguro del sistema operativo y entrega referencias o accesos efímeros a los consumidores correspondientes sin exponerlas como estado persistente fuera del Vault.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
 *   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Batcave.
@@ -298,7 +312,7 @@ Cortex actúa como la **capa de interacción directa con el usuario y los AI Pro
 
 El runtime de Cortex incluye tres páginas web locales que operan sobre el mismo canal Synapse y comparten el mismo mecanismo de autodescripción de protocolo:
 
-* **Discovery** — Onboarding del usuario. Guía el flujo desde la instalación hasta tener GitHub auth, API key y cuenta registrada en Nucleus.
+* **Discovery** — Onboarding del usuario. Guía el flujo desde la instalación hasta autenticar la identidad canónica mediante GitHub, resolver en el servidor la cuenta, el Tenant, la Organization y la membership correspondiente, y completar las credenciales necesarias. Discovery conduce la experiencia, pero no es dueño del registro. En el primer acceso, el servidor crea atómicamente Tenant, Organization, membership fundadora y asignación `Master`; en accesos posteriores reconoce la misma identidad y devuelve la misma Organization sin duplicarla.
 * **Landing** — Dashboard del perfil activo. Estado de sesión, cuentas vinculadas, stats de uso y acciones rápidas post-onboarding.
 * **SynapseSimulator** — Herramienta de debug y observabilidad del protocolo. Existe **únicamente en builds dev** — no se despliega en producción.
 * **Companion** — Panel lateral de segunda opinión cognitiva. A diferencia de SynapseSimulator, es un activo de uso continuo: vive permanentemente disponible para el ingeniero, condicionado por onboarding completo + handshake Synapse confirmado. Ver subsección dedicada más abajo.
@@ -1288,7 +1302,12 @@ Batcave no contiene lógica de negocio. Es infraestructura soberana: valida iden
 
 **SIN VALORES HARDCODEADOS. TODO DERIVA DE `{organization}`.**
 
-Batcave es multi-tenant por diseño. Cada organización tiene su propio namespace aislado, su propia configuración, sus propios logs y su propia instancia de Alfred. Ningún valor puede estar quemado en el código. Esta es la base que garantiza que múltiples organizaciones puedan coexistir en el mismo control plane sin data leakage entre ellas.
+Batcave es multi-tenant por diseño. El servidor distingue dos límites diferentes:
+
+* **Tenant:** agrupación administrativa de una o más Organizations relacionadas.
+* **Organization:** límite real de membresía, roles, permisos y autoridad.
+
+Cada Organization tiene su propio namespace aislado, su propia configuración, sus propios logs y su propia instancia de Alfred. Dos Organizations pueden compartir Tenant sin compartir miembros, roles, permisos ni autoridad. No existe una Organization madre con autoridad implícita sobre sus hermanas y ningún permiso atraviesa el límite organizacional por pertenecer al mismo Tenant. Ningún valor puede estar quemado en el código. Esta separación permite que múltiples Organizations coexistan en el mismo control plane sin data leakage entre ellas.
 
 ### 9.3 Rol en la cadena de gobernanza
 
@@ -1373,14 +1392,66 @@ INVARIANT-ALF-004: El contrato .ai_bot.sovereign.bl nunca se carga desde fuera d
 
 ### Principio rector
 
-> El backend remoto conserva la fuente organizacional de identidades, memberships, roles y asignaciones. Nucleus consume ese estado de forma verificable y revocable, y sigue siendo el punto local que decide y aplica la autorización efectiva, junto con las políticas vigentes, Gravity y los límites técnicos.
+> El servidor conserva la fuente organizacional de identidades, cuentas, Tenants, Organizations, memberships, roles, asignaciones e invitaciones. Nucleus consume ese estado de forma verificable y revocable, y sigue siendo el punto local que decide y aplica la autorización efectiva, junto con las políticas vigentes, Gravity y los límites técnicos.
 
-Un rol no es una propiedad global de una persona ni de su máquina. Es una relación entre actor, organización, alcance, rol y vigencia — identidad, membership, definición de rol y asignación permanecen conceptos separados.
+La gestión de cuentas y organizaciones ocurre en el servidor, no en el almacenamiento local de la computadora. Un rol no es una propiedad global de una persona ni de su máquina. Es una relación entre actor, Organization, alcance, rol y vigencia: identidad, cuenta, membership, definición de rol y asignación permanecen conceptos separados.
+
+### Creación de cuenta y Organization
+
+El primer acceso no requiere un formulario de registro separado. La persona inicia sesión mediante GitHub y el servidor verifica esa identidad como referencia canónica, no como un dato autodeclarado.
+
+```text
+GitHub OAuth
+        ↓
+Identidad canónica
+        ↓
+Resolución idempotente en servidor
+        ├── Identidad existente → misma cuenta y misma Organization
+        └── Identidad nueva
+                ↓ transacción atómica
+           Tenant + Organization + Founder Membership + Master
+```
+
+Si la identidad aparece por primera vez, el servidor crea en una misma operación atómica el Tenant, la Organization, la membership fundadora y la asignación `Master`. No puede quedar una identidad fundadora sin Organization, una Organization sin membership fundadora ni una creación parcial. Si la misma identidad vuelve a autenticarse, el servidor reconoce la cuenta y devuelve la misma Organization sin generar duplicados.
+
+### Tenant y límite organizacional
+
+Cada Organization nueva nace dentro de un Tenant. El Tenant permite agrupar una empresa, sus filiales u otras operaciones relacionadas, pero no constituye un nivel de autoridad sobre ellas. Cada Organization administra de forma independiente sus miembros, roles, asignaciones y alcance. La pertenencia al mismo Tenant no concede acceso ni produce herencia de permisos entre Organizations.
+
+### Roles built-in
+
+El servidor mantiene un catálogo común de roles built-in, disponible desde el nacimiento de cada Organization y también para las Organizations existentes:
+
+* **Master:** máxima autoridad administrativa de la Organization. La persona fundadora lo recibe durante la creación atómica y puede administrar las asignaciones permitidas dentro de su autoridad.
+* **Specialist:** colaborador con permisos acotados para participar del trabajo sin autoridad administrativa completa.
+* **Operator:** rol orientado a tareas operativas específicas, incluida la designación de agentes automatizados dentro del alcance de un Project.
+
+Cuando se incorpora un nuevo rol built-in al catálogo del servidor, queda disponible tanto para Organizations nuevas como existentes sin migraciones manuales por Organization. `Unknown` no es un rol asignable y `Architect` no pertenece al catálogo vigente. El régimen de roles personalizados queda fuera de esta incorporación y no se define por inferencia.
+
+### Asignación de roles con aceptación
+
+La autoridad no se activa por una decisión unilateral. Toda asignación sigue dos pasos:
+
+```text
+Administrador propone la asignación
+        ↓
+La persona destinataria la acepta
+        ↓
+Asignación efectiva
+```
+
+Proponer una asignación no la activa. Nadie puede asignar permisos que no posee ni autoasignarse una autoridad superior a la vigente. Cada asignación puede limitarse a una Organization o a un Project específico. El servidor conserva un historial inmutable de propuestas, aceptaciones, suspensiones y revocaciones para auditar quién hizo cada acto, cuándo y bajo qué condiciones.
+
+### Invitaciones externas
+
+Una persona con la autoridad administrativa necesaria puede invitar a alguien que todavía no pertenece a la Organization, indicando el rol y el alcance previstos. El servidor genera un enlace único con vigencia predeterminada de siete días, configurable hasta un máximo de treinta.
+
+La administración puede crear, listar y revocar invitaciones, y distinguir entre invitaciones pendientes, vencidas y utilizadas. Una invitación pendiente no es una membership activa ni una asignación aceptada. La incorporación final mediante el enlace permanece condicionada a la definición de seguridad que habilite su aceptación; hasta entonces, crear, consultar y revocar invitaciones no otorga autoridad a la persona invitada.
 
 ### La cadena
 
 ```text
-Backend (verdad organizacional)
+Servidor (cuentas y verdad organizacional)
         ↓
 Batcave (transporte y caché)
         ↓
@@ -1389,11 +1460,11 @@ Nucleus (verificación y decisión efectiva)
 Brain / Temporal (ejecución acotada)
 ```
 
-Metamorph queda fuera de este recorrido: protege el lifecycle del software, no transporta ni decide autoridad (ver 2.13️⃣).
+Batcave transporta el estado organizacional, pero no crea cuentas, roles, memberships o asignaciones. Nucleus no sustituye al servidor como fuente de verdad de cuentas: verifica el estado recibido y aplica localmente la autorización efectiva. Metamorph queda fuera de este recorrido porque protege el lifecycle del software y no transporta ni decide autoridad (ver 2.13️⃣).
 
 ### Migración en tres etapas
 
-El modelo avanza mediante una migración controlada, sin mezclar privilegios de ambos regímenes a la vez:
+La gestión de cuentas ya pertenece al servidor. La migración siguiente describe exclusivamente cuánto depende Nucleus del estado remoto para aplicar autoridad local, sin mezclar privilegios de ambos regímenes a la vez:
 
 - **`local_legacy`** — autorización basada en marcadores locales, `.ownership.json` y guards locales.
 - **`shadow_remote`** — Nucleus ya verifica autoridad remota y la compara contra la decisión local, sin que todavía gobierne el comportamiento productivo.
@@ -1401,7 +1472,7 @@ El modelo avanza mediante una migración controlada, sin mezclar privilegios de 
 
 ### Roles y decisión efectiva
 
-El catálogo objetivo reconoce roles built-in (`master`, `specialist`) y permite roles personalizados por organización, cada uno con permisos y alcance explícitos, sin herencia implícita entre alcances. `Architect` no forma parte de este catálogo: es un nombre heredado de documentación anterior (ver 2.2️⃣); la capacidad que ese nombre intentaba representar se resuelve como un permiso de gobernanza específico, no como un rol nuevo.
+La decisión efectiva parte de una identidad canónica, una membership vigente y una asignación aceptada de `Master`, `Specialist` u `Operator` dentro de un alcance explícito. No existe herencia implícita entre Organizations ni entre alcances. `Architect` no forma parte de este catálogo: es un nombre heredado de documentación anterior (ver 2.2️⃣); la capacidad que ese nombre intentaba representar se resuelve como un permiso de gobernanza específico, no como un rol nuevo.
 
 Una decisión de autorización efectiva requiere la intersección de: autoridad remota vigente y verificada, política soberana, las posturas de Gravity activas (ver 8️⃣), y los límites de Vault y Executor. Que falte cualquiera de esos términos produce denegación — no hay retorno automático a los marcadores locales una vez completada la migración.
 
@@ -1486,10 +1557,11 @@ Cada paso es auditado. Los logs de governance registran qué instrucción llegó
 
 Alfred solo acepta sesiones que pasen por el protocolo completo de Batcave:
 
-1. **GitHub OAuth**: el usuario se autentica con su cuenta de GitHub. Batcave valida que ese usuario pertenezca a la organización.
-2. **QR + nonce**: el acceso inicial desde la app mobile usa un QR efímero que contiene los endpoints de Batcave y un nonce de un solo uso.
-3. **BlindJudge**: verifica la firma de cada comando antes de enviarlo a Alfred.
-4. **Nivel de permiso**: el contrato soberano define qué puede hacer cada usuario. Un Specialist puede crear intents `exp` y `doc`. Solo el Master puede crear Mandates o aprobar intents `dev` en producción. *(Ejemplo narrativo simplificado — el modelo completo de roles, permisos y autorización efectiva se describe en 🔟 Autoridad Organizacional Remota.)*
+1. **GitHub OAuth:** la persona autentica su identidad canónica. El servidor resuelve la cuenta, la membership y las asignaciones vigentes dentro de la Organization correspondiente.
+2. **Transporte organizacional:** Batcave transporta esa relación de autoridad sin convertirse en su fuente ni modificarla.
+3. **QR + nonce:** el acceso inicial desde la app mobile usa un QR efímero que contiene los endpoints de Batcave y un nonce de un solo uso.
+4. **BlindJudge:** verifica la firma de cada comando antes de enviarlo a Alfred.
+5. **Decisión efectiva:** Nucleus verifica el estado organizacional remoto y aplica localmente el alcance y los permisos correspondientes. El contrato soberano aporta contexto operacional a Alfred, pero no sustituye la identidad, la membership, el catálogo de roles ni las asignaciones conservadas por el servidor. El modelo completo se describe en 🔟 Autoridad Organizacional Remota.
 
 ### 11.6 Qué puede hacer Alfred que ningún otro componente puede
 
