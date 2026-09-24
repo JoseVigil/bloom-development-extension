@@ -9,15 +9,15 @@
       "version": "1.0.0",
       "zip_path": "installer/native/ionpump/github.com.ion.zip",
       "download_url": "",
-      "sha256": "9e3cf7ddcdbb5ce4097e8b1951f8feffa39092dcf469991f4ca0c7928f4ea1dc",
+      "sha256": "ba936edad514a8f70517907023bcde805bab388103a89de9c8aa86964fc71aa2",
       "files": [
         {
           "path": "domain.manifest.json",
-          "sha256": "29fe4bbfd75a2d1316b7f1a8bdc6451fe47dd11844dbe66bd9527241d1b9d938"
+          "sha256": "9c2e3c2c1c448d55eed25daf354a191df42a58453472ea92fabba7f7349fd5ba"
         },
         {
           "path": "shared/session_guard.ion",
-          "sha256": "e6d0f22a64f39baa4301da4730a742098a6db361a663d143702eea95e81585ea"
+          "sha256": "d81c44b0898bc93a90889a2437ffccd2ca687cab8e7d3aa017476a94d072fadb"
         }
       ]
     }

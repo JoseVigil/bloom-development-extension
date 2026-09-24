@@ -9,6 +9,8 @@ const fs   = require('fs');
 const path = require('path');
 const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
 const { migrateToNestedSchema, getActiveOrg, getOrCreateOrg, getOrCreateProject, getActiveProject } = require('../../../shared/onboarding-schema');
@@ -94,18 +96,9 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
 
   // ── HANDLER: Disparar validación de identidad contra el backend (Auth 1, step 0) ──
   //
-  // Ver Investigacion_Onboarding_ValidacionGitHub_ServerSide_PuntoInsercion_v1_0.md
-  // §2 y §4. El contrato HTTP/WS real con el backend de identidad está
-  // explícitamente fuera de alcance de ese documento (§9) — no está definido
-  // todavía qué URL abrir ni qué transporte usar para llegar a él. Este
-  // handler deja lista la plomería IPC (persistencia de "intento iniciado",
-  // forma de la respuesta) para que, cuando ese contrato se cierre, alcance
-  // con reemplazar el cuerpo de este try{} por la llamada real — el resto
-  // del flujo (handler dedicado en milestone-reactor.js, resume, simulador)
-  // ya no requiere cambios.
-  //
-  // En desarrollo, mientras el backend real no existe, el step se completa
-  // vía synapse-simulator.html (optgroup "backend-auth", ver §8 del doc).
+  // Diseño P: el Runner entrega el secreto browser del mismo flujo 00a/00b.
+  // El backend conserva el resultado para un único poll de Conductor. Este
+  // paso no usa el Synapse Simulator ni transporta el token al reactor.
   ipcMain.handle('onboarding:validate-backend-identity', async () => {
     log.info('[IPC] onboarding:validate-backend-identity');
     try {
@@ -119,8 +112,67 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
     } catch (e) {
       log.warn('[IPC] onboarding:validate-backend-identity — no se pudo persistir el intento:', e.message);
     }
-    log.warn('[IPC] onboarding:validate-backend-identity — contrato con el backend real todavía no definido (ver §9 del doc de diseño); en desarrollo, completar este step vía synapse-simulator.html.');
-    return { success: true, pending: true, note: 'backend contract not implemented yet — use dev simulator' };
+    const browser = process.env.BLOOM_GENESIS_TEST_BROWSER_SECRET;
+    const origin = process.env.BLOOM_AUTHORITY_ORIGIN;
+    if (!browser) {
+      // La ruta de producción necesita que el navegador que completa GitHub
+      // posea la cookie del mismo flow y que Conductor conozca su browser.
+      // Un POST desde el proceso principal seguido de shell.openExternal no
+      // transfiere esa cookie. Mantener este camino cerrado hasta resolverlo.
+      log.warn('[IPC] onboarding:validate-backend-identity — arranque navegable de producción pendiente de transporte de cookie de flow');
+      return { success: false, error: 'production genesis browser handoff not implemented' };
+    }
+    if (!origin || new URL(origin).origin !== origin) {
+      return { success: false, error: 'BLOOM_AUTHORITY_ORIGIN missing or invalid' };
+    }
+    const reactor = getReactor?.();
+    if (!reactor) return { success: false, error: 'onboarding reactor not initialized' };
+
+    try {
+      const url = new URL('/v1/authority/genesis/result', origin);
+      url.searchParams.set('browser', browser);
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        // family:4 conecta a Wrangler en Windows sin cambiar el Host canónico
+        // localhost:8787 que el backend valida contra AUTHORITY_HUMAN_ORIGIN.
+        const response = await new Promise((resolve, reject) => {
+          const transport = url.protocol === 'https:' ? https : http;
+          const request = transport.get(url, { family: url.hostname === 'localhost' ? 4 : undefined }, res => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', chunk => { body += chunk; });
+            res.on('end', () => resolve({ status: res.statusCode, body }));
+            res.on('error', reject);
+          });
+          request.setTimeout(5000, () => request.destroy(new Error('genesis/result request timed out')));
+          request.on('error', reject);
+        });
+        if (response.status === 202) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        if (response.status !== 200) throw new Error(`genesis/result returned ${response.status}`);
+        const result = JSON.parse(response.body);
+        if (!result.organizationId || !result.principalId || typeof result.created !== 'boolean') {
+          throw new Error('genesis/result returned an incomplete identity');
+        }
+        if (!result.created) {
+          log.warn('[IPC] onboarding:validate-backend-identity — genesis returned created:false; reusing existing founder organization');
+        }
+        reactor.handleMilestone('backend_identity_check', {
+          type: 'ONBOARDING_MILESTONE',
+          event: 'BACKEND_IDENTITY_CHECK',
+          data: { branch: 'master_new_org', orgId: result.organizationId, role: 'master' },
+          _ts: Date.now(),
+        });
+        log.info('[IPC] onboarding:validate-backend-identity — founder organization confirmed:', result.organizationId);
+        return { success: true, pending: true };
+      }
+      throw new Error('genesis/result did not complete within 30s');
+    } catch (err) {
+      log.error('[IPC] onboarding:validate-backend-identity — FAILED:', err.message, err.cause?.message || '');
+      return { success: false, error: err.message };
+    }
   });
 
   // ── HANDLER: Polling de respaldo para backend_identity_check ────────────

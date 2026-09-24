@@ -411,9 +411,10 @@ Requisitos para que la suite corra de punta a punta:
 - `brain synapse host` corriendo (Capa 4 / paso 06-contingencia depende del
   socket TCP `127.0.0.1:5678`).
 - El debug panel / EventBus levantado en `ws://localhost:4124` (Capa 3).
-- Chromium de Nucleus/Sentinel levantado con `--remote-debugging-port`
-  accesible (ver `SYNAPSE_RUNNER_CDP_ENDPOINT`, placeholder actual:
-  `http://localhost:9222` — **no confirmado**, ver Puntos abiertos).
+- Chromium de Nucleus/Sentinel levantado con `--remote-debugging-port=0`.
+  Tras el click de Identity, el Runner lee el puerto asignado en
+  `DevToolsActivePort` dentro del `paths.user_data` del `ignition_spec.json`
+  del perfil `master_profile` indicado por `nucleus.json`.
 
 ---
 
@@ -548,9 +549,14 @@ Estos NO estaban en la lista de puntos abiertos del dossier, pero aparecieron
 al escribir el harness real y se documentan acá por la misma razón — para
 no asumirlos silenciosamente:
 
-- **Puerto de `--remote-debugging-port` de Chromium** (`discovery-chromium.ts`):
-  placeholder `http://localhost:9222` vía `SYNAPSE_RUNNER_CDP_ENDPOINT`. El
-  puerto real que usa Sentinel para levantar Chromium no fue confirmado.
+- **Puerto de `--remote-debugging-port` de Chromium**: Sentinel escribe
+  `--remote-debugging-port=0` en `ignition_spec.json`; Chromium asigna el
+  puerto y lo publica en `DevToolsActivePort` del directorio `paths.user_data`.
+  `electron-conductor.ts::waitForDiscoveryCdpEndpoint()` espera un archivo
+  actualizado tras el click y comprueba que `/json/version` responda antes de
+  conectar. `Launch()` en `installer/sentinel/internal/ignition/ignition_lifecycle.go`
+  todavía devuelve `9222` fijo, aunque no lee el puerto asignado; queda
+  registrado para DA-0-08, sin cambiar Sentinel en esta tarea.
 - **API real del bridge IPC de Conductor** (`window.onboarding` vs
   `window.electronAPI`, y la forma de suscripción a milestones —
   `electron-conductor.ts::installMilestoneBuffer()` prueba `onMilestone()`

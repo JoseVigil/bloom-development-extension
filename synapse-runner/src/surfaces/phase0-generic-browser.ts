@@ -114,6 +114,7 @@ function extractCookie(headers: Headers, name: string): string | undefined {
 export interface Phase0GenesisFlow {
   authorizationUrl: string;
   flowCookie: string;
+  browser: string;
 }
 
 /**
@@ -140,9 +141,11 @@ export async function beginPhase0FixtureRegistration(backendOrigin: string): Pro
   if (!body.authorizationUrl || !flowCookie) {
     throw new Error('[phase0] 00a: respuesta del backend sin authorizationUrl o sin cookie de flow.');
   }
+  const browser = flowCookie.slice(`${FLOW_COOKIE_NAME}=`.length);
+  if (!browser) throw new Error('[phase0] 00a: cookie de flow sin secreto browser.');
   // eslint-disable-next-line no-console
   console.log(`[phase0-generic-browser] 00a ok (${PHASE0_REGISTRATION_STATUS}) — flow de génesis iniciado, sin tocar github.com.`);
-  return { authorizationUrl: body.authorizationUrl, flowCookie };
+  return { authorizationUrl: body.authorizationUrl, flowCookie, browser };
 }
 
 export interface Phase0RegistrationResult {

@@ -1,5 +1,5 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { env } from '../config/env';
 import { getBloomPaths } from '../config/bloom-paths';
@@ -28,7 +28,43 @@ export interface ConductorHandle {
   close(): Promise<void>;
 }
 
-export async function launchConductor(): Promise<ConductorHandle> {
+/** Puerto que Chromium escribió para el perfil que Conductor lanza. */
+export async function waitForDiscoveryCdpEndpoint(launchStartedAt: number, timeoutMs = 30_000): Promise<string> {
+  const paths = getBloomPaths();
+  const nucleus = JSON.parse(readFileSync(paths.nucleusJson, 'utf-8')) as { master_profile?: string };
+  const profileId = nucleus.master_profile;
+  if (!profileId) throw new Error('[electron-conductor] nucleus.json no tiene master_profile');
+
+  const specPath = join(paths.configDir, 'profile', profileId, 'ignition_spec.json');
+  const spec = JSON.parse(readFileSync(specPath, 'utf-8')) as {
+    engine_flags?: string[];
+    paths?: { user_data?: string };
+  };
+  if (!spec.engine_flags?.includes('--remote-debugging-port=0') || !spec.paths?.user_data) {
+    throw new Error(`[electron-conductor] Spec CDP dinámico inválido: ${specPath}`);
+  }
+  const activePortPath = join(spec.paths.user_data, 'DevToolsActivePort');
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(activePortPath)) {
+      const modifiedAt = statSync(activePortPath).mtimeMs;
+      const port = Number.parseInt(readFileSync(activePortPath, 'utf-8').split(/\r?\n/, 1)[0], 10);
+      if (modifiedAt >= launchStartedAt && Number.isInteger(port) && port > 0 && port <= 65535) {
+        const endpoint = `http://127.0.0.1:${port}`;
+        try {
+          const response = await fetch(`${endpoint}/json/version`, { signal: AbortSignal.timeout(1_000) });
+          if (response.ok) return endpoint;
+        } catch {
+          // Chromium puede haber escrito el puerto antes de aceptar conexiones.
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`[electron-conductor] Chromium no publicó un puerto CDP vigente en ${activePortPath} tras ${timeoutMs}ms`);
+}
+
+export async function launchConductor(testGenesis?: { browser: string; backendOrigin: string }): Promise<ConductorHandle> {
   // MODO DE LANZAMIENTO (confirmado esta sesión con una corrida real contra
   // el build empaquetado, ya con el bug de extraFiles resuelto): el canal
   // `synapse-simulator:inject-milestone` que usa injectBackendIdentityCheck()
@@ -48,10 +84,20 @@ export async function launchConductor(): Promise<ConductorHandle> {
   const launchArgs = env.useConductorPackagedBuild
     ? resolvePackagedLaunchArgs()
     : resolveDevLaunchArgs();
+  const processEnv = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
 
   const app = await electron.launch({
     executablePath: launchArgs.executablePath,
     args: launchArgs.args,
+    env: testGenesis
+      ? {
+          ...processEnv,
+          BLOOM_GENESIS_TEST_BROWSER_SECRET: testGenesis.browser,
+          BLOOM_AUTHORITY_ORIGIN: testGenesis.backendOrigin,
+        }
+      : processEnv,
     // Nucleus/Sentinel spawnean su propio Chromium por fuera de Electron
     // (Sección 1: "Brain/Nucleus — spawnea Chromium + perfil") — Conductor
     // en sí es solo la ventana desktop.

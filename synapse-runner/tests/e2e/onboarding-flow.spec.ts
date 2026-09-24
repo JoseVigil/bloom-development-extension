@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { test, expect } from '../fixtures/synapse-runner-fixture';
 import {
   beginPhase0FixtureRegistration,
   finishPhase0FixtureRegistration,
   type Phase0RegistrationResult,
 } from '../../src/surfaces/phase0-generic-browser';
-import { injectBackendIdentityCheck } from '../../src/surfaces/backend-identity-check';
 import { env } from '../../src/config/env';
 import {
   launchConductor,
   installMilestoneBuffer,
+  waitForDiscoveryCdpEndpoint,
   waitForMilestone,
   type ConductorHandle,
 } from '../../src/surfaces/electron-conductor';
@@ -21,7 +24,7 @@ import {
 } from '../../src/surfaces/companion-panel';
 import { runSubmitTestimony } from '../../src/surfaces/submit-cli';
 import { SELECTORS, assertSelectorConfigured } from '../../src/config/selectors';
-import { getExtensionIdFromNucleusJson, resetOnboardingState } from '../../src/config/bloom-paths';
+import { getBloomPaths, getExtensionIdFromNucleusJson, resetOnboardingState } from '../../src/config/bloom-paths';
 
 /**
  * Suite E2E de onboarding UI-driven — implementa la Matriz de Flujo
@@ -72,15 +75,13 @@ import { getExtensionIdFromNucleusJson, resetOnboardingState } from '../../src/c
  * Superficie 0 es la excepción documentada: no tiene capa de diagnóstico
  * propia todavía (§14.4, pendiente) — su paso sólo deja log por consola.
  *
- * CDP endpoint: hardcodeado a un valor de placeholder razonable
- * (localhost:9222) — el puerto real que usa Sentinel para levantar
- * Chromium no fue confirmado en esta sesión (no era un punto bloqueante de
- * la Sección 7 del dossier). Ajustar vía SYNAPSE_RUNNER_CDP_ENDPOINT si
- * difiere.
+ * CDP endpoint: Chromium lo publica en DevToolsActivePort del perfil maestro
+ * después del click que dispara el lanzamiento de Discovery.
  */
 
-const CDP_ENDPOINT = process.env.SYNAPSE_RUNNER_CDP_ENDPOINT ?? 'http://localhost:9222';
 const DISCOVERY_URL_PATTERN = /discovery\/index\.html|chrome-extension:\/\/.+\/discovery\//;
+const WORKSPACE_PATH = process.env.SYNAPSE_TEST_WORKSPACE_PATH ?? join(homedir(), 'BloomTestWorkspace', 'synapse-runner-e2e');
+const WORKSPACE_ORG = process.env.SYNAPSE_TEST_WORKSPACE_ORG ?? 'synapse-runner-e2e';
 
 test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0 server-side real + Fases 1-4 local)', () => {
   let phase0Registration: Phase0RegistrationResult | undefined;
@@ -135,7 +136,7 @@ test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0
     // resetOnboardingState() en bloom-paths.ts para el detalle completo.
     resetOnboardingState();
 
-    conductor = await launchConductor();
+    conductor = await launchConductor({ browser: genesisFlow.browser, backendOrigin: env.backendOrigin });
     await installMilestoneBuffer(conductor.mainWindow);
 
     await synapseRunner.runStep('backend_identity_check', undefined, async () => {
@@ -157,36 +158,38 @@ test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0
       // dentro de <div class="screen active" id="screen-entry">.
       await conductor.mainWindow.click('#screen-entry .btn-primary');
 
-      // Sin contrato de backend real todavía (§4/§9 del encargo) — el único
-      // mecanismo hoy para completar este step es la inyección directa del
-      // Synapse Simulator, confirmada ya implementada del lado de Conductor.
-      // 'master_new_org' — el único branch que este PoC puede ejercitar de
-      // punta a punta (mismo KNOWN_LIMITATION_FOUNDER_ONLY que 00a/00b).
-      await injectBackendIdentityCheck(conductor.mainWindow, { branch: 'master_new_org' });
-      // El botón "Continuar →" arranca disabled (onboarding.html) y
-      // step-backend-identity.js lo habilita recién al recibir el milestone
-      // — Playwright espera la actionability (no-disabled) antes de poder
-      // clickearlo, así que este click ya funciona como la espera del
-      // milestone sin necesitar waitForMilestone() explícito antes.
+      const milestone = (await waitForMilestone(conductor.mainWindow, 'backend_identity_check')) as {
+        jsonValue(): Promise<unknown>;
+      };
+      const observed = (await milestone.jsonValue()) as { payload?: { branch?: string; orgId?: string; role?: string } };
+      expect(observed.payload).toMatchObject({
+        branch: 'master_new_org',
+        orgId: phase0Registration!.organizationId,
+        role: 'master',
+      });
+      const nucleus = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+        onboarding?: { backend_identity_org_id?: string; backend_identity_branch?: string };
+      };
+      expect(nucleus.onboarding?.backend_identity_org_id).toBe(phase0Registration!.organizationId);
+      expect(nucleus.onboarding?.backend_identity_branch).toBe('master_new_org');
       await conductor.mainWindow.click('#btn-continue-backend-identity');
     });
 
-    // ---- Paso 01: Launch (Electron UI → onboarding:launch-discovery) ----
-    await synapseRunner.runStep('01_launch', undefined, async () => {
-      await conductor.mainWindow.click('text=Launch Discovery').catch(() => {
-        // El texto exacto del botón no fue confirmado contra el DOM real
-        // (Sección 0 auditó archivos, no runtime). Ver README.
-        throw new Error(
-          '[01_launch] No se encontró el botón "Launch Discovery" — confirmar el selector real ' +
-            'en installer/conductor/workspace/onboarding/renderer/steps/step-identity.js.',
-        );
-      });
-      await waitForMilestone(conductor.mainWindow, 'onboarding:launch-discovery');
+    // ---- Paso local previo a Discovery: Workspace ----
+    await synapseRunner.runStep('01a_workspace', undefined, async () => {
+      mkdirSync(WORKSPACE_PATH, { recursive: true });
+      await conductor.mainWindow.fill('#ws-path-input', WORKSPACE_PATH);
+      await conductor.mainWindow.fill('#ws-org-input', WORKSPACE_ORG);
+      await conductor.mainWindow.click('#btn-continue-workspace');
+      await conductor.mainWindow.locator('#screen-identity.active').waitFor({ state: 'visible' });
     });
 
     // ---- Paso 02: Device Code (Discovery → GITHUB_DEVICE_CODE) ----
     discovery = await synapseRunner.runStep('02_device_code', undefined, async () => {
-      const surface = await connectToDiscovery(CDP_ENDPOINT, DISCOVERY_URL_PATTERN);
+      const launchStartedAt = Date.now();
+      await conductor.mainWindow.click('#btn-continue-identity');
+      const cdpEndpoint = await waitForDiscoveryCdpEndpoint(launchStartedAt);
+      const surface = await connectToDiscovery(cdpEndpoint, DISCOVERY_URL_PATTERN);
       assertSelectorConfigured(SELECTORS.discovery.authGithubButton, 'discovery.authGithubButton');
       await clickAuthGithub(surface.discoveryPage, SELECTORS.discovery.authGithubButton);
       return surface;
@@ -203,7 +206,12 @@ test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0
       // sesión de GitHub ya autorizada en el perfil de Chromium usado por
       // el Runner, tal como recomienda tratar las fronteras externas sin
       // saltear el circuito de eventos del cliente (consigna, punto 3).
-      await waitForMilestone(conductor.mainWindow, 'milestone:reached');
+      await waitForMilestone(conductor.mainWindow, 'github_app_auth');
+    });
+
+    await synapseRunner.runStep('01b_vault', undefined, async () => {
+      await waitForMilestone(conductor.mainWindow, 'vault_init');
+      await conductor.mainWindow.click('#btn-continue-vault');
     });
 
     // ---- Paso 04: Identity (Discovery → ACCOUNT_REGISTERED) ----
