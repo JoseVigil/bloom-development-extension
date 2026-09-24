@@ -1,10 +1,77 @@
 package inspection
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestInspectBootstrapReadsMetadataWithoutPython(t *testing.T) {
+	binRoot := t.TempDir()
+	bootstrapDir := filepath.Join(binRoot, "bootstrap")
+	if err := os.MkdirAll(bootstrapDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bootstrapDir, "bundle.js"), []byte("bundle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	metadata, _ := json.Marshal(map[string]any{
+		"version": "1.2.3", "build_number": 17,
+		"build_date": "2026-09-24T00:00:00Z", "info": "test bootstrap",
+	})
+	if err := os.WriteFile(filepath.Join(bootstrapDir, "bootstrap.meta.json"), metadata, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := inspectBootstrap(binRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != "1.2.3" || got.BuildNumber != 17 || got.Status != "healthy" {
+		t.Fatalf("unexpected Bootstrap inspection: %+v", got)
+	}
+	if got.Path != filepath.Join(bootstrapDir, "bundle.js") {
+		t.Fatalf("Bootstrap path = %q", got.Path)
+	}
+}
+
+func TestManagedPathsUseInstalledLayout(t *testing.T) {
+	definitions := getManagedBinaries(filepath.Join("host", "bloom-host.exe"))
+	want := map[string]string{
+		"Host":      filepath.Join("bin", "host", "bloom-host.exe"),
+		"Conductor": filepath.Join("bin", "workspace", "bloom-workspace.exe"),
+		"Cortex":    filepath.Join("bin", "cortex", "bloom-cortex.blx"),
+		"Setup":     filepath.Join("bin", "setup", "bloom-setup.exe"),
+	}
+	for _, definition := range definitions {
+		if expected, ok := want[definition.name]; ok {
+			if definition.path != expected {
+				t.Errorf("%s path = %q, want %q", definition.name, definition.path, expected)
+			}
+			delete(want, definition.name)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing managed definitions: %v", want)
+	}
+}
+
+func TestElectronWithMissingMetadataIsNotMissing(t *testing.T) {
+	tmp := t.TempDir()
+	executable := filepath.Join(tmp, "bloom-workspace.exe")
+	if err := os.WriteFile(executable, []byte("exe"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := InspectManagedBinary("Conductor", executable, managedBinaryDefinition{name: "Conductor"})
+	if err == nil {
+		t.Fatal("expected missing metadata error")
+	}
+	if got == nil || got.Status == "missing" {
+		t.Fatalf("existing executable classified as missing: %+v", got)
+	}
+}
 
 // TestCalculateSHA256 tests SHA-256 hash calculation
 func TestCalculateSHA256(t *testing.T) {
@@ -12,7 +79,7 @@ func TestCalculateSHA256(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	content := []byte("Hello, World!")
-	
+
 	if err := os.WriteFile(testFile, content, 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -119,7 +186,7 @@ func TestFormatSize(t *testing.T) {
 // TestFileExists tests file existence checking
 func TestFileExists(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create a test file
 	testFile := filepath.Join(tmpDir, "exists.txt")
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
@@ -147,7 +214,7 @@ func TestGetFileInfo(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	content := []byte("Hello, World!")
-	
+
 	if err := os.WriteFile(testFile, content, 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -233,7 +300,7 @@ func BenchmarkCalculateSHA256(b *testing.B) {
 	tmpDir := b.TempDir()
 	testFile := filepath.Join(tmpDir, "benchmark.bin")
 	content := make([]byte, 1024*1024) // 1MB
-	
+
 	if err := os.WriteFile(testFile, content, 0644); err != nil {
 		b.Fatalf("Failed to create test file: %v", err)
 	}

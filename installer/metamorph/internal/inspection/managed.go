@@ -116,6 +116,11 @@ type managedBinaryDefinition struct {
 func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 	if hostPath == "" {
 		hostPath = defaultHostPath
+	} else if !filepath.IsAbs(hostPath) {
+		clean := filepath.Clean(hostPath)
+		if clean != "bin" && !strings.HasPrefix(clean, "bin"+string(filepath.Separator)) {
+			hostPath = filepath.Join("bin", clean)
+		}
 	}
 
 	// Conductor path depends on the platform:
@@ -604,12 +609,18 @@ func InspectAllManagedBinaries(basePath string) ([]ManagedBinary, error) {
 
 			binary, err := InspectManagedBinary(definition.name, fullPath, definition)
 			if err != nil {
-				results[index] = ManagedBinary{
-					Name:                 definition.name,
-					Path:                 fullPath,
-					Status:               "missing",
-					Version:              "unknown",
-					UpdatableByMetamorph: true,
+				if binary != nil {
+					// The executable exists but its metadata could not be read.
+					// Preserve that distinction instead of reporting it as absent.
+					results[index] = *binary
+				} else {
+					results[index] = ManagedBinary{
+						Name:                 definition.name,
+						Path:                 fullPath,
+						Status:               "unknown",
+						Version:              "unknown",
+						UpdatableByMetamorph: true,
+					}
 				}
 			} else {
 				results[index] = *binary

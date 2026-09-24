@@ -13,7 +13,7 @@
     "nucleus_exe": "nucleus/nucleus.exe",
     "brain_exe": "brain/brain.exe",
     "sentinel_exe": "sentinel/sentinel.exe",
-    "host_exe": "host/bloom-host.exe",
+    "host_exe": "bin/host/bloom-host.exe",
     "conductor_exe": "conductor/bloom-conductor.exe",
     "cortex_blx": "cortex/bloom-cortex.blx"
   },

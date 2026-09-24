@@ -2,21 +2,19 @@ package inspection
 
 import (
 	"archive/zip"
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
-	"metamorph/internal/core"
 	"github.com/spf13/cobra"
+	"metamorph/internal/core"
 )
 
 func init() {
@@ -138,7 +136,7 @@ func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeI
 
 	// Bootstrap and VSCode live under bin/ within bootstrapBase.
 	// In AppData mode bootstrapBase == BloomNucleus/, so we append "bin/" here
-	// so that inspectBootstrap resolves bin/bootstrap/version-bootstrap.py and
+	// so that inspectBootstrap resolves bin/bootstrap/bootstrap.meta.json and
 	// inspectVSCodeExtension resolves bin/vscode/bloom-extension.vsix correctly.
 	bootstrapBinBase := filepath.Join(bootstrapBase, "bin")
 
@@ -272,121 +270,80 @@ func detectPlatform() (string, error) {
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
-// bootstrapVersionOutput matches the JSON emitted by version-bootstrap.py.
-type bootstrapVersionOutput struct {
-	Success     bool   `json:"success"`
+// bootstrapVersionMetadata is the immutable metadata emitted by the build.
+type bootstrapVersionMetadata struct {
 	Version     string `json:"version"`
 	BuildNumber int    `json:"build_number"`
 	BuildDate   string `json:"build_date"`
 	Info        string `json:"info"`
-	DryRun      bool   `json:"dry_run"`
 }
 
-// BootstrapMeta holds the extra fields reported by version-bootstrap.py.
+// BootstrapMeta holds the extra fields reported by bootstrap.meta.json.
 type BootstrapMeta struct {
 	BuildDate string `json:"build_date"`
 	Info      string `json:"info"`
 }
 
-// resolvePythonExecutable returns the path to the Python interpreter to use
-// for running bootstrap scripts.
-//
-// Lookup order:
-//  1. BloomNucleus/bin/engine/runtime/python3  (deployed runtime, preferred)
-//  2. BloomNucleus/bin/engine/runtime/python   (alternate name in same runtime)
-//  3. "python3" on $PATH                       (system Python 3)
-//  4. "python"  on $PATH                       (legacy fallback)
-//
-// basePath is BloomNucleus/ (the bloom_base directory).
-func resolvePythonExecutable(basePath string) string {
-	runtimeDir := filepath.Join(basePath, "bin", "engine", "runtime")
-	candidates := []string{
-		filepath.Join(runtimeDir, "python3"),
-		filepath.Join(runtimeDir, "python"),
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	// Fall back to system Python; prefer python3 to avoid Python 2.
-	for _, name := range []string{"python3", "python"} {
-		if path, err := exec.LookPath(name); err == nil {
-			return path
-		}
-	}
-	return "python3" // last resort — will fail with a clear error message
-}
-
-// inspectBootstrap runs bin/bootstrap/version-bootstrap.py and returns a
-// ManagedBinary entry. The script is executed from its own directory so that
-// any relative imports inside it resolve correctly.
+// inspectBootstrap reads build metadata without executing the versioning script.
+// Inspection must never increment a build number or depend on a system Python.
 //
 // bootstrapBinBase is BloomNucleus/bin/ (the bin/ subdirectory of bloom_base).
 // basePath (bloom_base) is needed to locate the deployed Python runtime.
 func inspectBootstrap(bootstrapBinBase string) (ManagedBinary, error) {
 	scriptDir := filepath.Join(bootstrapBinBase, "bootstrap")
-	scriptPath := filepath.Join(scriptDir, "version-bootstrap.py")
+	metaPath := filepath.Join(scriptDir, "bootstrap.meta.json")
+	bundlePath := filepath.Join(scriptDir, "bundle.js")
 
-	stat, err := os.Stat(scriptPath)
+	stat, err := os.Stat(bundlePath)
 	if err != nil {
 		return ManagedBinary{
 			Name:    "Bootstrap",
-			Path:    scriptPath,
+			Path:    bundlePath,
 			Version: "unknown",
 			Status:  "corrupted",
-		}, fmt.Errorf("script not found: %w", err)
+		}, fmt.Errorf("bootstrap bundle not found: %w", err)
 	}
 
-	// Resolve bloom_base (one level up from bootstrapBinBase = BloomNucleus/bin/)
-	bloomBase := filepath.Dir(bootstrapBinBase)
-	pythonExe := resolvePythonExecutable(bloomBase)
-
-	var stdout, stderr bytes.Buffer
-	cmd := exec.Command(pythonExe, "version-bootstrap.py")
-	cmd.Dir = scriptDir
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
+	metaBytes, err := os.ReadFile(metaPath)
+	if err != nil {
 		return ManagedBinary{
 			Name:    "Bootstrap",
-			Path:    scriptPath,
+			Path:    bundlePath,
 			Version: "unknown",
 			Status:  "corrupted",
-		}, fmt.Errorf("script execution failed: %v — stderr: %s", err, stderr.String())
+		}, fmt.Errorf("bootstrap metadata not found: %w", err)
 	}
 
-	var out bootstrapVersionOutput
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+	var out bootstrapVersionMetadata
+	if err := json.Unmarshal(metaBytes, &out); err != nil {
 		return ManagedBinary{
 			Name:    "Bootstrap",
-			Path:    scriptPath,
+			Path:    bundlePath,
 			Version: "unknown",
 			Status:  "corrupted",
-		}, fmt.Errorf("could not parse script output: %w", err)
+		}, fmt.Errorf("could not parse bootstrap metadata: %w", err)
 	}
 
-	if !out.Success {
+	if out.Version == "" || out.BuildNumber < 0 {
 		return ManagedBinary{
 			Name:    "Bootstrap",
-			Path:    scriptPath,
+			Path:    bundlePath,
 			Version: "unknown",
 			Status:  "corrupted",
-		}, fmt.Errorf("script reported success=false")
+		}, fmt.Errorf("bootstrap metadata is incomplete")
 	}
 
-	hash, _ := sha256File(scriptPath)
+	hash, _ := sha256File(bundlePath)
 
 	return ManagedBinary{
-		Name:        "Bootstrap",
-		Path:        scriptPath,
-		Version:     out.Version,
-		BuildNumber: out.BuildNumber,
-		Hash:        hash,
-		SizeBytes:   stat.Size(),
+		Name:         "Bootstrap",
+		Path:         bundlePath,
+		Version:      out.Version,
+		BuildNumber:  out.BuildNumber,
+		Hash:         hash,
+		SizeBytes:    stat.Size(),
 		LastModified: stat.ModTime().UTC().Format(time.RFC3339),
-		Status:      "healthy",
+		Status:       "healthy",
 		BootstrapMeta: &BootstrapMeta{
 			BuildDate: out.BuildDate,
 			Info:      out.Info,
@@ -423,33 +380,33 @@ func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
 	stat, err := os.Stat(vsixPath)
 	if err != nil {
 		return ManagedBinary{
-			Name:                 "VSCodeExtension",
-			Path:                 vsixPath,
-			Version:              "unknown",
-			Status:               "corrupted",
+			Name:    "VSCodeExtension",
+			Path:    vsixPath,
+			Version: "unknown",
+			Status:  "corrupted",
 		}, fmt.Errorf("file not found: %w", err)
 	}
 
 	pkg, err := readVsixPackageJSON(vsixPath)
 	if err != nil {
 		return ManagedBinary{
-			Name:                 "VSCodeExtension",
-			Path:                 vsixPath,
-			Version:              "unknown",
-			Status:               "corrupted",
+			Name:    "VSCodeExtension",
+			Path:    vsixPath,
+			Version: "unknown",
+			Status:  "corrupted",
 		}, fmt.Errorf("could not read package.json from vsix: %w", err)
 	}
 
 	hash, _ := sha256File(vsixPath)
 
 	return ManagedBinary{
-		Name:                 "VSCodeExtension",
-		Path:                 vsixPath,
-		Version:              pkg.Version,
-		Hash:                 hash,
-		SizeBytes:            stat.Size(),
-		LastModified:         stat.ModTime().UTC().Format(time.RFC3339),
-		Status:               "healthy",
+		Name:         "VSCodeExtension",
+		Path:         vsixPath,
+		Version:      pkg.Version,
+		Hash:         hash,
+		SizeBytes:    stat.Size(),
+		LastModified: stat.ModTime().UTC().Format(time.RFC3339),
+		Status:       "healthy",
 		VSIXMeta: &VSIXMeta{
 			Publisher:   pkg.Publisher,
 			DisplayName: pkg.DisplayName,

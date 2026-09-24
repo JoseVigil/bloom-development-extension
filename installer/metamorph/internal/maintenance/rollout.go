@@ -141,13 +141,15 @@ var allComponents = []component{
 		SourceFn: func(r string) string {
 			switch runtime.GOOS {
 			case "windows":
-				return filepath.Join(r, "installer", "native", "bin", "win64", "workspace", "bloom-workspace.exe")
+				return filepath.Join(r, "installer", "native", "bin", "win64", "workspace", "win-unpacked")
 			case "darwin":
 				subdir := "mac"
+				platformDir := "darwin_x64"
 				if isARM64() {
 					subdir = "mac-arm64"
+					platformDir = "darwin_arm64"
 				}
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "workspace", subdir, "bloom-workspace.app")
+				return filepath.Join(r, "installer", "native", "bin", platformDir, "workspace", subdir, "bloom-workspace.app")
 			default: // linux
 				return filepath.Join(nativeBin(r, "workspace"), "linux-unpacked")
 			}
@@ -171,13 +173,15 @@ var allComponents = []component{
 		SourceFn: func(r string) string {
 			switch runtime.GOOS {
 			case "windows":
-				return filepath.Join(r, "installer", "native", "bin", "win64", "setup", "bloom-setup.exe")
+				return filepath.Join(r, "installer", "native", "bin", "win64", "setup", "win-unpacked")
 			case "darwin":
 				subdir := "mac"
+				platformDir := "darwin_x64"
 				if isARM64() {
 					subdir = "mac-arm64"
+					platformDir = "darwin_arm64"
 				}
-				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "setup", subdir, "bloom-setup.app")
+				return filepath.Join(r, "installer", "native", "bin", platformDir, "setup", subdir, "bloom-setup.app")
 			default: // linux
 				return filepath.Join(nativeBin(r, "setup"), "linux-unpacked")
 			}
