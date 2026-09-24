@@ -781,7 +781,7 @@ func isElevated() (bool, error) {
 // (service not installed, already stopped when asked to stop, already
 // running when asked to start) so callers can log the idempotent case
 // explicitly instead of implying an action that didn't happen — same
-// contract as controlService in rollout_other.go.
+// contract as controlService in rollout_unix.go.
 func controlService(name string, start bool) (bool, error) {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -842,4 +842,12 @@ func waitForServiceState(s *mgr.Service, desired svc.State, timeout time.Duratio
 		time.Sleep(300 * time.Millisecond)
 	}
 	return fmt.Errorf("timed out waiting for service state %v", desired)
+}
+
+// sandboxAlreadyFixed always reports false on Windows: the Linux SUID
+// chrome-sandbox mechanism it checks for doesn't exist here (no
+// chrome-sandbox is shipped, and syscall.Stat_t is undefined on Windows).
+// The real implementation is in rollout_unix.go.
+func sandboxAlreadyFixed(sandbox string) bool {
+	return false
 }

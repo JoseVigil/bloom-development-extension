@@ -594,22 +594,6 @@ func elevateAndFixSandbox(sandbox string) error {
 	return cmd.Run()
 }
 
-// sandboxAlreadyFixed reports whether sandbox is already owned by root
-// with the setuid bit set, so applySandboxSetuid can skip the pkexec
-// round-trip (and its dialog) on the common case (nothing changed since
-// the last fix).
-func sandboxAlreadyFixed(sandbox string) bool {
-	info, err := os.Stat(sandbox)
-	if err != nil {
-		return false
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false
-	}
-	return stat.Uid == 0 && stat.Gid == 0 && info.Mode().Perm() == 0o755 && info.Mode()&os.ModeSetuid != 0
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // bootstrap pre/post-deploy hooks — full Nucleus service restart
 // ─────────────────────────────────────────────────────────────────────────────

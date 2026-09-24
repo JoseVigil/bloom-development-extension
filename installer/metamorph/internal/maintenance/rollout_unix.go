@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"metamorph/internal/core"
@@ -199,4 +200,20 @@ func sudoChown(path string, uid, gid int) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// sandboxAlreadyFixed reports whether sandbox is already owned by root
+// with the setuid bit set, so applySandboxSetuid can skip the pkexec
+// round-trip (and its dialog) on the common case (nothing changed since
+// the last fix). Lives here because syscall.Stat_t only exists on Unix.
+func sandboxAlreadyFixed(sandbox string) bool {
+	info, err := os.Stat(sandbox)
+	if err != nil {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false
+	}
+	return stat.Uid == 0 && stat.Gid == 0 && info.Mode().Perm() == 0o755 && info.Mode()&os.ModeSetuid != 0
 }
