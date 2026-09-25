@@ -449,7 +449,11 @@ const Simulator = {
     }
 
     try {
-      return JSON.parse(template);
+      const payload = JSON.parse(template);
+      if (this.currentMessage.id === 'google_login_detected' && /^\d+$/.test(String(payload.tabId))) {
+        payload.tabId = Number(payload.tabId);
+      }
+      return payload;
     } catch (e) {
       return { _raw: template, _parseError: e.message };
     }

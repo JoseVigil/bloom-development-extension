@@ -96,7 +96,6 @@ contextBridge.exposeInMainWorld('onboarding', {
   //   });
   //
   onMilestone: (callback) => {
-    ipcRenderer.removeAllListeners('milestone:reached');
     ipcRenderer.on('milestone:reached', (_, data) => callback(data));
   },
 

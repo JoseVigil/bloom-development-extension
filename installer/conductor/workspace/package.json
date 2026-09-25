@@ -85,7 +85,7 @@
       "artifactName": "bloom-workspace.exe",
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false,
-      "extraFiles": [
+      "extraResources": [
         {
           "from": "../shared/logger.js",
           "to": "shared/logger.js"
@@ -105,7 +105,9 @@
         {
           "from": "shared_node_modules",
           "to": "node_modules"
-        },
+        }
+      ],
+      "extraFiles": [
         {
           "from": "bloom-conductor-version.ps1",
           "to": "bloom-conductor-version.ps1"

@@ -49,7 +49,21 @@ export async function waitForDiscoveryCdpEndpoint(launchStartedAt: number, timeo
     if (existsSync(activePortPath)) {
       const modifiedAt = statSync(activePortPath).mtimeMs;
       const port = Number.parseInt(readFileSync(activePortPath, 'utf-8').split(/\r?\n/, 1)[0], 10);
-      if (modifiedAt >= launchStartedAt && Number.isInteger(port) && port > 0 && port <= 65535) {
+      let reusableSession = false;
+      if (modifiedAt < launchStartedAt) {
+        try {
+          const inventory = JSON.parse(readFileSync(paths.profilesJson, 'utf-8')) as {
+            profiles?: Array<{ id: string; runtime_state?: { status?: string; handshake_confirmed?: boolean } }>;
+          };
+          reusableSession = inventory.profiles?.some((profile) =>
+            profile.id === profileId && profile.runtime_state?.status === 'open' &&
+            profile.runtime_state.handshake_confirmed === true,
+          ) ?? false;
+        } catch {
+          // Una sesión antigua sólo sirve con confirmación explícita del inventario.
+        }
+      }
+      if ((modifiedAt >= launchStartedAt || reusableSession) && Number.isInteger(port) && port > 0 && port <= 65535) {
         const endpoint = `http://127.0.0.1:${port}`;
         try {
           const response = await fetch(`${endpoint}/json/version`, { signal: AbortSignal.timeout(1_000) });

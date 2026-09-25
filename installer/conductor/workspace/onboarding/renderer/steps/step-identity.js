@@ -539,6 +539,8 @@ function _restoreIdentityFromResume(producedSet) {
   // (handleIdentityBtn, que resetea todo a stepIndex=0 — ver onboarding.js).
   if (firstPendingIdx !== -1) {
     _wireIdentityButtonToResumeStep();
+  } else {
+    advanceIdentityWizard('gemini');
   }
 }
 

@@ -1998,7 +1998,35 @@ func copyFile(src, dst string) error {
 	}
 	tmp.Close()
 
-	return os.Rename(tmpName, dst)
+	if err := os.Rename(tmpName, dst); err == nil {
+		return nil
+	}
+
+	// Windows does not allow os.Rename to replace an existing destination.
+	// Move the current file aside first so a failed replacement can restore it.
+	backup, err := os.CreateTemp(dir, ".rollout-previous-*")
+	if err != nil {
+		return err
+	}
+	backupName := backup.Name()
+	if err := backup.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(backupName); err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(backupName) }()
+
+	if err := os.Rename(dst, backupName); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		if restoreErr := os.Rename(backupName, dst); restoreErr != nil {
+			return fmt.Errorf("replace %s: %w; restore previous file: %v", dst, err, restoreErr)
+		}
+		return err
+	}
+	return os.Remove(backupName)
 }
 
 func copyDir(src, dst string) (int, error) {

@@ -15,7 +15,7 @@
 export const SELECTORS = {
   discovery: {
     /** Botón "Auth GitHub" — paso 02 de la Matriz de Flujo. */
-    authGithubButton: '__TODO_VERIFY__ [data-action="auth-github"]',
+    authGithubButton: '#btn-start-github-device-flow',
     /** Botón "Detect Google" — paso 04. */
     detectGoogleButton: '__TODO_VERIFY__ [data-action="detect-google"]',
   },

@@ -65,3 +65,34 @@ func TestElectronRolloutCopiesExecutableResourcesAndMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestElectronRolloutReplacesExistingAppAsar(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	relative := filepath.Join("resources", "app.asar")
+	srcPath := filepath.Join(src, relative)
+	dstPath := filepath.Join(dst, relative)
+
+	for path, content := range map[string]string{
+		srcPath: "new workspace package",
+		dstPath: "stale installed package",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := copyDir(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(dstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new workspace package" {
+		t.Fatalf("installed app.asar = %q, want updated package", got)
+	}
+}
