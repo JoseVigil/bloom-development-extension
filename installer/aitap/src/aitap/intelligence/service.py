@@ -140,7 +140,9 @@ class IntelligenceService:
                 route = routes[min(number, len(routes) - 1)]
                 backend = route["effective_intelligence"]
                 try:
-                    secret = self.vault.resolve(backend["credential_ref"])
+                    purpose = ("mandate_genesis_intelligence" if budget_context
+                               and intent["intent_type"] == "ing" and intent["phase"] == "classification" else None)
+                    secret = self.vault.resolve(backend["credential_ref"], purpose=purpose)
                 except SupplyError as exc:
                     journal.update(state="failed", error=exc.envelope()["error"])
                     self.store.write(identity, journal)

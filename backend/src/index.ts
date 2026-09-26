@@ -44,6 +44,7 @@ app.get('/v1/authority/genesis/login', c => configuredAuthorityHumanResponse(c.e
 // de arriba, mismo dispatch por path dentro de configuredAuthorityHumanResponse.
 app.get('/v1/authority/genesis/result', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/administration', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/vault-service-grant', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/initial-emission', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 // Sovereign Tenant Fase 3 (Propuesta_Arquitectura_Tenant_Soberano_v0_1.md §2.3.2-§2.3.4):
 // ambos verbos ya existen y están probados dentro de administration-route.ts

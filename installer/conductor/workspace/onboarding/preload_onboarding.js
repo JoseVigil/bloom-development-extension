@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('onboarding', {
   selectFolder: () => ipcRenderer.invoke('onboarding:select-folder'),
   listOrgs:     (params) => ipcRenderer.invoke('onboarding:list-orgs', params),
   initNucleus:  (params) => ipcRenderer.invoke('onboarding:init-nucleus', params),
+  useExistingWorkspace: (params) => ipcRenderer.invoke('onboarding:use-existing-workspace', params),
 
   // Project
   listRepos:     (params) => ipcRenderer.invoke('onboarding:list-repos', params),

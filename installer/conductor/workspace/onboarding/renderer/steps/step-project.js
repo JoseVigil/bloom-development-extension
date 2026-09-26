@@ -174,6 +174,29 @@ export async function importSelectedProject() {
   const project = selection.selectedProject;
   if (!project) return;
 
+  const normalizePath = value => value.replace(/[\\/]+/g, '/').replace(/\/$/, '').toLowerCase();
+  const existingProjectPath = selection.existingWorkspacePath
+    ? `${selection.existingWorkspacePath}/${project.name}`
+    : null;
+  if (project.path && existingProjectPath && normalizePath(project.path) === normalizePath(existingProjectPath)) {
+    selection.importedProjectPath = project.path;
+    showImportStatus(`✓ "${project.name}" existente — listo para continuar`, 'success');
+    const selectResult = await window.onboarding.selectProject({
+      projectName: project.name,
+      projectPath: project.path,
+    });
+    if (!selectResult.success || !selectResult.project?.projectId) {
+      showImportStatus(`No se pudo identificar el proyecto: ${selectResult?.error || 'projectId ausente'}`, 'error');
+      return;
+    }
+    selection.selectedProjectId = selectResult.project.projectId;
+    if (btn) {
+      btn.disabled = false;
+      btn.onclick = advanceToMandateStep;
+    }
+    return;
+  }
+
   if (!project.path) {
     // Repo de GitHub — nada que copiar, la selección ya es la confirmación.
     selection.importedProjectPath = '';

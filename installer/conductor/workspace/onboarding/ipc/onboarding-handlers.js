@@ -13,7 +13,14 @@ const http = require('http');
 const https = require('https');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
-const { migrateToNestedSchema, getActiveOrg, getOrCreateOrg, getOrCreateProject, getActiveProject } = require('../../../shared/onboarding-schema');
+const {
+  migrateToNestedSchema,
+  getActiveOrg,
+  getOrCreateOrg,
+  validateActiveOrganizationIdentity,
+  getOrCreateProject,
+  getActiveProject,
+} = require('../../../shared/onboarding-schema');
 
 const log = getLogger('onboarding');
 
@@ -159,6 +166,15 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         if (!result.created) {
           log.warn('[IPC] onboarding:validate-backend-identity — genesis returned created:false; reusing existing founder organization');
         }
+        // Auth 1 ya validó que `origin` es un origin absoluto y confirmó la
+        // organización contra ese backend. Persistirlo ahora completa el
+        // contexto que `nucleus authority sync` resolverá al cerrar el
+        // onboarding; conservarlo sólo en el environment dejaba el contexto
+        // instalado incompleto aunque el organization_id sí estuviera ligado.
+        const confirmedData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+        confirmedData.authority_base_url = origin;
+        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(confirmedData, null, 2));
+        log.info('[IPC] onboarding:validate-backend-identity — authority_base_url persistido:', origin);
         reactor.handleMilestone('backend_identity_check', {
           type: 'ONBOARDING_MILESTONE',
           event: 'BACKEND_IDENTITY_CHECK',
@@ -539,7 +555,10 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
             // mismo 'bloom-local' que ya usa selection.selectedOrg en
             // step-workspace.js para el caso temporal.
             const orgSlug = resolvedOrg || 'bloom-local';
-            getOrCreateOrg(data.onboarding, orgSlug, { workspacePath: nucleusPath });
+            getOrCreateOrg(data.onboarding, orgSlug, {
+              workspacePath: nucleusPath,
+              organizationId: data.onboarding.backend_identity_org_id || null,
+            });
 
             data.onboarding.updated_at = new Date().toISOString();
 
@@ -555,10 +574,11 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
           } catch (e) {
             // CRÍTICO: si esto falla, el usuario pierde el org/path aunque
             // `nucleus create` haya tenido éxito. Lo dejamos bien visible en logs
-            // y devolvemos el dato igual en la respuesta IPC para que el renderer
-            // pueda, como red de seguridad, reintentar la persistencia explícitamente
-            // vía onboarding:mark-step-complete con datos extendidos.
+            // y fallamos el IPC: no se puede avanzar sobre un workspace cuya
+            // organización/identidad canónica no quedó persistida.
             log.error('[IPC] onboarding:init-nucleus — COULD NOT PERSIST nucleus_create (org/path lost on disk!):', e.message);
+            resolve({ success: false, error: e.message, path: nucleusPath, output: allOutput });
+            return;
           }
 
           resolve({ success: true, org: resolvedOrg, path: nucleusPath, output: allOutput });
@@ -609,7 +629,10 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       // key de organizations[]), así que un workspace temporal/sin org
       // detectada cae a 'bloom-local'.
       const orgSlug = org || 'bloom-local';
-      getOrCreateOrg(data.onboarding, orgSlug, { workspacePath });
+      getOrCreateOrg(data.onboarding, orgSlug, {
+        workspacePath,
+        organizationId: data.onboarding.backend_identity_org_id || null,
+      });
 
       // Limpiar cualquier resto de un intento pendiente anterior (mismo
       // patrón que la rama de éxito de init-nucleus).
@@ -866,7 +889,42 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   ipcMain.handle('onboarding:complete', async (event, { workspaceUrl, projectId }) => {
     log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:5173');
     try {
-      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      let nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      migrateToNestedSchema(nucleusData.onboarding);
+      const activeOrgBeforeSync = validateActiveOrganizationIdentity(nucleusData.onboarding);
+      const confirmedOrganizationID = nucleusData.onboarding.backend_identity_org_id;
+      if (!confirmedOrganizationID || activeOrgBeforeSync.organization_id !== confirmedOrganizationID) {
+        throw new Error('organization_id_mismatch: la organización activa no coincide con Auth 1');
+      }
+      if (!nucleusData.authority_base_url) {
+        throw new Error('authority_base_url_missing: Auth 1 no dejó persistido el backend de Authority');
+      }
+
+      // El primer sync es parte de la barrera de cierre: registra la instalación,
+      // obtiene el tenant y reconcilia .ownership.json. No declarar el onboarding
+      // completo antes de que Nucleus haya terminado y persistido ese resultado.
+      log.info('[IPC] onboarding:complete — ejecutando nucleus --json authority sync');
+      const authoritySync = await execNucleus(['--json', 'authority', 'sync'], 30_000);
+      log.info('[IPC] onboarding:complete — authority sync respondió:', JSON.stringify(authoritySync));
+
+      nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      migrateToNestedSchema(nucleusData.onboarding);
+      const activeOrgAfterSync = validateActiveOrganizationIdentity(nucleusData.onboarding);
+      if (activeOrgAfterSync.organization_id !== confirmedOrganizationID) {
+        throw new Error('organization_id_mismatch: authority sync alteró la organización activa');
+      }
+      if (!activeOrgAfterSync.tenant_id || typeof activeOrgAfterSync.tenant_id !== 'string') {
+        throw new Error('tenant_id_missing: authority sync no resolvió el tenant de la organización activa');
+      }
+      log.info(
+        '[IPC] onboarding:complete — authority listo para organización activa:',
+        activeOrgAfterSync.org_slug,
+        '| organization_id:',
+        activeOrgAfterSync.organization_id,
+        '| tenant_id:',
+        activeOrgAfterSync.tenant_id
+      );
+
       nucleusData.onboarding = {
         ...nucleusData.onboarding,
         completed:     true,
@@ -877,7 +935,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
 
       // Resolver por identidad explícita, no por nombre ni por la noción de
       // "proyecto activo": puede haber varios proyectos operando a la vez.
-      migrateToNestedSchema(nucleusData.onboarding);
       if (!projectId) {
         throw new Error('onboarding:complete requiere el projectId de la selección actual');
       }

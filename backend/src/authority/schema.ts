@@ -120,12 +120,19 @@ export interface WireRoleAssignment {
   status: WireMembership["status"]; valid_from: string; valid_until: string | null; accepted_at: string;
 }
 export interface WireRevocation {
-  revocation_id: string; target_type: "external_identity" | "membership" | "role_definition" | "role_assignment";
+  revocation_id: string; target_type: "external_identity" | "membership" | "role_definition" | "role_assignment" | "vault_service_grant";
   target_id: string; effective_at: string; recorded_in_authority_version: string; reason_code: string;
+}
+export interface WireVaultServiceGrant {
+  grant_id: string; organization_id: string; installation_id: string;
+  consumer: "aitap"; permission: "vault.key.read"; key_id: string;
+  purpose: "mandate_genesis_intelligence"; service_public_key: string;
+  issued_by_principal_id: string; valid_from: string; valid_until: string;
 }
 export interface WireFullContent {
   principals: WirePrincipal[]; memberships: WireMembership[]; role_definitions: WireRoleDefinition[];
   role_assignments: WireRoleAssignment[]; revocations: WireRevocation[];
+  vault_service_grants?: WireVaultServiceGrant[];
 }
 export interface WireEmissionMetadata {
   schema: "bloom.authority.snapshot"; schema_version: "1.0";
@@ -135,7 +142,7 @@ export interface WireEmissionMetadata {
 }
 export interface WireDeltaOperation {
   sequence: string; operation: "upsert" | "remove"; collection: keyof WireFullContent;
-  entity_id: string; value: WireFullContent[keyof WireFullContent][number] | null;
+  entity_id: string; value: NonNullable<WireFullContent[keyof WireFullContent]>[number] | null;
 }
 export type WireSnapshotPayload = WireEmissionMetadata & (
   { kind: "full"; base_authority_version: null; content: WireFullContent } |

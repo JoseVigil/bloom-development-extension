@@ -24,7 +24,9 @@ def test_real_provider_and_durable_replay():
                                       root/'registry/genesis-pilot-v2.json')
     engine.policy['intelligence_supply'].update(max_attempts=1,max_output_tokens=budget)
     store = AccountingStore(state)
-    first = IntelligenceService(engine,store).supply(request())
+    approved = request()
+    approved['intent']['mandate_id'] = engine.policy['intelligence_supply']['budget']['mandate_id']
+    first = IntelligenceService(engine,store).supply(approved)
     assert first['outcome'] == 'completed' and first['provider'] == 'anthropic'
-    assert IntelligenceService(engine,AccountingStore(state)).supply(request()) == first
-    assert len(store.read(request()['logical_inference_id'])['attempts']) == 1
+    assert IntelligenceService(engine,AccountingStore(state)).supply(approved) == first
+    assert len(store.read(approved['logical_inference_id'])['attempts']) == 1

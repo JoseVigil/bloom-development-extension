@@ -321,6 +321,7 @@ func createVaultCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(createVaultCheckCommand(c))
 	cmd.AddCommand(createVaultSetCommand(c))
 	cmd.AddCommand(createVaultDeleteCommand(c))
+	cmd.AddCommand(createVaultServiceRequestCommand(c))
 
 	return cmd
 }
@@ -337,6 +338,10 @@ func createVaultLockCommand(c *core.Core) *cobra.Command {
 		Example: `nucleus vault lock
 nucleus --json vault lock`,
 		Run: func(cmd *cobra.Command, args []string) {
+			if !legacyVaultAllowed() {
+				fmt.Fprintln(cmd.ErrOrStderr(), "VAULT_ACCESS_DENIED")
+				os.Exit(1)
+			}
 			if core.GetUserRole() != core.RoleMaster {
 				fmt.Println("Error: requires master role")
 				os.Exit(1)
@@ -369,6 +374,10 @@ func createVaultUnlockCommand(c *core.Core) *cobra.Command {
 		Example: `nucleus vault unlock
 nucleus --json vault unlock`,
 		Run: func(cmd *cobra.Command, args []string) {
+			if !legacyVaultAllowed() {
+				fmt.Fprintln(cmd.ErrOrStderr(), "VAULT_ACCESS_DENIED")
+				os.Exit(1)
+			}
 			if core.GetUserRole() != core.RoleMaster {
 				fmt.Println("Error: requires master role")
 				os.Exit(1)
@@ -466,6 +475,10 @@ func createVaultCheckCommand(c *core.Core) *cobra.Command {
 		Args: cobra.ExactArgs(1), SilenceErrors: true, SilenceUsage: true,
 		Annotations: map[string]string{"category": "VAULT", "json_response": `{"available":true,"code":""}`},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !legacyVaultAllowed() {
+				fmt.Fprintln(cmd.OutOrStdout(), `{"available":false,"code":"VAULT_ACCESS_DENIED"}`)
+				return ErrUnauthorized
+			}
 			available, code := checkKeyAvailability(args[0], core.GetUserRole())
 			// Do not echo arguments, backend errors, hashes or secret values.
 			payload, _ := json.Marshal(struct {
@@ -493,6 +506,10 @@ func createVaultRequestCommand(c *core.Core) *cobra.Command {
 		Example: `nucleus vault request gemini-key:Personal
 nucleus --json vault request gemini-key:Personal`,
 		Run: func(cmd *cobra.Command, args []string) {
+			if !legacyVaultAllowed() {
+				fmt.Fprintln(cmd.ErrOrStderr(), "VAULT_ACCESS_DENIED")
+				os.Exit(1)
+			}
 			if core.GetUserRole() != core.RoleMaster {
 				fmt.Println("Error: vault access denied - requires master role")
 				os.Exit(1)
@@ -524,6 +541,18 @@ nucleus --json vault request gemini-key:Personal`,
 	}
 }
 
+func createVaultServiceRequestCommand(c *core.Core) *cobra.Command {
+	return &cobra.Command{Use: "service-request", Short: "Resolve a delegated service credential through a local channel", Args: cobra.NoArgs,
+		Annotations: map[string]string{"category": "VAULT", "json_response": `{"status":"delivered"}`},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := RunServiceRequest(cmd.InOrStdin(), c.Paths.AppDataDir); err != nil {
+				return ErrUnauthorized
+			}
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), `{"status":"delivered"}`)
+			return err
+		}}
+}
+
 func createVaultSetCommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <key-id> <value>",
@@ -536,6 +565,10 @@ func createVaultSetCommand(c *core.Core) *cobra.Command {
 		Example: `nucleus vault set gemini-key:Personal AIza...
 nucleus --json vault set gemini-key:Personal AIza...`,
 		Run: func(cmd *cobra.Command, args []string) {
+			if !legacyVaultAllowed() {
+				fmt.Fprintln(cmd.ErrOrStderr(), "VAULT_ACCESS_DENIED")
+				os.Exit(1)
+			}
 			if core.GetUserRole() != core.RoleMaster {
 				fmt.Println("Error: vault access denied - requires master role")
 				os.Exit(1)
@@ -578,6 +611,10 @@ func createVaultDeleteCommand(c *core.Core) *cobra.Command {
 		Example: `nucleus vault delete gemini-key:Personal
 nucleus --json vault delete gemini-key:Personal`,
 		Run: func(cmd *cobra.Command, args []string) {
+			if !legacyVaultAllowed() {
+				fmt.Fprintln(cmd.ErrOrStderr(), "VAULT_ACCESS_DENIED")
+				os.Exit(1)
+			}
 			if core.GetUserRole() != core.RoleMaster {
 				fmt.Println("Error: vault access denied - requires master role")
 				os.Exit(1)

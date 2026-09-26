@@ -190,7 +190,8 @@ export async function continueWorkspace() {
     errEl.style.display = 'block';
 
     const msg = result.error || '';
-    if (msg.includes('already exists') || msg.includes('ya existe')) {
+    const diagnosticText = `${msg} ${result.output || ''}`;
+    if (diagnosticText.includes('already exists') || diagnosticText.includes('ya existe')) {
       errEl.innerHTML = `
         Ya existe una configuración de Bloom en esta carpeta.
         <div class="ws-error-actions">
@@ -220,6 +221,9 @@ export async function continueWorkspace() {
 export async function useExistingWorkspace() {
   const orgSlug = workspaceState.org;
   const path = workspaceState.path;
+  const workspacePath = orgSlug
+    ? `${path.replace(/[\\/]+$/, '')}${path.includes('\\') ? '\\' : '/'}${orgSlug}`
+    : path;
 
   // FIX (auditoría multi-org): markStepComplete({ step: 'nucleus_create' })
   // SIEMPRE fallaba acá — nucleus_create está en FS_MARKER_STEPS
@@ -234,7 +238,7 @@ export async function useExistingWorkspace() {
   // por el reactor genérico.
   let result;
   try {
-    result = await window.onboarding.useExistingWorkspace({ org: orgSlug || null, path });
+    result = await window.onboarding.useExistingWorkspace({ org: orgSlug || null, path: workspacePath });
   } catch (e) {
     result = { success: false, error: e.message };
   }
@@ -251,9 +255,10 @@ export async function useExistingWorkspace() {
 
   const resolvedOrg = result.org || orgSlug || null;
   selection.selectedOrg = resolvedOrg;
-  selection.selectedFolderPath = path;
+  selection.selectedFolderPath = workspacePath;
+  selection.existingWorkspacePath = workspacePath;
   state.selectedOrg = resolvedOrg;
-  state.selectedFolder = path;
+  state.selectedFolder = workspacePath;
 
   // FIX (auditoría 16/07/2026, Bug #4): ver comentario idéntico en
   // continueWorkspace() más arriba.

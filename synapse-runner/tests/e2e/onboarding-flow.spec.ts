@@ -223,6 +223,23 @@ test.describe('synapse-runner — onboarding E2E completo (5 superficies: Fase 0
     // ---- Paso 05: Completion (Electron UI → _onOnboardingSuccess) ----
     await synapseRunner.runStep('05_completion', undefined, async () => {
       await waitForMilestone(conductor.mainWindow, 'onboarding:success');
+
+      const nucleus = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+        onboarding?: {
+          completed?: boolean;
+          backend_identity_org_id?: string;
+          active_org_slug?: string;
+          organizations?: Array<{ org_slug?: string; organization_id?: string }>;
+        };
+      };
+      const activeSlug = nucleus.onboarding?.active_org_slug;
+      const activeOrganizations = (nucleus.onboarding?.organizations ?? [])
+        .filter((org) => org.org_slug === activeSlug);
+
+      expect(activeOrganizations).toHaveLength(1);
+      expect(activeOrganizations[0].organization_id).toBeTruthy();
+      expect(activeOrganizations[0].organization_id).toBe(nucleus.onboarding?.backend_identity_org_id);
+      expect(activeOrganizations[0].organization_id).toBe(phase0Registration!.organizationId);
     });
 
     // ---- Paso 06-contingencia: Submit Intent (CLI, fuera de banda) ----

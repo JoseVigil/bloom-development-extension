@@ -1,7 +1,7 @@
 import { base64ToBase64url, canonicalizeJson, digestWire, signCanonicalPayload } from "./canonical";
 import type { WireDeltaOperation, WireEmissionMetadata, WireEnvelope, WireFullContent, WireSnapshotPayload } from "./schema";
 
-const collections = ["principals", "memberships", "role_definitions", "role_assignments", "revocations"] as const;
+const collections = ["principals", "memberships", "role_definitions", "role_assignments", "revocations", "vault_service_grants"] as const;
 // master v1 — idéntico carácter por carácter a installer/nucleus/internal/authority/roles.go
 // BuiltinRoles[RoleMaster] (13 permisos). `create_project` agregado 2026-09-23 (Paso 0 de
 // Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md, decisión de Jose): Go ya lo tenía desde
@@ -69,9 +69,9 @@ const roleKey = (r: { role_id: string; role_version: string }) => JSON.stringify
 
 /** Produces a detached normal form; missing fields and ambiguous entities never get defaults. */
 export function normalizeState(input: WireFullContent, organizationId: string): WireFullContent {
-  object(input, [...collections]); text(organizationId, "organization required");
+  object(input, input.vault_service_grants === undefined ? [...collections.slice(0, -1)] : [...collections]); text(organizationId, "organization required");
   const f = structuredClone(input);
-  for (const c of collections) array(f[c]);
+  for (const c of collections) if (f[c] !== undefined) array(f[c]);
   const identities: string[] = [];
   for (const p of f.principals) {
     object(p, ["principal_id", "principal_type", "status", "external_identities"]);
@@ -117,15 +117,26 @@ export function normalizeState(input: WireFullContent, organizationId: string): 
   for (const r of f.revocations) {
     object(r, ["revocation_id", "target_type", "target_id", "effective_at", "recorded_in_authority_version", "reason_code"]);
     text(r.revocation_id, "revocation ID"); text(r.target_id, "revocation target"); text(r.reason_code, "reason code");
-    one(r.target_type, ["external_identity", "membership", "role_definition", "role_assignment"]);
+    one(r.target_type, ["external_identity", "membership", "role_definition", "role_assignment", "vault_service_grant"]);
     wireVersion(r.recorded_in_authority_version); r.effective_at = normalizeWireTime(r.effective_at);
   }
   unique(f.revocations.map(r => r.revocation_id), "revocation");
+  for (const g of f.vault_service_grants ?? []) {
+    object(g, ["grant_id", "organization_id", "installation_id", "consumer", "permission", "key_id", "purpose", "service_public_key", "issued_by_principal_id", "valid_from", "valid_until"]);
+    for (const v of [g.grant_id, g.installation_id, g.key_id, g.issued_by_principal_id]) text(v, "grant identity");
+    if (g.organization_id !== organizationId || g.consumer !== "aitap" || g.permission !== "vault.key.read" || g.purpose !== "mandate_genesis_intelligence") fail("grant binding");
+    if (!/^[A-Za-z0-9_-]{43}$/.test(g.service_public_key)) fail("grant public key");
+    g.valid_from = normalizeWireTime(g.valid_from); g.valid_until = normalizeWireTime(g.valid_until);
+    if (instant(g.valid_until) <= instant(g.valid_from)) fail("grant validity");
+    if (!f.principals.some(p => p.principal_id === g.issued_by_principal_id && p.principal_type === "human")) fail("grant issuer");
+  }
+  unique((f.vault_service_grants ?? []).map(g => g.grant_id), "vault service grant");
   f.principals.sort((a, b) => cmp(a.principal_id, b.principal_id));
   f.memberships.sort((a, b) => cmp(a.membership_id, b.membership_id));
   f.role_definitions.sort((a, b) => cmp(a.role_id, b.role_id) || (wireVersion(a.role_version) < wireVersion(b.role_version) ? -1 : wireVersion(a.role_version) > wireVersion(b.role_version) ? 1 : 0));
   f.role_assignments.sort((a, b) => cmp(a.assignment_id, b.assignment_id));
   f.revocations.sort((a, b) => cmp(a.revocation_id, b.revocation_id));
+  f.vault_service_grants?.sort((a, b) => cmp(a.grant_id, b.grant_id));
   return f;
 }
 /** Regla R1 (Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.1): agrega al
@@ -181,12 +192,13 @@ export async function emitSnapshot(input: {
     if (wireVersion(input.base.authority_version) >= wireVersion(metadata.authority_version)) fail("delta version order");
     const base = normalizeState(input.base.state, metadata.organization_id);
     const operations: WireDeltaOperation[] = [];
-    const entityID = (c: keyof WireFullContent, v: any): string => c === "principals" ? v.principal_id : c === "memberships" ? v.membership_id : c === "role_definitions" ? v.role_id : c === "role_assignments" ? v.assignment_id : v.revocation_id;
+    const entityID = (c: keyof WireFullContent, v: any): string => c === "principals" ? v.principal_id : c === "memberships" ? v.membership_id : c === "role_definitions" ? v.role_id : c === "role_assignments" ? v.assignment_id : c === "vault_service_grants" ? v.grant_id : v.revocation_id;
     const key = (c: keyof WireFullContent, v: any) => c === "role_definitions" ? roleKey(v) : entityID(c, v);
     for (const c of collections) {
-      for (const old of base[c]) {
-        const current = (state[c] as any[]).find(v => key(c, v) === key(c, old));
+      for (const old of base[c] ?? []) {
+        const current = (state[c] as any[] | undefined)?.find(v => key(c, v) === key(c, old));
         if (c === "revocations" && (!current || canonicalizeJson(current) !== canonicalizeJson(old))) fail("revocation history cannot change");
+        if (c === "vault_service_grants" && current && canonicalizeJson(current) !== canonicalizeJson(old)) fail("vault service grant history cannot change");
         if (c === "role_definitions" && current) {
           const prior = old as WireFullContent["role_definitions"][number];
           if (prior.role_origin !== current.role_origin || canonicalizeJson(prior.permissions) !== canonicalizeJson(current.permissions)) fail("role permissions or origin change requires a new role version");
@@ -194,13 +206,13 @@ export async function emitSnapshot(input: {
         if (!current) {
           if (c === "role_definitions") fail("historical role removal forbidden");
           if (c === "principals") fail("principal removal deferred");
-          const type = c === "memberships" ? "membership" : "role_assignment";
+          const type = c === "memberships" ? "membership" : c === "vault_service_grants" ? "vault_service_grant" : "role_assignment";
           if (!state.revocations.some(r => r.target_type === type && r.target_id === entityID(c, old))) fail("removal requires revocation");
           operations.push({ sequence: String(operations.length + 1), operation: "remove", collection: c, entity_id: entityID(c, old), value: null });
         }
       }
-      for (const value of state[c]) {
-        const old = (base[c] as any[]).find(v => key(c, v) === key(c, value));
+      for (const value of state[c] ?? []) {
+        const old = (base[c] as any[] | undefined)?.find(v => key(c, v) === key(c, value));
         if (!old || canonicalizeJson(old) !== canonicalizeJson(value)) operations.push({ sequence: String(operations.length + 1), operation: "upsert", collection: c, entity_id: entityID(c, value), value });
       }
     }

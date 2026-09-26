@@ -70,7 +70,7 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 	root := &cobra.Command{Use: "authority", Short: "Inspect Authority evidence without changing enforcement mode", Args: cobra.NoArgs, Annotations: map[string]string{"category": "GOVERNANCE", "json_response": `{"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}`}}
 	root.SilenceUsage = true
 	root.SilenceErrors = true
-	for _, name := range []string{"status", "sync", "decision", "checkpoint", "observation"} {
+	for _, name := range []string{"status", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants"} {
 		n := name
 		sub := &cobra.Command{Use: n + " [arguments]", Short: "Report Authority " + n + " evidence", Args: cobra.ArbitraryArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := services.Run(n, args)
@@ -107,6 +107,29 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 		checkpoint := filepath.Join(dir, "checkpoint.json")
 		observations := filepath.Join(dir, "observation.json")
 		switch command {
+		case "service-identity":
+			if len(args) != 0 {
+				return report, AuthorityCommandError{"invalid_arguments"}
+			}
+			publicKey, identityErr := authority.CreateServiceIdentity(c.Paths.AppDataDir)
+			if identityErr != nil {
+				return report, AuthorityCommandError{"service_identity_unavailable"}
+			}
+			report.Evidence["consumer"] = "aitap"
+			report.Evidence["service_public_key"] = publicKey
+		case "service-grants":
+			if len(args) != 0 {
+				return report, AuthorityCommandError{"invalid_arguments"}
+			}
+			active, contextErr := core.ResolveActiveOrgContext()
+			if contextErr != nil {
+				return report, AuthorityCommandError{"authority_config_invalid"}
+			}
+			grants, grantErr := authority.ActiveVaultServiceGrantEvidence(&authority.Store{Path: state}, &authority.CheckpointStore{Path: checkpoint}, active.OrganizationID, authorityCommandNow())
+			if grantErr != nil {
+				return report, AuthorityCommandError{"VAULT_ACCESS_DENIED"}
+			}
+			report.Evidence["grants"] = grants
 		case "status":
 			_, stateErr := os.Stat(state)
 			_, cpErr := os.Stat(checkpoint)

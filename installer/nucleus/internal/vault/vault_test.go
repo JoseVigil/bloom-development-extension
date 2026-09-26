@@ -126,6 +126,7 @@ func withTempHome(t *testing.T) string {
 	tmp := t.TempDir()
 	// Test-only context; never change real authority or machine configuration.
 	t.Setenv("BLOOM_NUCLEUS_ROOT", tmp)
+	t.Setenv("BLOOM_APPDATA_DIR", t.TempDir())
 	return tmp
 }
 

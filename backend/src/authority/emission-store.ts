@@ -144,7 +144,7 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
         || assignment.scope.type !== "organization" || assignment.scope.id !== metadata.organization_id
         || assignment.status !== "active" || assignment.valid_until !== null
         || assignment.valid_from !== membership.valid_from || assignment.accepted_at !== membership.accepted_at
-        || state.revocations.length !== 0) throw new EmissionStoreError("initial_evidence_required");
+        || state.revocations.length !== 0 || (state.vault_service_grants?.length ?? 0) !== 0) throw new EmissionStoreError("initial_evidence_required");
     } else throw new EmissionStoreError("initial_evidence_required");
   } else if (initialEvidence !== undefined) throw new EmissionStoreError("invalid_emission");
 

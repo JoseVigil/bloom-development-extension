@@ -8,6 +8,7 @@ import { wireVersion } from './emission';
 import { createInitialAuthorityEmission, InitialAuthorityEmissionError, initialEmissionGuardStatement } from './initial-emission';
 import { createOrganizationUnderTenant, listTenantOrganizations, TenantStoreError } from './tenant-store';
 import { createInvitation, listInvitations, revokeInvitation, InvitationStoreError, type InvitationStoreFailure } from './invitation-store';
+import { vaultServiceGrantResponse } from './vault-service-grant-route';
 export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;}
 // Invitaciones a organización ajena, Fase B (Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
 // §2/§4, aprobada por Jose 2026-09-22). Mismo esquema de mapeo a status HTTP que ya usan
@@ -132,6 +133,7 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    const flow=await beginHumanLogin(db,org,s);headers.append('Set-Cookie',setCookie(flowCookie,flow.browser,300));return reply({authorizationUrl:flow.url});
   }
   const token=cookie(request,sessionCookie);await checkSessionCsrf(db,token,request.headers.get('X-Authority-CSRF')??'');
+  if(path==='/v1/authority/vault-service-grant')return vaultServiceGrantResponse(db,body,token,{...s,issuer:s.issuer??''});
   if(path==='/v1/authority/human/renew'||path==='/v1/authority/human/logout'){
    if(!exact(body,['organizationId']))return reply({error:'invalid_request'},400);
    if(path.endsWith('/logout')){

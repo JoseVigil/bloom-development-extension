@@ -126,9 +126,26 @@ function getActiveOrg(onboarding) {
  * `active_org_slug` apuntando a esta org (mismo comportamiento que el
  * código viejo, que asumía "la última org tocada es la activa").
  */
-function getOrCreateOrg(onboarding, orgSlug, { workspacePath } = {}) {
+function getOrCreateOrg(onboarding, orgSlug, { workspacePath, organizationId } = {}) {
   migrateToNestedSchema(onboarding);
   let org = getOrgBySlug(onboarding, orgSlug);
+
+  if (organizationId) {
+    const owner = onboarding.organizations.find(
+      candidate => candidate.org_slug !== orgSlug && candidate.organization_id === organizationId
+    );
+    if (owner) {
+      throw new Error(
+        `organization_id ${organizationId} ya está vinculado a la organización "${owner.org_slug}"`
+      );
+    }
+    if (org?.organization_id && org.organization_id !== organizationId) {
+      throw new Error(
+        `la organización "${orgSlug}" ya está vinculada a otro organization_id`
+      );
+    }
+  }
+
   if (!org) {
     org = {
       org_slug: orgSlug,
@@ -140,8 +157,41 @@ function getOrCreateOrg(onboarding, orgSlug, { workspacePath } = {}) {
   } else if (workspacePath) {
     org.workspace_path = workspacePath;
   }
+  if (organizationId) {
+    org.organization_id = organizationId;
+  }
   onboarding.active_org_slug = orgSlug;
   return org;
+}
+
+/**
+ * Valida la identidad canónica de la organización activa antes del handoff a
+ * Core. El ID confirmado por Auth 1 sólo puede habilitar el cierre cuando está
+ * materializado en la entrada exacta señalada por active_org_slug.
+ */
+function validateActiveOrganizationIdentity(onboarding) {
+  migrateToNestedSchema(onboarding);
+  const activeOrg = getActiveOrg(onboarding);
+  if (!activeOrg) {
+    throw new Error('onboarding no tiene una organización activa válida');
+  }
+  if (!activeOrg.workspace_path) {
+    throw new Error(`la organización activa "${activeOrg.org_slug}" no tiene workspace_path`);
+  }
+  if (!activeOrg.organization_id) {
+    throw new Error(`organization_id_missing: organización activa "${activeOrg.org_slug}"`);
+  }
+
+  const confirmedId = onboarding.backend_identity_org_id;
+  if (!confirmedId) {
+    throw new Error('backend_identity_org_id_missing: Auth 1 no confirmó una organización');
+  }
+  if (activeOrg.organization_id !== confirmedId) {
+    throw new Error(
+      `organization_id_mismatch: la organización activa "${activeOrg.org_slug}" no coincide con Auth 1`
+    );
+  }
+  return activeOrg;
 }
 
 /**
@@ -260,6 +310,7 @@ module.exports = {
   getOrgBySlug,
   getActiveOrg,
   getOrCreateOrg,
+  validateActiveOrganizationIdentity,
   switchActiveOrg,
   getActiveProject,
   getOrCreateProject,

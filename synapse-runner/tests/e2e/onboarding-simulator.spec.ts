@@ -25,6 +25,32 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
   const resumeCurrent = process.env.SYNAPSE_RESUME_CURRENT === '1';
   let conductor: ConductorHandle | undefined;
   let discovery: DiscoverySurface | undefined;
+  let phase0RegistrationId: string | undefined;
+  const verifyOrganizationIdentity = (stage: string, expectedCompleted: boolean) => {
+    const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+      onboarding?: { completed?: boolean; backend_identity_org_id?: string; active_org_slug?: string;
+        organizations?: Array<{ org_slug?: string; organization_id?: string; workspace_path?: string }> };
+    };
+    const onboarding = data.onboarding;
+    const activeSlug = onboarding?.active_org_slug;
+    expect(activeSlug, `${stage}: falta active_org_slug`).toBeTruthy();
+    const matches = (onboarding?.organizations ?? []).filter(org => org.org_slug === activeSlug);
+    expect(matches, `${stage}: el slug activo debe identificar una sola organización`).toHaveLength(1);
+    expect(matches[0].organization_id, `${stage}: falta organization_id`).toBeTruthy();
+    expect(matches[0].organization_id).toBe(onboarding?.backend_identity_org_id);
+    expect(matches[0].organization_id).toBe(phase0RegistrationId);
+    expect(matches[0].workspace_path).toBe(WORKSPACE_PATH);
+    expect(onboarding?.completed === true).toBe(expectedCompleted);
+    console.log(`[synapse-simulator] ${stage}: ${JSON.stringify({
+      phase0RegistrationOrganizationId: phase0RegistrationId,
+      backendIdentityOrgId: onboarding?.backend_identity_org_id,
+      activeOrgSlug: activeSlug,
+      activeOrganizationId: matches[0].organization_id,
+      equal: matches[0].organization_id === onboarding?.backend_identity_org_id
+        && matches[0].organization_id === phase0RegistrationId,
+      completed: onboarding?.completed === true,
+    })}`);
+  };
   try {
     if (resumeCurrent) {
       await synapseRunner.runStep('resume_state', undefined, async () => {
@@ -51,6 +77,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       const registration = await synapseRunner.runStep('00b', undefined, () =>
         finishPhase0FixtureRegistration(env.backendOrigin, flow, randomUUID()));
       expect(registration.created).toBe(true);
+      phase0RegistrationId = registration.organizationId;
       resetOnboardingState();
       conductor = await launchConductor({ browser: flow.browser, backendOrigin: env.backendOrigin });
       await installMilestoneBuffer(conductor.mainWindow);
@@ -66,10 +93,13 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       });
 
       await synapseRunner.runStep('workspace', undefined, async () => {
-      expect(existsSync(WORKSPACE_PATH), 'el destino de Nucleus debe estar ausente antes de crear').toBe(false);
+      expect(existsSync(join(WORKSPACE_PATH, '.bloom', '.nucleus-eias-repos'))).toBe(true);
       await conductor!.mainWindow.fill('#ws-path-input', WORKSPACE_BASE);
       await conductor!.mainWindow.fill('#ws-org-input', 'eias-repos');
       await conductor!.mainWindow.click('#btn-continue-workspace');
+      await conductor!.mainWindow.locator('#ws-err-use-existing').waitFor({ state: 'visible' });
+      console.log(`[synapse-simulator] onboarding:init-nucleus rechazó destino existente: ${await conductor!.mainWindow.locator('#ws-error').innerText()}`);
+      await conductor!.mainWindow.click('#ws-err-use-existing');
       await conductor!.mainWindow.locator('#screen-identity.active').waitFor({ state: 'visible' });
       expect(existsSync(join(WORKSPACE_PATH, '.bloom', '.nucleus-eias-repos'))).toBe(true);
       const nucleus = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
@@ -77,7 +107,8 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       };
       expect(nucleus.onboarding?.active_org_slug).toBe('eias-repos');
       expect(nucleus.onboarding?.organizations?.find(org => org.org_slug === 'eias-repos')?.workspace_path).toBe(WORKSPACE_PATH);
-      console.log(`[synapse-simulator] Workspace creado: ${WORKSPACE_PATH}`);
+      verifyOrganizationIdentity('después de Workspace', false);
+      console.log(`[synapse-simulator] Workspace existente vinculado: ${WORKSPACE_PATH}`);
       });
     }
 
@@ -169,10 +200,6 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
     });
 
     if (!resumeCurrent) {
-      await synapseRunner.runStep('sim_vault_navigation', undefined, async () => {
-      await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'vault_init' });
-      await pages.discoveryPage.locator('#screen-vault-created.active').waitFor({ state: 'visible' });
-      });
       await synapseRunner.runStep('sim_github', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'github_app_auth' });
       await pages.discoveryPage.locator('#screen-github-app-start.active').waitFor({ state: 'visible' });
@@ -182,6 +209,10 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await sendDiscoveryMessage(pages.simulator, 'github_app_authorized');
       await pages.discoveryPage.locator('#screen-github-app-stored.active').waitFor({ state: 'visible' });
       await waitForMilestone(conductor!.mainWindow, 'github_app_auth');
+      await synapseRunner.runStep('sim_vault_navigation', undefined, async () => {
+        await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'vault_init' });
+        await pages.discoveryPage.locator('#screen-vault-created.active').waitFor({ state: 'visible' });
+      });
       await waitForMilestone(conductor!.mainWindow, 'vault_init');
       await conductor!.mainWindow.click('#btn-continue-identity');
       await conductor!.mainWindow.locator('#screen-vault.active').waitFor({ state: 'visible' });
@@ -232,13 +263,13 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await conductor!.mainWindow.click('#btn-continue-identity');
       await conductor!.mainWindow.locator('#screen-project.active').waitFor({ state: 'visible' });
       expect(existsSync(PROJECT_SOURCE)).toBe(true);
-      expect(existsSync(PROJECT_PATH), 'el proyecto aún no debe estar importado').toBe(false);
+      expect(existsSync(PROJECT_PATH), 'el proyecto existente debe conservarse').toBe(true);
 
       // Playwright no controla el selector nativo de Electron. Solo ese diálogo
       // devuelve la fuente confirmada; la tarjeta y el resto del flujo son UI real.
       await conductor!.app.evaluate(({ dialog }, projectPath) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [projectPath] });
-      }, PROJECT_SOURCE);
+      }, PROJECT_PATH);
       await conductor!.mainWindow.locator('#project-grid .project-card').filter({ hasText: '+ Local folder' }).click();
       await conductor!.mainWindow.locator('#project-import-status.success').waitFor({ state: 'visible' });
       console.log(`[synapse-simulator] Project UI: ${await conductor!.mainWindow.locator('#project-import-status').innerText()}`);
@@ -253,6 +284,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       const org = selected.onboarding?.organizations?.find(item => item.org_slug === 'eias-repos');
       expect(org?.workspace_path).toBe(WORKSPACE_PATH);
       expect(org?.projects?.find(project => project.project_name === 'sample_project')?.project_path).toBe(PROJECT_PATH);
+      if (!resumeCurrent) verifyOrganizationIdentity('antes de finalizar', false);
       await conductor!.mainWindow.click('#btn-project-continue');
       await conductor!.mainWindow.locator('#screen-mandate.active').waitFor({ state: 'visible' });
       await conductor!.mainWindow.click('#btn-mandate-continue');
@@ -264,6 +296,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         };
         return data.onboarding?.completed;
       }, { timeout: 30_000 }).toBe(true);
+      if (!resumeCurrent) verifyOrganizationIdentity('onboarding finalizado', true);
     });
   } finally {
     await discovery?.close();

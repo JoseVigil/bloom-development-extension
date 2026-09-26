@@ -65,13 +65,54 @@ type Revocation struct {
 	RecordedInAuthorityVersion string    `json:"recorded_in_authority_version"`
 	ReasonCode                 string    `json:"reason_code"`
 }
+type VaultServiceGrant struct {
+	GrantID             string    `json:"grant_id"`
+	OrganizationID      string    `json:"organization_id"`
+	InstallationID      string    `json:"installation_id"`
+	Consumer            string    `json:"consumer"`
+	Permission          string    `json:"permission"`
+	KeyID               string    `json:"key_id"`
+	Purpose             string    `json:"purpose"`
+	ServicePublicKey    string    `json:"service_public_key"`
+	IssuedByPrincipalID string    `json:"issued_by_principal_id"`
+	ValidFrom           time.Time `json:"valid_from"`
+	ValidUntil          time.Time `json:"valid_until"`
+}
 type FullContent struct {
+	Principals         []Principal         `json:"principals"`
+	Memberships        []Membership        `json:"memberships"`
+	RoleDefinitions    []RoleDefinition    `json:"role_definitions"`
+	RoleAssignments    []RoleAssignment    `json:"role_assignments"`
+	Revocations        []Revocation        `json:"revocations"`
+	VaultServiceGrants []VaultServiceGrant `json:"vault_service_grants,omitempty"`
+}
+
+// Historical snapshots carry five collections. The sixth is mandatory only
+// when present, preserving their signed bytes and state digests.
+type legacyFullContent struct {
 	Principals      []Principal      `json:"principals"`
 	Memberships     []Membership     `json:"memberships"`
 	RoleDefinitions []RoleDefinition `json:"role_definitions"`
 	RoleAssignments []RoleAssignment `json:"role_assignments"`
 	Revocations     []Revocation     `json:"revocations"`
 }
+
+func decodeProjection(raw []byte, out *FullContent) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	if _, present := fields["vault_service_grants"]; present {
+		return decodeWire(raw, out)
+	}
+	var legacy legacyFullContent
+	if err := decodeWire(raw, &legacy); err != nil {
+		return err
+	}
+	*out = FullContent{Principals: legacy.Principals, Memberships: legacy.Memberships, RoleDefinitions: legacy.RoleDefinitions, RoleAssignments: legacy.RoleAssignments, Revocations: legacy.Revocations}
+	return nil
+}
+
 type DeltaOperation struct {
 	Sequence   string          `json:"sequence"`
 	Operation  string          `json:"operation"`
@@ -239,7 +280,7 @@ func (v *Verifier) VerifyAndAccept(raw []byte, correlationID string) (*DurableSt
 	}
 	var projection FullContent
 	if p.Kind == "full" {
-		if err = decodeWire(p.Content, &projection); err != nil {
+		if err = decodeProjection(p.Content, &projection); err != nil {
 			return nil, err
 		}
 		normalizeProjection(&projection)
@@ -365,7 +406,7 @@ func validateProjection(f FullContent, org string) error {
 		return err
 	}
 	var checked FullContent
-	if err := decodeWire(raw, &checked); err != nil {
+	if err := decodeProjection(raw, &checked); err != nil {
 		return err
 	}
 	if org == "" {
@@ -439,11 +480,24 @@ func validateProjection(f FullContent, org string) error {
 	}
 	revocations := map[string]bool{}
 	for _, r := range f.Revocations {
-		if !unique(revocations, r.RevocationID) || r.TargetID == "" || r.ReasonCode == "" || !one(r.TargetType, "external_identity", "membership", "role_definition", "role_assignment") || r.RecordedInAuthorityVersion == "" {
+		if !unique(revocations, r.RevocationID) || r.TargetID == "" || r.ReasonCode == "" || !one(r.TargetType, "external_identity", "membership", "role_definition", "role_assignment", "vault_service_grant") || r.RecordedInAuthorityVersion == "" {
 			return errors.New("invalid revocation")
 		}
 		if _, err := strictVersion(r.RecordedInAuthorityVersion); err != nil {
 			return err
+		}
+	}
+	grants := map[string]bool{}
+	for _, g := range f.VaultServiceGrants {
+		key, err := base64.RawURLEncoding.DecodeString(g.ServicePublicKey)
+		issuerHuman := false
+		for _, p := range f.Principals {
+			if p.PrincipalID == g.IssuedByPrincipalID && p.PrincipalType == "human" {
+				issuerHuman = true
+			}
+		}
+		if !unique(grants, g.GrantID) || g.OrganizationID != org || g.InstallationID == "" || g.Consumer != "aitap" || g.Permission != "vault.key.read" || g.KeyID == "" || g.Purpose != "mandate_genesis_intelligence" || len(key) != 32 || base64.RawURLEncoding.EncodeToString(key) != g.ServicePublicKey || !issuerHuman || !g.ValidUntil.After(g.ValidFrom) || err != nil {
+			return errors.New("invalid vault service grant")
 		}
 	}
 	return nil
@@ -552,6 +606,17 @@ func applyOperation(f *FullContent, op DeltaOperation) error {
 			}
 		}
 		f.Revocations = mutate(f.Revocations, op.EntityID, op.Operation, v, func(x Revocation) string { return x.RevocationID })
+	case "vault_service_grants":
+		var v VaultServiceGrant
+		if op.Operation == "upsert" {
+			if err := decodeWire(op.Value, &v); err != nil {
+				return err
+			}
+			if v.GrantID != op.EntityID {
+				return errors.New("delta grant entity_id mismatch")
+			}
+		}
+		f.VaultServiceGrants = mutate(f.VaultServiceGrants, op.EntityID, op.Operation, v, func(x VaultServiceGrant) string { return x.GrantID })
 	default:
 		return errors.New("unknown delta collection")
 	}
@@ -610,6 +675,7 @@ func normalizeProjection(f *FullContent) {
 		return wireLess(f.RoleAssignments[i].AssignmentID, f.RoleAssignments[j].AssignmentID)
 	})
 	sort.Slice(f.Revocations, func(i, j int) bool { return wireLess(f.Revocations[i].RevocationID, f.Revocations[j].RevocationID) })
+	sort.Slice(f.VaultServiceGrants, func(i, j int) bool { return wireLess(f.VaultServiceGrants[i].GrantID, f.VaultServiceGrants[j].GrantID) })
 }
 
 func wireLess(a, b string) bool {
@@ -729,6 +795,17 @@ func validateContinuity(old, next FullContent) error {
 		}
 		if !found && !revoked("role_assignment", a.AssignmentID) {
 			return errors.New("assignment removal requires revocation")
+		}
+	}
+	for _, g := range old.VaultServiceGrants {
+		found := false
+		for _, n := range next.VaultServiceGrants {
+			if n.GrantID == g.GrantID && sameJSON(n, g) {
+				found = true
+			}
+		}
+		if !found {
+			return errors.New("vault service grant history cannot change")
 		}
 	}
 	return nil

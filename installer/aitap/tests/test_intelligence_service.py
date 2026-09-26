@@ -27,7 +27,13 @@ def request():
 
 
 class Vault:
-    def resolve(self, reference):
+    def __init__(self):
+        self.calls = 0
+        self.purposes = []
+
+    def resolve(self, reference, purpose=None):
+        self.calls += 1
+        self.purposes.append(purpose)
         assert reference == "credential-ref://anthropic/default"
         return "test-secret-not-a-real-credential"
 
@@ -58,6 +64,7 @@ def test_real_journal_replay_after_service_restart(tmp_path):
     second = service(tmp_path)
     assert second.supply(request()) == expected
     assert first.provider.calls == 1 and second.provider.calls == 0
+    assert first.vault.calls == 1 and second.vault.calls == 0
     journal = second.store.read(request()["logical_inference_id"])
     assert journal["attempts"][0]["usage"] == {"input_tokens": 23, "output_tokens": 7}
     assert "test-secret-not-a-real-credential" not in first.store.path(request()["logical_inference_id"]).read_text()
@@ -150,8 +157,10 @@ def budget_service(tmp_path):
 def test_budget_survives_restart_and_limits_two_inferences(tmp_path):
     supplied = budget_service(tmp_path)
     first = supplied.supply(budget_request())
+    assert supplied.vault.purposes == ["mandate_genesis_intelligence"]
     recovered = budget_service(tmp_path)
     assert recovered.supply(budget_request()) == first
+    assert recovered.vault.calls == 0
     assert recovered.provider.calls == 0
     recovered.supply(budget_request("second"))
     with pytest.raises(SupplyError, match="BUDGET_EXCEEDED"):
