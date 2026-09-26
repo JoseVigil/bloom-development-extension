@@ -1,0 +1,57 @@
+{
+  "version": "laya-es-v1",
+  "language": "es",
+  "note": "SOLO para el checkpoint multilingüe (322M). Instrucciones y criterios en inglés, mensajes en español rioplatense. Resultados separados de la prueba en inglés.",
+  "suites": [
+    {
+      "name": "support",
+      "questions": {
+        "category": {
+          "type": "choice",
+          "instructions": "Classify the issue described in the message.",
+          "criteria": {
+            "billing": "Invoices, charges, refunds and payments",
+            "technical": "Software failures, errors, crashes, slowness and outages",
+            "account": "Login, profile, membership and account settings",
+            "other": "Anything that is not a billing, technical or account issue"
+          }
+        }
+      },
+      "cases": [
+        {"id": "s01", "message": "Me cobraron dos veces la misma factura.", "expected": "billing"},
+        {"id": "s02", "message": "¿Me pueden devolver lo del mes pasado?", "expected": "billing"},
+        {"id": "s03", "message": "La app se cierra cada vez que abro la configuración.", "expected": "technical"},
+        {"id": "s04", "message": "Me tira error 500 cuando subo archivos.", "expected": "technical"},
+        {"id": "s05", "message": "Cambien el mail de mi perfil, por favor.", "expected": "account"},
+        {"id": "s06", "message": "No puedo entrar porque me olvidé la contraseña.", "expected": "account"},
+        {"id": "s07", "message": "¿Tienen oficina en Córdoba?", "expected": "other"},
+        {"id": "s08", "message": "Se colgó el pago y igual me lo cobraron.", "expected": "billing"}
+      ]
+    },
+    {
+      "name": "intent",
+      "questions": {
+        "intent": {
+          "type": "choice",
+          "instructions": "Decide what the user wants the assistant to do with this message.",
+          "criteria": {
+            "create_task": "Create a task, to-do or follow-up to be done later",
+            "query_status": "Ask about the status or progress of existing work",
+            "capture_note": "Record information or an idea without creating a task",
+            "none": "Greetings, small talk or questions unrelated to the user's work"
+          }
+        }
+      },
+      "cases": [
+        {"id": "i01", "message": "Agregá una tarea para revisar el contrato antes del viernes.", "expected": "create_task"},
+        {"id": "i02", "message": "Recordame mandarle un mail a Ana mañana.", "expected": "create_task"},
+        {"id": "i03", "message": "¿Qué queda pendiente en el proyecto Aurora?", "expected": "query_status"},
+        {"id": "i04", "message": "¿Ya terminaron la migración de la base?", "expected": "query_status"},
+        {"id": "i05", "message": "Anotá que el cliente prefiere llamadas después de las 15.", "expected": "capture_note"},
+        {"id": "i06", "message": "Idea para después: paleta más oscura en la landing.", "expected": "capture_note"},
+        {"id": "i07", "message": "¡Hola!", "expected": "none"},
+        {"id": "i08", "message": "jaja dale", "expected": "none"}
+      ]
+    }
+  ]
+}

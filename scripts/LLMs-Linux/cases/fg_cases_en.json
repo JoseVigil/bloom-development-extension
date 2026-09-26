@@ -1,0 +1,59 @@
+{
+  "version": "fg-en-v1",
+  "language": "en",
+  "note": "Herramientas ficticias; el benchmark sólo inspecciona la llamada propuesta. Etiquetas fijadas antes de ejecutar.",
+  "tools": [
+    {"type": "function", "function": {"name": "find_project", "description": "Find a project by its exact name",
+      "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Exact project name"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "find_person", "description": "Find a team member by their full name",
+      "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Person's full name"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "list_tasks", "description": "List tasks of a project filtered by status",
+      "parameters": {"type": "object", "properties": {
+        "project": {"type": "string", "description": "Exact project name"},
+        "status": {"type": "string", "enum": ["open", "done", "all"], "description": "Task status filter"}}, "required": ["project", "status"]}}},
+    {"type": "function", "function": {"name": "create_note", "description": "Attach a text note to a project",
+      "parameters": {"type": "object", "properties": {
+        "project": {"type": "string", "description": "Exact project name"},
+        "text": {"type": "string", "description": "Note text"}}, "required": ["project", "text"]}}},
+    {"type": "function", "function": {"name": "set_reminder", "description": "Set a reminder for the user after a number of minutes",
+      "parameters": {"type": "object", "properties": {
+        "text": {"type": "string", "description": "What to remind"},
+        "minutes": {"type": "integer", "description": "Minutes from now"}}, "required": ["text", "minutes"]}}}
+  ],
+  "cases": [
+    {"id": "en01_exact_project", "category": "exact", "prompt": "Find the project named Aurora",
+     "expected": {"tool": "find_project", "args": {"name": "Aurora"}}},
+    {"id": "en02_lookup_project", "category": "exact", "prompt": "Look up the Nimbus project",
+     "expected": {"tool": "find_project", "args": {"name": "Nimbus"}}},
+    {"id": "en03_similar_person", "category": "similar_name", "prompt": "Find Aurora Diaz on the team",
+     "expected": {"tool": "find_person", "args": {"name": "Aurora Diaz"}, "match": {"name": "norm"}}},
+    {"id": "en04_similar_person2", "category": "similar_name", "prompt": "Who is Marco Ruiz? Look him up.",
+     "expected": {"tool": "find_person", "args": {"name": "Marco Ruiz"}, "match": {"name": "norm"}}},
+    {"id": "en05_tasks_open", "category": "args", "prompt": "Show open tasks for project Aurora",
+     "expected": {"tool": "list_tasks", "args": {"project": "Aurora", "status": "open"}}},
+    {"id": "en06_tasks_done", "category": "args", "prompt": "List all completed tasks in Nimbus",
+     "expected": {"tool": "list_tasks", "args": {"project": "Nimbus", "status": "done"}}},
+    {"id": "en07_tasks_quoted", "category": "args", "prompt": "Can you pull up the finished tasks for the project called 'Blue Harbor'?",
+     "expected": {"tool": "list_tasks", "args": {"project": "Blue Harbor", "status": "done"}}},
+    {"id": "en08_note", "category": "args", "prompt": "Add a note to Aurora saying: budget approved",
+     "expected": {"tool": "create_note", "args": {"project": "Aurora", "text": "budget approved"}, "match": {"text": "norm"}}},
+    {"id": "en09_reminder", "category": "args", "prompt": "Remind me in 15 minutes to call Ana",
+     "expected": {"tool": "set_reminder", "args": {"text": "call Ana", "minutes": 15}, "match": {"text": "norm", "minutes": "int"}}},
+    {"id": "en10_not_offered_delete", "category": "not_offered", "prompt": "Delete the project Aurora",
+     "expected": {"abstain": true}},
+    {"id": "en11_not_offered_email", "category": "not_offered", "prompt": "Send an email to Marco Ruiz about the release",
+     "expected": {"abstain": true}},
+    {"id": "en12_not_offered_weather", "category": "not_offered", "prompt": "What's the weather in Buenos Aires today?",
+     "expected": {"abstain": true}},
+    {"id": "en13_not_offered_rename", "category": "not_offered", "prompt": "Rename project Nimbus to Cirrus",
+     "expected": {"abstain": true}},
+    {"id": "en14_chitchat", "category": "chitchat", "prompt": "Thanks, that's all for now",
+     "expected": {"abstain": true}},
+    {"id": "en15_ambiguous_entity", "category": "ambiguous", "prompt": "Find Aurora",
+     "expected": {"abstain": true, "acceptable_alternatives": [
+       {"tool": "find_project", "args": {"name": "Aurora"}},
+       {"tool": "find_person", "args": {"name": "Aurora"}}]}},
+    {"id": "en16_missing_arg", "category": "ambiguous", "prompt": "Show me the tasks",
+     "expected": {"abstain": true}}
+  ]
+}
