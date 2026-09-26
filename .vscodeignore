@@ -146,3 +146,5 @@ node_modules/**/*.ts
 # rompe el escáner de secretos de vsce con EISDIR, sin depender de
 # que el bloque de arriba se haya aplicado correctamente.
 node_modules/@fastify/static/test/**
+_to_delete/
+.tmp/
