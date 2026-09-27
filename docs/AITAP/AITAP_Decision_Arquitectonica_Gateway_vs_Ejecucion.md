@@ -6,6 +6,78 @@
 **Estado:** **RESUELTO — ver Resolución al final del documento**
 **Fecha del documento original:** 2026-08-12
 **Fecha de resolución:** 2026-08-12
+**Enmienda 1:** aprobada por José el 2026-09-26 (sección «ENMIENDA 1», a continuación). Modifica la Resolución sin derogarla.
+
+---
+
+## ENMIENDA 1 — Suministro de Inteligencia Local (aprobada el 2026-09-26)
+
+**Aprobada por:** José Vigil, en calidad de Architecture. Modifica la Resolución A del 2026-08-12 sin derogarla.
+
+**1. Pilar nuevo.** AITAP incorpora un cuarto pilar, **Suministro Local**. Comprende:
+- el catálogo versionado de modelos locales;
+- la verificación previa de la máquina, de solo lectura;
+- el aprovisionamiento de modelos a través de la API local de Ollama;
+- la prueba de humo;
+- la salud observada de los backends locales;
+- su registro como backends de inteligencia con `privacy: local`.
+
+El Suministro Local existe para alimentar al pilar 1 (Grifo) y queda sometido a los pilares 2 (Vault) y 3 (Contabilidad).
+
+**2. Runtime de inferencia ≠ runtime de ejecución.** Un *runtime de inferencia* recibe texto o estructuras y devuelve texto o estructuras. No tiene tools, no lee ni escribe workspaces y no ejecuta comandos derivados de su salida. **Ollama es el único runtime de inferencia local:** todos los modelos locales se sirven siempre a través de él. AITAP le pide, por su API local, descargar, cargar, verificar y descargar de memoria los modelos declarados en su catálogo; no crea ni lanza runtimes de inferencia propios. Los *runtimes de ejecución* siguen siendo exclusivamente de Executor.
+
+**3. Categoría de CLI nueva.** Se habilita la categoría `LOCAL` («Suministro de inteligencia local: verificación previa, aprovisionamiento, salud y retiro de modelos locales»). La categoría `HEALTH`, hoy vacía, pasa a alojar la salud de backends. El resto del set sigue cerrado: se mantiene la prohibición de `EXECUTE`, `BASH`, `APPLY`, `RUN` o similares.
+
+**4. Escrituras permitidas.** AITAP sólo puede crear, modificar o borrar archivos cuya ruta real (después de resolver enlaces) esté dentro de estas raíces de BloomNucleus:
+- (a) su propio directorio de estado de Suministro Local;
+- (b) su subdirectorio de logs y evidencia;
+- (c) el directorio de estado de Contabilidad ya vigente.
+
+Los pesos de Ollama los escribe **el servidor de Ollama**, a pedido de AITAP por su API local. AITAP no escribe directamente en el almacén de Ollama.
+
+**5. Procesos permitidos.** AITAP sólo puede lanzar procesos de una **lista cerrada** declarada en su catálogo empaquetado:
+- `nucleus` para Vault y autorización, como hoy.
+
+AITAP no lanza procesos de inferencia: habla con el servidor de Ollama sólo por su API local (loopback).
+
+Se aplican además estas reglas:
+- Ningún argumento de proceso puede provenir de la salida de un modelo ni del request de un consumidor.
+- No se usa `shell=True`.
+- AITAP no registra servicios del sistema operativo (launchd, systemd, NSSM), salvo que la decisión D2 lo habilite en forma expresa.
+
+**6. Red permitida.** AITAP sólo contacta la API local de Ollama (loopback). Las descargas las hace el servidor de Ollama, y sólo de modelos declarados en el catálogo con integridad fijada: el digest del manifiesto de Ollama.
+
+Una descarga sin fijación es un error, no un aviso.
+
+**7. Autorización.** AITAP no se autoautoriza. Todo aprovisionamiento, actualización o retiro requiere:
+- una **referencia de autorización emitida o verificada por Nucleus**;
+- el **consentimiento humano de licencias**, registrado por Nucleus.
+
+La verificación previa de solo lectura no requiere autorización.
+
+**8. Salida sin autoridad.** Las respuestas de modelos locales se tratan igual que las remotas: AITAP las devuelve crudas, las cuenta y no las interpreta. Una llamada a herramienta propuesta por un modelo local es texto para el consumidor. AITAP nunca la ejecuta ni la valida.
+
+**9. Lo que sigue prohibido, sin cambios.**
+- Tocar codebases, workspaces o `.bloom/` de cualquier proyecto.
+- Aplicar o verificar diffs.
+- Tener tools de bash, edit, write o patch.
+- Administrar sesiones de ejecución (OpenCode headless u otras).
+- Parsear o validar el BSIP-Response.
+- Custodiar secretos.
+- Decidir el orden o la condición de las Actions de un Mandate.
+- Actuar sobre attempts de Executor.
+- Autoautorizarse.
+
+### Nota de aplicación (decisiones de José del 2026-09-26)
+
+- Toda invocación desde Core pasa por Nucleus. No existe acceso directo a
+  AITAP que lo evite.
+- Todos los modelos locales se sirven **siempre a través de Ollama**. AITAP no
+  escribe pesos (los escribe el servidor Ollama en `models/`), no crea runtimes
+  de inferencia propios y no lanza procesos de inferencia.
+- Origen del texto: Project BTIPS,
+  `AITAP/LLM_LOCAL/Borrador_Enmienda_ResolucionA_Suministro_Inteligencia_Local_v0_1.md`
+  (§§0, 2 y 3 contienen la justificación y los cambios derivados).
 
 ---
 

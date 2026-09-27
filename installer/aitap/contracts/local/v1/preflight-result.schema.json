@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.preflight/v1",
+  "title": "Resultado de la verificacion previa de solo lectura de AITAP",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "catalog_fingerprint", "selection", "eligibility_fingerprint", "stable_profile", "verdicts", "readiness", "destinations"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.preflight/v1"},
+    "catalog_version": {"type": "string", "minLength": 1},
+    "catalog_fingerprint": {"$ref": "#/$defs/sha256"},
+    "selection": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "eligibility_fingerprint": {"$ref": "#/$defs/sha256"},
+    "stable_profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["os", "os_version", "arch", "cpu_features", "ram_total_mb", "ollama"],
+      "properties": {
+        "os": {"enum": ["darwin", "linux", "windows"]},
+        "os_version": {"type": ["string", "null"]},
+        "arch": {"type": "string"},
+        "cpu_features": {"type": "array", "items": {"enum": ["AVX2", "FMA", "F16C"]}},
+        "ram_total_mb": {"type": ["integer", "null"], "minimum": 0},
+        "ollama": {
+          "type": "object", "additionalProperties": false,
+          "required": ["service_kind", "service_defined", "binary_present", "binary_minos", "companion_present", "models_dir_effective"],
+          "properties": {
+            "service_kind": {"enum": ["launchd", "systemd_user", "nssm"]},
+            "service_defined": {"type": "boolean"},
+            "binary_present": {"type": "boolean"},
+            "binary_minos": {"type": ["string", "null"]},
+            "companion_present": {"type": "boolean"},
+            "models_dir_effective": {"type": ["string", "null"]}
+          }
+        }
+      }
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["model_id", "backend_id", "mandatory", "verdict", "reasons", "platform_status", "coexistence_set"],
+        "properties": {
+          "model_id": {"type": "string"},
+          "backend_id": {"type": "string"},
+          "mandatory": {"type": "boolean"},
+          "verdict": {"enum": ["APTO", "APTO_CON_SALVEDADES", "BLOQUEADO"]},
+          "reasons": {"type": "array", "uniqueItems": true, "items": {"enum": [
+            "OS_UNSUPPORTED", "ARCH_UNSUPPORTED", "OS_BELOW_OBSERVED_MINIMUM", "OS_BELOW_VENDOR_MINIMUM",
+            "RAM_TOTAL_INSUFFICIENT", "COEXISTENCE_BUDGET_EXCEEDED", "COEXISTENCE_UNMEASURED",
+            "RUNTIME_SERVICE_ABSENT", "RUNTIME_COMPANION_MISSING", "GPU_ACCEL_UNAVAILABLE",
+            "CATALOG_UNMEASURED_ON_PLATFORM"]}},
+          "platform_status": {"enum": ["measured", "a_medir", null]},
+          "coexistence_set": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "required": ["free_memory_pct", "swap_used_mb", "memory_pressure", "observed_at", "ttl_seconds", "ollama", "disk_free_mb", "models", "advisories", "state"],
+      "properties": {
+        "free_memory_pct": {"type": ["integer", "null"]},
+        "swap_used_mb": {"type": ["integer", "null"]},
+        "memory_pressure": {"enum": ["normal", "warn", "critical", null]},
+        "observed_at": {"type": "string"},
+        "ttl_seconds": {"type": "integer", "minimum": 1},
+        "ollama": {"type": "object"},
+        "disk_free_mb": {"type": "object"},
+        "models": {"type": "object"},
+        "advisories": {"type": "array", "items": {"enum": [
+          "FREE_MEMORY_LOW", "MEMORY_PRESSURE_HIGH", "RUNTIME_SERVICE_UNREACHABLE", "DISK_INSUFFICIENT"]}},
+        "state": {"enum": ["OK", "ADVISORY"]}
+      }
+    },
+    "destinations": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ollama_store"],
+      "properties": {"ollama_store": {"type": "string"}}
+    }
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

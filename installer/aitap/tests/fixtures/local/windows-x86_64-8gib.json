@@ -1,0 +1,18 @@
+{
+  "_comment": "Windows sin evidencia real; servicio NSSM definido por Conductor.",
+  "observed": {
+    "stable": {
+      "os": "windows", "os_version": "10.0.22631", "arch": "x86_64", "cpu_features": ["AVX2"], "ram_total_mb": 8192,
+      "ollama": {"service_kind": "nssm", "service_defined": true, "binary_present": true,
+                 "binary_minos": null, "companion_present": false,
+                 "models_dir_effective": "C:\\Users\\example\\AppData\\Local\\BloomNucleus\\models"}
+    },
+    "readiness": {"free_memory_pct": 55, "swap_used_mb": null, "memory_pressure": null,
+                  "heavy_processes": null, "heavy_processes_note": "no recolectado"},
+    "ollama_host": null
+  },
+  "probe": {"host": "127.0.0.1:11434", "reachable": true, "version": "0.23.2", "installed_refs": []},
+  "expected": {
+    "functiongemma-270m": {"verdict": "APTO_CON_SALVEDADES", "reasons": ["CATALOG_UNMEASURED_ON_PLATFORM", "COEXISTENCE_UNMEASURED"], "installed": false}
+  }
+}

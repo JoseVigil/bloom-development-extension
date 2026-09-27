@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify_paths.sh — PASO 1. Evidencia actual, sin red ni descargas.
 #
-# Comprueba en bell-ubuntu que entorno Python, PyTorch, pesos, cachés, temporales y resultados
+# Comprueba en bell-ubuntu que pesos, cachés, temporales y resultados
 # apuntan a TerraBiter; registra el espacio de /, la carga de ClickHouse y los reinicios de
 # ollama.service. No detiene ni modifica ningún servicio.
 # Escribe sólo: las carpetas de $LAB_T/llm-lab (por defecto /mnt/llms) y un log en llm-lab/results.
@@ -18,7 +18,7 @@ LOG="$LAB_RESULTS/verify_paths_$(lab_ts).log"
   df -Pm / "$LAB_T"
   echo "== dispositivo de / = $(stat -c %d /) | de $LAB_T = $(stat -c %d "$LAB_T")"
   bad=0
-  for v in HF_HOME PIP_CACHE_DIR TORCH_HOME XDG_CACHE_HOME TMPDIR LAB_OLLAMA_MODELS LAB_LAYA_VENV LAB_RESULTS LAB_LOGS LAB_RUN; do
+  for v in PIP_CACHE_DIR XDG_CACHE_HOME TMPDIR LAB_OLLAMA_MODELS LAB_RESULTS LAB_LOGS LAB_RUN; do
     p="${!v}"; t="$p"; [ -e "$t" ] || t="$(dirname "$p")"
     d=$(stat -c %d "$t")
     if [ "$d" = "$(stat -c %d "$LAB_T")" ]; then ok="OK"; else ok="FUERA DE $LAB_T"; bad=1; fi

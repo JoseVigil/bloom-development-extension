@@ -58,7 +58,7 @@ ln -s "$P/x.sh" "$P/link_abs" && [ -e "$P/link_abs" ] && ok "symlink absoluto" |
 mkdir "$P/d1" && ( cd "$P" && ln -s d1 dlink ) && [ -d "$P/dlink" ] && ok "symlink a directorio" || bad "symlink a directorio"
 ln "$P/x.sh" "$P/hard" 2>/dev/null && ok "hardlink" || bad "hardlink (no crítico)"
 
-sec "5. Semántica usada por pip / Hugging Face / Ollama"
+sec "5. Semántica usada por pip / Ollama"
 python3 -B - "$P" <<'PY'
 import os, sys, fcntl, mmap
 p = sys.argv[1]
@@ -80,7 +80,7 @@ try:
     open(os.path.join(p, "Case"), "w").write("A"); open(os.path.join(p, "case"), "w").write("b")
     r(open(os.path.join(p, "Case")).read() == "A", "nombres sensibles a mayúsculas")
 except Exception as e: r(False, f"mayúsculas: {e}")
-# nombres con ':' (Ollama usa 'sha256-...'; HF usa nombres largos)
+# nombres con ':' y largos (Ollama usa 'sha256-...')
 try:
     open(os.path.join(p, "sha256-" + "a"*64), "w").write("x"); r(True, "nombre largo tipo blob")
     open(os.path.join(p, "a:b"), "w").write("x"); r(True, "nombre con ':'")

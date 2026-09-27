@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence-catalog/v1",
+  "title": "Catalogo de modelos locales de AITAP (datos versionados)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "mandatory_model_ids", "coexistence", "models"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence-catalog/v1"},
+    "catalog_version": {"type": "string", "minLength": 1},
+    "mandatory_model_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "coexistence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["baseline_cognituum_mb", "safety_factor", "status", "note"],
+      "properties": {
+        "baseline_cognituum_mb": {"type": ["integer", "null"], "minimum": 0},
+        "safety_factor": {"type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 1},
+        "status": {"enum": ["measured", "a_medir"]},
+        "note": {"type": "string"}
+      }
+    },
+    "models": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/model"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "platform": {
+      "type": "object", "additionalProperties": false,
+      "required": ["os", "arch", "status", "vendor_min_os", "observed_min_os", "known_insufficient_ram_mb", "requires_companion", "flags", "evidence"],
+      "properties": {
+        "os": {"enum": ["darwin", "linux", "windows"]},
+        "arch": {"enum": ["x86_64", "arm64"]},
+        "status": {"enum": ["measured", "a_medir"]},
+        "vendor_min_os": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"},
+        "observed_min_os": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"},
+        "known_insufficient_ram_mb": {"type": ["integer", "null"], "minimum": 1},
+        "requires_companion": {"type": "boolean"},
+        "flags": {"type": "array", "uniqueItems": true, "items": {"enum": ["GPU_ACCEL_UNAVAILABLE"]}},
+        "evidence": {"type": ["string", "null"]}
+      }
+    },
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model_id", "display_name", "role", "mandatory", "runtime", "runtime_min_version", "source", "size_bytes", "license", "destination", "memory", "capabilities", "backend", "platforms"],
+      "properties": {
+        "model_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "display_name": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "mandatory": {"type": "boolean"},
+        "runtime": {"const": "ollama"},
+        "runtime_min_version": {"type": ["string", "null"]},
+        "source": {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "ollama_ref", "manifest_digest", "layers", "note"],
+          "properties": {
+            "kind": {"const": "ollama"},
+            "ollama_ref": {"type": "string", "pattern": "^[a-z0-9._-]+:[a-z0-9._-]+$"},
+            "manifest_digest": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+            "layers": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/sha256"}},
+            "note": {"type": "string"}
+          }
+        },
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "license": {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "url", "consent_required", "redistribution"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "url": {"type": "string", "pattern": "^https://"},
+            "consent_required": {"type": "boolean"},
+            "redistribution": {"type": "string"}
+          }
+        },
+        "destination": {"const": "ollama_store"},
+        "memory": {
+          "type": "object", "additionalProperties": false,
+          "required": ["resident_mb", "peak_mb", "load_seconds", "context_tokens", "source"],
+          "properties": {
+            "resident_mb": {"type": ["integer", "null"], "minimum": 1},
+            "peak_mb": {"type": ["integer", "null"], "minimum": 1},
+            "load_seconds": {"type": ["number", "null"], "minimum": 0},
+            "context_tokens": {"type": ["integer", "null"], "minimum": 1},
+            "source": {"type": "string", "minLength": 1}
+          }
+        },
+        "capabilities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "backend": {
+          "type": "object", "additionalProperties": false,
+          "required": ["backend_id", "provider", "model", "credential_ref", "privacy"],
+          "properties": {
+            "backend_id": {"type": "string", "pattern": "^local\\.[a-z0-9_-]+\\.[a-z0-9._-]+$"},
+            "provider": {"type": "string", "minLength": 1},
+            "model": {"type": "string", "minLength": 1},
+            "credential_ref": {"type": "null"},
+            "privacy": {"const": "local"}
+          }
+        },
+        "platforms": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/platform"}}
+      }
+    }
+  }
+}

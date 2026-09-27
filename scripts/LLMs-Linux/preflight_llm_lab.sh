@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # preflight_llm_lab.sh — v2, ESTRICTAMENTE DE SOLO LECTURA
 #
-# Propósito: relevar bell-ubuntu antes de probar FunctionGemma 270M (Ollama) y Laya en CPU.
+# Propósito: relevar bell-ubuntu antes de probar FunctionGemma 270M (Ollama) en CPU.
 # Ejecutar en una terminal real de bell-ubuntu, como usuario jose, SIN sudo.
 # No usar la VM aislada de Cowork: sus mediciones no representan esta máquina.
 #
@@ -165,7 +165,7 @@ if [ -x "$OLLAMA_BIN" ]; then
 fi
 
 sec "Tamaño de cachés existentes en / (solo lectura)"
-for d in "$HOME/.cache/pip" "$HOME/.cache/huggingface" "$HOME/.cache/torch" "$HOME/.ollama/models" /usr/share/ollama/.ollama/models; do
+for d in "$HOME/.cache/pip" "$HOME/.ollama/models" /usr/share/ollama/.ollama/models; do
   if [ -e "$d" ]; then du -sh "$d" 2>/dev/null; else echo "no existe: $d"; fi
 done
 

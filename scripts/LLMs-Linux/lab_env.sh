@@ -12,13 +12,10 @@ LAB_RUN="$LAB/run"
 LAB_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Cachés y temporales fuera de /
-export HF_HOME="$LAB/hf"
 export PIP_CACHE_DIR="$LAB/pip-cache"
-export TORCH_HOME="$LAB/torch"
 export XDG_CACHE_HOME="$LAB/cache"
 export TMPDIR="$LAB/tmp"
 export PYTHONDONTWRITEBYTECODE=1
-export HF_HUB_DISABLE_TELEMETRY=1
 
 # Ollama: instancia APARTE. BloomNucleus y /usr/local/bin tienen el mismo binario 0.30.7 (sha256 8565…deb5),
 # pero la inferencia necesita el ejecutable compañero `llama-server` (junto al binario o en ../lib/ollama).
@@ -45,10 +42,6 @@ LAB_OLLAMA_URL="http://$LAB_OLLAMA_ADDR"
 LAB_OLLAMA_MODELS="$LAB/ollama-models"
 LAB_OLLAMA_PIDFILE="$LAB_RUN/ollama-$LAB_OLLAMA_PORT.pid"
 
-# Laya
-LAB_LAYA_VENV="$LAB/venv-laya"
-LAYA_VERSION="${LAYA_VERSION:-0.3.20}"
-
 # Umbrales de protección de /
 LAB_ROOT_MIN_FREE_MB="${LAB_ROOT_MIN_FREE_MB:-1200}"   # no arrancar si / tiene menos que esto
 # / varía por otros procesos (ClickHouse): se observó -100 MB en 45 s y oscilaciones de 1,9 a 3,6 GB.
@@ -68,7 +61,7 @@ lab_guard() {
   [ "$(stat -c %d "$LAB_T")" != "$(stat -c %d /)" ] || lab_die "$LAB_T está en el mismo dispositivo que /"
   local free; free=$(lab_root_free_mb)
   [ "$free" -ge "$LAB_ROOT_MIN_FREE_MB" ] || lab_die "/ tiene sólo ${free} MB libres (mínimo ${LAB_ROOT_MIN_FREE_MB})"
-  mkdir -p "$LAB" "$LAB_RESULTS" "$LAB_LOGS" "$LAB_RUN" "$HF_HOME" "$PIP_CACHE_DIR" "$TORCH_HOME" "$XDG_CACHE_HOME" "$TMPDIR"
+  mkdir -p "$LAB" "$LAB_RESULTS" "$LAB_LOGS" "$LAB_RUN" "$PIP_CACHE_DIR" "$XDG_CACHE_HOME" "$TMPDIR"
   [ "$(stat -c %d "$TMPDIR")" = "$(stat -c %d "$LAB_T")" ] || lab_die "TMPDIR no quedó en TerraBiter"
   LAB_ROOT_BASELINE_MB="$free"
   if [ -n "$LAB_ROOT_MAX_DROP_MB_FIXED" ]; then LAB_ROOT_MAX_DROP_MB="$LAB_ROOT_MAX_DROP_MB_FIXED"
@@ -133,7 +126,7 @@ lab_run_watched() {  # uso: lab_run_watched <log_vigilante> comando args...
 
 # Las descargas exigen confirmación explícita de que se leyeron las licencias.
 lab_license_gate() {
-  [ "${ACEPTO_LICENCIAS:-}" = "1" ] || lab_die "falta ACEPTO_LICENCIAS=1 (leer Gemma Terms of Use y la licencia de Laya antes de descargar)"
+  [ "${ACEPTO_LICENCIAS:-}" = "1" ] || lab_die "falta ACEPTO_LICENCIAS=1 (leer Gemma Terms of Use antes de descargar)"
 }
 
 # Registro de comandos ejecutados

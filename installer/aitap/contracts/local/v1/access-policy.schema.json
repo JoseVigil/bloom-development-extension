@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-access-policy/v1",
+  "title": "Politica de acceso de grifo y cuotas de consumo por modelo local",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_version", "default_decision", "status", "note", "models"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-access-policy/v1"},
+    "policy_version": {"type": "string", "minLength": 1},
+    "default_decision": {"const": "deny"},
+    "status": {"enum": ["default_packaged", "installed"]},
+    "note": {"type": "string"},
+    "models": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/model_rule"}}
+  },
+  "$defs": {
+    "quotas": {
+      "type": "object", "additionalProperties": false,
+      "required": ["window_seconds", "max_inferences", "max_input_tokens", "max_output_tokens", "max_concurrency", "max_input_bytes", "timeout_seconds"],
+      "properties": {
+        "window_seconds": {"type": "integer", "minimum": 60, "maximum": 2592000},
+        "max_inferences": {"type": "integer", "minimum": 0},
+        "max_input_tokens": {"type": "integer", "minimum": 0},
+        "max_output_tokens": {"type": "integer", "minimum": 0},
+        "max_concurrency": {"type": "integer", "minimum": 1, "maximum": 64},
+        "max_input_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 600}
+      }
+    },
+    "model_rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model_id", "backend_id", "enabled", "allowed_consumers", "quotas", "consumer_overrides"],
+      "properties": {
+        "model_id": {"type": "string", "minLength": 1},
+        "backend_id": {"type": "string", "pattern": "^local\\."},
+        "enabled": {"type": "boolean"},
+        "allowed_consumers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"}},
+        "quotas": {"$ref": "#/$defs/quotas"},
+        "consumer_overrides": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_-]*$"},
+          "additionalProperties": {"$ref": "#/$defs/quotas"}
+        }
+      }
+    }
+  }
+}

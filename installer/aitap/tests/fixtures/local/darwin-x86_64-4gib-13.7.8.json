@@ -1,0 +1,19 @@
+{
+  "_comment": "Perfil real de la Mac de Jose (MacBookAir6,1) segun el encargo §4 y el listado de BloomNucleus del 2026-09-26.",
+  "observed": {
+    "stable": {
+      "os": "darwin", "os_version": "13.7.8", "arch": "x86_64",
+      "cpu_features": ["AVX2", "F16C", "FMA"], "ram_total_mb": 4096,
+      "ollama": {"service_kind": "launchd", "service_defined": true, "binary_present": true,
+                 "binary_minos": "14.0", "companion_present": false,
+                 "models_dir_effective": "/Users/example/Library/BloomNucleus/models"}
+    },
+    "readiness": {"free_memory_pct": 44, "swap_used_mb": 350, "memory_pressure": "normal",
+                  "heavy_processes": null, "heavy_processes_note": "no recolectado"},
+    "ollama_host": "127.0.0.1:11434"
+  },
+  "probe": {"host": "127.0.0.1:11434", "reachable": true, "version": "0.23.2", "installed_refs": ["functiongemma:270m"]},
+  "expected": {
+    "functiongemma-270m": {"verdict": "APTO_CON_SALVEDADES", "reasons": ["COEXISTENCE_UNMEASURED", "GPU_ACCEL_UNAVAILABLE", "OS_BELOW_VENDOR_MINIMUM"], "installed": true}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "cognituum.local-access-policy/v1",
+  "policy_version": "local-access-default/v1",
+  "default_decision": "deny",
+  "status": "default_packaged",
+  "note": "Politica por defecto empaquetada, solo lectura en esta ola. allowed_consumers vacio hasta que Jose decida que consumidores usan cada modelo (decision C). Cuotas iniciales conservadoras, a calibrar con la prueba del sistema completo. La modificacion requerira authorization_ref de Nucleus.",
+  "models": [
+    {
+      "model_id": "functiongemma-270m",
+      "backend_id": "local.ollama.functiongemma-270m",
+      "enabled": true,
+      "allowed_consumers": [],
+      "quotas": {
+        "window_seconds": 3600,
+        "max_inferences": 600,
+        "max_input_tokens": 1000000,
+        "max_output_tokens": 200000,
+        "max_concurrency": 1,
+        "max_input_bytes": 131072,
+        "timeout_seconds": 30
+      },
+      "consumer_overrides": {}
+    }
+  ]
+}

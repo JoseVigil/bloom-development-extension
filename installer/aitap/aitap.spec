@@ -9,7 +9,10 @@ datas = [
     (str(AITAP_ROOT / "contracts"), "contracts"),
     (str(AITAP_ROOT / "policies"), "policies"),
     (str(AITAP_ROOT / "registry"), "registry"),
+    (str(AITAP_ROOT / "local"), "local"),
     (str(AITAP_ROOT / "VERSION"), "."),
+    # Solo referencias credential_ref -> key_id; nunca secretos (ver test_packaged_config_holds_references_only).
+    (str(AITAP_ROOT / "aitap.config.json"), "."),
 ]
 
 a = Analysis(

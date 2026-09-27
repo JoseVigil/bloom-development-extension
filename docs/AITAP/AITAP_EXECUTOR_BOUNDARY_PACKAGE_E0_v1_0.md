@@ -6,6 +6,8 @@
 **Implementación autorizada:** no  
 **Executor/runtimes ejecutados:** no
 
+> **Enmienda 1 (2026-09-26):** en la matriz del §2, la fila «Adapter/proceso/sandbox/workspace» se desdobla. Ejecución: Executor, AITAP no participa. Inferencia local: la sirve Ollama y la administra AITAP por su API local; Executor no participa. Ver `AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`, sección «ENMIENDA 1».
+
 ## 1. Resumen ejecutivo
 
 AITAP produce una **selección abstracta y autoritativa dentro de una Policy ya

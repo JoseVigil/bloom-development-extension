@@ -5,6 +5,8 @@
 **Estado:** transferido para auditoría y reconciliación; implementación no aprobada  
 **Fecha:** 2026-08-20
 
+> **Enmienda 1 (2026-09-26):** el criterio de no aprobación del §5 «AITAP inicia procesos o accede filesystem» pasa a ser «AITAP inicia procesos o escribe fuera de las raíces y la lista cerrada de la Enmienda 1». Ver `AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`, sección «ENMIENDA 1».
+
 ## 1. Autoridad
 
 Architecture conserva autoridad sobre:

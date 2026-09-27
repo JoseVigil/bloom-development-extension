@@ -4,6 +4,8 @@
 **Versión:** 2.0  
 **Fecha:** 2026-08-20
 
+> **Enmienda 1 (2026-09-26):** «no ejecuta procesos» sigue vigente: los modelos locales los sirve Ollama y AITAP sólo le habla por su API local. El catálogo de modelos locales pertenece al pilar Suministro Local. Ver `AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`, sección «ENMIENDA 1».
+
 Una decisión AITAP contiene dos dimensiones ortogonales y obligatorias:
 
 ```text

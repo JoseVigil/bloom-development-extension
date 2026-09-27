@@ -18,7 +18,11 @@ class CommandRegistry:
     def register(self, command: BaseCommand) -> None:
         """Registra un comando y lo indexa por categoria."""
         meta = command.metadata()
-        unique_key = f"{meta.category.value}.{meta.name}"
+        # Clave estable por nombre de categoria (no por la tupla value, que
+        # incluye la descripcion y cambiaria la clave al editar el texto).
+        unique_key = f"{meta.category.name}.{meta.name}"
+        if unique_key in self._commands:
+            raise ValueError(f"comando duplicado: {unique_key}")
         self._commands[unique_key] = command
 
         if meta.category not in self._by_category:

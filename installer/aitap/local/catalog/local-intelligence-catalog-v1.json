@@ -1,0 +1,83 @@
+{
+  "schema_version": "cognituum.local-intelligence-catalog/v1",
+  "catalog_version": "local-intelligence-catalog/v1",
+  "mandatory_model_ids": ["functiongemma-270m"],
+  "coexistence": {
+    "baseline_cognituum_mb": null,
+    "safety_factor": null,
+    "status": "a_medir",
+    "note": "Baseline de Cognituum completo (servicios + Electron) sin medir; se obtiene con la prueba del sistema completo."
+  },
+  "models": [
+    {
+      "model_id": "functiongemma-270m",
+      "display_name": "FunctionGemma 270M",
+      "role": "Propone llamadas a herramientas. No conversa. Lo que propone nunca se ejecuta sin la autorizacion correspondiente.",
+      "mandatory": true,
+      "runtime": "ollama",
+      "runtime_min_version": "0.13.5",
+      "source": {
+        "kind": "ollama",
+        "ollama_ref": "functiongemma:270m",
+        "manifest_digest": null,
+        "layers": {
+          "model": "sha256:415f8f959d807bd4d4da891f01225d7b330416947fb011a8473080ae4fd07885",
+          "license": "sha256:64c834d5c134577dc3e6b29bc8df5cd75f0e07bf8b9b03ee20a6e43dcc3808a0",
+          "params": "sha256:b536e845ddda12ebb432d680e2e79cfdcd2843db55274a8b33441ce981255073",
+          "other": "sha256:d087699a88291521d394cac6841bd30ce16c5ef16d54f16c94c003e5aee00e5f"
+        },
+        "note": "Capas verificadas en ~/Library/BloomNucleus/models el 2026-09-26. manifest_digest a capturar. La variante functiongemma:270m-it-fp16 no fue evaluada."
+      },
+      "size_bytes": 300807157,
+      "license": {
+        "id": "gemma-terms-of-use",
+        "url": "https://ai.google.dev/gemma/terms",
+        "consent_required": true,
+        "redistribution": "No se empaqueta en el instalador; descarga bajo demanda."
+      },
+      "destination": "ollama_store",
+      "memory": {
+        "resident_mb": 516,
+        "peak_mb": null,
+        "load_seconds": 3.3,
+        "context_tokens": 4096,
+        "source": "ollama ps, Darwin Intel 4 GiB, 2026-09-26"
+      },
+      "capabilities": ["tool_call.propose"],
+      "backend": {
+        "backend_id": "local.ollama.functiongemma-270m",
+        "provider": "ollama",
+        "model": "functiongemma:270m",
+        "credential_ref": null,
+        "privacy": "local"
+      },
+      "platforms": [
+        {
+          "os": "darwin", "arch": "x86_64", "status": "measured",
+          "vendor_min_os": "14.0", "observed_min_os": "13.7.8",
+          "known_insufficient_ram_mb": null, "requires_companion": false,
+          "flags": ["GPU_ACCEL_UNAVAILABLE"],
+          "evidence": "Encargo AITAP LLM local v1.0 §4.2: pull verificado, 26,9 tok/s, tool call positiva y negativa correctas."
+        },
+        {
+          "os": "darwin", "arch": "arm64", "status": "a_medir",
+          "vendor_min_os": "14.0", "observed_min_os": null,
+          "known_insufficient_ram_mb": null, "requires_companion": false,
+          "flags": [], "evidence": null
+        },
+        {
+          "os": "linux", "arch": "x86_64", "status": "a_medir",
+          "vendor_min_os": null, "observed_min_os": null,
+          "known_insufficient_ram_mb": null, "requires_companion": true,
+          "flags": [], "evidence": "scripts/LLMs-Linux/README.md: la inferencia requiere llama-server junto al binario o en ../lib/ollama."
+        },
+        {
+          "os": "windows", "arch": "x86_64", "status": "a_medir",
+          "vendor_min_os": null, "observed_min_os": null,
+          "known_insufficient_ram_mb": null, "requires_companion": false,
+          "flags": [], "evidence": null
+        }
+      ]
+    }
+  ]
+}

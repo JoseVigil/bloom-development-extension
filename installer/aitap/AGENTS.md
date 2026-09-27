@@ -36,7 +36,18 @@ Decisión adicional vigente sobre OpenCode:
 prohibidos. El provider/backend y modelo efectivos son dimensiones separadas.
 Seleccionar uno nunca selecciona el otro implícitamente.
 
-## Lo que AITAP hace — exactamente tres pilares, nada mas
+## Enmienda 1 — Suministro de Inteligencia Local (aprobada por Jose, 2026-09-26)
+
+Jose aprobo el texto de la Enmienda 1 a la Resolucion A (fuente:
+Project BTIPS, `AITAP/LLM_LOCAL/Borrador_Enmienda_ResolucionA_Suministro_Inteligencia_Local_v0_1.md`).
+Agrega un cuarto pilar y la categoria `LOCAL`; no deroga ninguna prohibicion.
+La distincion que la sostiene: un *runtime de inferencia* produce tokens y
+no tiene tools ni toca workspaces; pertenece a la dimension de inteligencia,
+cuyo catalogo es de AITAP. **Ollama es el unico runtime de inferencia
+local:** todos los modelos locales se sirven siempre a traves de el. Los
+*runtimes de ejecucion* siguen siendo exclusivamente de Executor.
+
+## Lo que AITAP hace — exactamente cuatro pilares, nada mas
 
 1. **Gateway/Grifo:** decide el target abstracto para Intelligence Supply
    (provider/model) y, desde la decisión v1 del 2026-08-20, para Execution
@@ -53,6 +64,13 @@ Seleccionar uno nunca selecciona el otro implícitamente.
    **por consumidor** (Brain, Alfred, los que se sumen). Esto es lo que
    permite responder "cuanto gasto Alfred este mes" sin reconstruirlo
    despues.
+4. **Suministro Local (Enmienda 1):** catalogo versionado de modelos
+   locales, verificacion previa de solo lectura, aprovisionamiento
+   idempotente de modelos a traves de la API local de Ollama, prueba de
+   humo, salud observada y registro como backend `privacy: local`. Existe para alimentar
+   al pilar 1 y queda sometido a los pilares 2 y 3. No es ejecucion. Estado:
+   implementados el catalogo y `aitap local preflight` (solo lectura); el
+   aprovisionamiento no existe todavia.
 
 Su ciclo operativo completo, literal: recibe el `BSIP-Payload`, consulta
 al modelo, registra la metrica en Contabilidad, devuelve la respuesta
@@ -66,14 +84,47 @@ Expone su propio CLI (`aitap`) siguiendo el patron de `brain`
 Si estas por escribir codigo en `installer/aitap` que hace cualquiera de
 estas cosas, pará: estás en el componente equivocado.
 
-- **No agregar tools de filesystem/bash/edit/patch/diff.** AITAP no toca
-  el codebase de ningun proyecto, ni siquiera el suyo propio en runtime.
+- **No agregar tools de bash/edit/patch/diff ni filesystem de proyecto.**
+  AITAP no toca el codebase de ningun proyecto, ni siquiera el suyo propio
+  en runtime. Las unicas escrituras permitidas son las raices enumeradas en
+  la Enmienda 1 §4 (estado de Suministro Local, logs/evidencia y el estado
+  de Contabilidad). Los pesos los escribe el servidor de Ollama.
+  Toda ruta se resuelve con `realpath` y se rechaza si queda fuera de esas
+  raices; ese guard llega con el aprovisionamiento y exige test propio.
 - **No agregar una `CommandCategory` de ejecucion** (`EXECUTE`, `BASH`,
-  `APPLY`, `RUN`, o similar). El set cerrado hoy es `SYSTEM`, `KEYS`,
-  `ROUTE`, `HEALTH` (`src/aitap/cli/categories.py`). Si un caso de uso
-  nuevo parece necesitar una categoria de ese tipo, el caso de uso
-  pertenece a la "Implementation Layer" (todavia no construida, no vive
-  acá), no a AITAP.
+  `APPLY`, `RUN`, o similar). El set cerrado es `SYSTEM`, `KEYS`, `ROUTE`,
+  `HEALTH`, `ACCOUNTING`, `LOCAL` (`src/aitap/cli/categories.py`,
+  taxonomia "Alternativa B" aprobada por Jose el 2026-09-26). `LOCAL`
+  gestiona *inteligencia*; si un comando de `LOCAL` necesita actuar sobre
+  un workspace, esta en el componente equivocado. Un caso de uso de
+  ejecucion pertenece a Executor, no a AITAP.
+- **Ningun proceso fuera de la lista cerrada de la Enmienda 1 §5.** No
+  `subprocess` con argumentos armados desde requests, respuestas de
+  modelos, variables de entorno del consumidor ni rutas no canonicas. No
+  `shell=True`.
+- **Ninguna descarga sin fijacion.** Si falta el digest del manifiesto de
+  Ollama, el aprovisionamiento falla cerrado.
+- **Ningun aprovisionamiento sin `authorization_ref` verificada por Nucleus
+  y sin consentimiento de licencia registrado.** La verificacion previa es
+  la unica operacion `LOCAL` sin autorizacion. Toda invocacion desde Core
+  pasa por Nucleus; no existe acceso directo a AITAP que lo evite.
+- **Nunca instalar paquetes en el interprete de AITAP ni crear runtimes de
+  inferencia propios.** AITAP es PyInstaller: `sys.executable` es el propio
+  binario. Todo modelo local lo sirve Ollama.
+- **Nunca cargar pesos en el proceso de AITAP.** Ni `torch` ni
+  `transformers` ni ningun framework de inferencia son dependencias de
+  AITAP.
+- **Una llamada a herramienta propuesta por un modelo local es texto.** Si
+  estas escribiendo codigo que despacha `tool_calls`, estas en el
+  componente equivocado.
+- **Privacidad `local` es un techo, no una preferencia.** Un request con
+  privacidad `local` nunca hace failover a un backend en la nube.
+- **No registrar servicios del sistema operativo** (LaunchAgents, units de
+  systemd, servicios NSSM) salvo decision expresa de Jose (D2). El
+  servicio residente de Ollama sigue siendo de Conductor.
+- **Ningun nombre de modelo en el codigo.** Los modelos (hoy FunctionGemma
+  270M, obligatorio) viven en `local/catalog/*.json`; agregar un modelo es
+  agregar datos.
 - **Execution Routing no es ejecución.** Se permiten contratos, policies y
   decisiones abstractas que devuelvan `target_id`. No se permiten comandos,
   flags, procesos, sesiones ni protocolos nativos de esos targets.
@@ -129,8 +180,9 @@ policies, engine, CLI ni tests actuales.
 
 Toda necesidad de cambiar fronteras, taxonomía runtime/intelligence o contratos
 cross-system vuelve a Architecture. AITAP no absorbe discovery, adapters,
-procesos, workspaces, containment, checkpoints, Evidence o promoción de
-Executor.
+procesos de **ejecucion**, workspaces, containment, checkpoints, Evidence ni
+promoción de Executor. **Excepcion aprobada por la Enmienda 1:** el
+catalogo de modelos locales servidos por Ollama.
 
 ## Contexto adicional
 

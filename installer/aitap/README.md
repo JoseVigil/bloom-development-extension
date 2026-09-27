@@ -5,12 +5,16 @@ para todos los clientes del ecosistema Bloom (Brain, Alfred, y los que vengan).
 
 ## Estado
 
-Primer vertical reconciliado de routing determinístico. Incluye contratos
-v2, registry fixture y la policy experimental
-`genesis-runtime-intelligence/v2`. La conexión real a providers, Nucleus Vault y
-la integración con Executor continúa pendiente. Intelligence Supply dispone de
-un piloto directo Anthropic con Vault, journal y contabilidad; su aceptación
-real sigue pendiente del E2E autorizado descrito al final.
+Routing determinístico v2 (contratos, registry fixture y policy
+`genesis-runtime-intelligence/v2`) e Intelligence Supply con piloto directo
+Anthropic: Vault vía `nucleus vault service-request`, journal durable y
+contabilidad. La integración con Executor sigue pendiente.
+
+**Suministro Local (Enmienda 1, 2026-09-26):** catálogo versionado con el
+modelo obligatorio (FunctionGemma 270M, servido por Ollama) y verificación
+previa de solo lectura (`aitap local preflight`). Todavía no hay
+aprovisionamiento, providers locales ni aplicación de la política de acceso y
+cuotas dentro de `route supply`. Toda invocación desde Core pasa por Nucleus.
 
 > **Auditoría completada:** clasificación y estado en
 > `../../docs/AITAP/AITAP_ROUTING_RECONCILIATION_REPORT_2026-08-20.md`.
@@ -66,15 +70,25 @@ src/aitap/
   __main__.py           entry point (typer + intercept de --help/--json-help)
   cli/
     base.py              CommandMetadata + BaseCommand (mismo contrato que brain)
-    categories.py         CommandCategory: SYSTEM, KEYS, ROUTE, HEALTH
-    registry.py            CommandRegistry
+    categories.py         CommandCategory: SYSTEM, KEYS, ROUTE, HEALTH, ACCOUNTING, LOCAL
+    registry.py            CommandRegistry (clave categoria.nombre; rechaza duplicados)
+    output.py              salida dual y envelope de error unico
     help_renderer.py        render_help(): texto (rich) + JSON AI-native
-  commands/
-    system/  (version, status)
-    keys/    (list — placeholder, no toca Nucleus Vault todavia)
-    route/   (status — placeholder, sin motor de ruteo todavia)
+  commands/                un BaseCommand por archivo; registro explicito
+    system/      version, info, status   introspeccion estatica
+    health/      check                   sondeo vivo de dependencias
+    keys/        list                    credential_ref -> key_id (sin Vault)
+    route/       decide, supply, policy  grifo: decision, suministro, politica
+    accounting/  usage                   lectura de la Contabilidad
+    local/       preflight               verificacion previa de solo lectura
+  access/        politica de acceso y cuotas por modelo (carga y validacion)
+  accounting/    journal durable (store) y agregados de lectura (usage)
+  health/        sondas de dependencias
+  local/         catalogo y verificacion previa por sistema (darwin/linux/windows)
   core/
     context.py            GlobalContext (json_mode, verbose)
+local/catalog/            catalogo de modelos locales (datos, empaquetado)
+contracts/local/v1/       schemas del catalogo, verificacion previa y politica de acceso
 scripts/
   generate_help.py        vuelca a installer/help/aitap_help.{json,txt}
 ```
@@ -88,10 +102,16 @@ pip install -e . --break-system-packages   # o dentro de un venv
 aitap --help                 # ayuda humana
 aitap --json-help            # referencia completa en JSON (AI-native)
 aitap system version
-aitap system status
-aitap keys list               # placeholder
-aitap route status
+aitap system status             # versiones y huellas de los recursos cargados
+aitap health check              # AITAP_STATE_DIR y prerrequisitos de Nucleus
+aitap keys list                 # referencias; nunca secretos, no consulta Vault
 aitap route decide --request examples/genesis-ing-request-v2.json
+aitap route policy              # politica de acceso y cuotas por modelo local
+aitap accounting usage --state-dir <dir>
+aitap local preflight           # veredicto por modelo; no descarga nada
+# Con --json todos los comandos devuelven {"status","operation","data"} o el
+# envelope de error {"status":"error","error":{code,message,stage,retryable,details}}.
+# route decide y route supply conservan su contrato JSON vigente en caso de exito.
 
 python scripts/generate_help.py   # regenera installer/help/aitap_help.{json,txt}
 python ../../build-all.py --only aitap  # empaqueta AITAP y genera ambas ayudas
@@ -99,8 +119,8 @@ python ../../build-all.py --only aitap  # empaqueta AITAP y genera ambas ayudas
 
 ## Fuera de alcance, a propósito
 
-AITap es grifo (Gateway + Vault + Contabilidad), no implementador y no
-orquestador. Nunca va a tener tools de bash/edit/write, nunca administra
+AITap es grifo (Gateway + Vault + Contabilidad + Suministro Local de
+inferencia), no implementador y no orquestador. Nunca va a tener tools de bash/edit/write, nunca administra
 sesiones de ejecución (ej. OpenCode headless), nunca aplica diffs sobre un
 codebase, y **nunca parsea ni valida el `BSIP-Response`** — devuelve la
 respuesta cruda del modelo, el parseo es 100% del orquestador consumidor
@@ -124,8 +144,9 @@ vocabulario preciso de los tres pilares y quién parsea qué).
 
 ## Pendiente
 
-- Conexion real a Nucleus Vault (`VaultClient`, subprocess `nucleus vault`)
-  para `aitap keys add/list/delete`.
+- Aprovisionamiento local (`aitap local ensure`), provider Ollama y
+  aplicación de la política de acceso y cuotas en `route supply`.
+- Consumidores de cada modelo local (decisión C).
 - Health dinámico y circuit breaker anticipatorio (leer
   cuota restante antes de fallar, no solo reaccionar a 3 errores consecutivos
   como hace `GeminiKeyManager` hoy).

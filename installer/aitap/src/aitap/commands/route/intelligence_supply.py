@@ -16,8 +16,9 @@ from aitap.runtime_paths import resource_root
 class IntelligenceSupplyCommand(BaseCommand):
     def metadata(self):
         return CommandMetadata(name="supply", category=CommandCategory.ROUTE,
-            description="Invoke Intelligence Supply with durable accounting and replay",
-            examples=["aitap --json route supply --request request.json"])
+            description="Invoca Intelligence Supply: resuelve la credencial via Nucleus Vault, consulta al provider y registra contabilidad durable con replay",
+            examples=["aitap --json route supply --request request.json"],
+            requires_vault=True)
 
     def register(self, app):
         @app.command("supply")

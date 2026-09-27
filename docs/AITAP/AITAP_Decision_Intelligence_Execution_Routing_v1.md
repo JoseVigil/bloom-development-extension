@@ -4,6 +4,8 @@
 **Versión:** 1.0  
 **Fecha:** 2026-08-20
 
+> **Enmienda 1 (2026-09-26):** ver `AITAP_Decision_Arquitectonica_Gateway_vs_Ejecucion.md`, sección «ENMIENDA 1».
+
 AITAP es dueño de la decisión abstracta de grifo en dos espacios separados:
 
 1. `intelligence_provider`: provider/backend y model para inferencia;
