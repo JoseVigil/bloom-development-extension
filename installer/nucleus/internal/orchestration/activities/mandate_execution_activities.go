@@ -25,7 +25,10 @@ package activities
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 
@@ -39,13 +42,16 @@ import (
 // test que no lo poblaron) se usa DomainName como fallback para la clave —
 // ver executionResultKey.
 type PersistExecutionResultInput struct {
-	MandatesRoot string
-	MandateID    string
-	ActionID     string
-	DomainName   string
-	ResultRef    string
-	Status       string // "completed" | "failed"
-	Error        string
+	MandatesRoot      string
+	MandateID         string
+	ActionID          string
+	DomainName        string
+	ResultRef         string
+	ArtifactDigest    string
+	ContractDigest    string
+	FulfillmentStatus string
+	Status            string // "completed" | "failed"
+	Error             string
 }
 
 type PersistExecutionResultResult struct {
@@ -79,6 +85,19 @@ func PersistExecutionResultActivity(ctx context.Context, input PersistExecutionR
 	if input.MandatesRoot == "" || input.MandateID == "" {
 		return PersistExecutionResultResult{}, fmt.Errorf("PersistExecutionResultActivity: MandatesRoot/MandateID vacíos")
 	}
+	if input.ArtifactDigest != "" {
+		if input.ActionID == "" || input.Status != "completed" || input.FulfillmentStatus != "fulfilled" || input.ContractDigest == "" || input.ResultRef != "domain_definition.json" {
+			return PersistExecutionResultResult{}, fmt.Errorf("Mandate gen evidence is incomplete")
+		}
+		artifact, err := os.ReadFile(filepath.Join(input.MandatesRoot, input.MandateID, input.ResultRef))
+		if err != nil {
+			return PersistExecutionResultResult{}, err
+		}
+		sum := sha256.Sum256(artifact)
+		if hex.EncodeToString(sum[:]) != input.ArtifactDigest {
+			return PersistExecutionResultResult{}, fmt.Errorf("artifact digest changed before reconciliation")
+		}
+	}
 	key := executionResultKey(input)
 	if key == "" {
 		return PersistExecutionResultResult{}, fmt.Errorf("PersistExecutionResultActivity: ActionID y DomainName vacíos, no hay clave para persistir")
@@ -108,6 +127,11 @@ func PersistExecutionResultActivity(ctx context.Context, input PersistExecutionR
 		}
 		if input.ResultRef != "" {
 			record["resultRef"] = input.ResultRef
+		}
+		if input.ArtifactDigest != "" {
+			record["artifactSha256"] = input.ArtifactDigest
+			record["contractDigest"] = input.ContractDigest
+			record["fulfillmentStatus"] = input.FulfillmentStatus
 		}
 		if input.Error != "" {
 			record["error"] = input.Error

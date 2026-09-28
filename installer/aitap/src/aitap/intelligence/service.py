@@ -30,10 +30,26 @@ class IntelligenceService:
 
     def supply(self, request):
         validate_contract("intelligence-supply-request.schema.json", request)
-        budget = self.engine.policy["intelligence_supply"].get("budget")
-        if budget and request["intent"]["mandate_id"] == budget["mandate_id"]:
+        rule = self.engine.policy["intelligence_supply"]
+        budget = rule.get("budget")
+        if request["intent"]["intent_type"] == "gen":
+            try:
+                ceiling = Decimal(str(budget["max_usd"]))
+                if (budget.get("per_mandate") is not True or not ceiling.is_finite()
+                        or not Decimal(0) < ceiling <= Decimal(1)
+                        or type(budget["max_total_tokens"]) is not int
+                        or not 1 <= budget["max_total_tokens"] <= 50000
+                        or budget.get("max_inferences") != 1
+                        or rule["max_attempts"] != 1 or rule.get("fallback")
+                        or type(rule["max_output_tokens"]) is not int
+                        or not 1 <= rule["max_output_tokens"] <= 8192):
+                    raise ValueError()
+            except (KeyError, TypeError, ValueError, ArithmeticError):
+                raise SupplyError("INVALID_REQUEST", "budget", "Explicit Mandate gen budget required") from None
+        if budget and (request["intent"]["mandate_id"] == budget.get("mandate_id")
+                       or (budget.get("per_mandate") is True and request["intent"]["intent_type"] == "gen")):
             store = AccountingStore(self.store.root / "budgets")
-            identity = digest(["budget", budget["mandate_id"]])
+            identity = digest(["budget", request["intent"]["mandate_id"]])
             with store.lock(identity):
                 return self._supply(request, (store, identity, budget))
         return self._supply(request)
@@ -140,7 +156,9 @@ class IntelligenceService:
                 route = routes[min(number, len(routes) - 1)]
                 backend = route["effective_intelligence"]
                 try:
-                    purpose = ("mandate_genesis_intelligence" if budget_context
+                    purpose = ("mandate_gen_intelligence" if budget_context
+                               and intent["intent_type"] == "gen" and intent["phase"] == "generation"
+                               else "mandate_genesis_intelligence" if budget_context
                                and intent["intent_type"] == "ing" and intent["phase"] == "classification" else None)
                     secret = self.vault.resolve(backend["credential_ref"], purpose=purpose)
                 except SupplyError as exc:

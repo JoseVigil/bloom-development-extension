@@ -70,7 +70,7 @@ class VaultClient:
     def resolve(self, reference, purpose=None):
         if reference != "credential-ref://anthropic/default":
             raise SupplyError("CREDENTIAL_NOT_FOUND", "vault")
-        if purpose != "mandate_genesis_intelligence":
+        if purpose not in ("mandate_genesis_intelligence", "mandate_gen_intelligence"):
             raise SupplyError("VAULT_ACCESS_DENIED", "vault")
         key_id = "anthropic-key:default"
         signer = _identity(self.app_data)

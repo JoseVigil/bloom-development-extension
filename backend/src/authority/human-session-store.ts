@@ -63,6 +63,20 @@ export async function resolveHumanSession(db:D1Database,token:string,org:string,
 export async function checkSessionCsrf(db:D1Database,token:string,csrf:string){
  if(!csrf||!await db.prepare("SELECT session_id FROM authority_human_sessions WHERE token_hash=? AND csrf_hash=? AND status='active'").bind(await hashSecret(token),await hashSecret(csrf)).first())throw new HumanIdentityError('csrf_invalid');
 }
+export async function issueMandateConsentToken(db:D1Database,actor:SessionActor,challengeHash:string,s:HumanServices){
+ if(actor.source!=='backend-session'||!actor.sessionId||!challengeHash)throw new HumanIdentityError('session_invalid');
+ const token=randomSecret(),expiresAt=new Date(Math.min(timestamp(s)+120000,Date.parse(actor.expiresAt))).toISOString();
+ await db.prepare('INSERT INTO authority_mandate_consents(token_hash,challenge_hash,session_id,principal_id,expires_at,consumed_at) VALUES(?,?,?,?,?,NULL)')
+  .bind(await hashSecret(token),challengeHash,actor.sessionId,actor.principalId,expiresAt).run();
+ return token;
+}
+export async function consumeMandateConsentToken(db:D1Database,actor:SessionActor,challengeHash:string,token:string,s:HumanServices){
+ if(!token||actor.source!=='backend-session')throw new HumanIdentityError('consent_invalid');
+ const updated=await db.prepare(`UPDATE authority_mandate_consents SET consumed_at=? WHERE token_hash=? AND challenge_hash=?
+  AND session_id=? AND principal_id=? AND consumed_at IS NULL AND julianday(expires_at)>julianday(?) RETURNING token_hash`)
+  .bind(s.now(),await hashSecret(token),challengeHash,actor.sessionId,actor.principalId,s.now()).first();
+ if(!updated)throw new HumanIdentityError('consent_invalid');
+}
 export async function revokeHumanSession(db:D1Database,token:string){await db.prepare("UPDATE authority_human_sessions SET status='revoked',revision=CAST(CAST(revision AS INTEGER)+1 AS TEXT) WHERE token_hash=? AND status='active'").bind(await hashSecret(token)).run();}
 export async function renewHumanSession(db:D1Database,token:string,org:string,s:HumanServices){
  const actor=await resolveHumanSession(db,token,org,s);if(!actor)throw new HumanIdentityError('session_invalid');

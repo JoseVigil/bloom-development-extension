@@ -8,7 +8,7 @@ export class VaultServiceGrantError extends Error {
   constructor(readonly code: string) { super(`authority_vault_service_grant_${code}`); }
 }
 const deny = (code: string): never => { throw new VaultServiceGrantError(code); };
-export type GrantCommand = { kind: 'issue'; installationId: string; servicePublicKey: string; keyId: 'anthropic-key:default'; validUntil: string }
+export type GrantCommand = { kind: 'issue'; installationId: string; servicePublicKey: string; keyId: 'anthropic-key:default'; purpose?: 'mandate_genesis_intelligence' | 'mandate_gen_intelligence'; validUntil: string }
   | { kind: 'revoke'; grantId: string };
 export interface GrantRequest { organizationId: string; requestId: string; expectedVersion: string; command: GrantCommand }
 export interface GrantServices { now: () => string; issuer: string; signer: EmissionSigner; commitGuard: (actor: VerifiedHumanActor, requestId: string, at: string) => D1PreparedStatement }
@@ -56,7 +56,7 @@ export async function administerVaultServiceGrant(db: D1Database, request: Grant
   const version = String(wireVersion(expectedVersion) + 1n);
   let grantId = '';
   if (command.kind === 'issue') {
-    if (command.keyId !== 'anthropic-key:default' || !/^[A-Za-z0-9_-]{43}$/.test(command.servicePublicKey)
+    if (command.keyId !== 'anthropic-key:default' || (command.purpose !== undefined && command.purpose !== 'mandate_genesis_intelligence' && command.purpose !== 'mandate_gen_intelligence') || !/^[A-Za-z0-9_-]{43}$/.test(command.servicePublicKey)
       || !command.installationId) deny('invalid_request');
     const key = Uint8Array.from(atob(command.servicePublicKey.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
     const canonicalKey=btoa(String.fromCharCode(...key)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
@@ -68,7 +68,7 @@ export async function administerVaultServiceGrant(db: D1Database, request: Grant
     if (authorityInstant(validUntil) <= authorityInstant(now) || authorityInstant(validUntil) > authorityInstant(new Date(Date.parse(now)+24*60*60*1000).toISOString())) deny('invalid_validity');
     grantId = crypto.randomUUID();
     const grant: WireVaultServiceGrant = {grant_id:grantId,organization_id:org,installation_id:command.installationId,
-      consumer:'aitap',permission:'vault.key.read',key_id:command.keyId,purpose:'mandate_genesis_intelligence',
+      consumer:'aitap',permission:'vault.key.read',key_id:command.keyId,purpose:command.purpose ?? 'mandate_genesis_intelligence',
       service_public_key:command.servicePublicKey,issued_by_principal_id:actor.principalId,valid_from:now,valid_until:validUntil};
     state.vault_service_grants.push(grant);
   } else if (command.kind === 'revoke') {

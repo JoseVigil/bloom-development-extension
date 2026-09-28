@@ -70,7 +70,7 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	state := authority.FullContent{Principals: []authority.Principal{{PrincipalID: "human", PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{}}},
 		Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{},
 		VaultServiceGrants: []authority.VaultServiceGrant{{GrantID: "grant", OrganizationID: org, InstallationID: installation, Consumer: "aitap", Permission: "vault.key.read",
-			KeyID: "anthropic-key:default", Purpose: servicePurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
+			KeyID: "anthropic-key:default", Purpose: mandateGenPurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
 			ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)}}}
 	content, _ := json.Marshal(state)
 	payload := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", Kind: "full", SnapshotID: "snapshot", Issuer: issuer, OrganizationID: org,
@@ -100,7 +100,7 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	defer listener.Close()
 	nonce := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32))
 	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{4}, 32))
-	request := ServiceRequest{GrantID: "grant", OrganizationID: org, InstallationID: installation, KeyID: "anthropic-key:default", Purpose: servicePurpose,
+	request := ServiceRequest{GrantID: "grant", OrganizationID: org, InstallationID: installation, KeyID: "anthropic-key:default", Purpose: mandateGenPurpose,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano), Nonce: nonce, ChannelPort: listener.Addr().(*net.TCPAddr).Port, ChannelToken: token}
 	request.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(servicePrivate, serviceMessage(request)))
 	encoded, _ := json.Marshal(request)

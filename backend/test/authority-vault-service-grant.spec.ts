@@ -58,7 +58,7 @@ afterAll(async()=>{await mf?.dispose();if(temp)rmSync(temp,{recursive:true,force
 
 describe('Vault service grant',()=>{
   const issue:GrantCommand={kind:'issue',installationId:installation,keyId:'anthropic-key:default',
-    servicePublicKey:'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',validUntil:'2026-09-25T12:30:00Z'};
+    purpose:'mandate_gen_intelligence',servicePublicKey:'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',validUntil:'2026-09-25T12:30:00Z'};
   it('requires a current human Master and registered installation',async()=>{
     for(const role of ['specialist','operator'] as const)
       await expect(administerVaultServiceGrant(db,{organizationId:org,requestId:`wrong-${role}`,expectedVersion:'1',command:issue},
@@ -79,6 +79,7 @@ describe('Vault service grant',()=>{
     const state=(await loadCurrentEmission(db,org))!.state;
     expect(state.vault_service_grants).toHaveLength(1);
     expect(state.vault_service_grants![0].grant_id).toBe(issued.grantId);
+    expect(state.vault_service_grants![0].purpose).toBe('mandate_gen_intelligence');
     expect(JSON.stringify(issued)).not.toContain('secret');
     const revoked=await administerVaultServiceGrant(db,{organizationId:org,requestId:'revoke-1',expectedVersion:'2',
       command:{kind:'revoke',grantId:issued.grantId}},actor,services());

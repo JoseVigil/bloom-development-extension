@@ -79,6 +79,11 @@ func RenderFullHelp(root *cobra.Command, renderer *ModernHelpRenderer) {
 
 func (r *ModernHelpRenderer) render(root *cobra.Command) {
 	r.printHeader()
+	if root.Parent() != nil {
+		r.printCommandDetail(root)
+		r.printFooter()
+		return
+	}
 	r.printUsageSection()
 	r.printGlobalOptions()
 	r.printCategoriesOverview(root)
@@ -126,7 +131,7 @@ func (r *ModernHelpRenderer) printGlobalOptions() {
 	r.writeln("             " + Cyan.Apply("PowerShell:", r.useColors) + "  nucleus --json info " + Bold.Apply("2>$null", r.useColors))
 	r.writeln("             " + Cyan.Apply("Bash:", r.useColors) + "        nucleus --json info " + Bold.Apply("2>/dev/null", r.useColors))
 	r.writeln("")
-	
+
 	// Other flags
 	otherOptions := []struct {
 		flag string
@@ -135,7 +140,7 @@ func (r *ModernHelpRenderer) printGlobalOptions() {
 		{"--verbose", "Enable detailed logging for debugging"},
 		{"--help", "Show this help message"},
 	}
-	
+
 	for _, opt := range otherOptions {
 		r.writeln(fmt.Sprintf("  %s  %s",
 			Yellow.Apply(r.padRight(opt.flag, 15), r.useColors),
@@ -230,10 +235,10 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 	r.writeln("    " + Dim.Apply(cmd.Short, r.useColors))
 	r.writeln("")
 
-	usage := fmt.Sprintf("nucleus %s", cmd.Use)
+	usage := cmd.CommandPath()
 	r.writeln("    " + Dim.Apply("Usage:", r.useColors) + " " + Green.Apply(usage, r.useColors))
 	r.writeln("")
-	
+
 	// Show subcommands if they exist
 	if cmd.HasSubCommands() {
 		r.writeln("    " + Bold.Apply("Subcommands:", r.useColors))
@@ -241,14 +246,14 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 			if subcmd.Name() == "help" {
 				continue
 			}
-			subUsage := fmt.Sprintf("nucleus %s %s", cmd.Name(), subcmd.Use)
+			subUsage := subcmd.CommandPath()
 			r.writeln(fmt.Sprintf("      %s  %s",
 				Cyan.Apply(r.padRight(subcmd.Name(), 20), r.useColors),
 				Dim.Apply(subcmd.Short, r.useColors)))
 			r.writeln(fmt.Sprintf("        %s", Dim.Apply(subUsage, r.useColors)))
 		}
 		r.writeln("")
-		
+
 		// Mostrar detalles completos de cada subcomando
 		r.writeln("    " + Bold.Apply("Subcommand Details:", r.useColors))
 		r.writeln("")
@@ -256,7 +261,7 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 			if subcmd.Name() == "help" {
 				continue
 			}
-			r.printSubcommandDetail(cmd.Name(), subcmd)
+			r.printSubcommandDetail(subcmd)
 		}
 	}
 
@@ -335,17 +340,17 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 	r.writeln("")
 }
 
-func (r *ModernHelpRenderer) printSubcommandDetail(parentName string, subcmd *cobra.Command) {
+func (r *ModernHelpRenderer) printSubcommandDetail(subcmd *cobra.Command) {
 	subcmdName := strings.ToUpper(subcmd.Name())
-	
+
 	r.writeln("      " + Bold.Apply(BrightCyan.Apply("└─ ", r.useColors)+subcmdName, r.useColors))
 	r.writeln("        " + Dim.Apply(subcmd.Short, r.useColors))
 	r.writeln("")
-	
-	usage := fmt.Sprintf("nucleus %s %s", parentName, subcmd.Use)
+
+	usage := subcmd.CommandPath()
 	r.writeln("        " + Dim.Apply("Usage:", r.useColors) + " " + Green.Apply(usage, r.useColors))
 	r.writeln("")
-	
+
 	// Args
 	if args := r.extractArgs(subcmd); len(args) > 0 {
 		r.writeln("        " + Bold.Apply("Arguments:", r.useColors))
@@ -360,7 +365,7 @@ func (r *ModernHelpRenderer) printSubcommandDetail(parentName string, subcmd *co
 		}
 		r.writeln("")
 	}
-	
+
 	// Flags
 	hasFlags := false
 	subcmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
@@ -387,7 +392,7 @@ func (r *ModernHelpRenderer) printSubcommandDetail(parentName string, subcmd *co
 	if hasFlags {
 		r.writeln("")
 	}
-	
+
 	// Example
 	if subcmd.Example != "" {
 		r.writeln("        " + Bold.Apply("Example:", r.useColors))
@@ -398,7 +403,7 @@ func (r *ModernHelpRenderer) printSubcommandDetail(parentName string, subcmd *co
 		}
 		r.writeln("")
 	}
-	
+
 	// JSON Response
 	if jsonResp, ok := subcmd.Annotations["json_response"]; ok && jsonResp != "" {
 		r.writeln("        " + Bold.Apply("JSON Response:", r.useColors))
@@ -409,22 +414,28 @@ func (r *ModernHelpRenderer) printSubcommandDetail(parentName string, subcmd *co
 		}
 		r.writeln("")
 	}
-	
+
 	var separator string
 	if r.isRedirected() {
 		separator = strings.Repeat("-", 70)
 	} else {
 		separator = strings.Repeat("─", 70)
 	}
-	
+
 	r.writeln(Gray.Apply("        "+separator, r.useColors))
 	r.writeln("")
+	for _, child := range subcmd.Commands() {
+		if child.Name() == "help" || child.Name() == "completion" {
+			continue
+		}
+		r.printSubcommandDetail(child)
+	}
 }
 
 func (r *ModernHelpRenderer) printFooter() {
 	// Add common mistakes section before footer
 	r.printCommonMistakes()
-	
+
 	r.writeln("")
 
 	var emoji string
@@ -446,41 +457,41 @@ func (r *ModernHelpRenderer) printFooter() {
 func (r *ModernHelpRenderer) printCommonMistakes() {
 	r.writeln("")
 	r.printSectionHeader("💡 COMMON MISTAKES & TIPS", BrightMagenta)
-	
+
 	var bullet string
 	if r.isRedirected() {
 		bullet = "X "
 	} else {
 		bullet = "❌ "
 	}
-	
+
 	var checkmark string
 	if r.isRedirected() {
 		checkmark = "√ "
 	} else {
 		checkmark = "✅ "
 	}
-	
+
 	var lightbulb string
 	if r.isRedirected() {
 		lightbulb = "* "
 	} else {
 		lightbulb = "💡 "
 	}
-	
+
 	// Mistake 1
 	r.writeln("  " + Yellow.Apply(bullet+"MISTAKE #1:", r.useColors) + " Placing --json flag after the command")
 	r.writeln("     " + Dim.Apply("Wrong:", r.useColors) + "   nucleus synapse seed profile --json")
 	r.writeln("     " + Green.Apply("Correct:", r.useColors) + " nucleus " + Bold.Apply("--json", r.useColors) + " synapse seed profile")
 	r.writeln("")
-	
+
 	// Mistake 2
 	r.writeln("  " + Yellow.Apply(bullet+"MISTAKE #2:", r.useColors) + " Expecting clean JSON without redirecting stderr")
 	r.writeln("     " + Dim.Apply("Issue:", r.useColors) + "   Logs appear mixed with JSON in console")
 	r.writeln("     " + Green.Apply("Fix:", r.useColors) + "     Use " + Bold.Apply("2>$null", r.useColors) + " (PowerShell) or " + Bold.Apply("2>/dev/null", r.useColors) + " (Bash)")
 	r.writeln("     " + Cyan.Apply("Example:", r.useColors) + " nucleus --json info " + Bold.Apply("2>$null", r.useColors))
 	r.writeln("")
-	
+
 	// Tip
 	r.writeln("  " + BrightCyan.Apply(lightbulb+"TIP:", r.useColors) + " When integrating with scripts/automation")
 	r.writeln("     " + Green.Apply(checkmark, r.useColors) + "Always use --json flag for parseable output")
@@ -633,31 +644,46 @@ func (r *ModernHelpRenderer) plural(count int) string {
 
 // RenderHelpJSON exporta metadatos completos como JSON
 func RenderHelpJSON(root *cobra.Command) {
-	var fullMap []CommandJSON
-
-	for _, sub := range root.Commands() {
-		if sub.Name() == "help" || sub.Name() == "completion" {
-			continue
-		}
-		
-		// Si tiene subcomandos, solo exportar los subcomandos
-		if sub.HasSubCommands() {
-			for _, subsub := range sub.Commands() {
-				fullMap = append(fullMap, parseCommand(subsub))
-			}
-		} else {
-			// Si no tiene subcomandos, exportar el comando directamente
-			fullMap = append(fullMap, parseCommand(sub))
-		}
-	}
-
+	fullMap := collectHelpJSON(root)
 	output, _ := json.MarshalIndent(fullMap, "", "  ")
 	fmt.Println(string(output))
+}
+
+func collectHelpJSON(root *cobra.Command) []CommandJSON {
+	fullMap := make([]CommandJSON, 0)
+	var visit func(*cobra.Command)
+	visit = func(cmd *cobra.Command) {
+		if cmd.Name() == "help" || cmd.Name() == "completion" {
+			return
+		}
+		fullMap = append(fullMap, parseCommand(cmd))
+		for _, child := range cmd.Commands() {
+			visit(child)
+		}
+	}
+	if root.Parent() != nil {
+		visit(root)
+	} else {
+		for _, top := range root.Commands() {
+			if top.Name() == "help" || top.Name() == "completion" {
+				continue
+			}
+			if !top.HasSubCommands() {
+				visit(top)
+				continue
+			}
+			for _, child := range top.Commands() {
+				visit(child)
+			}
+		}
+	}
+	return fullMap
 }
 
 func parseCommand(cmd *cobra.Command) CommandJSON {
 	item := CommandJSON{
 		Name:         cmd.Name(),
+		Path:         cmd.CommandPath(),
 		Use:          cmd.Use,
 		Short:        cmd.Short,
 		Category:     cmd.Annotations["category"],
@@ -700,6 +726,7 @@ func parseCommand(cmd *cobra.Command) CommandJSON {
 // JSON structures
 type CommandJSON struct {
 	Name         string     `json:"name"`
+	Path         string     `json:"path"`
 	Use          string     `json:"use"`
 	Short        string     `json:"short"`
 	Category     string     `json:"category,omitempty"`

@@ -13,9 +13,10 @@ export async function vaultServiceGrantResponse(db:D1Database, body:unknown, tok
     || Array.isArray(input.command)) return reply({error:'invalid_request'},400);
   const command=input.command as Record<string,unknown>;
   if (command.kind==='issue') {
-    if (Object.keys(command).sort().join(',')!=='installationId,keyId,kind,servicePublicKey,validUntil'
+    if (!['installationId,keyId,kind,servicePublicKey,validUntil','installationId,keyId,kind,purpose,servicePublicKey,validUntil'].includes(Object.keys(command).sort().join(','))
       || typeof command.installationId!=='string' || typeof command.keyId!=='string'
-      || typeof command.servicePublicKey!=='string' || typeof command.validUntil!=='string') return reply({error:'invalid_request'},400);
+      || typeof command.servicePublicKey!=='string' || typeof command.validUntil!=='string'
+      || (command.purpose !== undefined && !['mandate_genesis_intelligence','mandate_gen_intelligence'].includes(String(command.purpose)))) return reply({error:'invalid_request'},400);
   } else if (command.kind==='revoke') {
     if (Object.keys(command).sort().join(',')!=='grantId,kind' || typeof command.grantId!=='string') return reply({error:'invalid_request'},400);
   } else return reply({error:'invalid_request'},400);

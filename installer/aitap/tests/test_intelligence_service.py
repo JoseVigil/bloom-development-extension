@@ -1,4 +1,8 @@
 import copy
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -24,6 +28,105 @@ def request():
     value["logical_inference_id"] = digest(["intent-1", "classification", "1", value["input_digest"],
                                             value["routing"]["policy_version"]])
     return value
+
+
+def gen_request():
+    value = request()
+    value["intent"].update(intent_type="gen", phase="generation", mandate_id="mandate-gen-1")
+    value["routing"]["policy_version"] = "mandate-gen/v1"
+    value["logical_inference_id"] = digest(["intent-1", "generation", "1", value["input_digest"], "mandate-gen/v1"])
+    return value
+
+
+def test_gen_replay_and_uncertain_inference_never_calls_provider_twice(tmp_path):
+    engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    engine.policy["intelligence_supply"].update(max_output_tokens=100)
+    engine.policy["intelligence_supply"]["budget"].update(max_usd="1.00", max_total_tokens=5000)
+    vault, provider = Vault(), Provider()
+    provider.count_input_tokens = lambda **kwargs: 100
+    supply = IntelligenceService(engine, AccountingStore(tmp_path), vault, provider)
+    req = gen_request()
+    first = supply.supply(req)
+    assert supply.supply(req) == first
+    assert provider.calls == 1 and vault.purposes == ["mandate_gen_intelligence"]
+    uncertain = gen_request()
+    uncertain["intent"]["intent_id"] = "intent-uncertain"
+    uncertain["logical_inference_id"] = digest(["intent-uncertain", "generation", "1", uncertain["input_digest"], "mandate-gen/v1"])
+    journal = {"schema_version": "cognituum.inference-accounting/v1", "logical_inference_id": uncertain["logical_inference_id"],
+               "request_digest": digest({k: v for k, v in uncertain.items() if k != "request_id"}), "state": "in_flight"}
+    supply.store.write(uncertain["logical_inference_id"], journal)
+    with pytest.raises(SupplyError) as exc:
+        supply.supply(uncertain)
+    assert exc.value.code == "STATE_CONFLICT" and provider.calls == 1
+
+
+def test_gen_crash_during_provider_call_blocks_replay(tmp_path):
+    engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    engine.policy["intelligence_supply"].update(max_output_tokens=100)
+    engine.policy["intelligence_supply"]["budget"].update(max_usd="1.00", max_total_tokens=5000)
+    provider = Provider()
+    provider.count_input_tokens = lambda **kwargs: 100
+    provider.generate = lambda **kwargs: (_ for _ in ()).throw(KeyboardInterrupt())
+    request_value = gen_request()
+    with pytest.raises(KeyboardInterrupt):
+        IntelligenceService(engine, AccountingStore(tmp_path), Vault(), provider).supply(request_value)
+    recovered = Provider()
+    recovered.count_input_tokens = lambda **kwargs: 100
+    with pytest.raises(SupplyError, match="uncertain"):
+        IntelligenceService(engine, AccountingStore(tmp_path), Vault(), recovered).supply(request_value)
+    assert recovered.calls == 0
+
+
+def test_gen_requires_generation_phase_before_vault_or_provider(tmp_path):
+    engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    vault, provider = Vault(), Provider()
+    request_value = gen_request()
+    request_value["intent"]["phase"] = "mapping"
+    with pytest.raises(SupplyError, match="Transport schema validation failed"):
+        IntelligenceService(engine, AccountingStore(tmp_path), vault, provider).supply(request_value)
+    assert vault.calls == 0 and provider.calls == 0
+
+
+def test_unconfigured_gen_policy_rejects_before_vault(tmp_path):
+    engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    vault, provider = Vault(), Provider()
+    with pytest.raises(SupplyError, match="Explicit Mandate gen budget required"):
+        IntelligenceService(engine, AccountingStore(tmp_path), vault, provider).supply(gen_request())
+    assert vault.calls == 0 and provider.calls == 0
+
+
+def test_gen_route_supply_cli_fails_before_vault_when_budget_unset(tmp_path):
+    request_path = tmp_path / "gen-request.json"
+    request_path.write_text(json.dumps(gen_request()), encoding="utf-8")
+    process = subprocess.run([sys.executable, "-B", "-m", "aitap", "--json", "route", "supply",
+        "--request", str(request_path), "--state-dir", str(tmp_path / "accounting"),
+        "--policy", str(ROOT / "policies/mandate-gen-v1.json"),
+        "--registry", str(ROOT / "registry/genesis-pilot-v2.json")],
+        capture_output=True, text=True, encoding="utf-8", timeout=30,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONDONTWRITEBYTECODE": "1"})
+    assert process.returncode == 1
+    error = json.loads(process.stdout)["error"]
+    assert error["code"] == "INVALID_REQUEST" and error["stage"] == "budget"
+
+
+def test_gen_route_supply_cli_reaches_vault_and_denies_without_grant(tmp_path):
+    request_path = tmp_path / "gen-request.json"
+    request_path.write_text(json.dumps(gen_request()), encoding="utf-8")
+    policy = json.loads((ROOT / "policies/mandate-gen-v1.json").read_text(encoding="utf-8"))
+    policy["intelligence_supply"].update(max_output_tokens=100)
+    policy["intelligence_supply"]["budget"].update(max_usd="0.10", max_total_tokens=5000)
+    policy_path = tmp_path / "test-policy.json"
+    policy_path.write_text(json.dumps(policy), encoding="utf-8")
+    environment = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONDONTWRITEBYTECODE": "1",
+                   "BLOOM_APPDATA_DIR": str(tmp_path / "absent-identity")}
+    environment.pop("AITAP_VAULT_GRANT_ID", None)
+    process = subprocess.run([sys.executable, "-B", "-m", "aitap", "--json", "route", "supply",
+        "--request", str(request_path), "--state-dir", str(tmp_path / "accounting"),
+        "--policy", str(policy_path), "--registry", str(ROOT / "registry/genesis-pilot-v2.json")],
+        capture_output=True, text=True, encoding="utf-8", timeout=30, env=environment)
+    assert process.returncode == 1
+    error = json.loads(process.stdout)["error"]
+    assert error["code"] == "VAULT_ACCESS_DENIED" and error["stage"] == "vault"
 
 
 class Vault:

@@ -5,7 +5,27 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
+
+func TestBuildDomainsConfirmHasExactPublicPathAndDualHelpMetadata(t *testing.T) {
+	root := &cobra.Command{Use: "nucleus"}
+	mandate := &cobra.Command{Use: "mandate"}
+	root.AddCommand(mandate)
+	mandate.AddCommand(createBuildMandateSubcommand(nil))
+	cmd, _, err := root.Find([]string{"mandate", "build", "domains", "confirm"})
+	if err != nil || cmd == nil || cmd.CommandPath() != "nucleus mandate build domains confirm" {
+		t.Fatalf("public path: cmd=%v err=%v", cmd, err)
+	}
+	if cmd.Short == "" || cmd.Long == "" || cmd.Example == "" || cmd.Flags().Lookup("id") == nil || cmd.Flags().Lookup("domain-id") == nil {
+		t.Fatal("human help or flags missing")
+	}
+	var sample map[string]interface{}
+	if err := json.Unmarshal([]byte(cmd.Annotations["json_response"]), &sample); err != nil || sample["mandateId"] == nil {
+		t.Fatalf("JSON help invalid: %#v err=%v", sample, err)
+	}
+}
 
 func TestMutateMandateStateValidateIsMonotonicAndIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mandate_state.json")

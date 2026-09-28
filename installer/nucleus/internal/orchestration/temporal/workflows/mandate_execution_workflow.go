@@ -78,7 +78,8 @@ type MandateExecutionInput struct {
 const gravityExecutionTurn uint64 = 1
 
 type MandateExecutionResult struct {
-	Success bool
+	Success   bool
+	Fulfilled bool
 	// CompletedDomains — ahora refleja los dominios que realmente
 	// terminaron el scaffold real, no un array vacío fijo.
 	CompletedDomains []string
@@ -180,133 +181,28 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 			MaximumAttempts: 3,
 		},
 	})
-
-	// ── Gravity: garantizar espina hasta MANDATE, crear SESSION, resolver
-	// y persistir evidencia — ANTES de ejecutar ninguna Action. Cowork
-	// nodo SESSION/MANDATE (2026-09-02): cierra G.1/G.2 de
-	// docs/ANALYSIS/GRAVITY/SESSION/Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md.
-	// Un solo SessionID por invocación completa de este Workflow (decisión
-	// ratificada — nunca uno por DomainAction), reutilizado en la única
-	// llamada a resolveActiveGravityActivity de esta corrida. Cualquier
-	// fallo acá (espina inconsistente/faltante, SESSION, resolución o
-	// persistencia) aborta antes de tocar ninguna Action — mismo contrato
-	// soft-failure (Success:false, Error poblado) que el resto de este
-	// Workflow.
-	var mandateNode activities.EnsureGravityMandateNodeResult
-	if err := workflow.ExecuteActivity(ctx, activities.EnsureGravityMandateNodeActivity, activities.EnsureGravityMandateNodeInput{
-		MandatesRoot: input.MandatesRoot,
-		MandateID:    input.MandateID,
-		ProjectID:    input.ProjectID,
-	}).Get(ctx, &mandateNode); err != nil {
-		logger.Error("MandateExecutionWorkflow: no se pudo garantizar la espina Gravity hasta MANDATE", "mandateId", input.MandateID, "error", err)
-		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	// The execution request may identify the Mandate and its local storage,
+	// but must not carry an executable plan. The registered activity reloads
+	// the signed version and rejects unbound Files before any effect.
+	if input.MandateID == "" || input.MandatesRoot == "" || input.Project != "" || input.ProjectID != "" || input.IntentType != "" || len(input.Domains) != 0 {
+		return MandateExecutionResult{Success: false, Error: "execution request contains an unsigned plan or lacks Mandate identity"}, nil
 	}
-
-	// SessionID = RunID de esta invocación (workflow.GetInfo es
-	// determinístico/replay-safe, no un side effect prohibido en código de
-	// Workflow). RunID, no WorkflowID: WorkflowID es fijo por MandateID
-	// (mandate_execution_{mandateId}, mandate_build_workflow.go) y
-	// podría reutilizarse entre corridas distintas; RunID identifica la
-	// corrida real, uno a uno con "una invocación" tal como quedó
-	// ratificado (checkpoint §2).
-	sessionID := workflow.GetInfo(ctx).WorkflowExecution.RunID
-
-	var sessionResult activities.CreateGravitySessionResult
-	if err := workflow.ExecuteActivity(ctx, activities.CreateGravitySessionActivity, activities.CreateGravitySessionInput{
-		NucleusRoot:     mandateNode.NucleusRoot,
-		MandateNodePath: mandateNode.MandateNodePath,
-		MandateID:       input.MandateID,
-		SessionID:       sessionID,
-	}).Get(ctx, &sessionResult); err != nil {
-		logger.Error("MandateExecutionWorkflow: no se pudo crear la SESSION de Gravity", "mandateId", input.MandateID, "sessionId", sessionID, "error", err)
-		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	var genResult activities.MandateGenResult
+	if err := workflow.ExecuteActivity(ctx, "MandateGenActivity", activities.MandateGenInput{
+		MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+	}).Get(ctx, &genResult); err != nil {
+		return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 	}
-
-	var gravityResolved activities.ResolveActiveGravityResult
-	if err := workflow.ExecuteActivity(ctx, activities.ResolveActiveGravityActivity, activities.ResolveActiveGravityInput{
-		NucleusRoot: mandateNode.NucleusRoot,
-		MandateID:   input.MandateID,
-		SessionID:   sessionID,
-		IntentType:  input.IntentType,
-		Turn:        gravityExecutionTurn,
-	}).Get(ctx, &gravityResolved); err != nil {
-		logger.Error("MandateExecutionWorkflow: no se pudo resolver Gravity activa", "mandateId", input.MandateID, "sessionId", sessionID, "error", err)
-		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+	if genResult.MandateID != input.MandateID || genResult.ActionID == "" || genResult.ContractDigest == "" || genResult.ArtifactSHA256 == "" || genResult.FulfillmentStatus != "fulfilled" {
+		return MandateExecutionResult{Success: false, Error: "gen returned incomplete evidence"}, nil
 	}
-
-	if err := workflow.ExecuteActivity(ctx, activities.PersistExecutionGravityActivity, activities.PersistExecutionGravityInput{
-		MandatesRoot: input.MandatesRoot,
-		MandateID:    input.MandateID,
-		SessionID:    sessionID,
-		IntentType:   input.IntentType,
-		Turn:         gravityExecutionTurn,
-		Result:       gravityResolved,
+	if err := workflow.ExecuteActivity(ctx, activities.PersistExecutionResultActivity, activities.PersistExecutionResultInput{
+		MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+		ActionID: genResult.ActionID, ResultRef: genResult.ArtifactRef,
+		ArtifactDigest: genResult.ArtifactSHA256, ContractDigest: genResult.ContractDigest,
+		Status: "completed", FulfillmentStatus: genResult.FulfillmentStatus,
 	}).Get(ctx, nil); err != nil {
-		logger.Error("MandateExecutionWorkflow: no se pudo persistir la Gravity resuelta", "mandateId", input.MandateID, "sessionId", sessionID, "error", err)
-		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
+		return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 	}
-
-	layers, err := topologicalLayers(input.Domains)
-	if err != nil {
-		logger.Error("MandateExecutionWorkflow: no se pudo ordenar el action graph", "mandateId", input.MandateID, "error", err)
-		return MandateExecutionResult{Success: false, CompletedDomains: []string{}, Error: err.Error()}, nil
-	}
-
-	completed := make([]string, 0, len(input.Domains))
-	for _, layer := range layers {
-		type inFlightScaffold struct {
-			domain DomainAction
-			future workflow.Future
-		}
-
-		inFlight := make([]inFlightScaffold, 0, len(layer))
-		for _, domain := range layer {
-			future := workflow.ExecuteActivity(ctx, activities.ScaffoldDomainActivity, activities.ScaffoldDomainInput{
-				MandateID:    input.MandateID,
-				ActionID:     domain.ActionID,
-				DomainName:   domain.DomainName,
-				Files:        domain.Files,
-				Mode:         activities.ScaffoldModeReal,
-				MandatesRoot: input.MandatesRoot,
-			})
-			inFlight = append(inFlight, inFlightScaffold{domain: domain, future: future})
-		}
-
-		for _, pending := range inFlight {
-			domain := pending.domain
-			var scaffoldResult activities.ScaffoldDomainResult
-			scaffoldErr := pending.future.Get(ctx, &scaffoldResult)
-
-			persistInput := activities.PersistExecutionResultInput{
-				MandatesRoot: input.MandatesRoot,
-				MandateID:    input.MandateID,
-				ActionID:     domain.ActionID,
-				DomainName:   domain.DomainName,
-			}
-			if scaffoldErr != nil {
-				persistInput.Status = "failed"
-				persistInput.Error = scaffoldErr.Error()
-			} else {
-				persistInput.Status = "completed"
-				persistInput.ResultRef = scaffoldResult.ResultRef
-			}
-
-			if persistErr := workflow.ExecuteActivity(ctx, activities.PersistExecutionResultActivity, persistInput).Get(ctx, nil); persistErr != nil {
-				if scaffoldErr != nil {
-					return MandateExecutionResult{Success: false, CompletedDomains: completed, Error: fmt.Sprintf("dominio %s falló scaffold (%v) y no pude persistir el fallo: %v", domain.DomainName, scaffoldErr, persistErr)}, nil
-				}
-				return MandateExecutionResult{Success: false, CompletedDomains: completed, Error: fmt.Sprintf("dominio %s completó scaffold pero no pude persistir el resultado: %v", domain.DomainName, persistErr)}, nil
-			}
-
-			if scaffoldErr != nil {
-				logger.Error("MandateExecutionWorkflow: dominio falló, no se arrancan capas dependientes", "mandateId", input.MandateID, "domain", domain.DomainName, "error", scaffoldErr)
-				return MandateExecutionResult{Success: false, CompletedDomains: completed, Error: fmt.Sprintf("dominio %s: %v", domain.DomainName, scaffoldErr)}, nil
-			}
-
-			completed = append(completed, domain.DomainName)
-		}
-	}
-
-	logger.Info("MandateExecutionWorkflow: ejecución real completa", "mandateId", input.MandateID, "completedDomains", len(completed))
-	return MandateExecutionResult{Success: true, CompletedDomains: completed}, nil
+	return MandateExecutionResult{Success: true, Fulfilled: true, CompletedDomains: []string{input.MandateID}}, nil
 }

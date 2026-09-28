@@ -2,7 +2,7 @@ import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';import {join} from 'node:path';
-import {beginHumanLogin,finishHumanLogin,resolveHumanSession,renewHumanSession,revokeHumanSession,checkSessionCsrf,type HumanServices} from '../src/authority/human-session-store';
+import {beginHumanLogin,finishHumanLogin,resolveHumanSession,renewHumanSession,revokeHumanSession,checkSessionCsrf,issueMandateConsentToken,consumeMandateConsentToken,type HumanServices} from '../src/authority/human-session-store';
 import {HumanIdentityError} from '../src/authority/human-identity';
 let db:D1Database,mf:Miniflare,temp:string,n=0;
 const now='2026-09-09T12:00:00Z';
@@ -15,12 +15,20 @@ beforeAll(async()=>{
  await db.prepare('CREATE TABLE authority_admin_requests(organization_id TEXT,request_id TEXT,actor_id TEXT,PRIMARY KEY(organization_id,request_id))').run();
  const sql=readFileSync(new URL('../migrations/0006_authority_human_identity.sql',import.meta.url),'utf8').replace(/--[^\r\n]*/g,'').trim();
  for(const part of sql.split(/;\s*(?=CREATE\b)/i))await db.prepare(part).run();
+ await db.prepare('CREATE TABLE authority_mandate_consents(token_hash TEXT PRIMARY KEY,challenge_hash TEXT,session_id TEXT,principal_id TEXT,expires_at TEXT,consumed_at TEXT)').run();
 },60000);
 afterAll(async()=>{await mf?.dispose();if(temp)rmSync(temp,{recursive:true,force:true});});
 async function org(mapped=true){const id=`human-${++n}`;await db.prepare('INSERT INTO organizations VALUES(?)').bind(id).run();
  if(mapped)await db.prepare("INSERT INTO authority_human_identities VALUES(?,?,'123','fixture:explicit','test-fixture','1','active',NULL,'')").bind(id,'human').run();return id;}
 async function login(id:string,s=services){const f=await beginHumanLogin(db,id,s);return finishHumanLogin(db,{...f,code:'fixture-code'},s);}
 describe('human sessions on temporary D1',()=>{
+ it('consumes scoped Mandate consent once for the same human session and challenge',async()=>{
+  const id=await org(),session=await login(id),actor=(await resolveHumanSession(db,session.token,id,services))!;
+  const consent=await issueMandateConsentToken(db,actor,'challenge-one',services);
+  await expect(consumeMandateConsentToken(db,actor,'challenge-two',consent,services)).rejects.toThrow('consent_invalid');
+  await consumeMandateConsentToken(db,actor,'challenge-one',consent,services);
+  await expect(consumeMandateConsentToken(db,actor,'challenge-one',consent,services)).rejects.toThrow('consent_invalid');
+ });
  it('requires explicit correspondence and admits no fixture fallback',async()=>{
   await expect(login(await org(false))).rejects.toThrow('correspondence_missing');
   await expect(login(await org(),{...services,allowTestFixtures:false})).rejects.toThrow('fixture_forbidden');

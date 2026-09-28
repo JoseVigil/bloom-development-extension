@@ -26,7 +26,8 @@
         "intent_type": {
           "enum": [
             "ing",
-            "dis"
+            "dis",
+            "gen"
           ]
         },
         "mandate_id": {
@@ -36,7 +37,8 @@
         "phase": {
           "enum": [
             "classification",
-            "mapping"
+            "mapping",
+            "generation"
           ]
         },
         "turn_id": {
@@ -128,6 +130,9 @@
         }
       },
       "else": {
+        "if": {"properties": {"intent": {"properties": {"intent_type": {"const": "gen"}}}}},
+        "then": {"properties": {"intent": {"properties": {"phase": {"const": "generation"}}}}},
+        "else": {
         "properties": {
           "intent": {
             "properties": {
@@ -136,6 +141,7 @@
               }
             }
           }
+        }
         }
       }
     }

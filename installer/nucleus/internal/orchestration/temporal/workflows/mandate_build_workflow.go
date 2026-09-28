@@ -242,18 +242,12 @@ func MandateBuildWorkflow(ctx workflow.Context, input MandateBuildInput) error {
 	// viejo (cand.Name), ignorando el rename que el usuario acaba de
 	// confirmar. "El rename se aplica en el mismo acto de confirm" (mismo
 	// criterio que ya usa mandate_genesis_domains_cmd.go del lado CLI).
-	renameByID := make(map[string]string, len(signal.Domains))
 	confirmedIDs := make([]string, 0, len(signal.Domains))
 	for _, d := range signal.Domains {
+		if d.Rename != "" || len(d.Files) != 0 {
+			return fmt.Errorf("mandate %s: la señal no puede cambiar el dominio ni añadir Files al plan confirmado", input.MandateID)
+		}
 		confirmedIDs = append(confirmedIDs, d.ID)
-		if d.Rename != "" {
-			renameByID[d.ID] = d.Rename
-		}
-	}
-	for i := range candidateDomains {
-		if newName, ok := renameByID[candidateDomains[i].DomainID]; ok {
-			candidateDomains[i].Name = newName
-		}
 	}
 
 	// ── Persistir Human Sync en mandate_state.json (unifica CLI + señal) ──
@@ -280,176 +274,36 @@ func MandateBuildWorkflow(ctx workflow.Context, input MandateBuildInput) error {
 	}).Get(ctx, &humanSyncResult); err != nil {
 		return fmt.Errorf("fase validate, persistir human sync: %w", err)
 	}
-
-	// ── Firmar: produce mandate.json con operational.actions[] (D-3) ──────
-	var signResult activities.SignMandateResult
-	if err := workflow.ExecuteActivity(ctx, activities.SignMandateActivity,
-		input.MandatesRoot, input.MandateID,
-	).Get(ctx, &signResult); err != nil {
-		var failureResult activities.PersistSignatureFailureResult
-		failureErr := workflow.ExecuteActivity(ctx, activities.PersistSignatureFailureActivity,
-			activities.PersistSignatureFailureInput{
-				MandatesRoot: input.MandatesRoot,
-				MandateID:    input.MandateID,
-				Message:      err.Error(),
-				FailureType:  "SignMandateActivity",
-			},
-		).Get(ctx, &failureResult)
-		if failureErr != nil {
-			return fmt.Errorf("fase sign agotó reintentos (%v) y no pudo persistir signature=failed: %w", err, failureErr)
-		}
-		if publishErr := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-			"mandate:build:error", map[string]interface{}{
-				"mandateId": input.MandateID,
-				"phase":     "sign",
-				"error":     err.Error(),
-				"resumable": true,
-			},
-		).Get(ctx, nil); publishErr != nil {
-			return fmt.Errorf("fase sign falló (%v); signature=failed durable pero no pude publicar evento: %w", err, publishErr)
-		}
-		return fmt.Errorf("fase sign: %w", err)
+	// Signals only wake the workflow. The activity rereads and verifies the
+	// persisted signed contract and Authority-backed act receipt.
+	var approvalDigest string
+	workflow.GetSignalChannel(ctx, "mandate:build:approve").Receive(ctx, &approvalDigest)
+	var approved activities.MandateActVerificationResult
+	if err := workflow.ExecuteActivity(ctx, "MandateActVerificationActivity", activities.MandateActVerificationInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Operation: "approve", ExpectedDigest: approvalDigest}).Get(ctx, &approved); err != nil {
+		return fmt.Errorf("approval verification: %w", err)
 	}
-	_ = humanSyncResult
-
-	// CAMBIO (esta sesión, Paso 2): avanza currentPhase de "validate" a
-	// "signed" y marca phases.validate.status="completed". Se dispara acá,
-	// después de que SignMandateActivity ya firmó con éxito (no antes,
-	// dentro de PersistHumanSyncActivity) porque firmar es lo que
-	// efectivamente cierra la fase validate — humanSync por sí solo es
-	// solo la confirmación, no el cierre de fase.
-	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
-		MandatesRoot:              input.MandatesRoot,
-		MandateID:                 input.MandateID,
-		Phase:                     "validate",
-		PhaseOrder:                BuildPhaseOrder,
-		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("fase sign, avanzar currentPhase: %w", err)
+	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Phase: "validate", PhaseOrder: BuildPhaseOrder, PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("approved phase transition: %w", err)
 	}
-
-	// Traducir Action[] (mandate.json, dependsOn en actionIds) a
-	// []DomainAction (input del child, dependsOn en domainNames) — mismo
-	// mapeo que ya se documentó como pendiente en mandate_execution_workflow.go,
-	// ahora resuelto acá porque ya tenemos las Actions reales, no una lista
-	// armada a mano.
-	nameByActionID := make(map[string]string, len(signResult.Actions))
-	for _, a := range signResult.Actions {
-		nameByActionID[a.ActionID] = a.DomainName
+	var activationDigest string
+	workflow.GetSignalChannel(ctx, "mandate:build:activate").Receive(ctx, &activationDigest)
+	var activated activities.MandateActVerificationResult
+	if err := workflow.ExecuteActivity(ctx, "MandateActVerificationActivity", activities.MandateActVerificationInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Operation: "activate", ExpectedDigest: activationDigest}).Get(ctx, &activated); err != nil {
+		return fmt.Errorf("activation verification: %w", err)
 	}
-	filesByID := make(map[string][]string, len(signal.Domains))
-	for _, d := range signal.Domains {
-		filesByID[d.ID] = d.Files
+	if approved.ContractDigest != activated.ContractDigest {
+		return fmt.Errorf("Mandate digest changed between approval and activation")
 	}
-	domains := make([]DomainAction, 0, len(signResult.Actions))
-	for _, a := range signResult.Actions {
-		deps := make([]string, 0, len(a.DependsOn))
-		for _, depActionID := range a.DependsOn {
-			if n, ok := nameByActionID[depActionID]; ok {
-				deps = append(deps, n)
-			}
-		}
-		domains = append(domains, DomainAction{
-			DomainName: a.DomainName,
-			DomainID:   a.Payload.DomainID,
-			ActionID:   a.ActionID,
-			Files:      filesByID[a.Payload.DomainID],
-			DependsOn:  deps,
-		})
+	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: "mandate_execution_" + input.MandateID})
+	var result MandateExecutionResult
+	if err := workflow.ExecuteChildWorkflow(childCtx, MandateExecutionWorkflow, MandateExecutionInput{MandateID: input.MandateID, MandatesRoot: input.MandatesRoot}).Get(childCtx, &result); err != nil {
+		return fmt.Errorf("Mandate execution: %w", err)
 	}
-
-	// IntentType — CAMPO NUEVO esta sesión (cowork nodo SESSION/MANDATE de
-	// Gravity): un solo valor por corrida (decisión ratificada, checkpoint
-	// §3), tomado de signResult.Actions[].IntentType — ya estampado por
-	// SignMandateActivity (mandate_genesis_sign_activity.go:262) igual
-	// para todas las Actions de un Mandate. Se valida esa uniformidad acá,
-	// no se asume: si alguna vez dejara de serlo, esto debe fallar cerrado
-	// en vez de elegir una al azar — no hay hoy un IntentType por Domain
-	// (appliesTo filtra por IntentType, nunca por Domain/Gene, resolver.go:56).
-	intentType := ""
-	for i, a := range signResult.Actions {
-		if i == 0 {
-			intentType = a.IntentType
-			continue
-		}
-		if a.IntentType != intentType {
-			return fmt.Errorf(
-				"mandate %s: Actions firmadas con IntentType inconsistente (%q vs %q) — no hay un único valor de Gravity IntentType para esta corrida",
-				input.MandateID, intentType, a.IntentType,
-			)
-		}
+	if !result.Success || !result.Fulfilled {
+		return fmt.Errorf("Mandate execution did not fulfill objective: %s", result.Error)
 	}
-	if intentType == "" {
-		return fmt.Errorf("mandate %s: signResult.Actions no trae IntentType — no puedo resolver Gravity activa sin él", input.MandateID)
+	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Phase: "signed", PhaseOrder: BuildPhaseOrder, PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("fulfilled phase transition: %w", err)
 	}
-
-	// ── execute (child workflow) ─────────────────────────────────────────
-	// MandateExecutionWorkflow sigue siendo un placeholder puro (ver
-	// mandate_execution_workflow.go) — este cambio ya le pasa las Actions
-	// firmadas, traducidas a DomainAction con DependsOn resuelto, en vez
-	// de un array armado a mano en el padre o de un loop de scaffold real
-	// ejecutado acá (eso violaba D-B1, corregido en este turno). La
-	// lógica interna de ejecución real (createStandardMandate,
-	// ScaffoldDomainActivity(Mode: real) por Action) sigue sin
-	// implementarse: es P4, fuera de este alcance.
-	childOpts := workflow.ChildWorkflowOptions{
-		WorkflowID: fmt.Sprintf("mandate_execution_%s", input.MandateID),
-		TaskQueue:  "mandate-orchestration",
-	}
-	childCtx := workflow.WithChildOptions(ctx, childOpts)
-
-	var execResult MandateExecutionResult
-	childFuture := workflow.ExecuteChildWorkflow(childCtx, MandateExecutionWorkflow, MandateExecutionInput{
-		MandateID:    input.MandateID,
-		Project:      input.Project,
-		MandatesRoot: input.MandatesRoot,
-		Domains:      domains,
-		ProjectID:    input.ProjectID,
-		IntentType:   intentType,
-	})
-
-	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-		"mandate:build:signed", map[string]interface{}{
-			"mandateId":        input.MandateID,
-			"domainsConfirmed": len(confirmedIDs),
-			"actionsCreated":   signResult.ActionsCreated,
-			"signedAt":         signResult.SignedAt,
-			"workflowId":       childOpts.WorkflowID,
-		},
-	).Get(ctx, nil); err != nil {
-		return fmt.Errorf("firma durable, publicar evento signed: %w", err)
-	}
-
-	err := childFuture.Get(ctx, &execResult)
-	if err != nil {
-		return fmt.Errorf("fase execute: %w", err)
-	}
-
-	// CAMBIO (esta sesión, Paso 2): currentPhase solo llega a "completed"
-	// cuando MandateExecutionWorkflow (Paso 1) reporta Success:true —
-	// decisión confirmada explícitamente con el usuario (no automático solo
-	// porque el child workflow haya retornado sin error de Temporal;
-	// recordar que MandateExecutionResult usa el patrón de soft-failure:
-	// falla por contenido de Success/Error, no por error de Go). Si
-	// Success:false, currentPhase se queda en "signed" — el mandate no se
-	// marca completo, y el evento all_complete de abajo igual se publica
-	// con el resultado real para que la UI pueda mostrar el fallo.
-	if execResult.Success {
-		if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
-			MandatesRoot:              input.MandatesRoot,
-			MandateID:                 input.MandateID,
-			Phase:                     "signed",
-			PhaseOrder:                BuildPhaseOrder,
-			PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
-		}).Get(ctx, nil); err != nil {
-			return fmt.Errorf("fase execute, avanzar currentPhase a completed: %w", err)
-		}
-	}
-
-	return workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-		"mandate:build:all_complete", map[string]interface{}{
-			"mandateId": input.MandateID,
-			"result":    execResult,
-		},
-	).Get(ctx, nil)
+	return workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity, "mandate:build:all_complete", map[string]interface{}{"mandateId": input.MandateID, "contractDigest": activated.ContractDigest, "fulfilled": true}).Get(ctx, nil)
 }

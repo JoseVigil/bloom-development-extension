@@ -24,6 +24,9 @@ type ActorChallengeRequest struct {
 	OrganizationID string `json:"organizationId"`
 	ActorPublicKey string `json:"actorPublicKey"`
 	Audience       string `json:"audience"`
+	Operation      string `json:"operation,omitempty"`
+	MandateID      string `json:"mandateId,omitempty"`
+	ContractDigest string `json:"contractDigest,omitempty"`
 }
 type ActorChallengeApproval struct {
 	OrganizationID string `json:"organizationId"`
@@ -58,6 +61,9 @@ type ActorAttestation struct {
 	RunID          string `json:"run_id"`
 	DesignationID  string `json:"designation_id"`
 	CapabilitySeam string `json:"capability_seam"`
+	Operation      string `json:"operation,omitempty"`
+	MandateID      string `json:"mandate_id,omitempty"`
+	ContractDigest string `json:"contract_digest,omitempty"`
 }
 
 // allowedActorProofAudiences es una whitelist, no una eliminación del chequeo: agrega
@@ -66,6 +72,7 @@ type ActorAttestation struct {
 var allowedActorProofAudiences = map[string]struct{}{
 	"bloom.authority.local-actor":     {},
 	"bloom.authority.orbital-context": {},
+	"bloom.authority.mandate-consent": {},
 }
 
 func NewActorProof(org, installation, audience string) (*ActorProof, error) {
@@ -79,7 +86,17 @@ func NewActorProof(org, installation, audience string) (*ActorProof, error) {
 	return &ActorProof{org, installation, audience, pub, priv}, nil
 }
 func (p *ActorProof) ChallengeRequest() ActorChallengeRequest {
-	return ActorChallengeRequest{p.OrganizationID, base64.RawURLEncoding.EncodeToString(p.public), p.Audience}
+	return ActorChallengeRequest{OrganizationID: p.OrganizationID, ActorPublicKey: base64.RawURLEncoding.EncodeToString(p.public), Audience: p.Audience}
+}
+func (p *ActorProof) MandateChallengeRequest(operation, mandateID, digest string) (ActorChallengeRequest, error) {
+	if p == nil || p.Audience != "bloom.authority.mandate-consent" || (operation != "approve" && operation != "activate") || mandateID == "" || len(digest) != 64 {
+		return ActorChallengeRequest{}, errors.New("invalid Mandate consent context")
+	}
+	r := p.ChallengeRequest()
+	r.Operation = operation
+	r.MandateID = mandateID
+	r.ContractDigest = digest
+	return r, nil
 }
 func (p *ActorProof) SignChallenge(challenge string) (ActorChallengeApproval, error) {
 	if p == nil || challenge == "" || len(p.private) != ed25519.PrivateKeySize {
@@ -127,20 +144,77 @@ func VerifyActorAttestation(raw []byte, manifest *VerifiedTrustManifest, proof *
 		return zero, errors.New("invalid actor attestation signature")
 	}
 	var a ActorAttestation
-	if err = decodeWire(env.Payload, &a); err != nil {
+	if err = decodeActorAttestationPayload(env.Payload, &a); err != nil {
 		return zero, err
 	}
 	challengeSum := sha256.Sum256([]byte(challenge))
-	if a.Schema != "bloom.authority.actor-attestation" || (a.SchemaVersion != "1.0" && a.SchemaVersion != "1.1") || a.AttestationID == "" || a.PrincipalID == "" || a.Issuer != manifest.Payload.Issuer || a.OrganizationID != proof.OrganizationID || a.InstallationID != proof.InstallationID || a.Audience != proof.Audience || a.ActorPublicKey != base64.RawURLEncoding.EncodeToString(proof.public) || a.ChallengeDigest != base64.RawURLEncoding.EncodeToString(challengeSum[:]) || a.IssuedAt.After(now) || !now.Before(a.ExpiresAt) {
+	if a.Schema != "bloom.authority.actor-attestation" || (a.SchemaVersion != "1.0" && a.SchemaVersion != "1.1" && a.SchemaVersion != "1.2") || a.AttestationID == "" || a.PrincipalID == "" || a.Issuer != manifest.Payload.Issuer || a.OrganizationID != proof.OrganizationID || a.InstallationID != proof.InstallationID || a.Audience != proof.Audience || a.ActorPublicKey != base64.RawURLEncoding.EncodeToString(proof.public) || a.ChallengeDigest != base64.RawURLEncoding.EncodeToString(challengeSum[:]) || a.IssuedAt.After(now) || !now.Before(a.ExpiresAt) {
 		return zero, errors.New("actor attestation binding or validity mismatch")
 	}
 	// "1.0" nunca lleva los campos de Orbital (ningún consumidor existente de bloom.authority.local-actor
 	// los completa hoy); "1.1" los exige completos — son el motivo de ser de esa versión de schema.
-	if a.SchemaVersion == "1.0" && (a.RunID != "" || a.DesignationID != "" || a.CapabilitySeam != "") {
+	if a.SchemaVersion == "1.0" && (a.RunID != "" || a.DesignationID != "" || a.CapabilitySeam != "" || a.Operation != "" || a.MandateID != "" || a.ContractDigest != "") {
 		return zero, errors.New("actor attestation schema version mismatch")
 	}
 	if a.SchemaVersion == "1.1" && (a.RunID == "" || a.DesignationID == "" || a.CapabilitySeam == "") {
 		return zero, errors.New("actor attestation orbital context fields required")
+	}
+	if a.SchemaVersion == "1.1" && (a.Operation != "" || a.MandateID != "" || a.ContractDigest != "") {
+		return zero, errors.New("actor attestation context mismatch")
+	}
+	if a.SchemaVersion == "1.2" && (a.Audience != "bloom.authority.mandate-consent" || (a.Operation != "approve" && a.Operation != "activate") || a.MandateID == "" || len(a.ContractDigest) != 64 || a.RunID != "" || a.DesignationID != "" || a.CapabilitySeam != "") {
+		return zero, errors.New("actor attestation Mandate context required")
+	}
+	return a, nil
+}
+
+func decodeActorAttestationPayload(raw []byte, dst *ActorAttestation) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	base := []string{"schema", "schema_version", "attestation_id", "issuer", "organization_id", "installation_id", "principal_id", "actor_public_key", "audience", "challenge_digest", "issued_at", "expires_at"}
+	allowed := map[string]bool{}
+	for _, key := range base {
+		allowed[key] = true
+		if _, ok := fields[key]; !ok {
+			return errors.New("actor attestation missing required field")
+		}
+	}
+	version := string(fields["schema_version"])
+	if version == `"1.1"` || version == `"1.2"` {
+		for _, key := range []string{"run_id", "designation_id", "capability_seam"} {
+			allowed[key] = true
+		}
+	}
+	if version == `"1.2"` {
+		for _, key := range []string{"operation", "mandate_id", "contract_digest"} {
+			allowed[key] = true
+			if _, ok := fields[key]; !ok {
+				return errors.New("Mandate actor attestation missing context")
+			}
+		}
+	}
+	if version == `"1.0"` {
+		for _, key := range []string{"run_id", "designation_id", "capability_seam"} {
+			allowed[key] = true
+		}
+	}
+	for key := range fields {
+		if !allowed[key] {
+			return errors.New("actor attestation unknown field")
+		}
+	}
+	return json.Unmarshal(raw, dst)
+}
+
+func VerifyMandateActorAttestation(raw []byte, manifest *VerifiedTrustManifest, proof *ActorProof, challenge string, now time.Time, operation, mandateID, digest string) (ActorAttestation, error) {
+	a, err := VerifyActorAttestation(raw, manifest, proof, challenge, now)
+	if err != nil {
+		return ActorAttestation{}, err
+	}
+	if a.SchemaVersion != "1.2" || a.Operation != operation || a.MandateID != mandateID || a.ContractDigest != digest {
+		return ActorAttestation{}, errors.New("human consent does not match exact Mandate operation and digest")
 	}
 	return a, nil
 }

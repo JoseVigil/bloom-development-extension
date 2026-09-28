@@ -371,6 +371,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load IntentFreezeCommand: {e}")
     
     try:
+        from brain.commands.intent.gen_domain import GenDomainCommand
+        registry.register(GenDomainCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load GenDomainCommand: {e}")
+    
+    try:
         from brain.commands.intent.get import GetCommand
         registry.register(GetCommand())
     except (ImportError, AttributeError) as e:
@@ -891,6 +897,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.download',
         'brain.commands.intent.finalize',
         'brain.commands.intent.freeze',
+        'brain.commands.intent.gen_domain',
         'brain.commands.intent.get',
         'brain.commands.intent.hydrate',
         'brain.commands.intent.list',

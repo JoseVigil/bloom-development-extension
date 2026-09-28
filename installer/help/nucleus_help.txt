@@ -1,0 +1,1765 @@
+
+                                                        NUCLEUS
+                                                 Governance Magistrate
+
+
+------------------------------------------------------------------------------------------------------------------------
+  USAGE
+------------------------------------------------------------------------------------------------------------------------
+
+  nucleus [OPTIONS] <command> [args]
+
+  Quick examples:
+    nucleus version                    # Display version information
+    nucleus info                       # Show system information
+    nucleus --json info              # JSON output for automation
+
+
+------------------------------------------------------------------------------------------------------------------------
+  GLOBAL OPTIONS
+------------------------------------------------------------------------------------------------------------------------
+
+  --json           Output in JSON format (machine-readable)
+
+           ⚠️  CRITICAL: Flag MUST be placed BEFORE the command
+           ✅ CORRECT:   nucleus --json synapse seed profile
+           ❌ WRONG:     nucleus synapse seed profile --json
+
+           When using --json, logs go to stderr and JSON to stdout.
+           For clean JSON output in scripts, redirect stderr:
+             PowerShell:  nucleus --json info 2>$null
+             Bash:        nucleus --json info 2>/dev/null
+
+  --verbose        Enable detailed logging for debugging
+  --help           Show this help message
+
+
+------------------------------------------------------------------------------------------------------------------------
+  COMMAND CATEGORIES
+------------------------------------------------------------------------------------------------------------------------
+
+  SYSTEM             System information and diagnostics                       1 cmd
+  DIAGNOSTICS        Health checks, log inspection and system diagnostics     1 cmd
+  SUPERVISOR         Supervisor operations and cross-component log inspection  1 cmd
+  GOVERNANCE         Organization initialization and authority                10 cmds
+  TEAM               Team and collaboration management                        3 cmds
+  VAULT              Secure key and credential management                     1 cmd
+  SYNC               State synchronization with central server                2 cmds
+  ANALYTICS          System monitoring and telemetry                          1 cmd
+  TELEMETRY          Centralized log stream registration                      1 cmd
+  TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
+  ORCHESTRATION      Workflow orchestration and automation                    4 cmds
+  SERVICE            Nucleus service lifecycle management                     1 cmd
+  MANDATES           Mandate hooks and orchestration                          2 cmds
+  ---------------------------------------------------------------------------  Total: 29 commands
+
+
+=======================================================[ SYSTEM ]=======================================================
+
+  > INFO
+    Display detailed system information
+
+    Usage: nucleus info
+
+    --------------------------------------------------------------------------------
+
+
+====================================================[ DIAGNOSTICS ]=====================================================
+
+  > HEALTH
+    System integrity check — all components in parallel (<3s)
+
+    Usage: nucleus health
+
+    Flags:
+      --component                Check only one component (temporal, worker, brain_service, etc.)
+      --fix                      Attempt automated remediation of known failures
+      --json                     Output result as JSON
+      --validate                 Deep validation checks (slower)
+
+    Example:
+        nucleus health
+        nucleus health --fix
+        nucleus health --component brain_service
+        nucleus --json health
+        nucleus --json health --fix
+        nucleus health --validate
+
+    JSON Response:
+      {
+        "success": false,
+        "state": "DEGRADED",
+        "error": "2 non-critical components unhealthy",
+        "timestamp": 1740000000,
+        "components": {
+          "temporal":       { "healthy": true,  "state": "RUNNING",      "port": 7233,  "latency_ms": 4  },
+          "worker":         { "healthy": false, "state": "DISCONNECTED",  "error": "Worker process not found in supervisor" },
+          "ollama":         { "healthy": true,  "state": "RUNNING",       "port": 11434, "latency_ms": 3  },
+          "control_plane":  { "healthy": true,  "state": "RUNNING",       "pid": 9821   },
+          "vault":          { "healthy": true,  "state": "UNLOCKED"       },
+          "governance":     { "healthy": true,  "state": "VALID"          },
+          "brain_service":  { "healthy": false, "state": "UNREACHABLE",   "port": 5678,  "error": "Port 5678 not accessible" },
+          "bloom_api":      { "healthy": true,  "state": "RUNNING",       "port": 48215, "latency_ms": 12 },
+          "svelte_dev":     { "healthy": true,  "state": "RUNNING",       "port": 5173,  "latency_ms": 5  },
+          "worker_manager": { "healthy": true,  "state": "ACTIVE",        "profiles_count": 1 }
+        },
+        "brain_last_errors": {
+          "brain_service_log":   ["2026-02-20 22:50:09 ERROR Connection reset by peer"],
+          "brain_event_bus_log": ["2026-02-20 22:50:09 ERROR WinError 64: pipe broken"]
+        }
+      }
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ SUPERVISOR ]=====================================================
+
+  > LOGS
+    Read, trace and analyze Nucleus log streams
+
+    Usage: nucleus logs
+
+    Subcommands:
+      synapse               Trace automático del último launch — obtiene perfil y launch_id via Brain CLI
+        nucleus logs synapse
+
+    Subcommand Details:
+
+      └─ SYNAPSE
+        Trace automático del último launch — obtiene perfil y launch_id via Brain CLI
+
+        Usage: nucleus logs synapse
+
+        Example:
+            nucleus logs synapse
+
+        ----------------------------------------------------------------------
+
+    Arguments:
+      stream                optional
+
+    Flags:
+      --errors-only              Only show WARNING or ERROR lines
+      --json                     Output in JSON format
+      --launch                   Launch ID to produce a full synapse trace
+      --no-startup               Exclude Brain startup noise patterns
+      --out                      Output file path (default: logs/synapse/trace_<launch_id>.log)
+      --profile                  Profile ID (required for Chrome log analysis with --launch)
+      --since                    Only show lines from last X minutes/hours (e.g. 5m, 2h)
+      --summary                  Show dashboard of all streams
+      --tail                     Live tail mode (follow file)
+
+    Example:
+        nucleus logs nucleus_synapse --since 5m
+        nucleus logs sentinel_core --errors-only --no-startup
+        nucleus logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c
+        nucleus logs --summary --since 10m
+        nucleus --json logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c
+
+    JSON Response:
+      {
+        "success": true,
+        "mode": "stream|launch|summary",
+        "lines": 42,
+        "output_file": "logs/synapse_trace/synapse_trace_001_0b31f2fa_033803.log"
+      }
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ GOVERNANCE ]=====================================================
+
+  > ALFRED
+    Inicia el custodio administrativo y los servidores de autoridad
+
+    Usage: nucleus alfred
+
+    Arguments:
+      start                 required
+
+    --------------------------------------------------------------------------------
+
+  > ALFRED
+    Ejecuta una verificación de integridad manual sobre el sistema de archivos
+
+    Usage: nucleus alfred
+
+    Arguments:
+      audit                 required
+
+    --------------------------------------------------------------------------------
+
+  > ALFRED
+    Muestra el reporte de salud administrativa y estado de la Bóveda
+
+    Usage: nucleus alfred
+
+    Arguments:
+      status                required
+
+    Flags:
+      --json                     Salida en formato JSON (para Conductor u otras herramientas)
+
+    --------------------------------------------------------------------------------
+
+  > AUTH
+    Autenticar esta instalación de Nucleus contra Authority
+
+    Usage: nucleus auth
+
+    Subcommands:
+      link                  Vincula esta instalación de Nucleus con la organización creada por Génesis y corre el primer sync
+        nucleus auth link
+
+    Subcommand Details:
+
+      └─ LINK
+        Vincula esta instalación de Nucleus con la organización creada por Génesis y corre el primer sync
+
+        Usage: nucleus auth link
+
+        Flags:
+          --authority-url            URL base del backend de Authority (obligatorio)
+          --org                      Slug de organización ya usado en 'nucleus create' (obligatorio)
+          --path                     Workspace path ya usado en 'nucleus create' (obligatorio)
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"installation_id":"...","organization_id":"...","authority_version":"1"}}
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+  > AUTHORITY
+    Inspect Authority evidence without changing enforcement mode
+
+    Usage: nucleus authority
+
+    Subcommands:
+      checkpoint            Report Authority checkpoint evidence
+        nucleus authority checkpoint
+      decision              Report Authority decision evidence
+        nucleus authority decision
+      observation           Report Authority observation evidence
+        nucleus authority observation
+      service-grants        Report Authority service-grants evidence
+        nucleus authority service-grants
+      service-identity      Report Authority service-identity evidence
+        nucleus authority service-identity
+      status                Report Authority status evidence
+        nucleus authority status
+      sync                  Report Authority sync evidence
+        nucleus authority sync
+
+    Subcommand Details:
+
+      └─ CHECKPOINT
+        Report Authority checkpoint evidence
+
+        Usage: nucleus authority checkpoint
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+      └─ DECISION
+        Report Authority decision evidence
+
+        Usage: nucleus authority decision
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+      └─ OBSERVATION
+        Report Authority observation evidence
+
+        Usage: nucleus authority observation
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+      └─ SERVICE-GRANTS
+        Report Authority service-grants evidence
+
+        Usage: nucleus authority service-grants
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+      └─ SERVICE-IDENTITY
+        Report Authority service-identity evidence
+
+        Usage: nucleus authority service-identity
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Report Authority status evidence
+
+        Usage: nucleus authority status
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+      └─ SYNC
+        Report Authority sync evidence
+
+        Usage: nucleus authority sync
+
+        Arguments:
+          arguments             optional
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+        ----------------------------------------------------------------------
+
+    JSON Response:
+      {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+
+    --------------------------------------------------------------------------------
+
+  > BEGIN-DRAIN
+    G4 — marca el inicio de la ventana de drenado para la organización activa
+
+    Usage: nucleus begin-drain
+
+    Flags:
+      --reason                   Motivo del drenado (ej. 'switch a org X')
+
+    --------------------------------------------------------------------------------
+
+  > CAN-SWITCH-ORG
+    G2 — evalúa si la organización activa puede drenarse para un switch
+
+    Usage: nucleus can-switch-org
+
+    --------------------------------------------------------------------------------
+
+  > CREATE
+    Create a new Bloom Nucleus project structure
+
+    Usage: nucleus create
+
+    Flags:
+      --force                    Overwrite existing nucleus directory
+      --org                      Organization name or GitHub handle
+      --path                     Target path for nucleus creation (required)
+      --temporary                Use 'bloom-local' as temporary org name (skips --org)
+      --url                      Organization URL
+
+    Example:
+        # Crear nucleus con org explícita
+        nucleus create --org bloom-labs --path /home/user/repos/my-project
+        # Crear nucleus con org y URL
+        nucleus create --org bloom-labs --url https://bloom-labs.com --path /home/user/repos/my-project
+        # Crear nucleus temporal (usa "bloom-local" como slug)
+        nucleus create --temporary --path /home/user/repos/my-project
+        # Sin --org: también usa "bloom-local" automáticamente
+        nucleus create --path /home/user/repos/my-project
+        # Sobreescribir si ya existe
+        nucleus create --org bloom-labs --path /home/user/repos/my-project --force
+        # Modo JSON (para Workspace vía IPC)
+        nucleus --json create --org bloom-labs --path /home/user/repos/my-project
+
+    JSON Response:
+      {
+        "nucleus_name": "nucleus-bloom-labs",
+        "path": "/home/user/repos/my-project/.bloom/.nucleus-bloom-labs",
+        "organization": {
+          "name": "bloom-labs",
+          "url": ""
+        },
+        "files_created": [
+          ".core/.nucleus-config.json",
+          ".core/.rules.bl",
+          ".core/.standards.bl",
+          ".core/.policies.bl",
+          ".core/.ai_bot.sovereign.bl",
+          ".core/.meta.json",
+          ".governance/architecture/.principles.bl",
+          ".governance/architecture/.patterns.bl",
+          ".governance/security/.security-standards.bl",
+          ".governance/security/.compliance-requirements.bl",
+          ".governance/quality/.code-standards.bl",
+          ".governance/quality/.testing-requirements.bl",
+          ".cache/.projects-snapshot.json",
+          ".cache/.semantic-index.json",
+          ".cache/.last-sync.json",
+          ".relations/.project-links.json",
+          "findings/README.md",
+          "reports/health-dashboard.json"
+        ],
+        "projects_detected": 0,
+        "is_git_repo": false,
+        "timestamp": "2026-06-24T10:00:00.000000"
+      }
+
+    --------------------------------------------------------------------------------
+
+  > END-DRAIN
+    G4 — limpia el flag de drenado (idempotente)
+
+    Usage: nucleus end-drain
+
+    --------------------------------------------------------------------------------
+
+  > INIT
+    Initialize Nucleus organization
+
+    Usage: nucleus init
+
+    Flags:
+      --github-id                GitHub username
+      --master                   Initialize as master
+      --name                     Display name
+
+    JSON Response:
+      {"org_id":"org_123","owner_id":"owner","status":"initialized"}
+
+    --------------------------------------------------------------------------------
+
+
+========================================================[ TEAM ]========================================================
+
+  > ADD
+    Add team member
+
+    Usage: nucleus add
+
+    Arguments:
+      <github-id>           required
+
+    Flags:
+      --name                     Display name
+      --role                     Role [default: specialist]
+
+    --------------------------------------------------------------------------------
+
+  > LIST
+    List team members
+
+    Usage: nucleus list
+
+    --------------------------------------------------------------------------------
+
+  > REMOVE
+    Remove team member
+
+    Usage: nucleus remove
+
+    Arguments:
+      <github-id>           required
+
+    --------------------------------------------------------------------------------
+
+
+=======================================================[ VAULT ]========================================================
+
+  > VAULT
+    Secure key and credential vault
+
+    Usage: nucleus vault
+
+    Subcommands:
+      check                 Check credential availability without returning its value
+        nucleus vault check
+      delete                Delete a key from the vault
+        nucleus vault delete
+      lock                  Lock vault
+        nucleus vault lock
+      request               Request key from vault
+        nucleus vault request
+      service-request       Resolve a delegated service credential through a local channel
+        nucleus vault service-request
+      set                   Store or rotate a key in the vault
+        nucleus vault set
+      status                Display vault status
+        nucleus vault status
+      unlock                Unlock vault
+        nucleus vault unlock
+
+    Subcommand Details:
+
+      └─ CHECK
+        Check credential availability without returning its value
+
+        Usage: nucleus vault check
+
+        Arguments:
+          <key-id>              required
+
+        JSON Response:
+          {"available":true,"code":""}
+
+        ----------------------------------------------------------------------
+
+      └─ DELETE
+        Delete a key from the vault
+
+        Usage: nucleus vault delete
+
+        Arguments:
+          <key-id>              required
+
+        Example:
+          nucleus vault delete gemini-key:Personal
+          nucleus --json vault delete gemini-key:Personal
+
+        JSON Response:
+          {"status":"deleted","key_id":"example-key"}
+
+        ----------------------------------------------------------------------
+
+      └─ LOCK
+        Lock vault
+
+        Usage: nucleus vault lock
+
+        Example:
+          nucleus vault lock
+          nucleus --json vault lock
+
+        JSON Response:
+          {"status":"locked"}
+
+        ----------------------------------------------------------------------
+
+      └─ REQUEST
+        Request key from vault
+
+        Usage: nucleus vault request
+
+        Arguments:
+          <key-id>              required
+
+        Example:
+          nucleus vault request gemini-key:Personal
+          nucleus --json vault request gemini-key:Personal
+
+        JSON Response:
+          {"key_id":"example-key","key":"<secret-value>"}
+
+        ----------------------------------------------------------------------
+
+      └─ SERVICE-REQUEST
+        Resolve a delegated service credential through a local channel
+
+        Usage: nucleus vault service-request
+
+        JSON Response:
+          {"status":"delivered"}
+
+        ----------------------------------------------------------------------
+
+      └─ SET
+        Store or rotate a key in the vault
+
+        Usage: nucleus vault set
+
+        Arguments:
+          <key-id>              required
+          <value>               required
+
+        Example:
+          nucleus vault set gemini-key:Personal AIza...
+          nucleus --json vault set gemini-key:Personal AIza...
+
+        JSON Response:
+          {"status":"stored","key_id":"example-key"}
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Display vault status
+
+        Usage: nucleus vault status
+
+        Example:
+          nucleus vault status
+          nucleus --json vault status
+
+        JSON Response:
+          {
+            "locked": true,
+            "key_count": 0,
+            "last_access": "2026-07-08T00:00:00Z",
+            "master_key_id": ""
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ UNLOCK
+        Unlock vault
+
+        Usage: nucleus vault unlock
+
+        Example:
+          nucleus vault unlock
+          nucleus --json vault unlock
+
+        JSON Response:
+          {"status":"unlocked"}
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+========================================================[ SYNC ]========================================================
+
+  > SYNC-PULL
+    Pull permissions from central server
+
+    Usage: nucleus sync-pull
+
+    --------------------------------------------------------------------------------
+
+  > SYNC-PUSH
+    Push state to central server
+
+    Usage: nucleus sync-push
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ ANALYTICS ]======================================================
+
+  > HEARTBEAT
+    Send heartbeat to central server
+
+    Usage: nucleus heartbeat
+
+    Flags:
+      --volume                   Intent volume [default: 0]
+      --workers                  Active workers count [default: 0]
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ TELEMETRY ]======================================================
+
+  > TELEMETRY
+    Centralized log stream registration
+
+    Usage: nucleus telemetry
+
+    Subcommands:
+      list                  List registered telemetry streams, optionally filtered by category
+        nucleus telemetry list
+      register              Register or update a telemetry stream
+        nucleus telemetry register
+
+    Subcommand Details:
+
+      └─ LIST
+        List registered telemetry streams, optionally filtered by category
+
+        Usage: nucleus telemetry list
+
+        Flags:
+          --category                 Filter by category: brain|build|conductor|launcher|nucleus|sentinel|synapse
+
+        ----------------------------------------------------------------------
+
+      └─ REGISTER
+        Register or update a telemetry stream
+
+        Usage: nucleus telemetry register
+
+        Flags:
+          --category                 Subsystem category (repeatable): brain|build|conductor|launcher|nucleus|sentinel|synapse [default: []]
+          --description              Who writes this log and what it captures (required)
+          --label                    Display label with emoji (required)
+          --path                     Absolute log file path (required, repeatable; last path is active) [default: []]
+          --priority                 Priority: 1=critical 2=important 3=informational [default: 2]
+          --source                   Application that writes this log (optional): brain|nucleus|sentinel|conductor|launcher|host
+          --stream                   Stream identifier — lowercase snake_case (required)
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+==================================================[ TEMPORAL_SERVER ]===================================================
+
+  > TEMPORAL
+    Manage Temporal Server lifecycle
+
+    Usage: nucleus temporal
+
+    Subcommands:
+      cleanup               Clean up zombie Temporal processes on port 7233
+        nucleus temporal cleanup
+      diagnostics           Run comprehensive Temporal diagnostics
+        nucleus temporal diagnostics
+      ensure                Ensure Temporal Server is running (non-interactive, automation-safe)
+        nucleus temporal ensure
+      force-stop            Forcefully stop all Temporal processes
+        nucleus temporal force-stop
+      start                 Start Temporal Server (interactive mode)
+        nucleus temporal start
+      status                Check Temporal Server status
+        nucleus temporal status
+      stop                  Stop running Temporal Server
+        nucleus temporal stop
+
+    Subcommand Details:
+
+      └─ CLEANUP
+        Clean up zombie Temporal processes on port 7233
+
+        Usage: nucleus temporal cleanup
+
+        Example:
+              nucleus temporal cleanup
+              nucleus --json temporal cleanup
+
+        JSON Response:
+          {
+            "command": "temporal_cleanup",
+            "port": 7233,
+            "found_process": true,
+            "pid": 19580,
+            "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+            "action_taken": "killed",
+            "port_free_after": true,
+            "errors": []
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ DIAGNOSTICS
+        Run comprehensive Temporal diagnostics
+
+        Usage: nucleus temporal diagnostics
+
+        Example:
+            nucleus temporal diagnostics
+            nucleus --json temporal diagnostics
+
+        JSON Response:
+          {
+            "executable": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+              "exists": true,
+              "size": 123456789
+            },
+            "health": {
+              "operational": true,
+              "state": "RUNNING",
+              "grpc_responding": true,
+              "ui_responding": true
+            },
+            "database": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
+              "exists": true,
+              "size": 98304
+            },
+            "pid_file": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.pid",
+              "exists": true,
+              "pid": 12345
+            },
+            "overall_status": "HEALTHY"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ ENSURE
+        Ensure Temporal Server is running (non-interactive, automation-safe)
+
+        Usage: nucleus temporal ensure
+
+        Example:
+            nucleus temporal ensure
+
+        JSON Response:
+          {
+            "success": true,
+            "state": "RUNNING",
+            "started": true,
+            "pid": 14192,
+            "grpc_port": 7233,
+            "ui_port": 8233,
+            "ui_url": "http://localhost:8233",
+            "grpc_url": "localhost:7233"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ FORCE-STOP
+        Forcefully stop all Temporal processes
+
+        Usage: nucleus temporal force-stop
+
+        Example:
+              nucleus temporal force-stop
+              nucleus --json temporal force-stop
+
+        JSON Response:
+          {
+            "command": "temporal_force_stop",
+            "processes_found": 2,
+            "processes_killed": 2,
+            "port_7233_free": true,
+            "state_cleaned": true,
+            "details": [
+              {
+                "pid": 19580,
+                "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+                "killed": true
+              }
+            ],
+            "errors": []
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ START
+        Start Temporal Server (interactive mode)
+
+        Usage: nucleus temporal start
+
+        Example:
+            nucleus temporal start
+            nucleus --json temporal start
+
+        JSON Response:
+          {
+            "temporal": {
+              "state": "RUNNING",
+              "pid": 12345,
+              "grpc_port": 7233,
+              "ui_port": 8233,
+              "ui_url": "http://localhost:8233",
+              "grpc_url": "localhost:7233"
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Check Temporal Server status
+
+        Usage: nucleus temporal status
+
+        Example:
+            nucleus temporal status
+            nucleus --json temporal status
+
+        JSON Response:
+          {
+            "temporal": {
+              "operational": true,
+              "state": "RUNNING",
+              "ui_port": 8233,
+              "grpc_port": 7233,
+              "ui_url": "http://localhost:8233",
+              "grpc_url": "localhost:7233",
+              "health_checks": {
+                "grpc": true,
+                "ui": true
+              }
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STOP
+        Stop running Temporal Server
+
+        Usage: nucleus temporal stop
+
+        Example:
+            nucleus temporal stop
+            nucleus --json temporal stop
+
+        JSON Response:
+          {
+            "temporal": {
+              "state": "STOPPED",
+              "message": "Temporal Server stopped successfully"
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+===================================================[ ORCHESTRATION ]====================================================
+
+  > DEV-START
+    Start Nucleus development environment with full boot sequence
+
+    Usage: nucleus dev-start
+
+    Flags:
+      --enable-synapse-simulator-onboarding  Enable SynapseSimulator in onboarding mode (skips Master role check)
+      --json                     Output result as JSON
+      --simulation               Run in simulation mode (use test ownership.json)
+      --skip-control-plane       Skip Control Plane startup (pre-onboarding mode)
+      --skip-vault               Skip vault verification (development only)
+
+    Example:
+        nucleus dev-start
+        nucleus dev-start --simulation
+        nucleus dev-start --skip-vault
+        nucleus dev-start --enable-synapse-simulator-onboarding
+
+    --------------------------------------------------------------------------------
+
+  > SYNAPSE
+    Temporal workflow orchestration via Sentinel
+
+    Usage: nucleus synapse
+
+    Subcommands:
+      launch                Launch Sentinel for a profile (with pre-flight check)
+        nucleus synapse launch
+      onboarding            Send onboarding navigation signal to a running profile
+        nucleus synapse onboarding
+      seed                  Create new persistent profile workflow
+        nucleus synapse seed
+      shutdown              Shutdown a profile workflow gracefully
+        nucleus synapse shutdown
+      shutdown-all          Shutdown all orchestrated services gracefully
+        nucleus synapse shutdown-all
+      start-ollama          Start Ollama AI service via Temporal workflow
+        nucleus synapse start-ollama
+      status                Query current profile workflow status
+        nucleus synapse status
+      vault-status          Query Vault lock state via Brain
+        nucleus synapse vault-status
+
+    Subcommand Details:
+
+      └─ LAUNCH
+        Launch Sentinel for a profile (with pre-flight check)
+
+        Usage: nucleus synapse launch
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --add-account              Add linked account (provider,email_or_username,status). Repeatable [default: []]
+          --config-file              Load overrides from JSON file (@file path or - for stdin)
+          --json                     Output in JSON format
+          --mode                     Launch mode (landing, discovery) [default: landing]
+          --override-alias           Override profile alias
+          --override-email           Override profile email
+          --override-extension       Override extension ID
+          --override-heartbeat       Override heartbeat flag (true/false)
+          --override-register        Override register flag (true/false)
+          --override-role            Override profile role
+          --override-service         Override registration service (google, twitter, github, etc)
+          --override-step            Override current step (default: 0)
+          --save                     Persist overrides in profiles.json
+          --skip-preflight           Skip Brain/launcher pre-flight check
+
+        Example:
+            nucleus synapse launch prf_a1b2c3d4
+            nucleus synapse launch prf_a1b2c3d4 --mode discovery
+            nucleus synapse launch prf_a1b2c3d4 --skip-preflight
+            nucleus synapse launch prf_a1b2c3d4 --override-email user@example.com --override-service google
+            nucleus synapse launch prf_a1b2c3d4 --override-role sovereign --override-register true --save
+            nucleus synapse launch prf_a1b2c3d4 --add-account google,user@gmail.com,active --add-account twitter,@user,active
+            nucleus synapse launch prf_a1b2c3d4 --config-file overrides.json
+            nucleus synapse launch prf_a1b2c3d4 --config-file @/path/to/config.json
+            nucleus --json synapse launch prf_a1b2c3d4
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "prf_a1b2c3d4",
+            "chrome_pid": 14832,
+            "debug_port": 9222,
+            "extension_loaded": true,
+            "state": "RUNNING"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ ONBOARDING
+        Send onboarding navigation signal to a running profile
+
+        Usage: nucleus synapse onboarding
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --step                     Onboarding screen to navigate to (required)
+
+        Example:
+            nucleus synapse onboarding profile_001 --step account_setup
+            nucleus --json synapse onboarding profile_001 --step account_setup
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "profile_001",
+            "step": "account_setup",
+            "request_id": "onb_nav_1741234567_abc",
+            "status": "routed"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ SEED
+        Create new persistent profile workflow
+
+        Usage: nucleus synapse seed
+
+        Arguments:
+          <alias>               required
+
+        Flags:
+          --json                     Output in JSON format
+          --master                   Create as master profile
+
+        Example:
+            nucleus synapse seed my-profile
+            nucleus synapse seed my-profile --master
+            nucleus --json synapse seed my-profile
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "prf_a1b2c3d4",
+            "alias": "my-profile",
+            "workflow_id": "seed_my-profile_1740000000",
+            "state": "SEEDED"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ SHUTDOWN
+        Shutdown a profile workflow gracefully
+
+        Usage: nucleus synapse shutdown
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --json                     Output in JSON format
+
+        Example:
+            nucleus synapse shutdown prf_a1b2c3d4
+            nucleus --json synapse shutdown prf_a1b2c3d4
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "prf_a1b2c3d4",
+            "message": "shutdown signal sent"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ SHUTDOWN-ALL
+        Shutdown all orchestrated services gracefully
+
+        Usage: nucleus synapse shutdown-all
+
+        Example:
+            nucleus synapse shutdown-all
+            nucleus --json synapse shutdown-all
+
+        JSON Response:
+          {
+            "success": true,
+            "services_shutdown": ["ollama", "profile_prf_a1b2c3d4"],
+            "count": 2
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ START-OLLAMA
+        Start Ollama AI service via Temporal workflow
+
+        Usage: nucleus synapse start-ollama
+
+        Flags:
+          --simulation               Run in simulation mode (no real process)
+
+        Example:
+            nucleus synapse start-ollama
+            nucleus synapse start-ollama --simulation
+            nucleus --json synapse start-ollama
+
+        JSON Response:
+          {
+            "success": true,
+            "pid": 18340,
+            "port": 11434,
+            "state": "RUNNING"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Query current profile workflow status
+
+        Usage: nucleus synapse status
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --json                     Output in JSON format
+
+        Example:
+            nucleus synapse status prf_a1b2c3d4
+            nucleus --json synapse status prf_a1b2c3d4
+
+        JSON Response:
+          {
+            "success": true,
+            "status": {
+              "profile_id": "prf_a1b2c3d4",
+              "state": "RUNNING",
+              "sentinel_running": true,
+              "last_update": "2026-02-21T19:51:07Z",
+              "error_message": ""
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ VAULT-STATUS
+        Query Vault lock state via Brain
+
+        Usage: nucleus synapse vault-status
+
+        Example:
+            nucleus synapse vault-status
+            nucleus --json synapse vault-status
+
+        JSON Response:
+          {
+            "success": true,
+            "vault_state": "UNLOCKED",
+            "master_profile_active": true,
+            "state": "HEALTHY",
+            "timestamp": 1740000000
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+  > WORKER
+    Inicia el worker de Temporal para procesar workflows
+
+    Usage: nucleus worker
+
+    Arguments:
+      start                 required
+
+    Flags:
+      --task-queue, -q           Task queue de Temporal [default: profile-orchestration]
+
+    --------------------------------------------------------------------------------
+
+  > WORKERS
+    Temporal worker pool inspection and management
+
+    Usage: nucleus workers
+
+    Subcommands:
+      describe              Show detailed information for a specific worker
+        nucleus workers describe
+      list                  List all active workers in profile-orchestration task queue
+        nucleus workers list
+
+    Subcommand Details:
+
+      └─ DESCRIBE
+        Show detailed information for a specific worker
+
+        Usage: nucleus workers describe
+
+        Flags:
+          --identity                 Worker identity to describe (required)
+
+        Example:
+            nucleus workers describe --identity "nucleus-worker/dev@LENOVO/profile-orchestration"
+            nucleus --json workers describe --identity "23428@LENOVO@"
+
+        JSON Response:
+          {
+            "success": true,
+            "worker": {
+              "identity": "nucleus-worker/dev@LENOVO/profile-orchestration",
+              "raw_identity": "nucleus-worker/dev@LENOVO/profile-orchestration",
+              "identity_format": "enriched",
+              "hostname": "LENOVO",
+              "version": "dev",
+              "role": "profile-orchestration",
+              "build_id": "UNVERSIONED",
+              "has_workflow_poller": true,
+              "has_activity_poller": true,
+              "fully_connected": true,
+              "poller_count": 2,
+              "status": "ACTIVE",
+              "last_seen": "2026-03-16T17:12:39Z",
+              "last_seen_ago_seconds": 33,
+              "workflow_rate_per_second": 100000,
+              "activity_rate_per_second": 100000
+            },
+            "timestamp": 1773680744
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ LIST
+        List all active workers in profile-orchestration task queue
+
+        Usage: nucleus workers list
+
+        Example:
+            nucleus workers list
+            nucleus --json workers list
+
+        JSON Response:
+          {
+            "success": true,
+            "task_queue": "profile-orchestration",
+            "worker_count": 2,
+            "active_count": 1,
+            "idle_count": 1,
+            "stale_count": 0,
+            "fully_connected_count": 2,
+            "total_pollers_in_queue": 4,
+            "workers": [
+              {
+                "identity": "nucleus-worker/dev@LENOVO/profile-orchestration",
+                "raw_identity": "nucleus-worker/dev@LENOVO/profile-orchestration",
+                "identity_format": "enriched",
+                "hostname": "LENOVO",
+                "version": "dev",
+                "role": "profile-orchestration",
+                "build_id": "UNVERSIONED",
+                "has_workflow_poller": true,
+                "has_activity_poller": true,
+                "fully_connected": true,
+                "poller_count": 2,
+                "status": "ACTIVE",
+                "last_seen": "2026-03-16T17:12:39Z",
+                "last_seen_ago_seconds": 33,
+                "workflow_rate_per_second": 100000,
+                "activity_rate_per_second": 100000
+              }
+            ],
+            "backlog": {
+              "workflow": { "count": 0, "age": "", "add_rate": 0, "dispatch_rate": 0 },
+              "activity": { "count": 0, "age": "", "add_rate": 0, "dispatch_rate": 0 }
+            },
+            "timestamp": 1773680744
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ SERVICE ]=======================================================
+
+  > SERVICE
+    Manage Nucleus service lifecycle (start / stop / status / restart / restart-bootstrap)
+
+    Usage: nucleus service
+
+    Subcommands:
+      restart               Full stop + start of the Nucleus service (master process and all managed children)
+        nucleus service restart
+      restart-bootstrap     Restart the Control Plane (bootstrap/bundle.js) only
+        nucleus service restart-bootstrap
+      start                 Boot all Nucleus components in order
+        nucleus service start
+      status                Show current state of all managed Nucleus processes
+        nucleus service status
+      stop                  Gracefully shut down all managed Nucleus processes
+        nucleus service stop
+
+    Subcommand Details:
+
+      └─ RESTART
+        Full stop + start of the Nucleus service (master process and all managed children)
+
+        Usage: nucleus service restart
+
+        Flags:
+          --json                     Output result as JSON
+          --timeout                  Seconds to wait for graceful shutdown and for the new master to confirm readiness [default: 30]
+
+        Example:
+            nucleus service restart
+            nucleus --json service restart
+            nucleus service restart --timeout 45
+
+        JSON Response:
+          {
+            "success": true,
+            "pid": 14213,
+            "previous_pid": 9821,
+            "state": "RUNNING",
+            "timestamp": 1740000000
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ RESTART-BOOTSTRAP
+        Restart the Control Plane (bootstrap/bundle.js) only
+
+        Usage: nucleus service restart-bootstrap
+
+        Flags:
+          --json                     Output result as JSON
+
+        Example:
+            nucleus service restart-bootstrap
+            nucleus --json service restart-bootstrap
+
+        JSON Response:
+          {
+            "success": true,
+            "pid": 9012,
+            "state": "RUNNING",
+            "timestamp": 1740000000
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ START
+        Boot all Nucleus components in order
+
+        Usage: nucleus service start
+
+        Flags:
+          --json                     Output result as JSON
+          --simulation               Boot in simulation mode
+
+        Example:
+            nucleus service start
+            nucleus --json service start
+            nucleus service start --simulation
+
+        JSON Response:
+          {
+            "success": true,
+            "state": "RUNNING",
+            "timestamp": 1740000000
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Show current state of all managed Nucleus processes
+
+        Usage: nucleus service status
+
+        Flags:
+          --json                     Output result as JSON
+
+        Example:
+            nucleus service status
+            nucleus --json service status
+
+        JSON Response:
+          {
+            "success": true,
+            "state": "RUNNING",
+            "processes": {
+              "temporal_server":   { "state": "READY", "pid": 1234 },
+              "nucleus_worker":    { "state": "READY", "pid": 5678 },
+              "control_plane_api": { "state": "READY", "pid": 9012 },
+              "svelte_dev":        { "state": "READY", "pid": 3456 }
+            },
+            "timestamp": 1740000000
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STOP
+        Gracefully shut down all managed Nucleus processes
+
+        Usage: nucleus service stop
+
+        Flags:
+          --json                     Output result as JSON
+
+        Example:
+            nucleus service stop
+            nucleus --json service stop
+
+        JSON Response:
+          {
+            "success": true,
+            "state": "STOPPED",
+            "timestamp": 1740000000
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ MANDATES ]======================================================
+
+  > HOOKS
+    Manage and execute mandate hooks
+
+    Usage: nucleus hooks
+
+    Subcommands:
+      list                  List hooks registered for an event
+        nucleus hooks list
+      run                   Execute all hooks registered for an event
+        nucleus hooks run
+
+    Subcommand Details:
+
+      └─ LIST
+        List hooks registered for an event
+
+        Usage: nucleus hooks list
+
+        Arguments:
+          <event>               required
+
+        Example:
+            nucleus hooks list post_launch
+            nucleus --json hooks list post_launch
+
+        JSON Response:
+          {
+            "event": "post_launch",
+            "hooks_dir": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\hooks\\post_launch",
+            "hooks": ["00_generate_synapse_trace.py"]
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ RUN
+        Execute all hooks registered for an event
+
+        Usage: nucleus hooks run
+
+        Arguments:
+          <event>               required
+
+        Flags:
+          --context                  Hook context as JSON string
+
+        Example:
+            nucleus hooks run post_launch
+            nucleus hooks run post_launch --context '{"launch_id":"001_031c802a_205228","profile_id":"031c802a","log_base_dir":"C:\\...\\logs","nucleus_bin":"C:\\...\\nucleus.exe"}'
+            nucleus --json hooks run post_launch --context '{...}'
+
+        JSON Response:
+          {
+            "success": true,
+            "event": "post_launch",
+            "total": 1,
+            "failed": 0,
+            "hooks": [
+              {
+                "hook": "00_generate_synapse_trace.py",
+                "success": true,
+                "stdout": "Synapse trace generado correctamente"
+              }
+            ]
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+  > MANDATE
+    Gestiona mandates (standard, genesis, domain_expansion)
+
+    Usage: nucleus mandate
+
+    Subcommands:
+      activate              Activa un Mandate firmado con un consentimiento humano distinto
+        nucleus mandate activate
+      approve               Aprueba el contrato exacto de un Mandate con consentimiento humano de Authority
+        nucleus mandate approve
+      build                 Crea un mandate genesis o domain_expansion (escribe mandate_state.json — el watcher dispara el build)
+        nucleus mandate build
+      create                Crea un mandate standard (draft → firmado por confirmación explícita)
+        nucleus mandate create
+      install               Materializa un mandate ya entregado y verificado como mandate.json local
+        nucleus mandate install
+      publish               Publica un mandate firmado (mandate.json) hacia Backend y, opcionalmente, lo asigna como bootstrap de la organización
+        nucleus mandate publish
+      status                Muestra el estado actual de un mandate (lee mandate.json o mandate_state.json)
+        nucleus mandate status
+
+    Subcommand Details:
+
+      └─ ACTIVATE
+        Activa un Mandate firmado con un consentimiento humano distinto
+
+        Usage: nucleus mandate activate
+
+        Flags:
+          --id                       ID del Mandate (requerido)
+
+        Example:
+            nucleus mandate activate --id MANDATE_ID
+            nucleus --json mandate activate --id MANDATE_ID
+
+        JSON Response:
+          {"success":true,"mandateId":"MANDATE_ID","operation":"activate","contractDigest":"SHA256","principalId":"AUTHORITY_PRINCIPAL"}
+
+        ----------------------------------------------------------------------
+
+      └─ APPROVE
+        Aprueba el contrato exacto de un Mandate con consentimiento humano de Authority
+
+        Usage: nucleus mandate approve
+
+        Flags:
+          --id                       ID del Mandate (requerido)
+          --max-output-tokens        Límite explícito de tokens de salida [default: 0]
+          --max-total-tokens         Límite total explícito de tokens [default: 0]
+          --max-usd                  Presupuesto máximo explícito en USD
+          --model                    Modelo Anthropic elegido para este contrato
+          --policy                   Política AITAP verificada que se firmará
+          --registry                 Registro AITAP verificado del modelo
+
+        Example:
+            nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS
+            nucleus --json mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS
+
+        JSON Response:
+          {"success":true,"mandateId":"MANDATE_ID","operation":"approve","contractDigest":"SHA256","principalId":"AUTHORITY_PRINCIPAL"}
+
+        ----------------------------------------------------------------------
+
+      └─ BUILD
+        Crea un mandate genesis o domain_expansion (escribe mandate_state.json — el watcher dispara el build)
+
+        Usage: nucleus mandate build
+
+        Flags:
+          --base-genesis-id          ID de genesis base (opcional)
+          --docs                     Path a un archivo o carpeta de documentación (repetible) — Capa 0 del Bootstrap Strategy [default: []]
+          --project                  Nombre del proyecto (requerido)
+          --project-id               Identidad estable del proyecto (opcional)
+          --source                   Origen del mandate [default: cli]
+
+        Example:
+            nucleus mandate build --project my-app --project-id 68f66d80-a8c7-4fe4-b3b5-06bd18d5a246 --source cli
+            nucleus mandate build --project my-app --source cli --docs ./README.md --docs ./docs/architecture.md
+            nucleus --json mandate build --project my-app --project-id 68f66d80-a8c7-4fe4-b3b5-06bd18d5a246 --source cli
+
+        JSON Response:
+          {
+            "success": true,
+            "mandate_id": "3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
+            "mandate_dir": "{MandatesRoot}/3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
+            "status": "building",
+            "project": "example-project",
+            "project_id": "68f66d80-a8c7-4fe4-b3b5-06bd18d5a246"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ DOMAINS
+        Gestiona los dominios de un Mandate en preparación (list/confirm/reject)
+
+        Usage: nucleus mandate build domains
+
+        ----------------------------------------------------------------------
+
+      └─ CONFIRM
+        Confirma un dominio y congela Files con hash y tamaño
+
+        Usage: nucleus mandate build domains confirm
+
+        Flags:
+          --domain-id                domainId a confirmar (repetible) [default: []]
+          --id                       ID del mandate (requerido)
+
+        Example:
+            nucleus mandate build domains confirm --id MANDATE_ID --domain-id DOMAIN_ID
+            nucleus --json mandate build domains confirm --id MANDATE_ID --domain-id DOMAIN_ID
+
+        JSON Response:
+          {"success":true,"mandateId":"MANDATE_ID","confirmedDomainIds":["DOMAIN_ID"],"frozenFiles":[{"ref":"inputs/source.txt","sha256":"SHA256","size":12}],"workflowSignaled":"mandate_build_MANDATE_ID"}
+
+        ----------------------------------------------------------------------
+
+      └─ LIST
+        Lista los dominios candidatos detectados por Brain (Fase 2)
+
+        Usage: nucleus mandate build domains list
+
+        Flags:
+          --id                       ID del mandate (requerido)
+
+        ----------------------------------------------------------------------
+
+      └─ REJECT
+        Rechaza un dominio candidato (no pasa a Fase 4)
+
+        Usage: nucleus mandate build domains reject
+
+        Flags:
+          --domain-id                domainId a rechazar (informativo)
+          --id                       ID del mandate (requerido)
+
+        ----------------------------------------------------------------------
+
+      └─ CREATE
+        Crea un mandate standard (draft → firmado por confirmación explícita)
+
+        Usage: nucleus mandate create
+
+        Flags:
+          --docs                     Path a un archivo o carpeta de documentación (repetible) — Capa 0 del Bootstrap Strategy [default: []]
+          --project                  Nombre del proyecto (requerido)
+
+        Example:
+            nucleus mandate create --project my-app
+            nucleus mandate create --project my-app --docs ./README.md --docs ./docs/architecture.md
+            nucleus --json mandate create --project my-app
+
+        JSON Response:
+          {
+            "success": true,
+            "mandate_id": "mandate_abc123",
+            "status": "signed",
+            "project": "example-project"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ INSTALL
+        Materializa un mandate ya entregado y verificado como mandate.json local
+
+        Usage: nucleus mandate install
+
+        Flags:
+          --id                       ID del mandate ya entregado y verificado (requerido)
+
+        Example:
+            nucleus mandate install --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f
+            nucleus --json mandate install --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f
+
+        JSON Response:
+          {
+            "success": true,
+            "mandate_id": "3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
+            "mandate_path": "{MandatesRoot}/3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f/mandate.json",
+            "already_installed": false
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ PUBLISH
+        Publica un mandate firmado (mandate.json) hacia Backend y, opcionalmente, lo asigna como bootstrap de la organización
+
+        Usage: nucleus mandate publish
+
+        Flags:
+          --authority-url            URL base del backend de Authority (requerido)
+          --bootstrap                Asigna esta versión como el mandate de bootstrap de la organización activa [default: true]
+          --description              Descripción del mandate (opcional)
+          --id                       ID del mandate ya construido y firmado (requerido)
+          --slug                     Slug del mandate en el Marketplace (requerido)
+          --version                  Versión publicada del mandate — GAP: no especificada por §2.2, ver comentario de cabecera del archivo [default: 1.0.0]
+          --visibility               Visibilidad del mandate ('private' o 'public') [default: private]
+
+        Example:
+            nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug genesis-bootstrap
+            nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap --bootstrap=false
+            nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap
+
+        JSON Response:
+          {
+            "success": true,
+            "mandate_id": "3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
+            "mandate_version_id": "a1b2c3d4-...",
+            "bootstrap_assigned": true
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Muestra el estado actual de un mandate (lee mandate.json o mandate_state.json)
+
+        Usage: nucleus mandate status
+
+        Flags:
+          --id                       ID del mandate (requerido)
+
+        Example:
+            nucleus mandate status --id mandate_abc123
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+  💡 COMMON MISTAKES & TIPS
+------------------------------------------------------------------------------------------------------------------------
+
+  X MISTAKE #1: Placing --json flag after the command
+     Wrong:   nucleus synapse seed profile --json
+     Correct: nucleus --json synapse seed profile
+
+  X MISTAKE #2: Expecting clean JSON without redirecting stderr
+     Issue:   Logs appear mixed with JSON in console
+     Fix:     Use 2>$null (PowerShell) or 2>/dev/null (Bash)
+     Example: nucleus --json info 2>$null
+
+  * TIP: When integrating with scripts/automation
+     √ Always use --json flag for parseable output
+     √ Always redirect stderr (2>$null) for clean JSON
+     √ stdout will contain ONLY valid JSON
+     √ stderr will contain human-readable logs
+
+
+                                  [!] Nucleus: Governance Layer for Bloom Organization
+                            Use 'nucleus <command> --help' for detailed command information
+

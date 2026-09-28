@@ -1,0 +1,21 @@
+{
+  "schema_version": "cognituum.routing-policy/v2",
+  "policy_version": "mandate-gen/v1",
+  "intelligence_supply": {
+    "backend_id": "anthropic_api",
+    "fallback": [],
+    "max_attempts": 1,
+    "budget": {
+      "per_mandate": true,
+      "max_usd": null,
+      "max_total_tokens": null,
+      "max_inferences": 1,
+      "input_margin_tokens": 1024
+    },
+    "max_output_tokens": null,
+    "max_input_bytes": 131072,
+    "timeout_seconds": 60,
+    "retry_delay_seconds": 1
+  },
+  "stages": {}
+}

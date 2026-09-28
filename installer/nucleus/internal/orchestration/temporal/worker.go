@@ -432,6 +432,20 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			mandateWorker.RegisterWorkflow(temporalworkflows.MandateBuildWorkflow)
 			mandateWorker.RegisterWorkflow(temporalworkflows.MandateExecutionWorkflow)
 			mandateWorker.RegisterActivity(activities.ScaffoldDomainActivity)
+			mandateActivityLogger, mandateLogErr := core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)
+			if mandateLogErr != nil {
+				logger.Warning("Mandate activity telemetry unavailable: %v", mandateLogErr)
+			} else {
+				defer mandateActivityLogger.Close()
+			}
+			genActivity := &activities.MandateGenActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    filepath.Join(c.Paths.AppDataDir, "bin", "brain", "brain.exe"),
+				Logger:       mandateActivityLogger,
+			}
+			mandateWorker.RegisterActivityWithOptions(genActivity.Run, activity.RegisterOptions{Name: "MandateGenActivity"})
+			actVerifier := &activities.MandateActVerificationActivity{IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json")}
+			mandateWorker.RegisterActivityWithOptions(actVerifier.Run, activity.RegisterOptions{Name: "MandateActVerificationActivity"})
 			// PersistExecutionResultActivity — CAMBIO esta sesión (Paso 1, action
 			// graph): MandateExecutionWorkflow ahora la invoca de verdad después
 			// de cada ScaffoldDomainActivity(Mode: real), para dejar el resultado

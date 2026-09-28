@@ -1,50 +1,78 @@
-// internal/orchestration/activities/mandate_genesis_sign_activity.go
-//
-// RENOMBRADO en este turno: el nombre original que le puse a este archivo
-// (mandate_genesis_activities.go) resultó ser el mismo que el archivo REAL
-// del repo que contiene ScaffoldDomainActivity/PublishMandateEventActivity
-// — ambos en el mismo paquete `activities`. Si se hubiera escrito con ese
-// nombre, habría pisado el archivo real al copiarlo al repo. Este archivo
-// sigue definiendo SignMandateActivity, sin cambios de contenido — solo de
-// nombre de archivo.
+// Mandate confirmation state and the closed legacy signing entry point.
 package activities
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"time"
 
 	"github.com/google/uuid"
 
+	"nucleus/internal/authority"
+	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/orchestration/mandatestate"
 )
 
-// ─────────────────────────────────────────────────────────────────────────
-// NOTA DE ALCANCE — ACTUALIZADA esta sesión (corrección D-B1)
-//
-// signMandateActivity NO existía como código en ningún archivo Go
-// disponible — solo como descripción de comportamiento en
-// BLOOM_Mandate_Genesis_Backend_Design_v0_1_0.md §6.2. Fue implementada
-// acá.
-//
-// CORRECCIÓN: en el turno anterior quedó marcada como "no enganchada
-// todavía a MandateBuildWorkflow" — eso violaba D-B1 (Backend
-// Design §0: Fase 4 se ejecuta con el MandateExecutionWorkflow que ya
-// existe para `mandate run`, no con una llamada directa a
-// ScaffoldDomainActivity desde el padre). Corregido: el workflow ahora SÍ
-// llama a esta función antes de arrancar el child workflow — ver
-// mandate_build_workflow.go.
-//
-// Esta función resuelve D-3 (dependsOn) de punta a punta a nivel de
-// datos: lee dependsOn de DomainCandidate (gen-state.types.ts /
-// mandate_state.json), lo traduce a dependsOn de Action (mandate.json), y
-// ahora también devuelve las Actions en el resultado (Action.DomainName
-// agregado esta sesión) para que el workflow pueda traducirlas a
-// DomainAction sin tener que releer mandate.json ni parsear actionIds.
-// ─────────────────────────────────────────────────────────────────────────
+type MandateActVerificationActivity struct {
+	IdentityPath string
+	TrustRoots   map[string]ed25519.PublicKey
+}
+type MandateActVerificationInput struct {
+	MandatesRoot   string
+	MandateID      string
+	Operation      string
+	ExpectedDigest string
+}
+type MandateActVerificationResult struct {
+	ContractDigest string
+	ProjectID      string
+}
+
+func (a *MandateActVerificationActivity) Run(input MandateActVerificationInput) (MandateActVerificationResult, error) {
+	if a == nil || a.IdentityPath == "" || input.MandatesRoot == "" || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID || (input.Operation != "approve" && input.Operation != "activate") {
+		return MandateActVerificationResult{}, fmt.Errorf("Mandate act verification prerequisites invalid")
+	}
+	dir := filepath.Join(input.MandatesRoot, input.MandateID)
+	identity, err := authority.LoadExistingLocalIdentity(a.IdentityPath)
+	if err != nil {
+		return MandateActVerificationResult{}, err
+	}
+	roots := a.TrustRoots
+	if roots == nil {
+		roots = authority.DevelopmentPinnedRoots()
+	}
+	envelope, err := mandatecontract.LoadVerified(dir, a.IdentityPath)
+	if err != nil {
+		return MandateActVerificationResult{}, err
+	}
+	if input.ExpectedDigest != "" && input.ExpectedDigest != envelope.ContractDigest {
+		return MandateActVerificationResult{}, fmt.Errorf("signal digest differs from signed Mandate")
+	}
+	receipt, err := mandatecontract.LoadActReceipt(dir, input.Operation)
+	if err != nil {
+		return MandateActVerificationResult{}, err
+	}
+	if err := mandatecontract.VerifyActReceipt(receipt, identity, roots, input.Operation, input.MandateID, envelope.ContractDigest, envelope.Contract.ProjectID); err != nil {
+		return MandateActVerificationResult{}, err
+	}
+	if input.Operation == "activate" {
+		approval, loadErr := mandatecontract.LoadActReceipt(dir, "approve")
+		if loadErr != nil {
+			return MandateActVerificationResult{}, loadErr
+		}
+		if err := mandatecontract.VerifyActReceipt(approval, identity, roots, "approve", input.MandateID, envelope.ContractDigest, envelope.Contract.ProjectID); err != nil {
+			return MandateActVerificationResult{}, err
+		}
+	}
+	return MandateActVerificationResult{ContractDigest: envelope.ContractDigest, ProjectID: envelope.Contract.ProjectID}, nil
+}
+
+// Legacy build-state types remain for confirmation persistence. The old
+// signer is deliberately closed until actor proof and the immutable contract
+// are connected; none of these mutable records grants execution authority.
 
 // DomainCandidateState espeja DomainCandidate (gen-state.types.ts) del lado
 // Go. No existía ningún struct Go equivalente en los archivos recibidos —
@@ -67,7 +95,8 @@ type HumanSyncState struct {
 	ConfirmedDomainIds []string               `json:"confirmedDomainIds,omitempty"`
 	ConfirmedAt        string                 `json:"confirmedAt,omitempty"`
 	// D-9 — ver mandate_genesis_domains_cmd.go para quién escribe esto.
-	ConfirmedBy string `json:"confirmedBy,omitempty"`
+	ConfirmedBy string                  `json:"confirmedBy,omitempty"`
+	Files       []mandatecontract.Input `json:"files,omitempty"`
 }
 
 type validatePhaseState struct {
@@ -75,11 +104,11 @@ type validatePhaseState struct {
 	HumanSync HumanSyncState `json:"humanSync"`
 }
 
-// mandateGenesisState es la porción de mandate_state.json que
+// mandateBuildState es la porción de mandate_state.json que
 // signMandateActivity necesita leer. No redeclara todo GenState — solo los
 // campos que este código toca, mismo criterio de mínima superficie que ya
 // usa MandateState en mandate_watcher.go.
-type mandateGenesisState struct {
+type mandateBuildState struct {
 	MandateID string `json:"mandateId"`
 	// MandateType — CAMPO NUEVO esta sesión. mandate_state.json SÍ lo trae
 	// (createBuildMandate lo escribe, commands/mandate.go:376:
@@ -185,153 +214,10 @@ func logicalActionKeyFor(candidate DomainCandidateState) string {
 	return "gen/scaffold/domain/" + candidate.DomainID
 }
 
-// SignMandateActivity es la Local Activity descrita en Backend Design §6.2
-// — corre dentro del propio workflow de Temporal (autoridad de
-// Nucleus/Vault, no se enruta a Brain, ver contrato §3.1). Lee
-// mandate_state.json, valida que Fase 3 (validate) esté confirmada, arma
-// operational.actions[] con dependsOn resuelto (D-3) y escribe mandate.json
-// firmado.
-//
-// mandatesRoot/mandateID siguen el mismo layout que mandate.go
-// (cfg.MandatesRoot()/{mandateID}/).
+// SignMandateActivity remains fail-closed. A confirmed domain is not a
+// verified human approval, and this legacy path cannot issue a signature.
 func SignMandateActivity(mandatesRoot, mandateID string) (SignMandateResult, error) {
-	dir := filepath.Join(mandatesRoot, mandateID)
-
-	raw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
-	if err != nil {
-		return SignMandateResult{}, fmt.Errorf("no pude leer mandate_state.json de %s: %w", mandateID, err)
-	}
-
-	var state mandateGenesisState
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return SignMandateResult{}, fmt.Errorf("mandate_state.json inválido para %s: %w", mandateID, err)
-	}
-
-	hs := state.Phases.Validate.HumanSync
-	if len(hs.ConfirmedDomainIds) == 0 {
-		return SignMandateResult{}, fmt.Errorf(
-			"mandate %s: no hay confirmedDomainIds — ¿se corrió 'mandate genesis domains confirm' antes de firmar?",
-			mandateID,
-		)
-	}
-
-	byID := make(map[string]DomainCandidateState, len(hs.CandidateDomains))
-	for _, c := range hs.CandidateDomains {
-		byID[c.DomainID] = c
-	}
-
-	confirmed := make(map[string]bool, len(hs.ConfirmedDomainIds))
-	for _, id := range hs.ConfirmedDomainIds {
-		confirmed[id] = true
-	}
-
-	actions := make([]Action, 0, len(hs.ConfirmedDomainIds))
-	anyDependency := false
-
-	for _, domainID := range hs.ConfirmedDomainIds {
-		cand, ok := byID[domainID]
-		if !ok {
-			return SignMandateResult{}, fmt.Errorf(
-				"mandate %s: confirmedDomainIds referencia domainId %q ausente en candidateDomains",
-				mandateID, domainID,
-			)
-		}
-
-		// D-3: traducir domainId → actionId, y solo para dependencias que
-		// también están confirmadas. Una dependencia hacia un dominio
-		// rechazado/no confirmado se descarta — no hay Action para
-		// esperar. Decisión explícita, no comportamiento no especificado.
-		var dependsOn []string
-		for _, depID := range cand.DependsOn {
-			if !confirmed[depID] {
-				continue
-			}
-			depCand, ok := byID[depID]
-			if !ok {
-				continue
-			}
-			dependsOn = append(dependsOn, actionIDFor(mandateID, logicalActionKeyFor(depCand)))
-		}
-		if len(dependsOn) > 0 {
-			anyDependency = true
-		}
-
-		actions = append(actions, Action{
-			ActionID:   actionIDFor(mandateID, logicalActionKeyFor(cand)),
-			Type:       "run_intent",
-			IntentType: "gen",
-			Payload: ActionPayload{
-				SubPhase: "scaffold",
-				DomainID: cand.DomainID,
-			},
-			Status:     "pending",
-			ResultRef:  nil,
-			DependsOn:  dependsOn,
-			DomainName: cand.Name,
-		})
-	}
-
-	// FIX esta sesión: antes esto escribía "genesis" literal sin importar
-	// state.MandateType — cualquier mandate domain_expansion que llegara acá
-	// quedaba firmado con metadata incorrecta, y mandate.json es inmutable
-	// tras firma (R-1, BLOOM_Mandate_Universal_Schema_v1_0_0.md:493) — no
-	// hay forma de corregirlo después sobre un archivo ya firmado. Falla
-	// duro en vez de asumir "genesis" por default: mismo criterio fail-closed
-	// que IngestReceptionActivity (mandate_genesis_activities.go) para el
-	// mismo campo.
-	if state.MandateType != "genesis" && state.MandateType != "domain_expansion" {
-		return SignMandateResult{}, fmt.Errorf(
-			"mandate %s: mandateType %q desconocido en mandate_state.json — esperaba 'genesis' o 'domain_expansion'",
-			mandateID, state.MandateType,
-		)
-	}
-
-	workflowType := "parallel"
-	if anyDependency {
-		workflowType = "dependent" // ver nota en OperationalBlock.Workflow.Type
-	}
-
-	signedAt := state.Signature.SignedAt
-	if signedAt == "" {
-		signedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-
-	mandateJSON := MandateJSON{
-		MandateID:   state.MandateID,
-		MandateType: state.MandateType,
-		Project:     state.Project,
-		Status:      "signed",
-		SignedAt:    signedAt,
-	}
-	mandateJSON.Operational.Workflow.Type = workflowType
-	mandateJSON.Operational.Actions = actions
-
-	data, err := json.MarshalIndent(mandateJSON, "", "  ")
-	if err != nil {
-		return SignMandateResult{}, fmt.Errorf("no pude serializar mandate.json de %s: %w", mandateID, err)
-	}
-	mandatePath := filepath.Join(dir, "mandate.json")
-	if state.Signature.Status != "signed" {
-		if err := os.WriteFile(mandatePath, data, 0644); err != nil {
-			return SignMandateResult{}, fmt.Errorf("no pude escribir mandate.json de %s: %w", mandateID, err)
-		}
-	} else if _, err := os.Stat(mandatePath); err != nil {
-		return SignMandateResult{}, fmt.Errorf("signature=signed pero mandate.json no es durable para %s: %w", mandateID, err)
-	}
-
-	stateVersion, err := persistSignatureSigned(filepath.Join(dir, "mandate_state.json"), signedAt)
-	if err != nil {
-		return SignMandateResult{}, fmt.Errorf("mandate.json fue escrito pero no pude persistir signature=signed para %s: %w", mandateID, err)
-	}
-
-	return SignMandateResult{
-		MandateID:      mandateID,
-		ActionsCreated: len(actions),
-		WorkflowType:   workflowType,
-		SignedAt:       signedAt,
-		Actions:        actions,
-		StateVersion:   stateVersion,
-	}, nil
+	return SignMandateResult{}, fmt.Errorf("firma de Mandate cerrada: falta decisión humana verificable vinculada al digest")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -391,20 +277,6 @@ func PersistHumanSyncActivity(input PersistHumanSyncInput) (PersistHumanSyncResu
 		return PersistHumanSyncResult{}, fmt.Errorf("artifacts de signature deben ser rutas relativas al directorio del Mandate")
 	}
 
-	humanSync := HumanSyncState{
-		CandidateDomains:   input.CandidateDomains,
-		ConfirmedDomainIds: input.ConfirmedDomainIds,
-		ConfirmedAt:        time.Now().Format(time.RFC3339),
-		ConfirmedBy:        input.ConfirmedBy,
-	}
-	humanSyncBytes, err := json.Marshal(humanSync)
-	if err != nil {
-		return PersistHumanSyncResult{}, fmt.Errorf("no pude serializar humanSync: %w", err)
-	}
-	var humanSyncMap map[string]interface{}
-	if err := json.Unmarshal(humanSyncBytes, &humanSyncMap); err != nil {
-		return PersistHumanSyncResult{}, err
-	}
 	pendingAt := time.Now().UTC().Format(time.RFC3339Nano)
 	version, err := mandatestate.Mutate(path, func(rawMap map[string]interface{}) (bool, error) {
 		phases, _ := rawMap["phases"].(map[string]interface{})
@@ -414,6 +286,21 @@ func PersistHumanSyncActivity(input PersistHumanSyncInput) (PersistHumanSyncResu
 		validate, _ := phases["validate"].(map[string]interface{})
 		if validate == nil {
 			validate = map[string]interface{}{}
+		}
+		humanSyncMap, ok := validate["humanSync"].(map[string]interface{})
+		if !ok {
+			return false, fmt.Errorf("confirmación CLI persistida ausente")
+		}
+		humanSyncBytes, err := json.Marshal(humanSyncMap)
+		if err != nil {
+			return false, err
+		}
+		var frozen HumanSyncState
+		if err := json.Unmarshal(humanSyncBytes, &frozen); err != nil {
+			return false, err
+		}
+		if len(frozen.Files) == 0 || len(frozen.ConfirmedDomainIds) != 1 || !reflect.DeepEqual(frozen.ConfirmedDomainIds, input.ConfirmedDomainIds) || !reflect.DeepEqual(frozen.CandidateDomains, input.CandidateDomains) {
+			return false, fmt.Errorf("señal de confirmación no coincide con dominio y Files congelados")
 		}
 		signature, _ := rawMap["signature"].(map[string]interface{})
 		if signature == nil {
@@ -431,9 +318,6 @@ func PersistHumanSyncActivity(input PersistHumanSyncInput) (PersistHumanSyncResu
 		if status, _ := signature["status"].(string); status != "" && status != "not_ready" && status != "pending" {
 			return false, fmt.Errorf("transición signature %s → pending inválida", status)
 		}
-		validate["humanSync"] = humanSyncMap
-		phases["validate"] = validate
-		rawMap["phases"] = phases
 		signature["status"] = "pending"
 		signature["intentId"] = input.IntentID
 		signature["artifacts"] = artifacts

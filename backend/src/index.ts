@@ -64,6 +64,8 @@ app.get('/v1/authority/tenant/invitations', c => configuredAuthorityHumanRespons
 app.post('/v1/authority/tenant/invitations', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/tenant/invitations/revoke', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/actor/approve', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
+app.get('/v1/authority/actor/mandate-consent', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
+app.post('/v1/authority/actor/mandate-consent', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 
 app.get("/", (context) => context.json({ service: "bloom-backend", status: "ok" }));
 

@@ -47,7 +47,8 @@ def test_signed_request_uses_local_channel_and_sanitized_stdout(tmp_path, monkey
             channel.sendall(json.dumps({"token":request["channel_token"],"key":secret}).encode() + b"\n")
         return SimpleNamespace(returncode=0, stdout='{"status":"delivered"}\n', stderr="")
 
-    assert VaultClient("nucleus", runner, tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_genesis_intelligence") == secret
+    assert VaultClient("nucleus", runner, tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_gen_intelligence") == secret
+    assert captured["purpose"] == "mandate_gen_intelligence"
     assert secret not in json.dumps(captured)
 
 

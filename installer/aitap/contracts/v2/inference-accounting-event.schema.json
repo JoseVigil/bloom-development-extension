@@ -26,7 +26,8 @@
         "intent_type": {
           "enum": [
             "ing",
-            "dis"
+            "dis",
+            "gen"
           ]
         },
         "mandate_id": {
@@ -36,7 +37,8 @@
         "phase": {
           "enum": [
             "classification",
-            "mapping"
+            "mapping",
+            "generation"
           ]
         },
         "turn_id": {

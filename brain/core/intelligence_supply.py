@@ -121,7 +121,7 @@ class IntelligenceSupplyClient:
         self.command = command or [os.environ.get("AITAP_BIN", "aitap")]
         self.runner = runner or subprocess.run
 
-    def obtain(self, directory, request):
+    def obtain(self, directory, request, *, policy=None, registry=None):
         directory = Path(directory)
         persist(directory / ".request.json", request)
         result_path = directory / ".supply_result.json"
@@ -129,8 +129,13 @@ class IntelligenceSupplyClient:
             result = read_json(result_path)
         else:
             try:
-                process = self.runner([*self.command, "--json", "route", "supply", "--request",
-                                       str(directory / ".request.json")],
+                arguments = [*self.command, "--json", "route", "supply", "--request",
+                             str(directory / ".request.json")]
+                if policy is not None:
+                    arguments.extend(["--policy", str(policy)])
+                if registry is not None:
+                    arguments.extend(["--registry", str(registry)])
+                process = self.runner(arguments,
                     capture_output=True, text=True, encoding="utf-8", timeout=200)
                 result = strict_json(process.stdout)
             except subprocess.TimeoutExpired:

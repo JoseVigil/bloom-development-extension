@@ -69,6 +69,41 @@ La investigación transversal debe usar el split vigente de CORTEX por dominio, 
 
 ---
 
+## Programa rector transversal — MANDATE
+
+**Estado actual**
+
+La Fase 0 de coordinación durable está abierta y cuenta con una fuente rectora propia: `docs/MANDATE/MANDATE_PROGRAM_CANONICAL_SOURCE_v0_1.md`. El programa coordina creación, contrato, firma, adopción, ejecución, Intents y efectos, evidencia, cumplimiento, portabilidad y transformación gobernada de experiencia en Wisdom sin confundir sus artefactos ni máquinas de estado.
+
+El Tema 1 — Mandate Genesis permanece como el primer vertical local del programa. Su estado no cambia: **implementación completada y validada de forma controlada; aceptación E2E bloqueada**. Este avance no acredita todavía el contrato canónico completo ni el recorrido portable y no permite declarar cerrado MANDATE.
+
+La fuente rectora propone para aprobación el invariante M-1: toda ejecución debe reconstruirse exclusivamente desde la versión adoptada y firmada del contrato, identificada por versión y digest; ninguna señal, estructura en memoria ni fuente auxiliar mutable puede ampliar o sustituir el plan firmado.
+
+**Fuente rectora**
+
+- `docs/MANDATE/MANDATE_PROGRAM_CANONICAL_SOURCE_v0_1.md`
+
+Los contratos históricos permanecen vigentes como fuentes de diseño sujetas a homologación posterior. La apertura de este programa no modifica el Universal Schema, Mandate Package, Wisdom Scope ni código.
+
+**Secuencia coordinada**
+
+1. Fase 0: persistir fuente, estado, contradicciones, decisiones y gates.
+2. Fase 1: cerrar en papel definición, identidad, versión, digest, firma, objetos separados, máquinas de estado, Mandate Executable Contract, Action Contract, fulfillment, Gravity, Impact, evidencia y autorización.
+3. Fase 2: ejecutar el primer vertical local real desde un contrato firmado y persistido, con Intent y efectos gobernados, evidencia, fulfillment, reinicio y continuidad sin pérdida ni duplicación.
+4. Fases posteriores: gobernanza local, portabilidad, Backend/Wisdom, Onboarding/Core y transformación de experiencia en Wisdom.
+
+Wisdom, Marketplace, Wisdom Score, PALADIN y la portabilidad completa no son bloqueantes automáticos del primer vertical. Sólo pueden adquirir esa condición mediante una decisión o evidencia específica del recorrido mínimo.
+
+**Próximo paso concreto**
+
+Preparar el paquete de decisiones de Fase 1 enumerado en la fuente rectora, separando hechos materiales, contratos existentes, propuestas y decisiones exclusivas de José. No modificar contratos históricos ni implementación hasta que José apruebe tanto las decisiones como una lista literal de archivos.
+
+**Criterio de aceptación del primer vertical**
+
+Un Mandate real debe poder crearse o adoptarse bajo autoridad válida, verificarse, ejecutarse exclusivamente desde su contrato persistido, producir evidencia y alcanzar una determinación de cumplimiento. Después de reiniciar servicios debe continuar o concluir sin pérdida, ampliación no autorizada ni duplicación de Intents o efectos.
+
+---
+
 ## 1. Mandate Genesis en Workspace Core
 
 **Estado actual**
@@ -685,6 +720,7 @@ Auditar `Nucleus → GravityGraph → ING/DIS → BISP/Chroma → semantic-index
 
 | Prioridad | Tema | Prompt/entregable a preparar | Precondición |
 |---|---|---|---|
+| Alta | Programa MANDATE | Preparar el paquete de decisiones de Fase 1: definición canónica, M-1, identidad/versionado/firma, objetos y estados separados, contrato ejecutable, Action Contract, fulfillment, Gravity, Impact, evidencia, autorización y aceptación del primer vertical | Fuente rectora v0.1 creada; sólo análisis y propuesta, sin modificar contratos históricos ni implementación |
 | Alta | 1 | Resolver bootstrap legítimo Master → Nucleus Vault → AITAP y ejecutar aceptación E2E Anthropic del primer Mandate Genesis | Implementación controlada validada; Genesis no habilitado hasta la corrida E2E real |
 | Media | Synapse Simulator | Continuar `SYNAPSE SIMULATOR — CONTRACT, FIXTURES AND FAILURE MODES` como canal alternativo posterior | Sin dependencia sobre el primer vertical Genesis |
 | Alta | 5 | Certificación operativa de instalación/servicio OpenCode en Windows, macOS y Linux | Acceso a los tres sistemas; confirmar comando real de `serve` |
@@ -710,6 +746,7 @@ Auditar `Nucleus → GravityGraph → ING/DIS → BISP/Chroma → semantic-index
 
 | Fecha | Tema(s) | Avance reportado | Fuente / sesión externa | Actualización realizada aquí |
 |---|---|---|---|---|
+| 2026-09-26 | Programa MANDATE / Tema 1 | José aprobó la Fase 0 y la coordinación durable del programa MANDATE, preservando Mandate Genesis como primer vertical local y sin convertir Wisdom, Marketplace, Wisdom Score, PALADIN ni portabilidad completa en bloqueantes automáticos. | Apertura consolidada de MANDATE CREATION, MANDATE EXECUTION y MANDATE; autorización expresa del usuario | Se creó `MANDATE_PROGRAM_CANONICAL_SOURCE_v0_1.md`, se registró el programa transversal y se abrió la preparación del paquete de decisiones de Fase 1. No se modificaron contratos históricos ni implementación. |
 | 2026-08-15 | 1–8 | Creación de la agenda y consolidación inicial basada en las fuentes existentes. | Sesión de control | Se fijaron ownership exclusivo, OpenCode como nombre vigente y GitHub App + Device Flow como criterio cerrado. |
 | 2026-08-16 | 3, 5 | Se integró y verificó el validador aislado de Contrato D; se decidió probar adherencia de modelos antes de diseñar el adapter de OpenCode. | Sesión externa de ejecución, reportada por el usuario | Se cerró el traslado del validador; se registraron como abiertos el productor, el consumidor y el adapter. |
 | 2026-08-16 | 3, 5 | Primera prueba headless de OpenCode v1.18.18 con salida JSON parseable y edición/verificación reales. | Sesión externa de investigación, reportada por el usuario | Se agregó evidencia para el formato de patch; no se cerró el schema ni se inició el adapter. |

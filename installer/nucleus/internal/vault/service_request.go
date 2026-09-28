@@ -19,6 +19,7 @@ import (
 )
 
 const servicePurpose = "mandate_genesis_intelligence"
+const mandateGenPurpose = "mandate_gen_intelligence"
 
 var errServiceDenied = errors.New("VAULT_ACCESS_DENIED")
 
@@ -93,7 +94,7 @@ func RunServiceRequest(input io.Reader, appDataDir string) error {
 			return deny()
 		}
 	}
-	if r.KeyID != "anthropic-key:default" || r.Purpose != servicePurpose || r.ChannelPort < 1 || r.ChannelPort > 65535 {
+	if r.KeyID != "anthropic-key:default" || (r.Purpose != servicePurpose && r.Purpose != mandateGenPurpose) || r.ChannelPort < 1 || r.ChannelPort > 65535 {
 		return deny()
 	}
 	now := time.Now().UTC()

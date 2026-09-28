@@ -34,6 +34,8 @@ func createMandateCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(mandateStatusSubcommand(c))
 	cmd.AddCommand(createPublishMandateSubcommand(c))
 	cmd.AddCommand(createInstallMandateSubcommand(c))
+	cmd.AddCommand(createMandateActCommand(c, "approve"))
+	cmd.AddCommand(createMandateActCommand(c, "activate"))
 
 	return cmd
 }
@@ -319,6 +321,7 @@ func createBuildMandateSubcommand(c *core.Core) *cobra.Command {
 	cmd.Flags().StringVar(&source, "source", "cli", "Origen del mandate")
 	cmd.Flags().StringVar(&baseGenesisID, "base-genesis-id", "", "ID de genesis base (opcional)")
 	cmd.Flags().StringSliceVar(&docs, "docs", nil, "Path a un archivo o carpeta de documentación (repetible) — Capa 0 del Bootstrap Strategy")
+	cmd.AddCommand(createDomainsSubcommand(c))
 	return cmd
 }
 

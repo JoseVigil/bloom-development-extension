@@ -1,4 +1,4 @@
-// internal/orchestration/commands/mandate_genesis_domains_cmd.go
+// internal/orchestration/commands/mandate_build_domains_cmd.go
 package commands
 
 import (
@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 	"reflect"
 	"time"
 
 	"nucleus/internal/core"
+	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/orchestration/mandatestate"
 	"nucleus/internal/orchestration/temporal"
 	"nucleus/internal/orchestration/temporal/workflows"
@@ -20,42 +20,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ─────────────────────────────────────────────────────────────────────────
-// NOTA DE ALCANCE
-//
-// `nucleus mandate genesis domains {list,confirm,reject}` tampoco existía
-// como código — no aparecía en mandate.go (que solo tiene create/genesis/
-// status) ni en ningún otro archivo Go recibido. Es el comando descrito en
-// el contrato §4 ("Qué escribe el comando en HumanSyncRecord:
-// confirmedDomainIds, confirmedAt, confirmedBy"). Esta es la primera
-// implementación real, y es acá — no en signMandateActivity — donde D-9
-// se resuelve, porque confirmedBy se escribe en el momento del confirm,
-// no en el de la firma.
-//
-// D-9 — ESTADO REAL DESPUÉS DE ESTE CAMBIO: sigue sin existir, en
-// cualquier archivo revisado, un mecanismo de identidad de sesión (auth
-// HTTP, JWT, usuario logueado en la UI, etc.). Lo que este archivo cierra
-// es el path CLI: usa la identidad del usuario del sistema operativo
-// (os/user.Current()) como fuente de "quién confirmó". Es una atribución
-// real y verificable (no un placeholder inventado como "system" o
-// string vacío), pero cubre solo invocaciones por CLI. El path
-// create-mandate.handler.ts / API HTTP (§0, jerarquía de fuentes) NO se
-// toca acá — necesita su propio mecanismo de sesión antes de poder
-// poblar confirmedBy con el mismo nivel de certeza, y no se inventa uno
-// a ciegas del lado TS sin ver ese subsistema de auth.
-// ─────────────────────────────────────────────────────────────────────────
-
-// WIRING REQUERIDO (una línea, en mandate.go, no incluida en este archivo
-// para no reescribir un archivo completo por un solo agregado): dentro de
-// createBuildMandateSubcommand, después de `cmd.Flags().StringVar(...)`
-// y antes de `return cmd`, agregar:
-//
-//   cmd.AddCommand(createDomainsSubcommand(c))
-//
-// Esto expone `nucleus mandate genesis domains {list,confirm,reject}` como
-// subcomando de `mandate genesis`, coherente con como el contrato (§4) lo
-// describe. No se usa core.RegisterCommand acá porque "domains" no es una
-// categoría de tope nueva — es un subcomando de uno ya existente.
+// Domain confirmation selects one candidate for a Mandate in preparation.
+// It does not prove human approval, sign, activate, or add executable Files.
 
 // domainCandidateJSON espeja DomainCandidate (gen-state.types.ts) para
 // lectura/escritura desde este comando. Mismo shape que
@@ -74,10 +40,11 @@ type domainCandidateJSON struct {
 }
 
 type humanSyncJSON struct {
-	CandidateDomains   []domainCandidateJSON `json:"candidateDomains"`
-	ConfirmedDomainIds []string              `json:"confirmedDomainIds,omitempty"`
-	ConfirmedAt        string                `json:"confirmedAt,omitempty"`
-	ConfirmedBy        string                `json:"confirmedBy,omitempty"` // D-9
+	CandidateDomains   []domainCandidateJSON   `json:"candidateDomains"`
+	ConfirmedDomainIds []string                `json:"confirmedDomainIds,omitempty"`
+	ConfirmedAt        string                  `json:"confirmedAt,omitempty"`
+	ConfirmedBy        string                  `json:"confirmedBy,omitempty"` // D-9
+	Files              []mandatecontract.Input `json:"files,omitempty"`
 }
 
 type validatePhaseJSON struct {
@@ -90,8 +57,9 @@ type validatePhaseJSON struct {
 // (ver readRawState/writeRawState) para no pisar campos que otros
 // escritores (mandate_watcher.go, Brain) ya hayan puesto ahí.
 type mandateStateDoc struct {
-	MandateID    string `json:"mandateId"`
-	CurrentPhase string `json:"currentPhase"`
+	MandateID    string   `json:"mandateId"`
+	DocsProvided []string `json:"docsProvided"`
+	CurrentPhase string   `json:"currentPhase"`
 	Phases       struct {
 		Validate validatePhaseJSON `json:"validate"`
 	} `json:"phases"`
@@ -100,7 +68,7 @@ type mandateStateDoc struct {
 func createDomainsSubcommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "domains",
-		Short: "Gestiona el Human Sync Point de un mandate genesis (list/confirm/reject)",
+		Short: "Gestiona los dominios de un Mandate en preparación (list/confirm/reject)",
 		Annotations: map[string]string{
 			"category": "MANDATES",
 		},
@@ -146,9 +114,15 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 	var mandateID string
 	var domainIDs []string
 	cmd := &cobra.Command{
-		Use:   "confirm",
-		Short: "Confirma los dominios candidatos que pasan a Fase 4 (Human Sync Point)",
-		Args:  cobra.NoArgs,
+		Use:     "confirm",
+		Short:   "Confirma un dominio y congela Files con hash y tamaño",
+		Long:    "Selecciona un dominio candidato y congela los documentos de build como Files con hash y tamaño. Este acto no aprueba, firma ni activa el Mandate.",
+		Example: "  nucleus mandate build domains confirm --id MANDATE_ID --domain-id DOMAIN_ID\n  nucleus --json mandate build domains confirm --id MANDATE_ID --domain-id DOMAIN_ID",
+		Args:    cobra.NoArgs,
+		Annotations: map[string]string{
+			"category":      "MANDATES",
+			"json_response": `{"success":true,"mandateId":"MANDATE_ID","confirmedDomainIds":["DOMAIN_ID"],"frozenFiles":[{"ref":"inputs/source.txt","sha256":"SHA256","size":12}],"workflowSignaled":"mandate_build_MANDATE_ID"}`,
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			state, raw, err := readMandateState(mandateID)
 			if err != nil {
@@ -170,23 +144,41 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 					return
 				}
 			}
-			if len(domainIDs) == 0 {
-				fail(c, fmt.Errorf("--domain-id es requerido (al menos uno)"))
+			if len(domainIDs) != 1 {
+				fail(c, fmt.Errorf("el primer vertical requiere exactamente un --domain-id"))
+				return
+			}
+			if len(state.Phases.Validate.HumanSync.ConfirmedDomainIds) > 0 && !reflect.DeepEqual(state.Phases.Validate.HumanSync.ConfirmedDomainIds, domainIDs) {
+				fail(c, fmt.Errorf("la confirmación persistida no puede sustituirse"))
+				return
+			}
+			cfg, err := supervisor.LoadNucleusConfig()
+			if err != nil {
+				fail(c, err)
+				return
+			}
+			frozenFiles, err := mandatecontract.FreezeFiles(filepath.Join(cfg.MandatesRoot(), mandateID), state.DocsProvided)
+			if err != nil {
+				fail(c, fmt.Errorf("no pude congelar Files: %w", err))
+				return
+			}
+			if len(state.Phases.Validate.HumanSync.Files) > 0 && !reflect.DeepEqual(state.Phases.Validate.HumanSync.Files, frozenFiles) {
+				fail(c, fmt.Errorf("Files congelados difieren de la confirmación persistida"))
 				return
 			}
 
 			// D-9: identidad interina vía usuario del SO. Ver nota de
 			// alcance al inicio del archivo — esto NO cubre el path HTTP.
-			confirmedBy := "unknown"
-			if u, err := user.Current(); err == nil && u.Username != "" {
-				confirmedBy = u.Username
-			} else {
-				c.Logger.Printf("[WARN] no pude resolver el usuario del SO (%v) — confirmedBy queda como %q", err, confirmedBy)
-			}
+			// La confirmación del dominio no acredita al aprobador humano.
+			// approve y activate requieren una prueba independiente del actor.
+			confirmedBy := ""
 
 			state.Phases.Validate.HumanSync.ConfirmedDomainIds = domainIDs
-			state.Phases.Validate.HumanSync.ConfirmedAt = time.Now().Format(time.RFC3339)
+			if state.Phases.Validate.HumanSync.ConfirmedAt == "" {
+				state.Phases.Validate.HumanSync.ConfirmedAt = time.Now().Format(time.RFC3339)
+			}
 			state.Phases.Validate.HumanSync.ConfirmedBy = confirmedBy
+			state.Phases.Validate.HumanSync.Files = frozenFiles
 
 			if err := writeMandateStateValidate(mandateID, raw, state.Phases.Validate); err != nil {
 				fail(c, err)
@@ -249,12 +241,12 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 					"success":            true,
 					"mandateId":          mandateID,
 					"confirmedDomainIds": domainIDs,
-					"confirmedBy":        confirmedBy,
+					"frozenFiles":        frozenFiles,
 					"workflowSignaled":   workflowID,
 				}, "", "  ")
 				fmt.Println(string(data))
 			} else {
-				c.Logger.Printf("[SUCCESS] ✅ %d dominio(s) confirmado(s) por %s para mandate %s — señal enviada a %s", len(domainIDs), confirmedBy, mandateID, workflowID)
+				c.Logger.Printf("[SUCCESS] ✅ %d dominio(s) confirmado(s) para mandate %s — señal enviada a %s", len(domainIDs), mandateID, workflowID)
 			}
 		},
 	}
@@ -357,6 +349,14 @@ func mutateMandateStateValidate(path string, validate validatePhaseJSON) (uint64
 			current = map[string]interface{}{}
 		}
 		desiredHumanSync := validateMap["humanSync"]
+		if persisted, ok := current["humanSync"].(map[string]interface{}); ok {
+			desired := desiredHumanSync.(map[string]interface{})
+			for _, key := range []string{"confirmedDomainIds", "files"} {
+				if prior, exists := persisted[key]; exists && !reflect.DeepEqual(prior, desired[key]) {
+					return false, fmt.Errorf("%s ya confirmado no puede sustituirse", key)
+				}
+			}
+		}
 		if reflect.DeepEqual(current["humanSync"], desiredHumanSync) {
 			return false, nil
 		}

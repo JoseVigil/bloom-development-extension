@@ -1,5 +1,6 @@
 
-aitap — Router centralizado de acceso a proveedores de IA para el ecosistema Bloom
+aitap — Router centralizado de acceso a proveedores de IA para el ecosistema 
+Bloom
 
 USAGE
   aitap [OPTIONS] <category> <command> 
@@ -10,17 +11,28 @@ GLOBAL OPTIONS
   --verbose       Logging detallado
   --help          Esta ayuda
 
-aitap no es dueno del vault — Nucleus lo es. Solo guarda referencias y politica de ruteo.
+aitap no es dueno del vault — Nucleus lo es. Solo guarda referencias y politica
+de ruteo.
 
-                                                  Categorias de comandos                                                   
-┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Categoria  ┃ Descripcion                                                                       ┃ Comandos               ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ system     │ Introspeccion estatica de AITAP: version, build y recursos cargados               │ version, info, status  │
-│ keys       │ Referencias de credenciales (credential_ref -> key_id); nunca el secreto real     │ list                   │
-│ route      │ Grifo: decision de routing, Intelligence Supply y politica de acceso y cuotas     │ decide, supply, policy │
-│ health     │ Sondeo vivo de las dependencias de AITAP                                          │ check                  │
-│ accounting │ Lectura de la Contabilidad de inferencias por modelo, consumidor y ventana        │ usage                  │
-│ local      │ Suministro de inteligencia local: verificacion previa y estado de modelos locales │ preflight              │
-└────────────┴───────────────────────────────────────────────────────────────────────────────────┴────────────────────────┘
+                            Categorias de comandos                             
++-----------------------------------------------------------------------------+
+| Categoria  | Descripcion                           | Comandos               |
+|------------+---------------------------------------+------------------------|
+| system     | Introspeccion estatica de AITAP:      | version, info, status  |
+|            | version, build y recursos cargados    |                        |
+| keys       | Referencias de credenciales           | list                   |
+|            | (credential_ref -> key_id); nunca el  |                        |
+|            | secreto real                          |                        |
+| route      | Grifo: decision de routing,           | decide, supply, policy |
+|            | Intelligence Supply y politica de     |                        |
+|            | acceso y cuotas                       |                        |
+| health     | Sondeo vivo de las dependencias de    | check                  |
+|            | AITAP                                 |                        |
+| accounting | Lectura de la Contabilidad de         | usage                  |
+|            | inferencias por modelo, consumidor y  |                        |
+|            | ventana                               |                        |
+| local      | Suministro de inteligencia local:     | preflight              |
+|            | verificacion previa y estado de       |                        |
+|            | modelos locales                       |                        |
++-----------------------------------------------------------------------------+
 
