@@ -118,6 +118,103 @@ func PolicyFingerprint(ctx context.Context, run Runner) (string, string, error) 
 	return body.PolicyVersion, body.FileSHA256, nil
 }
 
+// PolicyPermission asks AITAP for its effective decision for the exact local
+// Mandate supply tuple, then binds that decision to the selected model rule.
+func PolicyPermission(ctx context.Context, run Runner, modelID, backendID, supplyPolicyVersion string) (string, string, error) {
+	if modelID == "" || backendID == "" || supplyPolicyVersion == "" {
+		return "", "", errors.New("local access query is incomplete")
+	}
+	data, err := call(ctx, run, "route.policy", "route", "policy", "--consumer", "brain", "--intent-type", "gen",
+		"--policy-version", supplyPolicyVersion, "--model", modelID)
+	if err != nil {
+		return "", "", err
+	}
+	var body struct {
+		PolicyVersion string `json:"policy_version"`
+		FileSHA256    string `json:"file_sha256"`
+		Enforced      bool   `json:"enforced"`
+		Check         struct {
+			Allowed       *bool  `json:"allowed"`
+			ConsumerID    string `json:"consumer_id"`
+			IntentType    string `json:"intent_type"`
+			ModelID       string `json:"model_id"`
+			PolicyVersion string `json:"policy_version"`
+			Reason        string `json:"reason"`
+			Grant         *struct {
+				ConsumerID     string   `json:"consumer_id"`
+				IntentTypes    []string `json:"intent_types"`
+				PolicyVersions []string `json:"policy_versions"`
+			} `json:"grant"`
+		} `json:"check"`
+		EffectiveGrants []struct {
+			BackendID     string `json:"backend_id"`
+			ConsumerID    string `json:"consumer_id"`
+			IntentType    string `json:"intent_type"`
+			ModelID       string `json:"model_id"`
+			PolicyVersion string `json:"policy_version"`
+		} `json:"effective_grants"`
+		Policy struct {
+			PolicyVersion   string `json:"policy_version"`
+			DefaultDecision string `json:"default_decision"`
+			Models          []struct {
+				ModelID          string   `json:"model_id"`
+				BackendID        string   `json:"backend_id"`
+				Enabled          bool     `json:"enabled"`
+				AllowedConsumers []string `json:"allowed_consumers"`
+				Grants           []struct {
+					ConsumerID     string   `json:"consumer_id"`
+					IntentTypes    []string `json:"intent_types"`
+					PolicyVersions []string `json:"policy_versions"`
+				} `json:"grants"`
+			} `json:"models"`
+		} `json:"policy"`
+	}
+	if json.Unmarshal(data, &body) != nil || !body.Enforced || !hexDigest(body.FileSHA256) ||
+		body.PolicyVersion == "" || body.Policy.PolicyVersion != body.PolicyVersion || body.Policy.DefaultDecision != "deny" ||
+		body.Check.Allowed == nil || !*body.Check.Allowed || body.Check.Reason != "GRANTED" || body.Check.Grant == nil ||
+		body.Check.ConsumerID != "brain" || body.Check.IntentType != "gen" || body.Check.ModelID != modelID ||
+		body.Check.PolicyVersion != supplyPolicyVersion ||
+		body.Check.Grant.ConsumerID != "brain" || !contains(body.Check.Grant.IntentTypes, "gen") ||
+		!contains(body.Check.Grant.PolicyVersions, supplyPolicyVersion) {
+		return "", "", errors.New("AITAP effective local access permission is absent or unverifiable")
+	}
+	matches := 0
+	grantMatches := 0
+	for _, model := range body.Policy.Models {
+		if model.ModelID == modelID {
+			matches++
+			if model.BackendID != backendID || !model.Enabled || !contains(model.AllowedConsumers, "brain") {
+				return "", "", errors.New("AITAP selected model is not permitted for Brain")
+			}
+			for _, grant := range model.Grants {
+				if grant.ConsumerID == "brain" && contains(grant.IntentTypes, "gen") && contains(grant.PolicyVersions, supplyPolicyVersion) {
+					grantMatches++
+				}
+			}
+		}
+	}
+	effectiveMatches := 0
+	for _, grant := range body.EffectiveGrants {
+		if grant.ModelID == modelID && grant.BackendID == backendID && grant.ConsumerID == "brain" &&
+			grant.IntentType == "gen" && grant.PolicyVersion == supplyPolicyVersion {
+			effectiveMatches++
+		}
+	}
+	if matches != 1 || grantMatches != 1 || effectiveMatches != 1 {
+		return "", "", errors.New("AITAP selected model grant is missing or ambiguous")
+	}
+	return body.PolicyVersion, body.FileSHA256, nil
+}
+
+func contains(values []string, selected string) bool {
+	for _, value := range values {
+		if value == selected {
+			return true
+		}
+	}
+	return false
+}
+
 func FileSHA256(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", errors.New("resource path missing")

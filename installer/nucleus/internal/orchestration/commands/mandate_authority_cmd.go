@@ -605,7 +605,8 @@ func prepareLocalSelection(ctx context.Context, selected mandatecontract.Intelli
 		selected.Provider, selected.BackendID, selected.Model = backend.Provider, backend.BackendID, backend.Model
 		selected.ModelManifestSHA256, selected.RegistrySnapshotID = backend.ModelDigest, registry.SnapshotID
 		selected.PolicyVersion = policy.PolicyVersion
-		selected.AccessPolicyVersion, selected.AccessPolicySHA256, err = mandateintelligence.PolicyFingerprint(ctx, run)
+		selected.AccessPolicyVersion, selected.AccessPolicySHA256, err = mandateintelligence.PolicyPermission(ctx, run,
+			selected.ModelID, selected.BackendID, selected.PolicyVersion)
 		if err != nil {
 			return selected, err
 		}
@@ -618,7 +619,8 @@ func prepareLocalSelection(ctx context.Context, selected mandatecontract.Intelli
 }
 
 func verifyLocalObservation(ctx context.Context, selected mandatecontract.Intelligence, run mandateintelligence.Runner) error {
-	version, digest, err := mandateintelligence.PolicyFingerprint(ctx, run)
+	version, digest, err := mandateintelligence.PolicyPermission(ctx, run,
+		selected.ModelID, selected.BackendID, selected.PolicyVersion)
 	if err != nil {
 		return err
 	}

@@ -36,9 +36,25 @@ func TestLocalSelectionRequiresFreshModelAndEnforcedAccess(t *testing.T) {
 	}
 	access := strings.Repeat("b", 64)
 	available := true
+	permissionAllowed := true
+	checkModelID := "test-id"
 	run := mandateintelligence.Runner(func(_ context.Context, args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "route" {
-			return json.Marshal(map[string]any{"status": "success", "operation": "route.policy", "data": map[string]any{"policy_version": "local-access-default/v1", "file_sha256": access, "enforced": true, "policy": map[string]any{"default_decision": "deny"}}})
+			if len(args) != 10 || args[8] != "--model" || args[9] != "test-id" {
+				t.Fatalf("local permission query does not bind selected model: %v", args)
+			}
+			grant := map[string]any{"consumer_id": "brain", "intent_types": []string{"gen"}, "policy_versions": []string{"mandate-gen-local/v1"}}
+			check := map[string]any{"allowed": permissionAllowed, "consumer_id": "brain", "intent_type": "gen", "model_id": checkModelID,
+				"policy_version": "mandate-gen-local/v1", "reason": "GRANTED", "grant": grant}
+			if !permissionAllowed {
+				check["reason"], check["grant"] = "NO_MATCHING_GRANT", nil
+			}
+			return json.Marshal(map[string]any{"status": "success", "operation": "route.policy", "data": map[string]any{
+				"policy_version": "local-access-default/v1", "file_sha256": access, "enforced": true, "check": check,
+				"effective_grants": []any{map[string]any{"backend_id": "local.ollama.test-id", "consumer_id": "brain", "intent_type": "gen", "model_id": "test-id", "policy_version": "mandate-gen-local/v1"}},
+				"policy": map[string]any{"policy_version": "local-access-default/v1", "default_decision": "deny", "models": []any{map[string]any{
+					"model_id": "test-id", "backend_id": "local.ollama.test-id", "enabled": true, "allowed_consumers": []string{"brain"}, "grants": []any{grant}}}},
+			}})
 		}
 		return json.Marshal(map[string]any{"status": "success", "operation": "local.preflight", "data": map[string]any{"readiness": map[string]any{"observed_at": time.Now().UTC().Format(time.RFC3339), "ttl_seconds": 60, "models": map[string]any{"test-id": map[string]any{"model": "test:tag", "installed": true, "available": available, "manifest_sha256": manifest}}}}})
 	})
@@ -55,6 +71,19 @@ func TestLocalSelectionRequiresFreshModelAndEnforcedAccess(t *testing.T) {
 	access = strings.Repeat("c", 64)
 	if err := verifyLocalObservation(context.Background(), bound, run); err == nil {
 		t.Fatal("changed access policy accepted")
+	}
+	access = bound.AccessPolicySHA256
+	permissionAllowed = false
+	if _, err := prepareLocalSelection(context.Background(), selected, run); err == nil {
+		t.Fatal("approval prepared without effective Brain gen permission")
+	}
+	if err := verifyLocalObservation(context.Background(), bound, run); err == nil {
+		t.Fatal("permission revoked before signature accepted")
+	}
+	permissionAllowed = true
+	checkModelID = "other-id"
+	if err := verifyLocalObservation(context.Background(), bound, run); err == nil {
+		t.Fatal("permission for substituted model accepted")
 	}
 }
 
