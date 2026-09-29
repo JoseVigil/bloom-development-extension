@@ -459,15 +459,24 @@
         "usage": "Modelo Anthropic elegido para este contrato"
       },
       {
+        "name": "model-id",
+        "usage": "ID del modelo local en el catálogo AITAP"
+      },
+      {
         "name": "policy",
         "usage": "Política AITAP verificada que se firmará"
       },
       {
         "name": "registry",
         "usage": "Registro AITAP verificado del modelo"
+      },
+      {
+        "name": "supply",
+        "usage": "Suministro de inteligencia: cloud o local",
+        "default": "cloud"
       }
     ],
-    "example": "  nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS\n  nucleus --json mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS",
+    "example": "  nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS\n  nucleus --json mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS\n  nucleus mandate approve --id MANDATE_ID --supply local --model-id CATALOG_MODEL_ID --policy LOCAL_POLICY.json --registry LOCAL_REGISTRY.json --max-usd 0 --max-total-tokens TOKENS --max-output-tokens TOKENS",
     "json_response": "{\"success\":true,\"mandateId\":\"MANDATE_ID\",\"operation\":\"approve\",\"contractDigest\":\"SHA256\",\"principalId\":\"AUTHORITY_PRINCIPAL\"}"
   },
   {

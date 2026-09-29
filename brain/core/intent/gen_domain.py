@@ -38,7 +38,8 @@ def generate_domain(request: dict[str, Any], client: IntelligenceSupplyClient | 
     supply = request.get("supply")
     if not isinstance(intelligence, dict) or not isinstance(supply, dict):
         raise GenDomainError("signed intelligence and supply context required")
-    if intelligence.get("policyVersion") != "mandate-gen/v1" or not all(
+    local = contract.get("contractVersion") == 3
+    if intelligence.get("policyVersion") != ("mandate-gen-local/v1" if local else "mandate-gen/v1") or not all(
             isinstance(supply.get(key), str) and supply[key] for key in ("directory", "policyRef", "registryRef")):
         raise GenDomainError("verified supply policy required")
     if supply["policyRef"] != intelligence.get("policyRef") or supply["registryRef"] != intelligence.get("registryRef"):
@@ -58,18 +59,40 @@ def generate_domain(request: dict[str, Any], client: IntelligenceSupplyClient | 
                "contractDigest": request["contractDigest"], "objective": contract["objective"],
                "domain": domain, "sources": sources}
     state = {"intent_id": action["actionId"], "intent_type": "gen", "mandate_id": contract["mandateId"]}
-    transport = make_request(state, "generation", "1", payload, intelligence["policyVersion"])
+    transport = make_request(state, "generation", "1", payload, intelligence["policyVersion"],
+                             privacy="local" if local else "approved_cloud")
     result = (client or IntelligenceSupplyClient()).obtain(Path(supply["directory"]), transport,
         policy=intelligence["policyRef"], registry=intelligence["registryRef"])
     route = result.get("routing_decision", {}).get("effective_intelligence", {})
     if (result.get("model") != intelligence.get("model") or route.get("backend_id") != intelligence.get("backendId")
             or route.get("credential_ref") != intelligence.get("credentialRef")):
         raise GenDomainError("AITAP result differs from signed model or credential reference")
+    if local:
+        decision = result.get("routing_decision", {})
+        fingerprints = decision.get("resource_fingerprints", {})
+        expected = {"supply_policy_sha256": intelligence.get("policySha256"),
+                    "registry_sha256": intelligence.get("registrySha256"),
+                    "access_policy_sha256": intelligence.get("accessPolicySha256"),
+                    "model_manifest_sha256": intelligence.get("modelManifestSha256")}
+        if ("credential_ref" not in route or route["credential_ref"] is not None
+                or intelligence.get("credentialRef") is not None or intelligence.get("privacy") != "local"
+                or result.get("provider") != "ollama" or route.get("provider") != "ollama"
+                or route.get("privacy") != "local" or route.get("model_digest") != intelligence.get("modelManifestSha256")
+                or decision.get("registry_snapshot_id") != intelligence.get("registrySnapshotId")
+                or fingerprints != expected):
+            raise GenDomainError("AITAP local decision differs from signed resources")
     parsed = strict_json(result["raw_response"])
     if not isinstance(parsed, dict) or set(parsed) != {"purpose", "boundaries", "concepts", "decisions"}:
         raise GenDomainError("model proposal has an invalid shape")
     if not isinstance(parsed["purpose"], str) or not isinstance(parsed["boundaries"], dict) or not isinstance(parsed["concepts"], list) or not isinstance(parsed["decisions"], list):
         raise GenDomainError("model proposal has invalid fields")
+    if local and (set(parsed["boundaries"]) != {"inScope", "outOfScope"} or
+                  any(not isinstance(parsed["boundaries"][key], list) or
+                      any(not isinstance(item, str) for item in parsed["boundaries"][key])
+                      for key in ("inScope", "outOfScope")) or
+                  any(not isinstance(item, str) for item in parsed["concepts"]) or
+                  any(not isinstance(item, str) for item in parsed["decisions"])):
+        raise GenDomainError("local domain proposal has invalid structure")
     artifact = {
         "schemaVersion": "1.0",
         "mandateId": contract["mandateId"],

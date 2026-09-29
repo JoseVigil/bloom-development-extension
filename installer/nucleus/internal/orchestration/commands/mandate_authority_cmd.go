@@ -21,6 +21,7 @@ import (
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/orchestration/mandatecontract"
+	"nucleus/internal/orchestration/mandateintelligence"
 	"nucleus/internal/orchestration/mandatestate"
 	"nucleus/internal/orchestration/temporal"
 	"nucleus/internal/supervisor"
@@ -28,7 +29,7 @@ import (
 
 func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 	var id string
-	var model, policyRef, registryRef, maxUSD string
+	var model, modelID, supply, policyRef, registryRef, maxUSD string
 	var maxTotalTokens, maxOutputTokens int
 	short := "Aprueba el contrato exacto de un Mandate con consentimiento humano de Authority"
 	if operation == "activate" {
@@ -38,7 +39,12 @@ func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 		Example: "  nucleus mandate " + operation + " --id MANDATE_ID\n  nucleus --json mandate " + operation + " --id MANDATE_ID", Args: cobra.NoArgs,
 		Annotations: map[string]string{"category": "MANDATES", "json_response": `{"success":true,"mandateId":"MANDATE_ID","operation":"` + operation + `","contractDigest":"SHA256","principalId":"AUTHORITY_PRINCIPAL"}`},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			selection := &mandatecontract.Intelligence{Model: model, PolicyRef: policyRef, RegistryRef: registryRef, MaxUSD: maxUSD, MaxTotalTokens: maxTotalTokens, MaxOutputTokens: maxOutputTokens}
+			selection := &mandatecontract.Intelligence{Model: model, ModelID: modelID, PolicyRef: policyRef, RegistryRef: registryRef, MaxUSD: maxUSD, MaxTotalTokens: maxTotalTokens, MaxOutputTokens: maxOutputTokens}
+			if operation == "approve" && supply == "local" {
+				selection.Privacy = "local"
+			} else if operation == "approve" && supply != "" && supply != "cloud" {
+				return errors.New("unsupported Mandate intelligence supply")
+			}
 			result, err := runMandateAct(cmd, c, operation, id, selection)
 			if err != nil {
 				if c != nil && c.IsJSON {
@@ -57,12 +63,15 @@ func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 		},
 	}
 	if operation == "approve" {
-		cmd.Long += " Requiere un modelo marcado disponible en el registro AITAP, política verificada y presupuesto máximo explícito; los valores quedan dentro del contrato firmado."
+		cmd.Long += " Requiere un modelo disponible, política y registro verificados y límites explícitos. Para suministro local comprueba AITAP preflight y la política de acceso antes de firmar; los valores quedan dentro del contrato."
 		cmd.Example = "  nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS\n  nucleus --json mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS"
+		cmd.Example += "\n  nucleus mandate approve --id MANDATE_ID --supply local --model-id CATALOG_MODEL_ID --policy LOCAL_POLICY.json --registry LOCAL_REGISTRY.json --max-usd 0 --max-total-tokens TOKENS --max-output-tokens TOKENS"
 	}
 	cmd.Flags().StringVar(&id, "id", "", "ID del Mandate (requerido)")
 	if operation == "approve" {
 		cmd.Flags().StringVar(&model, "model", "", "Modelo Anthropic elegido para este contrato")
+		cmd.Flags().StringVar(&supply, "supply", "cloud", "Suministro de inteligencia: cloud o local")
+		cmd.Flags().StringVar(&modelID, "model-id", "", "ID del modelo local en el catálogo AITAP")
 		cmd.Flags().StringVar(&policyRef, "policy", "", "Política AITAP verificada que se firmará")
 		cmd.Flags().StringVar(&registryRef, "registry", "", "Registro AITAP verificado del modelo")
 		cmd.Flags().StringVar(&maxUSD, "max-usd", "", "Presupuesto máximo explícito en USD")
@@ -133,6 +142,13 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 			} else if !os.IsNotExist(statErr) {
 				return result, statErr
 			}
+			if selected != nil && selected.Privacy == "local" {
+				prepared, prepareErr := prepareLocalSelection(context.Background(), *selected, nil)
+				if prepareErr != nil {
+					return result, recordLocalActDenial(mandateLog, id, operation, "selection", "", prepareErr)
+				}
+				selected = &prepared
+			}
 			contract, err = buildConfirmedContract(dir, id, active.OrganizationID, authorityDir, selected)
 			if err != nil {
 				return result, err
@@ -161,11 +177,16 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 	if contract.OrganizationID != active.OrganizationID {
 		return result, errors.New("Mandate organization differs from active Authority binding")
 	}
-	if contract.ContractVersion != 2 || contract.Intelligence == nil {
+	if (contract.ContractVersion != 2 && contract.ContractVersion != 3) || contract.Intelligence == nil {
 		return result, errors.New("Mandate lacks signed intelligence policy, model or budget")
 	}
 	if _, err := verifyIntelligenceSelection(*contract.Intelligence); err != nil {
 		return result, err
+	}
+	if operation == "approve" && contract.ContractVersion == 3 {
+		if err := verifyLocalObservation(context.Background(), *contract.Intelligence, nil); err != nil {
+			return result, recordLocalActDenial(mandateLog, id, operation, "before_consent", digest, err)
+		}
 	}
 	if existing, loadErr := mandatecontract.LoadActReceipt(dir, operation); loadErr == nil {
 		if err := mandatecontract.VerifyActReceipt(existing, identity, authority.DevelopmentPinnedRoots(), operation, id, digest, contract.ProjectID); err != nil {
@@ -250,6 +271,11 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 		if current, _ := mandatecontract.Digest(latest); current != digest {
 			return result, errors.New("Mandate candidate changed after human consent")
 		}
+		if contract.ContractVersion == 3 {
+			if err := verifyLocalObservation(context.Background(), *contract.Intelligence, nil); err != nil {
+				return result, recordLocalActDenial(mandateLog, id, operation, "after_consent", digest, err)
+			}
+		}
 	}
 	if operation == "activate" {
 		latest, loadErr := mandatecontract.LoadVerified(dir, identityPath)
@@ -287,6 +313,19 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 		return result, fmt.Errorf("acto persistido; reintente la señal tras recuperar Temporal: %w", err)
 	}
 	return mandateActResult{Success: true, MandateID: id, Operation: operation, ContractDigest: digest, PrincipalID: attestation.PrincipalID}, nil
+}
+
+func recordLocalActDenial(log *core.Logger, mandateID, operation, stage, digest string, cause error) error {
+	fields := map[string]string{
+		"event": "mandate.act.denied", "mandateId": mandateID,
+		"operation": operation, "stage": stage, "reason": cause.Error(),
+	}
+	if digest != "" {
+		fields["contractDigest"] = digest
+	}
+	raw, _ := json.Marshal(fields)
+	log.Warning("%s", raw)
+	return cause
 }
 
 func persistSignedState(dir, digest string) error {
@@ -405,6 +444,9 @@ func buildConfirmedContract(dir, id, org, authorityDir string, selection ...*man
 			return mandatecontract.Contract{}, verifyErr
 		}
 		contract.ContractVersion = 2
+		if verified.Privacy == "local" {
+			contract.ContractVersion = 3
+		}
 		contract.Intelligence = &verified
 	}
 	return contract, contract.Validate()
@@ -415,11 +457,13 @@ func verifyIntelligenceSelection(selected mandatecontract.Intelligence) (mandate
 		return selected, errors.New("model, verified policy, registry and explicit budget are required before approval")
 	}
 	usd, err := strconv.ParseFloat(selected.MaxUSD, 64)
-	if err != nil || math.IsNaN(usd) || usd <= 0 || usd > 1 {
+	if err != nil || math.IsNaN(usd) || (selected.Privacy == "local" && usd != 0) || (selected.Privacy != "local" && (usd <= 0 || usd > 1)) {
 		return selected, errors.New("invalid explicit USD ceiling")
 	}
-	selected.Provider, selected.BackendID = "anthropic", "anthropic_api"
-	selected.CredentialRef, selected.PolicyVersion = "credential-ref://anthropic/default", "mandate-gen/v1"
+	if selected.Privacy != "local" {
+		credential := "credential-ref://anthropic/default"
+		selected.Provider, selected.BackendID, selected.CredentialRef, selected.PolicyVersion = "anthropic", "anthropic_api", &credential, "mandate-gen/v1"
+	}
 	for _, file := range []struct {
 		ref    *string
 		digest *string
@@ -456,29 +500,139 @@ func verifyIntelligenceSelection(selected mandatecontract.Intelligence) (mandate
 		} `json:"intelligence_supply"`
 	}
 	policyBytes, _ := os.ReadFile(selected.PolicyRef)
-	if json.Unmarshal(policyBytes, &policy) != nil || policy.PolicyVersion != selected.PolicyVersion || policy.Supply.BackendID != selected.BackendID || len(policy.Supply.Fallback) != 0 || policy.Supply.MaxAttempts != 1 || policy.Supply.MaxOutputTokens != selected.MaxOutputTokens || !policy.Supply.Budget.PerMandate || policy.Supply.Budget.MaxUSD != selected.MaxUSD || policy.Supply.Budget.MaxTotalTokens != selected.MaxTotalTokens || policy.Supply.Budget.MaxInferences != 1 {
+	if json.Unmarshal(policyBytes, &policy) != nil || policy.PolicyVersion != selected.PolicyVersion || policy.Supply.BackendID != selected.BackendID || len(policy.Supply.Fallback) != 0 || policy.Supply.MaxAttempts != 1 || policy.Supply.MaxOutputTokens != selected.MaxOutputTokens || !policy.Supply.Budget.PerMandate || (selected.Privacy != "local" && policy.Supply.Budget.MaxUSD != selected.MaxUSD) || policy.Supply.Budget.MaxTotalTokens != selected.MaxTotalTokens || policy.Supply.Budget.MaxInferences != 1 {
 		return selected, errors.New("AITAP policy does not match the explicit signed budget")
 	}
 	var registry struct {
-		Backends []struct {
-			BackendID     string `json:"backend_id"`
-			Provider      string `json:"provider"`
-			Model         string `json:"model"`
-			CredentialRef string `json:"credential_ref"`
-			Health        string `json:"health"`
-			Enabled       bool   `json:"supply_enabled"`
+		SnapshotID string `json:"snapshot_id"`
+		Backends   []struct {
+			BackendID     string  `json:"backend_id"`
+			Provider      string  `json:"provider"`
+			Model         string  `json:"model"`
+			ModelDigest   string  `json:"model_digest"`
+			CredentialRef *string `json:"credential_ref"`
+			Privacy       string  `json:"privacy"`
+			Health        string  `json:"health"`
+			Enabled       bool    `json:"supply_enabled"`
 		} `json:"intelligence_backends"`
 	}
 	registryBytes, _ := os.ReadFile(selected.RegistryRef)
 	if json.Unmarshal(registryBytes, &registry) != nil {
 		return selected, errors.New("AITAP registry invalid")
 	}
+	if selected.Privacy == "local" && registry.SnapshotID != selected.RegistrySnapshotID {
+		return selected, errors.New("local registry snapshot changed")
+	}
 	for _, backend := range registry.Backends {
-		if backend.BackendID == selected.BackendID && backend.Provider == selected.Provider && backend.Model == selected.Model && backend.CredentialRef == selected.CredentialRef && backend.Health == "healthy" && backend.Enabled {
+		credentialMatches := backend.CredentialRef == nil && selected.CredentialRef == nil || backend.CredentialRef != nil && selected.CredentialRef != nil && *backend.CredentialRef == *selected.CredentialRef
+		if backend.BackendID == selected.BackendID && backend.Provider == selected.Provider && backend.Model == selected.Model && credentialMatches && backend.Health == "healthy" && backend.Enabled && (selected.Privacy != "local" || backend.Privacy == "local" && backend.ModelDigest == selected.ModelManifestSHA256) {
 			return selected, nil
 		}
 	}
-	return selected, errors.New("selected Anthropic model is not marked available in verified AITAP registry")
+	return selected, errors.New("selected model is not marked available in verified AITAP registry")
+}
+
+func prepareLocalSelection(ctx context.Context, selected mandatecontract.Intelligence, run mandateintelligence.Runner) (mandatecontract.Intelligence, error) {
+	if selected.Privacy != "local" || selected.ModelID == "" || selected.Model != "" || selected.MaxUSD != "0" ||
+		selected.MaxTotalTokens < 1 || selected.MaxOutputTokens < 1 || selected.PolicyRef == "" || selected.RegistryRef == "" {
+		return selected, errors.New("local model, policy, registry and explicit limits required")
+	}
+	var err error
+	selected.PolicyRef, err = filepath.Abs(selected.PolicyRef)
+	if err != nil {
+		return selected, err
+	}
+	selected.RegistryRef, err = filepath.Abs(selected.RegistryRef)
+	if err != nil {
+		return selected, err
+	}
+	selected.PolicySHA256, err = mandateintelligence.FileSHA256(selected.PolicyRef)
+	if err != nil {
+		return selected, err
+	}
+	selected.RegistrySHA256, err = mandateintelligence.FileSHA256(selected.RegistryRef)
+	if err != nil {
+		return selected, err
+	}
+	policyBytes, err := os.ReadFile(selected.PolicyRef)
+	if err != nil {
+		return selected, err
+	}
+	var policy struct {
+		PolicyVersion string `json:"policy_version"`
+		Supply        struct {
+			BackendID       string   `json:"backend_id"`
+			Fallback        []string `json:"fallback"`
+			MaxAttempts     int      `json:"max_attempts"`
+			MaxOutputTokens int      `json:"max_output_tokens"`
+			Budget          struct {
+				PerMandate     bool `json:"per_mandate"`
+				MaxTotalTokens int  `json:"max_total_tokens"`
+				MaxInferences  int  `json:"max_inferences"`
+			} `json:"budget"`
+		} `json:"intelligence_supply"`
+	}
+	if json.Unmarshal(policyBytes, &policy) != nil || policy.PolicyVersion != "mandate-gen-local/v1" || len(policy.Supply.Fallback) != 0 || policy.Supply.MaxAttempts != 1 || policy.Supply.MaxOutputTokens != selected.MaxOutputTokens || !policy.Supply.Budget.PerMandate || policy.Supply.Budget.MaxTotalTokens != selected.MaxTotalTokens || policy.Supply.Budget.MaxInferences != 1 {
+		return selected, errors.New("local supply policy does not match explicit limits")
+	}
+	registryBytes, err := os.ReadFile(selected.RegistryRef)
+	if err != nil {
+		return selected, err
+	}
+	var registry struct {
+		SnapshotID string `json:"snapshot_id"`
+		Backends   []struct {
+			BackendID     string          `json:"backend_id"`
+			Provider      string          `json:"provider"`
+			Model         string          `json:"model"`
+			ModelDigest   string          `json:"model_digest"`
+			CredentialRef json.RawMessage `json:"credential_ref"`
+			Privacy       string          `json:"privacy"`
+			Health        string          `json:"health"`
+			Enabled       bool            `json:"supply_enabled"`
+		} `json:"intelligence_backends"`
+	}
+	if json.Unmarshal(registryBytes, &registry) != nil || registry.SnapshotID == "" {
+		return selected, errors.New("local registry invalid")
+	}
+	for _, backend := range registry.Backends {
+		if backend.BackendID != policy.Supply.BackendID || backend.BackendID != "local.ollama."+selected.ModelID {
+			continue
+		}
+		if backend.Provider != "ollama" || backend.Model == "" || len(backend.ModelDigest) != 64 || string(backend.CredentialRef) != "null" || backend.Privacy != "local" || backend.Health != "healthy" || !backend.Enabled {
+			return selected, errors.New("local registry backend is not eligible")
+		}
+		selected.Provider, selected.BackendID, selected.Model = backend.Provider, backend.BackendID, backend.Model
+		selected.ModelManifestSHA256, selected.RegistrySnapshotID = backend.ModelDigest, registry.SnapshotID
+		selected.PolicyVersion = policy.PolicyVersion
+		selected.AccessPolicyVersion, selected.AccessPolicySHA256, err = mandateintelligence.PolicyFingerprint(ctx, run)
+		if err != nil {
+			return selected, err
+		}
+		if err = verifyLocalObservation(ctx, selected, run); err != nil {
+			return selected, err
+		}
+		return verifyIntelligenceSelection(selected)
+	}
+	return selected, errors.New("selected local model absent from verified registry")
+}
+
+func verifyLocalObservation(ctx context.Context, selected mandatecontract.Intelligence, run mandateintelligence.Runner) error {
+	version, digest, err := mandateintelligence.PolicyFingerprint(ctx, run)
+	if err != nil {
+		return err
+	}
+	if version != selected.AccessPolicyVersion || digest != selected.AccessPolicySHA256 {
+		return errors.New("local access policy changed")
+	}
+	observation, err := mandateintelligence.Observe(ctx, run, selected.ModelID, selected.Model, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if observation.ManifestSHA256 != selected.ModelManifestSHA256 {
+		return errors.New("observed local model digest differs from signed registry")
+	}
+	return nil
 }
 
 func persistApprovedContract(dir string, contract mandatecontract.Contract, identity *authority.LocalIdentity) error {

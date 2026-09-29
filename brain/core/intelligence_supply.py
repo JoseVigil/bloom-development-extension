@@ -104,7 +104,9 @@ def locked(path):
                 fcntl.flock(stream, fcntl.LOCK_UN)
 
 
-def make_request(state, phase, turn, payload, policy_version):
+def make_request(state, phase, turn, payload, policy_version, *, privacy="approved_cloud"):
+    if privacy not in ("approved_cloud", "local"):
+        raise SupplyError("INVALID_REQUEST", "routing", "Unsupported privacy ceiling")
     input_digest = digest(payload)
     logical = digest([state["intent_id"], phase, str(turn), input_digest, policy_version])
     return {"schema_version": "cognituum.intelligence-supply/v1",
@@ -113,7 +115,7 @@ def make_request(state, phase, turn, payload, policy_version):
                    "mandate_id": state["mandate_id"], "phase": phase, "turn_id": str(turn)},
         "input_digest": input_digest, "payload": payload,
         "routing": {"mode": "policy", "policy_version": policy_version,
-                    "required_capabilities": ["text.generate", "structured_output"], "privacy": "approved_cloud"}}
+                    "required_capabilities": ["text.generate", "structured_output"], "privacy": privacy}}
 
 
 class IntelligenceSupplyClient:

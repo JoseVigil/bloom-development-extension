@@ -17,9 +17,30 @@ import (
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/orchestration/mandatecontract"
+	"nucleus/internal/orchestration/mandateintelligence"
 
 	"github.com/google/uuid"
 )
+
+func stringPtr(value string) *string { return &value }
+
+func TestMandateGenLocalObservationFailsClosedBeforeEffect(t *testing.T) {
+	manifest, access := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	activity := &MandateGenActivity{RunAITAP: mandateintelligence.Runner(func(_ context.Context, args ...string) ([]byte, error) {
+		if args[0] == "route" {
+			return json.Marshal(map[string]any{"status": "success", "operation": "route.policy", "data": map[string]any{"policy_version": "local-access-default/v1", "file_sha256": access, "enforced": true, "policy": map[string]any{"default_decision": "deny"}}})
+		}
+		return json.Marshal(map[string]any{"status": "success", "operation": "local.preflight", "data": map[string]any{"readiness": map[string]any{"observed_at": time.Now().UTC().Format(time.RFC3339), "ttl_seconds": 60, "models": map[string]any{"test-id": map[string]any{"model": "test:tag", "installed": true, "available": true, "manifest_sha256": manifest}}}}})
+	})}
+	selection := mandatecontract.Intelligence{ModelID: "test-id", Model: "test:tag", AccessPolicyVersion: "local-access-default/v1", AccessPolicySHA256: access, ModelManifestSHA256: manifest}
+	if err := activity.verifyLocalObservation(context.Background(), selection); err != nil {
+		t.Fatal(err)
+	}
+	selection.ModelManifestSHA256 = strings.Repeat("c", 64)
+	if err := activity.verifyLocalObservation(context.Background(), selection); err == nil {
+		t.Fatal("changed local model accepted")
+	}
+}
 
 func writeGenesisStateFixture(t *testing.T, root, mandateID string) string {
 	t.Helper()
@@ -154,7 +175,7 @@ func TestMandateGenReconstructsSignedInputsAndReconcilesArtifact(t *testing.T) {
 		MandateID: mandateID, ContractVersion: 2, OrganizationID: "org", ProjectID: "project", ProjectBinding: "binding",
 		Objective: "Define Billing", Domain: mandatecontract.Domain{ID: "d1", Name: "Billing"},
 		Action:       mandatecontract.Action{ActionID: "a1", Type: "run_intent", IntentType: "gen", DomainID: "d1", ArtifactRef: "domain_definition.json", IdempotencyKey: "key1"},
-		Intelligence: &mandatecontract.Intelligence{Provider: "anthropic", BackendID: "anthropic_api", Model: "test-model", CredentialRef: "credential-ref://anthropic/default", PolicyRef: policyRef, PolicyVersion: "mandate-gen/v1", PolicySHA256: hex.EncodeToString(policySum[:]), RegistryRef: registryRef, RegistrySHA256: hex.EncodeToString(registrySum[:]), MaxUSD: "0.01", MaxTotalTokens: 1000, MaxOutputTokens: 100},
+		Intelligence: &mandatecontract.Intelligence{Provider: "anthropic", BackendID: "anthropic_api", Model: "test-model", CredentialRef: stringPtr("credential-ref://anthropic/default"), PolicyRef: policyRef, PolicyVersion: "mandate-gen/v1", PolicySHA256: hex.EncodeToString(policySum[:]), RegistryRef: registryRef, RegistrySHA256: hex.EncodeToString(registrySum[:]), MaxUSD: "0.01", MaxTotalTokens: 1000, MaxOutputTokens: 100},
 		Inputs:       []mandatecontract.Input{{Ref: "inputs/source.md", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(source))}},
 		Fulfillment:  mandatecontract.Fulfillment{Evaluator: "domain-definition-structure", EvaluatorVersion: "1", RequiredFields: []string{"domainId", "purpose", "boundaries", "concepts", "decisions", "sources"}},
 	}

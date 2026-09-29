@@ -1,21 +1,115 @@
 package commands
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"nucleus/internal/authority"
+	"nucleus/internal/core"
 	"nucleus/internal/orchestration/mandatecontract"
+	"nucleus/internal/orchestration/mandateintelligence"
 )
+
+func TestLocalSelectionRequiresFreshModelAndEnforcedAccess(t *testing.T) {
+	root := t.TempDir()
+	policyPath, registryPath := filepath.Join(root, "policy.json"), filepath.Join(root, "registry.json")
+	manifest := strings.Repeat("a", 64)
+	policy := []byte(`{"policy_version":"mandate-gen-local/v1","intelligence_supply":{"backend_id":"local.ollama.test-id","fallback":[],"max_attempts":1,"max_output_tokens":100,"budget":{"per_mandate":true,"max_total_tokens":1000,"max_inferences":1}}}`)
+	registry := []byte(`{"snapshot_id":"test-snapshot","intelligence_backends":[{"backend_id":"local.ollama.test-id","provider":"ollama","model":"test:tag","model_digest":"` + manifest + `","credential_ref":null,"privacy":"local","health":"healthy","supply_enabled":true}]}`)
+	if err := os.WriteFile(policyPath, policy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(registryPath, registry, 0600); err != nil {
+		t.Fatal(err)
+	}
+	access := strings.Repeat("b", 64)
+	available := true
+	run := mandateintelligence.Runner(func(_ context.Context, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "route" {
+			return json.Marshal(map[string]any{"status": "success", "operation": "route.policy", "data": map[string]any{"policy_version": "local-access-default/v1", "file_sha256": access, "enforced": true, "policy": map[string]any{"default_decision": "deny"}}})
+		}
+		return json.Marshal(map[string]any{"status": "success", "operation": "local.preflight", "data": map[string]any{"readiness": map[string]any{"observed_at": time.Now().UTC().Format(time.RFC3339), "ttl_seconds": 60, "models": map[string]any{"test-id": map[string]any{"model": "test:tag", "installed": true, "available": available, "manifest_sha256": manifest}}}}})
+	})
+	selected := mandatecontract.Intelligence{Privacy: "local", ModelID: "test-id", PolicyRef: policyPath, RegistryRef: registryPath, MaxUSD: "0", MaxTotalTokens: 1000, MaxOutputTokens: 100}
+	bound, err := prepareLocalSelection(context.Background(), selected, run)
+	if err != nil || bound.Model != "test:tag" || bound.CredentialRef != nil || bound.AccessPolicySHA256 != access {
+		t.Fatalf("bound=%+v err=%v", bound, err)
+	}
+	available = false
+	if err := verifyLocalObservation(context.Background(), bound, run); err == nil {
+		t.Fatal("unavailable model accepted")
+	}
+	available = true
+	access = strings.Repeat("c", 64)
+	if err := verifyLocalObservation(context.Background(), bound, run); err == nil {
+		t.Fatal("changed access policy accepted")
+	}
+}
+
+func TestLocalActRejectionsUseExistingMandateStreamWithoutApproval(t *testing.T) {
+	root := t.TempDir()
+	logger, err := core.InitLogger(&core.Paths{LogsDir: filepath.Join(root, "logs")}, "MANDATE", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stage := range []string{"selection", "before_consent", "after_consent"} {
+		cause := errors.New("local policy or preflight not verifiable: " + stage)
+		if got := recordLocalActDenial(logger, "m-local", "approve", stage, "", cause); !errors.Is(got, cause) {
+			t.Fatalf("%s rejection did not return its cause", stage)
+		}
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := filepath.Glob(filepath.Join(root, "logs", "nucleus", "nucleus_mandate_*.log"))
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("existing nucleus_mandate stream missing: %v %v", paths, err)
+	}
+	raw, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		start := strings.IndexByte(line, '{')
+		if start < 0 {
+			continue
+		}
+		var event map[string]string
+		if err := json.Unmarshal([]byte(line[start:]), &event); err != nil {
+			t.Fatalf("unreadable Mandate event: %v", err)
+		}
+		if event["event"] == "mandate.act.denied" {
+			if event["mandateId"] != "m-local" || event["operation"] != "approve" || event["reason"] != "local policy or preflight not verifiable: "+event["stage"] {
+				t.Fatalf("rejection lacks correlation or reason: %#v", event)
+			}
+			found[event["stage"]] = true
+		}
+		if event["event"] == "mandate.act.recorded" {
+			t.Fatal("approval recorded after local rejection")
+		}
+	}
+	for _, stage := range []string{"selection", "before_consent", "after_consent"} {
+		if !found[stage] {
+			t.Fatalf("missing %s rejection in nucleus_mandate", stage)
+		}
+	}
+	if _, err := mandatecontract.LoadActReceipt(filepath.Join(root, "mandate"), "approve"); !os.IsNotExist(err) {
+		t.Fatalf("approval receipt unexpectedly exists: %v", err)
+	}
+}
 
 func TestMandateActsExposeDistinctHumanAndJSONHelp(t *testing.T) {
 	root := &cobra.Command{Use: "nucleus"}

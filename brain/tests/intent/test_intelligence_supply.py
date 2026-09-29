@@ -6,6 +6,17 @@ import pytest
 from brain.core.intelligence_supply import IntelligenceSupplyClient, SupplyError, make_request, text_digest
 
 
+def test_local_gen_request_preserves_privacy_and_identity():
+    state = {"intent_id": "action-test", "intent_type": "gen", "mandate_id": "mandate-test"}
+    local = make_request(state, "generation", "1", {"contractDigest": "signed"},
+                         "mandate-gen-local/v1", privacy="local")
+    assert local["routing"]["privacy"] == "local"
+    assert local["routing"]["required_capabilities"] == ["text.generate", "structured_output"]
+    assert local["logical_inference_id"].startswith("sha256:")
+    with pytest.raises(SupplyError):
+        make_request(state, "generation", "1", {}, "mandate-gen-local/v1", privacy="any")
+
+
 def test_response_correlation_and_immutable_raw_checkpoint(tmp_path):
     request = make_request({"intent_id": "i", "intent_type": "ing", "mandate_id": "m"}, "classification", 1, {}, "v")
     response = {"schema_version": "cognituum.intelligence-supply-result/v1", "request_id": request["request_id"],

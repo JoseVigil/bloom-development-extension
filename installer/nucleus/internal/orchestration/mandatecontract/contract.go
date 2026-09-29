@@ -34,18 +34,24 @@ type Contract struct {
 // Intelligence is fixed before human approval. Paths select local, read-only
 // resources; their hashes, model and spend ceiling are part of the signature.
 type Intelligence struct {
-	Provider        string `json:"provider"`
-	BackendID       string `json:"backendId"`
-	Model           string `json:"model"`
-	CredentialRef   string `json:"credentialRef"`
-	PolicyRef       string `json:"policyRef"`
-	PolicyVersion   string `json:"policyVersion"`
-	PolicySHA256    string `json:"policySha256"`
-	RegistryRef     string `json:"registryRef"`
-	RegistrySHA256  string `json:"registrySha256"`
-	MaxUSD          string `json:"maxUsd"`
-	MaxTotalTokens  int    `json:"maxTotalTokens"`
-	MaxOutputTokens int    `json:"maxOutputTokens"`
+	Provider            string  `json:"provider"`
+	BackendID           string  `json:"backendId"`
+	ModelID             string  `json:"modelId,omitempty"`
+	Model               string  `json:"model"`
+	CredentialRef       *string `json:"credentialRef"`
+	Privacy             string  `json:"privacy,omitempty"`
+	PolicyRef           string  `json:"policyRef"`
+	PolicyVersion       string  `json:"policyVersion"`
+	PolicySHA256        string  `json:"policySha256"`
+	RegistryRef         string  `json:"registryRef"`
+	RegistrySHA256      string  `json:"registrySha256"`
+	RegistrySnapshotID  string  `json:"registrySnapshotId,omitempty"`
+	AccessPolicyVersion string  `json:"accessPolicyVersion,omitempty"`
+	AccessPolicySHA256  string  `json:"accessPolicySha256,omitempty"`
+	ModelManifestSHA256 string  `json:"modelManifestSha256,omitempty"`
+	MaxUSD              string  `json:"maxUsd"`
+	MaxTotalTokens      int     `json:"maxTotalTokens"`
+	MaxOutputTokens     int     `json:"maxOutputTokens"`
 }
 
 type Domain struct {
@@ -83,7 +89,7 @@ type Fulfillment struct {
 // Validate rejects underspecified or externally directed effects. It does not
 // authorize signing, activation, filesystem writes, or the human approver.
 func (c Contract) Validate() error {
-	if c.ContractVersion != 1 && c.ContractVersion != 2 {
+	if c.ContractVersion != 1 && c.ContractVersion != 2 && c.ContractVersion != 3 {
 		return errors.New("unsupported Mandate contract version")
 	}
 	if c.MandateID == "" || c.ContractVersion == 0 || c.OrganizationID == "" || c.ProjectID == "" || c.ProjectBinding == "" || c.Objective == "" || c.Domain.ID == "" || c.Domain.Name == "" {
@@ -97,15 +103,26 @@ func (c Contract) Validate() error {
 	}
 	if c.ContractVersion >= 2 {
 		i := c.Intelligence
-		if i == nil || i.Provider != "anthropic" || i.BackendID != "anthropic_api" || i.Model == "" ||
-			i.CredentialRef != "credential-ref://anthropic/default" || i.PolicyVersion != "mandate-gen/v1" ||
-			!filepath.IsAbs(i.PolicyRef) || !hexDigest(i.PolicySHA256) || !filepath.IsAbs(i.RegistryRef) ||
-			!hexDigest(i.RegistrySHA256) || i.MaxUSD == "" || i.MaxTotalTokens < 1 || i.MaxOutputTokens < 1 {
+		if i == nil || i.Model == "" || !filepath.IsAbs(i.PolicyRef) || !hexDigest(i.PolicySHA256) ||
+			!filepath.IsAbs(i.RegistryRef) || !hexDigest(i.RegistrySHA256) || i.MaxUSD == "" ||
+			i.MaxTotalTokens < 1 || i.MaxOutputTokens < 1 {
 			return errors.New("Mandate intelligence selection or explicit budget missing")
 		}
 		usd, parseErr := strconv.ParseFloat(i.MaxUSD, 64)
-		if parseErr != nil || !(usd > 0 && usd <= 1) {
+		if parseErr != nil {
 			return errors.New("Mandate intelligence USD ceiling invalid")
+		}
+		if c.ContractVersion == 2 && (i.Provider != "anthropic" || i.BackendID != "anthropic_api" ||
+			i.CredentialRef == nil || *i.CredentialRef != "credential-ref://anthropic/default" ||
+			i.PolicyVersion != "mandate-gen/v1" || !(usd > 0 && usd <= 1)) {
+			return errors.New("Mandate v2 Anthropic selection invalid")
+		}
+		if c.ContractVersion == 3 && (i.MaxOutputTokens > i.MaxTotalTokens || i.Provider != "ollama" || i.ModelID == "" ||
+			!strings.HasPrefix(i.BackendID, "local.ollama.") || i.CredentialRef != nil || i.Privacy != "local" ||
+			i.PolicyVersion != "mandate-gen-local/v1" || i.RegistrySnapshotID == "" ||
+			i.AccessPolicyVersion == "" || !hexDigest(i.AccessPolicySHA256) ||
+			!hexDigest(i.ModelManifestSHA256) || usd != 0) {
+			return errors.New("Mandate v3 local selection invalid")
 		}
 	}
 	if c.Fulfillment.Evaluator != "domain-definition-structure" || c.Fulfillment.EvaluatorVersion != "1" ||

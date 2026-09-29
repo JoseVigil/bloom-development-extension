@@ -75,8 +75,9 @@ func TestVersionTwoBindsIntelligenceSelection(t *testing.T) {
 	if err := contract.Validate(); err == nil {
 		t.Fatal("missing intelligence accepted")
 	}
+	credential := "credential-ref://anthropic/default"
 	contract.Intelligence = &Intelligence{Provider: "anthropic", BackendID: "anthropic_api", Model: "selected-model",
-		CredentialRef: "credential-ref://anthropic/default", PolicyRef: filepath.Join(t.TempDir(), "policy.json"),
+		CredentialRef: &credential, PolicyRef: filepath.Join(t.TempDir(), "policy.json"),
 		PolicyVersion: "mandate-gen/v1", PolicySHA256: strings.Repeat("a", 64), RegistryRef: filepath.Join(t.TempDir(), "registry.json"),
 		RegistrySHA256: strings.Repeat("b", 64), MaxUSD: "0.10", MaxTotalTokens: 1000, MaxOutputTokens: 100}
 	if err := contract.Validate(); err != nil {
@@ -106,5 +107,29 @@ func TestVersionTwoBindsIntelligenceSelection(t *testing.T) {
 	contract.Intelligence.Model = ""
 	if err := contract.Validate(); err == nil {
 		t.Fatal("missing model accepted")
+	}
+}
+
+func TestVersionThreeRequiresBoundLocalResources(t *testing.T) {
+	c := fixtureContract()
+	c.ContractVersion = 3
+	c.Intelligence = &Intelligence{Provider: "ollama", BackendID: "local.ollama.selected", ModelID: "selected", Model: "selected:tag",
+		Privacy: "local", PolicyRef: filepath.Join(t.TempDir(), "policy.json"), PolicyVersion: "mandate-gen-local/v1",
+		PolicySHA256: strings.Repeat("a", 64), RegistryRef: filepath.Join(t.TempDir(), "registry.json"),
+		RegistrySHA256: strings.Repeat("b", 64), RegistrySnapshotID: "local-snapshot",
+		AccessPolicyVersion: "local-access-default/v1", AccessPolicySHA256: strings.Repeat("c", 64),
+		ModelManifestSHA256: strings.Repeat("d", 64), MaxUSD: "0", MaxTotalTokens: 1000, MaxOutputTokens: 100}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := Digest(c)
+	c.Intelligence.ModelManifestSHA256 = strings.Repeat("e", 64)
+	after, _ := Digest(c)
+	if before == after {
+		t.Fatal("manifest digest not signed")
+	}
+	c.Intelligence.CredentialRef = new(string)
+	if err := c.Validate(); err == nil {
+		t.Fatal("local credential accepted")
 	}
 }

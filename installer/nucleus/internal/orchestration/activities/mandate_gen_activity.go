@@ -15,11 +15,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/orchestration/mandatecontract"
+	"nucleus/internal/orchestration/mandateintelligence"
 )
 
 // MandateGenActivity is registered by the worker with its own installation
@@ -30,6 +32,7 @@ type MandateGenActivity struct {
 	TrustRoots   map[string]ed25519.PublicKey
 	BrainPath    string
 	RunBrain     func(context.Context, []byte) ([]byte, error)
+	RunAITAP     mandateintelligence.Runner
 	Logger       *core.Logger
 }
 
@@ -106,8 +109,13 @@ func (a *MandateGenActivity) runGenAfterActivation(ctx context.Context, input Ma
 	if err := requireActiveMandate(dir, envelope.ContractDigest); err != nil {
 		return MandateGenResult{}, err
 	}
-	if envelope.Contract.ContractVersion != 2 || envelope.Contract.Intelligence == nil {
+	if (envelope.Contract.ContractVersion != 2 && envelope.Contract.ContractVersion != 3) || envelope.Contract.Intelligence == nil {
 		return MandateGenResult{}, errors.New("signed intelligence selection and budget required")
+	}
+	if envelope.Contract.ContractVersion == 3 {
+		if err := a.verifyLocalObservation(ctx, *envelope.Contract.Intelligence); err != nil {
+			return MandateGenResult{}, err
+		}
 	}
 	for _, resource := range []struct{ path, digest string }{{envelope.Contract.Intelligence.PolicyRef, envelope.Contract.Intelligence.PolicySHA256}, {envelope.Contract.Intelligence.RegistryRef, envelope.Contract.Intelligence.RegistrySHA256}} {
 		content, readErr := os.ReadFile(resource.path)
@@ -171,6 +179,11 @@ func (a *MandateGenActivity) runGenAfterActivation(ctx context.Context, input Ma
 		sum := sha256.Sum256(content)
 		if hex.EncodeToString(sum[:]) != resource.digest {
 			return MandateGenResult{}, errors.New("AITAP policy or registry changed during inference")
+		}
+	}
+	if envelope.Contract.ContractVersion == 3 {
+		if err := a.verifyLocalObservation(ctx, *envelope.Contract.Intelligence); err != nil {
+			return MandateGenResult{}, err
 		}
 	}
 	// Check durable inputs again after Brain returns. A source cannot be
@@ -241,6 +254,24 @@ func (a *MandateGenActivity) runGenAfterActivation(ctx context.Context, input Ma
 	return result, nil
 }
 
+func (a *MandateGenActivity) verifyLocalObservation(ctx context.Context, selection mandatecontract.Intelligence) error {
+	version, digest, err := mandateintelligence.PolicyFingerprint(ctx, a.RunAITAP)
+	if err != nil {
+		return err
+	}
+	if version != selection.AccessPolicyVersion || digest != selection.AccessPolicySHA256 {
+		return errors.New("signed local access policy changed")
+	}
+	observed, err := mandateintelligence.Observe(ctx, a.RunAITAP, selection.ModelID, selection.Model, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if observed.ManifestSHA256 != selection.ModelManifestSHA256 {
+		return errors.New("signed local model digest changed")
+	}
+	return nil
+}
+
 func verifyGenSupplyEvidence(dir string, envelope mandatecontract.Envelope, artifact map[string]interface{}, logicalID, rawDigest, accountingRef, model string) error {
 	if len(logicalID) != 71 || !strings.HasPrefix(logicalID, "sha256:") || rawDigest == "" || accountingRef == "" || model != envelope.Contract.Intelligence.Model {
 		return errors.New("AITAP inference evidence missing or wrong model")
@@ -261,31 +292,70 @@ func verifyGenSupplyEvidence(dir string, envelope mandatecontract.Envelope, arti
 		} `json:"payload"`
 		Routing struct {
 			PolicyVersion string `json:"policy_version"`
+			Privacy       string `json:"privacy"`
 		} `json:"routing"`
 	}
 	if json.Unmarshal(requestBytes, &request) != nil || request.LogicalID != logicalID || request.Intent.MandateID != envelope.Contract.MandateID || request.Intent.Type != "gen" || request.Intent.Phase != "generation" || request.Payload.ContractDigest != envelope.ContractDigest || request.Routing.PolicyVersion != envelope.Contract.Intelligence.PolicyVersion {
 		return errors.New("AITAP request differs from signed Mandate")
+	}
+	if envelope.Contract.ContractVersion == 3 && request.Routing.Privacy != "local" {
+		return errors.New("AITAP request privacy differs from signed Mandate")
 	}
 	resultBytes, err := os.ReadFile(filepath.Join(dir, ".supply_result.json"))
 	if err != nil {
 		return err
 	}
 	var result struct {
-		LogicalID       string `json:"logical_inference_id"`
-		Outcome         string `json:"outcome"`
-		RawResponse     string `json:"raw_response"`
-		RawDigest       string `json:"raw_response_digest"`
-		AccountingRef   string `json:"accounting_ref"`
-		Model           string `json:"model"`
-		RoutingDecision struct {
-			Effective struct {
-				BackendID     string `json:"backend_id"`
-				CredentialRef string `json:"credential_ref"`
+		LogicalID         string `json:"logical_inference_id"`
+		Outcome           string `json:"outcome"`
+		RawResponse       string `json:"raw_response"`
+		RawDigest         string `json:"raw_response_digest"`
+		AccountingRef     string `json:"accounting_ref"`
+		Model             string `json:"model"`
+		Provider          string `json:"provider"`
+		RoutingDecisionID string `json:"routing_decision_id"`
+		RoutingDecision   struct {
+			RoutingDecisionID  string `json:"routing_decision_id"`
+			LogicalID          string `json:"logical_inference_id"`
+			PolicyVersion      string `json:"policy_version"`
+			RegistrySnapshotID string `json:"registry_snapshot_id"`
+			Effective          struct {
+				BackendID     string  `json:"backend_id"`
+				Provider      string  `json:"provider"`
+				Model         string  `json:"model"`
+				ModelDigest   string  `json:"model_digest"`
+				Privacy       string  `json:"privacy"`
+				CredentialRef *string `json:"credential_ref"`
 			} `json:"effective_intelligence"`
+			Fingerprints struct {
+				SupplyPolicy  string `json:"supply_policy_sha256"`
+				Registry      string `json:"registry_sha256"`
+				AccessPolicy  string `json:"access_policy_sha256"`
+				ModelManifest string `json:"model_manifest_sha256"`
+			} `json:"resource_fingerprints"`
 		} `json:"routing_decision"`
 	}
-	if json.Unmarshal(resultBytes, &result) != nil || result.LogicalID != logicalID || result.Outcome != "completed" || result.RawDigest != rawDigest || result.AccountingRef != accountingRef || result.Model != model || result.RoutingDecision.Effective.BackendID != envelope.Contract.Intelligence.BackendID || result.RoutingDecision.Effective.CredentialRef != envelope.Contract.Intelligence.CredentialRef {
+	credentialMatches := false
+	if json.Unmarshal(resultBytes, &result) == nil {
+		credentialMatches = result.RoutingDecision.Effective.CredentialRef == nil && envelope.Contract.Intelligence.CredentialRef == nil || result.RoutingDecision.Effective.CredentialRef != nil && envelope.Contract.Intelligence.CredentialRef != nil && *result.RoutingDecision.Effective.CredentialRef == *envelope.Contract.Intelligence.CredentialRef
+	}
+	if !credentialMatches || result.LogicalID != logicalID || result.Outcome != "completed" || result.RawDigest != rawDigest || result.AccountingRef != accountingRef || result.AccountingRef != "accounting://inference/"+logicalID[7:] || result.Model != model || result.RoutingDecision.Effective.BackendID != envelope.Contract.Intelligence.BackendID {
 		return errors.New("AITAP durable result missing or inconsistent")
+	}
+	if envelope.Contract.ContractVersion == 3 {
+		i := envelope.Contract.Intelligence
+		route := result.RoutingDecision
+		var exact struct {
+			RoutingDecision struct {
+				Effective map[string]json.RawMessage `json:"effective_intelligence"`
+			} `json:"routing_decision"`
+		}
+		if json.Unmarshal(resultBytes, &exact) != nil || string(exact.RoutingDecision.Effective["credential_ref"]) != "null" {
+			return errors.New("AITAP local credential reference must be JSON null")
+		}
+		if result.Provider != "ollama" || route.RoutingDecisionID != result.RoutingDecisionID || route.LogicalID != logicalID || route.PolicyVersion != i.PolicyVersion || route.RegistrySnapshotID != i.RegistrySnapshotID || route.Effective.Provider != "ollama" || route.Effective.Model != i.Model || route.Effective.ModelDigest != i.ModelManifestSHA256 || route.Effective.Privacy != "local" || route.Fingerprints.SupplyPolicy != i.PolicySHA256 || route.Fingerprints.Registry != i.RegistrySHA256 || route.Fingerprints.AccessPolicy != i.AccessPolicySHA256 || route.Fingerprints.ModelManifest != i.ModelManifestSHA256 {
+			return errors.New("AITAP local decision differs from signed resources")
+		}
 	}
 	stateDir := os.Getenv("AITAP_STATE_DIR")
 	if stateDir == "" {
@@ -303,8 +373,9 @@ func verifyGenSupplyEvidence(dir string, envelope mandatecontract.Envelope, arti
 		State    string            `json:"state"`
 		Attempts []json.RawMessage `json:"attempts"`
 		Result   struct {
-			LogicalID string `json:"logical_inference_id"`
-			RawDigest string `json:"raw_response_digest"`
+			LogicalID       string          `json:"logical_inference_id"`
+			RawDigest       string          `json:"raw_response_digest"`
+			RoutingDecision json.RawMessage `json:"routing_decision"`
 		} `json:"result"`
 	}
 	if json.Unmarshal(journalBytes, &recorded) != nil || json.Unmarshal(recorded.JournalRaw, &journal) != nil || journal.State != "completed" || len(journal.Attempts) != 1 || journal.Result.LogicalID != logicalID || journal.Result.RawDigest != rawDigest {
@@ -317,6 +388,19 @@ func verifyGenSupplyEvidence(dir string, envelope mandatecontract.Envelope, arti
 	journalSum := sha256.Sum256(canonicalJournal)
 	if recorded.JournalDigest != "sha256:"+hex.EncodeToString(journalSum[:]) {
 		return errors.New("AITAP accounting journal integrity invalid")
+	}
+	if envelope.Contract.ContractVersion == 3 {
+		var completeResult struct {
+			RoutingDecision json.RawMessage `json:"routing_decision"`
+		}
+		if json.Unmarshal(resultBytes, &completeResult) != nil {
+			return errors.New("AITAP local result unreadable")
+		}
+		left, leftErr := authority.Canonicalize(completeResult.RoutingDecision)
+		right, rightErr := authority.Canonicalize(journal.Result.RoutingDecision)
+		if leftErr != nil || rightErr != nil || !bytes.Equal(left, right) {
+			return errors.New("AITAP local decision differs from durable journal")
+		}
 	}
 	sum := sha256.Sum256([]byte(result.RawResponse))
 	if "sha256:"+hex.EncodeToString(sum[:]) != rawDigest {

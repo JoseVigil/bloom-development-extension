@@ -1561,12 +1561,15 @@
           --max-total-tokens         Límite total explícito de tokens [default: 0]
           --max-usd                  Presupuesto máximo explícito en USD
           --model                    Modelo Anthropic elegido para este contrato
+          --model-id                 ID del modelo local en el catálogo AITAP
           --policy                   Política AITAP verificada que se firmará
           --registry                 Registro AITAP verificado del modelo
+          --supply                   Suministro de inteligencia: cloud o local [default: cloud]
 
         Example:
             nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS
             nucleus --json mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS
+            nucleus mandate approve --id MANDATE_ID --supply local --model-id CATALOG_MODEL_ID --policy LOCAL_POLICY.json --registry LOCAL_REGISTRY.json --max-usd 0 --max-total-tokens TOKENS --max-output-tokens TOKENS
 
         JSON Response:
           {"success":true,"mandateId":"MANDATE_ID","operation":"approve","contractDigest":"SHA256","principalId":"AUTHORITY_PRINCIPAL"}
