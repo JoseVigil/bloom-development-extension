@@ -82,7 +82,10 @@
           "uniqueItems": true
         },
         "privacy": {
-          "const": "approved_cloud"
+          "enum": [
+            "approved_cloud",
+            "local"
+          ]
         }
       },
       "required": [

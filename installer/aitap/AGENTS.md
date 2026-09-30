@@ -69,8 +69,10 @@ local:** todos los modelos locales se sirven siempre a traves de el. Los
    idempotente de modelos a traves de la API local de Ollama, prueba de
    humo, salud observada y registro como backend `privacy: local`. Existe para alimentar
    al pilar 1 y queda sometido a los pilares 2 y 3. No es ejecucion. Estado:
-   implementados el catalogo y `aitap local preflight` (solo lectura); el
-   aprovisionamiento no existe todavia.
+   implementados el catalogo, `aitap local preflight` (solo lectura) y el
+   suministro por Ollama en `route supply` con `privacy: local`
+   (`providers/ollama.py`, politica de acceso aplicada en
+   `access/enforcement.py`); el aprovisionamiento no existe todavia.
 
 Su ciclo operativo completo, literal: recibe el `BSIP-Payload`, consulta
 al modelo, registra la metrica en Contabilidad, devuelve la respuesta
@@ -118,7 +120,19 @@ estas cosas, pará: estás en el componente equivocado.
   estas escribiendo codigo que despacha `tool_calls`, estas en el
   componente equivocado.
 - **Privacidad `local` es un techo, no una preferencia.** Un request con
-  privacidad `local` nunca hace failover a un backend en la nube.
+  privacidad `local` nunca hace failover a un backend en la nube, ni llama a
+  Vault. Una politica local con `fallback`, `max_attempts` distinto de 1 o un
+  backend no local se rechaza al cargarse; no se relaja "para probar".
+- **Nunca reinvocar un intento incierto.** Desde que empieza el `POST` a
+  Ollama, toda falla queda como `failed` con `delivery_uncertain: true` y un
+  journal `in_flight` responde `STATE_CONFLICT` sin llamar. Los chequeos
+  previos (acceso, elegibilidad, digest de `/api/tags`, concurrencia, cuotas,
+  presupuesto) ocurren antes y no dejan journal.
+- **El digest del modelo se verifica inmediatamente antes de cada `POST`.**
+  El preflight es una observacion previa, no reemplaza esa comprobacion.
+- **La politica de acceso aplicada es siempre la empaquetada.** No agregar
+  flags ni variables que la reemplacen en `route supply`; un permiso nuevo es
+  un cambio de datos autorizado, con decision por defecto `deny`.
 - **No registrar servicios del sistema operativo** (LaunchAgents, units de
   systemd, servicios NSSM) salvo decision expresa de Jose (D2). El
   servicio residente de Ollama sigue siendo de Conductor.

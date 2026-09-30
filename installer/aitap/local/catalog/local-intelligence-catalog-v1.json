@@ -19,14 +19,14 @@
       "source": {
         "kind": "ollama",
         "ollama_ref": "functiongemma:270m",
-        "manifest_digest": null,
+        "manifest_digest": "sha256:7c19b650567acfb1bee50d12bb286370e8a54d8877f6a0ecfd01f8c8fdc223bb",
         "layers": {
           "model": "sha256:415f8f959d807bd4d4da891f01225d7b330416947fb011a8473080ae4fd07885",
           "license": "sha256:64c834d5c134577dc3e6b29bc8df5cd75f0e07bf8b9b03ee20a6e43dcc3808a0",
           "params": "sha256:b536e845ddda12ebb432d680e2e79cfdcd2843db55274a8b33441ce981255073",
           "other": "sha256:d087699a88291521d394cac6841bd30ce16c5ef16d54f16c94c003e5aee00e5f"
         },
-        "note": "Capas verificadas en ~/Library/BloomNucleus/models el 2026-09-26. manifest_digest a capturar. La variante functiongemma:270m-it-fp16 no fue evaluada."
+        "note": "Capas verificadas en ~/Library/BloomNucleus/models el 2026-09-26. manifest_digest: sha256 de los bytes del manifest de functiongemma:270m, leido en ~/Library/BloomNucleus/models el 2026-09-28; se confirma contra el digest de /api/tags con local preflight. La variante functiongemma:270m-it-fp16 no fue evaluada."
       },
       "size_bytes": 300807157,
       "license": {

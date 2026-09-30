@@ -151,8 +151,76 @@ def test_ollama_probe_reads_version_and_tags():
 
     result = common.probe_ollama("http://127.0.0.1", opener=opener)
     assert result == {"host": "127.0.0.1:11434", "reachable": True, "version": "0.23.2",
-                      "installed_refs": ["functiongemma:270m"]}
+                      "installed_refs": ["functiongemma:270m"], "tags_observed": True,
+                      "installed_digests": {"functiongemma:270m": None}}
     assert seen == ["http://127.0.0.1:11434/api/version", "http://127.0.0.1:11434/api/tags"]
+
+
+HEX = "7c19b650567acfb1bee50d12bb286370e8a54d8877f6a0ecfd01f8c8fdc223bb"
+
+
+@pytest.mark.parametrize("probe, expected", [
+    # presente: instalado con digest valido (hex desnudo, como lo informa Ollama)
+    ({"reachable": True, "tags_observed": True, "installed_refs": ["functiongemma:270m"],
+      "installed_digests": {"functiongemma:270m": HEX}},
+     {"installed": True, "available": True, "manifest_sha256": HEX}),
+    # ausente: Ollama respondio y el modelo no esta
+    ({"reachable": True, "tags_observed": True, "installed_refs": ["otro:1b"],
+      "installed_digests": {"otro:1b": HEX}},
+     {"installed": False, "available": False, "manifest_sha256": None}),
+    # inobservable: Ollama no respondio
+    ({"reachable": False, "tags_observed": False, "installed_refs": [], "installed_digests": {}},
+     {"installed": None, "available": None, "manifest_sha256": None}),
+    # /api/version respondio pero /api/tags no: tampoco se puede afirmar que falte
+    ({"reachable": True, "tags_observed": False, "installed_refs": [], "installed_digests": {}},
+     {"installed": None, "available": None, "manifest_sha256": None}),
+    # instalado con digest invalido o ausente: disponible desconocido
+    ({"reachable": True, "tags_observed": True, "installed_refs": ["functiongemma:270m"],
+      "installed_digests": {"functiongemma:270m": None}},
+     {"installed": True, "available": None, "manifest_sha256": None}),
+])
+def test_preflight_model_observation_states(probe, expected, tmp_path):
+    fixture = json.loads((FIXTURES / "darwin-x86_64-4gib-13.7.8.json").read_text())
+    observed = copy.deepcopy(fixture["observed"])
+    result = run_preflight(collector=lambda base: observed, probe=lambda host: dict(probe), base=tmp_path)
+    Draft202012Validator(SCHEMA).validate(result)
+    state = result["readiness"]["models"]["functiongemma-270m"]
+    assert state == {"model": "functiongemma:270m", **expected}
+    assert "observed_at" not in state
+    assert result["readiness"]["ttl_seconds"] == 60
+
+
+@pytest.mark.parametrize("raw, normalized", [
+    (HEX, HEX), ("sha256:" + HEX, HEX), (HEX.upper(), None), (HEX[:-1], None), ("", None), (None, None), (7, None),
+])
+def test_preflight_digest_normalization(raw, normalized):
+    assert common.normalize_manifest_digest(raw) == normalized
+
+
+def test_preflight_probe_exposes_normalized_digests_by_exact_ref():
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    tags = {"models": [{"name": "functiongemma:270m", "digest": "sha256:" + HEX},
+                       {"model": "functiongemma:latest", "digest": "no-hex"}]}
+    replies = {"/api/version": {"version": "0.23.2"}, "/api/tags": tags}
+    result = common.probe_ollama("127.0.0.1:11434", opener=lambda url, timeout: Response(
+        json.dumps(replies[url.split("11434", 1)[1]]).encode()))
+    assert result["installed_digests"] == {"functiongemma:270m": HEX, "functiongemma:latest": None}
+
+
+def test_preflight_schema_rejects_prefixed_or_extra_model_fields(tmp_path):
+    fixture = json.loads((FIXTURES / "darwin-x86_64-4gib-13.7.8.json").read_text())
+    result = _run(fixture, tmp_path)
+    state = result["readiness"]["models"]["functiongemma-270m"]
+    for bad in ({**state, "manifest_sha256": "sha256:" + HEX}, {**state, "observed_at": "2026-09-29T00:00:00Z"}):
+        broken = copy.deepcopy(result)
+        broken["readiness"]["models"]["functiongemma-270m"] = bad
+        assert list(Draft202012Validator(SCHEMA).iter_errors(broken))
 
 
 def _thin(cputype, command, minos):

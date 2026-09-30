@@ -11,6 +11,7 @@ Separacion central del diseño:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import urllib.error
 import urllib.request
@@ -24,6 +25,7 @@ SCHEMA_VERSION = "cognituum.local-intelligence.preflight/v1"
 READINESS_TTL_SECONDS = 60
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]"}
 DEFAULT_OLLAMA_HOST = "127.0.0.1:11434"
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 # Codigos estables. Bloqueantes => BLOQUEADO; salvedades => APTO_CON_SALVEDADES.
 BLOCKING = {
@@ -133,8 +135,21 @@ def eligibility_fingerprint(stable: dict[str, Any], catalog: Catalog, selection:
 
 # --------------------------------------------------------------------------- sondas volatiles
 
+def normalize_manifest_digest(value: Any) -> str | None:
+    """``digest`` de /api/tags -> 64 hex minusculas sin prefijo; None si no es valido."""
+    if not isinstance(value, str):
+        return None
+    if value.startswith("sha256:"):
+        value = value[len("sha256:"):]
+    return value if _HEX64.match(value) else None
+
+
 def probe_ollama(host: str | None, timeout: float = 1.5, opener=None) -> dict[str, Any]:
-    """GET de solo lectura a la API local de Ollama. Nunca contacta hosts no loopback."""
+    """GET de solo lectura a la API local de Ollama. Nunca contacta hosts no loopback.
+
+    ``tags_observed`` indica que /api/tags respondio; ``installed_digests`` mapea cada
+    referencia exacta (``name`` o, si falta, ``model``) a su digest normalizado o None.
+    """
     host = (host or DEFAULT_OLLAMA_HOST).strip()
     for scheme in ("http://", "https://"):
         if host.startswith(scheme):
@@ -148,7 +163,8 @@ def probe_ollama(host: str | None, timeout: float = 1.5, opener=None) -> dict[st
         hostname = host
     if hostname == host:
         host = f"{host}:11434"
-    result: dict[str, Any] = {"host": host, "reachable": False, "version": None, "installed_refs": []}
+    result: dict[str, Any] = {"host": host, "reachable": False, "version": None, "installed_refs": [],
+                              "tags_observed": False, "installed_digests": {}}
     if hostname not in LOOPBACK_HOSTS:
         result["skipped"] = "NON_LOOPBACK_HOST"
         return result
@@ -160,7 +176,14 @@ def probe_ollama(host: str | None, timeout: float = 1.5, opener=None) -> dict[st
         result["reachable"] = True
         with opener(base + "/api/tags", timeout=timeout) as response:
             models = json.loads(response.read()).get("models", [])
-        result["installed_refs"] = sorted({m.get("name") or m.get("model") for m in models if m.get("name") or m.get("model")})
+        digests = {}
+        for entry in models:
+            ref = entry.get("name") or entry.get("model")
+            if ref:
+                digests[ref] = normalize_manifest_digest(entry.get("digest"))
+        result["installed_refs"] = sorted(digests)
+        result["installed_digests"] = digests
+        result["tags_observed"] = True
     except (urllib.error.URLError, OSError, ValueError, TypeError, AttributeError):
         pass
     return result

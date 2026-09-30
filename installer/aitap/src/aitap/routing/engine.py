@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,23 +22,79 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
 
 
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+# Proveedor admitido segun la privacidad del pedido. privacy local es un techo:
+# nunca selecciona un proveedor de nube, ni por fallback.
+_SUPPLY_PROVIDER = {"approved_cloud": "anthropic", "local": "ollama"}
+
+
 @dataclass(frozen=True)
 class RoutingEngine:
     policy: dict[str, Any]
     registry: dict[str, Any]
+    # sha256 (hex) de los bytes exactos leidos por from_files; None si se construyo en memoria.
+    policy_sha256: str | None = None
+    registry_sha256: str | None = None
+
+    def is_local_supply(self) -> bool:
+        """Una politica es local si alguno de sus backends de supply es local o de Ollama."""
+        rule = self.policy.get("intelligence_supply") or {}
+        backends = {b.get("backend_id"): b for b in self.registry.get("intelligence_backends", [])}
+        referenced = [backends.get(i) for i in [rule.get("backend_id"), *(rule.get("fallback") or [])]]
+        return any(b and (b.get("privacy") == "local" or b.get("provider") == "ollama") for b in referenced)
+
+    def validate_local_supply(self) -> None:
+        """Rechaza al cargar una politica local con fallback, reintentos o backend no local."""
+        rule = self.policy.get("intelligence_supply")
+        if not isinstance(rule, dict):
+            raise RoutingError("local policy without intelligence_supply")
+        if rule.get("fallback") != [] or rule.get("max_attempts") != 1:
+            raise RoutingError("local policy forbids fallback and retries")
+        backend = next((b for b in self.registry.get("intelligence_backends", [])
+                        if b.get("backend_id") == rule.get("backend_id")), None)
+        if (backend is None or backend.get("privacy") != "local" or backend.get("provider") != "ollama"
+                or backend.get("credential_ref", "") is not None
+                or not isinstance(backend.get("model_digest"), str) or not _HEX64.match(backend["model_digest"])):
+            raise RoutingError("local policy requires a local Ollama backend with pinned model_digest")
+        budget = rule.get("budget")
+        local = rule.get("local", {})
+        try:
+            if (not isinstance(budget, dict) or budget.get("per_mandate") is not True
+                    or budget.get("max_inferences") != 1
+                    or budget.get("max_usd") not in (None, "0", 0)
+                    or type(budget.get("max_total_tokens")) is not int or not 1 <= budget["max_total_tokens"] <= 50000
+                    or type(rule.get("max_output_tokens")) is not int or not 1 <= rule["max_output_tokens"] <= 8192
+                    or type(rule.get("max_input_bytes")) is not int or not 1 <= rule["max_input_bytes"] <= 131072
+                    or type(rule.get("timeout_seconds")) not in (int, float) or not 1 <= rule["timeout_seconds"] <= 600
+                    or not isinstance(local, dict) or set(local) - {"format", "options", "keep_alive"}
+                    or not isinstance(local.get("options", {}), dict)):
+                raise ValueError()
+        except (TypeError, ValueError):
+            raise RoutingError("local policy bounds are invalid") from None
+
+    def bind_fingerprints(self, route: dict[str, Any], fingerprints: dict[str, str]) -> dict[str, Any]:
+        """Ata el routing_decision_id local a las cuatro huellas de recursos."""
+        identity = {"logical_inference_id": route["logical_inference_id"], "policy": self.policy,
+                    "registry": self.registry, "backend": route["effective_intelligence"]["backend_id"],
+                    "resource_fingerprints": fingerprints}
+        return {**route, "routing_decision_id": "rd-" + _digest(identity)[:32],
+                "resource_fingerprints": dict(fingerprints)}
 
     def supply_routes(self, request: dict[str, Any]) -> list[dict[str, Any]]:
         """Route intelligence directly, without selecting an execution runtime."""
         if request["routing"]["policy_version"] != self.policy["policy_version"]:
             raise RoutingError("policy version mismatch")
+        if self.is_local_supply():
+            self.validate_local_supply()
         rule = self.policy.get("intelligence_supply", {})
         backends = {b["backend_id"]: b for b in self.registry["intelligence_backends"]}
+        provider = _SUPPLY_PROVIDER.get(request["routing"]["privacy"])
         routes = []
         for backend_id in dict.fromkeys([rule.get("backend_id"), *rule.get("fallback", [])]):
             backend = backends.get(backend_id)
             if not backend or backend.get("supply_enabled") is not True:
                 continue
-            if backend["health"] == "unavailable" or backend["provider"] != "anthropic":
+            if backend["health"] == "unavailable" or backend["provider"] != provider:
                 continue
             if set(request["routing"]["required_capabilities"]) - set(backend["capabilities"]):
                 continue
@@ -56,7 +113,12 @@ class RoutingEngine:
 
     @classmethod
     def from_files(cls, policy_path: Path, registry_path: Path) -> "RoutingEngine":
-        return cls(json.loads(policy_path.read_text(encoding="utf-8")), json.loads(registry_path.read_text(encoding="utf-8")))
+        policy_raw, registry_raw = Path(policy_path).read_bytes(), Path(registry_path).read_bytes()
+        engine = cls(json.loads(policy_raw.decode("utf-8")), json.loads(registry_raw.decode("utf-8")),
+                     hashlib.sha256(policy_raw).hexdigest(), hashlib.sha256(registry_raw).hexdigest())
+        if engine.is_local_supply():
+            engine.validate_local_supply()
+        return engine
 
     def decide(self, request: dict[str, Any]) -> dict[str, Any]:
         self._validate_registry()

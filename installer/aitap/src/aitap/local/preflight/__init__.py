@@ -53,14 +53,22 @@ def run_preflight(*, catalog: Catalog | None = None, selection: list[str] | None
     }
     destinations_free = {name: common.disk_free_mb(Path(path)) for name, path in destinations.items()}
     installed_refs = set(ollama_probe.get("installed_refs") or [])
+    installed_digests = ollama_probe.get("installed_digests") or {}
+    # Una sola observacion de /api/tags para todos los modelos: la vigencia es
+    # readiness.observed_at + ttl_seconds, sin marca de tiempo por modelo.
+    tags_observed = bool(ollama_probe.get("reachable")) and ollama_probe.get("tags_observed", True)
     models_state = {}
     for mid in selection:
         model = catalog.model(mid)
-        if model["runtime"] == "ollama":
-            installed = model["source"]["ollama_ref"] in installed_refs if ollama_probe.get("reachable") else None
+        ref = model["source"].get("ollama_ref") if model["runtime"] == "ollama" else None
+        if ref is not None:
+            installed = ref in installed_refs if tags_observed else None
         else:
             installed = None  # verificable cuando exista el aprovisionamiento (D4 pendiente)
-        models_state[mid] = {"installed": installed}
+        manifest = installed_digests.get(ref) if installed else None
+        available = True if installed and manifest else False if installed is False else None
+        models_state[mid] = {"model": ref, "installed": installed, "available": available,
+                             "manifest_sha256": manifest}
 
     advisories = common.readiness_advisories(
         readiness, [{**v, "installed": models_state[v["model_id"]]["installed"]} for v in verdicts],

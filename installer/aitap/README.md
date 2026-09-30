@@ -12,9 +12,14 @@ contabilidad. La integración con Executor sigue pendiente.
 
 **Suministro Local (Enmienda 1, 2026-09-26):** catálogo versionado con el
 modelo obligatorio (FunctionGemma 270M, servido por Ollama) y verificación
-previa de solo lectura (`aitap local preflight`). Todavía no hay
-aprovisionamiento, providers locales ni aplicación de la política de acceso y
-cuotas dentro de `route supply`. Toda invocación desde Core pasa por Nucleus.
+previa de solo lectura (`aitap local preflight`, que también publica por
+modelo `model`, `installed`, `available` y `manifest_sha256` observados en
+`/api/tags`). `route supply` con `routing.privacy: local` consulta a Ollama
+por loopback y aplica la política de acceso (ver "Suministro local por
+Ollama" abajo). Ningún registry ni política empaquetados declaran todavía un
+backend local ni un permiso: hoy todo pedido local termina en
+`NO_ELIGIBLE_ROUTE` o `ACCESS_DENIED`. Todavía no hay aprovisionamiento. Toda
+invocación desde Core pasa por Nucleus.
 
 > **Auditoría completada:** clasificación y estado en
 > `../../docs/AITAP/AITAP_ROUTING_RECONCILIATION_REPORT_2026-08-20.md`.
@@ -106,7 +111,9 @@ aitap system status             # versiones y huellas de los recursos cargados
 aitap health check              # AITAP_STATE_DIR y prerrequisitos de Nucleus
 aitap keys list                 # referencias; nunca secretos, no consulta Vault
 aitap route decide --request examples/genesis-ing-request-v2.json
-aitap route policy              # politica de acceso y cuotas por modelo local
+aitap route policy              # politica de acceso aplicada, file_sha256 y permisos efectivos
+aitap --json route policy --consumer brain --intent-type gen \
+    --policy-version mandate-gen-local/v1 --model <model_id>   # permiso efectivo: data.check
 aitap accounting usage --state-dir <dir>
 aitap local preflight           # veredicto por modelo; no descarga nada
 # Con --json todos los comandos devuelven {"status","operation","data"} o el
@@ -142,10 +149,37 @@ vocabulario preciso de los tres pilares y quién parsea qué).
   ejecuta el target seleccionado.
 - Las pruebas unitarias no requieren CLIs reales.
 
+## Suministro local por Ollama (`routing.privacy: local`)
+
+Contrato con MANDATE: Project BTIPS,
+`MANDATE/INTERFACES/Contrato_Interfaz_AITAP_RouteSupply_PrivacidadLocal_v0_3.md`.
+
+- **Privacidad `local` es un techo.** Sólo rutea a backends `privacy: local`
+  con `provider: ollama`. Una política local con `fallback`, reintentos o un
+  backend que no sea local se rechaza al cargarse. Nunca llama a Vault:
+  `credential_ref` es JSON `null`.
+- **Chequeos previos, sin journal y sin envío:** acceso (permiso acotado
+  consumidor + `intent_type` + versión de política + modelo; decisión por
+  defecto `deny`), elegibilidad estable del catálogo, digest del manifest en
+  `GET /api/tags` igual al `model_digest` fijado, concurrencia, cuotas y
+  presupuesto por Mandate en tokens.
+- **Una inferencia lógica:** justo antes de `POST /api/chat` el journal pasa a
+  `in_flight`. Toda falla durante el POST es incierta
+  (`delivery_uncertain: true`) y nunca se reenvía; un `in_flight` devuelve
+  `STATE_CONFLICT` antes de cualquier llamada.
+- **Evidencia:** `routing_decision.resource_fingerprints` trae el sha256 de
+  los bytes de política, registry y política de acceso, y el digest observado
+  del manifest; el `routing_decision_id` queda atado a las cuatro. La
+  contabilidad registra `cost_usd: 0` y `cost_status: local_zero`.
+- **Prueba real en macOS (opt-in, nunca descarga):**
+  `AITAP_REAL_OLLAMA=1 PYTHONPATH=src python3 -m pytest tests/local/test_real_ollama_opt_in.py -s`.
+  El modelo obligatorio del catálogo se usa sólo como prueba de transporte.
+
 ## Pendiente
 
-- Aprovisionamiento local (`aitap local ensure`), provider Ollama y
-  aplicación de la política de acceso y cuotas en `route supply`.
+- Aprovisionamiento local (`aitap local ensure`).
+- Política, registry y permiso local para el primer Mandate `gen`, con el
+  modelo que se elija tras la prueba de aptitud.
 - Consumidores de cada modelo local (decisión C).
 - Health dinámico y circuit breaker anticipatorio (leer
   cuota restante antes de fallar, no solo reaccionar a 3 errores consecutivos

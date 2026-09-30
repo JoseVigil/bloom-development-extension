@@ -306,3 +306,24 @@ def test_provider_overrun_halts_future_inferences(tmp_path):
     with pytest.raises(SupplyError, match="halted"):
         recovered.supply(budget_request("second"))
     assert recovered.provider.calls == 0
+
+
+class ForbiddenLocal:
+    """La rama de nube no debe tocar ninguna dependencia de la ruta local."""
+
+    def __getattr__(self, name):
+        raise AssertionError(f"approved_cloud touched local supply: {name}")
+
+
+def test_cloud_branch_is_unchanged_and_never_touches_local_supply(tmp_path):
+    engine = RoutingEngine.from_files(ROOT / "policies/genesis-runtime-intelligence-v2.json",
+                                      ROOT / "registry/genesis-pilot-v2.json")
+    vault, provider = Vault(), Provider()
+    supply = IntelligenceService(engine, AccountingStore(tmp_path), vault, provider, local=ForbiddenLocal())
+    result = supply.supply(request())
+    assert result["provider"] == "anthropic" and "resource_fingerprints" not in result["routing_decision"]
+    assert result["routing_decision"]["effective_intelligence"]["credential_ref"] == "credential-ref://anthropic/default"
+    journal = supply.store.read(request()["logical_inference_id"])
+    assert journal["attempts"][0]["cost_status"] in {"calculated", "unconfigured"}
+    assert supply.supply(request()) == result
+    assert vault.calls == 1 and provider.calls == 1

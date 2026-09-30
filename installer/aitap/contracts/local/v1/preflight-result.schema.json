@@ -65,7 +65,15 @@
         "ttl_seconds": {"type": "integer", "minimum": 1},
         "ollama": {"type": "object"},
         "disk_free_mb": {"type": "object"},
-        "models": {"type": "object"},
+        "models": {"type": "object", "additionalProperties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["model", "installed", "available", "manifest_sha256"],
+          "properties": {
+            "model": {"type": ["string", "null"]},
+            "installed": {"type": ["boolean", "null"]},
+            "available": {"type": ["boolean", "null"]},
+            "manifest_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          }}},
         "advisories": {"type": "array", "items": {"enum": [
           "FREE_MEMORY_LOW", "MEMORY_PRESSURE_HIGH", "RUNTIME_SERVICE_UNREACHABLE", "DISK_INSUFFICIENT"]}},
         "state": {"enum": ["OK", "ADVISORY"]}

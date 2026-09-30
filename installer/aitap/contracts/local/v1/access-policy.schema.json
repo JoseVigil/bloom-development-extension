@@ -40,7 +40,21 @@
           "type": "object",
           "propertyNames": {"pattern": "^[a-z][a-z0-9_-]*$"},
           "additionalProperties": {"$ref": "#/$defs/quotas"}
+        },
+        "grants": {
+          "description": "Permisos acotados sobre este modelo: consumidor + intent_type + version de politica de ruteo. Sin grants, el modelo no se sirve a nadie.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/grant"}
         }
+      }
+    },
+    "grant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["consumer_id", "intent_types", "policy_versions"],
+      "properties": {
+        "consumer_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+        "intent_types": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["ing", "dis", "gen"]}},
+        "policy_versions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
       }
     }
   }

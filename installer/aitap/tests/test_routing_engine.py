@@ -138,5 +138,80 @@ class RoutingEngineTest(unittest.TestCase):
             self.engine.decide(old)
 
 
+# ------------------------------------------------------------------ privacy local (supply)
+
+import json as _json  # noqa: E402
+
+import pytest  # noqa: E402
+from jsonschema import Draft202012Validator  # noqa: E402
+
+
+def _local_fixtures():
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import test_local_supply_mandate_gen as local
+    return local
+
+
+def test_request_schema_accepts_local_and_cloud_only():
+    schema = _json.loads((ROOT / "contracts/v2/intelligence-supply-request.schema.json").read_text())
+    local = _local_fixtures()
+    for privacy, valid in (("local", True), ("approved_cloud", True), ("any", False), ("cloud", False), (None, False)):
+        value = local.gen_request()
+        value["routing"]["privacy"] = privacy
+        assert (next(Draft202012Validator(schema).iter_errors(value), None) is None) is valid, privacy
+
+
+def test_local_request_never_routes_to_cloud():
+    from test_intelligence_service import gen_request as cloud_gen_request
+    local = _local_fixtures()
+    cloud_engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    request = cloud_gen_request()
+    request["routing"]["privacy"] = "local"
+    with pytest.raises(RoutingError):
+        cloud_engine.supply_routes(request)        # anthropic disponible, pero el pedido es local
+    engine = RoutingEngine(local.local_policy(), local.local_registry())
+    routes = engine.supply_routes(local.gen_request())
+    assert [r["effective_intelligence"]["provider"] for r in routes] == ["ollama"]
+    assert routes[0]["effective_intelligence"]["credential_ref"] is None
+
+
+def test_cloud_request_never_selects_ollama():
+    local = _local_fixtures()
+    request = local.gen_request()
+    request["routing"]["privacy"] = "approved_cloud"
+    with pytest.raises(RoutingError):
+        RoutingEngine(local.local_policy(), local.local_registry()).supply_routes(request)
+
+
+@pytest.mark.parametrize("policy_changes, backend_changes", [
+    ({"fallback": ["anthropic_api"]}, {}),
+    ({"max_attempts": 2}, {}),
+    ({"budget": {"per_mandate": True, "max_usd": "0.5", "max_total_tokens": 1000, "max_inferences": 1}}, {}),
+    ({"budget": {"per_mandate": True, "max_usd": None, "max_total_tokens": 1000, "max_inferences": 2}}, {}),
+    ({"local": {"format": "json", "tools": []}}, {}),
+    ({}, {"privacy": "approved_cloud"}),
+    ({}, {"credential_ref": "credential-ref://anthropic/default"}),
+    ({}, {"model_digest": "sha256:" + "a" * 64}),
+    ({}, {"model_digest": None}),
+])
+def test_local_policy_with_fallback_is_rejected(tmp_path, policy_changes, backend_changes):
+    local = _local_fixtures()
+    policy_path, registry_path = local.write_files(tmp_path, policy=local.local_policy(**policy_changes),
+                                                   registry=local.local_registry(**backend_changes))
+    with pytest.raises(RoutingError):
+        RoutingEngine.from_files(policy_path, registry_path)
+
+
+def test_from_files_records_raw_byte_hashes(tmp_path):
+    import hashlib
+    local = _local_fixtures()
+    policy_path, registry_path = local.write_files(tmp_path)
+    engine = RoutingEngine.from_files(policy_path, registry_path)
+    assert engine.policy_sha256 == hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    assert engine.registry_sha256 == hashlib.sha256(registry_path.read_bytes()).hexdigest()
+    cloud = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    assert not cloud.is_local_supply() and len(cloud.policy_sha256) == 64
+
 if __name__ == "__main__":
     unittest.main()

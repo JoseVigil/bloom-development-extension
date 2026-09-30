@@ -76,7 +76,7 @@
         {
           "name": "supply",
           "category": "route",
-          "description": "Invoca Intelligence Supply: resuelve la credencial via Nucleus Vault, consulta al provider y registra contabilidad durable con replay",
+          "description": "Invoca Intelligence Supply: con privacy approved_cloud resuelve la credencial via Nucleus Vault; con privacy local aplica la politica de acceso empaquetada y consulta a Ollama por loopback con el digest del modelo verificado antes del envio. Registra contabilidad durable con replay",
           "requires_vault": true,
           "aliases": [],
           "examples": [
@@ -86,12 +86,13 @@
         {
           "name": "policy",
           "category": "route",
-          "description": "Muestra la politica vigente de acceso de grifo y cuotas por modelo local (solo lectura; aun no se aplica en supply)",
+          "description": "Muestra la politica de acceso local que route supply aplica (decision por defecto deny, permisos acotados, cuotas y file_sha256); con --consumer --intent-type --policy-version --model evalua el permiso efectivo de esa combinacion (solo lectura)",
           "requires_vault": false,
           "aliases": [],
           "examples": [
             "aitap route policy",
-            "aitap --json route policy"
+            "aitap --json route policy",
+            "aitap --json route policy --consumer brain --intent-type gen --policy-version mandate-gen-local/v1 --model functiongemma-270m"
           ]
         }
       ]

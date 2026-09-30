@@ -1,0 +1,30 @@
+{
+  "models": [
+    {
+      "name": "functiongemma:270m",
+      "model": "functiongemma:270m",
+      "modified_at": "2026-09-26T00:00:00-03:00",
+      "size": 300807157,
+      "digest": "7c19b650567acfb1bee50d12bb286370e8a54d8877f6a0ecfd01f8c8fdc223bb",
+      "details": {
+        "format": "gguf",
+        "family": "gemma3",
+        "parameter_size": "268.10M",
+        "quantization_level": "Q8_0"
+      }
+    },
+    {
+      "name": "sintetico:1b",
+      "model": "sintetico:1b",
+      "modified_at": "2026-09-26T00:00:00-03:00",
+      "size": 1,
+      "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+      "details": {
+        "format": "gguf",
+        "family": "sintetico",
+        "parameter_size": "1B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  ]
+}
