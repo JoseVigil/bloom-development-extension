@@ -10,6 +10,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -67,10 +68,15 @@ def main() -> int:
         import jsonschema  # noqa: F401
         import rich  # noqa: F401
         import typer  # noqa: F401
+        import cryptography  # noqa: F401
     except ImportError as exc:
+        with (AITAP_ROOT / "pyproject.toml").open("rb") as pyproject:
+            deps = tomllib.load(pyproject)["project"]["dependencies"]
+        flag = "" if os.name == "nt" else " --break-system-packages"
+        quoted = " ".join(f'"{dep}"' for dep in deps)
         print(
             "Falta una dependencia de build. Ejecutar: "
-            f"{sys.executable} -m pip install -e {AITAP_ROOT} pyinstaller",
+            f"{sys.executable} -m pip install{flag} {quoted} pyinstaller",
             file=sys.stderr,
         )
         print(str(exc), file=sys.stderr)

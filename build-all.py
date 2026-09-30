@@ -43,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import tomllib
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -810,14 +811,23 @@ def build_aitap() -> StepResult:
 
     python_exe = sys.executable
     dependency_check = subprocess.run(
-        [python_exe, "-c", "import PyInstaller, jsonschema, rich, typer"],
+        [python_exe, "-c", "import PyInstaller, jsonschema, rich, typer, cryptography"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if dependency_check.returncode != 0:
         log("  Instalando dependencias de AITAP y PyInstaller ...")
+        # Mismo criterio que builds/unix/build-brain.sh: dependencias directo en el
+        # Python del sistema, sin venv. No se instala AITAP en modo editable: aitap.spec
+        # toma el codigo desde installer/aitap/src.
+        with (ROOT / "installer" / "aitap" / "pyproject.toml").open("rb") as pyproject:
+            aitap_deps = tomllib.load(pyproject)["project"]["dependencies"]
+        pip_cmd = [python_exe, "-m", "pip", "install", "--quiet"]
+        if not IS_WINDOWS:
+            # PEP 668: el Python de Homebrew/Debian rechaza pip sin este flag.
+            pip_cmd.append("--break-system-packages")
         code, out = run_streaming(
-            [python_exe, "-m", "pip", "install", "-e", str(ROOT / "installer/aitap"), "pyinstaller"],
+            [*pip_cmd, *aitap_deps, "pyinstaller"],
             cwd=ROOT,
             mirror_log=aitap_log,
         )
