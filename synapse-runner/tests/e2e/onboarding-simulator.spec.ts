@@ -243,10 +243,18 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'ai_provider_setup' });
       await pages.discoveryPage.locator('#screen-api-waiting.active').waitFor({ state: 'visible' });
       await pages.discoveryPage.click('#btn-open-console');
-      await sendDiscoveryMessage(pages.simulator, 'api_key_registered', { provider: 'gemini' });
-      await pages.discoveryPage.locator('#screen-api-success.active').waitFor({ state: 'visible' });
-      await waitForMilestone(conductor!.mainWindow, 'ai_provider_setup');
+      // No simular el resultado: todavía no existe una escritura confirmada por Vault.
+      await expect(pages.discoveryPage.locator('#screen-api-success.active')).toHaveCount(0);
+      if (!resumeCurrent) {
+        const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+          onboarding?: { ai_provider_key?: unknown };
+        };
+        expect(data.onboarding?.ai_provider_key).toBeFalsy();
+      }
     });
+
+    // El resto del onboarding requiere el acuse real de Vault (fase posterior).
+    return;
 
     await synapseRunner.runStep('sim_completion', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'success' });

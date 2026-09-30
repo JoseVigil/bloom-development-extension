@@ -1267,7 +1267,7 @@ function forwardToHost(eventName, msg = {}) {
 function logNeverForwardedOnboardingEvents() {
   const onboardingEventIds = [
     'vault_initialized', 'github_app_authorized', 'github_device_code',
-    'github_device_flow_error', 'api_key_registered', 'account_registered'
+    'github_device_flow_error', 'account_registered'
   ];
   const declared = (discoverySchema?.messages || [])
     .filter(m => onboardingEventIds.includes(m.id))
@@ -1578,7 +1578,8 @@ function watchGoogleLoginTab(tabId) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
-  console.log('🔴 RAW-ENTRY', JSON.stringify(msg));
+  // Payloads may contain secrets. Only log the message kind, never its fields.
+  console.log('[Synapse] runtime message', msg?.event || msg?.command || msg?.type || '(unknown)');
 
   // 🔧 FIX (race condition): esperar a que la inicialización (config +
   // discoverySchema, ver ensureInitialized() más arriba) haya terminado
@@ -1594,7 +1595,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   ensureInitialized()
     .then(() => handleRuntimeMessage(msg, sender, sendResp))
     .catch(err => {
-      console.error('[Synapse] ✗ Error de inicialización procesando mensaje entrante:', err, msg);
+      console.error('[Synapse] ✗ Error de inicialización procesando mensaje entrante:', err);
     });
   return true;
 });
@@ -1950,28 +1951,11 @@ function handleRuntimeMessage(msg, sender, sendResp) {
     return true;
   }
 
-  // ── API_KEY_REGISTERED ───────────────────────────────────────────────────
-  // FIX: faltaba por completo. discovery.js escucha este evento vía
-  // chrome.runtime.onMessage (setupAPIKeyListeners) para actualizar la UI y
-  // guardar la key localmente, pero nada lo reenviaba al host nativo — el
-  // step "ai_provider_setup" del onboarding quedaba esperando para siempre.
-  // Mismo patrón que ACCOUNT_REGISTERED/GITHUB_APP_AUTHORIZED: forwardToHost()
-  // arma el payload leyendo discovery.schema.json (id "api_key_registered",
-  // ya declarado ahí — ver logNeverForwardedOnboardingEvents más arriba).
+  // Registration is an outcome of a confirmed Vault write, not a runtime input.
+  // The authorized acknowledgement path is introduced in the next phase.
   if (event === 'API_KEY_REGISTERED') {
-    console.log('[Synapse] 📥 API_KEY_REGISTERED recibido — provider:', msg.provider);
-
-    forwardToHost('API_KEY_REGISTERED', msg);
-
-    forwardToDebugPanel('synapse', 'API_KEY_REGISTERED', {
-      provider:         msg.provider          || null,
-      key_fingerprint:  msg.key_fingerprint   || null,
-      profile_id:       msg.profile_id        || config?.profileId,
-      launch_id:        msg.launch_id         || config?.launchId,
-    }, msg.profile_id || config?.profileId);
-
-    console.log('[Synapse] ✓ API_KEY_REGISTERED → forwarding to native host');
-    sendResp({ received: true });
+    console.warn('[Synapse] API_KEY_REGISTERED rechazado: falta acuse de Nucleus Vault');
+    sendResp({ received: false, error: 'VAULT_ACK_REQUIRED' });
     return true;
   }
 

@@ -753,34 +753,14 @@ class ServerManager:
                     })
 
                 elif msg_type == 'API_KEY_REGISTERED':
-                    # FIX (auditoría 19/07/2026): mismo bug ya documentado arriba en
-                    # GITHUB_APP_AUTHORIZED/ACCOUNT_REGISTERED — sin handler explícito,
-                    # este msg_type caía al `else` de ruteo (más abajo) y nunca se
-                    # emitía a event_bus/Sentinels. Conductor (registrado como 'cli')
-                    # nunca se enteraba, así que ai_provider_setup nunca se persistía
-                    # en nucleus.json y el resume quedaba trabado ahí para siempre.
-                    profile_id      = msg.get('profile_id')
-                    launch_id       = msg.get('launch_id')
-                    provider        = msg.get('provider', '')
-                    key_fingerprint = msg.get('key_fingerprint', '')
-                    logger.info(
-                        f"🔑 [{conn_id}] API_KEY_REGISTERED: "
-                        f"profile={profile_id[:8] if profile_id else '?'} provider={provider}"
-                    )
-                    event = await self.event_bus.add_event(
-                        'ONBOARDING_STEP_COMPLETE',
-                        {
-                            'profile_id':      profile_id,
-                            'step':            'ai_provider_setup',
-                            'original_event':  'API_KEY_REGISTERED',
-                            'provider':        provider,
-                            'key_fingerprint': key_fingerprint,
-                        }
-                    )
-                    await self._broadcast_event(event)
+                    # An unverified event cannot establish that Nucleus Vault
+                    # stored a credential. Keep the step pending until the
+                    # authorized Vault acknowledgement path exists.
+                    logger.warning("API_KEY_REGISTERED rejected: Vault acknowledgement required")
                     await self._send_to_writer(writer, {
                         'type':   'API_KEY_REGISTERED_ACK',
-                        'status': 'ok',
+                        'status': 'error',
+                        'code':   'VAULT_ACK_REQUIRED',
                     })
 
                 elif msg_type == 'SWITCH_ORGANIZATION':
