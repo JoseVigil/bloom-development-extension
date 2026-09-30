@@ -484,6 +484,7 @@ def run_streaming(
     cmd: list[str],
     cwd: Path | None = None,
     env: dict | None = None,
+    mirror_log: Path | None = None,
 ) -> tuple[int, str]:
     """
     Ejecuta un comando escribiendo cada línea al log en tiempo real (streaming).
@@ -493,27 +494,35 @@ def run_streaming(
     en tiempo real y no quede truncado si el proceso muere.
     Retorna (returncode, output_completo).
     """
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        encoding="utf-8",
-        errors="replace",
-    )
-    lines: list[str] = []
-    assert proc.stdout is not None
-    for raw_line in proc.stdout:
-        line = raw_line.rstrip()
-        lines.append(line)
-        log(line)
-        # Flush explícito para que el FileHandler escriba al disco en tiempo real
-        if _logger:
-            for handler in _logger.handlers:
-                handler.flush()
-    proc.wait()
-    return proc.returncode, "\n".join(lines)
+    mirror = mirror_log.open("a", encoding="utf-8") if mirror_log else None
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+            errors="replace",
+        )
+        lines: list[str] = []
+        assert proc.stdout is not None
+        for raw_line in proc.stdout:
+            line = raw_line.rstrip()
+            lines.append(line)
+            log(line)
+            if mirror:
+                mirror.write(line + "\n")
+                mirror.flush()
+            # Flush explícito para que el FileHandler escriba al disco en tiempo real
+            if _logger:
+                for handler in _logger.handlers:
+                    handler.flush()
+        proc.wait()
+        return proc.returncode, "\n".join(lines)
+    finally:
+        if mirror:
+            mirror.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -779,9 +788,25 @@ def build_brain() -> StepResult:
 
 def build_aitap() -> StepResult:
     """Empaqueta AITAP y genera sus ayudas desde el artefacto resultante."""
+    aitap_log = NUCLEUS_HOME / "logs" / "build" / "aitap.build.log"
+    aitap_log.parent.mkdir(parents=True, exist_ok=True)
+    aitap_log.write_text(
+        f"AITAP build log - {datetime.datetime.now().isoformat()}\n"
+        f"Platform: {sys.platform}\n"
+        f"Repository: {ROOT}\n\n",
+        encoding="utf-8",
+    )
+    log(f"  📝 Log AITAP → {aitap_log}")
+
+    def record(message: str) -> None:
+        with aitap_log.open("a", encoding="utf-8") as handle:
+            handle.write(message.rstrip() + "\n")
+
     build_script = BUILDS["aitap"]
     if not build_script or not build_script.exists():
-        return StepResult("AITAP", False, error=f"Script no encontrado: {build_script}")
+        error = f"Script no encontrado: {build_script}"
+        record(f"FAILED: {error}")
+        return StepResult("AITAP", False, error=error)
 
     python_exe = sys.executable
     dependency_check = subprocess.run(
@@ -794,8 +819,10 @@ def build_aitap() -> StepResult:
         code, out = run_streaming(
             [python_exe, "-m", "pip", "install", "-e", str(ROOT / "installer/aitap"), "pyinstaller"],
             cwd=ROOT,
+            mirror_log=aitap_log,
         )
         if code != 0:
+            record(f"FAILED: dependency installation exited with code {code}")
             return StepResult("AITAP", False, error=out)
 
     # Incrementar y resolver build number antes de lanzar el script — mismo
@@ -810,9 +837,12 @@ def build_aitap() -> StepResult:
         [python_exe, str(build_script)],
         cwd=build_script.parent,
         env=aitap_env,
+        mirror_log=aitap_log,
     )
     if code != 0:
+        record(f"FAILED: AITAP builder exited with code {code}")
         return StepResult("AITAP", False, error=out)
+    record("SUCCESS: AITAP build completed")
     return StepResult("AITAP", True, output=out)
 
 
