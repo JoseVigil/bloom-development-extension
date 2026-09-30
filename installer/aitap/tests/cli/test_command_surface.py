@@ -20,7 +20,7 @@ EXPECTED = {
     "keys": {"list"},
     "route": {"decide", "supply", "policy"},
     "accounting": {"usage"},
-    "local": {"preflight"},
+    "local": {"preflight", "ensure"},
 }
 
 
@@ -136,3 +136,43 @@ def test_packaged_config_holds_references_only():
     references = config["intelligence_supply"]["credential_references"]
     assert references and all(k.startswith("credential-ref://") for k in references)
     assert all(re.fullmatch(r"[a-z0-9-]+-key:[a-z0-9_-]+", v) for v in references.values())
+
+
+def test_local_ensure_envelopes(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    env = {"BLOOM_APPDATA_DIR": str(tmp_path / "appdata")}
+    missing = _cli("--json", "local", "ensure", "--mode", "check", "--model", "x", env=env)
+    assert missing.returncode == 1 and json.loads(missing.stdout)["error"]["code"] == "STATE_DIR_REQUIRED"
+    bad = _cli("--json", "local", "ensure", "--mode", "check", "--state-dir", str(state), env=env)
+    error = json.loads(bad.stdout)["error"]
+    assert bad.returncode == 1 and error["code"] == "INVALID_REQUEST"
+    assert set(error) == {"code", "message", "stage", "retryable", "details"}
+    unknown = _cli("--json", "local", "ensure", "--mode", "check", "--model", "no-existe", "--state-dir", str(state),
+                   env=env)
+    assert unknown.returncode == 1 and json.loads(unknown.stdout)["error"]["code"] == "UNKNOWN_MODEL"
+
+
+def test_local_ensure_apply_without_authorization_is_action_required(tmp_path):
+    from aitap.local.catalog import load_catalog
+    catalog = load_catalog()
+    state = tmp_path / "state"
+    state.mkdir()
+    request = {"schema_version": "cognituum.local-intelligence.ensure-request/v1", "request_id": "req-1",
+               "correlation_id": "corr-1", "mode": "apply", "model_id": catalog.mandatory_ids[0],
+               "catalog_sha256": catalog.fingerprint, "authorization_ref": None}
+    environment = {**os.environ, "PYTHONPATH": str(SRC), "PYTHONIOENCODING": "utf-8",
+                   "BLOOM_APPDATA_DIR": str(tmp_path / "appdata")}
+    result = subprocess.run([sys.executable, "-B", "-m", "aitap", "--json", "local", "ensure", "--mode", "apply",
+                             "--request", "-", "--state-dir", str(state)], input=json.dumps(request),
+                            capture_output=True, text=True, encoding="utf-8", timeout=60, env=environment)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["operation"] == "local.ensure"
+    assert payload["data"]["status"] == "action_required" and payload["data"]["action_required"] == "AUTHORIZATION_REQUIRED"
+    assert not any(state.rglob("*"))
+    human = subprocess.run([sys.executable, "-B", "-m", "aitap", "local", "ensure", "--mode", "apply", "--request", "-",
+                            "--state-dir", str(state)], input=json.dumps(request), capture_output=True, text=True,
+                           encoding="utf-8", timeout=60, env=environment)
+    assert human.returncode == 0 and not human.stdout.lstrip().startswith("{")
+    assert "AUTHORIZATION_REQUIRED" in human.stdout

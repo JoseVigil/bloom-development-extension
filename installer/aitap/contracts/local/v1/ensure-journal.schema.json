@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.ensure-journal/v1",
+  "title": "Journal durable del aprovisionamiento local por modelo",
+  "description": "Estado de AITAP en <AITAP_STATE_DIR>/local/ensure/<model_id>.json. La fase es una indicacion: en cada apply la observacion de Ollama (/api/tags) gana sobre el journal. quarantined es un estado logico; AITAP no mueve ni borra pesos. No es telemetria ni contabilidad.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "model_id", "ollama_ref", "manifest_digest_expected", "phase", "request_id",
+               "correlation_id", "authorization_ref", "applies", "progress", "last_observation", "smoke_id",
+               "last_error", "last_receipt", "updated_at"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.ensure-journal/v1"},
+    "model_id": {"type": "string", "minLength": 1},
+    "ollama_ref": {"type": "string", "minLength": 1},
+    "manifest_digest_expected": {"$ref": "#/$defs/sha256"},
+    "phase": {"enum": ["queued", "downloading", "verifying", "smoke_testing", "ready", "failed", "quarantined"]},
+    "request_id": {"type": "string", "minLength": 1},
+    "correlation_id": {"type": "string", "minLength": 1},
+    "authorization_ref": {"type": "string", "minLength": 1},
+    "applies": {"type": "integer", "minimum": 1},
+    "progress": {
+      "oneOf": [{"type": "null"}, {
+        "type": "object", "additionalProperties": false, "required": ["status", "bytes_completed", "bytes_total", "updated_at"],
+        "properties": {"status": {"type": "string"}, "bytes_completed": {"type": "integer", "minimum": 0},
+                       "bytes_total": {"type": "integer", "minimum": 0}, "updated_at": {"type": "string"}}}]
+    },
+    "last_observation": {
+      "oneOf": [{"type": "null"}, {
+        "type": "object", "additionalProperties": false, "required": ["installed", "manifest_digest", "observed_at"],
+        "properties": {"installed": {"type": ["boolean", "null"]},
+                       "manifest_digest": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+                       "observed_at": {"type": "string"}}}]
+    },
+    "smoke_id": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "last_error": {
+      "oneOf": [{"type": "null"}, {
+        "type": "object", "additionalProperties": false, "required": ["code", "stage", "retryable"],
+        "properties": {"code": {"type": "string"}, "stage": {"type": "string"}, "retryable": {"type": "boolean"}}}]
+    },
+    "last_receipt": {"type": ["object", "null"]},
+    "updated_at": {"type": "string", "minLength": 1}
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

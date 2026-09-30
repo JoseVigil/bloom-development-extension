@@ -104,6 +104,31 @@ def test_missing_service_blocks_ollama_models(tmp_path):
     assert "RUNTIME_SERVICE_ABSENT" in fg["reasons"] and fg["verdict"] == "BLOQUEADO"
 
 
+def test_missing_service_keeps_machine_eligibility(tmp_path):
+    """El servicio ausente es estado del runtime: no bloquea la elegibilidad de la maquina."""
+    fixture = json.loads((FIXTURES / "darwin-x86_64-4gib-13.7.8.json").read_text())
+    stable = copy.deepcopy(fixture["observed"]["stable"])
+    stable["ollama"].update(service_defined=False, binary_present=False)
+    result = _run(fixture, tmp_path, stable={"ollama": stable["ollama"]})
+    Draft202012Validator(SCHEMA).validate(result)
+    fg = next(v for v in result["verdicts"] if v["mandatory"])
+    assert fg["verdict"] == "BLOQUEADO" and fg["runtime_reasons"] == ["RUNTIME_SERVICE_ABSENT"]
+    assert fg["machine_eligibility"]["verdict"] == "APTO_CON_SALVEDADES"
+    assert not any(r.startswith("RUNTIME_") for r in fg["machine_eligibility"]["reasons"])
+    healthy = _run(fixture, tmp_path)
+    assert healthy["machine_eligibility_fingerprint"] == result["machine_eligibility_fingerprint"]
+    assert healthy["eligibility_fingerprint"] != result["eligibility_fingerprint"]
+
+
+def test_machine_blockers_still_block_machine_eligibility(tmp_path):
+    fixture = json.loads((FIXTURES / "darwin-x86_64-4gib-13.7.8.json").read_text())
+    result = _run(fixture, tmp_path, catalog=_synthetic_catalog(4096),
+                  selection=["functiongemma-270m", "modelo-sintetico"])
+    synthetic = next(v for v in result["verdicts"] if v["model_id"] == "modelo-sintetico")
+    assert synthetic["machine_eligibility"]["verdict"] == "BLOQUEADO"
+    assert "RAM_TOTAL_INSUFFICIENT" in synthetic["machine_eligibility"]["reasons"]
+
+
 def test_unknown_architecture_and_model_selection(tmp_path):
     fixture = json.loads((FIXTURES / "linux-x86_64-companion-missing.json").read_text())
     result = _run(fixture, tmp_path, stable={"arch": "arm64"})

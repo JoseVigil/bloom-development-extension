@@ -11,6 +11,7 @@
     "catalog_fingerprint": {"$ref": "#/$defs/sha256"},
     "selection": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
     "eligibility_fingerprint": {"$ref": "#/$defs/sha256"},
+    "machine_eligibility_fingerprint": {"$ref": "#/$defs/sha256"},
     "stable_profile": {
       "type": "object", "additionalProperties": false,
       "required": ["os", "os_version", "arch", "cpu_features", "ram_total_mb", "ollama"],
@@ -50,7 +51,19 @@
             "RUNTIME_SERVICE_ABSENT", "RUNTIME_COMPANION_MISSING", "GPU_ACCEL_UNAVAILABLE",
             "CATALOG_UNMEASURED_ON_PLATFORM"]}},
           "platform_status": {"enum": ["measured", "a_medir", null]},
-          "coexistence_set": {"type": "array", "items": {"type": "string"}}
+          "coexistence_set": {"type": "array", "items": {"type": "string"}},
+          "machine_eligibility": {
+            "type": "object", "additionalProperties": false, "required": ["verdict", "reasons"],
+            "properties": {
+              "verdict": {"enum": ["APTO", "APTO_CON_SALVEDADES", "BLOQUEADO"]},
+              "reasons": {"type": "array", "uniqueItems": true, "items": {"enum": [
+                "OS_UNSUPPORTED", "ARCH_UNSUPPORTED", "OS_BELOW_OBSERVED_MINIMUM", "OS_BELOW_VENDOR_MINIMUM",
+                "RAM_TOTAL_INSUFFICIENT", "COEXISTENCE_BUDGET_EXCEEDED", "COEXISTENCE_UNMEASURED",
+                "GPU_ACCEL_UNAVAILABLE", "CATALOG_UNMEASURED_ON_PLATFORM"]}}
+            }
+          },
+          "runtime_reasons": {"type": "array", "uniqueItems": true, "items": {"enum": [
+            "RUNTIME_SERVICE_ABSENT", "RUNTIME_COMPANION_MISSING"]}}
         }
       }
     },

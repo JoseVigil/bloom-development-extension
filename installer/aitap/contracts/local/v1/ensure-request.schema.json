@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.ensure-request/v1",
+  "title": "Pedido de aprovisionamiento local (aitap local ensure)",
+  "description": "El modelo, la referencia de Ollama, el digest y el tamano salen siempre del catalogo empaquetado; el pedido solo los identifica. apply exige authorization_ref emitida por Nucleus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "correlation_id", "mode", "model_id", "catalog_sha256"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.ensure-request/v1"},
+    "request_id": {"$ref": "#/$defs/identifier"},
+    "correlation_id": {"$ref": "#/$defs/identifier"},
+    "mode": {"enum": ["check", "apply"]},
+    "model_id": {"$ref": "#/$defs/identifier"},
+    "catalog_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "authorization_ref": {"oneOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+  }
+}

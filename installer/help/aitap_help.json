@@ -142,6 +142,17 @@
             "aitap local preflight",
             "aitap --json local preflight --model functiongemma-270m"
           ]
+        },
+        {
+          "name": "ensure",
+          "category": "local",
+          "description": "Aprovisionamiento local de un modelo del catalogo por Ollama: check observa sin escribir; apply exige authorization_ref verificada por Nucleus, descarga solo si falta, verifica el digest del catalogo y corre una prueba de humo contabilizada",
+          "requires_vault": false,
+          "aliases": [],
+          "examples": [
+            "aitap --json local ensure --mode check --model <model_id> --state-dir <dir>",
+            "aitap --json local ensure --mode apply --request - --state-dir <dir>"
+          ]
         }
       ]
     }

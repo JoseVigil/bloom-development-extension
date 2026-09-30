@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.provision-authorization-result/v1",
+  "title": "Respuesta de Nucleus a la verificacion de una authorization_ref de aprovisionamiento local",
+  "description": "Nucleus la escribe en stdout. No contiene secretos. Cualquier salida que no valide contra este schema, que no repita el binding pedido, un exit code distinto de cero o un timeout se tratan como autorizacion no verificable (fallo cerrado).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "reason", "grant_id", "request_id", "operation", "model_id", "verified_at"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.provision-authorization-result/v1"},
+    "status": {"enum": ["allowed", "denied"]},
+    "reason": {"enum": ["GRANTED", "GRANT_NOT_FOUND", "GRANT_EXPIRED", "GRANT_REVOKED", "MODEL_NOT_GRANTED",
+                         "CATALOG_MISMATCH", "CONSENT_MISSING", "CONSENT_REVOKED", "SIGNATURE_INVALID", "REPLAY",
+                         "ORGANIZATION_MISMATCH", "AUTHORITY_UNAVAILABLE"]},
+    "grant_id": {"type": "string", "minLength": 1},
+    "request_id": {"type": "string", "minLength": 1},
+    "operation": {"enum": ["provision", "smoke"]},
+    "model_id": {"type": "string", "minLength": 1},
+    "limits": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "required": ["max_bytes", "smoke"],
+      "properties": {
+        "max_bytes": {"type": "integer", "minimum": 0},
+        "smoke": {
+          "type": "object", "additionalProperties": false,
+          "required": ["max_input_tokens", "max_output_tokens", "max_attempts"],
+          "properties": {
+            "max_input_tokens": {"type": "integer", "minimum": 1},
+            "max_output_tokens": {"type": "integer", "minimum": 1},
+            "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10}
+          }
+        }
+      }
+    },
+    "consent_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "valid_until": {"type": ["string", "null"]},
+    "verified_at": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "allowed"}}},
+     "then": {"required": ["limits", "consent_ids", "valid_until"],
+              "properties": {"reason": {"const": "GRANTED"}, "limits": {"type": "object"}, "valid_until": {"type": "string"}}}},
+    {"if": {"properties": {"status": {"const": "denied"}}},
+     "then": {"properties": {"reason": {"not": {"const": "GRANTED"}}}}}
+  ]
+}

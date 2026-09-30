@@ -1,0 +1,7 @@
+{"status":"pulling manifest"}
+{"status":"pulling 415f8f959d80","digest":"sha256:415f8f959d807bd4d4da891f01225d7b330416947fb011a8473080ae4fd07885","total":300807157,"completed":0}
+{"status":"pulling 415f8f959d80","digest":"sha256:415f8f959d807bd4d4da891f01225d7b330416947fb011a8473080ae4fd07885","total":300807157,"completed":150403578}
+{"status":"pulling 415f8f959d80","digest":"sha256:415f8f959d807bd4d4da891f01225d7b330416947fb011a8473080ae4fd07885","total":300807157,"completed":300807157}
+{"status":"verifying sha256 digest"}
+{"status":"writing manifest"}
+{"status":"success"}

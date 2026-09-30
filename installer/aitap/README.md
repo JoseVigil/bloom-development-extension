@@ -18,7 +18,10 @@ modelo `model`, `installed`, `available` y `manifest_sha256` observados en
 por loopback y aplica la política de acceso (ver "Suministro local por
 Ollama" abajo). Ningún registry ni política empaquetados declaran todavía un
 backend local ni un permiso: hoy todo pedido local termina en
-`NO_ELIGIBLE_ROUTE` o `ACCESS_DENIED`. Todavía no hay aprovisionamiento. Toda
+`NO_ELIGIBLE_ROUTE` o `ACCESS_DENIED`. El aprovisionamiento autorizado
+(`aitap local ensure`) está implementado del lado de AITAP; la verificación
+de su autorización en Nucleus todavía no existe, así que en una instalación
+real `apply` falla cerrado (ver "Aprovisionamiento local" abajo). Toda
 invocación desde Core pasa por Nucleus.
 
 > **Auditoría completada:** clasificación y estado en
@@ -85,15 +88,20 @@ src/aitap/
     keys/        list                    credential_ref -> key_id (sin Vault)
     route/       decide, supply, policy  grifo: decision, suministro, politica
     accounting/  usage                   lectura de la Contabilidad
-    local/       preflight               verificacion previa de solo lectura
+    local/       preflight, ensure       verificacion previa y aprovisionamiento autorizado
   access/        politica de acceso y cuotas por modelo (carga y validacion)
   accounting/    journal durable (store) y agregados de lectura (usage)
   health/        sondas de dependencias
-  local/         catalogo y verificacion previa por sistema (darwin/linux/windows)
+  local/         catalogo, verificacion previa por sistema (darwin/linux/windows),
+                 aprovisionamiento (ensure), autorizacion con Nucleus, pull de Ollama
+                 y guard de rutas de escritura
+  service_identity.py  identidad de servicio y vinculacion con la instalacion (neutral)
   core/
     context.py            GlobalContext (json_mode, verbose)
 local/catalog/            catalogo de modelos locales (datos, empaquetado)
-contracts/local/v1/       schemas del catalogo, verificacion previa y politica de acceso
+contracts/local/v1/       schemas del catalogo, verificacion previa, politica de acceso,
+                          ensure (pedido, resultado, journal), autorizacion con Nucleus
+                          y contabilidad de la prueba de humo
 scripts/
   generate_help.py        vuelca a installer/help/aitap_help.{json,txt}
 ```
@@ -116,6 +124,8 @@ aitap --json route policy --consumer brain --intent-type gen \
     --policy-version mandate-gen-local/v1 --model <model_id>   # permiso efectivo: data.check
 aitap accounting usage --state-dir <dir>
 aitap local preflight           # veredicto por modelo; no descarga nada
+aitap --json local ensure --mode check --model <model_id> --state-dir <dir>   # observa, no escribe
+aitap --json local ensure --mode apply --request - --state-dir <dir>          # pedido por stdin
 # Con --json todos los comandos devuelven {"status","operation","data"} o el
 # envelope de error {"status":"error","error":{code,message,stage,retryable,details}}.
 # route decide y route supply conservan su contrato JSON vigente en caso de exito.
@@ -175,9 +185,45 @@ Contrato con MANDATE: Project BTIPS,
   `AITAP_REAL_OLLAMA=1 PYTHONPATH=src python3 -m pytest tests/local/test_real_ollama_opt_in.py -s`.
   El modelo obligatorio del catálogo se usa sólo como prueba de transporte.
 
+## Aprovisionamiento local (`aitap local ensure`)
+
+Diseño y decisiones: Project BTIPS,
+`AITAP/LLM_LOCAL/Propuesta_Catalogo_Integraciones_Inteligencia_y_Vertical_v0_4.md`
+(M1, variante A) y sus antecesoras v0.2 y v0.3.
+
+- **`check`**: solo lectura. Observa `/api/tags`, el journal y la prueba de
+  humo; no escribe, no descarga y no pide autorización.
+- **`apply`**: el pedido (`ensure-request/v1`) llega por stdin o archivo y
+  sólo identifica el modelo; referencia, digest y tamaño salen del catálogo.
+  Sin `authorization_ref` devuelve `action_required` sin tocar Ollama.
+- **Autorización:** AITAP firma con su identidad de servicio un pedido
+  (`provision-authorization-request/v1`) y lo envía por stdin a
+  `nucleus --json intelligence local authorization verify` (contrato
+  provisional). Se verifica por separado la operación `provision` y la
+  operación `smoke`. Salida inválida, binding distinto, error o timeout:
+  fallo cerrado. Si la licencia lo exige, el grant debe citar consentimientos.
+- **Reconciliación:** lock no bloqueante por modelo; la observación de
+  Ollama gana sobre el journal; la descarga (`POST /api/pull`) sólo ocurre si
+  el modelo falta. Un digest distinto del catálogo deja el modelo en
+  cuarentena lógica: AITAP no mueve ni borra pesos, y el grifo ya lo rechaza
+  antes de cada envío.
+- **Prueba de humo:** por el mismo `OllamaProvider` del suministro, dentro de
+  la ranura de concurrencia del backend, con los límites del grant. Una por
+  modelo + digest + runtime. Se guardan sólo tokens, latencia y el digest de
+  la respuesta; nunca se interpreta ni se ejecuta lo que el modelo devuelva.
+- **Contabilidad técnica:** `<AITAP_STATE_DIR>/provisioning/smoke/`, consumidor
+  reservado `aitap.provisioning`, costo `local_zero`. `accounting usage` la
+  informa en la sección `provisioning_smoke`, sin alterar filas ni totales de
+  los consumidores de inferencia.
+- **Escrituras:** sólo bajo la raíz de estado, validada por
+  `local/paths.py` (sin `..`, sin enlaces que escapen, nunca dentro de un
+  proyecto). No registra servicios ni escribe telemetría.
+
 ## Pendiente
 
-- Aprovisionamiento local (`aitap local ensure`).
+- Verificación de la autorización de aprovisionamiento en Nucleus
+  (`nucleus --json intelligence local authorization verify`) y grant en la
+  proyección de autoridad (M2).
 - Política, registry y permiso local para el primer Mandate `gen`, con el
   modelo que se elija tras la prueba de aptitud.
 - Consumidores de cada modelo local (decisión C).

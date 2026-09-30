@@ -33,6 +33,8 @@ BLOCKING = {
     "RAM_TOTAL_INSUFFICIENT", "COEXISTENCE_BUDGET_EXCEEDED",
     "RUNTIME_SERVICE_ABSENT", "RUNTIME_COMPANION_MISSING",
 }
+# Codigos que describen el runtime (servicio y acompanantes), no la maquina.
+RUNTIME_REASONS = {"RUNTIME_SERVICE_ABSENT", "RUNTIME_COMPANION_MISSING"}
 CAVEATS = {
     "OS_BELOW_VENDOR_MINIMUM", "GPU_ACCEL_UNAVAILABLE",
     "CATALOG_UNMEASURED_ON_PLATFORM", "COEXISTENCE_UNMEASURED",
@@ -111,25 +113,37 @@ def evaluate_model(model: dict[str, Any], stable: dict[str, Any], catalog: Catal
         if resident + coexistence["baseline_cognituum_mb"] > budget:
             reasons.append("COEXISTENCE_BUDGET_EXCEEDED")
     reasons = sorted(dict.fromkeys(reasons))
-    if any(r in BLOCKING for r in reasons):
-        verdict = "BLOQUEADO"
-    elif reasons:
-        verdict = "APTO_CON_SALVEDADES"
-    else:
-        verdict = "APTO"
+    # Elegibilidad de la maquina: el mismo criterio sin los codigos del runtime, para
+    # poder ofrecer un modelo antes de registrar el servicio. ``verdict`` no cambia.
+    machine_reasons = [r for r in reasons if r not in RUNTIME_REASONS]
     return {
         "model_id": model["model_id"],
         "backend_id": model["backend"]["backend_id"],
         "mandatory": model["model_id"] in catalog.mandatory_ids,
-        "verdict": verdict,
+        "verdict": _verdict(reasons),
         "reasons": reasons,
         "platform_status": entry["status"] if entry else None,
         "coexistence_set": sorted(selection),
+        "machine_eligibility": {"verdict": _verdict(machine_reasons), "reasons": machine_reasons},
+        "runtime_reasons": [r for r in reasons if r in RUNTIME_REASONS],
     }
+
+
+def _verdict(reasons: list[str]) -> str:
+    if any(r in BLOCKING for r in reasons):
+        return "BLOQUEADO"
+    return "APTO_CON_SALVEDADES" if reasons else "APTO"
 
 
 def eligibility_fingerprint(stable: dict[str, Any], catalog: Catalog, selection: list[str]) -> str:
     return canonical_digest({"stable_profile": stable, "catalog_fingerprint": catalog.fingerprint,
+                             "selection": sorted(selection)})
+
+
+def machine_eligibility_fingerprint(stable: dict[str, Any], catalog: Catalog, selection: list[str]) -> str:
+    """Huella del perfil estable sin el estado del runtime de Ollama."""
+    machine = {k: v for k, v in stable.items() if k != "ollama"}
+    return canonical_digest({"machine_profile": machine, "catalog_fingerprint": catalog.fingerprint,
                              "selection": sorted(selection)})
 
 

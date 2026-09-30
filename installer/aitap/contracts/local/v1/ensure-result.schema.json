@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.ensure-result/v1",
+  "title": "Resultado de aitap local ensure",
+  "description": "ready solo con digest observado igual al del catalogo y prueba de humo aprobada para ese digest y runtime. Nunca contiene prompts, respuestas del modelo ni secretos.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mode", "status", "request_id", "correlation_id", "model_id", "ollama_ref",
+               "manifest_digest", "phase", "progress", "smoke", "receipt", "journal_ref", "fingerprints",
+               "action_required", "error", "observed_at"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.ensure-result/v1"},
+    "mode": {"enum": ["check", "apply"]},
+    "status": {"enum": ["ready", "in_progress", "action_required", "failed", "rejected"]},
+    "request_id": {"type": ["string", "null"]},
+    "correlation_id": {"type": ["string", "null"]},
+    "model_id": {"type": "string", "minLength": 1},
+    "ollama_ref": {"type": "string", "minLength": 1},
+    "manifest_digest": {
+      "type": "object", "additionalProperties": false, "required": ["expected", "observed"],
+      "properties": {"expected": {"$ref": "#/$defs/sha256"}, "observed": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}}
+    },
+    "phase": {"enum": ["queued", "downloading", "verifying", "smoke_testing", "ready", "failed", "quarantined", null]},
+    "progress": {
+      "oneOf": [{"type": "null"}, {
+        "type": "object", "additionalProperties": false, "required": ["bytes_completed", "bytes_total"],
+        "properties": {"bytes_completed": {"type": "integer", "minimum": 0}, "bytes_total": {"type": "integer", "minimum": 0}}}]
+    },
+    "smoke": {
+      "oneOf": [{"type": "null"}, {
+        "type": "object", "additionalProperties": false,
+        "required": ["smoke_id", "passed", "attempts", "input_tokens", "output_tokens", "latency_ms", "response_sha256"],
+        "properties": {
+          "smoke_id": {"$ref": "#/$defs/sha256"},
+          "passed": {"type": "boolean"},
+          "attempts": {"type": "integer", "minimum": 0},
+          "input_tokens": {"type": ["integer", "null"], "minimum": 0},
+          "output_tokens": {"type": ["integer", "null"], "minimum": 0},
+          "latency_ms": {"type": ["integer", "null"], "minimum": 0},
+          "response_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+        }}]
+    },
+    "receipt": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/receipt"}]},
+    "journal_ref": {"type": ["string", "null"]},
+    "fingerprints": {
+      "type": "object", "additionalProperties": false, "required": ["catalog", "runtime", "machine_eligibility"],
+      "properties": {
+        "catalog": {"$ref": "#/$defs/sha256"},
+        "runtime": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "machine_eligibility": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+      }
+    },
+    "action_required": {"enum": ["AUTHORIZATION_REQUIRED", "CONSENT_REQUIRED", "RUNTIME_NOT_READY", "MODEL_NOT_PROVISIONED", "SMOKE_PENDING", null]},
+    "error": {
+      "oneOf": [{"type": "null"}, {
+        "type": "object", "additionalProperties": false, "required": ["code", "stage", "retryable", "details"],
+        "properties": {"code": {"type": "string", "minLength": 1}, "stage": {"type": "string", "minLength": 1},
+                       "retryable": {"type": "boolean"}, "details": {"type": "object"}}}]
+    },
+    "observed_at": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "receipt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["receipt_id", "request_id", "correlation_id", "authorization_ref", "consent_ids", "model_id",
+                   "manifest_digest", "bytes_downloaded", "duration_ms", "runtime_version", "smoke_id", "result", "finished_at"],
+      "properties": {
+        "receipt_id": {"$ref": "#/$defs/sha256"},
+        "request_id": {"type": "string"},
+        "correlation_id": {"type": "string"},
+        "authorization_ref": {"type": "string"},
+        "consent_ids": {"type": "array", "items": {"type": "string"}},
+        "model_id": {"type": "string"},
+        "manifest_digest": {
+          "type": "object", "additionalProperties": false, "required": ["expected", "observed"],
+          "properties": {"expected": {"$ref": "#/$defs/sha256"}, "observed": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}}
+        },
+        "bytes_downloaded": {"type": "integer", "minimum": 0},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "runtime_version": {"type": ["string", "null"]},
+        "smoke_id": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "result": {"enum": ["ready", "failed", "quarantined"]},
+        "finished_at": {"type": "string"}
+      }
+    }
+  }
+}

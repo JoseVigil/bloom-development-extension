@@ -77,3 +77,31 @@ def test_errors(tmp_path):
     with pytest.raises(UsageError):
         parse_since("ayer")
     assert parse_since("2026-09-01T00:00:00") == datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+
+def test_provisioning_smoke_is_reported_apart(state):
+    folder = state / "provisioning" / "smoke"
+    smoke = AccountingStore(folder)
+    smoke.write(digest("smoke-a"), {"consumer_id": "aitap.provisioning", "backend_id": "local.ollama.x",
+                                    "ollama_ref": "x:1", "state": "passed", "attempts": [
+        {"started_at": "2026-09-30T10:00:00+00:00", "outcome": "failed", "usage": None},
+        {"started_at": "2026-09-30T10:01:00+00:00", "outcome": "completed",
+         "usage": {"input_tokens": 18, "output_tokens": 3}}]})
+    (folder / ("e" * 64 + ".json")).write_text(json.dumps({"journal": {}, "journal_digest": "sha256:" + "0" * 64}))
+    result = summarize(state)
+    assert result["totals"]["completed"] == 3 and result["journals_scanned"] == 4
+    section = result["provisioning_smoke"]
+    assert section["records_scanned"] == 2 and section["records_invalid"] == 1
+    row = section["rows"][0]
+    assert row["kind"] == "provisioning_smoke" and row["consumer_id"] == "aitap.provisioning"
+    assert (row["attempts"], row["completed"], row["errors"]) == (2, 1, 1)
+    assert (row["input_tokens"], row["output_tokens"], row["cost_usd"]) == (18, 3, 0.0)
+    assert summarize(state, consumer_id="brain")["provisioning_smoke"]["rows"] == []
+    assert summarize(state, since=parse_since("2026-09-30T10:00:30Z"))["provisioning_smoke"]["totals"]["attempts"] == 1
+
+
+def test_without_provisioning_the_section_is_empty(state):
+    section = summarize(state)["provisioning_smoke"]
+    assert section == {"records_scanned": 0, "records_invalid": 0, "rows": [],
+                       "totals": {"attempts": 0, "completed": 0, "errors": 0, "in_flight": 0, "input_tokens": 0,
+                                  "output_tokens": 0, "cost_usd": 0.0}}

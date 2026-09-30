@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.provision-authorization-request/v1",
+  "title": "Pedido firmado de AITAP a Nucleus para verificar una authorization_ref de aprovisionamiento local",
+  "description": "Se envia por stdin a `nucleus --json intelligence local authorization verify`. La firma Ed25519 de la identidad de servicio de AITAP cubre, en este orden y separados por salto de linea: BLOOM-AITAP-LOCAL-PROVISION-VERIFY-v1, grant_id, organization_id, installation_id, operation, model_id, catalog_sha256, manifest_digest, request_id, correlation_id, timestamp, nonce. No contiene secretos.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "grant_id", "organization_id", "installation_id", "operation", "model_id",
+               "catalog_sha256", "manifest_digest", "request_id", "correlation_id", "timestamp", "nonce", "signature"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.provision-authorization-request/v1"},
+    "grant_id": {"$ref": "#/$defs/identifier"},
+    "organization_id": {"$ref": "#/$defs/line"},
+    "installation_id": {"$ref": "#/$defs/line"},
+    "operation": {"enum": ["provision", "smoke"]},
+    "model_id": {"$ref": "#/$defs/identifier"},
+    "catalog_sha256": {"$ref": "#/$defs/sha256"},
+    "manifest_digest": {"$ref": "#/$defs/sha256"},
+    "request_id": {"$ref": "#/$defs/identifier"},
+    "correlation_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$"},
+    "nonce": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}$"},
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "line": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\r\\n]+$"},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

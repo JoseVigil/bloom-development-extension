@@ -9,6 +9,7 @@ from aitap.cli.registry import CommandRegistry
 from aitap.commands.accounting.usage import AccountingUsageCommand
 from aitap.commands.health.check import HealthCheckCommand
 from aitap.commands.keys.keys_list import KeysListCommand
+from aitap.commands.local.ensure import LocalEnsureCommand
 from aitap.commands.local.preflight import LocalPreflightCommand
 from aitap.commands.route.intelligence_supply import IntelligenceSupplyCommand
 from aitap.commands.route.policy import RoutePolicyCommand
@@ -29,7 +30,7 @@ COMMAND_CLASSES = (
     # ACCOUNTING
     AccountingUsageCommand,
     # LOCAL
-    LocalPreflightCommand,
+    LocalPreflightCommand, LocalEnsureCommand,
 )
 
 

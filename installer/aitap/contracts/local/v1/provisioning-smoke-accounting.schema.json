@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cognituum.local-intelligence.provisioning-smoke-accounting/v1",
+  "title": "Registro contable de la prueba de humo del aprovisionamiento local",
+  "description": "Contabilidad tecnica separada del contrato de inferencias v2: consumidor reservado aitap.provisioning, costo local_zero. Un registro por modelo, digest y runtime (smoke_id); cada intento es una entrada. Nunca guarda el prompt ni la respuesta: solo su digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "smoke_id", "consumer_id", "model_id", "backend_id", "ollama_ref", "manifest_digest",
+               "runtime_fingerprint", "runtime_version", "state", "attempts"],
+  "properties": {
+    "schema_version": {"const": "cognituum.local-intelligence.provisioning-smoke-accounting/v1"},
+    "smoke_id": {"$ref": "#/$defs/sha256"},
+    "consumer_id": {"const": "aitap.provisioning"},
+    "model_id": {"type": "string", "minLength": 1},
+    "backend_id": {"type": "string", "minLength": 1},
+    "ollama_ref": {"type": "string", "minLength": 1},
+    "manifest_digest": {"$ref": "#/$defs/sha256"},
+    "runtime_fingerprint": {"$ref": "#/$defs/sha256"},
+    "runtime_version": {"type": ["string", "null"]},
+    "state": {"enum": ["in_flight", "passed", "failed"]},
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["number", "request_id", "correlation_id", "authorization_ref", "started_at", "finished_at",
+                     "outcome", "delivery_uncertain", "usage", "latency_ms", "cost_status", "cost_usd", "response_sha256", "error_code"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "request_id": {"type": "string", "minLength": 1},
+          "correlation_id": {"type": "string", "minLength": 1},
+          "authorization_ref": {"type": "string", "minLength": 1},
+          "started_at": {"type": "string"},
+          "finished_at": {"type": ["string", "null"]},
+          "outcome": {"enum": ["in_flight", "completed", "failed"]},
+          "delivery_uncertain": {"type": "boolean"},
+          "usage": {
+            "oneOf": [{"type": "null"}, {
+              "type": "object", "additionalProperties": false, "required": ["input_tokens", "output_tokens"],
+              "properties": {"input_tokens": {"type": "integer", "minimum": 0}, "output_tokens": {"type": "integer", "minimum": 0}}}]
+          },
+          "latency_ms": {"type": ["integer", "null"], "minimum": 0},
+          "cost_status": {"const": "local_zero"},
+          "cost_usd": {"const": 0},
+          "response_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+          "error_code": {"type": ["string", "null"]}
+        }
+      }
+    }
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

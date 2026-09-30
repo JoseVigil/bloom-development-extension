@@ -88,6 +88,7 @@ def run_preflight(*, catalog: Catalog | None = None, selection: list[str] | None
         "catalog_fingerprint": catalog.fingerprint,
         "selection": selection,
         "eligibility_fingerprint": common.eligibility_fingerprint(stable, catalog, selection),
+        "machine_eligibility_fingerprint": common.machine_eligibility_fingerprint(stable, catalog, selection),
         "stable_profile": stable,
         "verdicts": verdicts,
         "readiness": readiness,

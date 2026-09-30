@@ -21,6 +21,6 @@ aitap no es dueno del vault — Nucleus lo es. Solo guarda referencias y politic
 │ route      │ Grifo: decision de routing, Intelligence Supply y politica de acceso y cuotas     │ decide, supply, policy │
 │ health     │ Sondeo vivo de las dependencias de AITAP                                          │ check                  │
 │ accounting │ Lectura de la Contabilidad de inferencias por modelo, consumidor y ventana        │ usage                  │
-│ local      │ Suministro de inteligencia local: verificacion previa y estado de modelos locales │ preflight              │
+│ local      │ Suministro de inteligencia local: verificacion previa y estado de modelos locales │ preflight, ensure      │
 └────────────┴───────────────────────────────────────────────────────────────────────────────────┴────────────────────────┘
 

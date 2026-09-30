@@ -69,10 +69,13 @@ local:** todos los modelos locales se sirven siempre a traves de el. Los
    idempotente de modelos a traves de la API local de Ollama, prueba de
    humo, salud observada y registro como backend `privacy: local`. Existe para alimentar
    al pilar 1 y queda sometido a los pilares 2 y 3. No es ejecucion. Estado:
-   implementados el catalogo, `aitap local preflight` (solo lectura) y el
+   implementados el catalogo, `aitap local preflight` (solo lectura), el
    suministro por Ollama en `route supply` con `privacy: local`
    (`providers/ollama.py`, politica de acceso aplicada en
-   `access/enforcement.py`); el aprovisionamiento no existe todavia.
+   `access/enforcement.py`) y el aprovisionamiento autorizado
+   `aitap local ensure` (`local/ensure.py`). La verificacion de su
+   autorizacion en Nucleus todavia no existe: hasta entonces `apply` falla
+   cerrado.
 
 Su ciclo operativo completo, literal: recibe el `BSIP-Payload`, consulta
 al modelo, registra la metrica en Contabilidad, devuelve la respuesta
@@ -92,7 +95,8 @@ estas cosas, pará: estás en el componente equivocado.
   la Enmienda 1 §4 (estado de Suministro Local, logs/evidencia y el estado
   de Contabilidad). Los pesos los escribe el servidor de Ollama.
   Toda ruta se resuelve con `realpath` y se rechaza si queda fuera de esas
-  raices; ese guard llega con el aprovisionamiento y exige test propio.
+  raices o dentro de un proyecto: `local/paths.py`, con test propio
+  (`tests/local/test_local_paths.py`).
 - **No agregar una `CommandCategory` de ejecucion** (`EXECUTE`, `BASH`,
   `APPLY`, `RUN`, o similar). El set cerrado es `SYSTEM`, `KEYS`, `ROUTE`,
   `HEALTH`, `ACCOUNTING`, `LOCAL` (`src/aitap/cli/categories.py`,
@@ -103,7 +107,12 @@ estas cosas, pará: estás en el componente equivocado.
 - **Ningun proceso fuera de la lista cerrada de la Enmienda 1 §5.** No
   `subprocess` con argumentos armados desde requests, respuestas de
   modelos, variables de entorno del consumidor ni rutas no canonicas. No
-  `shell=True`.
+  `shell=True`. Hoy AITAP lanza exactamente dos procesos, ambos de Nucleus,
+  con argumentos fijos y el pedido firmado por stdin:
+  `nucleus --json vault service-request` (`vault/client.py`) y
+  `nucleus --json intelligence local authorization verify`
+  (`local/authorization.py`, contrato provisional). Los dos firman con la
+  identidad de servicio de `service_identity.py`.
 - **Ninguna descarga sin fijacion.** Si falta el digest del manifiesto de
   Ollama, el aprovisionamiento falla cerrado.
 - **Ningun aprovisionamiento sin `authorization_ref` verificada por Nucleus
@@ -118,7 +127,12 @@ estas cosas, pará: estás en el componente equivocado.
   AITAP.
 - **Una llamada a herramienta propuesta por un modelo local es texto.** Si
   estas escribiendo codigo que despacha `tool_calls`, estas en el
-  componente equivocado.
+  componente equivocado. Tambien en la prueba de humo de `local ensure`: de
+  su respuesta solo se guardan contadores y digest.
+- **`aitap.provisioning` es un consumidor tecnico reservado.** Solo lo usa
+  la contabilidad de la prueba de humo (`provisioning/smoke/`, contrato
+  propio). Nunca aparece como consumidor en una politica de acceso ni se
+  mezcla con los totales de los consumidores de inferencia.
 - **Privacidad `local` es un techo, no una preferencia.** Un request con
   privacidad `local` nunca hace failover a un backend en la nube, ni llama a
   Vault. Una politica local con `fallback`, `max_attempts` distinto de 1 o un
@@ -127,7 +141,10 @@ estas cosas, pará: estás en el componente equivocado.
   Ollama, toda falla queda como `failed` con `delivery_uncertain: true` y un
   journal `in_flight` responde `STATE_CONFLICT` sin llamar. Los chequeos
   previos (acceso, elegibilidad, digest de `/api/tags`, concurrencia, cuotas,
-  presupuesto) ocurren antes y no dejan journal.
+  presupuesto) ocurren antes y no dejan journal. Unica diferencia aprobada:
+  la prueba de humo de `local ensure` no entrega nada a un consumidor, asi
+  que un intento incierto queda registrado como tal y se admite otro dentro
+  de los `max_attempts` del grant; nunca se da por aprobado.
 - **El digest del modelo se verifica inmediatamente antes de cada `POST`.**
   El preflight es una observacion previa, no reemplaza esa comprobacion.
 - **La politica de acceso aplicada es siempre la empaquetada.** No agregar
