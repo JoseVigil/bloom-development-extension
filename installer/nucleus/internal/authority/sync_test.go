@@ -208,3 +208,56 @@ func TestSyncBackendArtifacts(t *testing.T) {
 		t.Fatal("backend pull did not survive Go verification and checkpoint")
 	}
 }
+
+func TestSyncAcceptsAndPersistsWire11Full(t *testing.T) {
+	p, issuerPublic, issuerPrivate := full11Fixture(t, "1")
+	now := p.IssuedAt.Add(time.Minute)
+	grant := intelligenceGrantFixture(p.IssuedAt)
+	grant.ReplacesGrantID = nil
+	var content FullContent
+	if err := json.Unmarshal(p.Content, &content); err != nil {
+		t.Fatal(err)
+	}
+	grants := []IntelligenceSupplyGrant{grant}
+	content.IntelligenceSupplyGrants = &grants
+	p.Content, _ = json.Marshal(content)
+	snapshot := signedFixture(t, p, issuerPrivate, "issuer-key")
+	envelope, _, err := ParseAndVerifyEnvelope(snapshot, TrustBundle{"issuer": {"issuer-key": issuerPublic}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDigest, err := StateDigest(content, "org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, installationPrivate, _ := ed25519.GenerateKey(rand.Reader)
+	challenge := "wire11-challenge"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/authority/sync/challenge":
+			_ = json.NewEncoder(w).Encode(syncChallenge{challenge, "org", "installation", now, now.Add(time.Minute)})
+		case "/v1/authority/sync/pull":
+			if r.URL.Query().Get("challenge") != challenge {
+				http.Error(w, "challenge", http.StatusForbidden)
+				return
+			}
+			sum := sha256.Sum256([]byte(challenge))
+			check := CurrentCheckPayload{"bloom.authority.current-check", "1.0", "check", "issuer", "org", "installation", hex.EncodeToString(sum[:]), "1", stateDigest, envelope.Integrity.Digest, now}
+			_ = json.NewEncoder(w).Encode(syncPull{snapshot, signedCurrent(t, check, issuerPrivate, "issuer-key")})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	binding := Binding{"org", "issuer", "installation"}
+	verifier := &Verifier{Trust: TrustBundle{"issuer": {"issuer-key": issuerPublic}}, Binding: binding, Store: &Store{Path: filepath.Join(dir, "state.json")}, Checkpoint: &CheckpointStore{Path: filepath.Join(dir, "checkpoint.json")}, Now: func() time.Time { return now }}
+	client := &SyncClient{BaseURL: server.URL, Binding: binding, InstallationPrivateKey: installationPrivate, Verifier: verifier, HTTP: server.Client(), Now: func() time.Time { return now }}
+	result, err := client.Sync(context.Background(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State.Emission.SchemaVersion != "1.1" || result.State.Projection.IntelligenceSupplyGrants == nil || len(*result.State.Projection.IntelligenceSupplyGrants) != 1 || result.State.Monotonic.StateDigest != stateDigest {
+		t.Fatal("sync did not preserve wire 1.1 projection")
+	}
+}

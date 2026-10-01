@@ -67,12 +67,70 @@ func renderAuthorityEvidence(report AuthorityEvidenceReport, jsonMode bool) (str
 }
 
 func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool) *cobra.Command {
-	root := &cobra.Command{Use: "authority", Short: "Inspect Authority evidence without changing enforcement mode", Args: cobra.NoArgs, Annotations: map[string]string{"category": "GOVERNANCE", "json_response": `{"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}`}}
+	type commandHelp struct {
+		short, long, example, jsonResponse string
+	}
+	help := map[string]commandHelp{
+		"status": {
+			short:        "Report locally available Authority state and checkpoint evidence",
+			long:         "Reports whether accepted Authority state and its durable checkpoint are available locally. This command does not contact Authority or change enforcement mode.",
+			example:      "  nucleus authority status\n  nucleus --json authority status",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"status","ok":true,"evidence":{"accepted_state_available":true,"checkpoint_available":true,"effective_mode":"local_legacy","cutover":false}}`,
+		},
+		"sync": {
+			short:        "Synchronize verified Authority evidence for the active organization",
+			long:         "Registers the installation, confirms Authority 1.1 capability, verifies trust, pulls and accepts Authority evidence, then reports the resulting durable state. It does not independently change enforcement mode.",
+			example:      "  nucleus authority sync\n  nucleus --json authority sync",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"installation_id":"installation-123","organization_id":"organization-123","authority_version":"42","state_digest":"sha256-digest","capability_confirmed":true}}`,
+		},
+		"decision": {
+			short:        "Report the current effective Authority decision evidence",
+			long:         "Evaluates and reports the current effective Authority decision from already accepted local evidence. It does not pull remote state or mutate the enforcement mode.",
+			example:      "  nucleus authority decision\n  nucleus --json authority decision",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"decision","ok":true,"evidence":{"effective_mode":"local_legacy","cutover":false,"outcome":"not_evaluable"}}`,
+		},
+		"checkpoint": {
+			short:        "Report the durable Authority checkpoint",
+			long:         "Reads and reports the durable checkpoint associated with the accepted Authority projection. This command is read-only and does not advance the checkpoint.",
+			example:      "  nucleus authority checkpoint\n  nucleus --json authority checkpoint",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"checkpoint","ok":true,"evidence":{"organization_id":"organization-123","authority_version":"42","state_digest":"sha256-digest"}}`,
+		},
+		"observation": {
+			short:        "Report shadow Authority observation evidence",
+			long:         "Reads and reports locally recorded Authority comparison evidence. Observations are informational and cannot change the effective enforcement mode.",
+			example:      "  nucleus authority observation\n  nucleus --json authority observation",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"observation","ok":true,"evidence":{"effective_mode":"local_legacy","cutover":false,"outcome":"match"}}`,
+		},
+		"service-identity": {
+			short:        "Report the local AITAP service identity public evidence",
+			long:         "Creates the local AITAP service identity when absent and reports only its public evidence. Private key material is never emitted.",
+			example:      "  nucleus authority service-identity\n  nucleus --json authority service-identity",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"service-identity","ok":true,"evidence":{"consumer":"aitap","service_public_key":"base64url-public-key"}}`,
+		},
+		"service-grants": {
+			short:        "Report active Vault service Grant evidence",
+			long:         "Reports active Vault service Grant evidence for the AITAP consumer from the accepted Authority projection and checkpoint. It does not reveal credentials or secret values.",
+			example:      "  nucleus authority service-grants\n  nucleus --json authority service-grants",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"service-grants","ok":true,"evidence":{"grants":[]}}`,
+		},
+	}
+	root := &cobra.Command{
+		Use:     "authority",
+		Short:   "Inspect and synchronize verified Authority evidence",
+		Long:    "Inspects locally accepted Authority evidence or performs the explicit verified synchronization flow for the active organization. Authority commands remain in GOVERNANCE and do not expose credentials, signatures, private keys, or snapshot payloads.",
+		Example: "  nucleus authority status\n  nucleus authority sync\n  nucleus --json authority status",
+		Args:    cobra.NoArgs,
+		Annotations: map[string]string{
+			"category":      "GOVERNANCE",
+			"json_response": help["status"].jsonResponse,
+		},
+	}
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 	for _, name := range []string{"status", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants"} {
 		n := name
-		sub := &cobra.Command{Use: n + " [arguments]", Short: "Report Authority " + n + " evidence", Args: cobra.ArbitraryArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		commandHelp := help[n]
+		sub := &cobra.Command{Use: n + " [arguments]", Short: commandHelp.short, Long: commandHelp.long, Example: commandHelp.example, Args: cobra.ArbitraryArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := services.Run(n, args)
 			if err != nil {
 				var coded AuthorityCommandError
@@ -93,10 +151,49 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 				return AuthorityCommandError{report.ErrorCode}
 			}
 			return err
-		}, Annotations: map[string]string{"category": "GOVERNANCE", "json_response": root.Annotations["json_response"]}}
+		}, Annotations: map[string]string{"category": "GOVERNANCE", "json_response": commandHelp.jsonResponse}}
 		root.AddCommand(sub)
 	}
 	return root
+}
+
+type authorityTelemetryTransport struct {
+	base   http.RoundTripper
+	logger *core.Logger
+}
+
+func (t *authorityTelemetryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.base.RoundTrip(request)
+	if request.URL.Path != "/v1/authority/installations/capabilities" {
+		return response, err
+	}
+	if err != nil {
+		t.logger.Error("authority sync stage=capability transport=failed method=%s", request.Method)
+		return response, err
+	}
+	switch {
+	case request.Method == http.MethodGet && response.StatusCode == http.StatusNotFound:
+		t.logger.Info("authority sync stage=capability bootstrap=required expected_revision=0")
+	case request.Method == http.MethodPut && response.StatusCode == http.StatusConflict:
+		t.logger.Warning("authority sync stage=capability cas_conflict=true retry=bounded")
+	case request.Method == http.MethodPut:
+		t.logger.Info("authority sync stage=capability update=attempted status=%d", response.StatusCode)
+	}
+	return response, nil
+}
+
+func authorityHTTPClientWithTelemetry(logger *core.Logger) *http.Client {
+	base := authorityCommandHTTPClient
+	if base == nil {
+		base = http.DefaultClient
+	}
+	client := *base
+	transport := base.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	client.Transport = &authorityTelemetryTransport{base: transport, logger: logger}
+	return &client
 }
 
 func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
@@ -136,33 +233,64 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 			report.Evidence["accepted_state_available"] = stateErr == nil
 			report.Evidence["checkpoint_available"] = cpErr == nil
 		case "sync":
+			governanceLogger, loggerErr := core.InitLogger(&c.Paths, "GOVERNANCE", c.IsJSON)
+			if loggerErr != nil {
+				report.OK = false
+				report.Evidence["performed"] = false
+				return report, AuthorityCommandError{"authority_logging_unavailable"}
+			}
+			defer governanceLogger.Close()
+			governanceLogger.Info("authority sync started")
+			httpClient := authorityHTTPClientWithTelemetry(governanceLogger)
 			active, err := core.ResolveActiveOrgContext()
 			if err != nil {
+				governanceLogger.Error("authority sync failed stage=configuration")
 				report.OK = false
 				report.Evidence["performed"] = false
 				report.Evidence["reason"] = err.Error()
 				return report, AuthorityCommandError{"authority_config_invalid"}
 			}
+			governanceLogger.Info("authority sync context organization_id=%s", active.OrganizationID)
 			identity, err := authority.LoadOrCreateLocalIdentity(filepath.Join(dir, "identity.json"))
 			if err != nil {
+				governanceLogger.Error("authority sync failed stage=installation_identity organization_id=%s", active.OrganizationID)
 				report.OK = false
 				report.Evidence["performed"] = false
 				return report, AuthorityCommandError{"installation_identity_invalid"}
 			}
+			governanceLogger.Info("authority sync identity installation_id=%s", identity.InstallationID)
 			serviceToken := os.Getenv("AUTHORITY_SERVICE_TOKEN")
-			if err = authority.RegisterInstallation(context.Background(), active.AuthorityBaseURL, serviceToken, active.OrganizationID, identity, authorityCommandHTTPClient); err != nil {
+			governanceLogger.Info("authority sync stage=registration started organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
+			if err = authority.RegisterInstallation(context.Background(), active.AuthorityBaseURL, serviceToken, active.OrganizationID, identity, httpClient); err != nil {
+				governanceLogger.Error("authority sync failed stage=registration organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
 				report.OK = false
 				report.Evidence["performed"] = false
 				return report, AuthorityCommandError{"installation_registration_failed"}
 			}
+			governanceLogger.Success("authority sync stage=registration result=registered organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
+			governanceLogger.Info("authority sync stage=capability started installation_id=%s", identity.InstallationID)
+			capability, err := (&authority.InstallationCapabilityClient{BaseURL: active.AuthorityBaseURL, OrganizationID: active.OrganizationID, Identity: identity, HTTP: httpClient, Now: authorityCommandNow}).Ensure11(context.Background())
+			if err != nil || capability == nil {
+				governanceLogger.Error("authority sync failed stage=capability installation_id=%s", identity.InstallationID)
+				report.OK = false
+				report.Evidence["performed"] = false
+				report.Evidence["capability_confirmed"] = false
+				return report, AuthorityCommandError{"installation_capability_unavailable"}
+			}
+			governanceLogger.Success("authority sync stage=capability confirmed=1.1 revision=%s installation_id=%s", capability.Revision, identity.InstallationID)
+			report.Evidence["capability_confirmed"] = true
+			report.Evidence["capability_revision"] = capability.Revision
 			provisional := authority.Binding{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID}
 			now := authorityCommandNow()
-			manifest, trust, err := authority.FetchAndVerifyTrustManifest(context.Background(), active.AuthorityBaseURL, provisional, identity.PrivateKey, authorityCommandRoots(), authorityCommandHTTPClient, now)
+			governanceLogger.Info("authority sync stage=trust started organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
+			manifest, trust, err := authority.FetchAndVerifyTrustManifest(context.Background(), active.AuthorityBaseURL, provisional, identity.PrivateKey, authorityCommandRoots(), httpClient, now)
 			if err != nil {
+				governanceLogger.Error("authority sync failed stage=trust organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
 				report.OK = false
 				report.Evidence["performed"] = false
 				return report, AuthorityCommandError{"trust_manifest_invalid"}
 			}
+			governanceLogger.Success("authority sync stage=trust result=verified organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
 			binding := authority.Binding{OrganizationID: active.OrganizationID, Issuer: manifest.Payload.Issuer, InstallationID: identity.InstallationID}
 			store := &authority.Store{Path: state}
 			verifier := &authority.Verifier{Trust: trust, Manifest: manifest, Binding: binding, Store: store, Checkpoint: &authority.CheckpointStore{Path: checkpoint}, Now: authorityCommandNow}
@@ -170,14 +298,17 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 			if current, loadErr := store.Load(); loadErr == nil && current != nil {
 				baseVersion = current.Monotonic.HighWaterMark
 			}
-			syncClient := &authority.SyncClient{BaseURL: active.AuthorityBaseURL, Binding: binding, InstallationPrivateKey: identity.PrivateKey, Verifier: verifier, HTTP: authorityCommandHTTPClient, Now: authorityCommandNow}
+			syncClient := &authority.SyncClient{BaseURL: active.AuthorityBaseURL, Binding: binding, InstallationPrivateKey: identity.PrivateKey, Verifier: verifier, HTTP: httpClient, Now: authorityCommandNow}
+			governanceLogger.Info("authority sync stage=pull started organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
 			result, err := syncClient.Sync(context.Background(), baseVersion, nil)
 			if err != nil {
+				governanceLogger.Error("authority sync failed stage=pull organization_id=%s installation_id=%s", active.OrganizationID, identity.InstallationID)
 				report.OK = false
 				report.Evidence["performed"] = false
 				report.Evidence["sync_error"] = err.Error()
 				return report, AuthorityCommandError{"authority_sync_failed"}
 			}
+			governanceLogger.Success("authority sync stage=pull result=accepted authority_version=%s state_digest=%s", result.State.Monotonic.HighWaterMark, result.State.Monotonic.StateDigest)
 			report.Evidence["performed"] = true
 			report.Evidence["installation_id"] = identity.InstallationID
 			report.Evidence["organization_id"] = active.OrganizationID
@@ -190,26 +321,13 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 			// autoridad ya terminó con éxito para cuando se llega acá; ver
 			// ownership_reconciliation.go.
 			//
-			// Logging estructurado: mismo stream de telemetría "nucleus_governance" que
-			// ya usa 'nucleus auth link' (ver auth_link.go, core.InitLogger(&c.Paths,
-			// "GOVERNANCE", c.IsJSON)) — no un stream nuevo ni un archivo aparte. Es la
-			// categoría correcta porque 'authority' ya está registrado bajo GOVERNANCE
-			// (ver init() al final de este archivo) y esta operación es, en esencia,
-			// gobierno de identidad de organización — no delivery de mandates, que es
-			// por lo que el bloque de abajo sigue abriendo su propio logger "MANDATE" en
-			// lugar de reusar este. InitLogger registra/rota el stream en telemetry.json
-			// automáticamente (core/logger.go: rolloverLocked → tm.RegisterStream); acá
-			// sólo hace falta escribir las líneas, igual que ya hace runAuthLink.
-			governanceLogger, governanceLoggerErr := core.InitLogger(&c.Paths, "GOVERNANCE", c.IsJSON)
-			if governanceLoggerErr != nil {
-				report.Evidence["ownership_reconciliation_logger_error"] = governanceLoggerErr.Error()
-			} else {
-				defer governanceLogger.Close()
-			}
+			// Logging estructurado: reutiliza el logger GOVERNANCE abierto al comienzo
+			// de este sync. El bloque de mandate delivery conserva su logger MANDATE
+			// porque pertenece a ese stream ya existente; no se crea un stream Authority.
 			trustAnchorID, trustAnchorPublicKey := manifest.Root()
 			trustAnchorFingerprint := trustAnchorFingerprintSHA256(trustAnchorPublicKey)
 			var tenantID *string
-			if id, tenantErr := authority.FetchOrganizationTenantID(context.Background(), active.AuthorityBaseURL, tenantSelfPath, binding, identity.PrivateKey, authorityCommandHTTPClient, authorityCommandNow()); tenantErr != nil {
+			if id, tenantErr := authority.FetchOrganizationTenantID(context.Background(), active.AuthorityBaseURL, tenantSelfPath, binding, identity.PrivateKey, httpClient, authorityCommandNow()); tenantErr != nil {
 				report.Evidence["tenant_lookup_error"] = tenantErr.Error()
 				if governanceLogger != nil {
 					governanceLogger.Warning("tenant lookup falló (no bloqueante, %s no se actualiza): %v", tenantSelfPath, tenantErr)
@@ -364,7 +482,7 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 				report.Evidence["cutover"] = true
 			}
 		cutoverComplete:
-			deliveryClient := mandatedelivery.Client{BaseURL: active.AuthorityBaseURL, HTTP: authorityCommandHTTPClient, Signer: identity.PrivateKey, Context: mandatedelivery.Context{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID, Issuer: binding.Issuer, Trust: trust, Now: authorityCommandNow}, Store: &mandatedelivery.Store{Root: filepath.Join(dir, "mandate-delivery")}}
+			deliveryClient := mandatedelivery.Client{BaseURL: active.AuthorityBaseURL, HTTP: httpClient, Signer: identity.PrivateKey, Context: mandatedelivery.Context{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID, Issuer: binding.Issuer, Trust: trust, Now: authorityCommandNow}, Store: &mandatedelivery.Store{Root: filepath.Join(dir, "mandate-delivery")}}
 			deliveryResult, deliveryErr := deliveryClient.Receive(context.Background())
 			if deliveryErr != nil {
 				report.Evidence["mandate_delivery"] = "error"

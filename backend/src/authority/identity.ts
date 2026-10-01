@@ -103,7 +103,7 @@ function buildAuthPayload(params: {
  */
 export async function registerInstallationKey(
   db: D1Database,
-  params: { installationId: string; organizationId: string; publicKeyRaw: string },
+  params: { installationId: string; organizationId: string; publicKeyRaw: string; supportedAuthoritySchemaVersions?: ("1.0" | "1.1")[] },
 ): Promise<{ ok: true } | { ok: false; reason: "conflict" }> {
   const existing = await db
     .prepare("SELECT installation_id FROM installation_keys WHERE installation_id = ? AND status = 'active'")
@@ -111,13 +111,24 @@ export async function registerInstallationKey(
     .first<{ installation_id: string }>();
   if (existing) return { ok: false, reason: "conflict" };
 
-  await db
-    .prepare(
+  const keyStatement = db.prepare(
       `INSERT INTO installation_keys (installation_id, organization_id, public_key_raw, status, registered_at)
        VALUES (?, ?, ?, 'active', ?)`,
     )
-    .bind(params.installationId, params.organizationId, params.publicKeyRaw, Date.now())
-    .run();
+    .bind(params.installationId, params.organizationId, params.publicKeyRaw, Date.now());
+  const versions = [...new Set(params.supportedAuthoritySchemaVersions ?? ["1.0" as const])].sort();
+  if (!versions.length || versions.some(v => v !== "1.0" && v !== "1.1")) return { ok: false, reason: "conflict" };
+  const at = new Date().toISOString();
+  const requestId = `registration:${params.installationId}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalizeJson({
+    organization_id: params.organizationId, installation_id: params.installationId,
+    public_key_raw: params.publicKeyRaw, supported_authority_schema_versions: versions,
+  })));
+  const digestText = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2,"0")).join("");
+  await db.batch([keyStatement, db.prepare(`INSERT INTO authority_installation_capability_declarations
+    (organization_id,installation_id,revision,request_id,request_digest,supported_authority_schema_versions_json,source,declared_at)
+    VALUES (?,?, '1', ?, ?, ?, 'registration', ?)`)
+    .bind(params.organizationId,params.installationId,requestId,digestText,canonicalizeJson(versions),at)]);
   return { ok: true };
 }
 

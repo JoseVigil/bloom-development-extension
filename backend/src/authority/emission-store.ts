@@ -3,7 +3,7 @@ import { emitSnapshot, normalizeMetadata, normalizeState, normalizeWireTime, wit
 import type { WireEmissionMetadata, WireEnvelope, WireFullContent } from "./schema";
 import type { InitialHumanIdentity } from "./administration";
 
-export type EmissionFailure = "cas_conflict" | "idempotency_conflict" | "recovery_required" | "initial_evidence_required" | "invalid_emission" | "emission_unavailable" | "version_ahead" | "audience_mismatch";
+export type EmissionFailure = "cas_conflict" | "idempotency_conflict" | "recovery_required" | "initial_evidence_required" | "invalid_emission" | "emission_unavailable" | "version_ahead" | "audience_mismatch" | "schema_incompatible";
 export const AUTHORITY_EMISSION_TTL_MS = 4 * 60 * 1000;
 export class EmissionStoreError extends Error {
   constructor(readonly code: EmissionFailure) { super(`authority_${code}`); }
@@ -22,7 +22,7 @@ type Session = ReturnType<D1Database["withSession"]>;
 async function decodeEmission(row: EmissionRow): Promise<StoredEmission> {
   try {
     const metadata = normalizeMetadata(JSON.parse(row.metadata_json));
-    const state = normalizeState(JSON.parse(row.state_json), row.organization_id);
+    const state = normalizeState(JSON.parse(row.state_json), row.organization_id, metadata.schema_version);
     if (metadata.organization_id !== row.organization_id || metadata.authority_version !== row.authority_version
       || canonicalizeJson(metadata) !== row.metadata_json || canonicalizeJson(state) !== row.state_json
       || await digestWire(state) !== row.state_digest) throw new Error("stored evidence mismatch");
@@ -110,7 +110,7 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
   if (!input.requestId || typeof input.requestId !== "string") throw new EmissionStoreError("invalid_emission");
   let metadata: WireEmissionMetadata, state: WireFullContent;
   try {
-    metadata = normalizeMetadata(input.metadata); state = normalizeState(input.state, metadata.organization_id);
+    metadata = normalizeMetadata(input.metadata); state = normalizeState(input.state, metadata.organization_id, metadata.schema_version);
     if (input.expectedVersion !== null && wireVersion(metadata.authority_version) !== wireVersion(input.expectedVersion) + 1n) throw new Error("next version required");
   } catch { throw new EmissionStoreError("invalid_emission"); }
   const initialEvidence: InitialEmissionEvidence | undefined = input.initialEmissionEvidence
@@ -144,7 +144,8 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
         || assignment.scope.type !== "organization" || assignment.scope.id !== metadata.organization_id
         || assignment.status !== "active" || assignment.valid_until !== null
         || assignment.valid_from !== membership.valid_from || assignment.accepted_at !== membership.accepted_at
-        || state.revocations.length !== 0 || (state.vault_service_grants?.length ?? 0) !== 0) throw new EmissionStoreError("initial_evidence_required");
+        || state.revocations.length !== 0 || (state.vault_service_grants?.length ?? 0) !== 0
+        || (state.intelligence_supply_grants?.length ?? 0) !== 0) throw new EmissionStoreError("initial_evidence_required");
     } else throw new EmissionStoreError("initial_evidence_required");
   } else if (initialEvidence !== undefined) throw new EmissionStoreError("invalid_emission");
 
@@ -175,6 +176,9 @@ export async function prepareEmission(db: D1Database, input: PersistEmissionInpu
   let full: WireEnvelope, delta: WireEnvelope | null;
   try {
     full = await emitSnapshot({ metadata, state }, signer.privateKeyPkcs8, signer.keyId);
+    // D1's immutable emission ledger requires a delta artifact for every non-initial
+    // version. A 1.0→1.1 transition persists that evidence but snapshot.ts deliberately
+    // serves the full; the transition delta is never exposed to a 1.0 consumer.
     delta = base ? await emitSnapshot({ metadata, state, base: { authority_version: base.metadata.authority_version, state: base.state } }, signer.privateKeyPkcs8, signer.keyId) : null;
   } catch { throw new EmissionStoreError("invalid_emission"); }
   const stateDigest = await digestWire(state);

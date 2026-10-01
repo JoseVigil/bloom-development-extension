@@ -32,6 +32,18 @@ type interopFixture struct {
 	Envelopes map[string]json.RawMessage `json:"envelopes"`
 }
 
+type interopFixture11 struct {
+	KeyID     string `json:"key_id"`
+	PublicKey string `json:"public_key_base64url"`
+	Expected  struct {
+		Initial  string `json:"initial_1_1_digest"`
+		Issued   string `json:"issued_1_1_digest"`
+		Replaced string `json:"replaced_1_1_digest"`
+		Revoked  string `json:"revoked_1_1_digest"`
+	} `json:"expected"`
+	Envelopes map[string]json.RawMessage `json:"envelopes"`
+}
+
 func readInterop(t *testing.T) interopFixture {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)
@@ -44,6 +56,20 @@ func readInterop(t *testing.T) interopFixture {
 		t.Fatal(err)
 	}
 	return f
+}
+
+func readInterop11(t *testing.T) interopFixture11 {
+	t.Helper()
+	_, file, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../../docs/ROLES/fixtures/authority_interop_v1_1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture interopFixture11
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	return fixture
 }
 func interopVerifier(t *testing.T, f interopFixture) *Verifier {
 	t.Helper()
@@ -421,5 +447,52 @@ func TestAuthorityInteropRejectsValidlyEncodedBadSignatureAndWrongDomain(t *test
 				t.Fatal("invalid envelope accepted")
 			}
 		})
+	}
+}
+
+func TestAuthorityInteropWire11CorrectedBackendFixture(t *testing.T) {
+	fixture := readInterop11(t)
+	public, err := base64.RawURLEncoding.DecodeString(fixture.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newVerifier := func() *Verifier {
+		dir := t.TempDir()
+		return &Verifier{
+			Trust:   TrustBundle{"fixture-issuer": {fixture.KeyID: ed25519.PublicKey(public)}},
+			Binding: Binding{"org-fixture", "fixture-issuer", "installation-a"},
+			Store:   &Store{Path: filepath.Join(dir, "state.json")}, Checkpoint: &CheckpointStore{Path: filepath.Join(dir, "checkpoint.json")},
+			Now: func() time.Time { return time.Date(2026, 9, 8, 12, 13, 0, 0, time.UTC) },
+		}
+	}
+	deltaVerifier := newVerifier()
+	for _, step := range []struct{ envelope, digest string }{
+		{"transition_full", fixture.Expected.Initial},
+		{"issue_delta", fixture.Expected.Issued},
+		{"replace_delta", fixture.Expected.Replaced},
+		{"revoke_delta", fixture.Expected.Revoked},
+	} {
+		state, acceptErr := deltaVerifier.VerifyAndAccept(fixture.Envelopes[step.envelope], step.envelope)
+		if acceptErr != nil {
+			t.Fatalf("%s: %v", step.envelope, acceptErr)
+		}
+		if state.Monotonic.StateDigest != step.digest {
+			t.Fatalf("%s digest=%s want=%s", step.envelope, state.Monotonic.StateDigest, step.digest)
+		}
+	}
+	fullVerifier := newVerifier()
+	for _, step := range []struct{ envelope, digest string }{
+		{"transition_full", fixture.Expected.Initial},
+		{"issue_full", fixture.Expected.Issued},
+		{"replace_full", fixture.Expected.Replaced},
+		{"revoke_full", fixture.Expected.Revoked},
+	} {
+		state, acceptErr := fullVerifier.VerifyAndAccept(fixture.Envelopes[step.envelope], step.envelope)
+		if acceptErr != nil {
+			t.Fatalf("%s: %v", step.envelope, acceptErr)
+		}
+		if state.Monotonic.StateDigest != step.digest {
+			t.Fatalf("%s digest=%s want=%s", step.envelope, state.Monotonic.StateDigest, step.digest)
+		}
 	}
 }

@@ -11,6 +11,7 @@ import type { WireFullContent } from "../src/authority/schema";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const fixture = JSON.parse(readFileSync(join(root, "docs/ROLES/fixtures/authority_interop_v1.json"), "utf8"));
+const fixture11 = JSON.parse(readFileSync(join(root, "docs/ROLES/fixtures/authority_interop_v1_1.json"), "utf8"));
 const privateKey = Uint8Array.from(Buffer.from(fixture.private_key_pkcs8_base64, "base64")).buffer;
 const publicKey = Uint8Array.from(Buffer.from(fixture.public_key_base64url, "base64url")).buffer;
 const emit = () => Promise.all([
@@ -139,4 +140,61 @@ describe("authority wire v1 interoperability", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 180000);
+});
+describe("authority wire v1.1 intelligence supply interoperability", () => {
+  const privateKey11 = Uint8Array.from(Buffer.from(fixture11.private_key_pkcs8_base64, "base64")).buffer;
+  const publicKey11 = Uint8Array.from(Buffer.from(fixture11.public_key_base64url, "base64url")).buffer;
+  const cases = [
+    ["transition_full", "initial", "initial_1_1", null],
+    ["issue_full", "issue", "issued_1_1", null],
+    ["issue_delta", "issue", "issued_1_1", ["4", "initial_1_1"]],
+    ["replace_full", "replace", "replaced_1_1", null],
+    ["replace_delta", "replace", "replaced_1_1", ["5", "issued_1_1"]],
+    ["revoke_full", "revoke", "revoked_1_1", null],
+    ["revoke_delta", "revoke", "revoked_1_1", ["6", "replaced_1_1"]],
+  ] as const;
+
+  it("is autonomous and uses the approved Intelligence Supply vocabulary", () => {
+    expect(fixture11.private_key_pkcs8_base64).toBeTruthy();
+    expect(fixture11.public_key_base64url).toBeTruthy();
+    expect(fixture11.grants.issued.purpose).toBe("mandate_intelligence");
+    expect(fixture11.grants.issued.allowed_capabilities).toEqual(["structured_output", "text.generate", "tool_call.propose"]);
+    expect(JSON.stringify(fixture11)).not.toContain("decision.evaluate");
+    expect(fixture11.revocations.replaced.reason_code).toBe("grant_replaced");
+    expect(fixture11.revocations.issued.reason_code).toBe("master_revocation");
+    expect(fixture11.capability_declarations.compatible.supported_authority_schema_versions).toEqual(["1.0", "1.1"]);
+    expect(fixture11.capability_declarations.incompatible).toMatchObject({supported_authority_schema_versions:["1.0"], expected_error:"schema_incompatible"});
+  });
+
+  it("matches every literal state digest and signed full/delta envelope", async () => {
+    for (const [stateName, state] of Object.entries(fixture11.states)) {
+      expect(await stateDigest(state as WireFullContent, "org-fixture")).toBe(fixture11.expected[stateName + "_digest"]);
+    }
+    for (const [envelopeName, metadataName, stateName, base] of cases) {
+      const emitted = await emitSnapshot({ metadata: fixture11.metadata[metadataName], state: fixture11.states[stateName],
+        ...(base ? {base:{authority_version:base[0],state:fixture11.states[base[1]]}} : {}) }, privateKey11, fixture11.key_id);
+      expect(canonicalizeJson(emitted)).toBe(canonicalizeJson(fixture11.envelopes[envelopeName]));
+      expect(await verifyCanonicalSignature(canonicalizeJson(emitted.payload), Buffer.from(emitted.integrity.signature, "base64url").toString("base64"), publicKey11)).toBe(true);
+    }
+  });
+
+  it("materializes a full 1.0 to 1.1 transition and only 1.1 to 1.1 deltas", () => {
+    expect(fixture11.states.base_1_0).not.toHaveProperty("intelligence_supply_grants");
+    expect(fixture11.envelopes.transition_full.payload).toMatchObject({schema_version:"1.1",kind:"full",base_authority_version:null});
+    for (const name of ["issue_delta","replace_delta","revoke_delta"]) {
+      expect(fixture11.envelopes[name].payload).toMatchObject({schema_version:"1.1",kind:"delta"});
+    }
+    expect(fixture11.envelopes.issue_delta.payload.content.result_digest).toBe(fixture11.expected.issued_1_1_digest);
+    expect(fixture11.envelopes.replace_delta.payload.content.result_digest).toBe(fixture11.expected.replaced_1_1_digest);
+    expect(fixture11.envelopes.revoke_delta.payload.content.result_digest).toBe(fixture11.expected.revoked_1_1_digest);
+  });
+
+  it("replays byte-identically and rejects collection injection or Grant mutation", async () => {
+    const replay = await emitSnapshot({metadata:fixture11.metadata.issue,state:fixture11.states.issued_1_1,
+      base:{authority_version:"4",state:fixture11.states.initial_1_1}},privateKey11,fixture11.key_id);
+    expect(canonicalizeJson(replay)).toBe(canonicalizeJson(fixture11.envelopes.issue_delta));
+    await expect(emitSnapshot({metadata:{...fixture11.metadata.initial,schema_version:"1.0"},state:fixture11.states.initial_1_1},privateKey11,fixture11.key_id)).rejects.toThrow("1.0 intelligence supply grants forbidden");
+    const changed=structuredClone(fixture11.states.replaced_1_1);changed.intelligence_supply_grants[0].purpose="changed";
+    await expect(emitSnapshot({metadata:fixture11.metadata.replace,state:changed,base:{authority_version:"5",state:fixture11.states.issued_1_1}},privateKey11,fixture11.key_id)).rejects.toThrow("intelligence supply grant history cannot change");
+  });
 });

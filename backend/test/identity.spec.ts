@@ -57,7 +57,7 @@ beforeAll(async () => {
   db = await mf.getD1Database("DB") as unknown as D1Database;
   // 0000_initial.sql da `organizations` (FK de installation_keys); 0002 da
   // `installation_keys`. Cada test arranca limpio vía DELETE FROM en beforeEach.
-  await loadMigrations(["0000_initial.sql", "0002_authority_security.sql"]);
+  await loadMigrations(["0000_initial.sql", "0002_authority_security.sql", "0022_authority_intelligence_supply_grants.sql"]);
 }, 60000);
 afterAll(async () => { await mf?.dispose(); if (temp) rmSync(temp, { recursive: true, force: true }); }, 30000);
 
@@ -261,6 +261,36 @@ describe("registerInstallationKey / verifyInstallationSignature (§1.1)", () => 
     if (!secondResult.ok) {
       expect(secondResult.reason).toBe("conflict");
     }
+  });
+
+  it("registra atómicamente la declaración inicial de versiones Authority soportadas", async () => {
+    const { publicKeyRawBase64 } = await generateInstallationKeypair();
+    const result = await registerInstallationKey(db, {
+      installationId: "inst_capability_registration",
+      organizationId,
+      publicKeyRaw: publicKeyRawBase64,
+      supportedAuthoritySchemaVersions: ["1.1", "1.0", "1.1"],
+    });
+    expect(result.ok).toBe(true);
+    const declaration = await db.prepare(`SELECT revision, supported_authority_schema_versions_json AS supported_authority_schema_versions
+      FROM authority_installation_capability_declarations WHERE installation_id=?`).bind("inst_capability_registration").first();
+    expect(declaration).toEqual({ revision: "1", supported_authority_schema_versions: '["1.0","1.1"]' });
+  });
+
+  it("registra conservadoramente Authority 1.0 cuando no se declaran capabilities", async () => {
+    const { publicKeyRawBase64 } = await generateInstallationKeypair();
+    expect((await registerInstallationKey(db,{installationId:"inst_default_1_0",organizationId,publicKeyRaw:publicKeyRawBase64})).ok).toBe(true);
+    const row=await db.prepare(`SELECT h.revision,d.supported_authority_schema_versions_json AS versions
+      FROM authority_installation_capability_heads h JOIN authority_installation_capability_declarations d
+      ON d.organization_id=h.organization_id AND d.installation_id=h.installation_id AND d.revision=h.revision
+      WHERE h.installation_id=?`).bind("inst_default_1_0").first();
+    expect(row).toEqual({revision:"1",versions:'["1.0"]'});
+  });
+
+  it("revierte la clave si no puede crear su capability declaration", async () => {
+    const { publicKeyRawBase64 } = await generateInstallationKeypair();
+    await expect(registerInstallationKey(db,{installationId:"inst_atomic_failure",organizationId:"org_missing",publicKeyRaw:publicKeyRawBase64})).rejects.toThrow();
+    expect(await db.prepare("SELECT installation_id FROM installation_keys WHERE installation_id=?").bind("inst_atomic_failure").first()).toBeNull();
   });
 });
 

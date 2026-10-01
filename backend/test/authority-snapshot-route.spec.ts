@@ -13,6 +13,7 @@ import type { AdministrationCommand } from "../src/authority/administration";
 
 const root=resolve(fileURLToPath(new URL("../..",import.meta.url)));
 const fixture=JSON.parse(readFileSync(join(root,"docs/ROLES/fixtures/authority_interop_v1.json"),"utf8"));
+const fixture11=JSON.parse(readFileSync(join(root,"docs/ROLES/fixtures/authority_interop_v1_1.json"),"utf8"));
 const signer={privateKeyPkcs8:Uint8Array.from(Buffer.from(fixture.private_key_pkcs8_base64,"base64")).buffer,keyId:fixture.key_id,allowTestFixtures:true};
 let mf:Miniflare,db:D1Database,temp:string;
 const verified={organizationId:"org-fixture",installationId:"installation-a"};
@@ -27,7 +28,7 @@ beforeAll(async()=>{
   mf=new Miniflare({...convertV4MiniflareOptions({host:"127.0.0.1",cf:false,modules:true,script:'export default {fetch(){return new Response("test only")}}',compatibilityDate:"2026-08-29",d1Databases:{DB:"authority-1b-route"}}),resourcePersistencePath:temp});
   db=await mf.getD1Database("DB") as unknown as D1Database;
   await db.prepare("CREATE TABLE organizations (id TEXT PRIMARY KEY)").run();
-  for(const file of ["0001_authority_snapshot.sql","0004_authority_emissions.sql","0005_authority_administration.sql"]){
+  for(const file of ["0001_authority_snapshot.sql","0004_authority_emissions.sql","0005_authority_administration.sql","0022_authority_intelligence_supply_grants.sql"]){
     const sql=readFileSync(join(root,"backend/migrations",file),"utf8").replace(/--[^\r\n]*/g,"").trim();
     for(const statement of sql.split(/;\s*(?=CREATE\b)/i).filter(Boolean))await db.prepare(statement).run();
   }
@@ -86,7 +87,7 @@ describe("isolated persisted snapshot handler",()=>{
     const response=await authoritySnapshotResponse(db,request("org=absent"),{...verified,organizationId:"absent"});
     expect(response.status).toBe(503);expect(await response.json()).toEqual({error:"authority_emission_unavailable"});
   });
-  it("serves persisted full/delta/replay/renewal bytes that Go independently accepts",async()=>{
+  it("serves persisted legacy full/replay/renewal bytes while retaining the v1 delta interoperability vector",async()=>{
     const artifacts:Record<string,unknown>={};
     await publish("base");
     const first=await authoritySnapshotResponse(db,request(),verified);
@@ -94,7 +95,7 @@ describe("isolated persisted snapshot handler",()=>{
     artifacts.full1=await first.json();
     await publish("result");
     const delta=await authoritySnapshotResponse(db,request(`org=org-fixture&base_version=${fixture.metadata.base.authority_version}`),verified);
-    expect(delta.status).toBe(200);artifacts.delta2=await delta.json();
+    expect(delta.status).toBe(200);expect(await delta.text()).toBe(canonicalizeJson(fixture.envelopes.full2));artifacts.delta2=fixture.envelopes.delta2;
     const full=await authoritySnapshotResponse(db,request(),verified);artifacts.full2=await full.json();
     const replay=await authoritySnapshotResponse(db,request(`org=org-fixture&base_version=${fixture.metadata.result.authority_version}`),verified);
     expect(await replay.text()).toBe(canonicalizeJson(artifacts.full2));
@@ -118,6 +119,37 @@ describe("isolated persisted snapshot handler",()=>{
     expect(await verifyCanonicalSignature(canonicalizeJson(receipt.go_envelope.payload),Buffer.from(receipt.go_envelope.integrity.signature,"base64url").toString("base64"),Uint8Array.from(Buffer.from(fixture.public_key_base64url,"base64url")).buffer)).toBe(true);
     const count=await db.prepare("SELECT COUNT(*) AS n FROM authority_emissions WHERE organization_id='org-fixture'").first();expect(count?.n).toBe(3);
   },180000);
+  it("serves full on 1.0 to 1.1 transition, then delta only between 1.1 emissions",async()=>{
+    const org="org-v11-route";await db.prepare("INSERT INTO organizations VALUES (?)").bind(org).run();
+    const adapt=(value:any)=>{const copy=structuredClone(value);for(const membership of copy.memberships)membership.organization_id=org;for(const grant of copy.intelligence_supply_grants??[])grant.organization_id=org;return copy;};
+    const metadata=(value:any)=>({...structuredClone(value),organization_id:org,audience:{organization_id:org,installation_ids:["installation-a"]}});
+    const legacyMetadata=metadata(fixture11.metadata.base),legacyState=adapt(fixture11.states.base_1_0);
+    const legacy=await persistEmission(db,{requestId:"v11-legacy",expectedVersion:null,metadata:legacyMetadata,state:legacyState,
+      initialFixtureEvidence:{environment:"test",reference:"v11-route"}},signer);
+    await db.prepare(`INSERT INTO authority_installation_capability_declarations
+        (organization_id,installation_id,revision,request_id,request_digest,supported_authority_schema_versions_json,source,declared_at)
+        VALUES (?,?,'1','fixture','fixture','["1.0","1.1"]','registration','2026-09-08T12:10:00Z')`).bind(org,"installation-a").run();
+    const transitionMetadata=metadata(fixture11.metadata.initial),transitionState=adapt(fixture11.states.initial_1_1);
+    const transition=await persistEmission(db,{requestId:"v11-transition",expectedVersion:legacy.metadata.authority_version,metadata:transitionMetadata,state:transitionState},signer);
+    const transitionResponse=await authoritySnapshotResponse(db,new Request(`https://fixture.invalid/v1/authority/snapshot?org=${org}&base_version=${legacy.metadata.authority_version}`),{organizationId:org,installationId:"installation-a"});
+    expect(((await transitionResponse.json()) as any).payload.kind).toBe("full");
+    const issuedMetadata=metadata(fixture11.metadata.issue),issuedState=adapt(fixture11.states.issued_1_1);
+    const issued=await persistEmission(db,{requestId:"v11-issue",expectedVersion:transition.metadata.authority_version,metadata:issuedMetadata,state:issuedState},signer);
+    const deltaResponse=await authoritySnapshotResponse(db,new Request(`https://fixture.invalid/v1/authority/snapshot?org=${org}&base_version=${transition.metadata.authority_version}`),{organizationId:org,installationId:"installation-a"});
+    const delta=await deltaResponse.json() as any;expect(delta.payload.kind).toBe("delta");expect(delta.payload.content.result_digest).toBe(issued.stateDigest);
+  });
+  it("returns schema_incompatible when the authenticated installation has no 1.1 capability",async()=>{
+    const org="org-v11-incompatible";await db.prepare("INSERT INTO organizations VALUES (?)").bind(org).run();
+    const adapt=(value:any)=>{const copy=structuredClone(value);for(const membership of copy.memberships)membership.organization_id=org;for(const grant of copy.intelligence_supply_grants??[])grant.organization_id=org;return copy;};
+    const metadata=(value:any)=>({...structuredClone(value),organization_id:org,audience:{organization_id:org,installation_ids:["installation-legacy"]}});
+    await persistEmission(db,{requestId:"incompatible-base",expectedVersion:null,metadata:metadata(fixture11.metadata.base),state:adapt(fixture11.states.base_1_0),initialFixtureEvidence:{environment:"test",reference:"v11-incompatible"}},signer);
+    await persistEmission(db,{requestId:"incompatible-transition",expectedVersion:"3",metadata:metadata(fixture11.metadata.initial),state:adapt(fixture11.states.initial_1_1)},signer);
+    const declaration=fixture11.capability_declarations.incompatible;await db.prepare(`INSERT INTO authority_installation_capability_declarations
+      (organization_id,installation_id,revision,request_id,request_digest,supported_authority_schema_versions_json,source,declared_at)
+      VALUES (?,?,?,?,?,?, 'registration','2026-09-08T12:10:00Z')`).bind(org,declaration.installation_id,declaration.revision,"fixture-incompatible","fixture-incompatible",canonicalizeJson(declaration.supported_authority_schema_versions)).run();
+    const response=await authoritySnapshotResponse(db,new Request(`https://fixture.invalid/v1/authority/snapshot?org=${org}`),{organizationId:org,installationId:declaration.installation_id});
+    expect(response.status).toBe(409);expect(await response.json()).toEqual({error:"authority_schema_incompatible"});
+  });
   it("reports recovery required for legacy evidence, without converting it",async()=>{
     await db.prepare("INSERT INTO organizations VALUES ('legacy')").run();
     await db.prepare("INSERT INTO authority_state (organization_id,current_version,updated_at) VALUES ('legacy',7,0)").run();

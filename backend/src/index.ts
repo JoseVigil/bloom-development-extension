@@ -16,6 +16,7 @@ import { authorityEvidenceResponse } from './authority/evidence-route';
 import { authoritySyncResponse, relayAuthorityOutbox } from './authority/sync-route';
 import { authorityTenantSelfResponse } from './authority/tenant-self-route';
 import { claimProject, getProjectBinding, ProjectClaimError } from './authority/project-claim';
+import { installationCapabilityResponse,readInstallationCapabilityResponse } from './authority/installation-capability-route';
 
 // SUPUESTO: `AUTHORITY_SIGNING_KEY_PKCS8_B64` y `AUTHORITY_SIGNING_KEY_ID` en `Env` no
 // están confirmados contra el `Env` real del proyecto (no tengo el
@@ -45,6 +46,7 @@ app.get('/v1/authority/genesis/login', c => configuredAuthorityHumanResponse(c.e
 app.get('/v1/authority/genesis/result', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/administration', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/vault-service-grant', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
+app.post('/v1/authority/intelligence-supply-grant', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 app.post('/v1/authority/initial-emission', c => configuredAuthorityHumanResponse(c.env,c.req.raw));
 // Sovereign Tenant Fase 3 (Propuesta_Arquitectura_Tenant_Soberano_v0_1.md §2.3.2-§2.3.4):
 // ambos verbos ya existen y están probados dentro de administration-route.ts
@@ -188,7 +190,7 @@ app.post("/v1/authority/installations/register", async (context) => {
   }
 
   const body = await context.req
-    .json<{ installation_id?: string; public_key_raw?: string }>()
+    .json<{ installation_id?: string; public_key_raw?: string; supported_authority_schema_versions?: ("1.0"|"1.1")[] }>()
     .catch(() => null);
   if (!body?.installation_id || !body?.public_key_raw) {
     return context.json({ error: "missing_fields" }, 400);
@@ -198,6 +200,7 @@ app.post("/v1/authority/installations/register", async (context) => {
     installationId: body.installation_id,
     organizationId,
     publicKeyRaw: body.public_key_raw,
+    supportedAuthoritySchemaVersions: body.supported_authority_schema_versions,
   });
   if (!result.ok) {
     // installation_id ya tiene una fila `active` — conflicto, no se sobreescribe.
@@ -206,6 +209,13 @@ app.post("/v1/authority/installations/register", async (context) => {
 
   return context.json({ status: "registered" }, 201);
 });
+
+app.put('/v1/authority/installations/capabilities',verifyInstallationAuth,async context=>{
+  const body=await context.req.json().catch(()=>null);
+  return installationCapabilityResponse(context.env.DB,body,{organizationId:context.req.query('org')!,installationId:context.req.header('X-Bloom-Installation-Id')!});
+});
+app.get('/v1/authority/installations/capabilities',verifyInstallationAuth,context=>
+  readInstallationCapabilityResponse(context.env.DB,context.req.raw,{organizationId:context.req.query('org')!,installationId:context.req.header('X-Bloom-Installation-Id')!}));
 
 app.get("/v1/authority/snapshot", verifyInstallationAuth, async (context) => {
   return authoritySnapshotResponse(context.env.DB, context.req.raw, {

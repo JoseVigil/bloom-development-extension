@@ -23,9 +23,13 @@ func TestRegisterInstallationStatusContract(t *testing.T) {
 				if r.URL.Path != "/v1/authority/installations/register" || r.URL.Query().Get("org") != "org" || r.Header.Get("Authorization") != "Bearer token" {
 					t.Error("wrong registration request")
 				}
-				var body map[string]string
+				var body struct {
+					InstallationID                   string   `json:"installation_id"`
+					PublicKeyRaw                     string   `json:"public_key_raw"`
+					SupportedAuthoritySchemaVersions []string `json:"supported_authority_schema_versions"`
+				}
 				_ = json.NewDecoder(r.Body).Decode(&body)
-				if body["installation_id"] != identity.InstallationID || body["public_key_raw"] != base64.StdEncoding.EncodeToString(identity.PublicKey) {
+				if body.InstallationID != identity.InstallationID || body.PublicKeyRaw != base64.StdEncoding.EncodeToString(identity.PublicKey) || len(body.SupportedAuthoritySchemaVersions) != 2 || body.SupportedAuthoritySchemaVersions[0] != "1.0" || body.SupportedAuthoritySchemaVersions[1] != "1.1" {
 					t.Error("wrong registration body")
 				}
 				w.WriteHeader(tc.status)

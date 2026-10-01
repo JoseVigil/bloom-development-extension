@@ -2,6 +2,7 @@ package authority
 
 import (
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -111,4 +112,45 @@ func TestCheckpointRejectsTrustManifestRollback(t *testing.T) {
 	if _, err = v.VerifyAndAccept(raw, "rollback"); err == nil {
 		t.Fatal("trust manifest rollback accepted")
 	}
+}
+
+func TestCheckpointPreservesWire11ProjectionAcrossCrashRecovery(t *testing.T) {
+	for _, stage := range []string{"after_journal", "after_state", "after_checkpoint"} {
+		t.Run(stage, func(t *testing.T) {
+			p, pub, priv := full11Fixture(t, "1")
+			var content FullContent
+			if err := json.Unmarshal(p.Content, &content); err != nil {
+				t.Fatal(err)
+			}
+			grant := intelligenceGrantFixture(p.IssuedAt)
+			grant.ReplacesGrantID = nil
+			grants := []IntelligenceSupplyGrant{grant}
+			content.IntelligenceSupplyGrants = &grants
+			p.Content, _ = json.Marshal(content)
+			dir := t.TempDir()
+			v := &Verifier{Trust: TrustBundle{"issuer": {"key": pub}}, Binding: Binding{"org", "issuer", "installation"}, Store: &Store{Path: filepath.Join(dir, "state.json")}, Checkpoint: &CheckpointStore{Path: filepath.Join(dir, "checkpoint.json")}, Now: func() time.Time { return p.IssuedAt.Add(time.Minute) }}
+			raw := signedFixture(t, p, priv, "key")
+			checkpointHook = func(current string) error {
+				if current == stage {
+					return errors.New("crash")
+				}
+				return nil
+			}
+			if _, err := v.VerifyAndAccept(raw, "crash"); err == nil {
+				t.Fatal("expected interrupted commit")
+			}
+			checkpointHook = nil
+			state, err := v.VerifyAndAccept(raw, "retry")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if state.Emission.SchemaVersion != "1.1" || state.Projection.IntelligenceSupplyGrants == nil || len(*state.Projection.IntelligenceSupplyGrants) != 1 {
+				t.Fatal("wire 1.1 projection lost during recovery")
+			}
+			if _, err := v.Checkpoint.validateLocked(v.Store, state, nil); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	checkpointHook = nil
 }

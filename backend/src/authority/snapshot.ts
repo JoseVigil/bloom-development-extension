@@ -32,6 +32,7 @@
 import { digestCanonical, signCanonicalPayload } from "./canonical";
 import { EmissionStoreError, loadCurrentEmission, loadEmissionVersion } from "./emission-store";
 import { wireVersion } from "./emission";
+import { installationSupports } from './installation-capability';
 import type {
   AuthorityEnvelope,
   AuthoritySnapshotContent,
@@ -55,11 +56,12 @@ export async function resolveWireAuthoritySnapshot(db: D1Database, organizationI
   const current = await loadCurrentEmission(db, organizationId);
   if (!current) throw new EmissionStoreError("emission_unavailable");
   if (!current.metadata.audience.installation_ids.includes(installationId)) throw new EmissionStoreError("audience_mismatch");
+  if (!await installationSupports(db,organizationId,installationId,current.metadata.schema_version)) throw new EmissionStoreError("schema_incompatible");
   if (baseVersion !== null && wireVersion(baseVersion) > wireVersion(current.metadata.authority_version)) throw new EmissionStoreError("version_ahead");
-  if (baseVersion !== null && baseVersion === current.baseVersion && current.delta) {
+  if (baseVersion !== null && baseVersion === current.baseVersion && current.delta && current.metadata.schema_version === "1.1") {
     try {
       const base = await loadEmissionVersion(db, organizationId, baseVersion);
-      if (base && base.metadata.issuer === current.metadata.issuer) return current.delta;
+      if (base && base.metadata.issuer === current.metadata.issuer && base.metadata.schema_version === "1.1") return current.delta;
     } catch (error) {
       if (!(error instanceof EmissionStoreError) || error.code !== "recovery_required") throw error;
       // A damaged historical base cannot support a delta. Current full is independently verifiable.

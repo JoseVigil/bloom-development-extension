@@ -120,7 +120,7 @@ export interface WireRoleAssignment {
   status: WireMembership["status"]; valid_from: string; valid_until: string | null; accepted_at: string;
 }
 export interface WireRevocation {
-  revocation_id: string; target_type: "external_identity" | "membership" | "role_definition" | "role_assignment" | "vault_service_grant";
+  revocation_id: string; target_type: "external_identity" | "membership" | "role_definition" | "role_assignment" | "vault_service_grant" | "intelligence_supply_grant";
   target_id: string; effective_at: string; recorded_in_authority_version: string; reason_code: string;
 }
 export interface WireVaultServiceGrant {
@@ -129,13 +129,22 @@ export interface WireVaultServiceGrant {
   purpose: "mandate_genesis_intelligence" | "mandate_gen_intelligence"; service_public_key: string;
   issued_by_principal_id: string; valid_from: string; valid_until: string;
 }
+export interface WireIntelligenceSupplyGrant {
+  grant_id: string; organization_id: string; installation_ids: string[];
+  consumer_id: string; actor_principal_id: string; purpose: string;
+  allowed_capabilities: string[]; allowed_privacy: ("local" | "approved_cloud")[];
+  allowed_destinations: { provider: string; backend_id: string; models: string[] }[];
+  limits: { max_total_tokens: number; max_output_tokens_per_inference: number; max_inferences: number; max_usd: string };
+  issued_by_principal_id: string; valid_from: string; valid_until: string; replaces_grant_id: string | null;
+}
 export interface WireFullContent {
   principals: WirePrincipal[]; memberships: WireMembership[]; role_definitions: WireRoleDefinition[];
   role_assignments: WireRoleAssignment[]; revocations: WireRevocation[];
   vault_service_grants?: WireVaultServiceGrant[];
+  intelligence_supply_grants?: WireIntelligenceSupplyGrant[];
 }
 export interface WireEmissionMetadata {
-  schema: "bloom.authority.snapshot"; schema_version: "1.0";
+  schema: "bloom.authority.snapshot"; schema_version: "1.0" | "1.1";
   snapshot_id: string; issuer: string; organization_id: string; authority_version: string;
   issued_at: string; not_before: string; expires_at: string;
   audience: { organization_id: string; installation_ids: string[] };

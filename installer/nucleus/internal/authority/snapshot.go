@@ -10,6 +10,7 @@ import (
 	"github.com/gofrs/flock"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"time"
@@ -78,6 +79,33 @@ type VaultServiceGrant struct {
 	ValidFrom           time.Time `json:"valid_from"`
 	ValidUntil          time.Time `json:"valid_until"`
 }
+type IntelligenceSupplyDestination struct {
+	Provider  string   `json:"provider"`
+	BackendID string   `json:"backend_id"`
+	Models    []string `json:"models"`
+}
+type IntelligenceSupplyLimits struct {
+	MaxTotalTokens              uint64 `json:"max_total_tokens"`
+	MaxOutputTokensPerInference uint64 `json:"max_output_tokens_per_inference"`
+	MaxInferences               uint64 `json:"max_inferences"`
+	MaxUSD                      string `json:"max_usd"`
+}
+type IntelligenceSupplyGrant struct {
+	GrantID             string                          `json:"grant_id"`
+	OrganizationID      string                          `json:"organization_id"`
+	InstallationIDs     []string                        `json:"installation_ids"`
+	ConsumerID          string                          `json:"consumer_id"`
+	ActorPrincipalID    string                          `json:"actor_principal_id"`
+	Purpose             string                          `json:"purpose"`
+	AllowedCapabilities []string                        `json:"allowed_capabilities"`
+	AllowedPrivacy      []string                        `json:"allowed_privacy"`
+	AllowedDestinations []IntelligenceSupplyDestination `json:"allowed_destinations"`
+	Limits              IntelligenceSupplyLimits        `json:"limits"`
+	IssuedByPrincipalID string                          `json:"issued_by_principal_id"`
+	ValidFrom           time.Time                       `json:"valid_from"`
+	ValidUntil          time.Time                       `json:"valid_until"`
+	ReplacesGrantID     *string                         `json:"replaces_grant_id"`
+}
 type FullContent struct {
 	Principals         []Principal         `json:"principals"`
 	Memberships        []Membership        `json:"memberships"`
@@ -85,6 +113,9 @@ type FullContent struct {
 	RoleAssignments    []RoleAssignment    `json:"role_assignments"`
 	Revocations        []Revocation        `json:"revocations"`
 	VaultServiceGrants []VaultServiceGrant `json:"vault_service_grants,omitempty"`
+	// A pointer distinguishes the collection omitted by wire 1.0 from the
+	// mandatory (and possibly empty) array carried by wire 1.1.
+	IntelligenceSupplyGrants *[]IntelligenceSupplyGrant `json:"intelligence_supply_grants,omitempty"`
 }
 
 // Historical snapshots carry five collections. The sixth is mandatory only
@@ -97,13 +128,78 @@ type legacyFullContent struct {
 	Revocations     []Revocation     `json:"revocations"`
 }
 
-func decodeProjection(raw []byte, out *FullContent) error {
+type fullContent10WithVault struct {
+	Principals         []Principal         `json:"principals"`
+	Memberships        []Membership        `json:"memberships"`
+	RoleDefinitions    []RoleDefinition    `json:"role_definitions"`
+	RoleAssignments    []RoleAssignment    `json:"role_assignments"`
+	Revocations        []Revocation        `json:"revocations"`
+	VaultServiceGrants []VaultServiceGrant `json:"vault_service_grants"`
+}
+
+type fullContent11WithoutVault struct {
+	Principals               []Principal               `json:"principals"`
+	Memberships              []Membership              `json:"memberships"`
+	RoleDefinitions          []RoleDefinition          `json:"role_definitions"`
+	RoleAssignments          []RoleAssignment          `json:"role_assignments"`
+	Revocations              []Revocation              `json:"revocations"`
+	IntelligenceSupplyGrants []IntelligenceSupplyGrant `json:"intelligence_supply_grants"`
+}
+
+type fullContent11WithVault struct {
+	Principals               []Principal               `json:"principals"`
+	Memberships              []Membership              `json:"memberships"`
+	RoleDefinitions          []RoleDefinition          `json:"role_definitions"`
+	RoleAssignments          []RoleAssignment          `json:"role_assignments"`
+	Revocations              []Revocation              `json:"revocations"`
+	VaultServiceGrants       []VaultServiceGrant       `json:"vault_service_grants"`
+	IntelligenceSupplyGrants []IntelligenceSupplyGrant `json:"intelligence_supply_grants"`
+}
+
+func decodeProjection(raw []byte, out *FullContent, schemaVersion string) error {
 	var fields map[string]json.RawMessage
+	if err := rejectDuplicateKeys(raw); err != nil {
+		return err
+	}
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
 	}
-	if _, present := fields["vault_service_grants"]; present {
-		return decodeWire(raw, out)
+	_, intelligencePresent := fields["intelligence_supply_grants"]
+	_, vaultPresent := fields["vault_service_grants"]
+	if schemaVersion == "1.1" {
+		if !intelligencePresent {
+			return errors.New("wire 1.1 intelligence supply grants required")
+		}
+		if vaultPresent {
+			var wire fullContent11WithVault
+			if err := decodeWire(raw, &wire); err != nil {
+				return err
+			}
+			grants := wire.IntelligenceSupplyGrants
+			*out = FullContent{Principals: wire.Principals, Memberships: wire.Memberships, RoleDefinitions: wire.RoleDefinitions, RoleAssignments: wire.RoleAssignments, Revocations: wire.Revocations, VaultServiceGrants: wire.VaultServiceGrants, IntelligenceSupplyGrants: &grants}
+			return nil
+		}
+		var wire fullContent11WithoutVault
+		if err := decodeWire(raw, &wire); err != nil {
+			return err
+		}
+		grants := wire.IntelligenceSupplyGrants
+		*out = FullContent{Principals: wire.Principals, Memberships: wire.Memberships, RoleDefinitions: wire.RoleDefinitions, RoleAssignments: wire.RoleAssignments, Revocations: wire.Revocations, IntelligenceSupplyGrants: &grants}
+		return nil
+	}
+	if schemaVersion != "1.0" {
+		return errors.New("unsupported authority projection schema")
+	}
+	if intelligencePresent {
+		return errors.New("wire 1.0 intelligence supply grants forbidden")
+	}
+	if vaultPresent {
+		var wire fullContent10WithVault
+		if err := decodeWire(raw, &wire); err != nil {
+			return err
+		}
+		*out = FullContent{Principals: wire.Principals, Memberships: wire.Memberships, RoleDefinitions: wire.RoleDefinitions, RoleAssignments: wire.RoleAssignments, Revocations: wire.Revocations, VaultServiceGrants: wire.VaultServiceGrants}
+		return nil
 	}
 	var legacy legacyFullContent
 	if err := decodeWire(raw, &legacy); err != nil {
@@ -280,7 +376,7 @@ func (v *Verifier) VerifyAndAccept(raw []byte, correlationID string) (*DurableSt
 	}
 	var projection FullContent
 	if p.Kind == "full" {
-		if err = decodeProjection(p.Content, &projection); err != nil {
+		if err = decodeProjection(p.Content, &projection, p.SchemaVersion); err != nil {
 			return nil, err
 		}
 		normalizeProjection(&projection)
@@ -291,12 +387,15 @@ func (v *Verifier) VerifyAndAccept(raw []byte, correlationID string) (*DurableSt
 		if p.BaseAuthorityVersion == nil || *p.BaseAuthorityVersion != state.Monotonic.HighWaterMark {
 			return nil, errors.New("delta gap requires full reconciliation")
 		}
-		projection, err = applyDelta(state.Projection, p.Content)
+		if state.Emission == nil || state.Emission.SchemaVersion != p.SchemaVersion {
+			return nil, errors.New("schema transition requires full snapshot")
+		}
+		projection, err = applyDelta(state.Projection, p.Content, p.SchemaVersion)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err = validateProjection(projection, p.OrganizationID); err != nil {
+	if err = validateProjectionForVersion(projection, p.OrganizationID, p.SchemaVersion); err != nil {
 		return nil, err
 	}
 	for _, r := range projection.Revocations {
@@ -316,6 +415,9 @@ func (v *Verifier) VerifyAndAccept(raw []byte, correlationID string) (*DurableSt
 		return state, nil // Equivalent full does not rewrite accepted evidence or journal.
 	}
 	if current != 0 {
+		if state.Emission != nil && state.Emission.SchemaVersion == "1.1" && p.SchemaVersion == "1.0" {
+			return nil, errors.New("authority schema downgrade rejected")
+		}
 		if err := validateContinuity(state.Projection, projection); err != nil {
 			return nil, err
 		}
@@ -338,7 +440,7 @@ func (v *Verifier) VerifyAndAccept(raw []byte, correlationID string) (*DurableSt
 	return state, nil
 }
 func validatePayload(p SnapshotPayload, b Binding, now time.Time) error {
-	if p.Schema != "bloom.authority.snapshot" || p.SchemaVersion != "1.0" || (p.Kind != "full" && p.Kind != "delta") {
+	if p.Schema != "bloom.authority.snapshot" || (p.SchemaVersion != "1.0" && p.SchemaVersion != "1.1") || (p.Kind != "full" && p.Kind != "delta") {
 		return errors.New("unsupported snapshot")
 	}
 	if p.AuthorityVersion == "" || p.SnapshotID == "" || b.OrganizationID == "" || b.Issuer == "" || b.InstallationID == "" {
@@ -400,13 +502,20 @@ func strictVersion(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
 }
 func validateProjection(f FullContent, org string) error {
+	version := "1.0"
+	if f.IntelligenceSupplyGrants != nil {
+		version = "1.1"
+	}
+	return validateProjectionForVersion(f, org, version)
+}
+func validateProjectionForVersion(f FullContent, org, schemaVersion string) error {
 	// Reuse the wire shape check for direct Go callers as well as decoded JSON.
 	raw, err := json.Marshal(f)
 	if err != nil {
 		return err
 	}
 	var checked FullContent
-	if err := decodeProjection(raw, &checked); err != nil {
+	if err := decodeProjection(raw, &checked, schemaVersion); err != nil {
 		return err
 	}
 	if org == "" {
@@ -480,7 +589,7 @@ func validateProjection(f FullContent, org string) error {
 	}
 	revocations := map[string]bool{}
 	for _, r := range f.Revocations {
-		if !unique(revocations, r.RevocationID) || r.TargetID == "" || r.ReasonCode == "" || !one(r.TargetType, "external_identity", "membership", "role_definition", "role_assignment", "vault_service_grant") || r.RecordedInAuthorityVersion == "" {
+		if !unique(revocations, r.RevocationID) || r.TargetID == "" || r.ReasonCode == "" || !one(r.TargetType, "external_identity", "membership", "role_definition", "role_assignment", "vault_service_grant", "intelligence_supply_grant") || r.RecordedInAuthorityVersion == "" {
 			return errors.New("invalid revocation")
 		}
 		if _, err := strictVersion(r.RecordedInAuthorityVersion); err != nil {
@@ -500,9 +609,61 @@ func validateProjection(f FullContent, org string) error {
 			return errors.New("invalid vault service grant")
 		}
 	}
+	if schemaVersion == "1.1" && f.IntelligenceSupplyGrants == nil {
+		return errors.New("wire 1.1 intelligence supply grants required")
+	}
+	if schemaVersion == "1.0" && f.IntelligenceSupplyGrants != nil {
+		return errors.New("wire 1.0 intelligence supply grants forbidden")
+	}
+	intelligenceGrants := map[string]bool{}
+	const maxSafeInteger = uint64(9007199254740991)
+	money := regexp.MustCompile(`^(0|[1-9][0-9]*\.[0-9]{6})$`)
+	if f.IntelligenceSupplyGrants != nil {
+		for _, g := range *f.IntelligenceSupplyGrants {
+			actorHuman, issuerHuman := false, false
+			for _, p := range f.Principals {
+				actorHuman = actorHuman || (p.PrincipalID == g.ActorPrincipalID && p.PrincipalType == "human")
+				issuerHuman = issuerHuman || (p.PrincipalID == g.IssuedByPrincipalID && p.PrincipalType == "human")
+			}
+			if !unique(intelligenceGrants, g.GrantID) || g.OrganizationID != org || g.ConsumerID == "" || g.ActorPrincipalID == "" || g.Purpose == "" || g.IssuedByPrincipalID == "" || !actorHuman || !issuerHuman || !g.ValidUntil.After(g.ValidFrom) {
+				return errors.New("invalid intelligence supply grant")
+			}
+			if len(g.InstallationIDs) == 0 || len(g.AllowedCapabilities) == 0 || len(g.AllowedPrivacy) == 0 || len(g.AllowedDestinations) == 0 {
+				return errors.New("incomplete intelligence supply grant binding")
+			}
+			if !sortedUniqueStrings(g.InstallationIDs) || !sortedUniqueStrings(g.AllowedCapabilities) || !sortedUniqueStrings(g.AllowedPrivacy) {
+				return errors.New("noncanonical intelligence supply grant list")
+			}
+			for _, privacy := range g.AllowedPrivacy {
+				if privacy != "local" && privacy != "approved_cloud" {
+					return errors.New("invalid intelligence supply privacy")
+				}
+			}
+			seenDestinations := map[string]bool{}
+			for i, destination := range g.AllowedDestinations {
+				key := roleKey(destination.Provider, destination.BackendID)
+				if destination.Provider == "" || destination.BackendID == "" || seenDestinations[key] || len(destination.Models) == 0 || !sortedUniqueStrings(destination.Models) || (i > 0 && !destinationLess(g.AllowedDestinations[i-1], destination)) {
+					return errors.New("invalid intelligence supply destination")
+				}
+				seenDestinations[key] = true
+			}
+			limits := g.Limits
+			if limits.MaxTotalTokens == 0 || limits.MaxTotalTokens > maxSafeInteger || limits.MaxOutputTokensPerInference == 0 || limits.MaxOutputTokensPerInference > limits.MaxTotalTokens || limits.MaxInferences == 0 || limits.MaxInferences > maxSafeInteger || !money.MatchString(limits.MaxUSD) {
+				return errors.New("invalid intelligence supply limits")
+			}
+		}
+		for _, g := range *f.IntelligenceSupplyGrants {
+			if g.ReplacesGrantID == nil {
+				continue
+			}
+			if *g.ReplacesGrantID == g.GrantID || !intelligenceGrants[*g.ReplacesGrantID] || !hasRevocation(f.Revocations, "intelligence_supply_grant", *g.ReplacesGrantID) {
+				return errors.New("invalid intelligence supply replacement")
+			}
+		}
+	}
 	return nil
 }
-func applyDelta(base FullContent, raw []byte) (FullContent, error) {
+func applyDelta(base FullContent, raw []byte, schemaVersion string) (FullContent, error) {
 	copyRaw, err := json.Marshal(base)
 	if err != nil {
 		return base, err
@@ -520,6 +681,9 @@ func applyDelta(base FullContent, raw []byte) (FullContent, error) {
 		}
 		if op.Operation != "upsert" && op.Operation != "remove" {
 			return base, errors.New("invalid delta operation")
+		}
+		if schemaVersion == "1.0" && op.Collection == "intelligence_supply_grants" {
+			return base, errors.New("wire 1.0 intelligence supply grants forbidden")
 		}
 		if err := applyOperation(&base, op); err != nil {
 			return base, err
@@ -617,6 +781,27 @@ func applyOperation(f *FullContent, op DeltaOperation) error {
 			}
 		}
 		f.VaultServiceGrants = mutate(f.VaultServiceGrants, op.EntityID, op.Operation, v, func(x VaultServiceGrant) string { return x.GrantID })
+	case "intelligence_supply_grants":
+		if op.Operation == "remove" {
+			return errors.New("intelligence supply grant removal forbidden")
+		}
+		if f.IntelligenceSupplyGrants == nil {
+			return errors.New("intelligence supply grant collection unavailable")
+		}
+		var v IntelligenceSupplyGrant
+		if err := decodeWire(op.Value, &v); err != nil {
+			return err
+		}
+		if v.GrantID != op.EntityID {
+			return errors.New("delta intelligence supply grant entity_id mismatch")
+		}
+		for _, existing := range *f.IntelligenceSupplyGrants {
+			if existing.GrantID == v.GrantID && !sameJSON(existing, v) {
+				return errors.New("intelligence supply grant history cannot change")
+			}
+		}
+		values := mutate(*f.IntelligenceSupplyGrants, op.EntityID, op.Operation, v, func(x IntelligenceSupplyGrant) string { return x.GrantID })
+		f.IntelligenceSupplyGrants = &values
 	default:
 		return errors.New("unknown delta collection")
 	}
@@ -657,6 +842,24 @@ func normalizeProjection(f *FullContent) {
 	for i := range f.Revocations {
 		f.Revocations[i].EffectiveAt = f.Revocations[i].EffectiveAt.UTC()
 	}
+	if f.IntelligenceSupplyGrants != nil {
+		for i := range *f.IntelligenceSupplyGrants {
+			g := &(*f.IntelligenceSupplyGrants)[i]
+			g.ValidFrom = g.ValidFrom.UTC()
+			g.ValidUntil = g.ValidUntil.UTC()
+			sort.Slice(g.InstallationIDs, func(i, j int) bool { return wireLess(g.InstallationIDs[i], g.InstallationIDs[j]) })
+			sort.Slice(g.AllowedCapabilities, func(i, j int) bool { return wireLess(g.AllowedCapabilities[i], g.AllowedCapabilities[j]) })
+			sort.Slice(g.AllowedPrivacy, func(i, j int) bool { return wireLess(g.AllowedPrivacy[i], g.AllowedPrivacy[j]) })
+			for j := range g.AllowedDestinations {
+				d := &g.AllowedDestinations[j]
+				sort.Slice(d.Models, func(i, j int) bool { return wireLess(d.Models[i], d.Models[j]) })
+			}
+			sort.Slice(g.AllowedDestinations, func(i, j int) bool { return destinationLess(g.AllowedDestinations[i], g.AllowedDestinations[j]) })
+		}
+		sort.Slice(*f.IntelligenceSupplyGrants, func(i, j int) bool {
+			return wireLess((*f.IntelligenceSupplyGrants)[i].GrantID, (*f.IntelligenceSupplyGrants)[j].GrantID)
+		})
+	}
 	for i := range f.RoleDefinitions {
 		p := f.RoleDefinitions[i].Permissions
 		sort.Slice(p, func(i, j int) bool { return wireLess(p[i], p[j]) })
@@ -687,6 +890,25 @@ func wireLess(a, b string) bool {
 	}
 	return len(x) < len(y)
 }
+func sortedUniqueStrings(values []string) bool {
+	for i, value := range values {
+		if value == "" || (i > 0 && !wireLess(values[i-1], value)) {
+			return false
+		}
+	}
+	return true
+}
+func destinationLess(a, b IntelligenceSupplyDestination) bool {
+	return wireLess(a.Provider, b.Provider) || (a.Provider == b.Provider && wireLess(a.BackendID, b.BackendID))
+}
+func hasRevocation(revocations []Revocation, targetType, targetID string) bool {
+	for _, revocation := range revocations {
+		if revocation.TargetType == targetType && revocation.TargetID == targetID {
+			return true
+		}
+	}
+	return false
+}
 func roleKey(id, version string) string {
 	raw, _ := json.Marshal([]string{id, version})
 	return string(raw)
@@ -710,7 +932,11 @@ func sameJSON(a, b any) bool {
 
 // StateDigest hashes a detached normal form, never the envelope or emission metadata.
 func StateDigest(f FullContent, org string) (string, error) {
-	if err := validateProjection(f, org); err != nil {
+	version := "1.0"
+	if f.IntelligenceSupplyGrants != nil {
+		version = "1.1"
+	}
+	if err := validateProjectionForVersion(f, org, version); err != nil {
 		return "", err
 	}
 	raw, _ := json.Marshal(f)
@@ -806,6 +1032,22 @@ func validateContinuity(old, next FullContent) error {
 		}
 		if !found {
 			return errors.New("vault service grant history cannot change")
+		}
+	}
+	if old.IntelligenceSupplyGrants != nil {
+		if next.IntelligenceSupplyGrants == nil {
+			return errors.New("intelligence supply grant history cannot change")
+		}
+		for _, g := range *old.IntelligenceSupplyGrants {
+			found := false
+			for _, n := range *next.IntelligenceSupplyGrants {
+				if n.GrantID == g.GrantID && sameJSON(n, g) {
+					found = true
+				}
+			}
+			if !found {
+				return errors.New("intelligence supply grant history cannot change")
+			}
 		}
 	}
 	return nil

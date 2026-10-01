@@ -1,7 +1,8 @@
 import { base64ToBase64url, canonicalizeJson, digestWire, signCanonicalPayload } from "./canonical";
 import type { WireDeltaOperation, WireEmissionMetadata, WireEnvelope, WireFullContent, WireSnapshotPayload } from "./schema";
 
-const collections = ["principals", "memberships", "role_definitions", "role_assignments", "revocations", "vault_service_grants"] as const;
+const collections10 = ["principals", "memberships", "role_definitions", "role_assignments", "revocations", "vault_service_grants"] as const;
+const collections11 = [...collections10, "intelligence_supply_grants"] as const;
 // master v1 — idéntico carácter por carácter a installer/nucleus/internal/authority/roles.go
 // BuiltinRoles[RoleMaster] (13 permisos). `create_project` agregado 2026-09-23 (Paso 0 de
 // Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md, decisión de Jose): Go ya lo tenía desde
@@ -68,10 +69,16 @@ function validity(v: { valid_from: string; valid_until: string | null; accepted_
 const roleKey = (r: { role_id: string; role_version: string }) => JSON.stringify([r.role_id, r.role_version]);
 
 /** Produces a detached normal form; missing fields and ambiguous entities never get defaults. */
-export function normalizeState(input: WireFullContent, organizationId: string): WireFullContent {
-  object(input, input.vault_service_grants === undefined ? [...collections.slice(0, -1)] : [...collections]); text(organizationId, "organization required");
+export function normalizeState(input: WireFullContent, organizationId: string, schemaVersion?: "1.0" | "1.1"): WireFullContent {
+  const version = schemaVersion ?? (input.intelligence_supply_grants === undefined ? "1.0" : "1.1");
+  const fields = version === "1.0"
+    ? (input.vault_service_grants === undefined ? [...collections10.slice(0, -1)] : [...collections10])
+    : (input.vault_service_grants === undefined ? collections11.filter(c => c !== "vault_service_grants") : [...collections11]);
+  if (version === "1.0" && input.intelligence_supply_grants !== undefined) fail("1.0 intelligence supply grants forbidden");
+  if (version === "1.1" && input.intelligence_supply_grants === undefined) fail("1.1 intelligence supply grants required");
+  object(input, fields); text(organizationId, "organization required");
   const f = structuredClone(input);
-  for (const c of collections) if (f[c] !== undefined) array(f[c]);
+  for (const c of collections11) if (f[c] !== undefined) array(f[c]);
   const identities: string[] = [];
   for (const p of f.principals) {
     object(p, ["principal_id", "principal_type", "status", "external_identities"]);
@@ -117,7 +124,7 @@ export function normalizeState(input: WireFullContent, organizationId: string): 
   for (const r of f.revocations) {
     object(r, ["revocation_id", "target_type", "target_id", "effective_at", "recorded_in_authority_version", "reason_code"]);
     text(r.revocation_id, "revocation ID"); text(r.target_id, "revocation target"); text(r.reason_code, "reason code");
-    one(r.target_type, ["external_identity", "membership", "role_definition", "role_assignment", "vault_service_grant"]);
+    one(r.target_type, ["external_identity", "membership", "role_definition", "role_assignment", "vault_service_grant", "intelligence_supply_grant"]);
     wireVersion(r.recorded_in_authority_version); r.effective_at = normalizeWireTime(r.effective_at);
   }
   unique(f.revocations.map(r => r.revocation_id), "revocation");
@@ -131,12 +138,43 @@ export function normalizeState(input: WireFullContent, organizationId: string): 
     if (!f.principals.some(p => p.principal_id === g.issued_by_principal_id && p.principal_type === "human")) fail("grant issuer");
   }
   unique((f.vault_service_grants ?? []).map(g => g.grant_id), "vault service grant");
+  for (const g of f.intelligence_supply_grants ?? []) {
+    object(g, ["grant_id", "organization_id", "installation_ids", "consumer_id", "actor_principal_id", "purpose", "allowed_capabilities", "allowed_privacy", "allowed_destinations", "limits", "issued_by_principal_id", "valid_from", "valid_until", "replaces_grant_id"]);
+    for (const v of [g.grant_id, g.consumer_id, g.actor_principal_id, g.purpose, g.issued_by_principal_id]) text(v, "intelligence supply grant identity");
+    if (g.organization_id !== organizationId) fail("intelligence supply grant organization");
+    array(g.installation_ids); array(g.allowed_capabilities); array(g.allowed_privacy); array(g.allowed_destinations);
+    if (!g.installation_ids.length || !g.allowed_capabilities.length || !g.allowed_privacy.length || !g.allowed_destinations.length) fail("intelligence supply grant binding");
+    for (const id of g.installation_ids) text(id, "installation ID");
+    for (const capability of g.allowed_capabilities) text(capability, "capability");
+    for (const privacy of g.allowed_privacy) one(privacy, ["local", "approved_cloud"]);
+    unique(g.installation_ids, "grant installation"); unique(g.allowed_capabilities, "grant capability"); unique(g.allowed_privacy, "grant privacy");
+    for (const d of g.allowed_destinations) {
+      object(d, ["provider", "backend_id", "models"]); text(d.provider, "provider"); text(d.backend_id, "backend ID"); array(d.models);
+      if (!d.models.length) fail("destination models required"); for (const model of d.models) text(model, "model"); unique(d.models, "destination model"); d.models.sort(cmp);
+    }
+    unique(g.allowed_destinations.map(d => JSON.stringify([d.provider, d.backend_id])), "destination");
+    object(g.limits, ["max_total_tokens", "max_output_tokens_per_inference", "max_inferences", "max_usd"]);
+    if (!Number.isSafeInteger(g.limits.max_total_tokens) || g.limits.max_total_tokens < 1
+      || !Number.isSafeInteger(g.limits.max_output_tokens_per_inference) || g.limits.max_output_tokens_per_inference < 1
+      || g.limits.max_output_tokens_per_inference > g.limits.max_total_tokens
+      || !Number.isSafeInteger(g.limits.max_inferences) || g.limits.max_inferences < 1
+      || typeof g.limits.max_usd !== "string" || !/^(0|[1-9][0-9]*\.[0-9]{6})$/.test(g.limits.max_usd)) fail("intelligence supply limits");
+    g.valid_from = normalizeWireTime(g.valid_from); g.valid_until = normalizeWireTime(g.valid_until);
+    if (instant(g.valid_until) <= instant(g.valid_from)) fail("intelligence supply grant validity");
+    if (g.replaces_grant_id !== null) text(g.replaces_grant_id, "replaced grant ID");
+    if (!f.principals.some(p => p.principal_id === g.actor_principal_id && p.principal_type === "human")
+      || !f.principals.some(p => p.principal_id === g.issued_by_principal_id && p.principal_type === "human")) fail("intelligence supply grant principal");
+    g.installation_ids.sort(cmp); g.allowed_capabilities.sort(cmp); g.allowed_privacy.sort(cmp);
+    g.allowed_destinations.sort((a,b) => cmp(a.provider,b.provider) || cmp(a.backend_id,b.backend_id));
+  }
+  unique((f.intelligence_supply_grants ?? []).map(g => g.grant_id), "intelligence supply grant");
   f.principals.sort((a, b) => cmp(a.principal_id, b.principal_id));
   f.memberships.sort((a, b) => cmp(a.membership_id, b.membership_id));
   f.role_definitions.sort((a, b) => cmp(a.role_id, b.role_id) || (wireVersion(a.role_version) < wireVersion(b.role_version) ? -1 : wireVersion(a.role_version) > wireVersion(b.role_version) ? 1 : 0));
   f.role_assignments.sort((a, b) => cmp(a.assignment_id, b.assignment_id));
   f.revocations.sort((a, b) => cmp(a.revocation_id, b.revocation_id));
   f.vault_service_grants?.sort((a, b) => cmp(a.grant_id, b.grant_id));
+  f.intelligence_supply_grants?.sort((a, b) => cmp(a.grant_id, b.grant_id));
   return f;
 }
 /** Regla R1 (Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md §4.1): agrega al
@@ -163,7 +201,7 @@ export async function stateDigest(state: WireFullContent, organizationId: string
 export function normalizeMetadata(input: WireEmissionMetadata): WireEmissionMetadata {
   object(input, ["schema", "schema_version", "snapshot_id", "issuer", "organization_id", "authority_version", "issued_at", "not_before", "expires_at", "audience"]);
   const m = structuredClone(input);
-  if (m.schema !== "bloom.authority.snapshot" || m.schema_version !== "1.0") fail("schema");
+  if (m.schema !== "bloom.authority.snapshot" || !["1.0", "1.1"].includes(m.schema_version)) fail("schema");
   text(m.snapshot_id, "snapshot ID"); text(m.issuer, "issuer"); text(m.organization_id, "organization"); wireVersion(m.authority_version);
   m.issued_at = normalizeWireTime(m.issued_at); m.not_before = normalizeWireTime(m.not_before); m.expires_at = normalizeWireTime(m.expires_at);
   const ttl = instant(m.expires_at) - instant(m.issued_at);
@@ -183,7 +221,7 @@ export async function emitSnapshot(input: {
   object(input, input.base === undefined ? ["metadata", "state"] : ["metadata", "state", "base"]);
   text(keyId, "key ID");
   const metadata = normalizeMetadata(input.metadata);
-  const state = normalizeState(input.state, metadata.organization_id);
+  const state = normalizeState(input.state, metadata.organization_id, metadata.schema_version);
   if (state.revocations.some(r => wireVersion(r.recorded_in_authority_version) > wireVersion(metadata.authority_version))) fail("future revocation version");
   let payload: WireSnapshotPayload;
   if (input.base === undefined) payload = { ...metadata, kind: "full", base_authority_version: null, content: state };
@@ -192,13 +230,14 @@ export async function emitSnapshot(input: {
     if (wireVersion(input.base.authority_version) >= wireVersion(metadata.authority_version)) fail("delta version order");
     const base = normalizeState(input.base.state, metadata.organization_id);
     const operations: WireDeltaOperation[] = [];
-    const entityID = (c: keyof WireFullContent, v: any): string => c === "principals" ? v.principal_id : c === "memberships" ? v.membership_id : c === "role_definitions" ? v.role_id : c === "role_assignments" ? v.assignment_id : c === "vault_service_grants" ? v.grant_id : v.revocation_id;
+    const entityID = (c: keyof WireFullContent, v: any): string => c === "principals" ? v.principal_id : c === "memberships" ? v.membership_id : c === "role_definitions" ? v.role_id : c === "role_assignments" ? v.assignment_id : c === "vault_service_grants" || c === "intelligence_supply_grants" ? v.grant_id : v.revocation_id;
     const key = (c: keyof WireFullContent, v: any) => c === "role_definitions" ? roleKey(v) : entityID(c, v);
-    for (const c of collections) {
+    for (const c of collections11) {
       for (const old of base[c] ?? []) {
         const current = (state[c] as any[] | undefined)?.find(v => key(c, v) === key(c, old));
         if (c === "revocations" && (!current || canonicalizeJson(current) !== canonicalizeJson(old))) fail("revocation history cannot change");
         if (c === "vault_service_grants" && current && canonicalizeJson(current) !== canonicalizeJson(old)) fail("vault service grant history cannot change");
+        if (c === "intelligence_supply_grants" && current && canonicalizeJson(current) !== canonicalizeJson(old)) fail("intelligence supply grant history cannot change");
         if (c === "role_definitions" && current) {
           const prior = old as WireFullContent["role_definitions"][number];
           if (prior.role_origin !== current.role_origin || canonicalizeJson(prior.permissions) !== canonicalizeJson(current.permissions)) fail("role permissions or origin change requires a new role version");
@@ -206,7 +245,7 @@ export async function emitSnapshot(input: {
         if (!current) {
           if (c === "role_definitions") fail("historical role removal forbidden");
           if (c === "principals") fail("principal removal deferred");
-          const type = c === "memberships" ? "membership" : c === "vault_service_grants" ? "vault_service_grant" : "role_assignment";
+          const type = c === "memberships" ? "membership" : c === "vault_service_grants" ? "vault_service_grant" : c === "intelligence_supply_grants" ? "intelligence_supply_grant" : "role_assignment";
           if (!state.revocations.some(r => r.target_type === type && r.target_id === entityID(c, old))) fail("removal requires revocation");
           operations.push({ sequence: String(operations.length + 1), operation: "remove", collection: c, entity_id: entityID(c, old), value: null });
         }

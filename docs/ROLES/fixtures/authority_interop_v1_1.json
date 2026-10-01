@@ -1,0 +1,1677 @@
+{
+  "description": "TEST ONLY. Autonomous Backend Authority 1.1 interoperability vector; RFC 8032 fixture key, never a production trust anchor.",
+  "key_id": "fixture-only-rfc8032",
+  "private_key_pkcs8_base64": "MC4CAQAwBQYDK2VwBCIEIJ1hsZ3v/VpguoRK9JLsLMREScVpezJpGXA7rAMcrn9g",
+  "public_key_base64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+  "capability_declarations": {
+    "compatible": {
+      "organization_id": "org-fixture",
+      "installation_id": "installation-a",
+      "revision": "1",
+      "supported_authority_schema_versions": [
+        "1.0",
+        "1.1"
+      ]
+    },
+    "incompatible": {
+      "organization_id": "org-fixture",
+      "installation_id": "installation-legacy",
+      "revision": "1",
+      "supported_authority_schema_versions": [
+        "1.0"
+      ],
+      "expected_error": "schema_incompatible"
+    }
+  },
+  "metadata": {
+    "base": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.0",
+      "snapshot_id": "v10-transition-base",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "3",
+      "issued_at": "2026-09-08T12:09:00Z",
+      "not_before": "2026-09-08T12:09:00Z",
+      "expires_at": "2026-09-08T12:14:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": ["installation-a"]
+      }
+    },
+    "initial": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.1",
+      "snapshot_id": "v11-initial",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "4",
+      "issued_at": "2026-09-08T12:10:00Z",
+      "not_before": "2026-09-08T12:10:00Z",
+      "expires_at": "2026-09-08T12:15:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a"
+        ]
+      }
+    },
+    "issue": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.1",
+      "snapshot_id": "v11-issue",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "5",
+      "issued_at": "2026-09-08T12:11:00Z",
+      "not_before": "2026-09-08T12:11:00Z",
+      "expires_at": "2026-09-08T12:16:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a"
+        ]
+      }
+    },
+    "replace": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.1",
+      "snapshot_id": "v11-replace",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "6",
+      "issued_at": "2026-09-08T12:12:00Z",
+      "not_before": "2026-09-08T12:12:00Z",
+      "expires_at": "2026-09-08T12:17:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a"
+        ]
+      }
+    },
+    "revoke": {
+      "schema": "bloom.authority.snapshot",
+      "schema_version": "1.1",
+      "snapshot_id": "v11-revoke",
+      "issuer": "fixture-issuer",
+      "organization_id": "org-fixture",
+      "authority_version": "7",
+      "issued_at": "2026-09-08T12:13:00Z",
+      "not_before": "2026-09-08T12:13:00Z",
+      "expires_at": "2026-09-08T12:18:00Z",
+      "audience": {
+        "organization_id": "org-fixture",
+        "installation_ids": [
+          "installation-a"
+        ]
+      }
+    }
+  },
+  "grants": {
+    "issued": {
+      "grant_id": "grant-v11-a",
+      "organization_id": "org-fixture",
+      "installation_ids": [
+        "installation-a"
+      ],
+      "consumer_id": "brain",
+      "actor_principal_id": "p-😀",
+      "purpose": "mandate_intelligence",
+      "allowed_capabilities": [
+        "structured_output",
+        "text.generate",
+        "tool_call.propose"
+      ],
+      "allowed_privacy": [
+        "local",
+        "approved_cloud"
+      ],
+      "allowed_destinations": [
+        {
+          "provider": "anthropic",
+          "backend_id": "anthropic_api",
+          "models": [
+            "claude-fixture"
+          ]
+        }
+      ],
+      "limits": {
+        "max_total_tokens": 10000,
+        "max_output_tokens_per_inference": 2000,
+        "max_inferences": 5,
+        "max_usd": "1.500000"
+      },
+      "issued_by_principal_id": "p-😀",
+      "valid_from": "2026-09-08T12:11:00Z",
+      "valid_until": "2026-09-09T12:11:00Z",
+      "replaces_grant_id": null
+    },
+    "replacement": {
+      "grant_id": "grant-v11-b",
+      "organization_id": "org-fixture",
+      "installation_ids": [
+        "installation-a"
+      ],
+      "consumer_id": "brain",
+      "actor_principal_id": "p-😀",
+      "purpose": "mandate_intelligence",
+      "allowed_capabilities": [
+        "structured_output",
+        "text.generate",
+        "tool_call.propose"
+      ],
+      "allowed_privacy": [
+        "approved_cloud"
+      ],
+      "allowed_destinations": [
+        {
+          "provider": "anthropic",
+          "backend_id": "anthropic_api",
+          "models": [
+            "claude-fixture-2"
+          ]
+        }
+      ],
+      "limits": {
+        "max_total_tokens": 20000,
+        "max_output_tokens_per_inference": 4000,
+        "max_inferences": 10,
+        "max_usd": "3.000000"
+      },
+      "issued_by_principal_id": "p-😀",
+      "valid_from": "2026-09-08T12:12:00Z",
+      "valid_until": "2026-09-09T12:12:00Z",
+      "replaces_grant_id": "grant-v11-a"
+    }
+  },
+  "revocations": {
+    "replaced": {
+      "revocation_id": "replace-grant-v11-a",
+      "target_type": "intelligence_supply_grant",
+      "target_id": "grant-v11-a",
+      "effective_at": "2026-09-08T12:12:00Z",
+      "recorded_in_authority_version": "6",
+      "reason_code": "grant_replaced"
+    },
+    "issued": {
+      "revocation_id": "revoke-grant-v11-b",
+      "target_type": "intelligence_supply_grant",
+      "target_id": "grant-v11-b",
+      "effective_at": "2026-09-08T12:13:00Z",
+      "recorded_in_authority_version": "7",
+      "reason_code": "master_revocation"
+    }
+  },
+  "states": {
+    "base_1_0": {
+      "principals": [
+        {
+          "principal_id": "p-😀",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": [
+            {
+              "provider": "github",
+              "subject": "123456789",
+              "display_handle": "José <fixture> & 😀",
+              "status": "verified",
+              "verified_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ]
+        },
+        {
+          "principal_id": "p-",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": []
+        }
+      ],
+      "memberships": [
+        {
+          "membership_id": "m-1",
+          "principal_id": "p-😀",
+          "organization_id": "org-fixture",
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "role_definitions": [
+        {
+          "role_id": "org:editor",
+          "role_version": "2",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        },
+        {
+          "role_id": "org:editor",
+          "role_version": "10",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        }
+      ],
+      "role_assignments": [
+        {
+          "assignment_id": "a-old",
+          "membership_id": "m-1",
+          "role_id": "org:editor",
+          "role_version": "2",
+          "scope": {
+            "type": "project",
+            "id": "project-fixture"
+          },
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "revocations": []
+    },
+    "initial_1_1": {
+      "principals": [
+        {
+          "principal_id": "p-😀",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": [
+            {
+              "provider": "github",
+              "subject": "123456789",
+              "display_handle": "José <fixture> & 😀",
+              "status": "verified",
+              "verified_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ]
+        },
+        {
+          "principal_id": "p-",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": []
+        }
+      ],
+      "memberships": [
+        {
+          "membership_id": "m-1",
+          "principal_id": "p-😀",
+          "organization_id": "org-fixture",
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "role_definitions": [
+        {
+          "role_id": "org:editor",
+          "role_version": "2",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        },
+        {
+          "role_id": "org:editor",
+          "role_version": "10",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        }
+      ],
+      "role_assignments": [
+        {
+          "assignment_id": "a-old",
+          "membership_id": "m-1",
+          "role_id": "org:editor",
+          "role_version": "2",
+          "scope": {
+            "type": "project",
+            "id": "project-fixture"
+          },
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "revocations": [],
+      "intelligence_supply_grants": []
+    },
+    "issued_1_1": {
+      "principals": [
+        {
+          "principal_id": "p-😀",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": [
+            {
+              "provider": "github",
+              "subject": "123456789",
+              "display_handle": "José <fixture> & 😀",
+              "status": "verified",
+              "verified_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ]
+        },
+        {
+          "principal_id": "p-",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": []
+        }
+      ],
+      "memberships": [
+        {
+          "membership_id": "m-1",
+          "principal_id": "p-😀",
+          "organization_id": "org-fixture",
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "role_definitions": [
+        {
+          "role_id": "org:editor",
+          "role_version": "2",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        },
+        {
+          "role_id": "org:editor",
+          "role_version": "10",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        }
+      ],
+      "role_assignments": [
+        {
+          "assignment_id": "a-old",
+          "membership_id": "m-1",
+          "role_id": "org:editor",
+          "role_version": "2",
+          "scope": {
+            "type": "project",
+            "id": "project-fixture"
+          },
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "revocations": [],
+      "intelligence_supply_grants": [
+        {
+          "grant_id": "grant-v11-a",
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ],
+          "consumer_id": "brain",
+          "actor_principal_id": "p-😀",
+          "purpose": "mandate_intelligence",
+          "allowed_capabilities": [
+            "structured_output",
+            "text.generate",
+            "tool_call.propose"
+          ],
+          "allowed_privacy": [
+            "local",
+            "approved_cloud"
+          ],
+          "allowed_destinations": [
+            {
+              "provider": "anthropic",
+              "backend_id": "anthropic_api",
+              "models": [
+                "claude-fixture"
+              ]
+            }
+          ],
+          "limits": {
+            "max_total_tokens": 10000,
+            "max_output_tokens_per_inference": 2000,
+            "max_inferences": 5,
+            "max_usd": "1.500000"
+          },
+          "issued_by_principal_id": "p-😀",
+          "valid_from": "2026-09-08T12:11:00Z",
+          "valid_until": "2026-09-09T12:11:00Z",
+          "replaces_grant_id": null
+        }
+      ]
+    },
+    "replaced_1_1": {
+      "principals": [
+        {
+          "principal_id": "p-😀",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": [
+            {
+              "provider": "github",
+              "subject": "123456789",
+              "display_handle": "José <fixture> & 😀",
+              "status": "verified",
+              "verified_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ]
+        },
+        {
+          "principal_id": "p-",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": []
+        }
+      ],
+      "memberships": [
+        {
+          "membership_id": "m-1",
+          "principal_id": "p-😀",
+          "organization_id": "org-fixture",
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "role_definitions": [
+        {
+          "role_id": "org:editor",
+          "role_version": "2",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        },
+        {
+          "role_id": "org:editor",
+          "role_version": "10",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        }
+      ],
+      "role_assignments": [
+        {
+          "assignment_id": "a-old",
+          "membership_id": "m-1",
+          "role_id": "org:editor",
+          "role_version": "2",
+          "scope": {
+            "type": "project",
+            "id": "project-fixture"
+          },
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "revocations": [
+        {
+          "revocation_id": "replace-grant-v11-a",
+          "target_type": "intelligence_supply_grant",
+          "target_id": "grant-v11-a",
+          "effective_at": "2026-09-08T12:12:00Z",
+          "recorded_in_authority_version": "6",
+          "reason_code": "grant_replaced"
+        }
+      ],
+      "intelligence_supply_grants": [
+        {
+          "grant_id": "grant-v11-a",
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ],
+          "consumer_id": "brain",
+          "actor_principal_id": "p-😀",
+          "purpose": "mandate_intelligence",
+          "allowed_capabilities": [
+            "structured_output",
+            "text.generate",
+            "tool_call.propose"
+          ],
+          "allowed_privacy": [
+            "local",
+            "approved_cloud"
+          ],
+          "allowed_destinations": [
+            {
+              "provider": "anthropic",
+              "backend_id": "anthropic_api",
+              "models": [
+                "claude-fixture"
+              ]
+            }
+          ],
+          "limits": {
+            "max_total_tokens": 10000,
+            "max_output_tokens_per_inference": 2000,
+            "max_inferences": 5,
+            "max_usd": "1.500000"
+          },
+          "issued_by_principal_id": "p-😀",
+          "valid_from": "2026-09-08T12:11:00Z",
+          "valid_until": "2026-09-09T12:11:00Z",
+          "replaces_grant_id": null
+        },
+        {
+          "grant_id": "grant-v11-b",
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ],
+          "consumer_id": "brain",
+          "actor_principal_id": "p-😀",
+          "purpose": "mandate_intelligence",
+          "allowed_capabilities": [
+            "structured_output",
+            "text.generate",
+            "tool_call.propose"
+          ],
+          "allowed_privacy": [
+            "approved_cloud"
+          ],
+          "allowed_destinations": [
+            {
+              "provider": "anthropic",
+              "backend_id": "anthropic_api",
+              "models": [
+                "claude-fixture-2"
+              ]
+            }
+          ],
+          "limits": {
+            "max_total_tokens": 20000,
+            "max_output_tokens_per_inference": 4000,
+            "max_inferences": 10,
+            "max_usd": "3.000000"
+          },
+          "issued_by_principal_id": "p-😀",
+          "valid_from": "2026-09-08T12:12:00Z",
+          "valid_until": "2026-09-09T12:12:00Z",
+          "replaces_grant_id": "grant-v11-a"
+        }
+      ]
+    },
+    "revoked_1_1": {
+      "principals": [
+        {
+          "principal_id": "p-😀",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": [
+            {
+              "provider": "github",
+              "subject": "123456789",
+              "display_handle": "José <fixture> & 😀",
+              "status": "verified",
+              "verified_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ]
+        },
+        {
+          "principal_id": "p-",
+          "principal_type": "human",
+          "status": "active",
+          "external_identities": []
+        }
+      ],
+      "memberships": [
+        {
+          "membership_id": "m-1",
+          "principal_id": "p-😀",
+          "organization_id": "org-fixture",
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "role_definitions": [
+        {
+          "role_id": "org:editor",
+          "role_version": "2",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        },
+        {
+          "role_id": "org:editor",
+          "role_version": "10",
+          "role_origin": "organization",
+          "display_name": "Edición",
+          "status": "active",
+          "permissions": [
+            "intent.cor.merge",
+            "intent.create"
+          ]
+        }
+      ],
+      "role_assignments": [
+        {
+          "assignment_id": "a-old",
+          "membership_id": "m-1",
+          "role_id": "org:editor",
+          "role_version": "2",
+          "scope": {
+            "type": "project",
+            "id": "project-fixture"
+          },
+          "status": "active",
+          "valid_from": "2026-09-08T12:00:00.123456789Z",
+          "valid_until": null,
+          "accepted_at": "2026-09-08T12:00:00.123456789Z"
+        }
+      ],
+      "revocations": [
+        {
+          "revocation_id": "replace-grant-v11-a",
+          "target_type": "intelligence_supply_grant",
+          "target_id": "grant-v11-a",
+          "effective_at": "2026-09-08T12:12:00Z",
+          "recorded_in_authority_version": "6",
+          "reason_code": "grant_replaced"
+        },
+        {
+          "revocation_id": "revoke-grant-v11-b",
+          "target_type": "intelligence_supply_grant",
+          "target_id": "grant-v11-b",
+          "effective_at": "2026-09-08T12:13:00Z",
+          "recorded_in_authority_version": "7",
+          "reason_code": "master_revocation"
+        }
+      ],
+      "intelligence_supply_grants": [
+        {
+          "grant_id": "grant-v11-a",
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ],
+          "consumer_id": "brain",
+          "actor_principal_id": "p-😀",
+          "purpose": "mandate_intelligence",
+          "allowed_capabilities": [
+            "structured_output",
+            "text.generate",
+            "tool_call.propose"
+          ],
+          "allowed_privacy": [
+            "local",
+            "approved_cloud"
+          ],
+          "allowed_destinations": [
+            {
+              "provider": "anthropic",
+              "backend_id": "anthropic_api",
+              "models": [
+                "claude-fixture"
+              ]
+            }
+          ],
+          "limits": {
+            "max_total_tokens": 10000,
+            "max_output_tokens_per_inference": 2000,
+            "max_inferences": 5,
+            "max_usd": "1.500000"
+          },
+          "issued_by_principal_id": "p-😀",
+          "valid_from": "2026-09-08T12:11:00Z",
+          "valid_until": "2026-09-09T12:11:00Z",
+          "replaces_grant_id": null
+        },
+        {
+          "grant_id": "grant-v11-b",
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ],
+          "consumer_id": "brain",
+          "actor_principal_id": "p-😀",
+          "purpose": "mandate_intelligence",
+          "allowed_capabilities": [
+            "structured_output",
+            "text.generate",
+            "tool_call.propose"
+          ],
+          "allowed_privacy": [
+            "approved_cloud"
+          ],
+          "allowed_destinations": [
+            {
+              "provider": "anthropic",
+              "backend_id": "anthropic_api",
+              "models": [
+                "claude-fixture-2"
+              ]
+            }
+          ],
+          "limits": {
+            "max_total_tokens": 20000,
+            "max_output_tokens_per_inference": 4000,
+            "max_inferences": 10,
+            "max_usd": "3.000000"
+          },
+          "issued_by_principal_id": "p-😀",
+          "valid_from": "2026-09-08T12:12:00Z",
+          "valid_until": "2026-09-09T12:12:00Z",
+          "replaces_grant_id": "grant-v11-a"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "base_1_0_digest": "MOi_ukiJdxKN3cexVTY1Y7dCEPDjjQri0uG3GmaTsh0",
+    "initial_1_1_digest": "on8UOqBMlJHnEcDTwTCImuQdf1U2kp4lC95Q-C7Q158",
+    "issued_1_1_digest": "t_ynuyHOIBfkRwZNTAhYu9eDgT4nFot77hzvvRsIL7w",
+    "replaced_1_1_digest": "pnRBcTC1plA9OxrDExQGUb9ncQXRtSTaqR5c-bqiZ0o",
+    "revoked_1_1_digest": "VdTfMBhCwArb6LeKV_jCBurHVlv95LvCTcKANHOWUEY"
+  },
+  "envelopes": {
+    "transition_full": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-initial",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "4",
+        "issued_at": "2026-09-08T12:10:00Z",
+        "not_before": "2026-09-08T12:10:00Z",
+        "expires_at": "2026-09-08T12:15:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José <fixture> & 😀",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-old",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "2",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": [],
+          "intelligence_supply_grants": []
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "IqkRirc_J8JYo-htdj84pYbxC_yTArV5xaXvSO3scBo",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "C8_1aLV1MsxNm0PTdvHiVBTxkP4gzBzwoXlUv-camQihbAEa-JFH2tanWbYt_eLIMr1XhcUdwpDKHqxWFgBiBw"
+      }
+    },
+    "issue_full": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-issue",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "5",
+        "issued_at": "2026-09-08T12:11:00Z",
+        "not_before": "2026-09-08T12:11:00Z",
+        "expires_at": "2026-09-08T12:16:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José <fixture> & 😀",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-old",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "2",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": [],
+          "intelligence_supply_grants": [
+            {
+              "grant_id": "grant-v11-a",
+              "organization_id": "org-fixture",
+              "installation_ids": [
+                "installation-a"
+              ],
+              "consumer_id": "brain",
+              "actor_principal_id": "p-😀",
+              "purpose": "mandate_intelligence",
+              "allowed_capabilities": [
+                "structured_output",
+                "text.generate",
+                "tool_call.propose"
+              ],
+              "allowed_privacy": [
+                "approved_cloud",
+                "local"
+              ],
+              "allowed_destinations": [
+                {
+                  "provider": "anthropic",
+                  "backend_id": "anthropic_api",
+                  "models": [
+                    "claude-fixture"
+                  ]
+                }
+              ],
+              "limits": {
+                "max_total_tokens": 10000,
+                "max_output_tokens_per_inference": 2000,
+                "max_inferences": 5,
+                "max_usd": "1.500000"
+              },
+              "issued_by_principal_id": "p-😀",
+              "valid_from": "2026-09-08T12:11:00Z",
+              "valid_until": "2026-09-09T12:11:00Z",
+              "replaces_grant_id": null
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "G_bzzE0Lan2VLm3ur8_NkpjCfG8MQZsKcIr3yDbyufg",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "F1uIXmLyz6EcWcxbUyGC9kzR-UII7w6_QpbgWbmco3HlHKYn4OqHmX-lG3lHGRTi0CMoox0t9A_KOO1UiKHoCg"
+      }
+    },
+    "issue_delta": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-issue",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "5",
+        "issued_at": "2026-09-08T12:11:00Z",
+        "not_before": "2026-09-08T12:11:00Z",
+        "expires_at": "2026-09-08T12:16:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "delta",
+        "base_authority_version": "4",
+        "content": {
+          "result_digest": "t_ynuyHOIBfkRwZNTAhYu9eDgT4nFot77hzvvRsIL7w",
+          "operations": [
+            {
+              "sequence": "1",
+              "operation": "upsert",
+              "collection": "intelligence_supply_grants",
+              "entity_id": "grant-v11-a",
+              "value": {
+                "grant_id": "grant-v11-a",
+                "organization_id": "org-fixture",
+                "installation_ids": [
+                  "installation-a"
+                ],
+                "consumer_id": "brain",
+                "actor_principal_id": "p-😀",
+                "purpose": "mandate_intelligence",
+                "allowed_capabilities": [
+                  "structured_output",
+                  "text.generate",
+                  "tool_call.propose"
+                ],
+                "allowed_privacy": [
+                  "approved_cloud",
+                  "local"
+                ],
+                "allowed_destinations": [
+                  {
+                    "provider": "anthropic",
+                    "backend_id": "anthropic_api",
+                    "models": [
+                      "claude-fixture"
+                    ]
+                  }
+                ],
+                "limits": {
+                  "max_total_tokens": 10000,
+                  "max_output_tokens_per_inference": 2000,
+                  "max_inferences": 5,
+                  "max_usd": "1.500000"
+                },
+                "issued_by_principal_id": "p-😀",
+                "valid_from": "2026-09-08T12:11:00Z",
+                "valid_until": "2026-09-09T12:11:00Z",
+                "replaces_grant_id": null
+              }
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "z2GmzUxqXxYfNwht63wH9wLSrODhwFEATIg2ecytbVI",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "c6Cj26WRSyCXPXxI6i4ZfbT7mLuFzc6Z0mEKd6pGcdfKqI3_WxqX2rZq-RW-S9sXuhwwncIiGoqU1IRMy9SaDw"
+      }
+    },
+    "replace_full": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-replace",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "6",
+        "issued_at": "2026-09-08T12:12:00Z",
+        "not_before": "2026-09-08T12:12:00Z",
+        "expires_at": "2026-09-08T12:17:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José <fixture> & 😀",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-old",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "2",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": [
+            {
+              "revocation_id": "replace-grant-v11-a",
+              "target_type": "intelligence_supply_grant",
+              "target_id": "grant-v11-a",
+              "effective_at": "2026-09-08T12:12:00Z",
+              "recorded_in_authority_version": "6",
+              "reason_code": "grant_replaced"
+            }
+          ],
+          "intelligence_supply_grants": [
+            {
+              "grant_id": "grant-v11-a",
+              "organization_id": "org-fixture",
+              "installation_ids": [
+                "installation-a"
+              ],
+              "consumer_id": "brain",
+              "actor_principal_id": "p-😀",
+              "purpose": "mandate_intelligence",
+              "allowed_capabilities": [
+                "structured_output",
+                "text.generate",
+                "tool_call.propose"
+              ],
+              "allowed_privacy": [
+                "approved_cloud",
+                "local"
+              ],
+              "allowed_destinations": [
+                {
+                  "provider": "anthropic",
+                  "backend_id": "anthropic_api",
+                  "models": [
+                    "claude-fixture"
+                  ]
+                }
+              ],
+              "limits": {
+                "max_total_tokens": 10000,
+                "max_output_tokens_per_inference": 2000,
+                "max_inferences": 5,
+                "max_usd": "1.500000"
+              },
+              "issued_by_principal_id": "p-😀",
+              "valid_from": "2026-09-08T12:11:00Z",
+              "valid_until": "2026-09-09T12:11:00Z",
+              "replaces_grant_id": null
+            },
+            {
+              "grant_id": "grant-v11-b",
+              "organization_id": "org-fixture",
+              "installation_ids": [
+                "installation-a"
+              ],
+              "consumer_id": "brain",
+              "actor_principal_id": "p-😀",
+              "purpose": "mandate_intelligence",
+              "allowed_capabilities": [
+                "structured_output",
+                "text.generate",
+                "tool_call.propose"
+              ],
+              "allowed_privacy": [
+                "approved_cloud"
+              ],
+              "allowed_destinations": [
+                {
+                  "provider": "anthropic",
+                  "backend_id": "anthropic_api",
+                  "models": [
+                    "claude-fixture-2"
+                  ]
+                }
+              ],
+              "limits": {
+                "max_total_tokens": 20000,
+                "max_output_tokens_per_inference": 4000,
+                "max_inferences": 10,
+                "max_usd": "3.000000"
+              },
+              "issued_by_principal_id": "p-😀",
+              "valid_from": "2026-09-08T12:12:00Z",
+              "valid_until": "2026-09-09T12:12:00Z",
+              "replaces_grant_id": "grant-v11-a"
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "lF9iIGh7CCvsULSGKVPhLYhojeh8OtE5pfse74Ikw2U",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "qGdcaOZ6x3KndcfN4VoiPtlFbSd7a-jolFMbL0p9jE9foeHevHEV9SbNUSPVZvxMptJ7yDRme3042iQi4bX_Cw"
+      }
+    },
+    "replace_delta": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-replace",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "6",
+        "issued_at": "2026-09-08T12:12:00Z",
+        "not_before": "2026-09-08T12:12:00Z",
+        "expires_at": "2026-09-08T12:17:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "delta",
+        "base_authority_version": "5",
+        "content": {
+          "result_digest": "pnRBcTC1plA9OxrDExQGUb9ncQXRtSTaqR5c-bqiZ0o",
+          "operations": [
+            {
+              "sequence": "1",
+              "operation": "upsert",
+              "collection": "revocations",
+              "entity_id": "replace-grant-v11-a",
+              "value": {
+                "revocation_id": "replace-grant-v11-a",
+                "target_type": "intelligence_supply_grant",
+                "target_id": "grant-v11-a",
+                "effective_at": "2026-09-08T12:12:00Z",
+                "recorded_in_authority_version": "6",
+                "reason_code": "grant_replaced"
+              }
+            },
+            {
+              "sequence": "2",
+              "operation": "upsert",
+              "collection": "intelligence_supply_grants",
+              "entity_id": "grant-v11-b",
+              "value": {
+                "grant_id": "grant-v11-b",
+                "organization_id": "org-fixture",
+                "installation_ids": [
+                  "installation-a"
+                ],
+                "consumer_id": "brain",
+                "actor_principal_id": "p-😀",
+                "purpose": "mandate_intelligence",
+                "allowed_capabilities": [
+                  "structured_output",
+                  "text.generate",
+                  "tool_call.propose"
+                ],
+                "allowed_privacy": [
+                  "approved_cloud"
+                ],
+                "allowed_destinations": [
+                  {
+                    "provider": "anthropic",
+                    "backend_id": "anthropic_api",
+                    "models": [
+                      "claude-fixture-2"
+                    ]
+                  }
+                ],
+                "limits": {
+                  "max_total_tokens": 20000,
+                  "max_output_tokens_per_inference": 4000,
+                  "max_inferences": 10,
+                  "max_usd": "3.000000"
+                },
+                "issued_by_principal_id": "p-😀",
+                "valid_from": "2026-09-08T12:12:00Z",
+                "valid_until": "2026-09-09T12:12:00Z",
+                "replaces_grant_id": "grant-v11-a"
+              }
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "oTaBwtPPlcLSXG5PtIBw7EPcBNqGOIVdZdU8UiNzP-g",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "sALmNtivIf5BVgJGRsLJvDepBdRqOJZQxK_C29guKNeG82IqzWomA5-fWKqHWn4N9anjYMzkzIPTXx5ZcpqECw"
+      }
+    },
+    "revoke_full": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-revoke",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "7",
+        "issued_at": "2026-09-08T12:13:00Z",
+        "not_before": "2026-09-08T12:13:00Z",
+        "expires_at": "2026-09-08T12:18:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "full",
+        "base_authority_version": null,
+        "content": {
+          "principals": [
+            {
+              "principal_id": "p-😀",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": [
+                {
+                  "provider": "github",
+                  "subject": "123456789",
+                  "display_handle": "José <fixture> & 😀",
+                  "status": "verified",
+                  "verified_at": "2026-09-08T12:00:00.123456789Z"
+                }
+              ]
+            },
+            {
+              "principal_id": "p-",
+              "principal_type": "human",
+              "status": "active",
+              "external_identities": []
+            }
+          ],
+          "memberships": [
+            {
+              "membership_id": "m-1",
+              "principal_id": "p-😀",
+              "organization_id": "org-fixture",
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "role_definitions": [
+            {
+              "role_id": "org:editor",
+              "role_version": "2",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            },
+            {
+              "role_id": "org:editor",
+              "role_version": "10",
+              "role_origin": "organization",
+              "display_name": "Edición",
+              "status": "active",
+              "permissions": [
+                "intent.cor.merge",
+                "intent.create"
+              ]
+            }
+          ],
+          "role_assignments": [
+            {
+              "assignment_id": "a-old",
+              "membership_id": "m-1",
+              "role_id": "org:editor",
+              "role_version": "2",
+              "scope": {
+                "type": "project",
+                "id": "project-fixture"
+              },
+              "status": "active",
+              "valid_from": "2026-09-08T12:00:00.123456789Z",
+              "valid_until": null,
+              "accepted_at": "2026-09-08T12:00:00.123456789Z"
+            }
+          ],
+          "revocations": [
+            {
+              "revocation_id": "replace-grant-v11-a",
+              "target_type": "intelligence_supply_grant",
+              "target_id": "grant-v11-a",
+              "effective_at": "2026-09-08T12:12:00Z",
+              "recorded_in_authority_version": "6",
+              "reason_code": "grant_replaced"
+            },
+            {
+              "revocation_id": "revoke-grant-v11-b",
+              "target_type": "intelligence_supply_grant",
+              "target_id": "grant-v11-b",
+              "effective_at": "2026-09-08T12:13:00Z",
+              "recorded_in_authority_version": "7",
+              "reason_code": "master_revocation"
+            }
+          ],
+          "intelligence_supply_grants": [
+            {
+              "grant_id": "grant-v11-a",
+              "organization_id": "org-fixture",
+              "installation_ids": [
+                "installation-a"
+              ],
+              "consumer_id": "brain",
+              "actor_principal_id": "p-😀",
+              "purpose": "mandate_intelligence",
+              "allowed_capabilities": [
+                "structured_output",
+                "text.generate",
+                "tool_call.propose"
+              ],
+              "allowed_privacy": [
+                "approved_cloud",
+                "local"
+              ],
+              "allowed_destinations": [
+                {
+                  "provider": "anthropic",
+                  "backend_id": "anthropic_api",
+                  "models": [
+                    "claude-fixture"
+                  ]
+                }
+              ],
+              "limits": {
+                "max_total_tokens": 10000,
+                "max_output_tokens_per_inference": 2000,
+                "max_inferences": 5,
+                "max_usd": "1.500000"
+              },
+              "issued_by_principal_id": "p-😀",
+              "valid_from": "2026-09-08T12:11:00Z",
+              "valid_until": "2026-09-09T12:11:00Z",
+              "replaces_grant_id": null
+            },
+            {
+              "grant_id": "grant-v11-b",
+              "organization_id": "org-fixture",
+              "installation_ids": [
+                "installation-a"
+              ],
+              "consumer_id": "brain",
+              "actor_principal_id": "p-😀",
+              "purpose": "mandate_intelligence",
+              "allowed_capabilities": [
+                "structured_output",
+                "text.generate",
+                "tool_call.propose"
+              ],
+              "allowed_privacy": [
+                "approved_cloud"
+              ],
+              "allowed_destinations": [
+                {
+                  "provider": "anthropic",
+                  "backend_id": "anthropic_api",
+                  "models": [
+                    "claude-fixture-2"
+                  ]
+                }
+              ],
+              "limits": {
+                "max_total_tokens": 20000,
+                "max_output_tokens_per_inference": 4000,
+                "max_inferences": 10,
+                "max_usd": "3.000000"
+              },
+              "issued_by_principal_id": "p-😀",
+              "valid_from": "2026-09-08T12:12:00Z",
+              "valid_until": "2026-09-09T12:12:00Z",
+              "replaces_grant_id": "grant-v11-a"
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "RuxZgrncsHJm_52w0rNsGOfWtw_b8UXcNtNcPOsuXUI",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "vw6fDrmIaRO_0SZfAX-p2_7OFQgIVpns257mldTK5Qlu4X_SqgSoIS6TQThzB05ywHW9jGFOAFvQ5E-Rt9WEDQ"
+      }
+    },
+    "revoke_delta": {
+      "payload": {
+        "schema": "bloom.authority.snapshot",
+        "schema_version": "1.1",
+        "snapshot_id": "v11-revoke",
+        "issuer": "fixture-issuer",
+        "organization_id": "org-fixture",
+        "authority_version": "7",
+        "issued_at": "2026-09-08T12:13:00Z",
+        "not_before": "2026-09-08T12:13:00Z",
+        "expires_at": "2026-09-08T12:18:00Z",
+        "audience": {
+          "organization_id": "org-fixture",
+          "installation_ids": [
+            "installation-a"
+          ]
+        },
+        "kind": "delta",
+        "base_authority_version": "6",
+        "content": {
+          "result_digest": "VdTfMBhCwArb6LeKV_jCBurHVlv95LvCTcKANHOWUEY",
+          "operations": [
+            {
+              "sequence": "1",
+              "operation": "upsert",
+              "collection": "revocations",
+              "entity_id": "revoke-grant-v11-b",
+              "value": {
+                "revocation_id": "revoke-grant-v11-b",
+                "target_type": "intelligence_supply_grant",
+                "target_id": "grant-v11-b",
+                "effective_at": "2026-09-08T12:13:00Z",
+                "recorded_in_authority_version": "7",
+                "reason_code": "master_revocation"
+              }
+            }
+          ]
+        }
+      },
+      "integrity": {
+        "canonicalization": "JCS-RFC8785",
+        "digest_algorithm": "SHA-256",
+        "digest": "xRlYAlfrz5gUTYLHB0vwgriSdMKlJDrX-M77fevTKnE",
+        "signature_algorithm": "Ed25519",
+        "key_id": "fixture-only-rfc8032",
+        "signature": "JaqGcZs0eujqKzu_S6uB_QtJLeeII_r0rkyiycr7W3B7AT4bP-htGsc-4u8gA7opE5jadLWBnIph5vjiFmSeAA"
+      }
+    }
+  }
+}
+

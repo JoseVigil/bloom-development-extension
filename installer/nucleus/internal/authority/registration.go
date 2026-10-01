@@ -22,7 +22,11 @@ func RegisterInstallation(ctx context.Context, baseURL, serviceToken, organizati
 	}
 	query := url.Values{"org": {organizationID}}
 	u.RawQuery = query.Encode()
-	body, _ := json.Marshal(map[string]string{"installation_id": identity.InstallationID, "public_key_raw": base64.StdEncoding.EncodeToString(identity.PublicKey)})
+	body, _ := json.Marshal(struct {
+		InstallationID                   string   `json:"installation_id"`
+		PublicKeyRaw                     string   `json:"public_key_raw"`
+		SupportedAuthoritySchemaVersions []string `json:"supported_authority_schema_versions"`
+	}{identity.InstallationID, base64.StdEncoding.EncodeToString(identity.PublicKey), []string{"1.0", "1.1"}})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 	if err != nil {
 		return err

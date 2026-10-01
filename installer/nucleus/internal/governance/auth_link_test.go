@@ -270,16 +270,33 @@ func TestAuthLinkCommandWritesOrgContextThenSyncs(t *testing.T) {
 	}
 
 	var installationID string
+	capabilityConfirmed := false
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/authority/installations/register":
-			var body map[string]string
+			var body struct {
+				InstallationID                   string   `json:"installation_id"`
+				SupportedAuthoritySchemaVersions []string `json:"supported_authority_schema_versions"`
+			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			installationID = body["installation_id"]
+			installationID = body.InstallationID
+			if len(body.SupportedAuthoritySchemaVersions) != 2 || body.SupportedAuthoritySchemaVersions[0] != "1.0" || body.SupportedAuthoritySchemaVersions[1] != "1.1" {
+				t.Error("registration did not declare Authority 1.1")
+			}
 			w.WriteHeader(201)
 			_, _ = w.Write([]byte(`{"status":"registered"}`))
+		case "/v1/authority/installations/capabilities":
+			if r.Method != http.MethodGet || r.Header.Get("X-Bloom-Installation-Id") != installationID || r.Header.Get("X-Bloom-Signature") == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			capabilityConfirmed = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"organizationId": "org-real-id", "installationId": installationID, "revision": "1", "supportedAuthoritySchemaVersions": []string{"1.0", "1.1"}, "source": "registration", "declaredAt": now})
 		case "/v1/authority/trust-manifest":
+			if !capabilityConfirmed {
+				t.Error("trust manifest requested before Authority 1.1 capability confirmation")
+			}
 			p := authority.TrustManifestPayload{Schema: "bloom.authority.trust-manifest", SchemaVersion: "1.0", ManifestID: "manifest",
 				Issuer: "issuer", OrganizationID: "org-real-id", ManifestVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute),
 				ExpiresAt: now.Add(time.Hour), RootKeyID: "root",
@@ -288,6 +305,9 @@ func TestAuthLinkCommandWritesOrgContextThenSyncs(t *testing.T) {
 		case "/v1/authority/sync/challenge":
 			_ = json.NewEncoder(w).Encode(map[string]any{"challenge": "challenge", "organization_id": "org-real-id", "installation_id": installationID, "issued_at": now, "expires_at": now.Add(time.Minute)})
 		case "/v1/authority/sync/pull":
+			if !capabilityConfirmed {
+				t.Error("snapshot pulled before Authority 1.1 capability confirmation")
+			}
 			content := authority.FullContent{Principals: []authority.Principal{}, Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{}}
 			contentRaw, _ := json.Marshal(content)
 			p := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", Kind: "full", SnapshotID: "snapshot", Issuer: "issuer",
@@ -353,6 +373,37 @@ func TestAuthLinkCommandWritesOrgContextThenSyncs(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), "organizationId registrado: org-real-id") {
 		t.Fatalf("el log de GOVERNANCE no confirma el organizationId registrado:\n%s", logData)
+	}
+	logText := string(logData)
+	orderedStages := []string{
+		"authority sync stage=registration started",
+		"authority sync stage=capability confirmed=1.1",
+		"authority sync stage=trust started",
+		"authority sync stage=pull started",
+		"authority sync stage=pull result=accepted",
+	}
+	previous := -1
+	for _, stage := range orderedStages {
+		position := strings.Index(logText, stage)
+		if position <= previous {
+			t.Fatalf("authority stages are absent or out of order at %q:\n%s", stage, logText)
+		}
+		previous = position
+	}
+	if strings.Count(logText, "authority sync started") != 1 {
+		t.Fatalf("authority sync initialized or started more than once:\n%s", logText)
+	}
+	for _, forbidden := range []string{
+		"service-token",
+		"grant-integrated",
+		base64.RawURLEncoding.EncodeToString(rootPrivate),
+		base64.RawURLEncoding.EncodeToString(issuerPrivate),
+		base64.RawURLEncoding.EncodeToString(rootPublic),
+		base64.RawURLEncoding.EncodeToString(issuerPublic),
+	} {
+		if forbidden != "" && strings.Contains(logText, forbidden) {
+			t.Fatalf("GOVERNANCE log leaked forbidden material %q", forbidden)
+		}
 	}
 	if !strings.Contains(out.String(), "performed: true") {
 		t.Fatalf("salida no muestra el sync como performed:\n%s", out.String())

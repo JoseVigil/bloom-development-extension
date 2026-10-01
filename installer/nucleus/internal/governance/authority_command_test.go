@@ -77,6 +77,10 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	}
 
 	registrationCount, projectClaimCount, mandateMode := 0, 0, "pending"
+	capabilityGets, capabilityPuts, capabilityRevision := 0, 0, "1"
+	capability11 := false
+	failureStage := ""
+	loggerReadyAtRegistration := false
 	projectID := "11111111-1111-4111-8111-111111111111"
 	var installationID string
 	var server *httptest.Server
@@ -89,28 +93,85 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		return out
 	}
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if failureStage == "registration" && r.URL.Path == "/v1/authority/installations/register" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if failureStage == "capability" && r.URL.Path == "/v1/authority/installations/capabilities" {
+			_, _ = w.Write([]byte(`{"malformed":true}`))
+			return
+		}
+		if failureStage == "trust" && r.URL.Path == "/v1/authority/trust-manifest" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if failureStage == "pull" && r.URL.Path == "/v1/authority/sync/challenge" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		switch r.URL.Path {
 		case "/v1/authority/installations/register":
-			registrationCount++
-			var body map[string]string
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			installationID = body["installation_id"]
-			if registrationCount == 1 {
-				w.WriteHeader(201)
-				_, _ = w.Write([]byte(`{"status":"registered"}`))
-			} else {
-				w.WriteHeader(409)
-				_, _ = w.Write([]byte(`{"error":"installation_conflict"}`))
+			matches, _ := filepath.Glob(filepath.Join(appData, "logs", "nucleus", "nucleus_governance_*.log"))
+			if len(matches) == 1 {
+				if currentLog, readErr := os.ReadFile(matches[0]); readErr == nil && strings.Contains(string(currentLog), "authority sync started") {
+					loggerReadyAtRegistration = true
+				}
 			}
+			registrationCount++
+			var body struct {
+				InstallationID                   string   `json:"installation_id"`
+				SupportedAuthoritySchemaVersions []string `json:"supported_authority_schema_versions"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			installationID = body.InstallationID
+			if len(body.SupportedAuthoritySchemaVersions) != 2 || body.SupportedAuthoritySchemaVersions[0] != "1.0" || body.SupportedAuthoritySchemaVersions[1] != "1.1" {
+				t.Error("registration did not declare Authority 1.1")
+			}
+			// Simula una instalación existente, ya backfilled como 1.0.
+			w.WriteHeader(409)
+			_, _ = w.Write([]byte(`{"error":"installation_conflict"}`))
+		case "/v1/authority/installations/capabilities":
+			if r.Header.Get("X-Bloom-Installation-Id") != installationID || r.Header.Get("X-Bloom-Signature") == "" || r.URL.Query().Get("org") != "org-id" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if r.Method == http.MethodGet {
+				capabilityGets++
+				versions := []string{"1.0"}
+				if capability11 {
+					versions = []string{"1.0", "1.1"}
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"organizationId": "org-id", "installationId": installationID, "revision": capabilityRevision, "supportedAuthoritySchemaVersions": versions, "source": "signed_update", "declaredAt": now})
+				return
+			}
+			capabilityPuts++
+			var update struct {
+				ExpectedRevision                 string   `json:"expectedRevision"`
+				SupportedAuthoritySchemaVersions []string `json:"supportedAuthoritySchemaVersions"`
+				Signature                        string   `json:"signature"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&update)
+			if update.ExpectedRevision != capabilityRevision || len(update.SupportedAuthoritySchemaVersions) != 2 || update.Signature == "" {
+				t.Error("invalid capability update")
+			}
+			capabilityRevision, capability11 = "2", true
+			_ = json.NewEncoder(w).Encode(map[string]any{"installationId": installationID, "revision": capabilityRevision, "supportedAuthoritySchemaVersions": []string{"1.0", "1.1"}})
 		case "/v1/authority/trust-manifest":
+			if !capability11 {
+				t.Error("trust manifest requested before capability confirmation")
+			}
 			p := authority.TrustManifestPayload{Schema: "bloom.authority.trust-manifest", SchemaVersion: "1.0", ManifestID: "manifest", Issuer: "issuer", OrganizationID: "org-id", ManifestVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), RootKeyID: "root", Keys: []authority.TrustKey{{KeyID: "issuer-key", PublicKey: base64.RawURLEncoding.EncodeToString(issuerPublic), Status: "active", ValidFrom: now.Add(-time.Hour)}}}
 			_, _ = w.Write(signEnvelope(p, "BLOOM-AUTHORITY-TRUST-MANIFEST-v1", "root", rootPrivate))
 		case "/v1/authority/sync/challenge":
 			_ = json.NewEncoder(w).Encode(map[string]any{"challenge": "challenge", "organization_id": "org-id", "installation_id": installationID, "issued_at": now, "expires_at": now.Add(time.Minute)})
 		case "/v1/authority/sync/pull":
-			content := authority.FullContent{Principals: []authority.Principal{{PrincipalID: "principal-jose", PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Provider: "github", Subject: "jose", Status: "verified", VerifiedAt: now.Add(-time.Hour)}}}}, Memberships: []authority.Membership{{MembershipID: "membership-jose", PrincipalID: "principal-jose", OrganizationID: "org-id", Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}}, RoleDefinitions: []authority.RoleDefinition{{RoleID: authority.RoleMaster, RoleVersion: "1", RoleOrigin: "builtin", DisplayName: "Master", Status: "active", Permissions: authority.BuiltinRoles[authority.RoleMaster]}}, RoleAssignments: []authority.RoleAssignment{{AssignmentID: "assignment-jose", MembershipID: "membership-jose", RoleID: authority.RoleMaster, RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org-id"}, Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}}, Revocations: []authority.Revocation{}}
+			if !capability11 {
+				t.Error("snapshot pulled before capability confirmation")
+			}
+			grants := []authority.IntelligenceSupplyGrant{{GrantID: "grant-integrated", OrganizationID: "org-id", InstallationIDs: []string{installationID}, ConsumerID: "brain", ActorPrincipalID: "principal-jose", Purpose: "mandate_intelligence", AllowedCapabilities: []string{"text.generate"}, AllowedPrivacy: []string{"approved_cloud"}, AllowedDestinations: []authority.IntelligenceSupplyDestination{{Provider: "anthropic", BackendID: "anthropic_api", Models: []string{"model"}}}, Limits: authority.IntelligenceSupplyLimits{MaxTotalTokens: 10000, MaxOutputTokensPerInference: 2000, MaxInferences: 5, MaxUSD: "1.500000"}, IssuedByPrincipalID: "principal-jose", ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)}}
+			content := authority.FullContent{Principals: []authority.Principal{{PrincipalID: "principal-jose", PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Provider: "github", Subject: "jose", Status: "verified", VerifiedAt: now.Add(-time.Hour)}}}}, Memberships: []authority.Membership{{MembershipID: "membership-jose", PrincipalID: "principal-jose", OrganizationID: "org-id", Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}}, RoleDefinitions: []authority.RoleDefinition{{RoleID: authority.RoleMaster, RoleVersion: "1", RoleOrigin: "builtin", DisplayName: "Master", Status: "active", Permissions: authority.BuiltinRoles[authority.RoleMaster]}}, RoleAssignments: []authority.RoleAssignment{{AssignmentID: "assignment-jose", MembershipID: "membership-jose", RoleID: authority.RoleMaster, RoleVersion: "1", Scope: authority.Scope{Type: "organization", ID: "org-id"}, Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}}, Revocations: []authority.Revocation{}, IntelligenceSupplyGrants: &grants}
 			contentRaw, _ := json.Marshal(content)
-			p := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", Kind: "full", SnapshotID: "snapshot", Issuer: "issuer", OrganizationID: "org-id", AuthorityVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), Audience: authority.Audience{OrganizationID: "org-id", InstallationIDs: []string{installationID}}, Content: contentRaw}
+			p := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.1", Kind: "full", SnapshotID: "snapshot", Issuer: "issuer", OrganizationID: "org-id", AuthorityVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), Audience: authority.Audience{OrganizationID: "org-id", InstallationIDs: []string{installationID}}, Content: contentRaw}
 			snapshot := signEnvelope(p, "BLOOM-AUTHORITY-SNAPSHOT-v1", "issuer-key", issuerPrivate)
 			stateDigest, _ := authority.StateDigest(content, "org-id")
 			snapshotSum := sha256.Sum256(mustCanonicalPayload(t, snapshot))
@@ -216,8 +277,75 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	if registrationCount != 4 {
 		t.Fatalf("registration count=%d", registrationCount)
 	}
+	if capabilityPuts != 1 || capabilityGets != 5 {
+		t.Fatalf("capability gets=%d puts=%d", capabilityGets, capabilityPuts)
+	}
 	if projectClaimCount != 4 {
 		t.Fatalf("project claim count=%d", projectClaimCount)
+	}
+	if !loggerReadyAtRegistration {
+		t.Fatal("GOVERNANCE logger was not initialized before installation registration")
+	}
+	for _, stage := range []string{"registration", "capability", "trust", "pull"} {
+		failureStage = stage
+		report, syncErr := services.Run("sync", nil)
+		if syncErr == nil || report.OK {
+			t.Fatalf("stage=%s expected fail-closed sync, report=%+v err=%v", stage, report, syncErr)
+		}
+	}
+	failureStage = ""
+	governanceLogs, _ := filepath.Glob(filepath.Join(appData, "logs", "nucleus", "nucleus_governance_*.log"))
+	if len(governanceLogs) != 1 {
+		t.Fatalf("GOVERNANCE log files=%v", governanceLogs)
+	}
+	governanceLog, err := os.ReadFile(governanceLogs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	logText := string(governanceLog)
+	for _, evidence := range []string{
+		"authority sync started",
+		"stage=registration result=registered",
+		"stage=capability update=attempted",
+		"stage=capability confirmed=1.1 revision=2",
+		"stage=trust result=verified",
+		"stage=pull result=accepted authority_version=1 state_digest=",
+		"failed stage=registration",
+		"failed stage=capability",
+		"failed stage=trust",
+		"failed stage=pull",
+	} {
+		if !strings.Contains(logText, evidence) {
+			t.Fatalf("GOVERNANCE log missing %q:\n%s", evidence, logText)
+		}
+	}
+	if starts, ends := strings.Count(logText, "Logging session started"), strings.Count(logText, "Logging session ended"); starts != 8 || ends != 8 {
+		t.Fatalf("GOVERNANCE logger initialization count starts=%d ends=%d, want one session per 8 sync attempts", starts, ends)
+	}
+	for _, forbidden := range []string{
+		"service-token",
+		"grant-integrated",
+		base64.RawURLEncoding.EncodeToString(rootPrivate),
+		base64.RawURLEncoding.EncodeToString(issuerPrivate),
+		base64.RawURLEncoding.EncodeToString(rootPublic),
+		base64.RawURLEncoding.EncodeToString(issuerPublic),
+	} {
+		if forbidden != "" && strings.Contains(logText, forbidden) {
+			t.Fatalf("GOVERNANCE log leaked forbidden material %q", forbidden)
+		}
+	}
+	logFiles, err := filepath.Glob(filepath.Join(appData, "logs", "nucleus", "*.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range logFiles {
+		if strings.Contains(filepath.Base(path), "authority") {
+			t.Fatalf("authority sync created a new log stream: %s", path)
+		}
+	}
+	grantEvidence, grantErr := authority.ResolveIntelligenceSupplyGrant(&authority.Store{Path: filepath.Join(appData, "authority", "state.json")}, &authority.CheckpointStore{Path: filepath.Join(appData, "authority", "checkpoint.json")}, "org-id", installationID, "grant-integrated", now)
+	if grantErr != nil || grantEvidence.Status != authority.IntelligenceSupplyGrantActive || grantEvidence.ConsumerID != "brain" {
+		t.Fatalf("integrated Authority 1.1 Grant was not persisted/resolved: %+v err=%v", grantEvidence, grantErr)
 	}
 	receipts, err := (&authority.ProjectBindingStore{Path: filepath.Join(appData, "authority", "project-bindings.json")}).Load()
 	if err != nil || len(receipts) != 1 || receipts[0].ProjectID != projectID {
@@ -292,15 +420,76 @@ func mustCanonicalPayload(t *testing.T, envelope []byte) []byte {
 	}
 	return canonical
 }
+
+func TestAuthorityCapabilityTelemetryLogsBootstrapAndCASConflictWithoutBodies(t *testing.T) {
+	logsDir := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"secret":"bootstrap-response-body"}`))
+		case http.MethodPut:
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"secret":"cas-response-body"}`))
+		}
+	}))
+	defer server.Close()
+
+	authorityCommandHTTPClient = server.Client()
+	defer func() { authorityCommandHTTPClient = nil }()
+	logger, err := core.InitLogger(&core.Paths{LogsDir: logsDir}, "GOVERNANCE", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := authorityHTTPClientWithTelemetry(logger)
+	response, err := client.Get(server.URL + "/v1/authority/installations/capabilities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	request, err := http.NewRequest(http.MethodPut, server.URL+"/v1/authority/installations/capabilities", strings.NewReader(`{"signature":"must-not-be-logged"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	logs, _ := filepath.Glob(filepath.Join(logsDir, "nucleus", "nucleus_governance_*.log"))
+	if len(logs) != 1 {
+		t.Fatalf("logs=%v", logs)
+	}
+	raw, err := os.ReadFile(logs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, expected := range []string{"bootstrap=required expected_revision=0", "cas_conflict=true retry=bounded"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("missing %q in telemetry:\n%s", expected, text)
+		}
+	}
+	for _, forbidden := range []string{"bootstrap-response-body", "cas-response-body", "must-not-be-logged"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("telemetry leaked HTTP material %q", forbidden)
+		}
+	}
+}
+
 func TestAuthorityCLIHumanAndJSONCarrySameEvidence(t *testing.T) {
 	service := AuthorityCommandServices{Run: func(command string, args []string) (AuthorityEvidenceReport, error) {
 		return AuthorityEvidenceReport{OK: true, Evidence: map[string]any{"authority_version": "8", "outcome": "not_evaluable", "effective_mode": "local_legacy", "cutover": false}}, nil
 	}}
-	human, err := executeAuthority(t, false, "status", service)
+	human, err := executeAuthority(t, false, "sync", service)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wire, err := executeAuthority(t, true, "status", service)
+	wire, err := executeAuthority(t, true, "sync", service)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,11 +528,28 @@ func TestAuthorityCLIStableErrorAndObservationCannotChangeMode(t *testing.T) {
 }
 func TestAuthorityCLIHasOnlyReadAndExplicitSyncCommands(t *testing.T) {
 	cmd := NewAuthorityCommand(AuthorityCommandServices{Run: func(string, []string) (AuthorityEvidenceReport, error) { return AuthorityEvidenceReport{OK: true}, nil }}, func() bool { return false })
+	if cmd.Long == "" || cmd.Example == "" || cmd.Annotations["category"] != "GOVERNANCE" {
+		t.Fatalf("authority help metadata incomplete: long=%q example=%q annotations=%v", cmd.Long, cmd.Example, cmd.Annotations)
+	}
+	var rootExample map[string]any
+	if err := json.Unmarshal([]byte(cmd.Annotations["json_response"]), &rootExample); err != nil {
+		t.Fatalf("authority json_response invalid: %v", err)
+	}
 	got := map[string]bool{}
 	for _, sub := range cmd.Commands() {
 		got[sub.Name()] = true
+		if sub.Long == "" || sub.Example == "" || sub.Annotations["category"] != "GOVERNANCE" {
+			t.Fatalf("%s help metadata incomplete: long=%q example=%q annotations=%v", sub.Name(), sub.Long, sub.Example, sub.Annotations)
+		}
+		var example AuthorityEvidenceReport
+		if err := json.Unmarshal([]byte(sub.Annotations["json_response"]), &example); err != nil {
+			t.Fatalf("%s json_response invalid: %v", sub.Name(), err)
+		}
+		if example.Command != sub.Name() || example.Schema != "bloom.authority.cli-evidence/v1" {
+			t.Fatalf("%s json_response is not representative: %+v", sub.Name(), example)
+		}
 	}
-	for _, name := range []string{"status", "sync", "decision", "checkpoint", "observation"} {
+	for _, name := range []string{"status", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants"} {
 		if !got[name] {
 			t.Fatalf("missing %s", name)
 		}

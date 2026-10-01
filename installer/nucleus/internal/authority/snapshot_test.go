@@ -37,6 +37,33 @@ func verifierFixture(t *testing.T, pub ed25519.PublicKey) *Verifier {
 	return &Verifier{Trust: TrustBundle{"issuer": {"key": pub}}, Binding: Binding{OrganizationID: "org", Issuer: "issuer", InstallationID: "installation"}, Store: &Store{Path: filepath.Join(t.TempDir(), "authority-state.json")}, Now: func() time.Time { return time.Date(2026, 9, 4, 12, 1, 0, 0, time.UTC) }}
 }
 
+func intelligenceGrantFixture(now time.Time) IntelligenceSupplyGrant {
+	replaced := "grant-old"
+	return IntelligenceSupplyGrant{
+		GrantID: "grant-new", OrganizationID: "org", InstallationIDs: []string{"installation"},
+		ConsumerID: "brain", ActorPrincipalID: "actor", Purpose: "mandate_intelligence",
+		AllowedCapabilities: []string{"structured_output", "text.generate"}, AllowedPrivacy: []string{"approved_cloud"},
+		AllowedDestinations: []IntelligenceSupplyDestination{{Provider: "anthropic", BackendID: "anthropic_api", Models: []string{"model-a"}}},
+		Limits:              IntelligenceSupplyLimits{MaxTotalTokens: 10000, MaxOutputTokensPerInference: 2000, MaxInferences: 5, MaxUSD: "1.500000"},
+		IssuedByPrincipalID: "issuer-human", ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour), ReplacesGrantID: &replaced,
+	}
+}
+
+func full11Fixture(t *testing.T, version string) (SnapshotPayload, ed25519.PublicKey, ed25519.PrivateKey) {
+	t.Helper()
+	p, pub, priv := fullFixture(t, version)
+	p.SchemaVersion = "1.1"
+	now := p.IssuedAt
+	grants := []IntelligenceSupplyGrant{}
+	content := FullContent{
+		Principals:      []Principal{{PrincipalID: "actor", PrincipalType: "human", Status: "active", ExternalIdentities: []ExternalIdentity{}}, {PrincipalID: "issuer-human", PrincipalType: "human", Status: "active", ExternalIdentities: []ExternalIdentity{}}},
+		Memberships:     []Membership{{MembershipID: "membership", PrincipalID: "actor", OrganizationID: "org", Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}},
+		RoleDefinitions: []RoleDefinition{}, RoleAssignments: []RoleAssignment{}, Revocations: []Revocation{}, IntelligenceSupplyGrants: &grants,
+	}
+	p.Content, _ = json.Marshal(content)
+	return p, pub, priv
+}
+
 func TestSnapshotAcceptReplayDowngradeConflictAndExpiry(t *testing.T) {
 	p, pub, priv := fullFixture(t, "2")
 	v := verifierFixture(t, pub)
@@ -244,5 +271,142 @@ func TestSnapshotAcceptanceUsesManifestAndCheckpoint(t *testing.T) {
 	manifest.Payload.Keys[0].Status = "retired"
 	if _, err = v.VerifyAndAccept(signedFixture(t, p, issuerPriv, "issuer-key"), "retired-key"); err == nil {
 		t.Fatal("retired manifest key accepted")
+	}
+}
+
+func TestSnapshotWire11RequiresCollectionAndRejectsWire10Injection(t *testing.T) {
+	p, pub, priv := full11Fixture(t, "1")
+	v := verifierFixture(t, pub)
+	var content map[string]any
+	if err := json.Unmarshal(p.Content, &content); err != nil {
+		t.Fatal(err)
+	}
+	delete(content, "intelligence_supply_grants")
+	p.Content, _ = json.Marshal(content)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p, priv, "key"), ""); err == nil {
+		t.Fatal("wire 1.1 without intelligence_supply_grants accepted")
+	}
+	p.SchemaVersion = "1.0"
+	content["intelligence_supply_grants"] = []any{}
+	p.Content, _ = json.Marshal(content)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p, priv, "key"), ""); err == nil {
+		t.Fatal("wire 1.0 intelligence_supply_grants injection accepted")
+	}
+}
+
+func TestDecodeProjectionAcceptsOnlyFourVersionedWireShapes(t *testing.T) {
+	base := legacyFullContent{Principals: []Principal{}, Memberships: []Membership{}, RoleDefinitions: []RoleDefinition{}, RoleAssignments: []RoleAssignment{}, Revocations: []Revocation{}}
+	withVault10 := fullContent10WithVault{Principals: base.Principals, Memberships: base.Memberships, RoleDefinitions: base.RoleDefinitions, RoleAssignments: base.RoleAssignments, Revocations: base.Revocations, VaultServiceGrants: []VaultServiceGrant{}}
+	withoutVault11 := fullContent11WithoutVault{Principals: base.Principals, Memberships: base.Memberships, RoleDefinitions: base.RoleDefinitions, RoleAssignments: base.RoleAssignments, Revocations: base.Revocations, IntelligenceSupplyGrants: []IntelligenceSupplyGrant{}}
+	withVault11 := fullContent11WithVault{Principals: base.Principals, Memberships: base.Memberships, RoleDefinitions: base.RoleDefinitions, RoleAssignments: base.RoleAssignments, Revocations: base.Revocations, VaultServiceGrants: []VaultServiceGrant{}, IntelligenceSupplyGrants: []IntelligenceSupplyGrant{}}
+	for _, tc := range []struct {
+		name, version string
+		value         any
+	}{
+		{"1.0 historical", "1.0", base},
+		{"1.0 vault", "1.0", withVault10},
+		{"1.1 no vault", "1.1", withoutVault11},
+		{"1.1 vault", "1.1", withVault11},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, _ := json.Marshal(tc.value)
+			var projection FullContent
+			if err := decodeProjection(raw, &projection, tc.version); err != nil {
+				t.Fatal(err)
+			}
+			if tc.version == "1.1" && projection.IntelligenceSupplyGrants == nil {
+				t.Fatal("wire 1.1 collection presence lost")
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name, version string
+		value         any
+	}{
+		{"1.0 intelligence", "1.0", withoutVault11},
+		{"1.1 missing intelligence", "1.1", base},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, _ := json.Marshal(tc.value)
+			var projection FullContent
+			if err := decodeProjection(raw, &projection, tc.version); err == nil {
+				t.Fatal("invalid versioned shape accepted")
+			}
+		})
+	}
+	raw, _ := json.Marshal(withoutVault11)
+	var object map[string]any
+	_ = json.Unmarshal(raw, &object)
+	object["unknown"] = true
+	raw, _ = json.Marshal(object)
+	var projection FullContent
+	if err := decodeProjection(raw, &projection, "1.1"); err == nil {
+		t.Fatal("unknown wire property accepted")
+	}
+}
+
+func TestSnapshotWire11TransitionDeltaAndDowngradeRules(t *testing.T) {
+	p10, pub, priv := fullFixture(t, "1")
+	v := verifierFixture(t, pub)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p10, priv, "key"), "v10"); err != nil {
+		t.Fatal(err)
+	}
+	p11, _, _ := full11Fixture(t, "2")
+	p11.IssuedAt, p11.NotBefore, p11.ExpiresAt = p10.IssuedAt, p10.NotBefore, p10.ExpiresAt
+	base := "1"
+	delta, _ := json.Marshal(DeltaContent{ResultDigest: "unused", Operations: []DeltaOperation{}})
+	p11.Kind, p11.BaseAuthorityVersion, p11.Content = "delta", &base, delta
+	if _, err := v.VerifyAndAccept(signedFixture(t, p11, priv, "key"), "cross-schema-delta"); err == nil {
+		t.Fatal("wire 1.0 to 1.1 delta accepted")
+	}
+	p11.Kind, p11.BaseAuthorityVersion = "full", nil
+	empty := []IntelligenceSupplyGrant{}
+	full := FullContent{Principals: []Principal{}, Memberships: []Membership{}, RoleDefinitions: []RoleDefinition{}, RoleAssignments: []RoleAssignment{}, Revocations: []Revocation{}, IntelligenceSupplyGrants: &empty}
+	p11.Content, _ = json.Marshal(full)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p11, priv, "key"), "full-transition"); err != nil {
+		t.Fatal(err)
+	}
+	p10.AuthorityVersion, p10.SnapshotID = "3", "downgrade-schema"
+	if _, err := v.VerifyAndAccept(signedFixture(t, p10, priv, "key"), "downgrade"); err == nil {
+		t.Fatal("wire schema downgrade accepted")
+	}
+}
+
+func TestSnapshotWire11DeltaGrantAndImmutability(t *testing.T) {
+	p, pub, priv := full11Fixture(t, "1")
+	v := verifierFixture(t, pub)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p, priv, "key"), "initial"); err != nil {
+		t.Fatal(err)
+	}
+	var result FullContent
+	if err := json.Unmarshal(p.Content, &result); err != nil {
+		t.Fatal(err)
+	}
+	grant := intelligenceGrantFixture(p.IssuedAt)
+	grant.ReplacesGrantID = nil
+	values := []IntelligenceSupplyGrant{grant}
+	result.IntelligenceSupplyGrants = &values
+	digest, err := StateDigest(result, "org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, _ := json.Marshal(grant)
+	delta := DeltaContent{ResultDigest: digest, Operations: []DeltaOperation{{Sequence: "1", Operation: "upsert", Collection: "intelligence_supply_grants", EntityID: grant.GrantID, Value: value}}}
+	p.Kind, p.AuthorityVersion, p.SnapshotID = "delta", "2", "grant-issued"
+	base := "1"
+	p.BaseAuthorityVersion = &base
+	p.Content, _ = json.Marshal(delta)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p, priv, "key"), "issue"); err != nil {
+		t.Fatal(err)
+	}
+	grant.Purpose = "changed"
+	value, _ = json.Marshal(grant)
+	delta.Operations[0].Value = value
+	delta.ResultDigest = "irrelevant"
+	p.AuthorityVersion, p.SnapshotID = "3", "grant-mutated"
+	base = "2"
+	p.Content, _ = json.Marshal(delta)
+	if _, err := v.VerifyAndAccept(signedFixture(t, p, priv, "key"), "mutation"); err == nil || !strings.Contains(err.Error(), "history cannot change") {
+		t.Fatalf("grant mutation accepted: %v", err)
 	}
 }

@@ -23,7 +23,7 @@ export async function authoritySnapshotResponse(db: D1Database, request: Request
     return new Response(raw, { status: 200, headers });
   } catch (failure) {
     if (failure instanceof EmissionStoreError) {
-      const status = failure.code === "audience_mismatch" ? 403 : failure.code === "version_ahead" ? 409 : 503;
+      const status = failure.code === "audience_mismatch" ? 403 : failure.code === "version_ahead" || failure.code === "schema_incompatible" ? 409 : 503;
       return error(failure.message, status);
     }
     return error("authority_storage_unavailable", 503);

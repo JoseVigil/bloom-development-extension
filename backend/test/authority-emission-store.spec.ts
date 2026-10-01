@@ -74,6 +74,19 @@ describe("persisted authority emissions on temporary D1", () => {
     expect((await db.prepare("SELECT typeof(authority_version) AS type FROM authority_emissions WHERE organization_id=? LIMIT 1").bind(org).first())?.type).toBe("text");
     expect((await loadCurrentEmission(db,org))?.full).toBe(renewed.full);
   });
+  it("persists the 1.0 to 1.1 transition without rewriting historical bytes", async () => {
+    const org = await organization();
+    const first = await persistEmission(db, input(org), signer);
+    const transition = input(org, "result");
+    transition.metadata.schema_version = "1.1";
+    transition.state.intelligence_supply_grants = [];
+    const next = await persistEmission(db, transition, signer);
+    expect(first.metadata.schema_version).toBe("1.0");
+    expect(next.metadata.schema_version).toBe("1.1");
+    expect((await loadCurrentEmission(db, org))?.state.intelligence_supply_grants).toEqual([]);
+    expect((await db.prepare("SELECT metadata_json FROM authority_emissions WHERE organization_id=? AND authority_version=?")
+      .bind(org, first.metadata.authority_version).first<{metadata_json:string}>())?.metadata_json).toContain('"schema_version":"1.0"');
+  });
   it("returns the original idempotent result after head advances without signing again", async () => {
     const org = await organization(); const request = input(org);
     const first = await persistEmission(db,request,signer);
