@@ -8,6 +8,14 @@ export interface VerifiedInstallation {organizationId:string;installationId:stri
 export interface TrustRouteServices extends HumanServices {origin:string;issuer:string;attestationKeyId:string;attestationPrivateKeyPkcs8:ArrayBuffer;}
 export interface TrustRouteEnv {DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;AUTHORITY_ISSUER?:string;AUTHORITY_SIGNING_KEY_ID?:string;AUTHORITY_SIGNING_KEY_PKCS8_B64?:string;}
 export interface ActorAttestation {schema:'bloom.authority.actor-attestation';schema_version:'1.0'|'1.2';attestation_id:string;issuer:string;organization_id:string;installation_id:string;principal_id:string;actor_public_key:string;audience:string;challenge_digest:string;issued_at:string;expires_at:string;operation?:'approve'|'activate';mandate_id?:string;contract_digest?:string;}
+async function trustManifestResponse(db:D1Database,request:Request,origin:string,installation:VerifiedInstallation|null):Promise<Response>{
+ const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};const reply=(body:unknown,status:number)=>new Response(JSON.stringify(body),{status,headers});
+ try{
+  const url=new URL(request.url);if(url.origin!==origin)throw new TrustError('origin_invalid');
+  const org=url.searchParams.get('org');if(!installation||!org||org!==installation.organizationId)return reply({error:'authority_trust_installation_required'},401);
+  const raw=await loadTrustManifest(db,org);return raw?new Response(raw,{status:200,headers}):reply({error:'authority_trust_manifest_unavailable'},503);
+ }catch(e){const code=e instanceof TrustError?e.message:'authority_trust_unavailable';return reply({error:code},code.endsWith('unavailable')?503:403);}
+}
 const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const decode=(value:string,length:number)=>{if(!/^[A-Za-z0-9_-]+$/.test(value))throw new TrustError('actor_key_invalid');let b:Uint8Array;try{b=Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));}catch{throw new TrustError('actor_key_invalid');}if(b.length!==length)throw new TrustError('actor_key_invalid');return b;};
 const cookie=(request:Request,name:string)=>{const values=(request.headers.get('Cookie')??'').split(';').map(v=>v.trim()).filter(v=>v.startsWith(name+'='));return values.length===1?values[0].slice(name.length+1):'';};
@@ -30,8 +38,7 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
  try{
   const url=new URL(request.url),path=url.pathname;if(url.origin!==s.origin)throw new TrustError('origin_invalid');
   if(path==='/v1/authority/trust-manifest'&&request.method==='GET'){
-   const org=url.searchParams.get('org');if(!installation||!org||org!==installation.organizationId)return reply({error:'authority_trust_installation_required'},401);
-   const raw=await loadTrustManifest(db,org);return raw?new Response(raw,{status:200,headers}):reply({error:'authority_trust_manifest_unavailable'},503);
+   return trustManifestResponse(db,request,s.origin,installation);
   }
   if(path==='/v1/authority/actor/mandate-consent'&&request.method==='GET'){
    const encoded=url.searchParams.get('packet');if(!encoded||encoded.length>8192)throw new TrustError('invalid_request');
@@ -93,6 +100,10 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
 }
 export async function configuredAuthorityTrustResponse(env:TrustRouteEnv,request:Request,installation:VerifiedInstallation|null){
  try{
+  if(request.method==='GET'&&new URL(request.url).pathname==='/v1/authority/trust-manifest'){
+   if(!env.AUTHORITY_HUMAN_ORIGIN)throw new TrustError('configuration_missing');
+   return trustManifestResponse(env.DB,request,env.AUTHORITY_HUMAN_ORIGIN,installation);
+  }
   if(!env.AUTHORITY_HUMAN_ORIGIN||!env.AUTHORITY_ISSUER||!env.AUTHORITY_SIGNING_KEY_ID||!env.AUTHORITY_SIGNING_KEY_PKCS8_B64||!env.AUTHORITY_HUMAN_SESSION_KEY_B64)throw new TrustError('configuration_missing');
   const provider=githubAppProvider({clientId:env.AUTHORITY_GITHUB_APP_CLIENT_ID??'',clientSecret:env.AUTHORITY_GITHUB_APP_CLIENT_SECRET??'',callbackUrl:env.AUTHORITY_HUMAN_ORIGIN+'/v1/authority/human/callback'});
   return authorityTrustResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,attestationKeyId:env.AUTHORITY_SIGNING_KEY_ID,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),attestationPrivateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer},installation);

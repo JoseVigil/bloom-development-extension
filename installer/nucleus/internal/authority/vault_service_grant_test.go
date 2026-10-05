@@ -70,3 +70,35 @@ func TestVaultServiceGrantRequiresAcceptedSnapshotAndCheckpoint(t *testing.T) {
 		t.Fatal("missing checkpoint accepted")
 	}
 }
+
+func TestVaultWriteGrantCannotBeReusedForReadOrOtherKeys(t *testing.T) {
+	p, pub, priv := fullFixture(t, "1")
+	servicePublic, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 9, 4, 12, 1, 0, 0, time.UTC)
+	state := FullContent{Principals: []Principal{{PrincipalID: "human", PrincipalType: "human", Status: "active", ExternalIdentities: []ExternalIdentity{}}},
+		Memberships: []Membership{}, RoleDefinitions: []RoleDefinition{}, RoleAssignments: []RoleAssignment{}, Revocations: []Revocation{},
+		VaultServiceGrants: []VaultServiceGrant{{GrantID: "gemini-grant", OrganizationID: "org", InstallationID: "installation", Consumer: "onboarding", Permission: "vault.key.write",
+			KeyID: "gemini-key:default", Purpose: "onboarding_gemini", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic),
+			IssuedByPrincipalID: "human", ValidFrom: at.Add(-time.Minute), ValidUntil: at.Add(time.Hour)}}}
+	p.Content, _ = json.Marshal(state)
+	dir := t.TempDir()
+	v := &Verifier{Trust: TrustBundle{"issuer": {"key": pub}}, Binding: Binding{"org", "issuer", "installation"},
+		Store: &Store{Path: filepath.Join(dir, "state.json")}, Checkpoint: &CheckpointStore{Path: filepath.Join(dir, "checkpoint.json")}, Now: func() time.Time { return at }}
+	if _, err = v.VerifyAndAccept(signedFixture(t, p, priv, "key"), "write-grant"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ResolveVaultWriteGrant(v.Store, v.Checkpoint, "org", "installation", "gemini-grant", "gemini-key:default", "onboarding_gemini", at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ResolveVaultServiceGrant(v.Store, v.Checkpoint, "org", "installation", "gemini-grant", "gemini-key:default", "onboarding_gemini", at); err == nil {
+		t.Fatal("write grant accepted as read")
+	}
+	for _, binding := range [][2]string{{"anthropic-key:default", "onboarding_gemini"}, {"gemini-key:default", "mandate_gen_intelligence"}} {
+		if _, err = ResolveVaultWriteGrant(v.Store, v.Checkpoint, "org", "installation", "gemini-grant", binding[0], binding[1], at); err == nil {
+			t.Fatalf("write grant accepted invalid binding: %v", binding)
+		}
+	}
+}

@@ -16,9 +16,11 @@ const _sharedDir = require('electron').app.isPackaged
   : path.join(__dirname, '..', 'shared');
 const { getLogger } = require(path.join(_sharedDir, 'logger'));
 const { paths } = require(path.join(_sharedDir, 'global_paths'));
-const { registerOnboardingHandlers } = require('./onboarding/ipc/onboarding-handlers');
+const { registerOnboardingHandlers, storeGeminiKeyWithGrant } = require('./onboarding/ipc/onboarding-handlers');
 const { registerHealthHandlers }   = require('./core/ipc/health-handlers');
 const { registerProfilesHandlers } = require('./core/ipc/profiles-handlers');
+const { registerIntelligenceSupplyHandlers } = require('./core/ipc/intelligence-supply-handlers');
+const { registerConfirmedContextHandlers } = require('./core/ipc/confirmed-context-handlers');
 // synapse-bridge.js vive en conductor/shared/ — un nivel arriba de workspace/
 const { SynapseBridge, ONBOARDING_EVENTS } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
 const { MilestoneRegistry } = require('./onboarding/milestone-registry');
@@ -358,6 +360,34 @@ function initOnboardingBridge(logger = log) {
   _onboardingBridge.on('message', (enriched) => {
     if (enriched.type !== 'ONBOARDING_MILESTONE') return;
 
+    if ((enriched.originalEvent || enriched.data?.original_event) === 'API_KEY_REGISTERED') {
+      const data = enriched.data || {};
+      let liveLaunchId = null;
+      try {
+        const profiles = JSON.parse(fs.readFileSync(path.join(path.dirname(NUCLEUS_JSON), 'profiles.json'), 'utf8'));
+        liveLaunchId = profiles.profiles?.find(profile => profile.id === profileId)?.last_launch_id || null;
+      } catch (err) {
+        logger.error('[SYNAPSE] Gemini Vault request: profiles.json unavailable:', err.message);
+      }
+      if (data.provider !== 'gemini' || data.profile_id !== profileId ||
+          !liveLaunchId || data.launch_id !== liveLaunchId) {
+        logger.error('[SYNAPSE] Gemini Vault request rejected: profile/provider mismatch');
+        return;
+      }
+      storeGeminiKeyWithGrant(NUCLEUS_JSON).then(async receipt => {
+        const stepId = _registry.resolveEvent('API_KEY_REGISTERED', data);
+        if (!stepId) throw new Error('gemini_milestone_unmapped');
+        logger.info('[SYNAPSE] Nucleus Vault confirmed Gemini store:', receipt.key_id, receipt.grant_id);
+        await _reactor.handleMilestone(stepId, enriched);
+        _onboardingBridge.sendToProfile(profileId, {
+          event: 'API_KEY_REGISTERED', provider: 'gemini', profile_name: data.profile_name || '',
+          key_fingerprint: data.key_fingerprint || '', timestamp: data.timestamp || Date.now(),
+          vault_ack: { status: receipt.status, key_id: receipt.key_id, grant_id: receipt.grant_id },
+        });
+      }).catch(err => logger.error('[SYNAPSE] Gemini Vault write failed:', err.message));
+      return;
+    }
+
     // FIX (auditoría Synapse v3, §2 — bug crítico google_auth/ACCOUNT_REGISTERED):
     // resolveEvent ahora necesita el payload como segundo argumento para
     // discriminar eventos genéricos por "service" (ej: ACCOUNT_REGISTERED
@@ -622,6 +652,8 @@ app.whenReady().then(async () => {
   setupNucleusHandlers();
   registerHealthHandlers(execNucleus, coreLog);
   registerProfilesHandlers(execNucleus, NUCLEUS_JSON, coreLog);
+  registerIntelligenceSupplyHandlers(execNucleus, NUCLEUS_JSON, paths.aitapExe, coreLog);
+  registerConfirmedContextHandlers(execNucleus, NUCLEUS_JSON, coreLog);
 
   const onboardingDone = nucleusData?.onboarding?.completed === true;
 

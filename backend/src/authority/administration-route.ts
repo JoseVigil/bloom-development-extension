@@ -3,14 +3,41 @@ import { beginHumanLogin, finishHumanLogin, resolveHumanSession, checkSessionCsr
 import { beginGenesis, finishGenesis, pollGenesisResult } from './genesis-store';
 import { administerAuthority } from './administration-store';
 import { AdministrationError, type AdministrationCommand } from './administration';
-import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, type EmissionSigner } from './emission-store';
+import { AUTHORITY_EMISSION_TTL_MS, loadCurrentEmission, loadEmissionVersion, persistEmission, type EmissionSigner } from './emission-store';
 import { wireVersion } from './emission';
 import { createInitialAuthorityEmission, InitialAuthorityEmissionError, initialEmissionGuardStatement } from './initial-emission';
 import { createOrganizationUnderTenant, listTenantOrganizations, TenantStoreError } from './tenant-store';
 import { createInvitation, listInvitations, revokeInvitation, InvitationStoreError, type InvitationStoreFailure } from './invitation-store';
 import { vaultServiceGrantResponse } from './vault-service-grant-route';
 import { intelligenceSupplyGrantResponse } from './intelligence-supply-grant-route';
-export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;}
+import { loadTrustManifest, persistTrustManifest, signTrustManifest, verifyTrustManifest, type SignedArtifact, type TrustPayload } from './trust-manifest';
+const DEVELOPMENT_ROOT_KEY_ID='development-rfc8032-root';
+const DEVELOPMENT_ROOT_PUBLIC_KEY='11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo';
+export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;fixtureTrustRootPkcs8?:ArrayBuffer;}
+
+export async function provisionFixtureTrustManifest(db:D1Database,organizationId:string,s:HumanRouteServices):Promise<void>{
+ if(!s.allowTestFixtures)return;
+ if(!s.fixtureTrustRootPkcs8||!s.issuer||!s.signer.keyId)throw new HumanIdentityError('configuration_missing');
+ let issuerPublicKey:string;
+ try{
+  const issuerPrivate=await crypto.subtle.importKey('pkcs8',s.signer.privateKeyPkcs8,{name:'Ed25519'},true,['sign']);
+  const jwk=await crypto.subtle.exportKey('jwk',issuerPrivate) as JsonWebKey;
+  if(typeof jwk.x!=='string')throw new Error('issuer_public_key_missing');
+  issuerPublicKey=jwk.x;
+ }catch{throw new HumanIdentityError('configuration_missing');}
+ const now=s.now();
+ const existing=await loadTrustManifest(db,organizationId);
+ const envelope:SignedArtifact<TrustPayload>=existing?JSON.parse(existing) as SignedArtifact<TrustPayload>
+  :await signTrustManifest({schema:'bloom.authority.trust-manifest',schema_version:'1.0',manifest_id:crypto.randomUUID(),
+    issuer:s.issuer,organization_id:organizationId,manifest_version:'1',issued_at:now,not_before:now,
+    expires_at:new Date(Date.parse(now)+7*24*60*60*1000).toISOString(),root_key_id:DEVELOPMENT_ROOT_KEY_ID,
+    keys:[{key_id:s.signer.keyId,public_key:issuerPublicKey,status:'active',valid_from:now,valid_until:null}]},s.fixtureTrustRootPkcs8);
+ const verified=await verifyTrustManifest(envelope,DEVELOPMENT_ROOT_KEY_ID,DEVELOPMENT_ROOT_PUBLIC_KEY,now);
+ if(verified.organization_id!==organizationId||verified.issuer!==s.issuer||verified.keys.length!==1||
+    verified.keys[0].key_id!==s.signer.keyId||verified.keys[0].public_key!==issuerPublicKey||verified.keys[0].status!=='active')
+  throw new HumanIdentityError('fixture_trust_manifest_invalid');
+ if(!existing)await persistTrustManifest(db,envelope,{allowTestFixtures:true,expectedVersion:null});
+}
 // Invitaciones a organización ajena, Fase B (Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
 // §2/§4, aprobada por Jose 2026-09-22). Mismo esquema de mapeo a status HTTP que ya usan
 // TenantStoreError/InitialAuthorityEmissionError en este archivo (ternarias inline) —
@@ -26,6 +53,7 @@ export interface HumanRouteEnv {
  DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;
  AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;
   AUTHORITY_SIGNING_KEY_PKCS8_B64:string;AUTHORITY_SIGNING_KEY_ID:string;
+ AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64?:string;
  AUTHORITY_ISSUER?:string;
  // Sólo development: nunca debe llegar a un despliegue real. Ver .dev.vars.example
  // y README.md § Modo fixture. Comparación estricta contra 'true' en
@@ -36,6 +64,19 @@ const sessionCookie='__Host-authority-session',flowCookie='__Host-authority-flow
 function cookie(request:Request,name:string){const matches=(request.headers.get('Cookie')??'').split(';').map(v=>v.trim()).filter(v=>v.startsWith(name+'='));return matches.length===1?matches[0].slice(name.length+1):'';}
 function setCookie(name:string,value:string,seconds:number){return `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${seconds}`;}
 const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
+function fixtureRenewalMaster(state:NonNullable<Awaited<ReturnType<typeof loadCurrentEmission>>>['state'],principalId:string,org:string,now:string):boolean{
+ const at=Date.parse(now),principal=state.principals.find(p=>p.principal_id===principalId);
+ if(!principal||principal.principal_type!=='human'||principal.status!=='active'||
+   !principal.external_identities.some(e=>e.status==='verified'&&Date.parse(e.verified_at)<=at))return false;
+ const active=(item:{status:string;valid_from:string;valid_until:string|null;accepted_at:string})=>item.status==='active'&&
+   Date.parse(item.valid_from)<=at&&Date.parse(item.accepted_at)<=at&&(item.valid_until===null||Date.parse(item.valid_until)>at);
+ const revoked=(kind:string,id:string)=>state.revocations.some(r=>r.target_type===kind&&r.target_id===id&&Date.parse(r.effective_at)<=at);
+ return state.memberships.some(m=>m.principal_id===principalId&&m.organization_id===org&&active(m)&&!revoked('membership',m.membership_id)&&
+   state.role_assignments.some(a=>a.membership_id===m.membership_id&&a.role_id==='master'&&a.role_version==='1'&&
+     a.scope.type==='organization'&&a.scope.id===org&&active(a)&&!revoked('role_assignment',a.assignment_id)))&&
+   state.role_definitions.some(r=>r.role_id==='master'&&r.role_version==='1'&&r.role_origin==='builtin'&&
+     r.status==='active'&&!revoked('role_definition',r.role_id));
+}
 export async function authorityHumanResponse(db:D1Database,request:Request,s:HumanRouteServices):Promise<Response>{
  const headers=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
@@ -146,8 +187,47 @@ export async function authorityHumanResponse(db:D1Database,request:Request,s:Hum
    return reply({organizationId:org,principalId:result.principalId,csrf:result.csrf,expiresAt:result.expiresAt});
   }
   if(path==='/v1/authority/initial-emission'){
-   if(!exact(body,['organizationId']))return reply({error:'invalid_request'},400);
+   const fixtureOwner=exact(body,['organizationId','fixtureLocalOwner'])&&exact(body.fixtureLocalOwner,['source','subject'])
+    ?body.fixtureLocalOwner as {source:unknown;subject:unknown}:null;
+   if(!exact(body,['organizationId'])&&!fixtureOwner)return reply({error:'invalid_request'},400);
+   if(fixtureOwner&&(!s.allowTestFixtures||fixtureOwner.source!=='github_handle'||
+      typeof fixtureOwner.subject!=='string'||!/^[-A-Za-z0-9_]{1,39}$/.test(fixtureOwner.subject)))
+    return reply({error:'authority_fixture_owner_invalid'},403);
    const actor=await resolveHumanSession(db,token,org,s);if(!actor)return reply({error:'authority_human_session_invalid'},401);
+   await provisionFixtureTrustManifest(db,org,s);
+   const current=await loadCurrentEmission(db,org),now=s.now();
+   if(current&&s.allowTestFixtures&&(fixtureOwner||Date.parse(current.metadata.expires_at)<=Date.parse(now))){
+    if(!s.issuer||current.metadata.issuer!==s.issuer||!fixtureRenewalMaster(current.state,actor.principalId,org,now))
+     return reply({error:'authority_fixture_renewal_forbidden'},403);
+    const state=structuredClone(current.state);
+    if(fixtureOwner){
+     const ownerSubject=fixtureOwner.subject as string;
+     const evidence=await initialHumanIdentity(db,org,actor.principalId,s);
+     const principal=state.principals.find(p=>p.principal_id===actor.principalId);
+     const canonical=evidence?.principal.external_identities[0];
+     if(!principal||!canonical||canonical.provider!=='github'||
+       !principal.external_identities.some(e=>e.provider==='github'&&e.subject===canonical.subject&&e.status==='verified')||
+       state.principals.some(p=>p.principal_id!==actor.principalId&&p.external_identities.some(e=>
+        e.provider==='github'&&e.subject===ownerSubject&&e.status==='verified')))
+      return reply({error:'authority_fixture_owner_conflict'},409);
+     if(!principal.external_identities.some(e=>e.provider==='github'&&e.subject===ownerSubject)){
+      principal.external_identities.push({provider:'github',subject:ownerSubject,display_handle:ownerSubject,
+       status:'verified',verified_at:now});
+     }else if(!principal.external_identities.some(e=>e.provider==='github'&&e.subject===ownerSubject&&e.status==='verified')){
+      return reply({error:'authority_fixture_owner_conflict'},409);
+     }
+    }
+    const changed=JSON.stringify(state)!==JSON.stringify(current.state);
+    if(fixtureOwner&&!changed&&Date.parse(current.metadata.expires_at)>Date.parse(now))
+     return reply({authorityVersion:current.metadata.authority_version,stateDigest:current.stateDigest,status:'already_bound'});
+    const version=String(wireVersion(current.metadata.authority_version)+1n);
+    const renewed=await persistEmission(db,{requestId:`fixture-${changed?'owner':'renewal'}:${org}:${current.metadata.authority_version}`,
+     expectedVersion:current.metadata.authority_version,metadata:{...current.metadata,authority_version:version,
+      snapshot_id:crypto.randomUUID(),issued_at:now,not_before:now,
+      expires_at:new Date(Date.parse(now)+AUTHORITY_EMISSION_TTL_MS).toISOString()},state},s.signer);
+    return reply({authorityVersion:renewed.metadata.authority_version,stateDigest:renewed.stateDigest,
+     status:changed?'fixture_owner_bound':'renewed'});
+   }
    try{return reply(await createInitialAuthorityEmission(db,org,actor.principalId,{now:s.now,issuer:s.issuer??'',signer:s.signer,
     initialIdentity:(o,id)=>initialHumanIdentity(db,o,id,s),commitGuard:(id,at,evidence)=>initialEmissionGuardStatement(db,actor,id,at,evidence)}));}catch(e){
     if(e instanceof InitialAuthorityEmissionError)return reply({error:e.message},e.code==='already_exists'?409:e.code==='identity_not_ready'||e.code==='canonical_evidence_required'?403:503);throw e;
@@ -240,6 +320,7 @@ export async function configuredAuthorityHumanResponse(env:HumanRouteEnv,request
   if(!env.AUTHORITY_SIGNING_KEY_PKCS8_B64||!env.AUTHORITY_SIGNING_KEY_ID)throw new HumanIdentityError('configuration_missing');
   if(fixtureMode)console.warn('[authority] AUTHORITY_ALLOW_TEST_FIXTURES activo: login de GitHub simulado por inyección de estado, sin tocar github.com. NUNCA debe estar activo en un despliegue real.');
   return authorityHumanResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),allowTestFixtures:fixtureMode,
+   fixtureTrustRootPkcs8:fixtureMode&&env.AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64?Uint8Array.from(atob(env.AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64),c=>c.charCodeAt(0)).buffer:undefined,
    signer:{keyId:env.AUTHORITY_SIGNING_KEY_ID,privateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer}});
  }catch{return new Response(JSON.stringify({error:'authority_human_configuration_unavailable'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});}
 }

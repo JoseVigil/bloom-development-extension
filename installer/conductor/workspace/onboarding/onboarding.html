@@ -497,9 +497,7 @@ body::after {
 }
 
 /* ── IDENTITY ICONS ── */
-/* Achicados y con menos peso visual — en este step solo GitHub es
-   relevante (es el único requerido), Google/Gemini quedan como
-   referencia secundaria para más adelante en el flujo. */
+/* Cuentas de identidad; el suministro de inteligencia se elige debajo. */
 .account-icons {
   display: flex;
   align-items: center;
@@ -508,6 +506,16 @@ body::after {
   margin-bottom: 28px;
   flex-wrap: wrap;
 }
+
+.supply-choice { margin: 0 auto 24px; max-width: 440px; text-align: left; }
+.supply-choice-title { margin: 0 0 10px; color: var(--text-dim); font-size: 12px; }
+.supply-choice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.supply-choice-option { display: flex; gap: 9px; align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.supply-choice-option:has(input:checked) { border-color: var(--accent); background: var(--accent-dim); }
+.supply-choice-option input { margin-top: 3px; accent-color: var(--accent); }
+.supply-choice-option strong { display: block; font-size: 13px; }
+.supply-choice-option small { display: block; margin-top: 4px; color: var(--text-dim); line-height: 1.4; }
+#supply-choice-status { min-height: 18px; margin: 9px 0 0; color: var(--text-dim); font-size: 11px; }
 
 .acc-icon {
   display: flex;
@@ -1603,23 +1611,15 @@ body::after {
           </div>
           <div class="acc-label">Google</div>
         </div>
-        <!-- Gemini -->
-        <div class="acc-icon" id="acc-gemini">
-          <div class="acc-icon-ring">
-            <div class="acc-badge">
-              <svg width="9" height="9" viewBox="0 0 32 32" fill="none">
-                <rect x="6" y="14" width="20" height="14" rx="1" stroke="#C8F55A" stroke-width="2.5"/>
-                <path d="M10 14V10a6 6 0 0112 0v4" stroke="#C8F55A" stroke-width="2.5" stroke-linecap="round"/>
-                <circle cx="16" cy="21" r="2.5" fill="#C8F55A"/>
-              </svg>
-            </div>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C6.5 7 2 9 2 12c0 3 4.5 5 10 10 5.5-5 10-7 10-10 0-3-4.5-5-10-10z" stroke="rgba(232,234,240,0.7)" stroke-width="1.2" fill="none"/>
-              <path d="M12 2v20M2 12h20" stroke="rgba(232,234,240,0.35)" stroke-width="0.8"/>
-            </svg>
-          </div>
-          <div class="acc-label">Gemini</div>
+      </div>
+
+      <div class="supply-choice" role="group" aria-labelledby="supply-choice-title">
+        <p class="supply-choice-title" id="supply-choice-title">Seleccioná el proveedor del runtime del sistema</p>
+        <div class="supply-choice-options">
+          <label class="supply-choice-option"><input type="radio" name="intelligence-supply" value="gemini"><span><strong>Gemini</strong><small>Modelo de frontera mediante API key</small></span></label>
+          <label class="supply-choice-option"><input type="radio" name="intelligence-supply" value="gemma"><span><strong>Gemma</strong><small>LLM local en esta máquina</small></span></label>
         </div>
+        <p id="supply-choice-status" role="status"></p>
       </div>
 
       <button class="btn-primary" id="btn-continue-identity" style="min-width:200px;">Validate</button>

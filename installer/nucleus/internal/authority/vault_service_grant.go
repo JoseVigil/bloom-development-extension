@@ -49,6 +49,19 @@ func ActiveVaultServiceGrantEvidence(store *Store, checkpoint *CheckpointStore, 
 // ResolveVaultServiceGrant reads only a verifier-accepted snapshot paired with
 // its checkpoint. No caller-provided role or local marker is consulted.
 func ResolveVaultServiceGrant(store *Store, checkpoint *CheckpointStore, organizationID, installationID, grantID, keyID, purpose string, at time.Time) (ed25519.PublicKey, error) {
+	return resolveVaultServiceGrant(store, checkpoint, organizationID, installationID, grantID, keyID, purpose, "aitap", "vault.key.read", at)
+}
+
+// ResolveVaultWriteGrant accepts only a verified onboarding grant for the
+// exact Gemini key. Read grants cannot be reused for a write.
+func ResolveVaultWriteGrant(store *Store, checkpoint *CheckpointStore, organizationID, installationID, grantID, keyID, purpose string, at time.Time) (ed25519.PublicKey, error) {
+	if keyID != "gemini-key:default" || purpose != "onboarding_gemini" {
+		return nil, ErrVaultServiceGrantDenied
+	}
+	return resolveVaultServiceGrant(store, checkpoint, organizationID, installationID, grantID, keyID, purpose, "onboarding", "vault.key.write", at)
+}
+
+func resolveVaultServiceGrant(store *Store, checkpoint *CheckpointStore, organizationID, installationID, grantID, keyID, purpose, consumer, permission string, at time.Time) (ed25519.PublicKey, error) {
 	deny := func() (ed25519.PublicKey, error) { return nil, ErrVaultServiceGrantDenied }
 	if store == nil || checkpoint == nil || organizationID == "" || installationID == "" || grantID == "" || keyID == "" || purpose == "" {
 		return deny()
@@ -61,7 +74,7 @@ func ResolveVaultServiceGrant(store *Store, checkpoint *CheckpointStore, organiz
 		if g.GrantID != grantID {
 			continue
 		}
-		if g.OrganizationID != organizationID || g.InstallationID != installationID || g.Consumer != "aitap" || g.Permission != "vault.key.read" || g.KeyID != keyID || g.Purpose != purpose || at.Before(g.ValidFrom) || !at.Before(g.ValidUntil) {
+		if g.OrganizationID != organizationID || g.InstallationID != installationID || g.Consumer != consumer || g.Permission != permission || g.KeyID != keyID || g.Purpose != purpose || at.Before(g.ValidFrom) || !at.Before(g.ValidUntil) {
 			return deny()
 		}
 		for _, r := range state.Projection.Revocations {

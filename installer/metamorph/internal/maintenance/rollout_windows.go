@@ -431,9 +431,10 @@ func newMetamorphRolloutID() (string, error) {
 }
 
 type windowsProcessInfo struct {
-	PID       uint32
-	ParentPID uint32
-	ImagePath string
+	PID         uint32
+	ParentPID   uint32
+	ImagePath   string
+	CommandLine string
 }
 
 // stopOwnedNucleusProcesses removes a Control Plane left behind by an older
@@ -450,8 +451,9 @@ func stopOwnedNucleusProcesses(basePath string) error {
 
 	expectedNode := filepath.Join(basePath, "bin", "node", "node.exe")
 	expectedNucleus := filepath.Join(basePath, "bin", "nucleus", "nucleus.exe")
+	expectedBundle := filepath.Join(basePath, "bin", "bootstrap", "bundle.js")
 	if pid != 0 {
-		targetPID, tree, selectErr := selectOwnedNucleusTermination(pid, expectedNode, expectedNucleus, inspectWindowsProcess)
+		targetPID, tree, selectErr := selectOwnedNucleusTermination(pid, expectedNode, expectedNucleus, expectedBundle, inspectWindowsProcess)
 		if selectErr != nil {
 			return selectErr
 		}
@@ -465,7 +467,14 @@ func stopOwnedNucleusProcesses(basePath string) error {
 		if currentListener != pid {
 			return fmt.Errorf("port 48215 owner changed during verification (was PID %d, now PID %d); refusing termination", pid, currentListener)
 		}
-		expectedTarget := expectedNode
+		currentListenerInfo, inspectErr := inspectWindowsProcess(pid)
+		if inspectErr != nil {
+			return fmt.Errorf("verified Bloom listener PID %d disappeared before termination: %w", pid, inspectErr)
+		}
+		if !isOwnedNucleusNode(currentListenerInfo, expectedNode, expectedBundle) {
+			return fmt.Errorf("PID %d changed Control Plane identity before termination; refusing termination", pid)
+		}
+		expectedTarget := currentListenerInfo.ImagePath
 		if tree {
 			expectedTarget = expectedNucleus
 		}
@@ -525,13 +534,13 @@ func validateWindowsTerminationTarget(pid uint32, expectedPath string, lookup fu
 	return nil
 }
 
-func selectOwnedNucleusTermination(listenerPID uint32, expectedNode, expectedNucleus string, lookup func(uint32) (windowsProcessInfo, error)) (uint32, bool, error) {
+func selectOwnedNucleusTermination(listenerPID uint32, expectedNode, expectedNucleus, expectedBundle string, lookup func(uint32) (windowsProcessInfo, error)) (uint32, bool, error) {
 	listener, err := lookup(listenerPID)
 	if err != nil {
 		return 0, false, fmt.Errorf("port 48215 owner PID %d could not be inspected: %w", listenerPID, err)
 	}
-	if !sameWindowsPath(listener.ImagePath, expectedNode) {
-		return 0, false, fmt.Errorf("port 48215 is owned by unverified PID %d (%s); expected Bloom Node at %s", listenerPID, listener.ImagePath, expectedNode)
+	if !isOwnedNucleusNode(listener, expectedNode, expectedBundle) {
+		return 0, false, fmt.Errorf("port 48215 is owned by unverified PID %d (%s); expected Bloom Node at %s or an exact %s command", listenerPID, listener.ImagePath, expectedNode, expectedBundle)
 	}
 
 	seen := map[uint32]bool{listener.PID: true}
@@ -551,6 +560,46 @@ func selectOwnedNucleusTermination(listenerPID uint32, expectedNode, expectedNuc
 	// The exact installed Node path is independently verifiable ownership.
 	// If its parent already exited, limit the blast radius to the listener.
 	return listener.PID, false, nil
+}
+
+func isOwnedNucleusNode(process windowsProcessInfo, expectedNode, expectedBundle string) bool {
+	if sameWindowsPath(process.ImagePath, expectedNode) {
+		return true
+	}
+	if !strings.EqualFold(filepath.Base(process.ImagePath), "node.exe") || strings.TrimSpace(process.CommandLine) == "" {
+		return false
+	}
+	args, err := splitWindowsCommandLine(process.CommandLine)
+	if err != nil || len(args) < 2 {
+		return false
+	}
+	if filepath.IsAbs(args[0]) && !sameWindowsPath(args[0], process.ImagePath) {
+		return false
+	}
+	for _, arg := range args[1:] {
+		if filepath.IsAbs(arg) && sameWindowsPath(arg, expectedBundle) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitWindowsCommandLine(commandLine string) ([]string, error) {
+	ptr, err := windows.UTF16PtrFromString(commandLine)
+	if err != nil {
+		return nil, err
+	}
+	var argc int32
+	argv, err := windows.CommandLineToArgv(ptr, &argc)
+	if err != nil {
+		return nil, err
+	}
+	defer windows.LocalFree(windows.Handle(uintptr(unsafe.Pointer(argv))))
+	result := make([]string, 0, int(argc))
+	for i := int32(0); i < argc; i++ {
+		result = append(result, windows.UTF16PtrToString(&argv[i][0]))
+	}
+	return result, nil
 }
 
 func sameWindowsPath(a, b string) bool {
@@ -603,13 +652,30 @@ func inspectWindowsProcess(pid uint32) (windowsProcessInfo, error) {
 			if pathErr != nil {
 				return windowsProcessInfo{}, pathErr
 			}
-			return windowsProcessInfo{PID: pid, ParentPID: entry.ParentProcessID, ImagePath: imagePath}, nil
+			commandLine, commandErr := windowsProcessCommandLine(pid)
+			if commandErr != nil {
+				return windowsProcessInfo{}, commandErr
+			}
+			return windowsProcessInfo{PID: pid, ParentPID: entry.ParentProcessID, ImagePath: imagePath, CommandLine: commandLine}, nil
 		}
 		if err := windows.Process32Next(snapshot, &entry); err != nil {
 			break
 		}
 	}
 	return windowsProcessInfo{}, fmt.Errorf("PID %d no longer exists", pid)
+}
+
+func windowsProcessCommandLine(pid uint32) (string, error) {
+	script := fmt.Sprintf(`$p = Get-CimInstance Win32_Process -Filter "ProcessId = %d"; if ($null -eq $p) { exit 3 }; [Console]::Out.Write($p.CommandLine)`, pid)
+	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("could not inspect command line for PID %d: %w (%s)", pid, err, strings.TrimSpace(string(out)))
+	}
+	commandLine := strings.TrimSpace(string(out))
+	if commandLine == "" {
+		return "", fmt.Errorf("PID %d has no inspectable command line", pid)
+	}
+	return commandLine, nil
 }
 
 func inspectWindowsProcessesNamed(name string) ([]windowsProcessInfo, error) {

@@ -1,7 +1,11 @@
 package governance
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +87,12 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 			example:      "  nucleus authority sync\n  nucleus --json authority sync",
 			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"installation_id":"installation-123","organization_id":"organization-123","authority_version":"42","state_digest":"sha256-digest","capability_confirmed":true}}`,
 		},
+		"register": {
+			short:        "Register the active installation before its initial Authority emission",
+			long:         "Registers the local installation identity and Authority 1.1 capability. It does not pull an emission, accept a snapshot, or change enforcement mode.",
+			example:      "  nucleus --json authority register",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"register","ok":true,"evidence":{"installation_id":"installation-123","organization_id":"organization-123","registered":true}}`,
+		},
 		"decision": {
 			short:        "Report the current effective Authority decision evidence",
 			long:         "Evaluates and reports the current effective Authority decision from already accepted local evidence. It does not pull remote state or mutate the enforcement mode.",
@@ -113,6 +123,18 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 			example:      "  nucleus authority service-grants\n  nucleus --json authority service-grants",
 			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"service-grants","ok":true,"evidence":{"grants":[]}}`,
 		},
+		"supply-read": {
+			short:        "Read material Workspace context and Intelligence Supply authority state",
+			long:         "Compares Conductor selection with the installed Nucleus context. Without a verified session subject and grant binding, authority remains not_evaluable. Read-only.",
+			example:      "  nucleus --json authority supply-read <selected-org-slug> <selected-project-id-or-dash>",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"supply-read","ok":true,"evidence":{"context":{"status":"verified"},"authority":{"status":"not_evaluable","reason":"session_subject_grant_link_unavailable"}}}`,
+		},
+		"context-read": {
+			short:        "Read confirmed context evidence for an explicit selection",
+			long:         "Read-only identity, ProjectBinding, local folder and project ID continuity evidence for an explicit selection. Does not sync, claim or modify projects.",
+			example:      "  nucleus authority context-read acme 11111111-1111-4111-8111-111111111111\n  nucleus --json authority context-read acme 11111111-1111-4111-8111-111111111111",
+			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"context-read","ok":true,"evidence":{"schema":"bloom.confirmed-context/v1","selection":{"orgSlug":"acme","projectId":"11111111-1111-4111-8111-111111111111"},"identityAndMembership":{"status":"not_evaluable"},"projectBinding":{"status":"not_evaluable"},"localLocation":{"status":"present","source":"conductor_project_catalog","path":"C:/projects/one","checkedAt":"2026-10-03T12:00:00Z"},"projectIdContinuity":{"status":"matched","source":"nucleus_material_project_catalog","catalogPath":"C:/projects/.bloom/.nucleus-acme/.core/.nucleus-config.json","checkedAt":"2026-10-03T12:00:00Z"},"cognitumCompatibility":{"status":"not_evaluable"},"intelligencePreference":{"status":"not_evaluable"}}}`,
+		},
 	}
 	root := &cobra.Command{
 		Use:     "authority",
@@ -127,7 +149,7 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 	}
 	root.SilenceUsage = true
 	root.SilenceErrors = true
-	for _, name := range []string{"status", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants"} {
+	for _, name := range []string{"status", "register", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants", "supply-read", "context-read"} {
 		n := name
 		commandHelp := help[n]
 		sub := &cobra.Command{Use: n + " [arguments]", Short: commandHelp.short, Long: commandHelp.long, Example: commandHelp.example, Args: cobra.ArbitraryArgs, RunE: func(cmd *cobra.Command, args []string) error {
@@ -204,6 +226,46 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 		checkpoint := filepath.Join(dir, "checkpoint.json")
 		observations := filepath.Join(dir, "observation.json")
 		switch command {
+		case "register":
+			if len(args) != 0 {
+				return report, AuthorityCommandError{"invalid_arguments"}
+			}
+			active, err := core.ResolveActiveOrgContext()
+			if err != nil {
+				return report, AuthorityCommandError{"authority_config_invalid"}
+			}
+			identity, err := authority.LoadOrCreateLocalIdentity(filepath.Join(dir, "identity.json"))
+			if err != nil {
+				return report, AuthorityCommandError{"installation_identity_invalid"}
+			}
+			serviceToken := os.Getenv("AUTHORITY_SERVICE_TOKEN")
+			if err = authority.RegisterInstallation(context.Background(), active.AuthorityBaseURL, serviceToken, active.OrganizationID, identity, authorityCommandHTTPClient); err != nil {
+				return report, AuthorityCommandError{"installation_registration_failed"}
+			}
+			capability, err := (&authority.InstallationCapabilityClient{BaseURL: active.AuthorityBaseURL, OrganizationID: active.OrganizationID,
+				Identity: identity, HTTP: authorityCommandHTTPClient, Now: authorityCommandNow}).Ensure11(context.Background())
+			if err != nil || capability == nil {
+				return report, AuthorityCommandError{"installation_capability_unavailable"}
+			}
+			report.Evidence["registered"] = true
+			report.Evidence["installation_id"] = identity.InstallationID
+			report.Evidence["organization_id"] = active.OrganizationID
+			report.Evidence["capability_confirmed"] = true
+		case "context-read":
+			if len(args) != 2 || args[0] == "" || args[1] == "" {
+				return report, AuthorityCommandError{"invalid_arguments"}
+			}
+			report.Evidence = confirmedContextEvidence(c.Paths.AppDataDir, args[0], args[1])
+		case "supply-read":
+			if len(args) != 2 || args[0] == "" || args[1] == "" {
+				return report, AuthorityCommandError{"invalid_arguments"}
+			}
+			report.Evidence = map[string]any{}
+			now := authorityCommandNow()
+			report.Evidence["evaluated_at"] = now.Format(time.RFC3339Nano)
+			report.Evidence["authority"] = map[string]any{"status": "not_evaluable", "reason": "session_subject_grant_link_unavailable"}
+			active, contextErr := core.ResolveActiveOrgContext()
+			report.Evidence["context"] = supplyReadContextEvidence(args[0], args[1], active, contextErr)
 		case "service-identity":
 			if len(args) != 0 {
 				return report, AuthorityCommandError{"invalid_arguments"}
@@ -599,6 +661,179 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 		}
 		return report, nil
 	}}
+}
+
+func supplyReadContextEvidence(selectedOrg, selectedProject string, active *core.ActiveOrgContext, contextErr error) map[string]any {
+	evidence := map[string]any{"status": "not_evaluable", "selected_org_slug": selectedOrg, "selected_project_id": selectedProject}
+	if contextErr != nil || active == nil {
+		evidence["reason"] = "material_context_unavailable"
+		return evidence
+	}
+	if active.OrgSlug != selectedOrg {
+		evidence["reason"] = "selection_mismatch"
+		return evidence
+	}
+	evidence["status"] = "verified"
+	evidence["organization_id"] = active.OrganizationID
+	evidence["org_slug"] = active.OrgSlug
+	if selectedProject != "-" {
+		evidence["project_status"] = "not_evaluable"
+		evidence["project_reason"] = "material_project_binding_not_evaluated"
+	}
+	return evidence
+}
+
+// confirmedContextEvidence is deliberately a read projection. In particular it
+// never claims a project, synchronizes Authority, or infers a session subject.
+func confirmedContextEvidence(appDataDir, selectedOrg, selectedProject string) map[string]any {
+	now := authorityCommandNow().UTC()
+	out := map[string]any{
+		"schema": "bloom.confirmed-context/v1", "evaluatedAt": now.Format(time.RFC3339Nano),
+		"selection":              map[string]any{"orgSlug": selectedOrg, "projectId": selectedProject},
+		"identityAndMembership":  map[string]any{"status": "not_evaluable", "reason": "session_subject_unavailable"},
+		"projectBinding":         map[string]any{"status": "not_evaluable", "reason": "binding_not_read"},
+		"localLocation":          map[string]any{"status": "not_evaluable", "reason": "location_not_evaluated"},
+		"projectIdContinuity":    map[string]any{"status": "not_evaluable", "reason": "continuity_not_evaluated"},
+		"cognitumCompatibility":  map[string]any{"status": "not_evaluable", "reason": "criterion_not_defined"},
+		"intelligencePreference": map[string]any{"status": "not_evaluable", "reason": "preference_not_evaluated"},
+	}
+	identity := out["identityAndMembership"].(map[string]any)
+	bindingEvidence := out["projectBinding"].(map[string]any)
+	active, err := core.ResolveActiveOrgContext()
+	if err != nil || active == nil {
+		identity["reason"] = "material_context_unavailable"
+		return out
+	}
+	if active.OrgSlug != selectedOrg {
+		identity["status"] = "conflict"
+		identity["reason"] = "selection_mismatch"
+		return out
+	}
+	if project, projectErr := core.ResolveSelectedProject(active, selectedProject); projectErr == nil {
+		location, continuity := core.ReadProjectLocation(active, project)
+		location["checkedAt"] = now.Format(time.RFC3339Nano)
+		continuity["checkedAt"] = now.Format(time.RFC3339Nano)
+		out["localLocation"] = location
+		out["projectIdContinuity"] = continuity
+	} else {
+		out["localLocation"] = map[string]any{"status": "not_evaluable", "reason": "selected_project_unresolved"}
+		out["projectIdContinuity"] = map[string]any{"status": "not_evaluable", "reason": "selected_project_unresolved"}
+	}
+	statePath := filepath.Join(appDataDir, "authority", "state.json")
+	checkpointPath := filepath.Join(appDataDir, "authority", "checkpoint.json")
+	state, err := readAcceptedContextState(statePath, checkpointPath, now)
+	if err != nil {
+		identity["reason"] = err.Error()
+		bindingEvidence["reason"] = err.Error()
+		return out
+	}
+	identity["authorityVersion"] = state.Monotonic.HighWaterMark
+	identity["stateDigest"] = state.Monotonic.StateDigest
+	if state.Binding.OrganizationID != active.OrganizationID {
+		identity["status"] = "conflict"
+		identity["reason"] = "authority_organization_mismatch"
+		return out
+	}
+	identityPath := filepath.Join(appDataDir, "authority", "identity.json")
+	installationID, privateKey, err := readInstallationIdentity(identityPath)
+	if err != nil {
+		identity["reason"] = "installation_identity_unavailable"
+		return out
+	}
+	if installationID != state.Binding.InstallationID {
+		identity["status"] = "conflict"
+		identity["reason"] = "installation_identity_mismatch"
+		return out
+	}
+	client := &authority.SyncClient{BaseURL: active.AuthorityBaseURL, Binding: state.Binding, InstallationPrivateKey: privateKey, HTTP: authorityCommandHTTPClient, Now: authorityCommandNow}
+	tenant, err := authority.FetchOrganizationTenantID(context.Background(), active.AuthorityBaseURL, tenantSelfPath, state.Binding, privateKey, authorityCommandHTTPClient, authorityCommandNow())
+	if err != nil || tenant == nil || *tenant == "" {
+		identity["reason"] = "tenant_not_evaluable"
+		return out
+	}
+	identity["tenantId"] = *tenant
+	identity["organizationId"] = active.OrganizationID
+	identity["scopeStatus"] = "verified"
+	identity["scopeObservedAt"] = now.Format(time.RFC3339Nano)
+	identity["reason"] = "session_subject_unavailable"
+	if _, err := core.ResolveSelectedProject(active, selectedProject); err != nil {
+		bindingEvidence["reason"] = "selected_project_unresolved"
+		return out
+	}
+	binding, err := client.GetProjectBinding(context.Background(), selectedProject)
+	if err != nil {
+		var typed *authority.ProjectClaimError
+		if errors.As(err, &typed) {
+			bindingEvidence["status"] = strings.TrimPrefix(typed.Code, "project_binding_")
+			bindingEvidence["reason"] = typed.Code
+		} else {
+			bindingEvidence["reason"] = "project_binding_unavailable"
+		}
+		return out
+	}
+	if binding.TenantID != *tenant || binding.OrganizationID != active.OrganizationID || binding.ProjectID != selectedProject {
+		bindingEvidence["status"] = "conflict"
+		bindingEvidence["reason"] = "project_binding_scope_mismatch"
+		return out
+	}
+	out["projectBinding"] = map[string]any{"status": "bound", "tenantId": binding.TenantID, "organizationId": binding.OrganizationID, "projectId": binding.ProjectID, "revision": binding.Revision, "sourceRef": binding.SourceRef, "evidenceKind": binding.EvidenceKind, "claimedAt": binding.ClaimedAt, "checkedAt": binding.CheckedAt, "validUntil": binding.ValidUntil}
+	return out
+}
+
+func readAcceptedContextState(statePath, checkpointPath string, now time.Time) (*authority.DurableState, error) {
+	if _, err := os.Stat(checkpointPath + ".txn"); err == nil {
+		return nil, errors.New("authority_recovery_required")
+	} else if !os.IsNotExist(err) {
+		return nil, errors.New("checkpoint_unavailable")
+	}
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		return nil, errors.New("authority_state_unavailable")
+	}
+	checkpointRaw, err := os.ReadFile(checkpointPath)
+	if err != nil {
+		return nil, errors.New("checkpoint_unavailable")
+	}
+	state, err := (&authority.Store{Path: statePath}).Load()
+	if err != nil {
+		return nil, errors.New("authority_state_invalid")
+	}
+	var checkpoint authority.Checkpoint
+	if err := json.Unmarshal(checkpointRaw, &checkpoint); err != nil {
+		return nil, errors.New("checkpoint_invalid")
+	}
+	digest := sha256.Sum256(stateRaw)
+	if checkpoint.Schema != "bloom.authority.checkpoint/v1" || checkpoint.StoreDigest != base64.RawURLEncoding.EncodeToString(digest[:]) || checkpoint.Binding != state.Binding || checkpoint.HighWaterMark != state.Monotonic.HighWaterMark || checkpoint.PayloadDigest != state.Monotonic.Digest || checkpoint.StateDigest != state.Monotonic.StateDigest || checkpoint.CutoverFloor != state.Monotonic.CutoverFloor {
+		return nil, errors.New("checkpoint_conflict")
+	}
+	if state.Emission == nil || now.Before(state.Emission.NotBefore) {
+		return nil, errors.New("authority_state_not_yet_valid")
+	}
+	if !now.Before(state.Emission.ExpiresAt) {
+		return nil, errors.New("authority_state_stale")
+	}
+	return state, nil
+}
+
+func readInstallationIdentity(path string) (string, ed25519.PrivateKey, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", nil, err
+	}
+	var value struct {
+		InstallationID string `json:"installation_id"`
+		PublicKey      string `json:"public_key"`
+		PrivateKey     string `json:"private_key"`
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", nil, err
+	}
+	public, publicErr := base64.StdEncoding.Strict().DecodeString(value.PublicKey)
+	private, privateErr := base64.StdEncoding.Strict().DecodeString(value.PrivateKey)
+	if value.InstallationID == "" || publicErr != nil || privateErr != nil || len(public) != ed25519.PublicKeySize || len(private) != ed25519.PrivateKeySize || !bytes.Equal(public, private[32:]) {
+		return "", nil, errors.New("invalid installation identity")
+	}
+	return value.InstallationID, ed25519.PrivateKey(private), nil
 }
 
 func resolveCutoverPrincipal(state *authority.DurableState, subject, organizationID string, at time.Time) (string, error) {

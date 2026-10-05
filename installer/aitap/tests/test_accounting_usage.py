@@ -51,6 +51,21 @@ def test_groups_by_backend_and_consumer(state):
     local = rows[("local.ollama.functiongemma-270m", "alfred")]
     assert local["cost_statuses"] == ["local_zero"] and local["cost_usd"] == 0
     assert result["totals"]["completed"] == 3
+    assert brain["cost_coverage"] == "complete" and result["totals"]["cost_pending_attempts"] == 0
+    assert datetime.fromisoformat(result["read_at"]).tzinfo is not None
+
+
+def test_partial_cost_is_never_presented_as_total(state):
+    store = AccountingStore(state)
+    _write(store, "pending", "brain", [_attempt("anthropic_api", "completed", "2026-09-26T11:00:00+00:00",
+                                                  tokens=(9, 4), cost=None, status="unconfigured")])
+    result = summarize(state)
+    brain = next(r for r in result["rows"] if r["consumer_id"] == "brain")
+    assert brain["cost_usd"] == 0.0009
+    assert brain["cost_known_attempts"] == 2 and brain["cost_pending_attempts"] == 1
+    assert brain["cost_coverage"] == "partial"
+    assert result["totals"]["cost_coverage"] == "incomplete"  # hay un journal inválido
+    assert result["journals_invalid"] == 1
 
 
 def test_filters(state):

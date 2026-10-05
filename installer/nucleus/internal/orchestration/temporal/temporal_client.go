@@ -2,6 +2,8 @@ package temporal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -178,10 +180,16 @@ type LaunchOverrides struct {
 // Elimina la necesidad de DescribeWorkflowExecution + restart manual previos.
 func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger, profileID string, mode string, overrides LaunchOverrides) (*LaunchResult, error) {
 	workflowID := fmt.Sprintf("profile-lifecycle-%s", profileID)
+	requestBytes := make([]byte, 16)
+	if _, err := rand.Read(requestBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate launch request ID: %w", err)
+	}
+	requestID := hex.EncodeToString(requestBytes)
 
 	logger.Info("Executing launch for profile: %s (workflow: %s)", profileID, workflowID)
 
 	launchSignal := types.LaunchSignal{
+		RequestID:         requestID,
 		Mode:              mode,
 		ConfigOverride:    overrides.ConfigFile,
 		OverrideAlias:     overrides.OverrideAlias,
@@ -243,35 +251,29 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 			continue
 		}
 
-		// En el primer query con estado conocido, validar que el perfil puede lanzarse.
-		// Se chequea aquí (post-señal) en lugar de antes para evitar el DescribeWorkflow previo.
-		if i == 0 || status.State == types.StateLaunching {
-			if status.SentinelRunning {
-				return nil, fmt.Errorf("sentinel is already running for this profile")
-			}
-			if status.State != types.StateSeeded &&
-				status.State != types.StateReady &&
-				status.State != types.StateIdle &&
-				status.State != types.StateLaunching {
-				return nil, fmt.Errorf("profile cannot be launched in state: %s (must be SEEDED, READY, IDLE, or LAUNCHING)", status.State)
-			}
+		// SignalWithStart confirma el envío, no el consumo de la señal. Un query
+		// anterior puede seguir mostrando el Sentinel del lanzamiento previo.
+		matched, statusErr := launchRequestStatus(requestID, status)
+		if !matched {
+			logger.Debug("Waiting for launch signal to be consumed (attempt %d/%d)", i+1, maxAttempts)
+			continue
+		}
+		if statusErr != nil {
+			return nil, statusErr
 		}
 
-		// Si pasó a FAILED, retornar error inmediatamente
-		if status.State == types.StateFailed {
-			return &LaunchResult{
-				Success:   false,
-				ProfileID: profileID,
-				State:     string(status.State),
-				Error:     status.ErrorMessage,
-				Timestamp: time.Now().Unix(),
-			}, fmt.Errorf("launch failed: %s", status.ErrorMessage)
-		}
-
-		// Sentinel corriendo y estado RUNNING — obtener detalles completos
 		if status.SentinelRunning && status.State == types.StateRunning {
 			var details types.SentinelLaunchResult
 			if err := c.QueryWorkflow(ctx, workflowID, "", queries.QuerySentinelDetails, &details); err == nil {
+				if !launchDetailsReady(details) || details.ProfileID != profileID {
+					logger.Debug("Waiting for complete Sentinel details for launch request (attempt %d/%d)", i+1, maxAttempts)
+					continue
+				}
+				var confirmed types.ProfileStatus
+				if err := c.QueryWorkflow(ctx, workflowID, "", queries.QueryStatus, &confirmed); err != nil ||
+					confirmed.LaunchRequestID != requestID || confirmed.State != types.StateRunning {
+					continue
+				}
 				return &LaunchResult{
 					Success:         true,
 					ProfileID:       details.ProfileID,
@@ -290,6 +292,23 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 	}
 
 	return nil, fmt.Errorf("timeout waiting for Sentinel to start")
+}
+
+func launchDetailsReady(details types.SentinelLaunchResult) bool {
+	return details.Success && details.LaunchID != "" && details.ProfileID != "" && details.ChromePID > 0
+}
+
+func launchRequestStatus(requestID string, status types.ProfileStatus) (bool, error) {
+	if status.LaunchRequestID != requestID {
+		return false, nil
+	}
+	if status.State == types.StateFailed {
+		return true, fmt.Errorf("launch failed: %s", status.ErrorMessage)
+	}
+	if status.State != types.StateLaunching && status.State != types.StateRunning {
+		return true, fmt.Errorf("launch request entered unexpected state: %s", status.State)
+	}
+	return true, nil
 }
 
 // ShutdownProfile envía señal de shutdown a un perfil

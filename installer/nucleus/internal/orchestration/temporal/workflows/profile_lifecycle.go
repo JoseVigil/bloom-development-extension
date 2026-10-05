@@ -48,14 +48,13 @@ type OnboardingState struct {
 // stepProducesArtifact mapea cada step ID al artifact que produce.
 // Sincronizado con config/onboarding_steps.json.
 var stepProducesArtifact = map[string]string{
-	"github_auth":      "github_token",
-	"nucleus_create":   "nucleus_path",
-	"vault_init":       "vault_initialized",
-	"google_auth":      "google_account",
+	"github_auth":       "github_token",
+	"nucleus_create":    "nucleus_path",
+	"vault_init":        "vault_initialized",
+	"google_auth":       "google_account",
 	"ai_provider_setup": "ai_provider_key",
-	"project_create":   "project_mandate",
+	"project_create":    "project_mandate",
 }
-
 
 // maxLaunchesBeforeReset define cuántos launches se acumulan antes de hacer ContinueAsNew.
 // Temporal tiene un límite de ~50k eventos por run. Cada launch genera aprox. 400-600 eventos
@@ -167,6 +166,8 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 		selector.AddReceive(launchSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var launchSignal types.LaunchSignal
 			c.Receive(ctx, &launchSignal)
+			state.LaunchRequestID = launchSignal.RequestID
+			sentinelDetails = nil
 
 			logger.Info("Received LAUNCH signal",
 				"profile_id", input.ProfileID,
@@ -337,6 +338,7 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			// Resetear sesión — listo para próximo LAUNCH
 			state.State = types.StateSeeded
 			state.SentinelRunning = false
+			state.LaunchRequestID = ""
 			state.ErrorMessage = ""
 			chromePID = 0
 			currentCommandID = ""

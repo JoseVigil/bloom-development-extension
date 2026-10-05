@@ -30,7 +30,45 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nucleus/internal/orchestration/temporal/workflows"
+	"nucleus/internal/orchestration/types"
 )
+
+func TestLaunchRequestStatusIgnoresPreviousSession(t *testing.T) {
+	for _, state := range []types.ProfileState{types.StateRunning, types.StateFailed} {
+		matched, err := launchRequestStatus("new-request", types.ProfileStatus{
+			LaunchRequestID: "old-request", State: state, SentinelRunning: true,
+		})
+		if matched || err != nil {
+			t.Fatalf("old state %s matched=%v err=%v", state, matched, err)
+		}
+	}
+	for _, state := range []types.ProfileState{types.StateLaunching, types.StateRunning} {
+		matched, err := launchRequestStatus("new-request", types.ProfileStatus{
+			LaunchRequestID: "new-request", State: state,
+		})
+		if !matched || err != nil {
+			t.Fatalf("new state %s matched=%v err=%v", state, matched, err)
+		}
+	}
+	matched, err := launchRequestStatus("new-request", types.ProfileStatus{
+		LaunchRequestID: "new-request", State: types.StateFailed, ErrorMessage: "new launch failed",
+	})
+	if !matched || err == nil || err.Error() != "launch failed: new launch failed" {
+		t.Fatalf("new failure matched=%v err=%v", matched, err)
+	}
+}
+
+func TestLaunchDetailsReadyRequiresNewCompleteResult(t *testing.T) {
+	if launchDetailsReady(types.SentinelLaunchResult{Success: true, ProfileID: "profile", ChromePID: 42}) {
+		t.Fatal("missing launch ID was accepted")
+	}
+	if launchDetailsReady(types.SentinelLaunchResult{Success: false, ProfileID: "profile", LaunchID: "new", ChromePID: 42}) {
+		t.Fatal("failed Sentinel result was accepted")
+	}
+	if !launchDetailsReady(types.SentinelLaunchResult{Success: true, ProfileID: "profile", LaunchID: "new", ChromePID: 42}) {
+		t.Fatal("complete new Sentinel result was rejected")
+	}
+}
 
 const testTaskQueue = "etapa3-verification-queue"
 

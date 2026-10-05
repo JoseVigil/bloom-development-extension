@@ -753,14 +753,34 @@ class ServerManager:
                     })
 
                 elif msg_type == 'API_KEY_REGISTERED':
-                    # An unverified event cannot establish that Nucleus Vault
-                    # stored a credential. Keep the step pending until the
-                    # authorized Vault acknowledgement path exists.
-                    logger.warning("API_KEY_REGISTERED rejected: Vault acknowledgement required")
+                    # This is a request, not proof of storage. Conductor writes
+                    # through the signed Nucleus grant before it advances the
+                    # reactor or returns a verified receipt to Discovery.
+                    profile_id = msg.get('profile_id')
+                    launch_id = msg.get('launch_id')
+                    if msg.get('provider') != 'gemini' or not profile_id or not launch_id:
+                        await self._send_to_writer(writer, {
+                            'type': 'API_KEY_REGISTERED_ACK', 'status': 'error',
+                            'code': 'INVALID_GEMINI_REQUEST',
+                        })
+                        continue
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id': profile_id,
+                            'launch_id': launch_id,
+                            'step': 'ai_provider_setup',
+                            'original_event': 'API_KEY_REGISTERED',
+                            'provider': 'gemini',
+                            'profile_name': msg.get('profile_name', ''),
+                            'key_fingerprint': msg.get('key_fingerprint', ''),
+                            'timestamp': msg.get('timestamp'),
+                        },
+                    )
+                    await self._broadcast_event(event)
                     await self._send_to_writer(writer, {
                         'type':   'API_KEY_REGISTERED_ACK',
-                        'status': 'error',
-                        'code':   'VAULT_ACK_REQUIRED',
+                        'status': 'pending_vault',
                     })
 
                 elif msg_type == 'SWITCH_ORGANIZATION':

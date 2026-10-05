@@ -7,17 +7,17 @@ type ProfileState string
 
 const (
 	// Estados del ciclo de vida del perfil
-	StateIdle       ProfileState = "IDLE"        // Estado inicial, perfil no existe
-	StateSeeded     ProfileState = "SEEDED"      // Perfil creado, workflow iniciado
-	StateOnboarding ProfileState = "ONBOARDING"  // En proceso de onboarding
-	StateReady      ProfileState = "READY"       // Listo para launch
-	StateLaunching  ProfileState = "LAUNCHING"   // Ejecutando LaunchSentinel activity
-	StateRunning    ProfileState = "RUNNING"     // Sentinel corriendo normalmente
-	StateDegraded   ProfileState = "DEGRADED"    // Corriendo pero con problemas
-	StateRecovering ProfileState = "RECOVERING"  // Intentando recuperarse
-	StateShutdown   ProfileState = "SHUTDOWN"    // En proceso de shutdown
-	StateTerminated ProfileState = "TERMINATED"  // Workflow finalizado exitosamente
-	StateFailed     ProfileState = "FAILED"      // Error irrecuperable
+	StateIdle       ProfileState = "IDLE"       // Estado inicial, perfil no existe
+	StateSeeded     ProfileState = "SEEDED"     // Perfil creado, workflow iniciado
+	StateOnboarding ProfileState = "ONBOARDING" // En proceso de onboarding
+	StateReady      ProfileState = "READY"      // Listo para launch
+	StateLaunching  ProfileState = "LAUNCHING"  // Ejecutando LaunchSentinel activity
+	StateRunning    ProfileState = "RUNNING"    // Sentinel corriendo normalmente
+	StateDegraded   ProfileState = "DEGRADED"   // Corriendo pero con problemas
+	StateRecovering ProfileState = "RECOVERING" // Intentando recuperarse
+	StateShutdown   ProfileState = "SHUTDOWN"   // En proceso de shutdown
+	StateTerminated ProfileState = "TERMINATED" // Workflow finalizado exitosamente
+	StateFailed     ProfileState = "FAILED"     // Error irrecuperable
 )
 
 // BrainEvent es el esquema de eventos del Brain
@@ -42,6 +42,7 @@ type ProfileLifecycleInput struct {
 // ProfileStatus es el estado retornado por queries
 type ProfileStatus struct {
 	ProfileID       string       `json:"profile_id"`
+	LaunchRequestID string       `json:"launch_request_id,omitempty"`
 	State           ProfileState `json:"state"`
 	LastUpdate      time.Time    `json:"last_update"`
 	ErrorMessage    string       `json:"error_message,omitempty"`
@@ -147,6 +148,7 @@ type RecoveryFlowResult struct {
 
 // LaunchSignal - Señal para lanzar Sentinel
 type LaunchSignal struct {
+	RequestID      string `json:"request_id,omitempty"`
 	Mode           string `json:"mode"`                      // landing, discovery
 	ConfigOverride string `json:"config_override,omitempty"` // JSON opcional (@file o -)
 

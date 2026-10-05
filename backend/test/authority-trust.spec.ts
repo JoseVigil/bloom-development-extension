@@ -1,7 +1,7 @@
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';import {readFileSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import {spawnSync} from 'node:child_process';
 import {signTrustManifest,verifyTrustManifest,persistTrustManifest,loadTrustManifest,type TrustPayload} from '../src/authority/trust-manifest';
-import {authorityTrustResponse,type TrustRouteServices} from '../src/authority/trust-route';
+import {authorityTrustResponse,configuredAuthorityTrustResponse,type TrustRouteServices} from '../src/authority/trust-route';
 import {beginHumanLogin,finishHumanLogin,type HumanServices} from '../src/authority/human-session-store';
 import {base64ToBase64url,canonicalizeJson,signWithDomain} from '../src/authority/canonical';
 let db:D1Database,mf:Miniflare,temp:string,rootPrivate:ArrayBuffer,rootPublic:string,issuerPrivate:ArrayBuffer,issuerPublic:string,n=0,actorAttestation='',actorChallenge='',actorPublic='',actorOrg='',mandateAttestation='',mandateChallenge='',mandatePublic='',mandateOrg='';
@@ -31,6 +31,15 @@ describe('rooted Authority trust on temporary D1',()=>{
   const wrong=await keys(),bad=await authorityTrustResponse(db,new Request(origin+`/v1/authority/actor/challenge?org=${id}`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({organizationId:id,actorPublicKey:wrong.publicKey,audience:'other'})}),s,{organizationId:id,installationId:'installation-a'});expect(bad.status).toBe(403);
  });
  it('serves exact persisted manifest only to the bound installation',async()=>{const id=await org(),e=await signTrustManifest(payload(id),rootPrivate),raw=await persistTrustManifest(db,e,{allowTestFixtures:true});const s:TrustRouteServices={provider,encryptionKey:Buffer.alloc(32).toString('base64'),now:()=>now,allowTestFixtures:true,origin,issuer:'issuer-test',attestationKeyId:'issuer-key',attestationPrivateKeyPkcs8:issuerPrivate};const ok=await authorityTrustResponse(db,new Request(origin+`/v1/authority/trust-manifest?org=${id}`),s,{organizationId:id,installationId:'installation-a'});expect(await ok.text()).toBe(raw);expect((await authorityTrustResponse(db,new Request(origin+`/v1/authority/trust-manifest?org=${id}`),s,{organizationId:'other',installationId:'installation-a'})).status).toBe(401);});
+ it('serves a signed-installation trust manifest without GitHub provider configuration',async()=>{
+  const id=await org(),raw=await persistTrustManifest(db,await signTrustManifest(payload(id),rootPrivate),{allowTestFixtures:true});
+  const env={DB:db,AUTHORITY_HUMAN_ORIGIN:origin},installation={organizationId:id,installationId:'installation-a'};
+  const request=new Request(origin+`/v1/authority/trust-manifest?org=${id}`);
+  const ok=await configuredAuthorityTrustResponse(env,request,installation);expect(ok.status).toBe(200);expect(await ok.text()).toBe(raw);
+  expect((await configuredAuthorityTrustResponse(env,request,null)).status).toBe(401);
+  expect((await configuredAuthorityTrustResponse(env,request,{...installation,organizationId:'other'})).status).toBe(401);
+  expect((await configuredAuthorityTrustResponse(env,new Request('https://other.test/v1/authority/trust-manifest?org='+id),installation)).status).toBe(403);
+ });
  it('binds separate Mandate consent to Authority-signed operation, id and digest',async()=>{
   const id=await org(),digest='a'.repeat(64);await persistTrustManifest(db,await signTrustManifest(payload(id),rootPrivate),{allowTestFixtures:true});
   await db.prepare("INSERT INTO authority_human_identities VALUES(?,?,'123','fixture:explicit','test-fixture','1','active',NULL,'')").bind(id,'owner').run();

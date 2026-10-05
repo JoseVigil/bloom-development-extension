@@ -3,6 +3,7 @@ package vault
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -16,12 +17,113 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zalando/go-keyring"
 )
 
 const servicePurpose = "mandate_genesis_intelligence"
 const mandateGenPurpose = "mandate_gen_intelligence"
 
 var errServiceDenied = errors.New("VAULT_ACCESS_DENIED")
+
+type ServiceStoreRequest struct {
+	GrantID        string `json:"grant_id"`
+	OrganizationID string `json:"organization_id"`
+	InstallationID string `json:"installation_id"`
+	KeyID          string `json:"key_id"`
+	Purpose        string `json:"purpose"`
+	Timestamp      string `json:"timestamp"`
+	Nonce          string `json:"nonce"`
+	Value          string `json:"value"`
+	Signature      string `json:"signature"`
+}
+
+type ServiceStoreReceipt struct {
+	Status         string `json:"status"`
+	KeyID          string `json:"key_id"`
+	GrantID        string `json:"grant_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func serviceStoreMessage(r ServiceStoreRequest) []byte {
+	digest := sha256.Sum256([]byte(r.Value))
+	return []byte(strings.Join([]string{"BLOOM-ONBOARDING-VAULT-STORE-v1", r.GrantID, r.OrganizationID, r.InstallationID,
+		r.KeyID, r.Purpose, r.Timestamp, r.Nonce, base64.RawURLEncoding.EncodeToString(digest[:])}, "\n"))
+}
+
+// RunServiceStore receives the secret only on stdin. The receipt contains no
+// credential material and is emitted only after the OS keyring confirms it.
+func RunServiceStore(input io.Reader, appDataDir string) (*ServiceStoreReceipt, error) {
+	deny := func() (*ServiceStoreReceipt, error) { return nil, errServiceDenied }
+	raw, err := io.ReadAll(io.LimitReader(input, 16385))
+	if err != nil || len(raw) > 16384 {
+		return deny()
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var r ServiceStoreRequest
+	if decoder.Decode(&r) != nil || decoder.Decode(new(any)) != io.EOF {
+		return deny()
+	}
+	fields := []string{r.GrantID, r.OrganizationID, r.InstallationID, r.KeyID, r.Purpose, r.Timestamp, r.Nonce, r.Signature}
+	for _, field := range fields {
+		if field == "" || strings.ContainsAny(field, "\r\n") {
+			return deny()
+		}
+	}
+	if r.KeyID != "gemini-key:default" || r.Purpose != "onboarding_gemini" || r.Value == "" || len(r.Value) > 8192 || strings.ContainsAny(r.Value, "\r\n") {
+		return deny()
+	}
+	now := time.Now().UTC()
+	timestamp, err := time.Parse(time.RFC3339Nano, r.Timestamp)
+	if err != nil || timestamp.Before(now.Add(-30*time.Second)) || timestamp.After(now.Add(30*time.Second)) {
+		return deny()
+	}
+	nonce, err := base64.RawURLEncoding.DecodeString(r.Nonce)
+	if err != nil || len(nonce) != 32 || base64.RawURLEncoding.EncodeToString(nonce) != r.Nonce {
+		return deny()
+	}
+	active, err := core.ResolveActiveOrgContext()
+	if err != nil || active.OrganizationID != r.OrganizationID || !remoteEnforcedAt(active.NucleusRoot) {
+		return deny()
+	}
+	publicKey, err := authority.ResolveVaultWriteGrant(&authority.Store{Path: filepath.Join(appDataDir, "authority", "state.json")},
+		&authority.CheckpointStore{Path: filepath.Join(appDataDir, "authority", "checkpoint.json")},
+		r.OrganizationID, r.InstallationID, r.GrantID, r.KeyID, r.Purpose, now)
+	if err != nil {
+		return deny()
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(r.Signature)
+	if err != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, serviceStoreMessage(r), signature) {
+		return deny()
+	}
+	status, err := GetVaultStatus()
+	if err != nil || status.Locked {
+		return deny()
+	}
+	if err = ClaimNonce(filepath.Join(appDataDir, "authority", "vault-service-replay.json"), r.GrantID, r.Nonce, now); err != nil {
+		return deny()
+	}
+	_, existingErr := osKeyring.Get(vaultServiceName(), r.KeyID)
+	if existingErr != nil && !errors.Is(existingErr, keyring.ErrNotFound) {
+		return deny()
+	}
+	if err = osKeyring.Set(vaultServiceName(), r.KeyID, r.Value); err != nil {
+		return deny()
+	}
+	stored, err := osKeyring.Get(vaultServiceName(), r.KeyID)
+	if err != nil || stored != r.Value {
+		return deny()
+	}
+	if errors.Is(existingErr, keyring.ErrNotFound) {
+		status.KeyCount++
+	}
+	status.LastAccess = now
+	if err = saveVaultStatus(status); err != nil {
+		return deny()
+	}
+	return &ServiceStoreReceipt{Status: "stored", KeyID: r.KeyID, GrantID: r.GrantID, OrganizationID: r.OrganizationID}, nil
+}
 
 type ServiceRequest struct {
 	GrantID        string `json:"grant_id"`

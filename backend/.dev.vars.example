@@ -19,3 +19,9 @@
 #
 # NUNCA activar en un entorno que sirva tráfico real.
 AUTHORITY_ALLOW_TEST_FIXTURES=true
+
+# Solo para el trust manifest del onboarding fixture. Colocar en .dev.vars el
+# PKCS8 base64 de la raíz de prueba RFC 8032 vector 1, cuya clave pública está
+# fijada en Nucleus como development-rfc8032-root. El Backend verifica la firma
+# contra esa raíz antes de persistir el manifest; no usar una raíz productiva.
+# AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64=<pkcs8-base64-del-vector-de-prueba>

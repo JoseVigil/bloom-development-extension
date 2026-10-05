@@ -125,8 +125,8 @@ export interface WireRevocation {
 }
 export interface WireVaultServiceGrant {
   grant_id: string; organization_id: string; installation_id: string;
-  consumer: "aitap"; permission: "vault.key.read"; key_id: string;
-  purpose: "mandate_genesis_intelligence" | "mandate_gen_intelligence"; service_public_key: string;
+  consumer: "aitap" | "onboarding"; permission: "vault.key.read" | "vault.key.write"; key_id: string;
+  purpose: "mandate_genesis_intelligence" | "mandate_gen_intelligence" | "onboarding_gemini"; service_public_key: string;
   issued_by_principal_id: string; valid_from: string; valid_until: string;
 }
 export interface WireIntelligenceSupplyGrant {

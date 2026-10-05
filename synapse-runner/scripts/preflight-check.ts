@@ -38,7 +38,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error('🔴 [preflight] Error inesperado:', err);
-  process.exitCode = 1;
-});
+// Mantiene el export para consumidores de diagnóstico; Playwright no lo registra en esta corrida.
+export default function globalSetup(): void {}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('🔴 [preflight] Error inesperado:', err);
+    process.exitCode = 1;
+  });
+}

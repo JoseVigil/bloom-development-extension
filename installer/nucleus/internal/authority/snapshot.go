@@ -605,7 +605,9 @@ func validateProjectionForVersion(f FullContent, org, schemaVersion string) erro
 				issuerHuman = true
 			}
 		}
-		if !unique(grants, g.GrantID) || g.OrganizationID != org || g.InstallationID == "" || g.Consumer != "aitap" || g.Permission != "vault.key.read" || g.KeyID == "" || (g.Purpose != "mandate_genesis_intelligence" && g.Purpose != "mandate_gen_intelligence") || len(key) != 32 || base64.RawURLEncoding.EncodeToString(key) != g.ServicePublicKey || !issuerHuman || !g.ValidUntil.After(g.ValidFrom) || err != nil {
+		readGrant := g.Consumer == "aitap" && g.Permission == "vault.key.read" && g.KeyID == "anthropic-key:default" && (g.Purpose == "mandate_genesis_intelligence" || g.Purpose == "mandate_gen_intelligence")
+		writeGrant := g.Consumer == "onboarding" && g.Permission == "vault.key.write" && g.KeyID == "gemini-key:default" && g.Purpose == "onboarding_gemini"
+		if !unique(grants, g.GrantID) || g.OrganizationID != org || g.InstallationID == "" || (!readGrant && !writeGrant) || len(key) != 32 || base64.RawURLEncoding.EncodeToString(key) != g.ServicePublicKey || !issuerHuman || !g.ValidUntil.After(g.ValidFrom) || err != nil {
 			return errors.New("invalid vault service grant")
 		}
 	}

@@ -30,6 +30,9 @@ export const vaultState = {
 // no confundir con los stepId del SSOT — ver IDENTITY_STEPS para el mapeo).
 export const activeAccounts = new Set();
 
+// Elección de esta sesión; todavía no es una preferencia persistida ni una autorización.
+export const intelligenceSupplyChoice = { selected: 'gemini' }; // 'gemini' | 'gemma' | null
+
 // ── Workspace (nucleus_create) ─────────────────────────────────────────────
 export const workspaceState = {
   path: '',

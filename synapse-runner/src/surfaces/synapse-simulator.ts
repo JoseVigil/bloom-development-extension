@@ -97,7 +97,7 @@ export async function sendDiscoveryMessage(
   console.log(`[synapse-simulator] UI send ${id}: ${JSON.stringify(payload)}`);
   const sendButton = page.locator('#btn-send');
   try {
-    await sendButton.click({ timeout: 3_000 });
+    await sendButton.click({ timeout: 3_000, noWaitAfter: true });
   } catch (error) {
     if (!String(error).includes('intercepts pointer events')) throw error;
     await expect(sendButton).toBeVisible();

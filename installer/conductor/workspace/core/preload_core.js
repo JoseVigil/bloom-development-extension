@@ -69,3 +69,11 @@ contextBridge.exposeInMainWorld('nucleus', {
   // Leer installation/onboarding desde nucleus.json
   getInstallation: () => ipcRenderer.invoke('nucleus:get-installation')
 });
+
+contextBridge.exposeInMainWorld('intelligenceSupply', {
+  read: () => ipcRenderer.invoke('core:intelligence-supply-read')
+});
+
+contextBridge.exposeInMainWorld('confirmedContext', {
+  read: () => ipcRenderer.invoke('core:confirmed-context-read')
+});

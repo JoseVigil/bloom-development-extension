@@ -11,6 +11,7 @@ const { ipcMain, dialog, app } = require('electron');
 const { spawn } = require('child_process');
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
 const { getLogger } = require('../../../shared/logger');
 const { paths } = require('../../../shared/global_paths');
 const {
@@ -23,6 +24,89 @@ const {
 } = require('../../../shared/onboarding-schema');
 
 const log = getLogger('onboarding');
+let geminiVaultSession = null;
+
+function safeLaunchError(value) {
+  let message = String(value || 'nucleus_launch_failed').split(' | stdout:')[0];
+  for (const [name, secret] of Object.entries(process.env)) {
+    if (/SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIAL/i.test(name) && secret && secret.length >= 4) {
+      message = message.split(secret).join('[redacted]');
+    }
+  }
+  return message
+    .replace(/(Bearer\s+)[^\s]+/gi, '$1[redacted]')
+    .replace(/\b(?:sk-|gh[upso]_)[A-Za-z0-9_-]{8,}\b/g, '[redacted]')
+    .replace(/((?:api[_-]?key|secret|token|password)\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]')
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, 500);
+}
+
+function readActiveVaultContext(NUCLEUS_JSON) {
+  const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+  const slug = data.onboarding?.active_org_slug;
+  const matches = (data.onboarding?.organizations || []).filter(org => org.org_slug === slug);
+  if (!slug || matches.length !== 1 || !matches[0].organization_id ||
+      matches[0].organization_id !== data.onboarding?.backend_identity_org_id) {
+    throw new Error('gemini_vault_organization_identity_invalid');
+  }
+  return { organizationId: matches[0].organization_id, slug };
+}
+
+function requireGeminiRunnerFixture(event, getWindow) {
+  let origin;
+  try { origin = new URL(process.env.BLOOM_AUTHORITY_ORIGIN || ''); } catch { /* rejected below */ }
+  if (process.env.SYNAPSE_RUNNER_TEST_MODE !== '1' ||
+      !process.env.BLOOM_GENESIS_TEST_BROWSER_SECRET ||
+      !process.env.GEMINI_API_KEY?.trim() ||
+      !origin || origin.protocol !== 'http:' ||
+      !['localhost', '127.0.0.1'].includes(origin.hostname) ||
+      event.sender !== getWindow()?.webContents) {
+    throw new Error('gemini_runner_fixture_unavailable');
+  }
+}
+
+async function storeGeminiKeyWithGrant(NUCLEUS_JSON) {
+  const session = geminiVaultSession;
+  const secret = process.env.GEMINI_API_KEY;
+  const { organizationId } = readActiveVaultContext(NUCLEUS_JSON);
+  if (!session || session.organizationId !== organizationId || !session.grantId ||
+      !session.installationId || typeof secret !== 'string' || !secret.trim()) {
+    throw new Error('gemini_vault_session_unavailable');
+  }
+  const timestamp = new Date().toISOString();
+  const nonce = crypto.randomBytes(32).toString('base64url');
+  const digest = crypto.createHash('sha256').update(secret).digest('base64url');
+  const message = ['BLOOM-ONBOARDING-VAULT-STORE-v1', session.grantId, organizationId,
+    session.installationId, 'gemini-key:default', 'onboarding_gemini', timestamp, nonce, digest].join('\n');
+  const request = {
+    grant_id: session.grantId, organization_id: organizationId, installation_id: session.installationId,
+    key_id: 'gemini-key:default', purpose: 'onboarding_gemini', timestamp, nonce,
+    value: secret, signature: crypto.sign(null, Buffer.from(message), session.privateKey).toString('base64url'),
+  };
+  return new Promise((resolve, reject) => {
+    const child = spawn(paths.nucleusExe, ['--json', 'vault', 'service-store'], { windowsHide: true });
+    let stdout = '';
+    const timer = setTimeout(() => { child.kill(); reject(new Error('gemini_vault_store_timeout')); }, 30_000);
+    child.stdout.on('data', data => { stdout += data.toString(); });
+    // Never collect or log stderr: it could contain credential material from a failed child.
+    child.stderr.resume();
+    child.on('error', err => { clearTimeout(timer); reject(new Error(`gemini_vault_store_spawn_failed:${err.code || 'unknown'}`)); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`gemini_vault_store_failed:exit_${code}`));
+      try {
+        const receipt = JSON.parse(stdout.trim());
+        if (receipt.status !== 'stored' || receipt.organization_id !== organizationId ||
+            receipt.grant_id !== session.grantId || receipt.key_id !== 'gemini-key:default') {
+          throw new Error('gemini_vault_receipt_invalid');
+        }
+        session.receipt = receipt;
+        resolve(receipt);
+      } catch { reject(new Error('gemini_vault_receipt_invalid')); }
+    });
+    child.stdin.end(JSON.stringify(request));
+  });
+}
 
 // ── Steps válidos — espejo del JSON canónico en config/onboarding/onboarding_steps.json
 // No se hardcodean reglas aquí, solo los IDs para validación local.
@@ -47,6 +131,43 @@ const ONBOARDING_STEP_IDS = [
 
 function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getReactor, getRegistry, createWorkspaceWindow) {
   const { resolveEntryPoint } = require('../resolution-engine');
+
+  ipcMain.handle('onboarding:gemini-vault-prepare', async (event) => {
+    requireGeminiRunnerFixture(event, getWindow);
+    const { organizationId } = readActiveVaultContext(NUCLEUS_JSON);
+    const vaultStatus = await execNucleus(['--json', 'vault', 'status']);
+    if (vaultStatus.locked !== false) {
+      const unlocked = await execNucleus(['--json', 'vault', 'unlock']);
+      if (unlocked.status !== 'unlocked') throw new Error('gemini_vault_unlock_failed');
+    }
+    const registered = await execNucleus(['--json', 'authority', 'register'], 60_000);
+    if (registered.ok !== true || registered.evidence?.organization_id !== organizationId ||
+        !registered.evidence?.installation_id) throw new Error('gemini_authority_registration_failed');
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const publicRaw = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64url');
+    geminiVaultSession = { organizationId, installationId: registered.evidence.installation_id, privateKey, grantId: null };
+    return { organizationId, installationId: geminiVaultSession.installationId, servicePublicKey: publicRaw };
+  });
+
+  ipcMain.handle('onboarding:gemini-vault-sync', async (event, grantId) => {
+    requireGeminiRunnerFixture(event, getWindow);
+    if (!geminiVaultSession) throw new Error('gemini_vault_session_unavailable');
+    const result = await execNucleus(['--json', 'authority', 'sync'], 90_000);
+    if (result.ok !== true || result.evidence?.effective_mode !== 'remote_enforced') {
+      throw new Error(`gemini_authority_sync_failed:${result.error_code || 'remote_enforced_required'}`);
+    }
+    if (grantId) {
+      if (typeof grantId !== 'string' || !/^[0-9a-f-]{36}$/i.test(grantId)) throw new Error('gemini_grant_id_invalid');
+      geminiVaultSession.grantId = grantId;
+    }
+    return { authorityVersion: result.evidence.authority_version, effectiveMode: result.evidence.effective_mode };
+  });
+
+  ipcMain.handle('onboarding:gemini-vault-receipt', async () => {
+    const { organizationId } = readActiveVaultContext(NUCLEUS_JSON);
+    if (geminiVaultSession?.organizationId !== organizationId) return null;
+    return geminiVaultSession.receipt || null;
+  });
 
   // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
   // Paso 1: github_app_auth es el primer step de Chrome/Discovery
@@ -93,11 +214,18 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       if (email) args.push('--override-email', email);
 
       const result = await execNucleus(args, 30000);
+      if (result.success === false) {
+        const error = safeLaunchError(result.error);
+        const state = typeof result.state === 'string' ? result.state : null;
+        log.error('[IPC] onboarding:launch-discovery — FAILED:', error, '| state:', state);
+        return { success: false, profileId, error, state };
+      }
       log.success('[IPC] onboarding:launch-discovery — ok');
-      return { success: result.success !== false, profileId, result };
+      return { success: true, profileId, result };
     } catch (err) {
-      log.error('[IPC] onboarding:launch-discovery — FAILED:', err.message);
-      return { success: false, error: err.message };
+      const error = safeLaunchError(err.message);
+      log.error('[IPC] onboarding:launch-discovery — FAILED:', error);
+      return { success: false, error };
     }
   });
 
@@ -1294,4 +1422,4 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   });
 }
 
-module.exports = { registerOnboardingHandlers };
+module.exports = { registerOnboardingHandlers, storeGeminiKeyWithGrant };

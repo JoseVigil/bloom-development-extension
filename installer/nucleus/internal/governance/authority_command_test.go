@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,170 @@ func executeAuthority(t *testing.T, jsonMode bool, name string, service Authorit
 	cmd.SetArgs([]string{name})
 	err := cmd.Execute()
 	return out.String(), err
+}
+
+func TestSupplyReadCommandRequiresSelectionAndKeepsAuthorityUnevaluated(t *testing.T) {
+	service := AuthorityCommandServices{Run: func(name string, args []string) (AuthorityEvidenceReport, error) {
+		if name != "supply-read" || len(args) != 2 || args[0] != "acme" || args[1] != "-" {
+			t.Fatalf("unexpected command %q args %v", name, args)
+		}
+		return AuthorityEvidenceReport{Evidence: map[string]any{
+			"context":   map[string]any{"status": "verified", "organization_id": "org"},
+			"authority": map[string]any{"status": "not_evaluable", "reason": "session_subject_grant_link_unavailable"},
+		}}, nil
+	}}
+	cmd := NewAuthorityCommand(service, func() bool { return true })
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"supply-read", "acme", "-"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var report AuthorityEvidenceReport
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Evidence["authority"].(map[string]any)["status"] != "not_evaluable" {
+		t.Fatal(report)
+	}
+}
+
+func TestSupplyReadContextEvidenceDoesNotPromoteSelection(t *testing.T) {
+	active := &core.ActiveOrgContext{OrgSlug: "acme", OrganizationID: "org-1"}
+	if got := supplyReadContextEvidence("other", "project", active, nil); got["status"] != "not_evaluable" || got["reason"] != "selection_mismatch" {
+		t.Fatal(got)
+	}
+	if got := supplyReadContextEvidence("acme", "project", active, nil); got["status"] != "verified" || got["project_status"] != "not_evaluable" {
+		t.Fatal(got)
+	}
+	if got := supplyReadContextEvidence("acme", "-", nil, errors.New("missing")); got["status"] != "not_evaluable" {
+		t.Fatal(got)
+	}
+}
+
+func TestConfirmedContextUnavailableAuthorityKeepsBindingUnevaluated(t *testing.T) {
+	appData := t.TempDir()
+	workspace := t.TempDir()
+	t.Setenv("BLOOM_APPDATA_DIR", appData)
+	root := filepath.Join(workspace, ".bloom", ".nucleus-acme", ".core")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".nucleus-config.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"authority_base_url":"https://authority.test","onboarding":{"active_org_slug":"acme","organizations":[{"org_slug":"acme","organization_id":"org","workspace_path":` + strconv.Quote(workspace) + `,"projects":[{"project_id":"11111111-1111-4111-8111-111111111111"}]}]}}`
+	if err := os.MkdirAll(filepath.Join(appData, "config"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appData, "config", "nucleus.json"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got := confirmedContextEvidence(appData, "acme", "11111111-1111-4111-8111-111111111111")
+	if got["identityAndMembership"].(map[string]any)["reason"] != "authority_state_unavailable" || got["projectBinding"].(map[string]any)["reason"] != "authority_state_unavailable" || got["projectBinding"].(map[string]any)["status"] != "not_evaluable" {
+		t.Fatal(got)
+	}
+}
+
+func TestConfirmedContextLocationSurvivesMissingAuthorityWithoutWrites(t *testing.T) {
+	appData := t.TempDir()
+	workspace := t.TempDir()
+	t.Setenv("BLOOM_APPDATA_DIR", appData)
+	selected := filepath.Join(workspace, "selected")
+	root := filepath.Join(workspace, ".bloom", ".nucleus-acme")
+	if err := os.MkdirAll(filepath.Join(root, ".core"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(selected, 0700); err != nil {
+		t.Fatal(err)
+	}
+	const projectID = "11111111-1111-4111-8111-111111111111"
+	material := `{"projects":[{"id":"` + projectID + `","absolutePath":` + strconv.Quote(selected) + `}]}`
+	materialPath := filepath.Join(root, ".core", ".nucleus-config.json")
+	if err := os.WriteFile(materialPath, []byte(material), 0600); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"authority_base_url":"https://authority.test","onboarding":{"active_org_slug":"acme","organizations":[{"org_slug":"acme","organization_id":"org","workspace_path":` + strconv.Quote(workspace) + `,"projects":[{"project_id":"` + projectID + `","project_path":` + strconv.Quote(selected) + `}]}]}}`
+	if err := os.MkdirAll(filepath.Join(appData, "config"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(appData, "config", "nucleus.json")
+	if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	beforeConfig, _ := os.ReadFile(configPath)
+	beforeMaterial, _ := os.ReadFile(materialPath)
+	got := confirmedContextEvidence(appData, "acme", projectID)
+	if got["localLocation"].(map[string]any)["status"] != "present" || got["projectIdContinuity"].(map[string]any)["status"] != "matched" {
+		t.Fatal(got)
+	}
+	if got["identityAndMembership"].(map[string]any)["reason"] != "authority_state_unavailable" || got["projectBinding"].(map[string]any)["status"] != "not_evaluable" {
+		t.Fatal(got)
+	}
+	if got["cognitumCompatibility"].(map[string]any)["status"] != "not_evaluable" || got["intelligencePreference"].(map[string]any)["status"] != "not_evaluable" {
+		t.Fatal(got)
+	}
+	for _, item := range []map[string]any{got["localLocation"].(map[string]any), got["projectIdContinuity"].(map[string]any)} {
+		if _, err := time.Parse(time.RFC3339Nano, item["checkedAt"].(string)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	afterConfig, _ := os.ReadFile(configPath)
+	afterMaterial, _ := os.ReadFile(materialPath)
+	if !bytes.Equal(beforeConfig, afterConfig) || !bytes.Equal(beforeMaterial, afterMaterial) {
+		t.Fatal("context read changed catalogs")
+	}
+	if _, err := os.Stat(filepath.Join(appData, "authority")); !os.IsNotExist(err) {
+		t.Fatal("context read created Authority state or log")
+	}
+}
+
+func TestContextReadHelpAndJSONContract(t *testing.T) {
+	service := AuthorityCommandServices{Run: func(name string, args []string) (AuthorityEvidenceReport, error) {
+		if name != "context-read" || len(args) != 2 {
+			t.Fatalf("unexpected call %s %v", name, args)
+		}
+		return AuthorityEvidenceReport{OK: true, Evidence: map[string]any{"schema": "bloom.confirmed-context/v1", "localLocation": map[string]any{"status": "present"}, "projectIdContinuity": map[string]any{"status": "not_evaluable"}}}, nil
+	}}
+	cmd := NewAuthorityCommand(service, func() bool { return true })
+	sub, _, err := cmd.Find([]string{"context-read"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sub.Annotations["category"] != "GOVERNANCE" || !strings.Contains(sub.Long, "local folder") || !strings.Contains(sub.Example, "--json") {
+		t.Fatal(sub)
+	}
+	var example map[string]any
+	if err := json.Unmarshal([]byte(sub.Annotations["json_response"]), &example); err != nil {
+		t.Fatal(err)
+	}
+	evidence := example["evidence"].(map[string]any)
+	if evidence["localLocation"] == nil || evidence["projectIdContinuity"] == nil {
+		t.Fatal(evidence)
+	}
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"context-read", "acme", "11111111-1111-4111-8111-111111111111"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var report AuthorityEvidenceReport
+	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Command != "context-read" || report.Evidence["projectIdContinuity"] == nil {
+		t.Fatal(report)
+	}
+	cmd = NewAuthorityCommand(service, func() bool { return false })
+	output.Reset()
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"context-read", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "project ID continuity") || !strings.Contains(output.String(), "Examples:") {
+		t.Fatal(output.String())
+	}
 }
 
 func TestResolveCutoverPrincipalRequiresExactlyOneVerifiedLegacyIdentity(t *testing.T) {
@@ -82,6 +247,8 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	failureStage := ""
 	loggerReadyAtRegistration := false
 	projectID := "11111111-1111-4111-8111-111111111111"
+	bindingFailure := ""
+	bindingTenant := "tenant-xyz"
 	var installationID string
 	var server *httptest.Server
 	signEnvelope := func(payload any, domain, keyID string, private ed25519.PrivateKey) []byte {
@@ -226,7 +393,13 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(authority.ProjectBinding{Status: "bound", OrganizationID: "org-id", TenantID: "tenant-xyz", ProjectID: projectID, Revision: "1", SourceRef: "installation:" + installationID, EvidenceKind: "canonical", ClaimedAt: now.Add(-time.Minute), CheckedAt: now, ValidUntil: now.Add(time.Hour)})
+			if bindingFailure != "" {
+				status := map[string]int{"project_binding_required": 404, "project_binding_expired": 410, "project_binding_revoked": 410, "project_binding_conflict": 409, "project_binding_unavailable": 503}[bindingFailure]
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": bindingFailure})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(authority.ProjectBinding{Status: "bound", OrganizationID: "org-id", TenantID: bindingTenant, ProjectID: projectID, Revision: "1", SourceRef: "installation:" + installationID, EvidenceKind: "canonical", ClaimedAt: now.Add(-time.Minute), CheckedAt: now, ValidUntil: now.Add(time.Hour)})
 		}
 	}))
 	defer server.Close()
@@ -350,6 +523,74 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 	receipts, err := (&authority.ProjectBindingStore{Path: filepath.Join(appData, "authority", "project-bindings.json")}).Load()
 	if err != nil || len(receipts) != 1 || receipts[0].ProjectID != projectID {
 		t.Fatalf("canonical project receipt missing: %+v err=%v", receipts, err)
+	}
+	// Context read must not claim or sync again, and must keep principal,
+	// location, Cognitum and preference independent of a valid binding.
+	beforeClaims := projectClaimCount
+	stateBefore, err := os.ReadFile(filepath.Join(appData, "authority", "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpointBefore, err := os.ReadFile(filepath.Join(appData, "authority", "checkpoint.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	context := confirmedContextEvidence(appData, "acme", projectID)
+	if context["schema"] != "bloom.confirmed-context/v1" {
+		t.Fatal(context)
+	}
+	bind := context["projectBinding"].(map[string]any)
+	if bind["status"] != "bound" || bind["projectId"] != projectID || bind["organizationId"] != "org-id" || bind["tenantId"] != "tenant-xyz" {
+		t.Fatal(context)
+	}
+	if context["identityAndMembership"].(map[string]any)["status"] != "not_evaluable" || context["cognitumCompatibility"].(map[string]any)["status"] != "not_evaluable" || context["intelligencePreference"].(map[string]any)["status"] != "not_evaluable" {
+		t.Fatal(context)
+	}
+	if projectClaimCount != beforeClaims {
+		t.Fatal("read claimed a project")
+	}
+	stateAfter, _ := os.ReadFile(filepath.Join(appData, "authority", "state.json"))
+	checkpointAfter, _ := os.ReadFile(filepath.Join(appData, "authority", "checkpoint.json"))
+	if !bytes.Equal(stateBefore, stateAfter) || !bytes.Equal(checkpointBefore, checkpointAfter) {
+		t.Fatal("context read mutated Authority state")
+	}
+	bindingTenant = "other-tenant"
+	if got := confirmedContextEvidence(appData, "acme", projectID)["projectBinding"].(map[string]any); got["status"] == "bound" {
+		t.Fatal("cross-tenant binding accepted")
+	}
+	bindingTenant = "tenant-xyz"
+	if wrong := confirmedContextEvidence(appData, "other", projectID); wrong["projectBinding"].(map[string]any)["status"] == "bound" {
+		t.Fatal(wrong)
+	}
+	if wrong := confirmedContextEvidence(appData, "acme", "22222222-2222-4222-8222-222222222222"); wrong["projectBinding"].(map[string]any)["status"] == "bound" {
+		t.Fatal(wrong)
+	}
+	for _, failure := range []string{"project_binding_required", "project_binding_expired", "project_binding_revoked", "project_binding_conflict", "project_binding_unavailable"} {
+		bindingFailure = failure
+		got := confirmedContextEvidence(appData, "acme", projectID)["projectBinding"].(map[string]any)
+		if got["status"] == "bound" || got["reason"] != failure {
+			t.Fatalf("failure=%s got=%v", failure, got)
+		}
+	}
+	bindingFailure = ""
+	authorityCommandNow = func() time.Time { return now.Add(48 * time.Hour) }
+	if got := confirmedContextEvidence(appData, "acme", projectID); got["projectBinding"].(map[string]any)["status"] == "bound" {
+		t.Fatal("stale Authority state promoted binding")
+	}
+	authorityCommandNow = func() time.Time { return now }
+	checkpointPath := filepath.Join(appData, "authority", "checkpoint.json")
+	checkpointRaw, err := os.ReadFile(checkpointPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(checkpointPath, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := confirmedContextEvidence(appData, "acme", projectID); got["projectBinding"].(map[string]any)["status"] == "bound" {
+		t.Fatal("invalid checkpoint promoted binding")
+	}
+	if err := os.WriteFile(checkpointPath, checkpointRaw, 0600); err != nil {
+		t.Fatal(err)
 	}
 
 	// Sovereign Tenant Fase 5 — el mismo sync que ya se probó arriba (4 corridas, una

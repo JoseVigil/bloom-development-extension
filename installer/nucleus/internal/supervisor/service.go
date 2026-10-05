@@ -497,6 +497,24 @@ func resolveNodeBin(binDir string) string {
 	return "node" // fallback to system PATH
 }
 
+// resolveManagedNodeBin resolves the Node runtime shipped with Bloom. Service
+// processes must never fall back to a system Node: doing so creates a child
+// whose executable is outside the installation and cannot be attributed safely
+// during rollout if its parent exits.
+func resolveManagedNodeBin(binDir string) (string, error) {
+	candidates := []string{
+		filepath.Join(binDir, "node", "node"),
+		filepath.Join(binDir, "node", "node.exe"),
+	}
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("managed Node runtime not found at %s", filepath.Join(binDir, "node"))
+}
+
 // ============================================================================
 // TEMPORAL SERVER MANAGEMENT
 // ============================================================================
@@ -1727,8 +1745,14 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		[]string{"nucleus"},
 	)
 
-	// Get Node.js binary (cross-platform: tries without .exe first)
-	nodePath := resolveNodeBin(s.binDir)
+	// Production Control Plane ownership depends on the Bloom-managed runtime.
+	// Do not fall back to a system Node: an orphaned external node.exe cannot be
+	// safely attributed to this installation by executable path alone.
+	nodePath, nodeErr := resolveManagedNodeBin(s.binDir)
+	if nodeErr != nil {
+		logFile.Close()
+		return nil, nodeErr
+	}
 
 	// CRÍTICO: exec.Command SIN contexto (no exec.CommandContext).
 	// bootCtx tiene timeout de 120s — si usáramos CommandContext, Go mandaría

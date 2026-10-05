@@ -139,7 +139,6 @@ export async function launchConductor(testGenesis?: { browser: string; backendOr
   // 150s (120s de bootServices + margen) en vez de en cada call site.
   const mainWindow = await app.firstWindow({ timeout: 150_000 });
   await mainWindow.waitForLoadState('domcontentloaded');
-
   return {
     app,
     mainWindow,

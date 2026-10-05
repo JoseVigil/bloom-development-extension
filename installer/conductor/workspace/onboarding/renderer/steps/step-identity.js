@@ -40,7 +40,7 @@ import { log, registerMilestoneHandler } from '../core/ipc-bridge.js';
 import { addNotification } from '../core/notifications.js';
 import { navigateTo, registerStepHandler } from '../core/navigation.js';
 import { setStepperEstablished } from '../core/ui-stepper.js';
-import { identityWizard, activeAccounts, state, userEmail } from '../core/shared-state.js';
+import { identityWizard, activeAccounts, intelligenceSupplyChoice, state, userEmail } from '../core/shared-state.js';
 
 // ── INFO POPUP — contenido por cuenta ─────────────────────────────────────
 const STEP_INFO = {
@@ -79,9 +79,8 @@ const STEP_INFO = {
     label: 'Step 5 — AI Provider',
     title: 'Configuring your\nAI provider.',
     body: `
-      Podés usar Gemini, Claude, OpenAI o Grok.<br><br>
-      Para Gemini: abrí <strong>aistudio.google.com</strong> → Get API key → copiala.<br>
-      Para otros proveedores: ingresá a su plataforma y generá una API key.<br><br>
+      Gemini es la opción de modelo de frontera para el runtime del sistema.<br><br>
+      Abrí <strong>aistudio.google.com</strong> → Get API key → copiala.<br><br>
       La extensión detecta la key al copiarla y la guarda en el vault cifrado.<br>
       Bloom nunca ve la key en texto plano.
     `,
@@ -114,7 +113,7 @@ export function closeInfo() {
 // infoStep    → key en STEP_INFO para el popup de ayuda (?)
 export const IDENTITY_STEPS = [
   { id: 'github', key: 'github_app_auth', label: 'GitHub', buttonText: 'Continue to Vault', startLabel: 'Validate', infoStep: 'github' },
-  { id: 'google', key: 'google_auth', label: 'Google', buttonText: 'Continue to Gemini', startLabel: 'Continue to Google', infoStep: 'google' },
+  { id: 'google', key: 'google_auth', label: 'Google', buttonText: 'Elegí Gemini o Gemma', startLabel: 'Continue to Google', infoStep: 'google' },
   { id: 'gemini', key: 'ai_provider_setup', label: 'Gemini', buttonText: 'Continue to Projects', startLabel: 'Continue to Gemini', infoStep: 'gemini' },
 ];
 
@@ -148,7 +147,36 @@ const IDENTITY_SCREEN_COPY = {
   },
 };
 
-const REQUIRED_ACCOUNTS = IDENTITY_STEPS.map(s => s.id);
+const REQUIRED_ACCOUNTS = ['github', 'google'];
+
+function _renderSupplyChoice() {
+  document.querySelectorAll('input[name="intelligence-supply"]').forEach(input => {
+    input.checked = input.value === intelligenceSupplyChoice.selected;
+    input.disabled = activeAccounts.has('gemini');
+    input.onchange = () => {
+      intelligenceSupplyChoice.selected = input.value;
+      _renderSupplyChoice();
+    };
+  });
+  const status = document.getElementById('supply-choice-status');
+  if (status) {
+    status.textContent = intelligenceSupplyChoice.selected === 'gemma'
+      ? 'Gemma, LLM local, seleccionado. Falta verificar su disponibilidad antes de continuar.'
+      : intelligenceSupplyChoice.selected === 'gemini'
+        ? 'Gemini, modelo de frontera, seleccionado. Se confirmará al conectar la API key.'
+        : 'Elegí Gemini o Gemma para el runtime del sistema después de conectar Google.';
+  }
+  if (activeAccounts.has('google') && !activeAccounts.has('gemini')) {
+    const btn = document.getElementById('btn-continue-identity');
+    if (btn) {
+      btn.textContent = intelligenceSupplyChoice.selected === 'gemini' ? 'Continuar con Gemini'
+        : intelligenceSupplyChoice.selected === 'gemma' ? 'Gemma: verificación pendiente' : 'Elegí Gemini o Gemma';
+      btn.disabled = intelligenceSupplyChoice.selected !== 'gemini';
+      btn.onclick = intelligenceSupplyChoice.selected === 'gemini'
+        ? (identityWizard.stepIndex >= 2 ? kickoffIdentityStep : advanceToNextIdentityStep) : null;
+    }
+  }
+}
 
 function _renderIdentityScreenCopy(step) {
   const copy = IDENTITY_SCREEN_COPY[step?.id];
@@ -213,6 +241,7 @@ export async function handleIdentityBtn() {
 }
 
 export function advanceToNextIdentityStep() {
+  if (identityWizard.stepIndex === 1 && intelligenceSupplyChoice.selected !== 'gemini') return;
   identityWizard.stepIndex += 1;
   const next = IDENTITY_STEPS[identityWizard.stepIndex];
   if (!next) return; // el último sub-step navega a project desde advanceIdentityWizard()
@@ -395,6 +424,7 @@ function advanceIdentityWizard(subStepId) {
   } else {
     btn.onclick = advanceToNextIdentityStep;
   }
+  _renderSupplyChoice();
 }
 
 // Retoma el sub-step apuntado por identityWizard.stepIndex sin resetearlo a
@@ -411,6 +441,10 @@ function _wireIdentityButtonToResumeStep() {
   btn.textContent = step.startLabel;
   btn.disabled = false;
   btn.onclick = () => {
+    if (step.id === 'gemini' && intelligenceSupplyChoice.selected !== 'gemini') {
+      _renderSupplyChoice();
+      return;
+    }
     log('info', `identity wizard — retomando sub-step "${step.id}" desde resume`);
     btn.textContent = `Esperando ${step.label}…`;
     btn.disabled = true;
@@ -467,6 +501,7 @@ function onMilestoneGoogleAuth(data) {
 }
 
 function onMilestoneAiProviderSetup(data) {
+  if (intelligenceSupplyChoice.selected === 'gemma') return;
   if (activeAccounts.has('gemini')) return;
   log('info', `milestone: ai_provider_setup confirmado por Brain — provider: ${data?.provider || 'n/a'}`);
   const providerLabel = data?.provider ? ` (${data.provider})` : '';
@@ -495,6 +530,7 @@ registerMilestoneHandler('ai_provider_setup', onMilestoneAiProviderSetup);
 function onEnterIdentity() {
   _renderIdentityScreenCopy(IDENTITY_STEPS[identityWizard.stepIndex]);
   _refreshAccountIconStates();
+  _renderSupplyChoice();
 }
 
 // stepId del SSOT (key en IDENTITY_STEPS) → artefacto que produce.
@@ -525,6 +561,9 @@ function _restoreIdentityFromResume(producedSet) {
       activeAccounts.add(step.id);
     }
   });
+  if (activeAccounts.has('gemini') && !intelligenceSupplyChoice.selected) {
+    intelligenceSupplyChoice.selected = 'gemini';
+  }
 
   const firstPendingIdx = IDENTITY_STEPS.findIndex(s => !activeAccounts.has(s.id));
   identityWizard.stepIndex = firstPendingIdx === -1 ? IDENTITY_STEPS.length - 1 : firstPendingIdx;
@@ -533,12 +572,14 @@ function _restoreIdentityFromResume(producedSet) {
 
   _renderIdentityScreenCopy(IDENTITY_STEPS[identityWizard.stepIndex]);
   _refreshAccountIconStates();
+  _renderSupplyChoice();
 
   // Si queda un sub-step pendiente, hay que re-wirear el botón para que
   // retome ESE sub-step en vez de quedarse con el handler por defecto
   // (handleIdentityBtn, que resetea todo a stepIndex=0 — ver onboarding.js).
   if (firstPendingIdx !== -1) {
     _wireIdentityButtonToResumeStep();
+    if (IDENTITY_STEPS[firstPendingIdx]?.id === 'gemini') _renderSupplyChoice();
   } else {
     advanceIdentityWizard('gemini');
   }

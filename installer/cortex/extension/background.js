@@ -827,6 +827,15 @@ function handleHostMessage(msg) {
     return;
   }
 
+  if (msg.event === 'API_KEY_REGISTERED') {
+    if (msg.vault_ack?.status !== 'stored' || msg.vault_ack?.key_id !== 'gemini-key:default' || !msg.vault_ack?.grant_id) {
+      console.warn('[Synapse] API_KEY_REGISTERED host event rejected: missing Vault receipt');
+      return;
+    }
+    chrome.runtime.sendMessage({ ...msg, _internal: true }).catch(() => {});
+    return;
+  }
+
   // NOTA DE SEGURIDAD: se eliminó acá el routing a handleAPIKeyResponse()
   // porque ese handler solo existía para el monitor de portapapeles
   // (ver CLEANUP_NOTES.md). Si en el futuro se necesita un flujo de
@@ -1954,8 +1963,21 @@ function handleRuntimeMessage(msg, sender, sendResp) {
   // Registration is an outcome of a confirmed Vault write, not a runtime input.
   // The authorized acknowledgement path is introduced in the next phase.
   if (event === 'API_KEY_REGISTERED') {
-    console.warn('[Synapse] API_KEY_REGISTERED rechazado: falta acuse de Nucleus Vault');
-    sendResp({ received: false, error: 'VAULT_ACK_REQUIRED' });
+    if (msg._internal) { sendResp({ received: true }); return true; }
+    if (msg.provider !== 'gemini') {
+      sendResp({ received: false, error: 'PROVIDER_UNSUPPORTED' });
+      return true;
+    }
+    sendToHost({
+      event: 'API_KEY_REGISTERED',
+      profile_id: config?.profileId,
+      launch_id: config?.launchId,
+      provider: 'gemini',
+      profile_name: typeof msg.profile_name === 'string' ? msg.profile_name : '',
+      key_fingerprint: typeof msg.key_fingerprint === 'string' ? msg.key_fingerprint : '',
+      timestamp: Date.now(),
+    });
+    sendResp({ received: true, status: 'pending_vault' });
     return true;
   }
 

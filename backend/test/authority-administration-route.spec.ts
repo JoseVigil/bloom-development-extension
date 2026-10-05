@@ -1,8 +1,10 @@
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {readFileSync,mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
-import {authorityHumanResponse,configuredAuthorityHumanResponse,type HumanRouteServices} from '../src/authority/administration-route';
+import {authorityHumanResponse,configuredAuthorityHumanResponse,provisionFixtureTrustManifest,type HumanRouteServices} from '../src/authority/administration-route';
 import {persistEmission,loadCurrentEmission} from '../src/authority/emission-store';
+import {loadTrustManifest,verifyTrustManifest} from '../src/authority/trust-manifest';
+import {canonicalizeJson,verifyCanonicalSignature} from '../src/authority/canonical';
 const vector=JSON.parse(readFileSync(new URL('../../docs/ROLES/fixtures/authority_interop_v1.json',import.meta.url),'utf8'));
 const origin='https://authority.test',now='2026-09-08T12:05:00Z',owner='p-😀';
 const master=['authority.membership.manage','authority.role_definition.manage','authority.assignment.manage','authority.binding.approve','authority.cutover.approve','mandate.create','mandate.sign','mandate.promote','mandate.install','intent.create','intent.cor.merge','agent.issuer.designate','create_project'];
@@ -14,15 +16,15 @@ beforeAll(async()=>{
  temp=mkdtempSync(join(tmpdir(),'authority-2b-route-'));
  mf=new Miniflare({...convertV4MiniflareOptions({host:'127.0.0.1',cf:false,modules:true,script:'export default {fetch(){return new Response("fixture")}}',compatibilityDate:'2026-08-29',d1Databases:{DB:'human-route'}}),resourcePersistencePath:temp});db=await mf.getD1Database('DB') as unknown as D1Database;
  await db.prepare('CREATE TABLE organizations(id TEXT PRIMARY KEY)').run();
- for(const file of ['0001_authority_snapshot.sql','0004_authority_emissions.sql','0005_authority_administration.sql','0006_authority_human_identity.sql']){
+ for(const file of ['0001_authority_snapshot.sql','0004_authority_emissions.sql','0005_authority_administration.sql','0006_authority_human_identity.sql','0007_authority_trust.sql']){
   const sql=readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8').replace(/--[^\r\n]*/g,'').trim();for(const part of sql.split(/;\s*(?=CREATE\b)/i))await db.prepare(part).run();
  }
 },60000);
 afterAll(async()=>{await mf?.dispose();if(temp)rmSync(temp,{recursive:true,force:true});});
-async function initialize(){
+ async function initialize(expiresAt?:string){
  const org=`route-${++n}`;await db.prepare('INSERT INTO organizations VALUES(?)').bind(org).run();
  const state=structuredClone(vector.base_state),metadata=structuredClone(vector.metadata.base);
- state.memberships[0].organization_id=org;metadata.organization_id=org;metadata.audience.organization_id=org;metadata.issued_at=now;metadata.not_before=now;
+  state.memberships[0].organization_id=org;metadata.organization_id=org;metadata.audience.organization_id=org;metadata.issued_at=now;metadata.not_before=now;if(expiresAt)metadata.expires_at=expiresAt;
  state.role_definitions.push({role_id:'master',role_version:'1',role_origin:'builtin',display_name:'Master',status:'active',permissions:master});
  state.role_assignments.push({...state.role_assignments[0],assignment_id:'owner-master',role_id:'master',role_version:'1',scope:{type:'organization',id:org}});
  await persistEmission(db,{requestId:'fixture',expectedVersion:null,metadata,state,initialFixtureEvidence:{environment:'test',reference:'route'}},services.signer);
@@ -41,6 +43,98 @@ async function login(org:string,who='owner'){
  return {cookie:cookies.find(c=>c.startsWith('__Host-authority-session='))!.split(';')[0],csrf:body.csrf};
 }
 describe('isolated human/admin HTTP journey on temporary D1',()=>{
+ it('provisions only a root-verified fixture manifest for the active issuer, idempotently',async()=>{
+  const org=await initialize();
+  const rootPkcs8=Uint8Array.from(Buffer.from('302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60','hex')).buffer;
+  const fixture={...services,issuer:'issuer-test',fixtureTrustRootPkcs8:rootPkcs8};
+  await provisionFixtureTrustManifest(db,org,fixture);
+  const first=await loadTrustManifest(db,org);
+  expect(first).toBeTruthy();
+  const payload=await verifyTrustManifest(JSON.parse(first!), 'development-rfc8032-root',
+    '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo',now);
+  expect(payload.organization_id).toBe(org);
+  expect(payload.issuer).toBe('issuer-test');
+  expect(payload.keys).toMatchObject([{key_id:vector.key_id,status:'active'}]);
+  await provisionFixtureTrustManifest(db,org,fixture);
+  expect(await loadTrustManifest(db,org)).toBe(first);
+  const noFixtureOrg=await initialize();
+  await provisionFixtureTrustManifest(db,noFixtureOrg,{...fixture,allowTestFixtures:false});
+  expect(await loadTrustManifest(db,noFixtureOrg)).toBeNull();
+  const invalidRootOrg=await initialize();
+  const invalidRoot=Uint8Array.from(Buffer.from('302e020100300506032b6570042204204ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb','hex')).buffer;
+  await expect(provisionFixtureTrustManifest(db,invalidRootOrg,{...fixture,fixtureTrustRootPkcs8:invalidRoot})).rejects.toThrow();
+  expect(await loadTrustManifest(db,invalidRootOrg)).toBeNull();
+ },30000);
+ it('renews only an expired fixture emission for its authenticated master without rewriting history',async()=>{
+  const org=await initialize('2026-09-08T12:06:00Z'),session=await login(org),original=(await loadCurrentEmission(db,org))!;
+  const rootPkcs8=Uint8Array.from(Buffer.from('302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60','hex')).buffer;
+  const fixture={...services,issuer:vector.metadata.base.issuer as string,fixtureTrustRootPkcs8:rootPkcs8,now:()=> '2026-09-08T12:07:00Z'};
+  const send=(s:HumanRouteServices=fixture,auth:typeof session|null=session,organizationId=org)=>authorityHumanResponse(db,new Request(origin+'/v1/authority/initial-emission',{
+   method:'POST',headers:{Origin:origin,'Content-Type':'application/json',...(auth?{Cookie:auth.cookie,'X-Authority-CSRF':auth.csrf}:{})},body:JSON.stringify({organizationId})}),s);
+  expect((await send({...fixture,allowTestFixtures:false})).status).toBe(401);
+  expect((await send(fixture,null)).status).not.toBe(200);
+  const recipient=await login(org,'recipient');expect((await send(fixture,recipient)).status).toBe(403);
+  const other=await initialize(),wrongOrganization=await send(fixture,session,other);expect(wrongOrganization.status).not.toBe(200);
+  const expectedVersion=String(BigInt(original.metadata.authority_version)+1n);
+  expect((await loadCurrentEmission(db,org))!.metadata.authority_version).toBe(original.metadata.authority_version);
+  const response=await send();expect(response.status,await response.clone().text()).toBe(200);expect(await response.json()).toMatchObject({status:'renewed',authorityVersion:expectedVersion,stateDigest:original.stateDigest});
+  const current=(await loadCurrentEmission(db,org))!;expect(current.metadata.authority_version).toBe(expectedVersion);expect(Date.parse(current.metadata.expires_at)).toBeGreaterThan(Date.parse(fixture.now()));
+  expect((await db.prepare('SELECT full_json FROM authority_emissions WHERE organization_id=? AND authority_version=?').bind(org,original.metadata.authority_version).first<{full_json:string}>())?.full_json).toBe(original.full);
+  expect((await send()).status).toBe(409);
+  expect((await db.prepare('SELECT COUNT(*) AS n FROM authority_emissions WHERE organization_id=?').bind(org).first<{n:number}>())?.n).toBe(2);
+ },30000);
+ it('binds a fixture local owner to the same founder in a new signed version, once',async()=>{
+  const org=await initialize(),session=await login(org),original=(await loadCurrentEmission(db,org))!;
+  const rootPkcs8=Uint8Array.from(Buffer.from('302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60','hex')).buffer;
+  const fixture={...services,issuer:vector.metadata.base.issuer as string,fixtureTrustRootPkcs8:rootPkcs8};
+  const body={organizationId:org,fixtureLocalOwner:{source:'github_handle',subject:'octocat'}};
+  const send=(s:HumanRouteServices=fixture,auth:typeof session|null=session,input:unknown=body)=>
+   authorityHumanResponse(db,new Request(origin+'/v1/authority/initial-emission',{method:'POST',headers:{Origin:origin,
+    'Content-Type':'application/json',...(auth?{Cookie:auth.cookie,'X-Authority-CSRF':auth.csrf}:{})},body:JSON.stringify(input)}),s);
+  expect((await send({...fixture,allowTestFixtures:false})).status).toBe(403);
+  expect((await send(fixture,null)).status).not.toBe(200);
+  const recipient=await login(org,'recipient');expect((await send(fixture,recipient)).status).toBe(403);
+  expect((await send(fixture,session,{organizationId:org,fixtureLocalOwner:{source:'other',subject:'octocat'}})).status).toBe(403);
+  expect((await send(fixture,session,{organizationId:org,fixtureLocalOwner:{source:'github_handle',subject:'bad subject'}})).status).toBe(403);
+  const response=await send();expect(response.status,await response.clone().text()).toBe(200);
+  const result=await response.json() as {authorityVersion:string;status:string};
+  expect(result).toMatchObject({authorityVersion:String(BigInt(original.metadata.authority_version)+1n),status:'fixture_owner_bound'});
+  const current=(await loadCurrentEmission(db,org))!;
+  expect(current.state.principals).toHaveLength(original.state.principals.length);
+  const owners=current.state.principals.filter(p=>p.external_identities.some(e=>e.provider==='github'&&e.subject==='octocat'&&e.status==='verified'));
+  expect(owners).toHaveLength(1);expect(owners[0].principal_id).toBe(owner);
+  expect(owners[0].external_identities.some(e=>e.provider==='github'&&e.subject==='123456789'&&e.status==='verified')).toBe(true);
+  const member=current.state.memberships.find(m=>m.principal_id===owner&&m.organization_id===org&&m.status==='active')!;
+  expect(current.state.role_assignments.some(a=>a.membership_id===member.membership_id&&a.role_id==='master'&&a.status==='active')).toBe(true);
+  expect(current.state.role_definitions.find(r=>r.role_id==='master')?.permissions).toContain('create_project');
+  const envelope=JSON.parse(current.full) as {payload:unknown;integrity:{signature:string}};
+  expect(await verifyCanonicalSignature(canonicalizeJson(envelope.payload),
+   Buffer.from(envelope.integrity.signature,'base64url').toString('base64'),
+   Uint8Array.from(Buffer.from(vector.public_key_base64url,'base64url')).buffer)).toBe(true);
+  expect((await db.prepare('SELECT full_json FROM authority_emissions WHERE organization_id=? AND authority_version=?')
+   .bind(org,original.metadata.authority_version).first<{full_json:string}>())?.full_json).toBe(original.full);
+  const retry=await send();expect(retry.status).toBe(200);
+  expect(await retry.json()).toMatchObject({authorityVersion:result.authorityVersion,status:'already_bound'});
+  expect((await db.prepare('SELECT COUNT(*) AS n FROM authority_emissions WHERE organization_id=?').bind(org).first<{n:number}>())?.n).toBe(2);
+ },30000);
+ it('rejects a fixture owner already verified for a different principal',async()=>{
+  const org=await initialize(),session=await login(org),original=(await loadCurrentEmission(db,org))!;
+  const state=structuredClone(original.state);
+  state.principals.push({principal_id:'other-owner',principal_type:'human',status:'active',external_identities:[{
+   provider:'github',subject:'octocat',display_handle:'octocat',status:'verified',verified_at:now,
+  }]});
+  const contested=await persistEmission(db,{requestId:'other-owner-evidence',expectedVersion:original.metadata.authority_version,
+   metadata:{...original.metadata,authority_version:String(BigInt(original.metadata.authority_version)+1n),snapshot_id:crypto.randomUUID()},
+   state},services.signer);
+  const rootPkcs8=Uint8Array.from(Buffer.from('302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60','hex')).buffer;
+  const response=await authorityHumanResponse(db,new Request(origin+'/v1/authority/initial-emission',{method:'POST',headers:{
+   Origin:origin,'Content-Type':'application/json',Cookie:session.cookie,'X-Authority-CSRF':session.csrf},
+   body:JSON.stringify({organizationId:org,fixtureLocalOwner:{source:'github_handle',subject:'octocat'}})}),
+   {...services,issuer:vector.metadata.base.issuer as string,fixtureTrustRootPkcs8:rootPkcs8});
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({error:'authority_fixture_owner_conflict'});
+  expect((await loadCurrentEmission(db,org))?.metadata.authority_version).toBe(contested.metadata.authority_version);
+ },30000);
  it('authenticates, imports initial human, accepts membership and preserves idempotent receipt after clock advances',async()=>{
   const org=await initialize(),admin=await login(org),recipient=await login(org,'recipient');
   const before=(await loadCurrentEmission(db,org))!;

@@ -4,6 +4,7 @@
   import NucleusPanel from '$lib/components/NucleusPanel.svelte';
   import ProjectsPanel from '$lib/components/ProjectsPanel.svelte';
   import IntentsLink from '$lib/components/IntentsLink.svelte';
+  import IntelligenceSupplyView from '$lib/components/IntelligenceSupplyView.svelte';
 </script>
 
 <div class="container">
@@ -12,6 +13,7 @@
   </header>
   
   <main>
+    <section class="row"><IntelligenceSupplyView /></section>
     <section class="row">
       <SystemStatus />
     </section>

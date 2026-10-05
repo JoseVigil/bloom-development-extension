@@ -71,7 +71,10 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 		Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{},
 		VaultServiceGrants: []authority.VaultServiceGrant{{GrantID: "grant", OrganizationID: org, InstallationID: installation, Consumer: "aitap", Permission: "vault.key.read",
 			KeyID: "anthropic-key:default", Purpose: mandateGenPurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
-			ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)}}}
+			ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)},
+			{GrantID: "gemini-write", OrganizationID: org, InstallationID: installation, Consumer: "onboarding", Permission: "vault.key.write",
+				KeyID: "gemini-key:default", Purpose: "onboarding_gemini", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
+				ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)}}}
 	content, _ := json.Marshal(state)
 	payload := authority.SnapshotPayload{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", Kind: "full", SnapshotID: "snapshot", Issuer: issuer, OrganizationID: org,
 		AuthorityVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(4 * time.Minute), Audience: authority.Audience{OrganizationID: org, InstallationIDs: []string{installation}}, Content: content}
@@ -139,4 +142,38 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	if err = RunServiceRequest(bytes.NewReader(encoded), app); err == nil || len(fake.calls) != calls {
 		t.Fatal("future timestamp reached keyring")
 	}
+	store := ServiceStoreRequest{GrantID: "gemini-write", OrganizationID: org, InstallationID: installation, KeyID: "gemini-key:default",
+		Purpose: "onboarding_gemini", Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Nonce: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{6}, 32)), Value: "test-gemini-credential"}
+	store.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(servicePrivate, serviceStoreMessage(store)))
+	encoded, _ = json.Marshal(store)
+	receipt, err := RunServiceStore(bytes.NewReader(encoded), app)
+	if err != nil || receipt == nil || receipt.Status != "stored" || receipt.KeyID != store.KeyID {
+		t.Fatal("Gemini write receipt missing", err)
+	}
+	if fake.store[vaultServiceName()+"/gemini-key:default"] != store.Value {
+		t.Fatal("Gemini key not stored in keyring")
+	}
+	if string(encoded) == "" || strings.Contains(string(mustJSON(t, receipt)), store.Value) {
+		t.Fatal("receipt leaked credential")
+	}
+	previousCalls := len(fake.calls)
+	if _, err = RunServiceStore(bytes.NewReader(encoded), app); err == nil || len(fake.calls) != previousCalls {
+		t.Fatal("Gemini replay reached keyring")
+	}
+	store.Nonce = base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	store.Value = "tampered-gemini-credential"
+	encoded, _ = json.Marshal(store)
+	if _, err = RunServiceStore(bytes.NewReader(encoded), app); err == nil || len(fake.calls) != previousCalls {
+		t.Fatal("tampered Gemini value reached keyring")
+	}
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }

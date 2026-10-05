@@ -8,7 +8,7 @@ export class VaultServiceGrantError extends Error {
   constructor(readonly code: string) { super(`authority_vault_service_grant_${code}`); }
 }
 const deny = (code: string): never => { throw new VaultServiceGrantError(code); };
-export type GrantCommand = { kind: 'issue'; installationId: string; servicePublicKey: string; keyId: 'anthropic-key:default'; purpose?: 'mandate_genesis_intelligence' | 'mandate_gen_intelligence'; validUntil: string }
+export type GrantCommand = { kind: 'issue'; installationId: string; servicePublicKey: string; keyId: 'anthropic-key:default' | 'gemini-key:default'; purpose?: 'mandate_genesis_intelligence' | 'mandate_gen_intelligence' | 'onboarding_gemini'; validUntil: string }
   | { kind: 'revoke'; grantId: string };
 export interface GrantRequest { organizationId: string; requestId: string; expectedVersion: string; command: GrantCommand }
 export interface GrantServices { now: () => string; issuer: string; signer: EmissionSigner; commitGuard: (actor: VerifiedHumanActor, requestId: string, at: string) => D1PreparedStatement }
@@ -56,7 +56,9 @@ export async function administerVaultServiceGrant(db: D1Database, request: Grant
   const version = String(wireVersion(expectedVersion) + 1n);
   let grantId = '';
   if (command.kind === 'issue') {
-    if (command.keyId !== 'anthropic-key:default' || (command.purpose !== undefined && command.purpose !== 'mandate_genesis_intelligence' && command.purpose !== 'mandate_gen_intelligence') || !/^[A-Za-z0-9_-]{43}$/.test(command.servicePublicKey)
+    const geminiWrite = command.keyId === 'gemini-key:default' && command.purpose === 'onboarding_gemini';
+    const aitapRead = command.keyId === 'anthropic-key:default' && (command.purpose === undefined || command.purpose === 'mandate_genesis_intelligence' || command.purpose === 'mandate_gen_intelligence');
+    if ((!geminiWrite && !aitapRead) || !/^[A-Za-z0-9_-]{43}$/.test(command.servicePublicKey)
       || !command.installationId) deny('invalid_request');
     const key = Uint8Array.from(atob(command.servicePublicKey.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
     const canonicalKey=btoa(String.fromCharCode(...key)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
@@ -68,7 +70,7 @@ export async function administerVaultServiceGrant(db: D1Database, request: Grant
     if (authorityInstant(validUntil) <= authorityInstant(now) || authorityInstant(validUntil) > authorityInstant(new Date(Date.parse(now)+24*60*60*1000).toISOString())) deny('invalid_validity');
     grantId = crypto.randomUUID();
     const grant: WireVaultServiceGrant = {grant_id:grantId,organization_id:org,installation_id:command.installationId,
-      consumer:'aitap',permission:'vault.key.read',key_id:command.keyId,purpose:command.purpose ?? 'mandate_genesis_intelligence',
+      consumer:geminiWrite?'onboarding':'aitap',permission:geminiWrite?'vault.key.write':'vault.key.read',key_id:command.keyId,purpose:command.purpose ?? 'mandate_genesis_intelligence',
       service_public_key:command.servicePublicKey,issued_by_principal_id:actor.principalId,valid_from:now,valid_until:validUntil};
     state.vault_service_grants.push(grant);
   } else if (command.kind === 'revoke') {
@@ -96,7 +98,7 @@ export async function administerVaultServiceGrant(db: D1Database, request: Grant
         VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,'[]')`)
         .bind(org,eventId,requestDigest,actor.principalId,`vault_service_grant_${command.kind}`,expectedVersion,version,commitTime,canonicalizeJson(command),canonicalizeJson(result)),
       session.prepare('INSERT INTO authority_admin_audit (organization_id,request_id,actor_id,operation,before_version,after_version,at,details_json) VALUES (?,?,?,?,?,?,?,?)')
-        .bind(org,eventId,actor.principalId,`vault_service_grant_${command.kind}`,expectedVersion,version,commitTime,canonicalizeJson({grant_id:grantId,consumer:'aitap',key_id:'anthropic-key:default'})),
+        .bind(org,eventId,actor.principalId,`vault_service_grant_${command.kind}`,expectedVersion,version,commitTime,canonicalizeJson({grant_id:grantId,consumer:command.kind==='issue'&&command.keyId==='gemini-key:default'?'onboarding':'aitap',key_id:command.kind==='issue'?command.keyId:null})),
       session.prepare('INSERT INTO authority_admin_outbox (organization_id,event_id,authority_version,payload_json,created_at,delivered_at) VALUES (?,?,?,?,?,NULL)')
         .bind(org,eventId,version,canonicalizeJson({organization_id:org,authority_version:version,state_digest:result.stateDigest,urgency:command.kind==='revoke'?'revocation':'routine',correlation_id:eventId}),commitTime),
       services.commitGuard(actor,eventId,commitTime)]);

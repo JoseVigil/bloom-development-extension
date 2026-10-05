@@ -88,6 +88,7 @@ def summarize(root: Path, *, since: datetime | None = None, consumer_id: str | N
                 "model": intelligence.get("model"), "consumer_id": consumer,
                 "attempts": 0, "completed": 0, "errors": 0, "in_flight": 0,
                 "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "cost_statuses": [],
+                "cost_known_attempts": 0, "cost_pending_attempts": 0,
             })
             row["attempts"] += 1
             outcome = attempt.get("outcome")
@@ -98,6 +99,9 @@ def summarize(root: Path, *, since: datetime | None = None, consumer_id: str | N
                 row["output_tokens"] += int(usage.get("output_tokens") or 0)
                 if isinstance(attempt.get("cost_usd"), (int, float)):
                     row["cost_usd"] += float(attempt["cost_usd"])
+                    row["cost_known_attempts"] += 1
+                else:
+                    row["cost_pending_attempts"] += 1
                 status = attempt.get("cost_status")
                 if status and status not in row["cost_statuses"]:
                     row["cost_statuses"].append(status)
@@ -112,13 +116,18 @@ def summarize(root: Path, *, since: datetime | None = None, consumer_id: str | N
         row = groups[key]
         row["cost_usd"] = round(row["cost_usd"], 6)
         row["cost_statuses"] = sorted(row["cost_statuses"])
+        row["cost_coverage"] = "partial" if row["cost_pending_attempts"] else "complete"
         row["latency_ms_p50"] = _percentile(latencies.get(key, []), 0.50)
         row["latency_ms_p95"] = _percentile(latencies.get(key, []), 0.95)
         rows.append(row)
     totals = {name: sum(r[name] for r in rows) for name in
               ("attempts", "completed", "errors", "in_flight", "input_tokens", "output_tokens")}
     totals["cost_usd"] = round(sum(r["cost_usd"] for r in rows), 6)
+    totals["cost_known_attempts"] = sum(r["cost_known_attempts"] for r in rows)
+    totals["cost_pending_attempts"] = sum(r["cost_pending_attempts"] for r in rows)
+    totals["cost_coverage"] = "incomplete" if invalid else "partial" if totals["cost_pending_attempts"] else "complete"
     return {
+        "read_at": datetime.now(timezone.utc).isoformat(),
         "filters": {"since": since.isoformat() if since else None, "consumer_id": consumer_id,
                     "backend_id": backend_id},
         "journals_scanned": scanned,

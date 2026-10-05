@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('onboarding', {
 
   // Finalizar
   complete: (params) => ipcRenderer.invoke('onboarding:complete', params),
+  prepareGeminiVault: () => ipcRenderer.invoke('onboarding:gemini-vault-prepare'),
+  syncGeminiVault: (grantId) => ipcRenderer.invoke('onboarding:gemini-vault-sync', grantId),
+  geminiVaultReceipt: () => ipcRenderer.invoke('onboarding:gemini-vault-receipt'),
 
   // Streaming terminal (nucleus init)
   onInitLine: (callback) => {

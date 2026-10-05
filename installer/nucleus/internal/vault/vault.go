@@ -320,6 +320,7 @@ func createVaultCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(createVaultRequestCommand(c))
 	cmd.AddCommand(createVaultCheckCommand(c))
 	cmd.AddCommand(createVaultSetCommand(c))
+	cmd.AddCommand(createVaultServiceStoreCommand(c))
 	cmd.AddCommand(createVaultDeleteCommand(c))
 	cmd.AddCommand(createVaultServiceRequestCommand(c))
 
@@ -550,6 +551,18 @@ func createVaultServiceRequestCommand(c *core.Core) *cobra.Command {
 			}
 			_, err := fmt.Fprintln(cmd.OutOrStdout(), `{"status":"delivered"}`)
 			return err
+		}}
+}
+
+func createVaultServiceStoreCommand(c *core.Core) *cobra.Command {
+	return &cobra.Command{Use: "service-store", Short: "Store an Authority-authorized onboarding credential from stdin", Args: cobra.NoArgs,
+		Annotations: map[string]string{"category": "VAULT", "json_response": `{"status":"stored","key_id":"gemini-key:default","grant_id":"...","organization_id":"..."}`},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			receipt, err := RunServiceStore(cmd.InOrStdin(), c.Paths.AppDataDir)
+			if err != nil {
+				return ErrUnauthorized
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(receipt)
 		}}
 }
 

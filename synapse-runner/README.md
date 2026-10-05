@@ -404,6 +404,16 @@ npm run preflight                 # chequeos de entorno standalone
 npm test                          # preflight + suite completa
 ```
 
+### Comprobar el Workspace instalado después de un rollout
+
+Para comprobar que abre el paquete desplegado, ejecutar
+`C:\Users\josev\AppData\Local\BloomNucleus\bin\workspace\bloom-workspace.exe`.
+No usar `installer/conductor/workspace/node_modules/electron/dist/electron.exe .`
+para esta comprobación: ese comando carga el código del repositorio en modo
+desarrollo y su resultado no valida el Workspace instalado. Si el comando del
+ejecutable instalado devuelve el control enseguida, comprobar la ventana y el
+proceso antes de concluir que la aplicación se cerró.
+
 Requisitos para que la suite corra de punta a punta:
 - BloomNucleus corrió al menos una vez en esta máquina en modo desarrollo
   (para que exista `<base_dir>/config/profiles.json` con un perfil maestro

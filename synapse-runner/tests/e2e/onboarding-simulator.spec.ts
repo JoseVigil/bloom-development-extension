@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { test, expect } from '../fixtures/synapse-runner-fixture';
 import { beginPhase0FixtureRegistration, finishPhase0FixtureRegistration } from '../../src/surfaces/phase0-generic-browser';
 import { env } from '../../src/config/env';
@@ -19,6 +21,72 @@ const WORKSPACE_BASE = 'C:\\repos';
 const PROJECT_SOURCE = 'C:\\TEMP\\TMP\\sample_project';
 const PROJECT_PATH = 'C:\\repos\\eias-repos\\sample_project';
 const PROJECT_FILES = ['.gitignore', 'main.py', 'README.md', 'storage.py', 'tasks.py', 'test_tasks.py'];
+const execFileAsync = promisify(execFile);
+
+async function waitForProfileClosed(): Promise<string | undefined> {
+  const paths = getBloomPaths();
+  const nucleus = JSON.parse(readFileSync(paths.nucleusJson, 'utf-8')) as { master_profile?: string };
+  const profileId = nucleus.master_profile;
+  if (!profileId || !/^[0-9a-f-]{36}$/i.test(profileId)) {
+    throw new Error('[onboarding-simulator] No se pudo identificar el perfil maestro para verificar su cierre');
+  }
+  const readProfile = () => {
+    const inventory = JSON.parse(readFileSync(paths.profilesJson, 'utf-8')) as {
+      profiles?: Array<{ id: string; last_launch_id?: string; runtime_state?: {
+        status?: string; pid?: number | null; handshake_confirmed?: boolean;
+      } }>;
+    };
+    const matches = inventory.profiles?.filter(profile => profile.id === profileId) ?? [];
+    if (matches.length !== 1) throw new Error('[onboarding-simulator] Inventario del perfil maestro ambiguo');
+    return matches[0];
+  };
+  const prior = readProfile();
+  const oldHostPid = prior.runtime_state?.pid;
+  const processInventoryScript = `
+    $profileId = $env:SYNAPSE_TEST_PROFILE_ID
+    $oldHostPid = [int]$env:SYNAPSE_TEST_OLD_HOST_PID
+    $items = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'bloom-host.exe'" |
+      Where-Object { ($_.Name -eq 'chrome.exe' -and $_.CommandLine -like "*$profileId*") -or
+        ($oldHostPid -gt 0 -and $_.ProcessId -eq $oldHostPid) } |
+      Select-Object ProcessId, Name)
+    ConvertTo-Json -Compress -InputObject $items
+  `;
+  const deadline = Date.now() + 150_000;
+  let lastState = 'no inspeccionado';
+  while (Date.now() < deadline) {
+    const { stdout: statusOutput } = await execFileAsync(join(paths.binDir, 'nucleus', 'nucleus.exe'),
+      ['--json', 'synapse', 'status', profileId], { timeout: 10_000, windowsHide: true });
+    const statusResponse = JSON.parse(statusOutput) as { success?: boolean; error?: string; status?: {
+      state?: string; sentinel_running?: boolean;
+    } };
+    const workflowAbsent = statusResponse.success === false && statusResponse.error ===
+      `failed to query profile status: workflow not found for ID: profile-lifecycle-${profileId}`;
+    if (!workflowAbsent && (statusResponse.success !== true || !statusResponse.status)) {
+      throw new Error('[onboarding-simulator] Nucleus no confirmó el estado del perfil');
+    }
+    const profile = readProfile();
+    const { stdout: processOutput } = await execFileAsync('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', processInventoryScript], {
+        timeout: 10_000, windowsHide: true,
+        env: { ...process.env, SYNAPSE_TEST_PROFILE_ID: profileId,
+          SYNAPSE_TEST_OLD_HOST_PID: String(oldHostPid ?? 0) },
+      });
+    const processes = JSON.parse(processOutput) as Array<{ ProcessId: number; Name: string }>;
+    if (!Array.isArray(processes)) throw new Error('[onboarding-simulator] Inventario de procesos ambiguo');
+    lastState = JSON.stringify({ workflow: workflowAbsent ? 'not_found' : statusResponse.status?.state,
+      sentinel_running: statusResponse.status?.sentinel_running, profile: profile.runtime_state,
+      ownProcesses: processes.map(item => ({ pid: item.ProcessId, name: item.Name })) });
+    if ((workflowAbsent || (statusResponse.status?.state === 'SEEDED' &&
+        statusResponse.status.sentinel_running === false)) &&
+        profile.runtime_state?.status === 'closed' && !profile.runtime_state.pid &&
+        profile.runtime_state.handshake_confirmed === false && processes.length === 0) {
+      console.log(`[synapse-simulator] Cierre efectivo del perfil confirmado: ${lastState}`);
+      return profile.last_launch_id;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`[onboarding-simulator] Perfil aún no cerrado; se aborta antes de 00a/reset: ${lastState}`);
+}
 
 test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapseRunner }) => {
   test.setTimeout(900_000);
@@ -26,6 +94,10 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
   let conductor: ConductorHandle | undefined;
   let discovery: DiscoverySurface | undefined;
   let phase0RegistrationId: string | undefined;
+  let phase0Registration: Awaited<ReturnType<typeof finishPhase0FixtureRegistration>> | undefined;
+  let phase0FixtureSubject: string | undefined;
+  let githubFixtureUsername: string | undefined;
+  let previousLaunchId: string | undefined;
   const verifyOrganizationIdentity = (stage: string, expectedCompleted: boolean) => {
     const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
       onboarding?: { completed?: boolean; backend_identity_org_id?: string; active_org_slug?: string;
@@ -72,12 +144,19 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await installMilestoneBuffer(conductor.mainWindow);
       await conductor.mainWindow.locator('#screen-identity.active').waitFor({ state: 'visible' });
     } else {
+      previousLaunchId = await synapseRunner.runStep('profile_closed_before_00a', undefined, waitForProfileClosed);
+      const configuredFixtureSubject = process.env.SYNAPSE_FIXTURE_SUBJECT;
+      if (configuredFixtureSubject !== undefined && !configuredFixtureSubject.trim()) {
+        throw new Error('[onboarding-simulator] SYNAPSE_FIXTURE_SUBJECT no puede estar vacío');
+      }
+      phase0FixtureSubject = configuredFixtureSubject?.trim() ?? randomUUID();
       const flow = await synapseRunner.runStep('00a', undefined, () =>
         beginPhase0FixtureRegistration(env.backendOrigin));
       const registration = await synapseRunner.runStep('00b', undefined, () =>
-        finishPhase0FixtureRegistration(env.backendOrigin, flow, randomUUID()));
-      expect(registration.created).toBe(true);
+        finishPhase0FixtureRegistration(env.backendOrigin, flow, phase0FixtureSubject!));
+      console.log(`[synapse-simulator] 00b organizationId=${registration.organizationId}, created=${registration.created}`);
       phase0RegistrationId = registration.organizationId;
+      phase0Registration = registration;
       resetOnboardingState();
       conductor = await launchConductor({ browser: flow.browser, backendOrigin: env.backendOrigin });
       await installMilestoneBuffer(conductor.mainWindow);
@@ -150,6 +229,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       const extensionLaunch = readFileSync(configFile, 'utf-8').match(/"launchId":\s*"([^"]+)"/)?.[1];
       const expectedLaunch = resumeCurrent ? extensionLaunch : recordedLaunch;
       expect(expectedLaunch, 'profiles.json debe registrar el lanzamiento nuevo').toBeTruthy();
+      if (!resumeCurrent) expect(expectedLaunch, 'el lanzamiento debe ser nuevo').not.toBe(previousLaunchId);
       if (resumeCurrent) {
         console.log(`[synapse-simulator] Resume: profiles.json=${recordedLaunch}, config de extensión=${extensionLaunch}`);
         const simulatorIdentity = await firstSimulator.evaluate(() =>
@@ -206,7 +286,9 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       const code = await sendDiscoveryMessage(pages.simulator, 'github_device_code');
       await pages.discoveryPage.locator('#screen-github-app-device.active').waitFor({ state: 'visible' });
       await expect(pages.discoveryPage.locator('#github-device-user-code')).toHaveText(String(code.user_code));
-      await sendDiscoveryMessage(pages.simulator, 'github_app_authorized');
+      const githubAuthorized = await sendDiscoveryMessage(pages.simulator, 'github_app_authorized');
+      expect(githubAuthorized.username).toMatch(/^[-A-Za-z0-9_]{1,39}$/);
+      githubFixtureUsername = String(githubAuthorized.username);
       await pages.discoveryPage.locator('#screen-github-app-stored.active').waitFor({ state: 'visible' });
       await waitForMilestone(conductor!.mainWindow, 'github_app_auth');
       await synapseRunner.runStep('sim_vault_navigation', undefined, async () => {
@@ -217,6 +299,112 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await conductor!.mainWindow.click('#btn-continue-identity');
       await conductor!.mainWindow.locator('#screen-vault.active').waitFor({ state: 'visible' });
       await conductor!.mainWindow.click('#btn-continue-vault');
+      });
+
+      await synapseRunner.runStep('gemini_authority_grant', undefined, async () => {
+        const registration = phase0Registration!;
+        const prepared = await conductor!.mainWindow.evaluate(() =>
+          (window as unknown as { onboarding: { prepareGeminiVault(): Promise<{
+            organizationId: string; installationId: string; servicePublicKey: string;
+          }> } }).onboarding.prepareGeminiVault());
+        expect(prepared.organizationId).toBe(registration.organizationId);
+        const postAuthority = async (path: string, body: unknown, allowAlreadyExists = false) => {
+          const response = await fetch(`${env.backendOrigin}${path}`, {
+            method: 'POST',
+            headers: { Origin: env.backendOrigin, 'Content-Type': 'application/json',
+              Cookie: registration.sessionCookie, 'X-Authority-CSRF': registration.csrf },
+            body: JSON.stringify(body),
+          });
+          const result = await response.json() as Record<string, unknown>;
+          if (!response.ok && !(allowAlreadyExists && response.status === 409 && result.error === 'authority_initial_emission_already_exists')) {
+            throw new Error(`[gemini-authority] ${path}: HTTP ${response.status} ${JSON.stringify(result)}`);
+          }
+          return result;
+        };
+        const ownership = JSON.parse(readFileSync(join(WORKSPACE_PATH, '.bloom', '.nucleus-eias-repos', '.ownership.json'), 'utf-8')) as {
+          authority_mode?: string; binding?: { state?: string }; organization?: { canonical_id?: string };
+          legacy_authority?: { owner?: { source?: string; subject?: string } } | null;
+        };
+        expect(ownership.organization?.canonical_id).toBe(registration.organizationId);
+        expect(githubFixtureUsername).toMatch(/^[-A-Za-z0-9_]{1,39}$/);
+        const ownerSubject = githubFixtureUsername!;
+        let initial: Record<string, unknown>;
+        if (ownership.authority_mode === 'local_legacy') {
+          expect(ownership.legacy_authority?.owner).toMatchObject({ source: 'github_handle', subject: ownerSubject });
+          initial = await postAuthority('/v1/authority/initial-emission', {
+            organizationId: registration.organizationId,
+            fixtureLocalOwner: { source: 'github_handle', subject: ownerSubject },
+          });
+          if (initial.status === 'committed') {
+            initial = await postAuthority('/v1/authority/initial-emission', {
+              organizationId: registration.organizationId,
+              fixtureLocalOwner: { source: 'github_handle', subject: ownerSubject },
+            });
+          }
+        } else {
+          expect(ownership.authority_mode).toBe('remote_enforced');
+          expect(ownership.binding?.state).toBe('REMOTE_LOCKED');
+          expect(ownership.legacy_authority).toBeNull();
+          const prior = JSON.parse(readFileSync(join(getBloomPaths().baseDir, 'authority', 'state.json'), 'utf-8')) as {
+            monotonic_state: { high_water_mark: string }; accepted_projection: {
+              principals: Array<{ principal_id: string; external_identities: Array<{ provider: string; subject: string; status: string }> }>;
+            };
+          };
+          const bound = prior.accepted_projection.principals.filter(principal =>
+            principal.principal_id === registration.principalId &&
+            principal.external_identities.some(identity => identity.provider === 'github' && identity.subject === ownerSubject && identity.status === 'verified') &&
+            principal.external_identities.some(identity => identity.provider === 'github' && identity.subject === phase0FixtureSubject && identity.status === 'verified'));
+          expect(bound, 'El snapshot aceptado debe conservar el UUID de 00b y el usuario GitHub del mismo fundador').toHaveLength(1);
+          initial = await postAuthority('/v1/authority/initial-emission', { organizationId: registration.organizationId }, true);
+          if (initial.error === 'authority_initial_emission_already_exists') {
+            initial = { authorityVersion: prior.monotonic_state.high_water_mark, status: 'already_bound' };
+          }
+        }
+        expect(initial.status).toMatch(/^(fixture_owner_bound|already_bound|renewed)$/);
+        expect(initial.authorityVersion).toMatch(/^[1-9][0-9]*$/);
+        const sync = async (grantId?: string) => conductor!.mainWindow.evaluate((id) =>
+          (window as unknown as { onboarding: { syncGeminiVault(id?: string): Promise<{
+            authorityVersion: string; effectiveMode: string;
+          }> } }).onboarding.syncGeminiVault(id), grantId);
+        const firstSync = await sync();
+        expect(firstSync.effectiveMode).toBe('remote_enforced');
+        expect(firstSync.authorityVersion).toBe(initial.authorityVersion);
+        // Nucleus wrote this projection only after validating the signed snapshot and checkpoint.
+        const accepted = JSON.parse(readFileSync(join(getBloomPaths().baseDir, 'authority', 'state.json'), 'utf-8')) as {
+          monotonic_state: { high_water_mark: string }; accepted_projection: {
+          principals: Array<{ principal_id: string; external_identities: Array<{ provider: string; subject: string; status: string }> }>;
+          memberships: Array<{ principal_id: string; membership_id: string; organization_id: string; status: string }>;
+          role_assignments: Array<{ membership_id: string; role_id: string; role_version: string; status: string }>;
+          role_definitions: Array<{ role_id: string; role_version: string; permissions: string[] }>;
+        } };
+        expect(accepted.monotonic_state.high_water_mark).toBe(firstSync.authorityVersion);
+        const state = accepted.accepted_projection;
+        const owners = state.principals.filter(principal => principal.external_identities.some(identity =>
+          identity.provider === 'github' && identity.subject === ownerSubject && identity.status === 'verified'));
+        expect(owners).toHaveLength(1);
+        expect(owners[0].principal_id).toBe(registration.principalId);
+        expect(owners[0].external_identities.some(identity => identity.provider === 'github' &&
+          identity.subject === phase0FixtureSubject && identity.status === 'verified')).toBe(true);
+        const activeMaster = state.memberships.some(membership => membership.principal_id === owners[0].principal_id &&
+          membership.organization_id === registration.organizationId && membership.status === 'active' &&
+          state.role_assignments.some(assignment => assignment.membership_id === membership.membership_id &&
+            assignment.role_id === 'master' && assignment.status === 'active' &&
+            state.role_definitions.some(role => role.role_id === assignment.role_id &&
+              role.role_version === assignment.role_version && role.permissions.includes('create_project'))));
+        expect(activeMaster, 'El propietario del fixture debe conservar create_project').toBe(true);
+        console.log(`[synapse-simulator] Snapshot Authority v${initial.authorityVersion}: fundador=${owners[0].principal_id}, propietario fixture=${ownerSubject}, create_project=true, estado=${initial.status}`);
+        const issued = await postAuthority('/v1/authority/vault-service-grant', {
+          organizationId: registration.organizationId,
+          requestId: randomUUID(),
+          expectedVersion: firstSync.authorityVersion,
+          command: { kind: 'issue', installationId: prepared.installationId,
+            servicePublicKey: prepared.servicePublicKey, keyId: 'gemini-key:default',
+            purpose: 'onboarding_gemini', validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString() },
+        });
+        expect(issued.status).toBe('issued');
+        const secondSync = await sync(String(issued.grantId));
+        expect(secondSync.authorityVersion).toBe(issued.authorityVersion);
+        console.log(`[synapse-simulator] Gemini grant=${issued.grantId}, authority version=${secondSync.authorityVersion}, mode=${secondSync.effectiveMode}`);
       });
     }
 
@@ -236,6 +424,13 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await expect(pages.discoveryPage.locator('#google-detected-host')).toHaveText('myaccount.google.com');
       await sendDiscoveryMessage(pages.simulator, 'account_registered', { service: 'google' });
       await waitForMilestone(conductor!.mainWindow, 'google_auth');
+      const geminiChoice = conductor!.mainWindow.locator('input[name="intelligence-supply"][value="gemini"]');
+      const gemmaChoice = conductor!.mainWindow.locator('input[name="intelligence-supply"][value="gemma"]');
+      await expect(geminiChoice).toBeVisible();
+      await expect(geminiChoice).toBeChecked();
+      await expect(gemmaChoice).not.toBeChecked();
+      await geminiChoice.check();
+      await expect(conductor!.mainWindow.locator('#supply-choice-status')).toContainText('Gemini, modelo de frontera, seleccionado');
       await conductor!.mainWindow.click('#btn-continue-identity');
     });
 
@@ -243,18 +438,30 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'ai_provider_setup' });
       await pages.discoveryPage.locator('#screen-api-waiting.active').waitFor({ state: 'visible' });
       await pages.discoveryPage.click('#btn-open-console');
-      // No simular el resultado: todavía no existe una escritura confirmada por Vault.
       await expect(pages.discoveryPage.locator('#screen-api-success.active')).toHaveCount(0);
+      const sent = await sendDiscoveryMessage(pages.simulator, 'api_key_registered', { provider: 'gemini' });
+      console.log(`[synapse-simulator] Gemini request enviada sin secreto: provider=${sent.provider}`);
+      const readReceipt = () => conductor!.mainWindow.evaluate(() =>
+        (window as unknown as { onboarding: { geminiVaultReceipt(): Promise<{
+          status: string; key_id: string; organization_id: string; grant_id: string;
+        } | null> } }).onboarding.geminiVaultReceipt());
+      await expect.poll(readReceipt, { timeout: 30_000 }).toMatchObject({
+        status: 'stored', key_id: 'gemini-key:default', organization_id: phase0RegistrationId,
+      });
+      const receipt = await readReceipt();
+      expect(receipt).toMatchObject({ status: 'stored', key_id: 'gemini-key:default', organization_id: phase0RegistrationId });
+      expect(receipt?.grant_id).toBeTruthy();
+      await waitForMilestone(conductor!.mainWindow, 'ai_provider_setup');
+      await pages.discoveryPage.locator('#screen-api-success.active').waitFor({ state: 'visible', timeout: 30_000 });
+      console.log(`[synapse-simulator] Nucleus Vault confirmó key_id=${receipt!.key_id}, grant_id=${receipt!.grant_id}; Conductor confirmó ai_provider_setup; Discovery mostró éxito`);
       if (!resumeCurrent) {
         const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
           onboarding?: { ai_provider_key?: unknown };
         };
-        expect(data.onboarding?.ai_provider_key).toBeFalsy();
+        // The reactor persists a boolean completion marker; the credential lives in Nucleus Vault.
+        expect(data.onboarding?.ai_provider_key).toBe(true);
       }
     });
-
-    // El resto del onboarding requiere el acuse real de Vault (fase posterior).
-    return;
 
     await synapseRunner.runStep('sim_completion', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'success' });
