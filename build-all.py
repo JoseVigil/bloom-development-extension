@@ -1157,7 +1157,16 @@ def rollout_component(component: str) -> StepResult:
     """
     # Metamorph es el dueño del lifecycle productivo. Estos componentes no
     # deben duplicar aquí nombres de servicios, esperas ni reglas de restart.
-    if component in {"nucleus", "brain", "sensor", "impact"}:
+    #
+    # "config" no es un componente compilado (no hay build_config() ni
+    # _DEV_BIN_BASE/config/) — se agrega al set delegado para que
+    # rollout_component("config") llame a `metamorph rollout --only config`
+    # en vez de caer al branch de copia cruda de más abajo (que fallaría
+    # buscando un _DEV_BIN_BASE/config/ que no existe). Ese componente de
+    # Metamorph copia installer/native/config/ → NUCLEUS_HOME/config/,
+    # incluyendo sentinel-config.json: sin él, sentinel no puede inicializar
+    # y metamorph inspect lo reporta como "unknown".
+    if component in {"nucleus", "brain", "sensor", "impact", "config"}:
         metamorph_name = "metamorph.exe" if IS_WINDOWS else "metamorph"
         candidates = [
             NUCLEUS_HOME / "bin" / "metamorph" / metamorph_name,
@@ -2622,6 +2631,25 @@ def main() -> None:
             rollout_result = rollout_bootstrap()
             _print_result(rollout_result)
             results.append(rollout_result)
+
+    # ── Rollout: config ────────────────────────────────────────────────────
+    # A diferencia del resto, "config" no tiene build_*() propio — no es un
+    # binario que se compila, es la carpeta installer/native/config/
+    # (sentinel-config.json, settings.json, onboarding/) que vive siempre en
+    # el repo. Por eso no está en `all_steps` ni depende de que algún `key`
+    # particular haya corrido en este build: se sincroniza una vez al final,
+    # incondicionalmente, cada vez que se corre build-all.py (full o
+    # --only/--skip de cualquier combinación), siempre que Metamorph esté
+    # disponible. rollout_component("config") delega a
+    # `metamorph rollout --only config`, que no pisa archivos ya editados
+    # por el operador (ver copyDirSkipExisting en rollout.go).
+    log("")
+    log(_sep())
+    log("── Rollout: sincronizando config a NUCLEUS_HOME ──")
+    rollout_result = rollout_component("config")
+    rollout_result.name = "Rollout:Config"
+    _print_result(rollout_result)
+    results.append(rollout_result)
 
     log("")
     log(_sep())

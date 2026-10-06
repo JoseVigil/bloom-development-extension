@@ -116,11 +116,29 @@ var allComponents = []component{
 		RestoreOnFailure: true,
 	},
 	{
+		// PreDeployFn makes `rollout --only sentinel` self-sufficient. Sentinel
+		// cannot even initialize without config/sentinel/sentinel-config.json in
+		// place (see deployConfigTree/remapSentinelConfig below — this is the
+		// exact dependency the "config" component exists to satisfy). Before
+		// this, that dependency was only ever satisfied by something else
+		// having rolled out "config" first — `--only sentinel` alone, on a base
+		// path that had never seen a config rollout, deployed a binary that
+		// still couldn't start, with nothing in rollout's own output pointing
+		// at why. PreDeployFn runs the identical deployConfigTree logic
+		// (copy-once — it never clobbers an operator-edited
+		// sentinel-config.json/settings.json) as a prerequisite step, so the
+		// dependency is enforced at the one place that actually needs it
+		// instead of relying on a caller (e.g. build-all.py) to remember to
+		// roll out "config" first. It's a no-op when
+		// installer/native/config/ doesn't exist (e.g. a packaged installer
+		// layout without a repo checkout) and never fails the sentinel
+		// rollout on its own — see sentinelPreDeploy.
 		Key: "sentinel",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "sentinel")
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "sentinel") },
+		DestFn:      func(b string) string { return filepath.Join(b, "bin", "sentinel") },
+		PreDeployFn: sentinelPreDeploy,
 	},
 	{
 		Key: "metamorph",
@@ -340,15 +358,10 @@ var allComponents = []component{
 		// error names that exact path as "canónica") — a different relative
 		// path than its source location, which a structure-preserving copy
 		// can never produce. remapSentinelConfig places it there directly.
-		Key:      "config",
-		SourceFn: func(r string) string { return filepath.Join(r, "installer", "native", "config") },
-		DestFn:   func(b string) string { return filepath.Join(b, "config") },
-		ExtractFn: func(src, dstDir string) error {
-			if _, err := copyDirSkipExisting(src, dstDir, "sentinel-config.json"); err != nil {
-				return err
-			}
-			return remapSentinelConfig(src, dstDir)
-		},
+		Key:       "config",
+		SourceFn:  func(r string) string { return filepath.Join(r, "installer", "native", "config") },
+		DestFn:    func(b string) string { return filepath.Join(b, "config") },
+		ExtractFn: deployConfigTree,
 	},
 	{
 		Key: "nssm",
@@ -1292,6 +1305,55 @@ func copyDirSkipExisting(src, dst string, excludeRel ...string) (int, error) {
 		return nil
 	})
 	return count, err
+}
+
+// deployConfigTree is the "config" component's actual deployment logic,
+// factored out so it has exactly one definition shared by both the "config"
+// component's ExtractFn and sentinelPreDeploy below — whichever of the two
+// runs first on a given machine, the result is identical. See the "config"
+// component's own comment above for why this needs copyDirSkipExisting
+// (never clobber operator-edited files) plus a separate remap step for
+// sentinel-config.json (flat in the source tree, nested at the destination).
+func deployConfigTree(src, dstDir string) error {
+	if _, err := copyDirSkipExisting(src, dstDir, "sentinel-config.json"); err != nil {
+		return err
+	}
+	return remapSentinelConfig(src, dstDir)
+}
+
+// sentinelPreDeploy ensures config/ under sentinel's base path is populated
+// before the sentinel binary itself is copied, so `metamorph rollout --only
+// sentinel` is sufficient on its own — it no longer silently depends on the
+// "config" component having been rolled out at some earlier point by someone
+// else (e.g. build-all.py). dst is sentinel's own destination,
+// <basePath>/bin/sentinel (see the sentinel component's DestFn), so basePath
+// is recovered by walking up two levels, the same trick nucleusBasePath uses.
+//
+// This is deliberately tolerant of a missing source: a packaged installer
+// layout may not ship installer/native/config/ as a repo-relative path at
+// all, and that's not sentinel's problem to fail on — deployConfigTree/
+// copyDirSkipExisting already no-op cleanly when there's nothing to do.
+func sentinelPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
+	configSrc := filepath.Join(repoRoot, "installer", "native", "config")
+	if _, err := os.Stat(configSrc); err != nil {
+		return nil // no config tree in this checkout — nothing for sentinel to wait on
+	}
+
+	basePath := filepath.Dir(filepath.Dir(filepath.Clean(dst)))
+	configDst := filepath.Join(basePath, "config")
+
+	if dryRun {
+		c.Logger.Info("🔍 [dry-run] sentinel: would ensure %s is populated from %s before copying the binary", configDst, configSrc)
+		return nil
+	}
+
+	if err := os.MkdirAll(configDst, 0o755); err != nil {
+		return fmt.Errorf("sentinel: could not create %s: %w", configDst, err)
+	}
+	if err := deployConfigTree(configSrc, configDst); err != nil {
+		return fmt.Errorf("sentinel: config predeploy failed: %w", err)
+	}
+	return nil
 }
 
 // remapSentinelConfig copies installer/native/config/sentinel-config.json

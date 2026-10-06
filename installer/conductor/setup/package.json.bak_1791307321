@@ -35,7 +35,7 @@
   "build": {
     "appId": "com.bloom.conductor.installer",
     "productName": "bloom-setup",
-    "copyright": "Copyright \u00a9 2024 BTIP Studio",
+    "copyright": "Copyright © 2024 BTIP Studio",
     "linux": {
       "target": [
         {
@@ -106,22 +106,6 @@
         {
           "from": "shared_node_modules",
           "to": "node_modules"
-        },
-        {
-          "from": "../../chrome/chrome-linux.tar.xz",
-          "to": "chrome-linux"
-        },
-        {
-          "from": "../../ollama/linux",
-          "to": "ollama"
-        },
-        {
-          "from": "../../node/linux_x64",
-          "to": "node"
-        },
-        {
-          "from": "../../temporal/linux",
-          "to": "temporal"
         }
       ]
     },
