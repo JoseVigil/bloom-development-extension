@@ -101,7 +101,7 @@ type managedBinaryDefinition struct {
 //	Nucleus:   nucleus --json version      → version / build_number
 //	Sentinel:  sentinel --json version     → version / build
 //	Host:      bloom-host --version --json → version / build
-//	Conductor: bin/workspace/ — reads build_info.json directly (no script)
+//	Workspace: bin/workspace/ — reads build_info.json directly (no script)
 //	Metamorph: metamorph --json version    → version / build_number
 //	Cortex:    reads cortex.meta.json from inside .blx ZIP (not executable)
 //	Setup:     bin/setup/ — reads build_info.json directly (no script)
@@ -123,21 +123,25 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 		}
 	}
 
-	// Conductor path depends on the platform:
+	// Workspace path depends on the platform:
 	//   macOS  — installed as an .app bundle in /Applications/
-	//   others — exe inside bin/conductor/
+	//   others — exe inside bin/workspace/
 	// On macOS we set the path to the .app bundle; the inspector stats the bundle
 	// root (it's a directory) rather than the inner Mach-O.
-	// Conductor's deployed component is named "workspace" everywhere else in
-	// the system (see `metamorph rollout --only workspace`, and the macOS
-	// path below, which already reads "Workspace.app"). There is no
-	// bin/conductor/ directory on Linux/Windows — the binary lives at
-	// bin/workspace/bloom-workspace. We keep the managed-binary Name as
-	// "Conductor" for JSON/API backwards compatibility, but resolve the
-	// actual path to where the binary is really deployed.
-	conductorPath := filepath.Join("bin", "workspace", core.ExeName("bloom-workspace"))
+	//
+	// This component used to be labeled "Conductor" here even though it has
+	// been deployed as "workspace" everywhere else in the system for a long
+	// time (see `metamorph rollout --only workspace`, the macOS path below,
+	// which already reads "Workspace.app", and rollout.go's "workspace"
+	// component). An earlier version of this code kept the managed-binary
+	// Name as "Conductor" on purpose, for JSON/API backwards compatibility
+	// with whatever reads metamorph.json. Renamed to "Workspace" per
+	// explicit instruction (2026-10-06) to match the real component name —
+	// if anything external still keys off "Conductor" in metamorph.json,
+	// it will need updating too.
+	workspacePath := filepath.Join("bin", "workspace", core.ExeName("bloom-workspace"))
 	if runtime.GOOS == "darwin" {
-		conductorPath = "/Applications/Bloom Nucleus Workspace.app"
+		workspacePath = "/Applications/Bloom Nucleus Workspace.app"
 	}
 
 	return []managedBinaryDefinition{
@@ -181,9 +185,9 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			buildField:   "build",
 		},
 		{
-			name:         "Conductor",
-			path:         conductorPath,
-			versionArgs:  []string{}, // platform-specific — see inspectConductor()
+			name:         "Workspace",
+			path:         workspacePath,
+			versionArgs:  []string{}, // platform-specific — see inspectWorkspace()
 			infoArgs:     []string{},
 			versionField: "version",
 			buildField:   "build",
@@ -353,9 +357,9 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 		return inspectCortexBinary(binary, path)
 	}
 
-	// Conductor and Setup: Electron apps interrogated via bundled build_info.json
-	if name == "Conductor" {
-		return inspectConductor(binary, path)
+	// Workspace and Setup: Electron apps interrogated via bundled build_info.json
+	if name == "Workspace" {
+		return inspectWorkspace(binary, path)
 	}
 	if name == "Setup" {
 		return inspectSetup(binary, path)
@@ -366,10 +370,18 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 		return inspectSensor(binary, path)
 	}
 
-	// Standard executables: version_args first, info_args as fallback
+	// Standard executables: version_args first, info_args as fallback.
+	//
+	// A binary can print perfectly valid --json output and still exit
+	// non-zero (e.g. Sentinel returning an error status because its event
+	// bus is already owned by a running instance, while still emitting its
+	// version JSON on stdout first). cmd.CombinedOutput() surfaces that as
+	// a non-nil err alongside the captured output, so we must not let a
+	// non-zero exit code alone discard output that otherwise parses into a
+	// usable version. Only an empty/unparseable output falls through.
 	if len(def.versionArgs) > 0 {
-		out, err := ExecuteCommandWithTimeout(path, def.versionArgs...)
-		if err == nil && out != "" {
+		out, _ := ExecuteCommandWithTimeout(path, def.versionArgs...)
+		if out != "" {
 			version, build := extractVersionAndBuild(out, def.versionField, def.buildField)
 			if version != "" {
 				binary.Version = version
@@ -381,8 +393,8 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 	}
 
 	if len(def.infoArgs) > 0 {
-		out, err := ExecuteCommandWithTimeout(path, def.infoArgs...)
-		if err == nil && out != "" {
+		out, _ := ExecuteCommandWithTimeout(path, def.infoArgs...)
+		if out != "" {
 			version, build := extractVersionAndBuild(out, def.versionField, def.buildField)
 			if version != "" {
 				binary.Version = version
@@ -410,7 +422,7 @@ func inspectCortexBinary(binary *ManagedBinary, path string) (*ManagedBinary, er
 }
 
 // electronBuildInfo mirrors build_info.json, bundled at build time inside
-// resources/app.asar.unpacked/ of Electron apps (Setup, Workspace/Conductor).
+// resources/app.asar.unpacked/ of Electron apps (Setup, Workspace).
 // Verified against real deploy output on 2026-08-08:
 //
 //	{"name":"bloom-setup","product_name":"Bloom Conductor Setup","version":"1.0.0",
@@ -456,7 +468,7 @@ func readElectronBuildInfo(exeDir string) (*electronBuildInfo, error) {
 	return &info, nil
 }
 
-// inspectElectronApp interrogates an Electron app (Setup, Workspace/Conductor)
+// inspectElectronApp interrogates an Electron app (Setup, Workspace)
 // by reading its bundled build_info.json directly. No OS-specific script
 // (.ps1 on Windows, .sh on macOS) is needed or invoked — build_info.json is
 // generated at build time and ships identically on every platform.
@@ -485,9 +497,9 @@ func inspectElectronApp(binary *ManagedBinary, exePath string) (*ManagedBinary, 
 	return binary, nil
 }
 
-// inspectConductor interrogates the Workspace/Conductor Electron app via its
+// inspectWorkspace interrogates the Workspace Electron app via its
 // bundled build_info.json.
-func inspectConductor(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
+func inspectWorkspace(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
 	return inspectElectronApp(binary, exePath)
 }
 
@@ -598,7 +610,7 @@ func InspectAllManagedBinaries(basePath string) ([]ManagedBinary, error) {
 			defer func() { <-semaphore }()
 
 			// If the path is already absolute (e.g. from nucleus.json system_map
-			// or the macOS Conductor .app path) use it directly; otherwise join
+			// or the macOS Workspace .app path) use it directly; otherwise join
 			// with basePath.
 			var fullPath string
 			if filepath.IsAbs(definition.path) {

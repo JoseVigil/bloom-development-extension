@@ -5,7 +5,7 @@ package inspection
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ElectronMeta holds metadata read from build_info.json bundled inside
-// resources/app.asar.unpacked/ of an Electron app (Setup, Workspace/Conductor).
+// resources/app.asar.unpacked/ of an Electron app (Setup, Workspace).
 type ElectronMeta struct {
 	Channel     string `json:"channel,omitempty"`
 	FullVersion string `json:"full_version,omitempty"`

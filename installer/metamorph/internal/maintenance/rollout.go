@@ -307,17 +307,48 @@ var allComponents = []component{
 		DestFn:   func(b string) string { return filepath.Join(b, "hooks") },
 	},
 	{
-		// After the top-level config/ tree is copied, onboardingPostDeploy stages
-		// installer/native/config/onboarding/onboarding_steps.json into
-		// config/onboarding/ as well. That file lives outside the generic
-		// config/ source tree, so it would not be picked up by copyDir on its
-		// own. The hook is copy-once: if onboarding_steps.json already exists
-		// at the destination it is left untouched, so a user's recorded
-		// onboarding progress is never overwritten by a later rollout.
-		Key:          "config",
-		SourceFn:     func(r string) string { return filepath.Join(r, "config") },
-		DestFn:       func(b string) string { return filepath.Join(b, "config") },
-		PostDeployFn: onboardingPostDeploy,
+		// SourceFn used to point at repo-root config/, which is where the
+		// generic config tree lived historically. That directory no longer
+		// exists in the repo at all, so os.Stat(src) always failed in
+		// runRollout and this entire component — including its
+		// PostDeployFn — was silently skipped on every single rollout. A
+		// skipped source only logs to Skipped, never to Errors, so this
+		// went unnoticed: nothing under installer/native/config/ (notably
+		// sentinel-config.json) was ever deployed, which is why sentinel
+		// fails to initialize for ANY invocation — including
+		// `sentinel --json version`/`--json info` — and metamorph inspect
+		// reports it as "unknown" rather than parsing a version out of it.
+		//
+		// SourceFn now points at the directory that actually holds what
+		// needs deploying: installer/native/config/ (sentinel-config.json,
+		// settings.json, onboarding/onboarding_steps.json). Because several
+		// of those files are meant to be hand-edited post-install —
+		// settings.json explicitly says so, sentinel-config.json carries
+		// operator profiles/golden_key/extension_id, and
+		// onboarding_steps.json tracks per-install progress — this can't
+		// use the plain copyDir every other component uses, which would
+		// clobber those edits on every rollout. ExtractFn instead uses
+		// copyDirSkipExisting: it creates any file that's missing at the
+		// destination (so a fresh install still gets everything) and leaves
+		// any file that's already there untouched (so re-running rollout
+		// never overwrites configured state).
+		//
+		// sentinel-config.json is excluded from that generic walk and
+		// remapped explicitly: it sits flat at the root of
+		// installer/native/config/ in the repo, but sentinel's own startup
+		// code reads it from config/sentinel/sentinel-config.json (its own
+		// error names that exact path as "canónica") — a different relative
+		// path than its source location, which a structure-preserving copy
+		// can never produce. remapSentinelConfig places it there directly.
+		Key:      "config",
+		SourceFn: func(r string) string { return filepath.Join(r, "installer", "native", "config") },
+		DestFn:   func(b string) string { return filepath.Join(b, "config") },
+		ExtractFn: func(src, dstDir string) error {
+			if _, err := copyDirSkipExisting(src, dstDir, "sentinel-config.json"); err != nil {
+				return err
+			}
+			return remapSentinelConfig(src, dstDir)
+		},
 	},
 	{
 		Key: "nssm",
@@ -1194,50 +1225,98 @@ func resolveCodeCLI() (string, error) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// config / onboarding post-deploy hook
+// config tree copy — preserves operator-edited files
 // ─────────────────────────────────────────────────────────────────────────────
 
-// onboardingPostDeploy stages installer/native/config/onboarding/onboarding_steps.json
-// into <dst>/onboarding/onboarding_steps.json after the generic config/ tree has
-// been copied. dst is config component's resolved destination (<BloomRoot>/config),
-// so the file ends up at <BloomRoot>/config/onboarding/onboarding_steps.json —
-// where MilestoneRegistry expects to find it at runtime.
-//
-// This is copy-once, not copy-always: if onboarding_steps.json is already present
-// at the destination, it is left untouched. A rollout must never clobber a user's
-// recorded onboarding progress.
-func onboardingPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
-	src := filepath.Join(repoRoot, "installer", "native", "config", "onboarding", "onboarding_steps.json")
-	destDir := filepath.Join(dst, "onboarding")
-	destFile := filepath.Join(destDir, "onboarding_steps.json")
+// copyDirSkipExisting mirrors copyDir (same symlink/dir/file handling), but
+// never overwrites a path that already exists at the destination — it only
+// creates what's missing there. Used for the "config" component because
+// installer/native/config/ holds files that are meant to be hand-edited
+// post-install (settings.json says so explicitly) or that track mutable
+// per-install state (sentinel-config.json's operator profiles/golden_key,
+// onboarding/onboarding_steps.json's recorded progress). A plain copyDir
+// would silently clobber all of that back to repo defaults on every rollout.
+func copyDirSkipExisting(src, dst string, excludeRel ...string) (int, error) {
+	exclude := make(map[string]bool, len(excludeRel))
+	for _, rel := range excludeRel {
+		exclude[filepath.FromSlash(rel)] = true
+	}
 
-	if _, err := os.Stat(src); err != nil {
+	count := 0
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if exclude[rel] {
+			return nil
+		}
+		target := filepath.Join(dst, rel)
+
+		linfo, lerr := os.Lstat(path)
+		if lerr != nil {
+			return lerr
+		}
+
+		if linfo.IsDir() {
+			return os.MkdirAll(target, linfo.Mode())
+		}
+
+		if _, err := os.Lstat(target); err == nil {
+			// Already present — an operator or a prior rollout may have
+			// customized it. Leave it untouched.
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+
+		if linfo.Mode()&os.ModeSymlink != 0 {
+			linkTarget, lerr := os.Readlink(path)
+			if lerr != nil {
+				return lerr
+			}
+			if err := os.Symlink(linkTarget, target); err != nil {
+				return err
+			}
+			count++
+			return nil
+		}
+
+		if err := copyFile(path, target); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	return count, err
+}
+
+// remapSentinelConfig copies installer/native/config/sentinel-config.json
+// (flat in the source tree) into <dst>/sentinel/sentinel-config.json —
+// the path sentinel's own startup code reads, per its "canónica" error
+// message. Copy-once: if the destination file already exists, it is left
+// untouched so operator-configured profiles/golden_key/extension_id survive
+// a later rollout.
+func remapSentinelConfig(src, dstDir string) error {
+	flatSrc := filepath.Join(src, "sentinel-config.json")
+	if _, err := os.Stat(flatSrc); err != nil {
 		// Non-fatal: an older or partial checkout may not have the file yet.
-		// The config/ tree itself was still deployed successfully.
-		c.Logger.Warning("⚠️  onboarding: source not found at %s — skipping", src)
 		return nil
 	}
 
-	if _, err := os.Stat(destFile); err == nil {
-		c.Logger.Info("ℹ️  onboarding: %s already exists — leaving in place", destFile)
+	sentinelDir := filepath.Join(dstDir, "sentinel")
+	sentinelDest := filepath.Join(sentinelDir, "sentinel-config.json")
+	if _, err := os.Stat(sentinelDest); err == nil {
 		return nil
 	}
 
-	if dryRun {
-		c.Logger.Info("🔍 [dry-run] onboarding: would copy %s → %s", src, destFile)
-		return nil
+	if err := os.MkdirAll(sentinelDir, 0o755); err != nil {
+		return fmt.Errorf("sentinel-config: could not create %s: %w", sentinelDir, err)
 	}
-
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("onboarding: could not create %s: %w", destDir, err)
-	}
-
-	if err := copyFile(src, destFile); err != nil {
-		return fmt.Errorf("onboarding: copy failed: %w", err)
-	}
-
-	c.Logger.Success("✅ onboarding: onboarding_steps.json → %s", destFile)
-	return nil
+	return copyFile(flatSrc, sentinelDest)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -23,26 +23,26 @@ func managedBinaryDefs() []managedBinaryDef {
 	// host: C++ bridge — no .exe on macOS/Linux
 	hostBin := core.ExeName("bloom-host")
 
-	// conductor: Electron app
-	conductorBin := core.ExeName("bloom-conductor")
+	// workspace: Electron app
+	workspaceBin := core.ExeName("bloom-workspace")
 
 	defs := []managedBinaryDef{
 		{Name: "Brain", SubDir: "brain", BinName: core.ExeName("brain")},
 		{Name: "Nucleus", SubDir: "nucleus", BinName: core.ExeName("nucleus")},
 		{Name: "Sentinel", SubDir: "sentinel", BinName: core.ExeName("sentinel")},
 		{Name: "Host", SubDir: "native", BinName: hostBin},
-		{Name: "Conductor", SubDir: "conductor", BinName: conductorBin},
+		{Name: "Workspace", SubDir: "workspace", BinName: workspaceBin},
 		{Name: "Cortex", SubDir: "cortex", BinName: cortexBin},
 		{Name: "Metamorph", SubDir: "metamorph", BinName: core.ExeName("metamorph")},
 	}
 
-	// On macOS, Conductor ships as a .app bundle. Adjust the path so inspect
+	// On macOS, Workspace ships as a .app bundle. Adjust the path so inspect
 	// can find it. The .app is a directory, so inspection will stat the bundle
 	// root rather than an inner executable.
 	if runtime.GOOS == "darwin" {
 		for i, d := range defs {
-			if d.Name == "Conductor" {
-				defs[i].BinName = "Bloom Conductor.app"
+			if d.Name == "Workspace" {
+				defs[i].BinName = "Bloom Nucleus Workspace.app"
 			}
 		}
 	}
