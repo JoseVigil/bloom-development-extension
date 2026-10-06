@@ -10,7 +10,8 @@
     "test:no-preflight": "playwright test",
     "test:headed": "npm run preflight && playwright test --headed",
     "report": "playwright show-report",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:runner-core": "node --require ts-node/register --test tests/runner-core/*.test.ts"
   },
   "keywords": [
     "synapse-runner",
