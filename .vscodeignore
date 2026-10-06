@@ -26,6 +26,11 @@ tests/**
 installer/native/**
 native/**
 
+# Archivos .env reales (secretos locales, nunca van al VSIX). Los .env.example
+# NO matchean este patrón (nombre distinto) y siguen empaquetándose normal.
+.env
+**/.env
+
 # Archivos sueltos que no van
 *.py
 *.ps1
