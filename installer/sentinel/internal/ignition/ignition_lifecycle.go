@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -250,33 +251,59 @@ func (ig *Ignition) preFlight(profileID string) {
 
 // freePortQuirurgico libera el puerto especificado matando procesos que lo ocupan
 func (ig *Ignition) freePortQuirurgico(port int) {
-	if runtime.GOOS != "windows" {
-		ig.Core.Logger.Info("[WARN] [PORT] Liberación quirúrgica de puerto solo implementada en Windows por ahora")
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("cmd", "/C", fmt.Sprintf("netstat -ano | findstr :%d", port))
+		out, err := cmd.Output()
+		if err != nil {
+			return
+		}
+
+		lines := strings.Split(string(out), "\r\n")
+		for _, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) < 5 {
+				continue
+			}
+			pidStr := fields[4]
+			if pidStr == "0" || pidStr == "" {
+				continue
+			}
+
+			kill := exec.Command("taskkill", "/F", "/PID", pidStr, "/T")
+			if err := kill.Run(); err == nil {
+				ig.Core.Logger.Info("[PORT] Proceso %s terminado para liberar puerto %d", pidStr, port)
+			}
+		}
+
+		time.Sleep(1200 * time.Millisecond)
 		return
 	}
 
-	cmd := exec.Command("cmd", "/C", fmt.Sprintf("netstat -ano | findstr :%d", port))
+	// darwin/linux: mismo objetivo que la rama Windows (netstat+taskkill) vía
+	// lsof, que viene instalado por defecto en ambos. Si no está disponible,
+	// degradamos a warning — igual que el comportamiento previo — en vez de
+	// romper el preflight de lanzamiento.
+	cmd := exec.Command("lsof", "-ti", fmt.Sprintf("tcp:%d", port))
 	out, err := cmd.Output()
 	if err != nil {
+		ig.Core.Logger.Info("[WARN] [PORT] No se pudo ejecutar lsof para liberar el puerto %d: %v", port, err)
 		return
 	}
 
-	lines := strings.Split(string(out), "\r\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
+	pids := strings.Fields(strings.TrimSpace(string(out)))
+	for _, pidStr := range pids {
+		pid, convErr := strconv.Atoi(pidStr)
+		if convErr != nil {
 			continue
 		}
-		pidStr := fields[4]
-		if pidStr == "0" || pidStr == "" {
-			continue
-		}
-
-		kill := exec.Command("taskkill", "/F", "/PID", pidStr, "/T")
-		if err := kill.Run(); err == nil {
-			ig.Core.Logger.Info("[PORT] Proceso %s terminado para liberar puerto %d", pidStr, port)
+		if process, findErr := os.FindProcess(pid); findErr == nil {
+			if killErr := process.Kill(); killErr == nil {
+				ig.Core.Logger.Info("[PORT] Proceso %s terminado para liberar puerto %d", pidStr, port)
+			}
 		}
 	}
 
-	time.Sleep(1200 * time.Millisecond)
+	if len(pids) > 0 {
+		time.Sleep(1200 * time.Millisecond)
+	}
 }
