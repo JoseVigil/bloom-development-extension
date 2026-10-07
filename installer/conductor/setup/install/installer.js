@@ -841,20 +841,44 @@ async function deployAllSystemBinaries(win) {
     );
 
     // ── sentinel-config.json → config/sentinel/ (ubicación canónica) ──────────
+    //
+    // Antes esto tiraba (throw, abortando TODA la instalación) si no
+    // encontraba el archivo en ninguna de las dos fuentes empaquetadas. Esa
+    // rama recién se ejercitó por primera vez en una reinstalación limpia y
+    // reveló que el .json nunca estuvo incluido en los extraResources de
+    // setup/package.json (ningún OS) — un gap de empaquetado real, separado
+    // de esto. Ya se agregó esa entrada ahí, pero este bloque se corrige
+    // también para no depender únicamente de ese empaquetado: sigue el mismo
+    // patrón que onboarding_steps.json un poco más abajo en este archivo —
+    // primero revisa si el destino YA tiene un config (desplegado por un
+    // `metamorph rollout --only sentinel`/`config` previo, o por una corrida
+    // anterior de este instalador) y, si lo tiene, no lo pisa — puede llevar
+    // profiles/golden_key/extension_id configurados por el operador. Solo si
+    // el destino está vacío intenta poblarlo desde alguna de las dos fuentes
+    // empaquetadas; si ninguna existe, advierte y sigue en vez de abortar
+    // toda la instalación — sentinel no va a poder inicializar hasta que se
+    // le provea un config por otro medio, pero el resto de los componentes
+    // sí se termina de instalar.
     logger.info('\n⚙️ SENTINEL CONFIG');
     await fs.ensureDir(paths.sentinelConfigDir);
 
-    const _sentinelCfgSrc      = paths.sentinelConfigSource;
-    const _sentinelCfgFallback = path.join(paths.sentinelSource, 'sentinel-config.json');
-
-    if (await fs.pathExists(_sentinelCfgSrc)) {
-      await copyFileSafe(_sentinelCfgSrc, paths.sentinelConfig, 'sentinel-config.json');
-      logger.success('✅ sentinel-config.json deployed to config/sentinel/');
-    } else if (await fs.pathExists(_sentinelCfgFallback)) {
-      await copyFileSafe(_sentinelCfgFallback, paths.sentinelConfig, 'sentinel-config.json (fallback)');
-      logger.warn('⚠️ sentinel-config.json deployed from bin source — agregar a native/config/');
+    if (await fs.pathExists(paths.sentinelConfig)) {
+      logger.info('⭐️ sentinel-config.json ya presente en config/sentinel/, no se sobreescribe');
+      results.sentinelConfig = { success: true, skipped: true, dest: paths.sentinelConfig };
     } else {
-      throw new Error('sentinel-config.json not found in native/config nor in sentinel source dir');
+      const _sentinelCfgSrc      = paths.sentinelConfigSource;
+      const _sentinelCfgFallback = path.join(paths.sentinelSource, 'sentinel-config.json');
+
+      if (await fs.pathExists(_sentinelCfgSrc)) {
+        results.sentinelConfig = await copyFileSafe(_sentinelCfgSrc, paths.sentinelConfig, 'sentinel-config.json');
+        logger.success('✅ sentinel-config.json deployed to config/sentinel/');
+      } else if (await fs.pathExists(_sentinelCfgFallback)) {
+        results.sentinelConfig = await copyFileSafe(_sentinelCfgFallback, paths.sentinelConfig, 'sentinel-config.json (fallback)');
+        logger.warn('⚠️ sentinel-config.json deployed from bin source — agregar a native/config/');
+      } else {
+        logger.warn('⚠️ sentinel-config.json not found in native/config nor in sentinel source dir — sentinel no podrá inicializar hasta que se despliegue uno (ej. metamorph rollout --only sentinel)');
+        results.sentinelConfig = { success: false, skipped: true };
+      }
     }
 
     // Parchear paths dinámicos con valores del entorno del usuario

@@ -68,6 +68,10 @@
           "to": "sentinel"
         },
         {
+          "from": "../../native/config/sentinel-config.json",
+          "to": "sentinel-config"
+        },
+        {
           "from": "../../native/bin/linux_x64/metamorph",
           "to": "metamorph"
         },
@@ -166,6 +170,10 @@
           "to": "sentinel"
         },
         {
+          "from": "../../native/config/sentinel-config.json",
+          "to": "sentinel-config"
+        },
+        {
           "from": "../../native/bin/win64/metamorph",
           "to": "metamorph"
         },
@@ -251,6 +259,10 @@
         {
           "from": "../../native/bin/darwin_${arch}/sentinel",
           "to": "sentinel"
+        },
+        {
+          "from": "../../native/config/sentinel-config.json",
+          "to": "sentinel-config"
         },
         {
           "from": "../../native/bin/darwin_${arch}/metamorph",
