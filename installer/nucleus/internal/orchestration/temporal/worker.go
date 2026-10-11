@@ -85,6 +85,16 @@ func registerMandateGenesisSignatureActivities(registrar activityRegistrar) {
 	registrar.RegisterActivity(activities.PersistHumanSyncActivity)
 	registrar.RegisterActivity(activities.SignMandateActivity)
 	registrar.RegisterActivity(activities.PersistSignatureFailureActivity)
+	registrar.RegisterActivity(activities.PersistCandidateDomainsActivity)
+}
+
+// mandateGenBrainPath resuelve el binario de Brain para MandateGenActivity
+// con el mismo resolvedor que usa la ingesta (core.ResolveBrainPath), así
+// ambas fases ejecutan el mismo Brain en cualquier sistema operativo. Si no
+// se encuentra, devuelve "" y la actividad falla cerrado antes de cualquier
+// efecto ("Mandate gen prerequisites unavailable").
+func mandateGenBrainPath() (string, error) {
+	return core.ResolveBrainPath()
 }
 
 func registerGravityActivities(registrar namedActivityRegistrar) {
@@ -438,9 +448,13 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			} else {
 				defer mandateActivityLogger.Close()
 			}
+			genBrainPath, genBrainErr := mandateGenBrainPath()
+			if genBrainErr != nil {
+				logger.Warning("⚠️  Brain no localizado para MandateGenActivity: %v", genBrainErr)
+			}
 			genActivity := &activities.MandateGenActivity{
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
-				BrainPath:    filepath.Join(c.Paths.AppDataDir, "bin", "brain", "brain.exe"),
+				BrainPath:    genBrainPath,
 				Logger:       mandateActivityLogger,
 			}
 			mandateWorker.RegisterActivityWithOptions(genActivity.Run, activity.RegisterOptions{Name: "MandateGenActivity"})

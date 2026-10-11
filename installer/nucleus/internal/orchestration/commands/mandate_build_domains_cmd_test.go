@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"nucleus/internal/orchestration/activities"
+	"nucleus/internal/orchestration/mandatecontract"
 )
 
 func TestBuildDomainsConfirmHasExactPublicPathAndDualHelpMetadata(t *testing.T) {
@@ -55,5 +58,66 @@ func TestMutateMandateStateValidateIsMonotonicAndIdempotent(t *testing.T) {
 	_ = json.Unmarshal(raw, &state)
 	if state["signature"].(map[string]interface{})["status"] != "not_ready" {
 		t.Fatalf("foreign fields lost: %#v", state)
+	}
+}
+
+// B1 (ida y vuelta real): estado inicial de `mandate build` → candidatos
+// persistidos por el workflow → escritura de `domains confirm` →
+// PersistHumanSyncActivity acepta la confirmación con la misma lista.
+func TestConfirmRoundTripSatisfiesPersistHumanSync(t *testing.T) {
+	root := t.TempDir()
+	mandateID := "m-roundtrip"
+	dir := filepath.Join(root, mandateID)
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs", "vision.md"), []byte("# Vision\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	initial := initialBuildMandateState(mandateID, "genesis", "Core", "project-1", "cli", "", []string{"vision.md"}, "2026-10-10T00:00:00Z")
+	raw, _ := json.Marshal(initial)
+	path := filepath.Join(dir, "mandate_state.json")
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := []activities.DomainCandidateState{{DomainID: "dom_core_a3f1", Name: "Core", CohesionScore: 1, SuggestedActionCount: 1}}
+	if _, err := activities.PersistCandidateDomainsActivity(activities.PersistCandidateDomainsInput{MandatesRoot: root, MandateID: mandateID, CandidateDomains: candidates}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lo que leen `domains list` y `domains confirm`.
+	raw, _ = os.ReadFile(path)
+	var state mandateStateDoc
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Phases.Validate.HumanSync.CandidateDomains) != 1 || state.Phases.Validate.HumanSync.CandidateDomains[0].DomainID != "dom_core_a3f1" {
+		t.Fatalf("candidates not visible to CLI: %#v", state.Phases.Validate.HumanSync)
+	}
+
+	// Misma escritura que `domains confirm`.
+	files, err := mandatecontract.FreezeFiles(dir, state.DocsProvided)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate := state.Phases.Validate
+	validate.HumanSync.ConfirmedDomainIds = []string{"dom_core_a3f1"}
+	validate.HumanSync.ConfirmedAt = "2026-10-10T00:01:00Z"
+	validate.HumanSync.Files = files
+	if _, err := mutateMandateStateValidate(path, validate); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := activities.PersistHumanSyncActivity(activities.PersistHumanSyncInput{
+		MandatesRoot: root, MandateID: mandateID, CandidateDomains: candidates,
+		ConfirmedDomainIds: []string{"dom_core_a3f1"}, IntentID: "intent-1",
+		ReceptionRef: "../../.intents/.ing/.fixture/.reception", DomainProposalRef: "domain_proposal.json",
+	})
+	if err != nil {
+		t.Fatalf("human sync rejected CLI confirmation: %v", err)
+	}
+	if result.StateVersion == 0 {
+		t.Fatalf("result=%#v", result)
 	}
 }

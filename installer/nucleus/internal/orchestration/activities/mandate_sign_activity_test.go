@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -428,5 +429,93 @@ func TestPersistSignatureFailureIsIdempotent(t *testing.T) {
 	state := readGenesisStateFixture(t, path)
 	if state["signature"].(map[string]interface{})["status"] != "failed" {
 		t.Fatalf("state=%#v", state)
+	}
+}
+
+// writeClusterStateFixture reproduce el mandate_state.json inicial que crea
+// `nucleus mandate build` (candidatos vacíos, sin confirmación).
+func writeClusterStateFixture(t *testing.T, root, mandateID string) string {
+	t.Helper()
+	dir := filepath.Join(root, mandateID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	state := map[string]interface{}{
+		"mandateId": mandateID, "mandateType": "genesis", "project": "Core",
+		"status": "building", "currentPhase": "cluster", "stateVersion": 1, "updatedAt": "initial",
+		"signature": map[string]interface{}{"status": "not_ready", "intentId": nil},
+		"phases": map[string]interface{}{
+			"ingest":  map[string]interface{}{"status": "completed"},
+			"cluster": map[string]interface{}{"status": "pending"},
+			"validate": map[string]interface{}{
+				"status": "pending", "humanSync": map[string]interface{}{"candidateDomains": []interface{}{}},
+			},
+		},
+		"docsProvided": []string{"README.md"},
+	}
+	raw, _ := json.Marshal(state)
+	path := filepath.Join(dir, "mandate_state.json")
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestPersistCandidateDomainsWritesBeforeConfirmationAndIsIdempotent(t *testing.T) {
+	root := t.TempDir()
+	path := writeClusterStateFixture(t, root, "fixture-candidates")
+	input := PersistCandidateDomainsInput{MandatesRoot: root, MandateID: "fixture-candidates",
+		CandidateDomains: []DomainCandidateState{{DomainID: "dom_core_a3f1", Name: "Core", CohesionScore: 1, SuggestedActionCount: 1}}}
+	first, err := PersistCandidateDomainsActivity(input)
+	if err != nil || first.StateVersion != 2 {
+		t.Fatalf("first=%#v err=%v", first, err)
+	}
+	state := readGenesisStateFixture(t, path)
+	humanSync := state["phases"].(map[string]interface{})["validate"].(map[string]interface{})["humanSync"].(map[string]interface{})
+	raw, _ := json.Marshal(humanSync)
+	var persisted HumanSyncState
+	if err := json.Unmarshal(raw, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(persisted.CandidateDomains, input.CandidateDomains) || len(persisted.ConfirmedDomainIds) != 0 {
+		t.Fatalf("humanSync=%#v", persisted)
+	}
+	if state["currentPhase"] != "cluster" || state["signature"].(map[string]interface{})["status"] != "not_ready" ||
+		state["phases"].(map[string]interface{})["ingest"].(map[string]interface{})["status"] != "completed" {
+		t.Fatalf("unrelated fields changed: %#v", state)
+	}
+	retry, err := PersistCandidateDomainsActivity(input)
+	if err != nil || retry.StateVersion != 2 {
+		t.Fatalf("retry=%#v err=%v", retry, err)
+	}
+}
+
+func TestPersistCandidateDomainsRejectsDifferentCandidates(t *testing.T) {
+	root := t.TempDir()
+	writeClusterStateFixture(t, root, "fixture-different")
+	first := PersistCandidateDomainsInput{MandatesRoot: root, MandateID: "fixture-different",
+		CandidateDomains: []DomainCandidateState{{DomainID: "dom_core_a3f1", Name: "Core", CohesionScore: 1, SuggestedActionCount: 1}}}
+	if _, err := PersistCandidateDomainsActivity(first); err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.CandidateDomains = []DomainCandidateState{{DomainID: "dom_core_b4e2", Name: "Core", CohesionScore: 1, SuggestedActionCount: 1}}
+	if _, err := PersistCandidateDomainsActivity(second); err == nil {
+		t.Fatal("different candidates replaced persisted ones")
+	}
+}
+
+func TestPersistCandidateDomainsRejectsAfterConfirmation(t *testing.T) {
+	root := t.TempDir()
+	path := writeGenesisStateFixture(t, root, "fixture-confirmed")
+	before, _ := os.ReadFile(path)
+	_, err := PersistCandidateDomainsActivity(PersistCandidateDomainsInput{MandatesRoot: root, MandateID: "fixture-confirmed",
+		CandidateDomains: []DomainCandidateState{{DomainID: "dom-1", Name: "Core"}}})
+	if err == nil {
+		t.Fatal("candidates written after confirmation")
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Fatal("state changed after rejected write")
 	}
 }

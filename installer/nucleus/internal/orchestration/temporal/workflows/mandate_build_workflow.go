@@ -187,21 +187,8 @@ func MandateBuildWorkflow(ctx workflow.Context, input MandateBuildInput) error {
 		return fmt.Errorf("fase cluster: %w", err)
 	}
 
-	// CAMBIO (esta sesión, Paso 2): avanza currentPhase de "cluster" a
-	// "validate" y marca phases.cluster.status="completed".
-	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
-		MandatesRoot:              input.MandatesRoot,
-		MandateID:                 input.MandateID,
-		Phase:                     "cluster",
-		PhaseOrder:                BuildPhaseOrder,
-		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("fase cluster, avanzar currentPhase: %w", err)
-	}
-
-	// candidateDomains para persistir en mandate_state.json más adelante —
-	// traducción pura ProposedDomain -> DomainCandidateState (mismo id,
-	// mismo nombre; Files no es parte de DomainCandidateState, se
+	// candidateDomains — traducción pura ProposedDomain -> DomainCandidateState
+	// (mismo id, mismo nombre; Files no es parte de DomainCandidateState, se
 	// preserva del lado de la señal más abajo en cambio; DependsOn queda
 	// vacío porque no hay clustering real que lo produzca hoy).
 	candidateDomains := make([]activities.DomainCandidateState, 0, len(scaffoldResult.Domains))
@@ -212,6 +199,33 @@ func MandateBuildWorkflow(ctx workflow.Context, input MandateBuildInput) error {
 			CohesionScore:        pd.CohesionScore,
 			SuggestedActionCount: pd.SuggestedActionCount,
 		})
+	}
+
+	// Los candidatos se persisten antes de pasar a "validate": `domains list`
+	// y `domains confirm` los leen de mandate_state.json, y
+	// PersistHumanSyncActivity exige que la confirmación coincida con esta
+	// misma lista. GetVersion conserva el replay de corridas iniciadas antes
+	// de este paso.
+	if workflow.GetVersion(ctx, "persist-candidate-domains", workflow.DefaultVersion, 1) == 1 {
+		if err := workflow.ExecuteActivity(ctx, activities.PersistCandidateDomainsActivity, activities.PersistCandidateDomainsInput{
+			MandatesRoot:     input.MandatesRoot,
+			MandateID:        input.MandateID,
+			CandidateDomains: candidateDomains,
+		}).Get(ctx, nil); err != nil {
+			return fmt.Errorf("fase cluster, persistir candidatos: %w", err)
+		}
+	}
+
+	// CAMBIO (esta sesión, Paso 2): avanza currentPhase de "cluster" a
+	// "validate" y marca phases.cluster.status="completed".
+	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+		MandatesRoot:              input.MandatesRoot,
+		MandateID:                 input.MandateID,
+		Phase:                     "cluster",
+		PhaseOrder:                BuildPhaseOrder,
+		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
+	}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("fase cluster, avanzar currentPhase: %w", err)
 	}
 
 	// ── Fase 3: validate (Human Sync Point) ──────────────────────────────

@@ -28,7 +28,14 @@ func mandateBuildTestEnvironment(t *testing.T, denyAct string) (*testsuite.TestW
 		order = append(order, "phase:"+input.Phase)
 		return activities.AdvancePhaseResult{StateVersion: 1}, nil
 	})
-	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).Return(activities.PersistHumanSyncResult{StateVersion: 2}, nil)
+	env.OnActivity(activities.PersistCandidateDomainsActivity, mock.Anything, mock.Anything).Return(func(input activities.PersistCandidateDomainsInput) (activities.PersistCandidateDomainsResult, error) {
+		order = append(order, "candidates:"+candidateIDs(input.CandidateDomains))
+		return activities.PersistCandidateDomainsResult{StateVersion: 1}, nil
+	})
+	env.OnActivity(activities.PersistHumanSyncActivity, mock.Anything, mock.Anything).Return(func(input activities.PersistHumanSyncInput) (activities.PersistHumanSyncResult, error) {
+		order = append(order, "humansync:"+candidateIDs(input.CandidateDomains))
+		return activities.PersistHumanSyncResult{StateVersion: 2}, nil
+	})
 	env.OnActivity("MandateActVerificationActivity", mock.Anything, mock.Anything).Return(func(input activities.MandateActVerificationInput) (activities.MandateActVerificationResult, error) {
 		order = append(order, "verify:"+input.Operation)
 		if input.Operation == denyAct {
@@ -89,5 +96,33 @@ func TestMandateBuildRejectsUnverifiedActivationBeforeExecution(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(*order, "|"), "execute") {
 		t.Fatalf("executed after denied activation: %v", *order)
+	}
+}
+
+func candidateIDs(candidates []activities.DomainCandidateState) string {
+	ids := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		ids = append(ids, candidate.DomainID+"/"+candidate.Name)
+	}
+	return strings.Join(ids, ",")
+}
+
+// B1: los candidatos del cluster se persisten antes de pasar a "validate",
+// y PersistHumanSync recibe exactamente la misma lista.
+func TestMandateBuildPersistsCandidatesBeforeValidatePhase(t *testing.T) {
+	env, order := mandateBuildTestEnvironment(t, "")
+	env.ExecuteWorkflow(MandateBuildWorkflow, MandateBuildInput{MandateID: "m-1", MandatesRoot: "fixture", Project: "Core"})
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*order, "|")
+	candidates := strings.Index(joined, "candidates:dom-1/Core")
+	cluster := strings.Index(joined, "phase:cluster")
+	humanSync := strings.Index(joined, "humansync:dom-1/Core")
+	if candidates < 0 || cluster < 0 || humanSync < 0 {
+		t.Fatalf("missing candidate persistence, cluster transition or human sync: %s", joined)
+	}
+	if candidates > cluster || cluster > humanSync {
+		t.Fatalf("candidates must be persisted before validate and match human sync: %s", joined)
 	}
 }

@@ -334,6 +334,82 @@ func PersistHumanSyncActivity(input PersistHumanSyncInput) (PersistHumanSyncResu
 	return PersistHumanSyncResult{StateVersion: version}, nil
 }
 
+type PersistCandidateDomainsInput struct {
+	MandatesRoot     string
+	MandateID        string
+	CandidateDomains []DomainCandidateState
+}
+
+type PersistCandidateDomainsResult struct {
+	StateVersion uint64 `json:"stateVersion"`
+}
+
+// PersistCandidateDomainsActivity escribe phases.validate.humanSync.candidateDomains
+// con la misma lista que MandateBuildWorkflow comparará al recibir la
+// confirmación. Corre antes de que currentPhase pase a "validate", para que
+// `domains list` y `domains confirm` lean los candidatos del cluster. Es
+// idempotente para la misma lista; nunca reemplaza candidatos distintos ni
+// escribe una vez registrada una confirmación. No toca signature ni ningún
+// otro campo del documento.
+func PersistCandidateDomainsActivity(input PersistCandidateDomainsInput) (PersistCandidateDomainsResult, error) {
+	if input.MandatesRoot == "" || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID {
+		return PersistCandidateDomainsResult{}, fmt.Errorf("MandatesRoot y MandateID válidos son obligatorios")
+	}
+	if len(input.CandidateDomains) == 0 {
+		return PersistCandidateDomainsResult{}, fmt.Errorf("mandate %s: el cluster no produjo candidatos", input.MandateID)
+	}
+	candidatesBytes, err := json.Marshal(input.CandidateDomains)
+	if err != nil {
+		return PersistCandidateDomainsResult{}, err
+	}
+	var candidatesValue []interface{}
+	if err := json.Unmarshal(candidatesBytes, &candidatesValue); err != nil {
+		return PersistCandidateDomainsResult{}, err
+	}
+
+	path := filepath.Join(input.MandatesRoot, input.MandateID, "mandate_state.json")
+	version, err := mandatestate.Mutate(path, func(rawMap map[string]interface{}) (bool, error) {
+		phases, _ := rawMap["phases"].(map[string]interface{})
+		if phases == nil {
+			phases = map[string]interface{}{}
+		}
+		validate, _ := phases["validate"].(map[string]interface{})
+		if validate == nil {
+			validate = map[string]interface{}{}
+		}
+		humanSyncMap, _ := validate["humanSync"].(map[string]interface{})
+		if humanSyncMap == nil {
+			humanSyncMap = map[string]interface{}{}
+		}
+		humanSyncBytes, err := json.Marshal(humanSyncMap)
+		if err != nil {
+			return false, err
+		}
+		var existing HumanSyncState
+		if err := json.Unmarshal(humanSyncBytes, &existing); err != nil {
+			return false, err
+		}
+		if len(existing.ConfirmedDomainIds) > 0 || len(existing.Files) > 0 {
+			return false, fmt.Errorf("confirmación ya registrada: los candidatos no pueden reescribirse")
+		}
+		if len(existing.CandidateDomains) > 0 {
+			if reflect.DeepEqual(existing.CandidateDomains, input.CandidateDomains) {
+				return false, nil
+			}
+			return false, fmt.Errorf("candidatos persistidos difieren de los del cluster")
+		}
+		humanSyncMap["candidateDomains"] = candidatesValue
+		validate["humanSync"] = humanSyncMap
+		phases["validate"] = validate
+		rawMap["phases"] = phases
+		return true, nil
+	})
+	if err != nil {
+		return PersistCandidateDomainsResult{}, fmt.Errorf("no pude escribir candidatos en mandate_state.json de %s: %w", input.MandateID, err)
+	}
+	return PersistCandidateDomainsResult{StateVersion: version}, nil
+}
+
 func persistSignatureSigned(path, signedAt string) (uint64, error) {
 	return mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
 		signature, _ := state["signature"].(map[string]interface{})

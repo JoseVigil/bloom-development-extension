@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -35,7 +36,7 @@ func TestRegisterMandateGenesisSignatureActivities(t *testing.T) {
 
 	registerMandateGenesisSignatureActivities(registrar)
 
-	if got, want := len(registrar.registered), 3; got != want {
+	if got, want := len(registrar.registered), 4; got != want {
 		t.Fatalf("registered activities = %d, want exactly %d", got, want)
 	}
 
@@ -47,6 +48,7 @@ func TestRegisterMandateGenesisSignatureActivities(t *testing.T) {
 		{name: "PersistHumanSyncActivity", index: 0, expected: activities.PersistHumanSyncActivity},
 		{name: "SignMandateActivity", index: 1, expected: activities.SignMandateActivity},
 		{name: "PersistSignatureFailureActivity", index: 2, expected: activities.PersistSignatureFailureActivity},
+		{name: "PersistCandidateDomainsActivity", index: 3, expected: activities.PersistCandidateDomainsActivity},
 	}
 
 	for _, tt := range tests {
@@ -91,5 +93,22 @@ func TestRegisterGravityActivities(t *testing.T) {
 				t.Fatalf("activity name = %q, want %q", registrar.options[tt.index].Name, tt.optName)
 			}
 		})
+	}
+}
+
+// MandateGenActivity debe usar el mismo resolvedor de Brain que la ingesta
+// (core.ResolveBrainPath), no una ruta fija con extensión de Windows.
+func TestMandateGenBrainPathUsesIngestResolver(t *testing.T) {
+	brain := filepath.Join(t.TempDir(), "brain")
+	if err := os.WriteFile(brain, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BLOOM_BRAIN_PATH", brain)
+	got, err := mandateGenBrainPath()
+	if err != nil {
+		t.Fatalf("mandateGenBrainPath: %v", err)
+	}
+	if got != brain {
+		t.Fatalf("mandateGenBrainPath = %q, want %q", got, brain)
 	}
 }
