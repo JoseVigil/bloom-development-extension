@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escena gris — Channel Budget</title>
+<!--
+  Orrery — Channel Budget & Interaction Reservation v0.1 — ESCENA GRIS DE VERIFICACIÓN
+  docs/ANALYSIS/ORRERY/VISUAL/escena_gris/index.html
+
+  EVIDENCIA, NO DISEÑO. No es una escena de Orrery, ni un vertical slice, ni una propuesta.
+  Siluetas S0..S3, texturas T1..T5 y adjuntos de prueba son ARBITRARIOS: sólo materializan los
+  TIPOS de canal asignados por el presupuesto para comprobar en pantalla K-2, K-3, K-5, K-14 y K-20.
+  Datos sintéticos generados con semilla fija. No usa OrreryTree, data.ts ni código de installer/ (D-4).
+  Dependencia: PlayCanvas 2.22.1 por CDN (misma versión del prototipo). Requiere conexión.
+  Uso: abrir el archivo en un navegador. Parámetros opcionales de URL para reproducir las verificaciones:
+    T=T1|T2|T3|T4  N=N0..N3  V=3d|top|split  cat=1|2 (catálogo de estados)  focus=<id>  anchor=<id>  ind=<id>
+    lenses=P-W1,P-G2,...  nm=1 (marca de prueba N:M)  dim=1  ctx=0 (Contexto no confirmado)  eval=1 (contraste T4)
+    rl=1 (bordes de región como línea, para ver la falla F-6)  gray=1  dist=<factor de distancia de cámara>
+  Resultados y fallas registradas: Orrery_Channel_Budget_Interaction_Reservation_v0_1.md, §12.
+-->
+<script src="https://cdn.jsdelivr.net/npm/playcanvas@2.22.1/build/playcanvas.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0b0b; --panel:#141414; --line:#2c2c2c; --t1:#e8e8e8; --t2:#9a9a9a; --t3:#5c5c5c;
+    --font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--t1);font:12px/1.45 var(--font)}
+  body.forcegray{filter:grayscale(1)}
+  #app{display:grid;grid-template-rows:auto auto 1fr auto;grid-template-columns:1fr 340px;height:100vh}
+  #capaO{grid-column:1/3;border-bottom:1px solid var(--line);padding:6px 10px;display:flex;flex-wrap:wrap;gap:6px 18px;background:var(--panel)}
+  #capaO .blk{white-space:nowrap}
+  #capaO .k{color:var(--t3)}
+  #banner{grid-column:1/3;padding:3px 10px;background:#1e1e1e;color:var(--t2);border-bottom:1px solid var(--line);letter-spacing:.06em}
+  #stage{position:relative;overflow:hidden}
+  #c{width:100%;height:100%;display:block;outline:none}
+  #labels{position:absolute;inset:0;pointer-events:none}
+  .lbl{position:absolute;transform:translate(-50%,-140%);white-space:nowrap;padding:1px 4px;background:rgba(0,0,0,.65);color:var(--t1);border:1px solid var(--line);font-size:11px}
+  .lbl.cnt{transform:translate(10px,-50%);color:var(--t1)}
+  .lbl.cont{transform:none;color:var(--t2);background:none;border:none}
+  .lbl.ref{transform:translate(12px,6px);color:var(--t2)}
+  #vlabel{position:absolute;left:8px;top:6px;color:var(--t3);pointer-events:none}
+  #vlabel2{position:absolute;top:6px;color:var(--t3);pointer-events:none}
+  #surf{grid-row:3/5;grid-column:2;border-left:1px solid var(--line);overflow:auto;padding:8px 10px;background:var(--panel)}
+  #surf h3{margin:10px 0 4px;font-size:12px;color:var(--t2);font-weight:normal;letter-spacing:.08em}
+  #surf .row{padding:2px 0;border-bottom:1px solid #1d1d1d}
+  #ctrl{grid-column:1;border-top:1px solid var(--line);padding:6px 10px;display:flex;flex-wrap:wrap;gap:6px 14px;background:var(--panel);align-items:center}
+  #ctrl select,#ctrl button{background:#1b1b1b;color:var(--t1);border:1px solid var(--line);font:inherit;padding:2px 6px}
+  #ctrl label{color:var(--t2)}
+  input{accent-color:#9a9a9a}
+  #catalog{position:absolute;inset:0;background:var(--bg);overflow:auto;padding:12px 16px;display:none}
+  #catalog table{border-collapse:collapse}
+  #catalog td,#catalog th{border:1px solid var(--line);padding:4px 8px;text-align:center;vertical-align:middle}
+  #catalog th{color:var(--t2);font-weight:normal}
+  #catalog td.l{text-align:left;color:var(--t2);max-width:300px}
+  #catalog h2{font-size:13px;color:var(--t1);font-weight:normal;margin:4px 0 8px}
+  .note{color:var(--t3)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="banner">ESCENA DE EVIDENCIA · NO ES DISEÑO NI ESCENA DE ORRERY · DATOS SINTÉTICOS (SIMULACIÓN) · MARCAS DE PRUEBA ARBITRARIAS · SIN COLOR DE ESTADO</div>
+  <div id="capaO"></div>
+  <div id="stage">
+    <canvas id="c" tabindex="0"></canvas>
+    <div id="labels"></div>
+    <div id="vlabel"></div><div id="vlabel2"></div>
+    <div id="catalog"></div>
+  </div>
+  <div id="surf"></div>
+  <div id="ctrl">
+    <label>Territorio <select id="selT">
+      <option value="T1">T1 · mínimo CT-01 [NO OBSERVADO]</option>
+      <option value="T2">T2 · denso [HIPÓTESIS]</option>
+      <option value="T3">T3 · Gene en dos Domains (N:M)</option>
+      <option value="T4">T4 · Gravity entera en desconocido</option>
+    </select></label>
+    <label>Densidad (T2) <select id="selN"><option>N0</option><option>N1</option><option selected>N2</option><option>N3</option></select></label>
+    <label>Vista <select id="selV"><option value="3d">3D orbitable</option><option value="top">Plana (cenital ortográfica)</option><option value="split">Ambas (K-2)</option></select></label>
+    <span id="lensCtl"></span>
+    <label><input type="checkbox" id="chkNM"> marca de prueba N:M</label>
+    <label><input type="checkbox" id="chkDim"> atenuación declarada</label>
+    <label><input type="checkbox" id="chkCtx"> Contexto NO confirmado</label>
+    <label><input type="checkbox" id="chkEval"> T4 contraste: Gravity evaluada sin colisiones</label>
+    <label><input type="checkbox" id="chkGray"> filtro gris forzado</label>
+    <label><input type="checkbox" id="chkRL"> bordes de región como línea (falla F-6)</label>
+    <button id="btnCat">Catálogo de estados</button>
+    <span class="note">ratón: arrastrar = orbitar · rueda = zoom · clic = Foco · Tab = indicación por teclado · Enter = Foco · A = anclar/desanclar · Esc = quitar Foco</span>
+  </div>
+</div>
+<script>
+'use strict';
+// ───────────────────────────── presupuesto (tipos de canal) ─────────────────────────────
+// C1 contención (región anidada) ........ pertenencia en árbol con Fuente (DJ-CR1)
+// C2 silueta de la marca de Entidad ..... tipo de hoja (Domain / Gene / Repository); S0 = contenedor
+// C3 textura de relleno de la marca ..... Procedencia de la Entidad (T1..T5)
+// C4 contorno exterior (grosor/doble) ... RESERVADO interacción: indicación / Foco / Anchor
+// C5 encuadre y transición de cámara .... RESERVADO Foco
+// C6 firma temporal ..................... RESERVADO interacción (efímera / sesión / persistente)
+// C7 ranura de adherencia superior ...... identidad de Lente A
+// C8 orientación (giro 45°) del adjunto . identidad de Lente B (ranura inferior)
+// C9 nivel de relleno del adjunto ....... estado por Lente: afirmado / indecidible / desconocido / evaluado-vacío
+// C10 discontinuidad de trazo ........... Fuente débil (adjunto) · propuesta (conexión)
+// C11 luminancia baja ................... atenuación declarada (estado de vista)
+// C12 texto ............................. nombres (indicación/Foco/N0), recuento de agregados, capa O
+// C13 conexión .......................... Relación (continua) · Anotación entre Entidades (discontinua)
+// Tono (acento, error): NO usado (DJ-CR4, decisión c). Movimiento en reposo: NO usado (DJ-CR3).
+const G = { // niveles de gris (sin tono)
+  bg:[0.043,0.043,0.043], ground:[0.075,0.075,0.075], region:[0.16,0.16,0.16], regionIn:[0.24,0.24,0.24],
+  mark:'#cfcfcf', markDim:'#555555', ink:'#e8e8e8', inkDim:'#6a6a6a', hi:'#ffffff'
+};
+const LENS_CAP = 2; // tope de Lentes visibles simultáneamente en el Espacio [HIPÓTESIS]
+const LENSES = [ // orden fijo por clase de Proyección (EM §5.4.3)
+  {id:'P-W1', txt:'Trabajo situado por Entidad'},
+  {id:'P-W2', txt:'Resultados de Trabajo por Entidad'},
+  {id:'P-G2', txt:'Efectos de Gravity (4 estados de colisión)'},
+  {id:'P-L1', txt:'Resolución de Location reabierta'},
+  {id:'P-A1', txt:'Atención clasificada por Entidad'},
+  {id:'P-W3', txt:'Propuestas entre Entidades (relacional)', relational:true}
+];
+const PROV = {verificado:'T1', declarado:'T2', propuesto:'T3', proyeccion:'T4', noverif:'T5'};
+const PROVTXT = {verificado:'verificado', declarado:'declarado por un Mandate', propuesto:'propuesto', proyeccion:'proyección', noverif:'no verificable'};
+const LEAFSIL = {Domain:'S1', Gene:'S2', Repository:'S3'};
+
+// ───────────────────────────── utilidades ─────────────────────────────
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const $ = id=>document.getElementById(id);
+
+// ───────────────────────────── dibujo de marcas (fuente única para escena y catálogo) ─────────────────────────────
+function pathSil(ctx,sil,cx,cy,r){
+  ctx.beginPath();
+  if(sil==='S0'){ ctx.rect(cx-r*0.8,cy-r*0.8,r*1.6,r*1.6); }
+  else if(sil==='S1'){ ctx.arc(cx,cy,r*0.9,0,Math.PI*2); }
+  else if(sil==='S2'){ ctx.moveTo(cx,cy-r*0.95); ctx.lineTo(cx+r*0.9,cy+r*0.75); ctx.lineTo(cx-r*0.9,cy+r*0.75); ctx.closePath(); }
+  else if(sil==='S3'){ for(let i=0;i<6;i++){const a=Math.PI/3*i; const x=cx+r*0.9*Math.cos(a), y=cy+r*0.9*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.closePath(); }
+}
+function fillTexture(ctx,tex,size,col){
+  ctx.save(); ctx.clip();
+  ctx.strokeStyle=col; ctx.fillStyle=col;
+  const s=size;
+  if(tex==='T1'){ ctx.fillRect(0,0,s,s); }
+  else if(tex==='T2'){ ctx.lineWidth=s*0.07; for(let i=-s;i<2*s;i+=s*0.18){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i+s,s);ctx.stroke();} }
+  else if(tex==='T3'){ const st=s*0.15; for(let y=st/2;y<s;y+=st) for(let x=st/2;x<s;x+=st){ctx.beginPath();ctx.arc(x,y,s*0.035,0,Math.PI*2);ctx.fill();} }
+  else if(tex==='T4'){ ctx.lineWidth=s*0.05; for(let y=0;y<s;y+=s*0.14){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(s,y);ctx.stroke();} }
+  else if(tex==='T5'){ /* vacío */ }
+  ctx.restore();
+}
+// estado interactivo: '' | 'ind' | 'foco' | 'anc' | 'foco+anc'
+function drawEntityMark(ctx,size,sil,tex,inter,dim){
+  const cx=size/2, cy=size/2, r=size*0.30;
+  const col = dim?G.markDim:G.mark;
+  pathSil(ctx,sil,cx,cy,r); fillTexture(ctx,tex,size,col);
+  pathSil(ctx,sil,cx,cy,r); ctx.lineWidth=size*0.025; ctx.strokeStyle=col; ctx.setLineDash([]); ctx.stroke();
+  // C4 — reservado a interacción
+  const hasF = inter==='foco'||inter==='foco+anc', hasA = inter==='anc'||inter==='foco+anc';
+  if(inter==='ind'){ const b=r*1.45, t=r*0.55; ctx.lineWidth=size*0.03; ctx.strokeStyle=G.hi; ctx.beginPath();
+    [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sy])=>{ ctx.moveTo(cx+sx*b,cy+sy*(b-t)); ctx.lineTo(cx+sx*b,cy+sy*b); ctx.lineTo(cx+sx*(b-t),cy+sy*b); }); ctx.stroke(); }
+  if(hasF){ pathSil(ctx,sil,cx,cy,r*1.30); ctx.lineWidth=size*0.075; ctx.strokeStyle=G.hi; ctx.stroke(); }
+  if(hasA){ pathSil(ctx,sil,cx,cy,r*1.52); ctx.lineWidth=size*0.022; ctx.strokeStyle=G.hi; ctx.stroke();
+            pathSil(ctx,sil,cx,cy,r*1.64); ctx.stroke(); }
+}
+// adjunto: lens 'A' (eje) | 'B' (girado 45°); fill: 'afirmado'|'indecidible'|'desconocido'|'vacio'; weak: trazo discontinuo
+function drawGlyph(ctx,cx,cy,g,lensSlot,fill,weak,dim){
+  const col = dim?G.markDim:G.ink;
+  ctx.save(); ctx.translate(cx,cy); if(lensSlot==='B') ctx.rotate(Math.PI/4);
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=Math.max(1.2,g*0.14);
+  ctx.setLineDash(weak?[g*0.22,g*0.16]:[]);
+  if(fill==='vacio'){ ctx.beginPath(); ctx.rect(-g/2,-g/2,g,g); ctx.stroke(); ctx.setLineDash([]); ctx.fillRect(-g*0.5,-g*0.1,g,g*0.2); ctx.restore(); return; } // "evaluado, sin filas": contorno con barra interior
+  ctx.beginPath(); ctx.rect(-g/2,-g/2,g,g);
+  if(fill==='afirmado'){ ctx.fill(); if(weak){ctx.fillStyle='#000';ctx.fillRect(-g/2,-g/2,g,g);ctx.fillStyle=col;ctx.fillRect(-g*0.3,-g*0.3,g*0.6,g*0.6);} ctx.stroke(); }
+  else if(fill==='indecidible'){ ctx.stroke(); ctx.beginPath(); ctx.moveTo(-g/2,g/2); ctx.lineTo(g/2,-g/2); ctx.lineTo(g/2,g/2); ctx.closePath(); ctx.setLineDash([]); ctx.fill(); }
+  else if(fill==='desconocido'){ ctx.stroke(); }
+  ctx.restore();
+}
+const texCache=new Map();
+function markCanvas(sil,tex,inter,dim,size){
+  const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d');
+  drawEntityMark(x,size,sil,tex,inter,dim); return c;
+}
+function glyphCanvas(slot,fill,weak,dim,size){
+  const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d');
+  drawGlyph(x,size/2,size/2,size*0.62,slot,fill,weak,dim); return c;
+}
+
+// ───────────────────────────── territorios sintéticos ─────────────────────────────
+// entity: {id,tipo,name,parent,prov,fuente,x,z (hoja) | rect:[x0,z0,x1,z1] (contenedor), agg:{tipo,members}}
+function buildTerritory(T,N){
+  const ents=[], byId={}, rels=[], nm=[];
+  const add=e=>{ents.push(e);byId[e.id]=e;return e;};
+  const r=rng(T==='T2'?({N0:11,N1:12,N2:13,N3:14}[N]):7);
+  let spec;
+  if(T==='T1') spec={orgs:1,proj:1,dom:1,gen:0,repo:0};
+  else if(T==='T3') spec={orgs:1,proj:1,dom:2,gen:3,repo:0};
+  else if(T==='T4') spec={orgs:2,proj:3,dom:5,gen:12,repo:1};
+  else spec={N0:{orgs:1,proj:2,dom:2,gen:3,repo:0},N1:{orgs:2,proj:3,dom:4,gen:8,repo:1},N2:{orgs:3,proj:4,dom:6,gen:20,repo:1},N3:{orgs:4,proj:8,dom:15,gen:90,repo:2}}[N];
+  const WS = T==='T1'?0.3:(T==='T3'?0.42:(T==='T4'?0.7:({N0:0.4,N1:0.7,N2:1,N3:1.4}[N])));
+  const W=100*WS, H=60*WS;
+  const tenant=add({id:'ten',tipo:'Tenant',name:'‹tenant›',prov:'verificado',fuente:'autoridad canónica',rect:[-W/2,-H/2,W/2,H/2]});
+  const ow=W/spec.orgs;
+  for(let o=0;o<spec.orgs;o++){
+    const org=add({id:'org'+o,tipo:'Organization',name:'‹organización '+(o+1)+'›',parent:'ten',prov:'verificado',fuente:'autoridad canónica',rect:[-W/2+o*ow+1.2,-H/2+2,-W/2+(o+1)*ow-1.2,H/2-2]});
+    const cols=Math.ceil(Math.sqrt(spec.proj)), rows=Math.ceil(spec.proj/cols);
+    const pw=(org.rect[2]-org.rect[0]-1.6)/cols, ph=(H-4-1.6)/rows;
+    for(let p=0;p<spec.proj;p++){
+      const cx=p%cols, cz=Math.floor(p/cols);
+      const x0=org.rect[0]+0.8+cx*pw+0.7, z0=-H/2+2.8+cz*ph+0.7, x1=x0+pw-1.4, z1=z0+ph-1.4;
+      const pid='p'+o+'_'+p;
+      const proj=add({id:pid,tipo:'Project',name:(T==='T1'?'‹proyecto›':'‹proyecto '+(o+1)+'.'+(p+1)+'›'),parent:org.id,prov:'verificado',fuente:'autoridad canónica',rect:[x0,z0,x1,z1]});
+      const leaves=[];
+      for(let d=0;d<spec.dom;d++){
+        let prov = T==='T1'?'declarado':(r()<0.55?'declarado':(r()<0.5?'verificado':(r()<0.5?'proyeccion':'propuesto')));
+        leaves.push({id:pid+'_d'+d,tipo:'Domain',name:(T==='T1'?'Domain «Identidad»':'Domain '+(d+1)),parent:pid,prov,fuente:prov==='proyeccion'?'proyección':(prov==='propuesto'?'registro':'registro')});
+      }
+      for(let g=0;g<spec.gen;g++){
+        const prov = r()<0.7?'verificado':(r()<0.5?'proyeccion':(r()<0.5?'noverif':'propuesto'));
+        leaves.push({id:pid+'_g'+g,tipo:'Gene',name:'Gene '+(g+1),parent:pid,prov,fuente:prov==='noverif'?'cache':'autoridad canónica'});
+      }
+      for(let k=0;k<spec.repo;k++) leaves.push({id:pid+'_r'+k,tipo:'Repository',name:'Repository '+(k+1),parent:pid,prov:'noverif',fuente:'índice'});
+      // disposición en grilla dentro del Project (DJ-CR1: Domains y Genes son hijos directos del Project)
+      const n=leaves.length, lc=Math.ceil(Math.sqrt(n*(x1-x0)/(z1-z0)))||1, lr=Math.ceil(n/lc)||1;
+      const cell=Math.min((x1-x0)/lc,(z1-z0)/lr);
+      leaves.forEach((e,i)=>{ e.x=x0+(x1-x0)*((i%lc)+0.5)/lc; e.z=z0+(z1-z0)*(Math.floor(i/lc)+0.5)/lr; e.cell=cell; add(e); });
+      // N:M sintético: Genes ratificados en Domains (Relación); en T3 un Gene en dos Domains
+      const doms=leaves.filter(e=>e.tipo==='Domain'), gens=leaves.filter(e=>e.tipo==='Gene');
+      if(T==='T3'){ nm.push([gens[0].id,doms[0].id],[gens[0].id,doms[1].id],[gens[1].id,doms[0].id],[gens[2].id,doms[1].id]); gens[0].name='Gene «verificación de sesión»'; doms[0].name='Domain «Identidad»'; doms[1].name='Domain «Acceso»'; }
+      else gens.forEach((g,i)=>{ if(doms.length){ nm.push([g.id,doms[Math.floor(r()*doms.length)].id]); if(r()<0.2) nm.push([g.id,doms[Math.floor(r()*doms.length)].id]); }});
+      // propuestas entre Entidades (P-W3) — no son Relaciones
+      for(let k=0;k<Math.min(3,Math.floor(gens.length/4));k++){ const a=gens[Math.floor(r()*gens.length)], b=gens[Math.floor(r()*gens.length)]; if(a!==b) rels.push({a:a.id,b:b.id}); }
+    }
+  }
+  return {ents,byId,props:rels,nm:dedupe(nm)};
+}
+function dedupe(a){const s=new Set();return a.filter(p=>{const k=p.join('|');if(s.has(k))return false;s.add(k);return true;});}
+
+// datos de Lentes sintéticos: lens -> Map(id -> {state, weak, txt})
+function buildLensData(T,terr,N){
+  const r=rng(99+(T.charCodeAt(1))+({N0:0,N1:1,N2:2,N3:3}[N]||0)*7), L={};
+  const scope=terr.ents.filter(e=>e.tipo!=='Tenant'&&e.tipo!=='Organization');
+  const set=(lid,id,state,weak,txt)=>{(L[lid]=L[lid]||new Map()).set(id,{state,weak:!!weak,txt});};
+  if(T==='T1'){
+    const dom=terr.ents.find(e=>e.tipo==='Domain'), proj=terr.ents.find(e=>e.tipo==='Project');
+    set('P-W1',dom.id,'afirmado',false,'Mandate Genesis · completado');
+    set('P-W1',proj.id,'ninguno',false,'');
+    set('P-W2',dom.id,'afirmado',false,'domain_definition.json');
+    set('P-W2',proj.id,'ninguno',false,'');
+    // P-G2: sin cobertura (desconocido global), P-L1 / P-A1: sin Fuente
+    return L;
+  }
+  if(T==='T4'){
+    scope.forEach(e=>{ if(r()<0.6) set('P-W1',e.id,e.tipo==='Domain'?'afirmado':'ninguno',false,'Mandate'); });
+    return L; // P-G2 sin ninguna cobertura
+  }
+  scope.forEach(e=>{
+    // P-W1 mayormente cubierta (modo a)
+    const c1=r(); if(c1<0.82) set('P-W1',e.id, (e.tipo==='Domain'&&r()<0.6)?'afirmado':'ninguno', r()<0.08, 'Mandate'); else set('P-W1',e.id,'desconocido',false,'no evaluado');
+    // P-W2 parcialmente cubierta
+    if(r()<0.55) set('P-W2',e.id, r()<0.3?'afirmado':'ninguno', false,'resultado'); else set('P-W2',e.id,'desconocido',false,'');
+    // P-G2 poco cubierta (modo b): sólo algunos evaluados
+    if(r()<0.25){ const u=r(); set('P-G2',e.id, u<0.25?'afirmado':(u<0.45?'indecidible':'ninguno'), false, u<0.25?'colisión confirmada':(u<0.45?'colisión indecidible':'evaluado: sin colisión')); }
+    // P-L1 (Location reabierta) en pocas Entidades
+    if(r()<0.08){ const u=r(); set('P-L1',e.id, u<0.5?'afirmado':(u<0.8?'indecidible':'desconocido'), false, u<0.5?'changed':(u<0.8?'ambiguous':'unverifiable')); }
+    // P-A1 Atención
+    if(r()<0.04) set('P-A1',e.id,'afirmado',false,'espera confirmación de dominio');
+  });
+  const p0=terr.ents.find(e=>e.tipo==='Project'); if(p0){ p0.missingRefs=2; set('P-L1',p0.id,'afirmado',false,'soporte espacial de 2 referencias missing (DJ-9); el Project no cambia de estado'); }
+  return L;
+}
+
+// ───────────────────────────── estado ─────────────────────────────
+const S = {T:'T1',N:'N2',view:'3d',active:['P-W1','P-W2','P-G2'],visible:null,nmTest:false,dim:false,ctxOk:true,evalContrast:false,
+  focus:null,anchors:new Set(),ind:null,indList:[],indIdx:-1,expanded:null, focusHistory:[]};
+let terr, lensData, drawn=[]; // drawn: marcas en escena (entidades o agregados)
+
+function coverageMode(lid){ // 'a' = mayoría cubierta; 'b' = declaración global (mayoría no cubierta)
+  const m=lensData[lid]; const scope=terr.ents.filter(e=>e.tipo!=='Tenant'&&e.tipo!=='Organization');
+  if(!m) return {mode:'b',covered:0,total:scope.length};
+  let cov=0; scope.forEach(e=>{const v=m.get(e.id); if(v&&v.state!=='desconocido') cov++;});
+  return {mode: cov/scope.length>=0.5?'a':'b', covered:cov, total:scope.length};
+}
+function lensState(lid,e){ // devuelve estado para una entidad (o agregado)
+  const m=lensData[lid];
+  if(e.agg){ // DV-2: peor caso
+    let has={afirmado:0,indecidible:0,desconocido:0,ninguno:0};
+    e.agg.members.forEach(id=>{const v=m&&m.get(id); has[v?v.state:'desconocido']++;});
+    const weak=e.agg.members.some(id=>{const v=m&&m.get(id);return v&&v.weak;});
+    if(has.desconocido) return {state:'desconocido',weak,count:has};
+    if(has.afirmado) return {state:'afirmado',weak,count:has};
+    if(has.indecidible) return {state:'indecidible',weak,count:has};
+    return {state:'ninguno',weak,count:has};
+  }
+  const v=m&&m.get(e.id); return v?v:{state:'desconocido',weak:false,txt:'no cubierto por la Proyección'};
+}
+function visibleLenses(){ // tope LENS_CAP; orden fijo por clase entre las activas, salvo designación de la persona
+  const act=LENSES.filter(l=>S.active.includes(l.id)&&!l.relational).map(l=>l.id);
+  const vis=(S.visible||act).filter(id=>act.includes(id)).slice(0,LENS_CAP);
+  for(const id of act){ if(vis.length>=LENS_CAP) break; if(!vis.includes(id)) vis.push(id); }
+  return vis;
+}
+
+// ───────────────────────────── PlayCanvas ─────────────────────────────
+const canvas=$('c');
+const app=new pc.Application(canvas,{});
+app.setCanvasFillMode(pc.FILLMODE_NONE); app.setCanvasResolution(pc.RESOLUTION_AUTO);
+app.scene.ambientLight=new pc.Color(1,1,1);
+const layerA=new pc.Layer({name:'v3d'}), layerB=new pc.Layer({name:'vtop'});
+app.scene.layers.push(layerA); app.scene.layers.push(layerB);
+const worldLayer=app.scene.layers.getLayerByName('World');
+function mkCam(name,layer){
+  const e=new pc.Entity(name);
+  e.addComponent('camera',{clearColor:new pc.Color(G.bg[0],G.bg[1],G.bg[2]),farClip:2000,nearClip:0.1,fov:40,layers:[worldLayer.id,layer.id]});
+  app.root.addChild(e); return e;
+}
+const cam3d=mkCam('cam3d',layerA), camTop=mkCam('camTop',layerB);
+camTop.camera.projection=pc.PROJECTION_ORTHOGRAPHIC;
+camTop.setPosition(0,100,0); camTop.setEulerAngles(-90,0,0);
+const orbit={yaw:20,pitch:-48,dist:95,target:new pc.Vec3(0,0,0),tTarget:new pc.Vec3(0,0,0),tDist:95};
+
+const matCache=new Map();
+function matFor(key,canvasFn){
+  if(matCache.has(key)) return matCache.get(key);
+  const cv=canvasFn();
+  const tex=new pc.Texture(app.graphicsDevice,{width:cv.width,height:cv.height,format:pc.PIXELFORMAT_RGBA8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR});
+  tex.setSource(cv);
+  const m=new pc.StandardMaterial(); m.useLighting=false; m.useSkybox=false; m.diffuse=new pc.Color(0,0,0);
+  m.emissive=new pc.Color(1,1,1); m.emissiveMap=tex; m.opacityMap=tex; m.opacityMapChannel='a';
+  m.blendType=pc.BLEND_NORMAL; m.depthWrite=false; m.cull=pc.CULLFACE_NONE; m.update();
+  matCache.set(key,m); return m;
+}
+function solidMat(rgb,alpha){
+  const key='solid'+rgb.join(',')+alpha; if(matCache.has(key)) return matCache.get(key);
+  const m=new pc.StandardMaterial(); m.useLighting=false; m.useSkybox=false; m.diffuse=new pc.Color(0,0,0);
+  m.emissive=new pc.Color(rgb[0],rgb[1],rgb[2]); m.opacity=alpha; m.blendType=alpha<1?pc.BLEND_NORMAL:pc.BLEND_NONE; m.depthWrite=alpha>=1; m.update();
+  matCache.set(key,m); return m;
+}
+let sceneRoot=new pc.Entity('root'); app.root.addChild(sceneRoot);
+function billboard(mat,layer,size){
+  const e=new pc.Entity(); e.addComponent('render',{type:'plane',material:mat,layers:[layer.id],castShadows:false});
+  e.setLocalScale(size,size,size); sceneRoot.addChild(e); return e;
+}
+
+// ───────────────────────────── construcción de la escena ─────────────────────────────
+function rebuild(){
+  sceneRoot.destroy(); sceneRoot=new pc.Entity('root'); app.root.addChild(sceneRoot);
+  terr=buildTerritory(S.T,S.N); lensData=buildLensData(S.T,terr,S.N);
+  drawn=[];
+  // N3: agregación estructural determinista por Project y tipo (DV-1..DV-6); el Project en Foco se expande (DV-5)
+  const dense = S.T==='T2'&&S.N==='N3';
+  const leaves=terr.ents.filter(e=>e.x!==undefined);
+  if(dense){
+    terr.ents.filter(e=>e.tipo==='Project').forEach(p=>{
+      if(S.expanded===p.id){ leaves.filter(l=>l.parent===p.id).forEach(l=>drawn.push(l)); return; }
+      ['Domain','Gene','Repository'].forEach((t,i)=>{
+        const mem=leaves.filter(l=>l.parent===p.id&&l.tipo===t); if(!mem.length) return;
+        const order=['verificado','proyeccion','declarado','propuesto','noverif'];
+        const weakest=mem.map(m=>m.prov).sort((a,b)=>order.indexOf(b)-order.indexOf(a))[0]; // DV-4
+        const cx=(p.rect[0]+p.rect[2])/2, cz=p.rect[1]+(p.rect[3]-p.rect[1])*(i+1)/4;
+        drawn.push({id:p.id+'_agg_'+t,tipo:t,name:'×'+mem.length+' '+t+(mem.length>1?'s':''),parent:p.id,prov:weakest,fuente:'(agregado)',x:cx,z:cz,agg:{tipo:t,members:mem.map(m=>m.id)}});
+      });
+    });
+  } else leaves.forEach(l=>drawn.push(l));
+  terr.ents.filter(e=>e.rect).forEach(e=>drawn.push(e));
+  const totalLeaves=leaves.length;
+  // regiones de contenedores (C1)
+  terr.ents.filter(e=>e.rect).forEach(e=>{
+    const depth={Tenant:0,Organization:1,Project:2}[e.tipo];
+    const q=new pc.Entity(); const lum=[0.07,0.11,0.16][depth];
+    q.addComponent('render',{type:'plane',material:solidMat([lum,lum,lum],1),layers:[worldLayer.id]});
+    q.setLocalPosition((e.rect[0]+e.rect[2])/2,-0.02+depth*0.01,(e.rect[1]+e.rect[3])/2);
+    q.setLocalScale(e.rect[2]-e.rect[0],1,e.rect[3]-e.rect[1]); sceneRoot.addChild(q);
+  });
+  // marcas
+  const leafSize = {T1:2.6,T3:2.6,T4:1.8,T2:{N0:2.6,N1:2.2,N2:1.5,N3:2.6}[S.N]}[S.T];
+  drawn.forEach(e=>{
+    // tamaño de hoja acotado por la celda: el adjunto debe quedar dentro de la celda de su Entidad (adherencia)
+    e.size = e.rect? Math.min(2.6,leafSize*1.0) : (e.cell&&!e.agg? Math.min(leafSize, e.cell*0.5) : leafSize);
+    const depth=e.rect?{Tenant:0,Organization:1,Project:2}[e.tipo]:0;
+    const yy=e.size*0.85+0.3; e.pos = e.rect? new pc.Vec3(e.rect[0]+e.size*(0.6+depth*1.3),yy,e.rect[1]+e.size*0.6) : new pc.Vec3(e.x,yy,e.z);
+    e.bA=null; e.bB=null; e.gl=[];
+  });
+  updateMarks(true);
+  renderO(); renderSurf();
+  $('vlabel').textContent='';
+}
+function interOf(e){
+  const f=S.focus===e.id, a=S.anchors.has(e.id);
+  if(f&&a) return 'foco+anc'; if(f) return 'foco'; if(a) return 'anc'; if(S.ind===e.id) return 'ind'; return '';
+}
+function provOf(e){ return S.ctxOk? e.prov : 'noverif'; } // C-12: sin Contexto confirmado nada se presenta como verificado
+function silOf(e){ return e.rect?'S0':LEAFSIL[e.tipo]; }
+function isDim(e){ return S.dim && S.focus && S.focus!==e.id && !(e.rect && containsFocus(e)); }
+function containsFocus(c){ let f=S.focus&&findDrawn(S.focus); while(f){ if(f.parent===c.id) return true; f=findDrawn(f.parent)||terr.byId[f.parent]; } return false; }
+function findDrawn(id){ return drawn.find(d=>d.id===id); }
+function updateMarks(){
+  const vis=visibleLenses();
+  drawn.forEach(e=>{
+    const inter=interOf(e), dim=isDim(e), tex=PROV[provOf(e)], sil=silOf(e);
+    const key=['m',sil,tex,inter,dim?1:0].join('|');
+    const mat=matFor(key,()=>markCanvas(sil,tex,inter,dim,128));
+    if(!e.bA){ e.bA=billboard(mat,layerA,e.size); e.bB=billboard(mat,layerB,e.size); }
+    e.bA.render.meshInstances[0].material=mat; e.bB.render.meshInstances[0].material=mat;
+    e.gl.forEach(g=>g.destroy()); e.gl=[];
+    vis.forEach((lid,i)=>{
+      const mode=coverageMode(lid).mode; let st=lensState(lid,e);
+      if(e.tipo==='Tenant'||e.tipo==='Organization') return; // las Proyecciones de prueba no cubren esos niveles
+      let fill=null;
+      if(st.state==='afirmado') fill='afirmado'; else if(st.state==='indecidible') fill='indecidible';
+      else if(st.state==='desconocido') fill = mode==='a'?'desconocido':null;   // modo b: declaración global
+      else if(st.state==='ninguno') fill = mode==='a'?null:'vacio';              // modo b: evaluado-vacío explícito
+      if(!fill) return;
+      const slot=i===0?'A':'B';
+      const gk=['g',slot,fill,st.weak?1:0,dim?1:0].join('|');
+      const gm=matFor(gk,()=>glyphCanvas(slot,fill,st.weak,dim,64));
+      const gs=e.size*0.42;
+      const ga=billboard(gm,layerA,gs), gb=billboard(gm,layerB,gs);
+      ga.slot=gb.slot=slot; e.gl.push(ga,gb);
+    });
+  });
+}
+
+// ───────────────────────────── cámara y vistas ─────────────────────────────
+function distFor(){ const WS=S.T==='T1'?0.3:(S.T==='T3'?0.42:(S.T==='T4'?0.7:({N0:0.4,N1:0.7,N2:1,N3:1.4}[S.N]))); return 95*WS; }
+function layoutViews(){
+  if(S.view==='3d'){ cam3d.enabled=true; camTop.enabled=false; cam3d.camera.rect=new pc.Vec4(0,0,1,1); $('vlabel').textContent='3D orbitable'; $('vlabel2').textContent=''; }
+  else if(S.view==='top'){ cam3d.enabled=false; camTop.enabled=true; camTop.camera.rect=new pc.Vec4(0,0,1,1); $('vlabel').textContent='plana · cenital ortográfica'; $('vlabel2').textContent=''; }
+  else { cam3d.enabled=true; camTop.enabled=true; cam3d.camera.rect=new pc.Vec4(0,0,0.5,1); camTop.camera.rect=new pc.Vec4(0.5,0,0.5,1);
+    $('vlabel').textContent='3D orbitable'; $('vlabel2').textContent='plana · cenital ortográfica'; $('vlabel2').style.left='calc(50% + 8px)'; }
+}
+function placeCameras(dt){
+  const k=1-Math.exp(-dt*6); // C5: transición continua (única animación del sistema; sólo ante acto de la persona)
+  orbit.target.lerp(orbit.target,orbit.tTarget,k); orbit.dist+= (orbit.tDist-orbit.dist)*k;
+  const yaw=orbit.yaw*Math.PI/180, pit=orbit.pitch*Math.PI/180;
+  const p=new pc.Vec3(Math.sin(yaw)*Math.cos(pit), -Math.sin(pit), Math.cos(yaw)*Math.cos(pit)).mulScalar(orbit.dist*(S.view==='split'?1.45:1)).add(orbit.target);
+  cam3d.setPosition(p); cam3d.lookAt(orbit.target);
+  const w=canvas.clientWidth*(S.view==='split'?0.5:1), h=canvas.clientHeight||1;
+  const span=Math.max(60/(w/h), 34)*(orbit.tDist/95)*0.62;
+  camTop.camera.orthoHeight=Math.max(4,span);
+  camTop.setPosition(orbit.target.x,100,orbit.target.z);
+}
+function faceBillboards(){
+  const rA=cam3d.getRotation(), rB=camTop.getRotation();
+  const rightA=cam3d.right, upA=cam3d.up, rightB=camTop.right, upB=camTop.up;
+  const tmp=new pc.Quat(); const x90=new pc.Quat().setFromEulerAngles(90,0,0);
+  drawn.forEach(e=>{
+    if(!e.bA) return;
+    e.bA.setPosition(e.pos); tmp.mul2(rA,x90); e.bA.setRotation(tmp);
+    e.bB.setPosition(e.pos); tmp.mul2(rB,x90); e.bB.setRotation(tmp);
+    e.gl.forEach(g=>{
+      const isA=g.render.layers[0]===layerA.id; const right=isA?rightA:rightB, up=isA?upA:upB;
+      const off=g.slot==='A'? up.clone().mulScalar(e.size*0.55).add(right.clone().mulScalar(e.size*0.55))
+                            : up.clone().mulScalar(-e.size*0.55).add(right.clone().mulScalar(e.size*0.55));
+      g.setPosition(e.pos.clone().add(off)); tmp.mul2(isA?rA:rB,x90); g.setRotation(tmp);
+    });
+  });
+}
+// líneas: contornos de regiones, guías (interacción), conexiones (Relación / propuesta / prueba N:M)
+function lines(){
+  const layers=[]; if(cam3d.enabled) layers.push(layerA); if(camTop.enabled) layers.push(layerB);
+  const P=[],C=[]; const push=(a,b,c)=>{P.push(a,b);C.push(c,c);};
+  if(S.regionLines) terr.ents.filter(e=>e.rect).forEach(e=>{ // sólo para mostrar la colisión C1/C13 (F-6)
+    const v=[0.22,0.30,0.40][{Tenant:0,Organization:1,Project:2}[e.tipo]]; const c=new pc.Color(v,v,v);
+    const [x0,z0,x1,z1]=e.rect, y=0.01;
+    push(new pc.Vec3(x0,y,z0),new pc.Vec3(x1,y,z0),c); push(new pc.Vec3(x1,y,z0),new pc.Vec3(x1,y,z1),c);
+    push(new pc.Vec3(x1,y,z1),new pc.Vec3(x0,y,z1),c); push(new pc.Vec3(x0,y,z1),new pc.Vec3(x0,y,z0),c);
+  });
+  // guía de altura sólo para lo indicado / en Foco / anclado (parte de la reserva de interacción)
+  drawn.forEach(e=>{ if(interOf(e)) push(e.pos.clone(), new pc.Vec3(e.pos.x,0,e.pos.z), new pc.Color(0.7,0.7,0.7)); });
+  const posOf=id=>{ const d=findDrawn(id); if(d) return d.pos; const e=terr.byId[id]; if(!e) return null; const a=drawn.find(x=>x.agg&&x.agg.members.includes(id)); return a?a.pos:null; };
+  // marca de prueba N:M (Relación Domain↔Gene ratificada) — apagada por defecto
+  if(S.nmTest) terr.nm.forEach(([g,d])=>{ const a=posOf(g), b=posOf(d); if(a&&b&&a!==b) push(a.clone(),b.clone(),new pc.Color(0.55,0.55,0.55)); });
+  // Lente relacional P-W3: conexión discontinua (C13 + C10)
+  if(S.active.includes('P-W3')) terr.props.forEach(p=>{ const a=posOf(p.a), b=posOf(p.b); if(!a||!b||a===b) return;
+    const n=14; for(let i=0;i<n;i+=2){ const t0=i/n,t1=(i+1)/n; push(new pc.Vec3().lerp(a,b,t0),new pc.Vec3().lerp(a,b,t1),new pc.Color(0.85,0.85,0.85)); } });
+  layers.forEach(L=>app.drawLines(P,C,true,L));
+}
+
+// ───────────────────────────── proyección a pantalla, etiquetas, picking ─────────────────────────────
+const vp=new pc.Mat4(), v4=new pc.Vec4();
+function toScreen(cam,pos){
+  const r=cam.camera.rect, W=canvas.clientWidth, H=canvas.clientHeight;
+  vp.mul2(cam.camera.projectionMatrix,cam.camera.viewMatrix);
+  v4.set(pos.x,pos.y,pos.z,1); vp.transformVec4(v4,v4); if(v4.w<=0) return null;
+  const nx=v4.x/v4.w, ny=v4.y/v4.w;
+  return {x:(r.x+(nx*0.5+0.5)*r.z)*W, y:(1-(r.y+(ny*0.5+0.5)*r.w))*H};
+}
+function labelsDraw(){
+  const L=$('labels'); let html='';
+  const cams=[]; if(cam3d.enabled) cams.push(cam3d); if(camTop.enabled) cams.push(camTop);
+  const nLeaves=drawn.filter(d=>!d.rect).length;
+  cams.forEach(cam=>{
+    drawn.forEach(e=>{
+      const s=toScreen(cam,e.pos); if(!s) return;
+      const inter=interOf(e);
+      const far = S.T==='T2'&&S.N==='N3'&&orbit.dist>distFor()*0.55;
+      if(far && e.agg && !inter && !(S.focus&&e.parent===S.focus)) return; // el recuento lejano lo lleva el Project
+      const always = nLeaves<=12 || e.agg || (e.rect && e.tipo!=='Project') || (e.rect && nLeaves<=120) || (far && e.tipo==='Project');
+      if(inter||always){
+        const cls=e.agg?'lbl cnt':(e.rect?'lbl cont':'lbl');
+        let txt = e.agg? e.name : e.name;
+        if(far && e.tipo==='Project'){ const n=drawn.filter(d=>d.agg&&d.parent===e.id).reduce((a,d)=>a+d.agg.members.length,0); txt=e.name+' · ×'+n; }
+        if(inter){ const hid=LENSES.filter(l=>S.active.includes(l.id)&&!l.relational&&!visibleLenses().includes(l.id));
+          txt=(e.agg?e.name:e.name+' · '+e.tipo)+' · '+PROVTXT[provOf(e)]+(hid.length?' · '+hid.map(l=>l.id+': '+lensState(l.id,e).state).join(' · '):''); }
+        html+=`<div class="${cls}" style="left:${s.x}px;top:${s.y}px">${txt}</div>`;
+      }
+      // DJ-9: referencias missing alojadas en un ancestro (recuento explícito)
+      if(e.missingRefs && visibleLenses().includes('P-L1')) html+=`<div class="lbl ref" style="left:${s.x}px;top:${s.y}px">↳ ${e.missingRefs} ref. degradada</div>`;
+    });
+  });
+  L.innerHTML=html;
+}
+function pick(mx,my){
+  // hojas primero (Entidad más específica bajo el punto), luego contenedores por región (EM §4.3.1)
+  const cam = (S.view==='top'||(S.view==='split'&&mx>canvas.clientWidth/2))?camTop:cam3d;
+  const cands=[];
+  drawn.filter(e=>!e.rect).forEach(e=>{ const s=toScreen(cam,e.pos); if(!s) return; const d=Math.hypot(s.x-mx,s.y-my); if(d<18) cands.push({e,d}); });
+  cands.sort((a,b)=>a.d-b.d);
+  if(cands.length) return {e:cands[0].e, all:cands.map(c=>c.e)};
+  // contenedores: el más profundo cuya marca o región contiene el punto
+  const conts=drawn.filter(e=>e.rect).filter(e=>{ const s=toScreen(cam,e.pos); return s&&Math.hypot(s.x-mx,s.y-my)<16; });
+  if(conts.length) return {e:conts.sort((a,b)=>({Tenant:0,Organization:1,Project:2}[b.tipo])-({Tenant:0,Organization:1,Project:2}[a.tipo]))[0],all:conts};
+  return null;
+}
+
+// ───────────────────────────── capa O y Superficie ─────────────────────────────
+function chain(id){ const out=[]; let e=findDrawn(id)||terr.byId[id]; while(e){ out.unshift(e.name); e=terr.byId[e.parent]; } return out.join(' › '); }
+function renderO(){
+  const vis=visibleLenses(); let lensHtml='';
+  LENSES.forEach(l=>{
+    if(!S.active.includes(l.id)) return;
+    const m=lensData[l.id]; const cm=coverageMode(l.id);
+    let st;
+    if(l.relational) st='visible (conexión discontinua)';
+    else if(vis.includes(l.id)) st='visible en el Espacio · '+(vis.indexOf(l.id)===0?'ranura A':'giro B');
+    else st='ACTIVA · NO VISIBLE (tope '+LENS_CAP+') → indicación y Superficie';
+    let cov='';
+    if(!l.relational){
+      if(l.id==='P-G2'&&S.T==='T4'&&S.evalContrast) cov=' · evaluada en '+cm.total+'/'+cm.total+': sin colisiones (ausencia = ninguno)';
+      else if(!m||cm.covered===0) cov=' · SIN COBERTURA: no evaluado en ninguna Entidad (desconocido global)';
+      else if(cm.mode==='b') cov=' · DECLARACIÓN GLOBAL: no evaluado en '+(cm.total-cm.covered)+'/'+cm.total+' · ausencia = desconocido; evaluado-vacío marcado';
+      else cov=' · cubierta '+cm.covered+'/'+cm.total+' · desconocido marcado; ausencia = ninguno';
+    }
+    lensHtml+=`<span class="blk">[${l.id}] ${st}${cov}</span>`;
+  });
+  const att=lensData['P-A1']?[...lensData['P-A1'].values()].filter(v=>v.state==='afirmado').length:0;
+  $('capaO').innerHTML=
+    `<span class="blk"><span class="k">Contexto</span> ${S.ctxOk?'‹organización› › ‹proyecto› · verificado (sintético)':'NO CONFIRMADO · nada se presenta como verificado · anclar bloqueado'}</span>`+
+    `<span class="blk"><span class="k">Foco</span> ${S.focus?chain(S.focus):'—'}</span>`+
+    `<span class="blk"><span class="k">Anchors</span> ${S.anchors.size?[...S.anchors].map(id=>(findDrawn(id)||terr.byId[id]||{name:id}).name).join(', '):'—'}</span>`+
+    `<span class="blk"><span class="k">Atención</span> ${att?att+' convocatoria(s)':'ninguna clasificada'}</span>`+
+    `<span class="blk"><span class="k">Atenuación</span> ${S.dim?'ACTIVA (estado de vista declarado)':'no'}</span>`+
+    `<span class="blk"><span class="k">Vista</span> ${{'3d':'3D','top':'plana','split':'3D + plana'}[S.view]}${S.T==='T2'&&S.N==='N3'?' · N3: agregado por Project y tipo':''}</span>`+
+    `<div style="flex-basis:100%"></div><span class="blk"><span class="k">Lentes</span></span>`+lensHtml;
+}
+function renderSurf(){
+  const vis=visibleLenses(); let h='';
+  const e = S.focus && (findDrawn(S.focus)||terr.byId[S.focus]);
+  h+='<h3>SUPERFICIE · SUJETO</h3>';
+  if(!e) h+='<div class="row note">Sin Foco. Clic o Tab+Enter sobre una marca.</div>';
+  else {
+    h+=`<div class="row">${e.name} · ${e.agg?'agregado de '+e.agg.members.length+' '+e.agg.tipo:e.tipo}</div>`;
+    h+=`<div class="row">Procedencia: ${PROVTXT[provOf(e)]}${e.agg?' (más débil de los miembros, DV-4)':''} · Fuente: ${e.fuente}</div>`;
+    h+=`<div class="row">Ubicación: ${chain(e.id)}</div>`;
+    h+=`<div class="row">Anclable: ${!S.ctxOk?'no (Contexto no confirmado)':(e.prov==='declarado'?'no (unsupported en LocationSnapshot v0.1, D-3.b)':(e.agg?'no (agregado)':'sí'))}</div>`;
+    h+='<h3>ANOTACIONES POR LENTE (todas las activas)</h3>';
+    LENSES.filter(l=>S.active.includes(l.id)&&!l.relational).forEach(l=>{
+      const st=lensState(l.id,e); const where=vis.includes(l.id)?'visible':'no visible (tope)';
+      const c=st.count?` · ${st.count.afirmado} con filas, ${st.count.indecidible} indecidible, ${st.count.desconocido} desconocido, ${st.count.ninguno} ninguno`:'';
+      h+=`<div class="row">[${l.id}] ${st.state}${st.weak?' · Fuente débil':''}${st.txt?' · '+st.txt:''}${c} <span class="note">(${where})</span></div>`;
+    });
+    if(e.tipo==='Gene'||e.tipo==='Domain'){
+      const ids=e.agg?e.agg.members:[e.id];
+      const rel=terr.nm.filter(([g,d])=>ids.includes(g)||ids.includes(d));
+      h+='<h3>PERTENENCIA N:M (Domain ↔ Gene, Relación ratificada)</h3>';
+      if(!rel.length) h+='<div class="row note">sin Relaciones Domain↔Gene</div>';
+      rel.slice(0,40).forEach(([g,d])=>{ h+=`<div class="row">${terr.byId[g].name} ∈ ${terr.byId[d].name}</div>`; });
+      if(rel.length>40) h+=`<div class="row note">… ${rel.length-40} más</div>`;
+    }
+    if(e.agg){ h+='<h3>MIEMBROS DEL AGREGADO (DV-5)</h3>'; e.agg.members.slice(0,30).forEach(id=>h+=`<div class="row">${terr.byId[id].name} · ${PROVTXT[terr.byId[id].prov]}</div>`); if(e.agg.members.length>30) h+=`<div class="row note">… ${e.agg.members.length-30} más · Foco en el Project para expandir</div>`; }
+  }
+  if(S.T==='T3'){ h+='<h3>T3 · LISTA N:M COMPLETA</h3>'; terr.nm.forEach(([g,d])=>h+=`<div class="row">${terr.byId[g].name} ∈ ${terr.byId[d].name}</div>`);
+    h+='<div class="row note">En el Espacio el Gene está contenido sólo en su Project (DJ-CR1). La pertenencia N:M vive aquí; la conexión es una marca de prueba apagada por defecto.</div>'; }
+  h+='<h3>QUÉ NO DEMUESTRA ESTA ESCENA</h3><div class="row note">Diseño, legibilidad con usuarios, rendimiento, picking real de PlayCanvas (se usa proyección manual), formas definitivas, paleta, ni la experiencia de Orrery.</div>';
+  $('surf').innerHTML=h;
+}
+
+// ───────────────────────────── catálogo de estados (mismo código de dibujo) ─────────────────────────────
+function img(cv,px){ return `<img src="${cv.toDataURL()}" width="${px}" height="${px}" style="image-rendering:auto">`; }
+function renderCatalog(){
+  const big=72, small=22;
+  const both=(fnBig,fnSmall)=>img(fnBig(),big)+' '+img(fnSmall(),small);
+  let h='<h2>Catálogo de estados del inventario · sólo con los tipos de canal asignados · cada celda: tamaño N0 y tamaño N2</h2><table>';
+  h+='<tr><th>Dimensión</th><th>Canal</th><th colspan="6">Valores</th></tr>';
+  // D1 tipo de hoja
+  h+='<tr><td class="l">D1 tipo de Entidad (hojas)</td><td>C2 silueta</td>'+['S1','S2','S3'].map((s,i)=>`<td>${both(()=>markCanvas(s,'T1','',false,128),()=>markCanvas(s,'T1','',false,128))}<br>${['Domain','Gene','Repository'][i]}</td>`).join('')+'<td colspan="3" class="l">Tenant / Organization / Project: C1 (nivel de contención) + S0 + texto</td></tr>';
+  // D2 Procedencia
+  h+='<tr><td class="l">D2 Procedencia de Entidad</td><td>C3 textura</td>'+['T1','T2','T3','T4','T5'].map((t,i)=>`<td>${both(()=>markCanvas('S1',t,'',false,128),()=>markCanvas('S1',t,'',false,128))}<br>${['verificado','declarado por Mandate','propuesto','proyección','no verificable'][i]}</td>`).join('')+'<td class="l">simulado: capa O</td></tr>';
+  // D4 interacción
+  h+='<tr><td class="l">D4 estado interactivo</td><td>C4 contorno + C6 firma temporal</td>'+['','ind','foco','anc','foco+anc'].map((x,i)=>`<td>${both(()=>markCanvas('S2','T1',x,false,128),()=>markCanvas('S2','T1',x,false,128))}<br>${['reposo','indicación (efímera)','Foco (sesión)','Anchor (persistente)','Foco + Anchor'][i]}</td>`).join('')+'<td></td></tr>';
+  // D4 sobre textura débil
+  h+='<tr><td class="l">D4 × D2 (interacción sobre Procedencia débil)</td><td>C4 + C3</td>'+['','ind','foco','anc','foco+anc'].map(x=>`<td>${both(()=>markCanvas('S1','T5',x,false,128),()=>markCanvas('S1','T5',x,false,128))}</td>`).join('')+'<td></td></tr>';
+  // D5 identidad de Lente
+  h+='<tr><td class="l">D5 identidad de Lente (tope 2)</td><td>C7 ranura · C8 giro</td>'+['A','B'].map(s=>`<td>${both(()=>glyphCanvas(s,'afirmado',false,false,64),()=>glyphCanvas(s,'afirmado',false,false,64))}<br>Lente ${s==='A'?'A · ranura superior':'B · girada, ranura inferior'}</td>`).join('')+'<td colspan="4" class="l">3.ª Lente y siguientes: activas, no visibles en el Espacio; aviso en capa O; sus filas en indicación (recuento) y Superficie</td></tr>';
+  // D6/D7 estados por Lente
+  ['A','B'].forEach(s=>{
+    h+=`<tr><td class="l">D6/D7 estado por Lente (Lente ${s})</td><td>C9 relleno</td>`+['afirmado','indecidible','desconocido','vacio'].map((f,i)=>`<td>${both(()=>glyphCanvas(s,f,false,false,64),()=>glyphCanvas(s,f,false,false,64))}<br>${['con filas / confirmada','indecidible','desconocido (modo a)','evaluado sin filas (modo b)'][i]}</td>`).join('')+'<td class="l">ninguno (modo a): ausencia</td><td></td></tr>';
+  });
+  // D3 Fuente débil
+  h+='<tr><td class="l">D3 Fuente débil de la Anotación (CT-12)</td><td>C10 trazo discontinuo</td>'+['afirmado','indecidible','desconocido'].map(f=>`<td>${both(()=>glyphCanvas('A',f,true,false,64),()=>glyphCanvas('A',f,true,false,64))}<br>${f} · débil</td>`).join('')+'<td colspan="3" class="l">Clase de Fuente completa (7): indicación y Superficie</td></tr>';
+  // C11 atenuación
+  h+='<tr><td class="l">Atenuación declarada (estado de vista)</td><td>C11 luminancia</td>'+[false,true].map(d=>`<td>${both(()=>markCanvas('S2','T2','',d,128),()=>markCanvas('S2','T2','',d,128))}<br>${d?'atenuado':'normal'}</td>`).join('')+`<td>${both(()=>glyphCanvas('A','desconocido',false,true,64),()=>glyphCanvas('A','desconocido',false,true,64))}<br>desconocido atenuado</td><td colspan="3"></td></tr>`;
+  // D11 conexiones
+  const lineCv=(dash,v)=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');x.strokeStyle=`rgb(${v},${v},${v})`;x.lineWidth=3;x.setLineDash(dash);x.beginPath();x.moveTo(10,100);x.lineTo(118,28);x.stroke();return c;};
+  h+='<tr><td class="l">D11 Relación / Anotación entre Entidades / guía</td><td>C13 + C10 · guía = C4/C6</td>'+
+     `<td>${img(lineCv([],140),big)}<br>Relación (continua)</td><td>${img(lineCv([10,8],217),big)}<br>propuesta (discontinua)</td><td class="l">guía vertical: sólo con indicación/Foco/Anchor (reservada)</td><td colspan="3"></td></tr>`;
+  // agregado
+  h+='<tr><td class="l">D13 agregado (N3)</td><td>C2 + C3 (más débil) + C9 (peor caso) + C12 (×N)</td>'+
+     `<td>${img(markCanvas('S2','T5','',false,128),big)}<br>“×90 Genes”</td><td class="l" colspan="5">El texto ×N distingue agregado de Entidad individual; cobertura peor caso (DV-2); miembros en Superficie (DV-5)</td></tr>`;
+  // estrés combinado
+  h+='<tr><td class="l">Combinación máxima sobre una marca</td><td>C2+C3+C4+C7+C8+C9+C10</td>';
+  ['','foco+anc'].forEach(x=>{ const c=document.createElement('canvas'); c.width=c.height=160; const g=c.getContext('2d'); const m=markCanvas('S3','T3',x,false,128); g.drawImage(m,0,16); g.drawImage(glyphCanvas('A','indecidible',true,false,64),96,0); g.drawImage(glyphCanvas('B','desconocido',false,false,64),96,96); h+=`<td>${img(c,96)} ${img(c,30)}</td>`; });
+  h+='<td colspan="4" class="l">Lectura serial (conjunción, L-10): se identifica cada dimensión por separado, no de un vistazo</td></tr>';
+  h+='</table><p class="note">Ningún valor usa tono. Las siluetas, texturas y adjuntos son marcas de prueba arbitrarias y no son propuesta de forma.</p>';
+  $('catalog').innerHTML=h;
+}
+
+// ───────────────────────────── interacción ─────────────────────────────
+let drag=null;
+canvas.addEventListener('mousedown',ev=>{drag={x:ev.clientX,y:ev.clientY,moved:false};});
+window.addEventListener('mouseup',ev=>{ if(drag&&!drag.moved){ const r=canvas.getBoundingClientRect(); const p=pick(ev.clientX-r.left,ev.clientY-r.top); setFocus(p?p.e.id:null); } drag=null; });
+window.addEventListener('mousemove',ev=>{
+  const r=canvas.getBoundingClientRect();
+  if(drag){ const dx=ev.clientX-drag.x, dy=ev.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true;
+    if(drag.moved&&S.view!=='top'){ orbit.yaw-=dx*0.3; orbit.pitch=Math.max(-89,Math.min(-5,orbit.pitch-dy*0.3)); } drag.x=ev.clientX; drag.y=ev.clientY; return; }
+  if(ev.target!==canvas) return;
+  const p=pick(ev.clientX-r.left,ev.clientY-r.top); const id=p?p.e.id:null;
+  if(id!==S.ind){ S.ind=id; updateMarks(); }
+});
+canvas.addEventListener('wheel',ev=>{ ev.preventDefault(); orbit.tDist=Math.max(8,Math.min(220,orbit.tDist*(ev.deltaY>0?1.1:0.9))); },{passive:false});
+canvas.addEventListener('keydown',ev=>{
+  if(ev.key==='Tab'){ ev.preventDefault(); const list=drawn.slice().sort((a,b)=>(a.rect?0:1)-(b.rect?0:1)||a.id.localeCompare(b.id)); S.indIdx=(S.indIdx+(ev.shiftKey?-1:1)+list.length)%list.length; S.ind=list[S.indIdx].id; updateMarks(); }
+  else if(ev.key==='Enter'&&S.ind) setFocus(S.ind);
+  else if(ev.key==='Escape') setFocus(null);
+  else if(ev.key==='a'||ev.key==='A'){ if(!S.focus) return; const e=findDrawn(S.focus);
+    if(!S.ctxOk||e.prov==='declarado'||e.agg){ flashO(!S.ctxOk?'Anclar bloqueado: Contexto no confirmado (C-12)':(e.agg?'Un agregado no es anclable':'No anclable: unsupported en v0.1 (D-3.b)')); return; }
+    if(S.anchors.has(e.id)) S.anchors.delete(e.id); else S.anchors.add(e.id); updateMarks(); renderO(); renderSurf(); }
+});
+function flashO(msg){ $('capaO').insertAdjacentHTML('afterbegin',`<span class="blk" style="color:#fff">⚠ ${msg}</span>`); }
+function setFocus(id){
+  S.focus=id; const e=id&&findDrawn(id);
+  if(e){ orbit.tTarget.copy(e.pos); orbit.tTarget.y=0; orbit.tDist=e.rect? Math.max(20,(e.rect[2]-e.rect[0])*1.6) : Math.max(10,e.size*9);
+    if(S.T==='T2'&&S.N==='N3'&&e.tipo==='Project'&&S.expanded!==e.id){ S.expanded=e.id; rebuild(); S.focus=id; } }
+  updateMarks(); renderO(); renderSurf();
+}
+
+// ───────────────────────────── controles ─────────────────────────────
+function lensControls(){
+  $('lensCtl').innerHTML='Lentes: '+LENSES.map(l=>`<label title="${l.txt}"><input type="checkbox" data-l="${l.id}" ${S.active.includes(l.id)?'checked':''}>${l.id}</label>`).join(' ');
+  $('lensCtl').querySelectorAll('input').forEach(i=>i.onchange=()=>{ const id=i.dataset.l; if(i.checked) S.active.push(id); else S.active=S.active.filter(x=>x!==id); updateMarks(); renderO(); renderSurf(); });
+}
+function presetLenses(){
+  S.active = S.T==='T4'?['P-W1','P-G2']:(S.T==='T1'?['P-W1','P-W2','P-G2']:['P-W1','P-G2','P-L1','P-A1']);
+  if(S.T==='T2') S.visible=['P-W1','P-G2']; else S.visible=null;
+}
+$('selT').onchange=e=>{S.T=e.target.value; S.focus=null; S.anchors.clear(); S.expanded=null; presetLenses(); lensControls(); orbit.tTarget.set(0,0,0); orbit.tDist=distFor(); rebuild();};
+$('selN').onchange=e=>{S.N=e.target.value; S.focus=null; S.expanded=null; orbit.tDist=distFor(); rebuild();};
+$('selV').onchange=e=>{S.view=e.target.value; layoutViews(); renderO();};
+$('chkNM').onchange=e=>{S.nmTest=e.target.checked;};
+$('chkDim').onchange=e=>{S.dim=e.target.checked; updateMarks(); renderO();};
+$('chkCtx').onchange=e=>{S.ctxOk=!e.target.checked; if(!S.ctxOk) S.anchors.clear(); updateMarks(); renderO(); renderSurf();};
+$('chkEval').onchange=e=>{S.evalContrast=e.target.checked; renderO();};
+$('chkRL').onchange=e=>{S.regionLines=e.target.checked;};
+$('chkGray').onchange=e=>{document.body.classList.toggle('forcegray',e.target.checked);};
+$('btnCat').onclick=()=>{ const c=$('catalog'); if(c.style.display==='block'){c.style.display='none';} else { renderCatalog(); c.style.display='block'; } };
+
+// arranque (también se puede fijar el estado por URL: ?T=T2&N=N3&V=split&cat=1&focus=...)
+const q=new URLSearchParams(location.search);
+if(q.get('T')){ S.T=q.get('T'); $('selT').value=S.T; }
+if(q.get('N')){ S.N=q.get('N'); $('selN').value=S.N; }
+if(q.get('V')){ S.view=q.get('V'); $('selV').value=S.view; }
+presetLenses();
+if(q.get('lenses')) S.active=q.get('lenses').split(',');
+if(q.get('nm')) { S.nmTest=true; $('chkNM').checked=true; }
+if(q.get('dim')) { S.dim=true; $('chkDim').checked=true; }
+if(q.get('ctx')==='0') { S.ctxOk=false; $('chkCtx').checked=true; }
+if(q.get('eval')) { S.evalContrast=true; $('chkEval').checked=true; }
+orbit.tDist=orbit.dist=distFor();
+lensControls(); layoutViews(); rebuild();
+if(q.get('focus')){ const f=q.get('focus'); setFocus(f); orbit.target.copy(orbit.tTarget); orbit.dist=orbit.tDist; }
+if(q.get('anchor')){ S.anchors.add(q.get('anchor')); updateMarks(); renderO(); }
+if(q.get('ind')){ S.ind=q.get('ind'); updateMarks(); }
+if(q.get('rl')) S.regionLines=true;
+if(q.get('gray')){ document.body.classList.add('forcegray'); $('chkGray').checked=true; }
+if(q.get('dist')){ orbit.tDist=orbit.dist=distFor()*parseFloat(q.get('dist')); }
+if(q.get('cat')==='2'){ renderCatalog(); const c=$('catalog'); document.body.appendChild(c); c.style.position='static'; c.style.display='block'; $('app').style.display='none'; document.body.style.height='auto'; }
+else if(q.get('cat')) { renderCatalog(); $('catalog').style.display='block'; }
+window.addEventListener('resize',()=>app.resizeCanvas());
+app.on('update',dt=>{ if(!canvas.clientWidth) return; app.resizeCanvas(canvas.clientWidth,canvas.clientHeight); placeCameras(dt); faceBillboards(); lines(); labelsDraw(); });
+app.start();
+window.__ready=true;
+</script>
+</body>
+</html>

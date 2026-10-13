@@ -1,5 +1,7 @@
 # Orrery — Vocabulario normativo v1.0
 
+> **Reemplazado por `Orrery_Vocabulario_Normativo_v1_1.md` (2026-10-11).** Este documento se conserva como versión histórica y no se edita.
+
 **Estado:** normativo. Fundamento de vocabulario de ORRERY.
 **Fecha:** 2026-10-10.
 **Autoridad:** José Vigil.

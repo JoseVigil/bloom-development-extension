@@ -1,5 +1,7 @@
 # Orrery — Decisiones arquitectónicas D-1, D-2 y D-3 v1.0
 
+> **Reemplazado por `Orrery_Decisiones_Arquitectonicas_v1_1.md` (2026-10-11).** Este documento se conserva como versión histórica y no se edita.
+
 **Estado:** normativo. D-1, D-2, D-3 y D-3.b aprobadas por José Vigil el 2026-10-10 según las recomendaciones de este documento (A2, R-B, N-B y representación del Domain confirmado en un Mandate con Procedencia *declarada por un Mandate*).
 **Fecha:** 2026-10-10.
 **Autoridad:** José Vigil.

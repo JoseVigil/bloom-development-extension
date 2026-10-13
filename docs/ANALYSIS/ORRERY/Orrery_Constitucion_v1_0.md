@@ -1,5 +1,7 @@
 # Orrery — Constitución v1.0
 
+> **Reemplazado por `Orrery_Constitucion_v1_1.md` (2026-10-11).** Este documento se conserva como versión histórica y no se edita.
+
 **Estado:** normativo. Aprobado por José Vigil el 2026-10-10, con dos ajustes incorporados (C-12: el Contexto confirmado condiciona lo verificado, el anclaje, la Captura y los actos, no la existencia de objetos; C-15: la exclusión de Domain/Gene se refiere a la estructura normativa y no impide percibir sobre una Entidad los efectos de Gravity sobre el Trabajo situado allí).
 **Fecha:** 2026-10-10.
 **Autoridad:** José Vigil.

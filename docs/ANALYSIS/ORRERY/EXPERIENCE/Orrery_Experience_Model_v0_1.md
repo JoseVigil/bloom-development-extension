@@ -1,5 +1,7 @@
 # Orrery — Experience Model v0.1
 
+> **Reemplazado por `Orrery_Experience_Model_v1_0.md` (normativo, 2026-10-11).** Este documento se conserva como versión histórica y no se edita.
+
 | Campo | Valor |
 |---|---|
 | Documento | `docs/ANALYSIS/ORRERY/EXPERIENCE/Orrery_Experience_Model_v0_1.md` (copia en Project BTIPS: `ANALYSIS/ORRERY/EXPERIENCE/Orrery_Experience_Model_v0_1.md`) |
