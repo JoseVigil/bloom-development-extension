@@ -193,3 +193,11 @@ test('wildcard accepts Authorization names and reconnect triggers catch-up', asy
   assert.equal(snapshot(mandateStore).byId['m-1'].currentStatus, 'completed');
   assert.equal(snapshot(mandateStore).byId['m-1'].stateVersion, 2);
 });
+
+test('recovery lifecycle events remain wildcard-driven', () => {
+  const store = mandateModule.createMandateStore();
+  let reconciliations = 0;
+  store.onReconcileRequested(() => { reconciliations += 1; });
+  store.applyMandateEvent('mandate:genesis:replacement:available', { mandateId: 'm-1', stateVersion: 9 });
+  assert.equal(reconciliations, 1);
+});

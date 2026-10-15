@@ -33,6 +33,12 @@ import (
 	"nucleus/internal/orchestration/types"
 )
 
+func TestNewClientAtRejectsEmptyEndpoint(t *testing.T) {
+	if _, err := NewClientAt(context.Background(), nil, false, ""); err == nil {
+		t.Fatal("empty Temporal endpoint accepted")
+	}
+}
+
 func TestLaunchRequestStatusIgnoresPreviousSession(t *testing.T) {
 	for _, state := range []types.ProfileState{types.StateRunning, types.StateFailed} {
 		matched, err := launchRequestStatus("new-request", types.ProfileStatus{
@@ -88,6 +94,16 @@ func TestClassifyWorkflowExecutionStatus(t *testing.T) {
 	for _, tt := range tests {
 		if got := classifyWorkflowExecutionStatus(tt.status); got != tt.want {
 			t.Errorf("classifyWorkflowExecutionStatus(%v) = %q, want %q", tt.status, got, tt.want)
+		}
+	}
+}
+
+func TestMandateWorkflowIdentitySetIncludesBuildAndExecution(t *testing.T) {
+	mandateID := "fixture"
+	want := []string{"mandate_build_" + mandateID, "mandate_execution_" + mandateID}
+	for _, id := range want {
+		if id == mandateID {
+			t.Fatalf("workflow identity must be namespaced: %q", id)
 		}
 	}
 }

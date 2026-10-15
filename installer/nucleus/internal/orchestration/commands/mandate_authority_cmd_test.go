@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,14 @@ func TestLocalSelectionRequiresFreshModelAndEnforcedAccess(t *testing.T) {
 	}
 }
 
+func TestVerifyIntelligenceGrantFailsClosedWithoutAcceptedAuthorityState(t *testing.T) {
+	selected := mandatecontract.Intelligence{Provider: "google", BackendID: "gemini_api", Model: "gemini-3.8-flash",
+		MaxUSD: "0.10", MaxTotalTokens: 50000, MaxOutputTokens: 4096, SupplyGrantID: "missing-grant"}
+	if err := verifyIntelligenceGrant(t.TempDir(), "installation", "organization", selected); err == nil {
+		t.Fatal("missing accepted Authority state must deny intelligence supply")
+	}
+}
+
 func TestLocalActRejectionsUseExistingMandateStreamWithoutApproval(t *testing.T) {
 	root := t.TempDir()
 	logger, err := core.InitLogger(&core.Paths{LogsDir: filepath.Join(root, "logs")}, "MANDATE", true)
@@ -160,9 +169,9 @@ func TestMandateApprovalRequiresExplicitVerifiedModelPolicyAndBudget(t *testing.
 	root := t.TempDir()
 	policy := filepath.Join(root, "policy.json")
 	registry := filepath.Join(root, "registry.json")
-	selected := mandatecontract.Intelligence{Model: "chosen-test-model", PolicyRef: policy, RegistryRef: registry, MaxUSD: "0.10", MaxTotalTokens: 1000, MaxOutputTokens: 100}
-	policyRaw := []byte(`{"policy_version":"mandate-gen/v1","intelligence_supply":{"backend_id":"anthropic_api","fallback":[],"max_attempts":1,"max_output_tokens":100,"budget":{"per_mandate":true,"max_usd":"0.10","max_total_tokens":1000,"max_inferences":1}}}`)
-	registryRaw := []byte(`{"intelligence_backends":[{"backend_id":"anthropic_api","provider":"anthropic","model":"chosen-test-model","credential_ref":"credential-ref://anthropic/default","health":"healthy","supply_enabled":true}]}`)
+	selected := mandatecontract.Intelligence{Model: "chosen-test-model", PolicyRef: policy, RegistryRef: registry, MaxUSD: "0.10", MaxTotalTokens: 1000, MaxOutputTokens: 100, SupplyGrantID: "grant-1"}
+	policyRaw := []byte(`{"policy_version":"mandate-gen/v1","intelligence_supply":{"backend_id":"gemini_api","fallback":[],"max_attempts":2,"max_output_tokens":100,"budget":{"per_mandate":true,"max_usd":"0.10","max_total_tokens":1000,"max_inferences":1}}}`)
+	registryRaw := []byte(`{"intelligence_backends":[{"backend_id":"gemini_api","provider":"google","model":"chosen-test-model","credential_ref":"credential-ref://gemini/default","health":"healthy","supply_enabled":true}]}`)
 	if err := os.WriteFile(policy, policyRaw, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -172,6 +181,20 @@ func TestMandateApprovalRequiresExplicitVerifiedModelPolicyAndBudget(t *testing.
 	bound, err := verifyIntelligenceSelection(selected)
 	if err != nil || bound.Model != selected.Model || bound.PolicySHA256 == "" || bound.RegistrySHA256 == "" {
 		t.Fatalf("bound=%#v err=%v", bound, err)
+	}
+	for _, attempts := range []int{1, 3} {
+		t.Run(fmt.Sprintf("rejects %d cloud transport attempts", attempts), func(t *testing.T) {
+			invalid := []byte(fmt.Sprintf(`{"policy_version":"mandate-gen/v1","intelligence_supply":{"backend_id":"gemini_api","fallback":[],"max_attempts":%d,"max_output_tokens":100,"budget":{"per_mandate":true,"max_usd":"0.10","max_total_tokens":1000,"max_inferences":1}}}`, attempts))
+			if err := os.WriteFile(policy, invalid, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := verifyIntelligenceSelection(selected); err == nil {
+				t.Fatalf("cloud policy with %d attempts accepted", attempts)
+			}
+		})
+	}
+	if err := os.WriteFile(policy, policyRaw, 0600); err != nil {
+		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*mandatecontract.Intelligence){
 		"missing model":          func(i *mandatecontract.Intelligence) { i.Model = "" },
@@ -188,12 +211,25 @@ func TestMandateApprovalRequiresExplicitVerifiedModelPolicyAndBudget(t *testing.
 			}
 		})
 	}
-	unknownRegistry := []byte(`{"intelligence_backends":[{"backend_id":"anthropic_api","provider":"anthropic","model":"chosen-test-model","credential_ref":"credential-ref://anthropic/default","health":"unknown","supply_enabled":true}]}`)
+	unknownRegistry := []byte(`{"intelligence_backends":[{"backend_id":"gemini_api","provider":"google","model":"chosen-test-model","credential_ref":"credential-ref://gemini/default","health":"unknown","supply_enabled":true}]}`)
 	if err := os.WriteFile(registry, unknownRegistry, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := verifyIntelligenceSelection(selected); err == nil {
-		t.Fatal("model without verified availability accepted")
+	if _, err := verifyIntelligenceSelection(selected); err != nil {
+		t.Fatalf("unknown health must remain eligible until explicitly unavailable: %v", err)
+	}
+	for name, registryRaw := range map[string][]byte{
+		"unavailable health": []byte(`{"intelligence_backends":[{"backend_id":"gemini_api","provider":"google","model":"chosen-test-model","credential_ref":"credential-ref://gemini/default","health":"unavailable","supply_enabled":true}]}`),
+		"supply disabled":    []byte(`{"intelligence_backends":[{"backend_id":"gemini_api","provider":"google","model":"chosen-test-model","credential_ref":"credential-ref://gemini/default","health":"healthy","supply_enabled":false}]}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(registry, registryRaw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := verifyIntelligenceSelection(selected); err == nil {
+				t.Fatal("ineligible model accepted")
+			}
+		})
 	}
 	if err := os.WriteFile(registry, []byte(`{"intelligence_backends":[]}`), 0600); err != nil {
 		t.Fatal(err)

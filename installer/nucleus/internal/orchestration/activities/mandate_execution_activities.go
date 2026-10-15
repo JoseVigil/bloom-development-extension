@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"go.temporal.io/sdk/activity"
 
@@ -56,6 +57,54 @@ type PersistExecutionResultInput struct {
 
 type PersistExecutionResultResult struct {
 	StateVersion uint64
+}
+
+// PersistAdoptedINGResultActivity records the first Action without claiming
+// fulfillment. A replay with different evidence is a conflict, not a rewrite.
+func PersistAdoptedINGResultActivity(ctx context.Context, input MandateIntentResult, mandatesRoot string) (PersistExecutionResultResult, error) {
+	if input.MandateID == "" || input.ActionID == "" || input.ContractDigest == "" || input.IntentID == "" ||
+		input.EvidenceRef == "" || input.EvidenceDigest == "" || input.Status != "awaiting_human_decision" || mandatesRoot == "" {
+		return PersistExecutionResultResult{}, fmt.Errorf("adopted ING evidence is incomplete")
+	}
+	intentBase := filepath.Join(filepath.Dir(filepath.Clean(mandatesRoot)), ".intents", ".ing")
+	rel, relErr := filepath.Rel(intentBase, input.EvidenceRef)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return PersistExecutionResultResult{}, fmt.Errorf("adopted ING evidence is outside Intent storage")
+	}
+	evidence, err := os.ReadFile(input.EvidenceRef)
+	if err != nil {
+		return PersistExecutionResultResult{}, err
+	}
+	sum := sha256.Sum256(evidence)
+	if hex.EncodeToString(sum[:]) != input.EvidenceDigest {
+		return PersistExecutionResultResult{}, fmt.Errorf("adopted ING evidence digest changed")
+	}
+	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
+	record := map[string]interface{}{"intentId": input.IntentID, "status": input.Status,
+		"evidenceRef": input.EvidenceRef, "evidenceSha256": input.EvidenceDigest}
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		adoption, ok := state["adoption"].(map[string]interface{})
+		if !ok || adoption["contractDigest"] != input.ContractDigest || state["mandateId"] != input.MandateID {
+			return false, fmt.Errorf("adopted journal identity or digest mismatch")
+		}
+		actions, ok := state["actions"].(map[string]interface{})
+		if !ok {
+			return false, fmt.Errorf("adopted action journal missing")
+		}
+		if prior, exists := actions[input.ActionID]; exists {
+			if reflect.DeepEqual(prior, record) {
+				return false, nil
+			}
+			return false, fmt.Errorf("adopted Action evidence conflicts with prior result")
+		}
+		actions[input.ActionID] = record
+		state["status"] = "waiting_human"
+		return true, nil
+	})
+	if err != nil {
+		return PersistExecutionResultResult{}, err
+	}
+	return PersistExecutionResultResult{StateVersion: version}, nil
 }
 
 func executionResultKey(input PersistExecutionResultInput) string {

@@ -29,6 +29,7 @@ import { log } from '../core/ipc-bridge.js';
 import { addNotification } from '../core/notifications.js';
 import { navigateTo, registerStepHandler } from '../core/navigation.js';
 import { registerMilestoneHandler } from '../core/ipc-bridge.js';
+import { selection } from '../core/shared-state.js';
 
 function getStatusEl() {
   return document.getElementById('mandate-status');
@@ -66,6 +67,23 @@ function hideMandateStatus() {
  */
 function resetMandateScreen() {
   hideMandateStatus();
+  const required = selection.genesisLaunchRequired === true;
+  const title = document.getElementById('mandate-title');
+  const body = document.getElementById('mandate-body');
+  const details = document.getElementById('mandate-details');
+  const milestoneSummary = document.getElementById('milestone-summary');
+  const mandateState = document.querySelector('#mn-mandate .m-node-state');
+  const launchGenesis = document.querySelector('#ll-3 .launch-text');
+  if (title) title.innerHTML = required ? 'Meet your<br>Genesis Mandate.' : 'Project context<br>is ready.';
+  if (body) body.textContent = required
+    ? 'Genesis is the first Mandate for a new project. Here\'s what happens once you enter your workspace:'
+    : 'You selected or imported an existing project. Bloom will use it as workspace context without starting Genesis.';
+  if (details) details.hidden = !required;
+  if (milestoneSummary) milestoneSummary.innerHTML = required
+    ? 'Your system now exists.<br>Your first mandate is ready.'
+    : 'Your system now exists.<br>Your project context is ready.';
+  if (mandateState) mandateState.textContent = required ? 'Pending launch' : 'Not required';
+  if (launchGenesis) launchGenesis.textContent = required ? 'Preparing Genesis Mandate' : 'Confirming project context';
   const btn = getContinueBtn();
   if (btn) {
     btn.disabled = false;
@@ -95,7 +113,12 @@ export async function acknowledgeMandateScreen() {
 
   if (result.success) {
     showMandateStatus('✓ Got it', 'success');
-    addNotification('Genesis will start once you enter your workspace', { icon: '✓', type: 'success' });
+    addNotification(
+      selection.genesisLaunchRequired === true
+        ? 'Genesis will start once you enter your workspace'
+        : 'Existing project confirmed — Genesis is not required',
+      { icon: '✓', type: 'success' }
+    );
     navigateTo('__onboarding_complete__');
   } else {
     if (btn) {

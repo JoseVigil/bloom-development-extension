@@ -8,7 +8,7 @@ from aitap.runtime_paths import resource_root
 
 
 def _document():
-    return json.loads((resource_root() / CATALOG_RELATIVE).read_text())
+    return json.loads((resource_root() / CATALOG_RELATIVE).read_text(encoding="utf-8"))
 
 
 def test_catalog_declares_the_mandatory_model_with_pins():

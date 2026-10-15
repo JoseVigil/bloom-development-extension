@@ -27,10 +27,18 @@ export const StandardCreateBody = Type.Object(
 
 export const GenesisCreateBody = Type.Object(
   {
-    mandateId: Type.Optional(Type.String({ minLength: 1 })),
+    mandateLaunchId: Type.String({
+      pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    }),
+	// Present only for a recovery prepared by Nucleus. Initial onboarding
+	// launches remain valid and are adopted on acknowledge.
+	recoveryRequestId: Type.Optional(Type.String({
+	  pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+	})),
     mandateType: Type.Literal('genesis'),
     projectId: Type.String({ minLength: 1 }),
     project: Type.String(),
+    projectPath: Type.String({ minLength: 1 }),
     name: Type.String({ minLength: 1 }),
     source: Type.String({ minLength: 1 }),
   },

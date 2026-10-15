@@ -1,5 +1,11 @@
 import ast
+import json
 from pathlib import Path
+
+import pytest
+import typer
+
+from brain.commands.intent.create import CreateCommand
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -79,3 +85,31 @@ def test_suite_commands_follow_unified_template():
             failures.append(f"{path.name}: missing human renderer")
 
     assert not failures, "\n".join(failures)
+
+
+def test_intent_create_emits_canonical_json_error_envelope(capsys):
+    gc = type("Context", (), {"json_mode": True})()
+
+    with pytest.raises(typer.Exit) as raised:
+        CreateCommand()._handle_error(
+            gc,
+            "fixture conflict",
+            code="STATE_CONFLICT",
+            exit_code=4,
+            retryable=False,
+            details={"mandate_id": "mandate-one"},
+        )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert raised.value.exit_code == 4
+    assert payload == {
+        "status": "error",
+        "operation": "intent_create",
+        "error": {
+            "code": "STATE_CONFLICT",
+            "message": "fixture conflict",
+            "retryable": False,
+            "details": {"mandate_id": "mandate-one"},
+        },
+        "exit_code": 4,
+    }

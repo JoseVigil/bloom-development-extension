@@ -1,0 +1,19 @@
+# Runtime dependency lock for the AITAP production bundle.
+# Install with --no-deps so an undeclared transitive dependency fails closed.
+annotated-doc==0.0.5
+attrs==26.1.0
+cffi==2.1.1
+colorama==0.4.6; platform_system == "Windows"
+cryptography==50.0.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+markdown-it-py==4.2.0
+mdurl==0.1.2
+pycparser==3.0
+pygments==2.21.0
+referencing==0.37.0
+rich==15.0.0
+rpds-py==2026.6.3
+shellingham==1.5.4
+typer==0.27.1
+typing-extensions==4.16.0; python_version < "3.13"

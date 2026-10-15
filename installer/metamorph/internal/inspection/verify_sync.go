@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
-	"metamorph/internal/core"
 	"github.com/spf13/cobra"
+	"metamorph/internal/core"
 )
 
 func init() {
@@ -188,8 +189,20 @@ func compareAgainstReference(name, path, expectedHash string) componentSyncResul
 		ExpectedHash: expectedHash,
 	}
 
-	actualHash, err := hashFileSHA256(path)
+	var actualHash string
+	var err error
+	if name == "AITap" {
+		_, _, actualHash, _, err = VerifyAITAPBundle(filepath.Dir(path))
+	} else {
+		actualHash, err = hashFileSHA256(path)
+	}
 	if err != nil {
+		if name == "AITap" {
+			if _, statErr := os.Stat(path); statErr == nil {
+				result.Status = statusDrifted
+				return result
+			}
+		}
 		result.Status = statusMissing
 		return result
 	}

@@ -94,7 +94,7 @@
     {
       "backend_id": "gemini_api",
       "provider": "google",
-      "model": "gemini-2.0-flash-exp",
+      "model": "gemini-3.8-flash",
       "credential_ref": "credential-ref://gemini/default",
       "capabilities": [
         "text.generate",
@@ -103,7 +103,12 @@
       "privacy": "approved_cloud",
       "health": "unknown",
       "accounting_ref": "accounting://backend/gemini_api",
-      "supply_enabled": false
+      "supply_enabled": true,
+      "cost_per_million_tokens_usd": {
+        "input": 1.5,
+        "output": 7.5
+      },
+      "pricing_source": "https://ai.google.dev/gemini-api/docs/pricing"
     }
   ]
 }

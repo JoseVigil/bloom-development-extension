@@ -25,12 +25,15 @@ func createMandateCommand(c *core.Core) *cobra.Command {
 		Use:   "mandate",
 		Short: "Gestiona mandates (standard, genesis, domain_expansion)",
 		Annotations: map[string]string{
-			"category": "MANDATES",
+			"category":      "MANDATES",
+			"json_response": `{"command":"mandate","subcommands":["create","build","genesis","status","publish","install","approve","activate"]}`,
 		},
+		Example: "  nucleus mandate --help\n  nucleus --json mandate status --id MANDATE_ID",
 	}
 
 	cmd.AddCommand(createStandardMandateSubcommand(c))
 	cmd.AddCommand(createBuildMandateSubcommand(c))
+	cmd.AddCommand(createGenesisRecoverySubcommand(c))
 	cmd.AddCommand(mandateStatusSubcommand(c))
 	cmd.AddCommand(createPublishMandateSubcommand(c))
 	cmd.AddCommand(createInstallMandateSubcommand(c))
@@ -471,9 +474,11 @@ func mandateStatusSubcommand(c *core.Core) *cobra.Command {
 		Short: "Muestra el estado actual de un mandate (lee mandate.json o mandate_state.json)",
 		Args:  cobra.NoArgs,
 		Annotations: map[string]string{
-			"category": "MANDATES",
+			"category":      "MANDATES",
+			"json_response": `{"mandateId":"MANDATE_ID","status":"building","currentPhase":"validate"}`,
 		},
-		Example: `  nucleus mandate status --id mandate_abc123`,
+		Example: `  nucleus mandate status --id MANDATE_ID
+  nucleus --json mandate status --id MANDATE_ID`,
 
 		Run: func(cmd *cobra.Command, args []string) {
 			if mandateID == "" {

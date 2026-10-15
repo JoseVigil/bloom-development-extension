@@ -92,7 +92,8 @@ type MandateBuildInput struct {
 	// provisión de un ProjectID estable de Gravity. Declarado acá para que
 	// el campo exista y quede listo para esa integración, sin inventar un
 	// valor hoy.
-	ProjectID string
+	ProjectID  string
+	ResumeFrom string
 }
 
 // BuildPhaseOrder / BuildPhasesWithStatusSubobject — CAMBIO (esta
@@ -137,95 +138,67 @@ func MandateBuildWorkflow(ctx workflow.Context, input MandateBuildInput) error {
 	// única sin progreso incremental — pero ahora se dispara DESPUÉS del
 	// trabajo real, no en su lugar.
 	var receptionResult activities.IngestReceptionResult
-	if err := workflow.ExecuteActivity(ctx, activities.IngestReceptionActivity, activities.IngestReceptionInput{
-		MandateID:    input.MandateID,
-		MandateType:  input.MandateType,
-		Project:      input.Project,
-		MandatesRoot: input.MandatesRoot,
-	}).Get(ctx, &receptionResult); err != nil {
-		return fmt.Errorf("fase ingest: %w", err)
-	}
-
-	if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity,
-		"mandate:phase:ingest", map[string]interface{}{
-			"mandateId": input.MandateID,
-			// intentId/filesReceived — campos nuevos, aditivos: consumidores
-			// existentes que solo leen mandateId no se rompen.
-			"intentId":      receptionResult.IntentID,
-			"filesReceived": receptionResult.FilesCount,
-		},
-	).Get(ctx, nil); err != nil {
-		return fmt.Errorf("fase ingest, publicar evento: %w", err)
-	}
-
-	// CAMBIO (esta sesión, Paso 2 — activities.AdvancePhaseActivity,
-	// internal/orchestration/activities/mandate_phase_activities.go): avanza
-	// currentPhase de "ingest" a "cluster" y marca phases.ingest.status=
-	// "completed" en la misma escritura atómica. Único escritor de
-	// currentPhase/phases.*.status a partir de acá — ver comentario del
-	// archivo para el porqué. PhaseOrder/PhasesWithStatusSubobject se pasan
-	// explícitos (BuildPhaseOrder arriba) — la activity ya no los conoce.
-	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
-		MandatesRoot:              input.MandatesRoot,
-		MandateID:                 input.MandateID,
-		Phase:                     "ingest",
-		PhaseOrder:                BuildPhaseOrder,
-		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("fase ingest, avanzar currentPhase: %w", err)
-	}
-
-	// ── Fase 2: cluster (dry_run — solo domain_proposal.json, NO .scaffold/) ──
 	var scaffoldResult activities.ScaffoldDomainResult
-	if err := workflow.ExecuteActivity(ctx, activities.ScaffoldDomainActivity, activities.ScaffoldDomainInput{
-		MandateID:    input.MandateID,
-		ActionID:     "cluster",
-		DomainName:   input.Project,
-		Mode:         activities.ScaffoldModeDryRun,
-		MandatesRoot: input.MandatesRoot,
-	}).Get(ctx, &scaffoldResult); err != nil {
-		return fmt.Errorf("fase cluster: %w", err)
+	var candidateDomains []activities.DomainCandidateState
+	resumeFrom := input.ResumeFrom
+	if resumeFrom == "" {
+		resumeFrom = "ingest"
 	}
 
-	// candidateDomains — traducción pura ProposedDomain -> DomainCandidateState
-	// (mismo id, mismo nombre; Files no es parte de DomainCandidateState, se
-	// preserva del lado de la señal más abajo en cambio; DependsOn queda
-	// vacío porque no hay clustering real que lo produzca hoy).
-	candidateDomains := make([]activities.DomainCandidateState, 0, len(scaffoldResult.Domains))
-	for _, pd := range scaffoldResult.Domains {
-		candidateDomains = append(candidateDomains, activities.DomainCandidateState{
-			DomainID:             pd.ID,
-			Name:                 pd.DomainName,
-			CohesionScore:        pd.CohesionScore,
-			SuggestedActionCount: pd.SuggestedActionCount,
-		})
-	}
-
-	// Los candidatos se persisten antes de pasar a "validate": `domains list`
-	// y `domains confirm` los leen de mandate_state.json, y
-	// PersistHumanSyncActivity exige que la confirmación coincida con esta
-	// misma lista. GetVersion conserva el replay de corridas iniciadas antes
-	// de este paso.
-	if workflow.GetVersion(ctx, "persist-candidate-domains", workflow.DefaultVersion, 1) == 1 {
-		if err := workflow.ExecuteActivity(ctx, activities.PersistCandidateDomainsActivity, activities.PersistCandidateDomainsInput{
-			MandatesRoot:     input.MandatesRoot,
-			MandateID:        input.MandateID,
-			CandidateDomains: candidateDomains,
-		}).Get(ctx, nil); err != nil {
-			return fmt.Errorf("fase cluster, persistir candidatos: %w", err)
+	if resumeFrom == "cluster" || resumeFrom == "validate" {
+		var checkpoint activities.MandateBuildCheckpoint
+		if err := workflow.ExecuteActivity(ctx, activities.LoadMandateBuildCheckpointActivity, activities.LoadMandateBuildCheckpointInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Phase: resumeFrom,
+		}).Get(ctx, &checkpoint); err != nil {
+			return fmt.Errorf("cargar checkpoint %s: %w", resumeFrom, err)
+		}
+		receptionResult = checkpoint.Reception
+		if resumeFrom == "validate" {
+			scaffoldResult = checkpoint.Scaffold
+			candidateDomains = checkpoint.CandidateDomains
 		}
 	}
 
-	// CAMBIO (esta sesión, Paso 2): avanza currentPhase de "cluster" a
-	// "validate" y marca phases.cluster.status="completed".
-	if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
-		MandatesRoot:              input.MandatesRoot,
-		MandateID:                 input.MandateID,
-		Phase:                     "cluster",
-		PhaseOrder:                BuildPhaseOrder,
-		PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("fase cluster, avanzar currentPhase: %w", err)
+	if resumeFrom == "ingest" {
+		if err := workflow.ExecuteActivity(ctx, activities.IngestReceptionActivity, activities.IngestReceptionInput{
+			MandateID: input.MandateID, MandateType: input.MandateType, Project: input.Project, MandatesRoot: input.MandatesRoot,
+		}).Get(ctx, &receptionResult); err != nil {
+			return fmt.Errorf("fase ingest: %w", err)
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.PublishMandateEventActivity, "mandate:phase:ingest", map[string]interface{}{
+			"mandateId": input.MandateID, "intentId": receptionResult.IntentID, "filesReceived": receptionResult.FilesCount,
+			"classificationDigest": receptionResult.ClassificationDigest, "rawResponseDigest": receptionResult.RawResponseDigest,
+		}).Get(ctx, nil); err != nil {
+			return fmt.Errorf("fase ingest, publicar evento: %w", err)
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Phase: "ingest", PhaseOrder: BuildPhaseOrder, PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
+		}).Get(ctx, nil); err != nil {
+			return fmt.Errorf("fase ingest, avanzar currentPhase: %w", err)
+		}
+	}
+
+	if resumeFrom != "validate" {
+		if err := workflow.ExecuteActivity(ctx, activities.ScaffoldDomainActivity, activities.ScaffoldDomainInput{
+			MandateID: input.MandateID, ActionID: "cluster", DomainName: input.Project, Mode: activities.ScaffoldModeDryRun, MandatesRoot: input.MandatesRoot,
+			Domains: receptionResult.Domains, ClassificationDigest: receptionResult.ClassificationDigest,
+		}).Get(ctx, &scaffoldResult); err != nil {
+			return fmt.Errorf("fase cluster: %w", err)
+		}
+		candidateDomains = make([]activities.DomainCandidateState, 0, len(scaffoldResult.Domains))
+		for _, pd := range scaffoldResult.Domains {
+			candidateDomains = append(candidateDomains, activities.DomainCandidateState{DomainID: pd.ID, Name: pd.DomainName, CohesionScore: pd.CohesionScore, SuggestedActionCount: pd.SuggestedActionCount})
+		}
+		if workflow.GetVersion(ctx, "persist-candidate-domains", workflow.DefaultVersion, 1) == 1 {
+			if err := workflow.ExecuteActivity(ctx, activities.PersistCandidateDomainsActivity, activities.PersistCandidateDomainsInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, CandidateDomains: candidateDomains}).Get(ctx, nil); err != nil {
+				return fmt.Errorf("fase cluster, persistir candidatos: %w", err)
+			}
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.AdvancePhaseActivity, activities.AdvancePhaseInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, Phase: "cluster", PhaseOrder: BuildPhaseOrder, PhasesWithStatusSubobject: BuildPhasesWithStatusSubobject,
+		}).Get(ctx, nil); err != nil {
+			return fmt.Errorf("fase cluster, avanzar currentPhase: %w", err)
+		}
 	}
 
 	// ── Fase 3: validate (Human Sync Point) ──────────────────────────────

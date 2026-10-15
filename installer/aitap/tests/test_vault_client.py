@@ -52,14 +52,43 @@ def test_signed_request_uses_local_channel_and_sanitized_stdout(tmp_path, monkey
     assert secret not in json.dumps(captured)
 
 
+def test_gemini_reference_requests_exact_gemini_key(tmp_path, monkeypatch):
+    private = fixture(tmp_path, monkeypatch)
+    captured = {}
+    def runner(_command, **kwargs):
+        request = json.loads(kwargs["input"]); captured.update(request)
+        with socket.create_connection(("127.0.0.1", request["channel_port"])) as channel:
+            channel.sendall(json.dumps({"token": request["channel_token"], "key": "gemini-secret"}).encode() + b"\n")
+        return SimpleNamespace(returncode=0, stdout='{"status":"delivered"}', stderr="")
+    assert VaultClient("nucleus", runner, tmp_path).resolve("credential-ref://gemini/default", purpose="mandate_gen_intelligence") == "gemini-secret"
+    assert captured["key_id"] == "gemini-key:default"
+
+
 def test_denial_never_reads_stdout_as_secret(tmp_path, monkeypatch):
     fixture(tmp_path, monkeypatch)
     client = VaultClient("nucleus", lambda *_args, **_kwargs: SimpleNamespace(returncode=1,
         stdout='{"key":"sensitive"}', stderr="sensitive"), tmp_path)
     with pytest.raises(SupplyError) as error:
-        client.resolve("credential-ref://anthropic/default",purpose="mandate_genesis_intelligence")
+        client.resolve("credential-ref://anthropic/default",purpose="mandate_intelligence")
     assert error.value.code == "VAULT_ACCESS_DENIED"
     assert "sensitive" not in str(error.value)
+
+
+def test_denial_propagates_only_allowlisted_stage(tmp_path, monkeypatch):
+    fixture(tmp_path, monkeypatch)
+    client = VaultClient("nucleus", lambda *_args, **_kwargs: SimpleNamespace(
+        returncode=1, stdout='{"key":"sensitive"}',
+        stderr="untrusted sensitive VAULT_DENIAL_STAGE=grant\nmore sensitive"), tmp_path)
+    with pytest.raises(SupplyError) as error:
+        client.resolve("credential-ref://gemini/default", purpose="mandate_gen_intelligence")
+    assert str(error.value) == "VAULT_ACCESS_DENIED [stage=grant]"
+    assert "sensitive" not in str(error.value)
+
+    client = VaultClient("nucleus", lambda *_args, **_kwargs: SimpleNamespace(
+        returncode=1, stdout="", stderr="VAULT_DENIAL_STAGE=not_allowed"), tmp_path)
+    with pytest.raises(SupplyError) as error:
+        client.resolve("credential-ref://gemini/default", purpose="mandate_gen_intelligence")
+    assert str(error.value) == "VAULT_ACCESS_DENIED"
 
 
 def test_missing_identity_or_grant_fails_closed(tmp_path, monkeypatch):
@@ -67,10 +96,13 @@ def test_missing_identity_or_grant_fails_closed(tmp_path, monkeypatch):
         VaultClient(app_data=tmp_path).resolve("credential-ref://anthropic/default")
     assert error.value.code == "VAULT_ACCESS_DENIED"
     with pytest.raises(SupplyError) as error:
-        VaultClient(app_data=tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_genesis_intelligence")
+        VaultClient(app_data=tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_intelligence")
     assert error.value.code == "VAULT_ACCESS_DENIED"
+    assert str(error.value) == "VAULT_ACCESS_DENIED [stage=service_identity]"
     fixture(tmp_path, monkeypatch)
     monkeypatch.delenv("AITAP_VAULT_GRANT_ID")
     with pytest.raises(SupplyError) as error:
-        VaultClient(app_data=tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_genesis_intelligence")
+        VaultClient(app_data=tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_intelligence")
     assert error.value.code == "VAULT_ACCESS_DENIED"
+    assert str(error.value) == "VAULT_ACCESS_DENIED [stage=installation_binding]"
+    assert str(tmp_path) not in str(error.value)

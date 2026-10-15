@@ -1686,7 +1686,7 @@ body::after {
     <div class="screen-inner">
       <div class="stage-label">Stage 4 — Project</div>
       <h2 class="stage-title">Elegí el proyecto<br>inicial.</h2>
-      <p class="stage-body" style="margin-bottom:24px;">Bloom va a crear un <strong style="color:var(--text-primary);font-weight:400;">Genesis Mandate</strong> para este repositorio. Un Genesis Mandate es el punto de partida del agente — define el contexto desde el que va a operar.</p>
+      <p class="stage-body" style="margin-bottom:24px;">Bloom usará el proyecto elegido como contexto activo del workspace. <strong style="color:var(--text-primary);font-weight:400;">Genesis</strong> sólo se prepara cuando elegís crear un proyecto nuevo.</p>
 
       <div class="question-label">Elegí un repositorio de la organización</div>
       <div class="project-grid" id="project-grid">
@@ -1702,21 +1702,20 @@ body::after {
   <!-- SCREEN 4.5: Mandate Genesis (mandate_genesis) -->
   <!-- REDEFINIDA (D-22, BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6,
        Fase B): esta screen ya no dispara la creación real del Genesis
-       Mandate — pasa a ser puramente explicativa. La creación real ocurre
-       después, del lado de Core (automática al entrar, o a demanda más
-       adelante — ver D-23/D-26). El botón acá solo confirma que el usuario
-       leyó y entendió qué va a pasar; no ejecuta ningún trabajo de negocio.
+       Mandate — pasa a ser puramente explicativa. Sólo un proyecto nuevo con
+       genesis_launch_required=true deja el lanzamiento pendiente para Core.
+       El botón acá confirma que el usuario leyó el estado; no ejecuta negocio.
        Se mantiene como parada intermedia real (no saltar directo a
        screen-milestone) porque sigue siendo el punto donde el usuario se
        entera de que Genesis existe, aunque ya no se cree acá mismo. -->
   <div class="screen" id="screen-mandate">
     <div class="screen-inner">
       <div class="stage-label">Stage 5 — Mandate</div>
-      <h2 class="stage-title">Meet your<br>Genesis Mandate.</h2>
-      <p class="stage-body" style="margin-bottom:24px;">
-        Genesis is the first Mandate for your project. Here's what happens once you enter your workspace:
+      <h2 class="stage-title" id="mandate-title">Project context<br>is ready.</h2>
+      <p class="stage-body" id="mandate-body" style="margin-bottom:24px;">
+        You selected or imported an existing project. Bloom will use it as workspace context without starting Genesis.
       </p>
-      <ul class="stage-body" style="margin-bottom:32px; padding-left:20px; list-style:disc;">
+      <ul class="stage-body" id="mandate-details" hidden style="margin-bottom:32px; padding-left:20px; list-style:disc;">
         <li style="margin-bottom:8px;">We'll analyze your project and propose how to organize it — you review and confirm before anything gets built.</li>
         <li>Once you confirm, we'll assemble the real foundation of your project in the background.</li>
       </ul>
@@ -1732,7 +1731,7 @@ body::after {
     <div class="screen-inner">
       <div class="stage-label" style="margin-bottom:24px;">System — Active</div>
       <h1 class="headline">System<br>Activated.</h1>
-      <p class="sub">Your system now exists.<br>Your first mandate is ready.</p>
+      <p class="sub" id="milestone-summary">Your system now exists.<br>Your project context is ready.</p>
       <div class="milestone-nodes" id="milestone-nodes">
         <div class="m-node" id="mn-identity">
           <span class="m-node-name">Identity</span>
@@ -1752,7 +1751,7 @@ body::after {
         </div>
         <div class="m-node" id="mn-mandate">
           <span class="m-node-name">Genesis Mandate</span>
-          <span class="m-node-state">Persistent</span>
+          <span class="m-node-state">Not required</span>
         </div>
       </div>
       <div style="opacity:0; transition: opacity 0.8s;" id="enter-btn">
@@ -1781,7 +1780,7 @@ body::after {
         </div>
         <div class="launch-line" id="ll-3">
           <div class="launch-dot"></div>
-          <div class="launch-text">Activating Genesis Mandate</div>
+          <div class="launch-text">Confirming project context</div>
         </div>
       </div>
     </div>

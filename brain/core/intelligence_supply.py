@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -16,7 +17,23 @@ class SupplyError(ValueError):
     def envelope(self):
         return {"status": "error", "error": {"code": self.code, "stage": self.stage,
             "message": str(self), "retryable": self.code in {
-                "PROVIDER_TIMEOUT", "PROVIDER_RATE_LIMITED", "PROVIDER_UNAVAILABLE"}, "details": {}}}
+                "PROVIDER_TIMEOUT", "PROVIDER_RATE_LIMITED", "PROVIDER_UNAVAILABLE"}, "details": {}},
+            "exit_code": 1}
+
+
+_VAULT_DENIAL_STAGES = {"service_identity", "installation_binding", "request", "binding", "timestamp",
+    "nonce", "channel", "active_context", "grant", "signature", "replay", "vault_status", "credential",
+    "channel_connect", "channel_write"}
+
+
+def safe_aitap_error_message(error):
+    if not isinstance(error, dict) or error.get("code") != "VAULT_ACCESS_DENIED":
+        return None
+    message = error.get("message")
+    if not isinstance(message, str):
+        return None
+    match = re.fullmatch(r"VAULT_ACCESS_DENIED \[stage=([a-z_]+)\]", message)
+    return message if match and match.group(1) in _VAULT_DENIAL_STAGES else None
 
 
 def canonical(value):
@@ -146,7 +163,8 @@ class IntelligenceSupplyClient:
                 raise SupplyError("INVALID_REQUEST", "aitap", "AITAP returned no transport envelope") from None
             if process.returncode or result.get("status") == "error":
                 error = result.get("error", {})
-                raise SupplyError(error.get("code", "INVALID_REQUEST"), error.get("stage", "aitap"))
+                raise SupplyError(error.get("code", "INVALID_REQUEST"), error.get("stage", "aitap"),
+                                  safe_aitap_error_message(error))
         try:
             required = {"schema_version", "request_id", "logical_inference_id", "outcome", "routing_decision_id",
                         "routing_decision", "raw_response", "raw_response_digest", "usage", "provider", "model",

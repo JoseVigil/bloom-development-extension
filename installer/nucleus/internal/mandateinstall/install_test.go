@@ -252,3 +252,41 @@ func TestMaterializeFileContentConflict(t *testing.T) {
 		t.Fatal("conflicting write must not overwrite the existing mandate.json")
 	}
 }
+
+func TestAdoptJournalIsIdempotentAndRejectsReceiptConflict(t *testing.T) {
+	root := t.TempDir()
+	content := []byte(`{"contract":"signed"}`)
+	digest := sha256HexOfTestContent(content)
+	if _, _, err := MaterializeFile(root, "mandate-1", content); err != nil {
+		t.Fatal(err)
+	}
+	receipt := mandatedelivery.Receipt{MandateID: "mandate-1", OrganizationID: installTestOrgID,
+		InstallationID: installTestInstallationID, Version: "v1", Digest: digest, KeyID: "key-1", Domain: mandatedelivery.Domain}
+	delivery := mandatedelivery.Delivery{Envelope: mandatedelivery.Envelope{MandateID: receipt.MandateID,
+		OrganizationID: receipt.OrganizationID, InstallationID: receipt.InstallationID,
+		Version: receipt.Version, Digest: digest, KeyID: receipt.KeyID}}
+	if replay, err := AdoptJournal(root, receipt, delivery, "contract-digest"); err != nil || replay {
+		t.Fatalf("first adoption: replay=%v err=%v", replay, err)
+	}
+	path := filepath.Join(root, "mandate-1", "mandate_state.json")
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay, err := AdoptJournal(root, receipt, delivery, "contract-digest"); err != nil || !replay {
+		t.Fatalf("replay: replay=%v err=%v", replay, err)
+	}
+	second, _ := os.ReadFile(path)
+	if string(first) != string(second) {
+		t.Fatal("replay rewrote journal")
+	}
+	receipt.Version = "v2"
+	delivery.Envelope.Version = "v2"
+	if _, err := AdoptJournal(root, receipt, delivery, "contract-digest"); err == nil {
+		t.Fatal("conflicting version accepted")
+	}
+	receipt.Version, delivery.Envelope.Version = "v1", "v1"
+	if _, err := AdoptJournal(root, receipt, delivery, "different-contract-digest"); err == nil {
+		t.Fatal("conflicting contract digest accepted")
+	}
+}

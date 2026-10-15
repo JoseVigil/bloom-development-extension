@@ -17,6 +17,42 @@ func TestMandatesRootForWorker(t *testing.T) {
 	}
 }
 
+func TestEnsureAITAPStateDirDefaultsToProductAppData(t *testing.T) {
+	t.Setenv("AITAP_STATE_DIR", "")
+	appDataDir := t.TempDir()
+
+	got, err := ensureAITAPStateDir(appDataDir)
+	if err != nil {
+		t.Fatalf("ensureAITAPStateDir: %v", err)
+	}
+	want := filepath.Join(appDataDir, "aitap")
+	if got != want {
+		t.Fatalf("ensureAITAPStateDir() = %q, want %q", got, want)
+	}
+	if env := os.Getenv("AITAP_STATE_DIR"); env != want {
+		t.Fatalf("AITAP_STATE_DIR = %q, want %q", env, want)
+	}
+	if info, statErr := os.Stat(want); statErr != nil || !info.IsDir() {
+		t.Fatalf("durable AITAP state directory not created: info=%v err=%v", info, statErr)
+	}
+}
+
+func TestEnsureAITAPStateDirPreservesExplicitOverride(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "explicit-aitap-state")
+	t.Setenv("AITAP_STATE_DIR", override)
+
+	got, err := ensureAITAPStateDir(filepath.Join(t.TempDir(), "product-appdata"))
+	if err != nil {
+		t.Fatalf("ensureAITAPStateDir: %v", err)
+	}
+	if got != override {
+		t.Fatalf("ensureAITAPStateDir() = %q, want explicit override %q", got, override)
+	}
+	if info, statErr := os.Stat(override); statErr != nil || !info.IsDir() {
+		t.Fatalf("explicit AITAP state directory not created: info=%v err=%v", info, statErr)
+	}
+}
+
 type capturingActivityRegistrar struct {
 	registered []interface{}
 	options    []activity.RegisterOptions
@@ -36,7 +72,7 @@ func TestRegisterMandateGenesisSignatureActivities(t *testing.T) {
 
 	registerMandateGenesisSignatureActivities(registrar)
 
-	if got, want := len(registrar.registered), 4; got != want {
+	if got, want := len(registrar.registered), 5; got != want {
 		t.Fatalf("registered activities = %d, want exactly %d", got, want)
 	}
 
@@ -46,9 +82,10 @@ func TestRegisterMandateGenesisSignatureActivities(t *testing.T) {
 		expected interface{}
 	}{
 		{name: "PersistHumanSyncActivity", index: 0, expected: activities.PersistHumanSyncActivity},
-		{name: "SignMandateActivity", index: 1, expected: activities.SignMandateActivity},
-		{name: "PersistSignatureFailureActivity", index: 2, expected: activities.PersistSignatureFailureActivity},
-		{name: "PersistCandidateDomainsActivity", index: 3, expected: activities.PersistCandidateDomainsActivity},
+		{name: "LoadMandateBuildCheckpointActivity", index: 1, expected: activities.LoadMandateBuildCheckpointActivity},
+		{name: "SignMandateActivity", index: 2, expected: activities.SignMandateActivity},
+		{name: "PersistSignatureFailureActivity", index: 3, expected: activities.PersistSignatureFailureActivity},
+		{name: "PersistCandidateDomainsActivity", index: 4, expected: activities.PersistCandidateDomainsActivity},
 	}
 
 	for _, tt := range tests {

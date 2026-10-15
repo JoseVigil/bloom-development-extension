@@ -104,7 +104,7 @@ def validate_mapping(value, graph):
 
 
 class GenesisIntelligence:
-    def __init__(self, intent_root, semantic_index, client=None, policy_version="genesis-runtime-intelligence/v2"):
+    def __init__(self, intent_root, semantic_index, client=None, policy_version="mandate-gen/v1"):
         self.root = Path(intent_root).resolve()
         self.index = Path(semantic_index).resolve()
         self.client = client or IntelligenceSupplyClient()
@@ -272,8 +272,16 @@ class GenesisIntelligence:
             return self._finish(manager, value, control, turn_dir, graph)
         if len(previous) != len(known):
             manager.persist_turn_control(phase_name="consolidation", turn_number=1, control_payload=control)
+            classification_dir = self.root / ".classification" / (".turn_" + value["turn_id"])
+            transport = read_json(classification_dir / ".supply_result.json")
             return {"status": "awaiting_human_decision", "phase_active": "consolidation",
-                    "pending_clusters": sorted(set(known) - set(previous)), "intent_id": manager.intent_id}
+                    "pending_clusters": sorted(set(known) - set(previous)), "intent_id": manager.intent_id,
+                    "mandate_id": manager.snapshot()["mandate_id"], "classification": value,
+                    "classification_ref": str(classification_dir / ".files/.domain_resolution.json"),
+                    "classification_digest": digest(value),
+                    "supply_result_ref": str(classification_dir / ".supply_result.json"),
+                    "raw_response_digest": transport["raw_response_digest"],
+                    "routing_decision": transport["routing_decision"]}
         control["commit_requested"] = True
         manager.persist_turn_control(phase_name="consolidation", turn_number=1, control_payload=control)
         ledger = EffectLedgerManager.create(turn_dir=turn_dir, intent_id=manager.intent_id, intent_type="ing",

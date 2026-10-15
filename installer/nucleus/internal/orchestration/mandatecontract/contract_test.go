@@ -1,11 +1,31 @@
 package mandatecontract
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestMandateActionsRejectDuplicateIdempotencyKey(t *testing.T) {
+	types := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
+	actions := make([]Action, len(types))
+	for i, kind := range types {
+		actions[i] = Action{ActionID: fmt.Sprintf("action-%d", i), Type: "run_intent", IntentType: kind, IdempotencyKey: fmt.Sprintf("key-%d", i)}
+		if i > 0 {
+			actions[i].DependsOn = []string{actions[i-1].ActionID}
+		}
+	}
+	actions[4].WhenResult = "remediation_required"
+	if err := ValidateMandateActions(actions); err != nil {
+		t.Fatal(err)
+	}
+	actions[1].IdempotencyKey = actions[0].IdempotencyKey
+	if err := ValidateMandateActions(actions); err == nil {
+		t.Fatal("duplicate idempotency key accepted")
+	}
+}
 
 func fixtureContract() Contract {
 	return Contract{
@@ -75,10 +95,10 @@ func TestVersionTwoBindsIntelligenceSelection(t *testing.T) {
 	if err := contract.Validate(); err == nil {
 		t.Fatal("missing intelligence accepted")
 	}
-	credential := "credential-ref://anthropic/default"
-	contract.Intelligence = &Intelligence{Provider: "anthropic", BackendID: "anthropic_api", Model: "selected-model",
+	credential := "credential-ref://gemini/default"
+	contract.Intelligence = &Intelligence{Provider: "google", BackendID: "gemini_api", Model: "selected-model",
 		CredentialRef: &credential, PolicyRef: filepath.Join(t.TempDir(), "policy.json"),
-		PolicyVersion: "mandate-gen/v1", PolicySHA256: strings.Repeat("a", 64), RegistryRef: filepath.Join(t.TempDir(), "registry.json"),
+		PolicyVersion: "mandate-gen/v1", PolicySHA256: strings.Repeat("a", 64), RegistryRef: filepath.Join(t.TempDir(), "registry.json"), SupplyGrantID: "grant-1",
 		RegistrySHA256: strings.Repeat("b", 64), MaxUSD: "0.10", MaxTotalTokens: 1000, MaxOutputTokens: 100}
 	if err := contract.Validate(); err != nil {
 		t.Fatal(err)

@@ -179,6 +179,18 @@ function resolveConductorExePath(): string {
   return candidate;
 }
 
+/** Source package for the separate Runner Core functional fixture. The
+ * caller copies and verifies this package under its disposable root; this
+ * function never launches the installed executable. */
+export function resolvePackagedWorkspaceSource(): string {
+  if (process.platform !== 'win32') throw new Error('[electron-conductor] Workspace source requires Windows');
+  const candidate = join(getBloomPaths().binDir, 'workspace', 'bloom-workspace.exe');
+  if (!existsSync(candidate) || !statSync(candidate).isFile()) {
+    throw new Error(`[electron-conductor] Workspace empaquetado no encontrado en ${candidate}`);
+  }
+  return candidate;
+}
+
 /**
  * Modo dev — default de este Runner (ver comentario en launchConductor()).
  * Replica exactamente `npm run dev:linux` de

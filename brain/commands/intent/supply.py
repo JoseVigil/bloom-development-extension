@@ -21,7 +21,7 @@ class SupplyCommand(BaseCommand):
                     semantic_index: Path = typer.Option(..., "--semantic-index", help="Explicit Nucleus transient index"),
                     decisions: Path = typer.Option(None, "--decisions", help="Human decisions JSON array, ING only"),
                     ing_result: Path = typer.Option(None, "--ing-result", help="Completed ING result for DIS"),
-                    policy_version: str = typer.Option("genesis-runtime-intelligence/v2", "--policy-version", help="Approved policy version")):
+                    policy_version: str = typer.Option("mandate-gen/v1", "--policy-version", help="Approved policy version")):
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext

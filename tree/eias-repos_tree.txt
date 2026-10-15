@@ -1,0 +1,164 @@
+eias-repos/
+├── .bloom/
+│   └── .nucleus-eias-repos/
+│       ├── .cache/
+│       │   ├── .last-sync.json
+│       │   ├── .projects-snapshot.json
+│       │   └── .semantic-index.json
+│       ├── .core/
+│       │   ├── .ai_bot.sovereign.bl
+│       │   ├── .meta.json
+│       │   ├── .nucleus-config.json
+│       │   ├── .policies.bl
+│       │   ├── .rules.bl
+│       │   ├── .standards.bl
+│       │   ├── genesis-launches/
+│       │   │   └── 565287a1-d17c-4092-b7da-fbf80dcc3ae3.json
+│       │   └── genesis-projects/
+│       │       ├── 68d989e9-c51a-4d05-bf35-3a5912e32579.json
+│       │       └── 68d989e9-c51a-4d05-bf35-3a5912e32579.json.lock
+│       ├── .governance/
+│       │   ├── architecture/
+│       │   │   ├── .decisions/
+│       │   │   ├── .patterns.bl
+│       │   │   └── .principles.bl
+│       │   ├── quality/
+│       │   │   ├── .code-standards.bl
+│       │   │   └── .testing-requirements.bl
+│       │   └── security/
+│       │       ├── .compliance-requirements.bl
+│       │       └── .security-standards.bl
+│       ├── .gravity/
+│       │   ├── .edges/
+│       │   ├── .governed-creation.lock
+│       │   ├── .index/
+│       │   ├── .organization/
+│       │   │   └── org_1790433311/
+│       │   │       └── node.json
+│       │   ├── nucleus.node.json
+│       │   └── nucleus.node.json.lock
+│       ├── .intents/
+│       │   ├── .exp/
+│       │   └── .ing/
+│       │       ├── .must-not-create-383ff6a0/
+│       │       │   ├── .classification/
+│       │       │   ├── .consolidation/
+│       │       │   ├── .ing_state.json
+│       │       │   ├── .pipeline/
+│       │       │   │   ├── .classification/
+│       │       │   │   │   └── .response/
+│       │       │   │   │       └── .staging/
+│       │       │   │   ├── .consolidation/
+│       │       │   │   │   └── .response/
+│       │       │   │   │       └── .staging/
+│       │       │   │   └── .reception/
+│       │       │   │       └── .response/
+│       │       │   │           └── .staging/
+│       │       │   └── .reception/
+│       │       │       ├── .files/
+│       │       │       ├── .rawbase.json
+│       │       │       └── .rawbase_index.json
+│       │       ├── .probe-6e3199df/
+│       │       │   ├── .classification/
+│       │       │   ├── .consolidation/
+│       │       │   ├── .ing_state.json
+│       │       │   ├── .pipeline/
+│       │       │   │   ├── .classification/
+│       │       │   │   │   └── .response/
+│       │       │   │   │       └── .staging/
+│       │       │   │   ├── .consolidation/
+│       │       │   │   │   └── .response/
+│       │       │   │   │       └── .staging/
+│       │       │   │   └── .reception/
+│       │       │   │       └── .response/
+│       │       │   │           └── .staging/
+│       │       │   └── .reception/
+│       │       │       ├── .files/
+│       │       │       ├── .rawbase.json
+│       │       │       └── .rawbase_index.json
+│       │       ├── .sample-project-3f8e3724/
+│       │       │   ├── .classification/
+│       │       │   ├── .consolidation/
+│       │       │   ├── .ing_state.json
+│       │       │   ├── .pipeline/
+│       │       │   │   ├── .classification/
+│       │       │   │   │   └── .response/
+│       │       │   │   │       └── .staging/
+│       │       │   │   ├── .consolidation/
+│       │       │   │   │   └── .response/
+│       │       │   │   │       └── .staging/
+│       │       │   │   └── .reception/
+│       │       │   │       └── .response/
+│       │       │   │           └── .staging/
+│       │       │   └── .reception/
+│       │       │       ├── .files/
+│       │       │       ├── .rawbase.json
+│       │       │       └── .rawbase_index.json
+│       │       └── .sample-project-930a7a97/
+│       │           ├── .classification/
+│       │           ├── .consolidation/
+│       │           ├── .ing_state.json
+│       │           ├── .pipeline/
+│       │           │   ├── .classification/
+│       │           │   │   └── .response/
+│       │           │   │       └── .staging/
+│       │           │   ├── .consolidation/
+│       │           │   │   └── .response/
+│       │           │   │       └── .staging/
+│       │           │   └── .reception/
+│       │           │       └── .response/
+│       │           │           └── .staging/
+│       │           └── .reception/
+│       │               ├── .files/
+│       │               ├── .rawbase.json
+│       │               └── .rawbase_index.json
+│       ├── .mandates/
+│       │   ├── 0e5163ee-e60d-43be-b237-4984b672e02e/
+│       │   │   ├── domain_proposal.json
+│       │   │   ├── mandate_state.json
+│       │   │   └── mandate_state.json.lock
+│       │   ├── 16ac1156-17d8-427f-9ca6-b5bbb91f917a/
+│       │   │   ├── domain_proposal.json
+│       │   │   ├── mandate_state.json
+│       │   │   └── mandate_state.json.lock
+│       │   ├── 4e028a82-3f94-48ab-957d-116340dbcc7f/
+│       │   │   ├── docs/
+│       │   │   │   ├── .gitignore
+│       │   │   │   ├── README.md
+│       │   │   │   ├── main.py
+│       │   │   │   ├── storage.py
+│       │   │   │   ├── tasks.py
+│       │   │   │   └── test_tasks.py
+│       │   │   ├── domain_proposal.json
+│       │   │   ├── inputs/
+│       │   │   │   ├── .gitignore
+│       │   │   │   ├── README.md
+│       │   │   │   ├── main.py
+│       │   │   │   ├── storage.py
+│       │   │   │   ├── tasks.py
+│       │   │   │   └── test_tasks.py
+│       │   │   ├── mandate_state.json
+│       │   │   └── mandate_state.json.lock
+│       │   └── d0bfb33a-c1c6-44d6-89e9-dd96d80783ce/
+│       │       ├── domain_proposal.json
+│       │       ├── mandate_state.json
+│       │       └── mandate_state.json.lock
+│       ├── .master
+│       ├── .nucleus-governance.json
+│       ├── .ownership.json
+│       ├── .ownership.json.migration.lock
+│       ├── .relations/
+│       │   └── .project-links.json
+│       ├── findings/
+│       │   └── README.md
+│       ├── reports/
+│       │   ├── exports/
+│       │   └── health-dashboard.json
+│       └── vault.json
+└── sample_project/
+    ├── .gitignore
+    ├── README.md
+    ├── main.py
+    ├── storage.py
+    ├── tasks.py
+    └── test_tasks.py

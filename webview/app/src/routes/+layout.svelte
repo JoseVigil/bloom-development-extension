@@ -75,7 +75,10 @@
     // D-23 / B.4.1 (roadmap v3.2 §1.2/§6): al bootear, consumir el flag
     // "arrancá Genesis" si Onboarding lo dejó pendiente. No-op silencioso
     // fuera de Electron o si no hay nada pendiente — ver genesisLaunch.ts.
-    runPendingGenesisLaunch();
+	// Complete the durable launch handshake before the first reconciliation,
+	// so the initial GET can already see the newly created Mandate even when
+	// the WebSocket event arrived before this renderer subscribed.
+	void runPendingGenesisLaunch().finally(requestMandateReconciliation);
 
     // Mandate_Event_Mechanism_Auditoria_v1.md, frente 3: antes el WS solo
     // se conectaba desde routes/debug/+page.svelte — el arranque normal de
@@ -90,8 +93,6 @@
     websocketStore.onReconnect(requestMandateReconciliation);
     mandateStore.onReconcileRequested(requestMandateReconciliation);
     websocketStore.connect();
-
-    requestMandateReconciliation();
 
     console.log('✅ [Layout] Ready');
   });

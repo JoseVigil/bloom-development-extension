@@ -88,6 +88,7 @@ const {
 
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
+const { deployAitapBundle } = require('./aitap-bundle-installer');
 
 // ── Ollama service installer — condicional por plataforma ────────────────────
 const {
@@ -558,7 +559,7 @@ async function runChromiumInstall(win) {
   }
 }
 
-async function runRuntimeInstall(win) {
+async function runRuntimeInstall(win, options = {}) {
   const MILESTONE = 'brain_runtime';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
@@ -570,12 +571,25 @@ async function runRuntimeInstall(win) {
   emitProgress(win, 3, 12, 'Configuring Python runtime...');
 
   try {
-    // Remover servicio antes de instalar runtime (si existe)
-    logger.info('Stopping Brain Service before runtime install...');
-    await removeService(NEW_SERVICE_NAME);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
-    
-    const result = await installRuntime(win);
+    // El runtime puede estar siendo usado por hooks ejecutados desde Nucleus.
+    // Si el despliegue general fue omitido por su milestone, hacemos la misma
+    // limpieza antes del intercambio transaccional y forzamos la reinstalación
+    // de los servicios con el nuevo PATH administrado.
+    if (!options.cleanupAlreadyPerformed) {
+      if (process.platform === 'win32') {
+        await preInstallCleanup(logger);
+        await nucleusManager.resetMilestones(
+          RUNTIME_MILESTONES_AFTER_BINARY_CLEANUP,
+          'Invalidated before Python runtime replacement'
+        );
+      } else {
+        logger.info('Stopping Brain Service before runtime install...');
+        await removeService(NEW_SERVICE_NAME);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    const result = await installRuntime();
     await nucleusManager.completeMilestone(MILESTONE, result);
     return result;
 
@@ -718,21 +732,19 @@ async function deployAllSystemBinaries(win) {
     const results = {};
     
     // ========================================================================
-    // 1. PYTHON RUNTIME (base para Brain)
+    // 1. PYTHON RUNTIME
     // ========================================================================
-    logger.info('\n🐍 PYTHON RUNTIME');
-    results.runtime = await copyDirectorySafe(
-      paths.runtimeSource,
-      paths.runtimeDir,
-      'Python Runtime'
-    );
-    
-    // Configurar Python — sólo en Windows necesita el .pth de modo aislado
+    // Windows tiene un instalador transaccional propio y un milestone separado.
+    // En Unix conservamos el despliegue histórico dentro de binaries.
     if (process.platform === 'win32') {
-      const pthFile = path.join(paths.runtimeDir, 'python310._pth');
-      const pthContent = ['.', 'python310.zip', 'Lib', 'Lib\\site-packages'].join('\n');
-      await fs.writeFile(pthFile, pthContent, 'utf8');
-      logger.success('✅ Python configured in ISOLATED mode');
+      results.runtime = { success: true, skipped: true, managed_by: 'brain_runtime' };
+    } else {
+      logger.info('\n🐍 PYTHON RUNTIME');
+      results.runtime = await copyDirectorySafe(
+        paths.runtimeSource,
+        paths.runtimeDir,
+        'Python Runtime'
+      );
     }
     
     // ========================================================================
@@ -903,7 +915,9 @@ async function deployAllSystemBinaries(win) {
       'Metamorph'
     );
 
-    // ── IMPACT / MONITOR / AITAP (binarios estáticos Go — sin servicio, sin dependencias) ──
+    // ── IMPACT / MONITOR / AITAP ────────────────────────────────────────────
+    // AITAP es una aplicación PyInstaller onedir autocontenida. No es un
+    // servicio y no usa el runtime Python administrado por Setup.
     // Mismo patrón que Sentinel/Metamorph: se copian dentro del hito 'binaries',
     // no tienen milestone propio ni service-installer.
     logger.info('\n📊 IMPACT');
@@ -924,10 +938,14 @@ async function deployAllSystemBinaries(win) {
 
     logger.info('\n🤖 AITAP');
     if (await fs.pathExists(paths.aitapSource)) {
-      results.aitap = await copyDirectorySafe(paths.aitapSource, paths.aitapDir, 'AITap');
+      logger.info('📦 Validating and deploying the complete AITAP bundle...');
+      results.aitap = await deployAitapBundle({
+        sourceDir: paths.aitapSource,
+        destinationDir: paths.aitapDir,
+      });
+      logger.success('✅ AITAP bundle deployed, integrity verified and smokes passed');
     } else {
-      logger.warn(`⚠️ AITap source not found at: ${paths.aitapSource}, skipping`);
-      results.aitap = { success: false, skipped: true };
+      throw new Error(`AITAP bundle source not found: ${paths.aitapSource}`);
     }
 
     // En macOS asegurar permisos en todos los binarios Go
@@ -1743,8 +1761,10 @@ async function installService(win, { onBeforeLaunch } = {}) {
 
     await createDirectories(win);           // 1/11
     await runChromiumInstall(win);          // 2/11
-    await runRuntimeInstall(win);           // 3/11
-    await deployAllSystemBinaries(win);      // 4/11 - Incluye bootstrap y vsix deploy
+    const binaryDeployment = await deployAllSystemBinaries(win); // 3/11 - Incluye cleanup, bootstrap y vsix
+    await runRuntimeInstall(win, {           // 4/11
+      cleanupAlreadyPerformed: binaryDeployment?.skipped !== true,
+    });
     await installVSCodeExtension(win);      // 4.5/11 - Instala/actualiza extensión en VS Code (non-critical)
     await runMetamorphAudit(win);           // 5/11 - Snapshot + verify-sync
     await installBrainService(win);         // 6/11

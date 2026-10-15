@@ -58,6 +58,40 @@ function serviceExists(serviceName) {
   }
 }
 
+function buildNucleusServiceEnvironment(userLocalAppData = process.env.LOCALAPPDATA, inheritedPath = process.env.PATH || '') {
+  if (!userLocalAppData) {
+    throw new Error('LOCALAPPDATA is required to configure the Nucleus service environment');
+  }
+
+  const bloomRoot = path.join(userLocalAppData, 'BloomNucleus');
+  const bloomBinDir = path.join(bloomRoot, 'bin');
+  const bloomLogsDir = path.join(bloomRoot, 'logs');
+  const bloomRuntimeDir = path.join(bloomBinDir, 'engine', 'runtime');
+  const bloomPythonExe = path.join(bloomRuntimeDir, 'python.exe');
+  const envContent = [
+    'PYTHONUNBUFFERED=1',
+    'PYTHONIOENCODING=utf-8',
+    'BLOOM_ENVIRONMENT=production',
+    'NUCLEUS_MODE=service',
+    `LOCALAPPDATA=${userLocalAppData}`,
+    `BLOOM_ROOT=${bloomRoot}`,
+    `BLOOM_BIN_DIR=${bloomBinDir}`,
+    `BLOOM_LOGS_DIR=${bloomLogsDir}`,
+    `BLOOM_DIR=${bloomRoot}`,
+    `BLOOM_PYTHON_PATH=${bloomPythonExe}`,
+    `PATH=${bloomRuntimeDir};${bloomBinDir}\\nucleus;${bloomBinDir}\\sentinel;${inheritedPath}`,
+  ].join('\0') + '\0';
+
+  return {
+    bloomRoot,
+    bloomBinDir,
+    bloomLogsDir,
+    bloomRuntimeDir,
+    bloomPythonExe,
+    envContent,
+  };
+}
+
 // ============================================================================
 // TELEMETRY REGISTRATION (CRITICAL STREAM)
 // ============================================================================
@@ -171,24 +205,13 @@ async function installNucleusService() {
   console.log('   ✓ Working directory set');
   
   // D. Variables de Entorno - USAR REGISTRO DIRECTAMENTE
-  const userLocalAppData = process.env.LOCALAPPDATA;
-  const bloomRoot = path.join(userLocalAppData, 'BloomNucleus');
-  const bloomBinDir = path.join(bloomRoot, 'bin');
-  const bloomLogsDir = path.join(bloomRoot, 'logs');
-
-  // Crear archivo temporal con las variables
-  const envContent = [
-    `PYTHONUNBUFFERED=1`,
-    `PYTHONIOENCODING=utf-8`,
-    `BLOOM_ENVIRONMENT=production`,
-    `NUCLEUS_MODE=service`,
-    `LOCALAPPDATA=${userLocalAppData}`,
-    `BLOOM_ROOT=${bloomRoot}`,
-    `BLOOM_BIN_DIR=${bloomBinDir}`,
-    `BLOOM_LOGS_DIR=${bloomLogsDir}`,
-    `BLOOM_DIR=${bloomRoot}`,  // ← AGREGAR ESTA LÍNEA
-    `PATH=${bloomBinDir}\\nucleus;${bloomBinDir}\\sentinel;${process.env.PATH}`
-  ].join('\0') + '\0';
+  const {
+    bloomRoot,
+    bloomBinDir,
+    bloomLogsDir,
+    bloomPythonExe,
+    envContent,
+  } = buildNucleusServiceEnvironment();
 
   const tempEnvFile = path.join(os.tmpdir(), 'nucleus_env.txt');
   fs.writeFileSync(tempEnvFile, envContent, { encoding: 'utf16le' });
@@ -201,6 +224,7 @@ async function installNucleusService() {
   console.log(`     BLOOM_ROOT: ${bloomRoot}`);
   console.log(`     BLOOM_BIN_DIR: ${bloomBinDir}`);
   console.log(`     BLOOM_LOGS_DIR: ${bloomLogsDir}`);
+  console.log(`     BLOOM_PYTHON_PATH: ${bloomPythonExe}`);
   
   // E. Redirección de IO (LOG UNIFICADO)
   await runCommand(`"${nssmPath}" set "${NUCLEUS_SERVICE_NAME}" AppStdout "${serviceLog}"`);
@@ -328,6 +352,7 @@ module.exports = {
   startNucleusService,
   removeNucleusService,
   checkNucleusHealth,
+  buildNucleusServiceEnvironment,
   NUCLEUS_SERVICE_NAME,
   NUCLEUS_DISPLAY_NAME
 };

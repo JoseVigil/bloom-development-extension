@@ -28,6 +28,15 @@ def request(**changes):
 
 
 class RoutingEngineTest(unittest.TestCase):
+    def test_approved_cloud_can_route_google_backend_selected_by_policy(self):
+        from test_intelligence_service import request as supply_request
+        policy = copy.deepcopy(self.engine.policy)
+        registry = copy.deepcopy(self.engine.registry)
+        policy["intelligence_supply"]["backend_id"] = "gemini_api"
+        backend = next(b for b in registry["intelligence_backends"] if b["backend_id"] == "gemini_api")
+        backend["supply_enabled"] = True
+        routes = RoutingEngine(policy, registry).supply_routes(supply_request())
+        self.assertEqual(routes[0]["effective_intelligence"]["provider"], "google")
     def test_supply_does_not_require_execution_runtime_health(self):
         from test_intelligence_service import request as supply_request
         registry = copy.deepcopy(self.engine.registry)

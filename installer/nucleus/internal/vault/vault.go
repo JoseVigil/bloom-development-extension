@@ -114,7 +114,10 @@ func GetVaultStatus() (*VaultStatus, error) {
 	if err != nil {
 		return nil, err
 	}
+	return getVaultStatusAt(path)
+}
 
+func getVaultStatusAt(path string) (*VaultStatus, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -213,7 +216,10 @@ func saveVaultStatus(status *VaultStatus) error {
 	if err != nil {
 		return err
 	}
+	return saveVaultStatusAt(path, status)
+}
 
+func saveVaultStatusAt(path string, status *VaultStatus) error {
 	data, err := json.MarshalIndent(status, "", " ")
 	if err != nil {
 		return err
@@ -547,6 +553,10 @@ func createVaultServiceRequestCommand(c *core.Core) *cobra.Command {
 		Annotations: map[string]string{"category": "VAULT", "json_response": `{"status":"delivered"}`},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := RunServiceRequest(cmd.InOrStdin(), c.Paths.AppDataDir); err != nil {
+				var denied *serviceDeniedError
+				if errors.As(err, &denied) {
+					fmt.Fprintf(cmd.ErrOrStderr(), "VAULT_DENIAL_STAGE=%s\n", denied.stage)
+				}
 				return ErrUnauthorized
 			}
 			_, err := fmt.Fprintln(cmd.OutOrStdout(), `{"status":"delivered"}`)

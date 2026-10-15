@@ -21,8 +21,22 @@ func mandateBuildTestEnvironment(t *testing.T, denyAct string) (*testsuite.TestW
 	order := []string{}
 	env.RegisterWorkflow(MandateBuildWorkflow)
 	env.RegisterActivityWithOptions((&activities.MandateActVerificationActivity{}).Run, activity.RegisterOptions{Name: "MandateActVerificationActivity"})
-	env.OnActivity(activities.IngestReceptionActivity, mock.Anything, mock.Anything).Return(activities.IngestReceptionResult{IntentID: "intent-1", FolderName: "fixture"}, nil)
-	env.OnActivity(activities.ScaffoldDomainActivity, mock.Anything, mock.Anything).Return(activities.ScaffoldDomainResult{ResultRef: "domain_proposal.json", Domains: []activities.ProposedDomain{{ID: "dom-1", DomainName: "Core"}}}, nil)
+	env.OnActivity(activities.IngestReceptionActivity, mock.Anything, mock.Anything).Return(func(activities.IngestReceptionInput) (activities.IngestReceptionResult, error) {
+		order = append(order, "ingest")
+		return activities.IngestReceptionResult{IntentID: "intent-1", FolderName: "fixture", ClassificationDigest: "sha256:classification", RawResponseDigest: "sha256:raw", Domains: []activities.ProposedDomain{{ID: "dom-1", DomainName: "Core"}}}, nil
+	})
+	env.OnActivity(activities.ScaffoldDomainActivity, mock.Anything, mock.Anything).Return(func(activities.ScaffoldDomainInput) (activities.ScaffoldDomainResult, error) {
+		order = append(order, "cluster")
+		return activities.ScaffoldDomainResult{ResultRef: "domain_proposal.json", Domains: []activities.ProposedDomain{{ID: "dom-1", DomainName: "Core"}}}, nil
+	})
+	env.OnActivity(activities.LoadMandateBuildCheckpointActivity, mock.Anything, mock.Anything).Return(func(input activities.LoadMandateBuildCheckpointInput) (activities.MandateBuildCheckpoint, error) {
+		order = append(order, "checkpoint:"+input.Phase)
+		return activities.MandateBuildCheckpoint{
+			Reception:        activities.IngestReceptionResult{IntentID: "intent-1", FolderName: "fixture"},
+			Scaffold:         activities.ScaffoldDomainResult{ResultRef: "domain_proposal.json", Domains: []activities.ProposedDomain{{ID: "dom-1", DomainName: "Core"}}},
+			CandidateDomains: []activities.DomainCandidateState{{DomainID: "dom-1", Name: "Core"}},
+		}, nil
+	})
 	env.OnActivity(activities.PublishMandateEventActivity, mock.Anything, mock.Anything, mock.Anything).Return(func(event string, _ map[string]interface{}) error { order = append(order, "event:"+event); return nil })
 	env.OnActivity(activities.AdvancePhaseActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.AdvancePhaseInput) (activities.AdvancePhaseResult, error) {
 		order = append(order, "phase:"+input.Phase)
@@ -124,5 +138,23 @@ func TestMandateBuildPersistsCandidatesBeforeValidatePhase(t *testing.T) {
 	}
 	if candidates > cluster || cluster > humanSync {
 		t.Fatalf("candidates must be persisted before validate and match human sync: %s", joined)
+	}
+}
+
+func TestMandateBuildResumesValidateWithoutRepeatingIngestOrCluster(t *testing.T) {
+	env, order := mandateBuildTestEnvironment(t, "")
+	env.ExecuteWorkflow(MandateBuildWorkflow, MandateBuildInput{MandateID: "m-1", MandatesRoot: "fixture", Project: "Core", ResumeFrom: "validate"})
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*order, "|")
+	if !strings.Contains(joined, "checkpoint:validate") {
+		t.Fatalf("checkpoint not loaded: %s", joined)
+	}
+	if strings.Contains(joined, "ingest") || strings.Contains(joined, "cluster") || strings.Contains(joined, "candidates:") {
+		t.Fatalf("completed phases repeated during validate resume: %s", joined)
+	}
+	if !strings.Contains(joined, "humansync:dom-1/Core") {
+		t.Fatalf("restored candidate not used: %s", joined)
 	}
 }

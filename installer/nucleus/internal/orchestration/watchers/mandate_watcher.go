@@ -3,6 +3,8 @@ package watchers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +18,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
+	"nucleus/internal/authority"
 	"nucleus/internal/core"
+	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/orchestration/temporal/workflows"
 )
 
@@ -85,7 +89,7 @@ func newMandateProgress() *mandateProgress {
 }
 
 func (p *mandateProgress) fingerprint(ms MandateState) string {
-	return ms.CurrentPhase + ":" + ms.Phases.Ingest.Status + ":" + ms.Phases.Cluster.Status
+	return ms.CurrentPhase + ":" + ms.Phases.Ingest.Status + ":" + ms.Phases.Cluster.Status + ":" + ms.Reconciliation.Status + ":" + ms.Reconciliation.Reason
 }
 
 // markIfChanged devuelve true si el fingerprint es distinto al último
@@ -114,6 +118,8 @@ func (p *mandateProgress) markIfChanged(ms MandateState) bool {
 
 type MandateWatcher struct {
 	mandatesRoot string
+	identityPath string
+	verifyActs   func(string, mandatecontract.Envelope, string) error
 	tc           MandateBuildTemporalClient
 	watcher      *fsnotify.Watcher
 	progress     *mandateProgress
@@ -124,6 +130,7 @@ type MandateWatcher struct {
 // Keeping it here lets worker start own both components without an import cycle.
 type MandateBuildTemporalClient interface {
 	StartMandateBuildWorkflow(context.Context, string, workflows.MandateBuildInput) (client.WorkflowRun, error)
+	StartMandateExecutionWorkflow(context.Context, string, workflows.MandateExecutionInput) (client.WorkflowRun, error)
 	IsWorkflowRunning(context.Context, string) (bool, error)
 	GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error)
 }
@@ -190,6 +197,7 @@ func NewMandateWatcher(mandatesRoot string, tc MandateBuildTemporalClient, paths
 	}
 	return &MandateWatcher{
 		mandatesRoot: mandatesRoot,
+		identityPath: filepath.Join(paths.AppDataDir, "authority", "identity.json"),
 		tc:           tc,
 		progress:     newMandateProgress(),
 		logger:       logger,
@@ -283,6 +291,14 @@ func (w *MandateWatcher) handleEvent(ctx context.Context, event fsnotify.Event) 
 		if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 			if err := w.watcher.Add(event.Name); err != nil {
 				w.logger.Warning("[mandate_watcher] no pude observar nueva carpeta %s: %v", event.Name, err)
+				return
+			}
+			// La API puede escribir mandate_state.json antes de que fsnotify
+			// entregue la creación del directorio. Registrar el watch y luego
+			// leer el estado ya presente cierra esa ventana sin pedir otro write.
+			statePath := filepath.Join(event.Name, "mandate_state.json")
+			if _, err := os.Stat(statePath); err == nil {
+				w.onMandateStateWritten(ctx, statePath)
 			}
 			return
 		}
@@ -327,6 +343,18 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		w.logger.Error("[mandate_watcher] mandate_state.json inválido en %s: %v", path, err)
 		return
 	}
+	var adopted struct {
+		Adoption struct {
+			Version        string `json:"version"`
+			Digest         string `json:"digest"`
+			ContractDigest string `json:"contractDigest"`
+		} `json:"adoption"`
+		Status string `json:"status"`
+	}
+	if json.Unmarshal(raw, &adopted) == nil && adopted.Adoption.Digest != "" {
+		w.onAdoptedMandate(ctx, filepath.Dir(path), ms.MandateID, adopted.Adoption.Version, adopted.Adoption.Digest, adopted.Adoption.ContractDigest, adopted.Status)
+		return
+	}
 
 	// El mandateId puede no estar embebido en archivos viejos escritos antes
 	// de este cambio (o si algún escritor todavía no fue actualizado) — como
@@ -340,6 +368,10 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		// No es un genesis en curso (podría ser un standard, o un archivo
 		// todavía sin mandateType si algún escritor viejo no fue migrado).
 		// No es este watcher quien procesa eso.
+		return
+	}
+	if w.isSupersededGenesis(ms) {
+		w.logger.Info("[mandate_watcher] mandate Genesis superseded %s, reconciliación y dispatch omitidos", ms.MandateID)
 		return
 	}
 
@@ -380,7 +412,7 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 	}
 
 	switch {
-	case ms.Status == "building" && ms.CurrentPhase == "ingest" && ms.Phases.Ingest.Status == "pending":
+	case shouldDispatchBuild(ms):
 		w.startBuildWorkflow(ctx, ms)
 
 	default:
@@ -393,6 +425,101 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		// este watcher ni por mandate_state.json como intermediario para
 		// ese paso puntual.
 	}
+}
+
+func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, version, deliveryDigest, contractDigest, status string) {
+	if mandateID == "" {
+		mandateID = filepath.Base(dir)
+	}
+	if mandateID != filepath.Base(dir) || version == "" || status == "completed" {
+		return
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "mandate.json"))
+	if err != nil {
+		w.logger.Error("[mandate_watcher] adopted contract unreadable: %v", err)
+		return
+	}
+	sum := sha256.Sum256(raw)
+	if hex.EncodeToString(sum[:]) != deliveryDigest {
+		w.logger.Error("[mandate_watcher] adopted delivery digest mismatch for %s", mandateID)
+		return
+	}
+	envelope, err := mandatecontract.LoadVerified(dir, w.identityPath)
+	if err != nil || envelope.Contract.ContractVersion != 4 || envelope.ContractDigest != contractDigest {
+		w.logger.Error("[mandate_watcher] adopted contract invalid for %s: %v", mandateID, err)
+		return
+	}
+	verify := w.verifyActs
+	if verify == nil {
+		verify = verifyAdoptedActs
+	}
+	if err := verify(dir, envelope, w.identityPath); err != nil {
+		return
+	}
+	journalRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
+	var journal struct {
+		MandateID string `json:"mandateId"`
+		Adoption  struct {
+			Version        string `json:"version"`
+			Digest         string `json:"digest"`
+			ContractDigest string `json:"contractDigest"`
+			OrganizationID string `json:"organizationId"`
+			InstallationID string `json:"installationId"`
+		} `json:"adoption"`
+	}
+	if err != nil || json.Unmarshal(journalRaw, &journal) != nil || journal.MandateID != mandateID ||
+		journal.Adoption.Version != version || journal.Adoption.Digest != deliveryDigest || journal.Adoption.ContractDigest != contractDigest ||
+		journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID {
+		w.logger.Error("[mandate_watcher] adopted authority identity mismatch for %s", mandateID)
+		return
+	}
+	workflowID := "mandate_execute_" + mandateID
+	state, err := w.tc.GetWorkflowExecutionState(ctx, workflowID)
+	if err != nil {
+		w.logger.Error("[mandate_watcher] Temporal state unavailable for %s: %v", mandateID, err)
+		return
+	}
+	if state != WorkflowExecutionNotFound {
+		return
+	}
+	_, err = w.tc.StartMandateExecutionWorkflow(ctx, mandateID, workflows.MandateExecutionInput{MandateID: mandateID, MandatesRoot: w.mandatesRoot, Adopted: true})
+	if err != nil {
+		var already *serviceerror.WorkflowExecutionAlreadyStarted
+		if !errors.As(err, &already) {
+			w.logger.Error("[mandate_watcher] execution dispatch failed for %s: %v", mandateID, err)
+		}
+	}
+}
+
+func verifyAdoptedActs(dir string, envelope mandatecontract.Envelope, identityPath string) error {
+	identity, err := authority.LoadExistingLocalIdentity(identityPath)
+	if err != nil {
+		return err
+	}
+	for _, operation := range []string{"approve", "activate"} {
+		receipt, err := mandatecontract.LoadActReceipt(dir, operation)
+		if err != nil {
+			return err
+		}
+		if err := mandatecontract.VerifyActReceipt(receipt, identity, authority.DevelopmentPinnedRoots(), operation,
+			envelope.Contract.MandateID, envelope.ContractDigest, envelope.Contract.ProjectID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func shouldDispatchBuild(ms MandateState) bool {
+	if ms.Status != "building" {
+		return false
+	}
+	if ms.CurrentPhase == "ingest" && ms.Phases.Ingest.Status == "pending" {
+		return true
+	}
+	if ms.Reconciliation.Status != "required" || ms.Reconciliation.Reason != "unsigned_without_active_workflow" {
+		return false
+	}
+	return ms.CurrentPhase == "cluster" || ms.CurrentPhase == "validate"
 }
 
 func (w *MandateWatcher) reconcileUnsignedMandates(ctx context.Context, now time.Time) error {
@@ -424,6 +551,19 @@ func (w *MandateWatcher) reconcileUnsignedMandates(ctx context.Context, now time
 		if ms.MandateID == "" {
 			ms.MandateID = entry.Name()
 		}
+		var adopted struct {
+			Adoption struct {
+				Version        string `json:"version"`
+				Digest         string `json:"digest"`
+				ContractDigest string `json:"contractDigest"`
+			} `json:"adoption"`
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(raw, &adopted) == nil && adopted.Adoption.Digest != "" {
+			w.onAdoptedMandate(ctx, filepath.Join(w.mandatesRoot, entry.Name()), ms.MandateID,
+				adopted.Adoption.Version, adopted.Adoption.Digest, adopted.Adoption.ContractDigest, adopted.Status)
+			continue
+		}
 		if err := w.reconcileUnsignedMandate(ctx, path, ms, now); err != nil {
 			w.logger.Warning("[mandate_watcher] no pude reconciliar %s: %v", ms.MandateID, err)
 		}
@@ -433,6 +573,9 @@ func (w *MandateWatcher) reconcileUnsignedMandates(ctx context.Context, now time
 
 func (w *MandateWatcher) reconcileUnsignedMandate(ctx context.Context, path string, ms MandateState, now time.Time) error {
 	if ms.MandateType != "genesis" && ms.MandateType != "domain_expansion" {
+		return nil
+	}
+	if w.isSupersededGenesis(ms) {
 		return nil
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "mandate.json")); err == nil || ms.Signature.Status == "signed" {
@@ -454,6 +597,36 @@ func (w *MandateWatcher) reconcileUnsignedMandate(ctx context.Context, path stri
 		return nil
 	}
 	return persistReconciliation(path, action, reason, now)
+}
+
+// isSupersededGenesis reads Nucleus' project-attempt index. It is deliberately
+// fail-open for missing/invalid metadata: recovery only marks an attempt
+// superseded after the replacement was acknowledged, and a damaged index must
+// be diagnosed rather than silently changing legacy watcher behavior.
+func (w *MandateWatcher) isSupersededGenesis(ms MandateState) bool {
+	if ms.MandateType != "genesis" || ms.ProjectID == "" {
+		return false
+	}
+	root := filepath.Dir(w.mandatesRoot)
+	raw, err := os.ReadFile(filepath.Join(root, ".core", "genesis-projects", ms.ProjectID+".json"))
+	if err != nil {
+		return false
+	}
+	var record struct {
+		Attempts []struct {
+			MandateID          string `json:"mandateId"`
+			RelationshipStatus string `json:"relationshipStatus"`
+		} `json:"attempts"`
+	}
+	if json.Unmarshal(raw, &record) != nil {
+		return false
+	}
+	for _, attempt := range record.Attempts {
+		if attempt.MandateID == ms.MandateID {
+			return attempt.RelationshipStatus == "superseded"
+		}
+	}
+	return false
 }
 
 func evaluateUnsignedMandate(ms MandateState, workflowState WorkflowExecutionState, queryErr error, now time.Time) (reconciliationAction, string) {
@@ -587,6 +760,7 @@ func mandateBuildInput(ms MandateState, mandatesRoot string) workflows.MandateBu
 		Source:        ms.Source,
 		Project:       ms.Project,
 		ProjectID:     ms.ProjectID,
+		ResumeFrom:    ms.CurrentPhase,
 		// MandatesRoot — CAMPO NUEVO esta sesión (Tarea 1). Sin esto,
 		// ScaffoldDomainActivity/SignMandateActivity/PersistHumanSyncActivity
 		// fallan al arrancar ("MandatesRoot vacío para mandate ..."). El

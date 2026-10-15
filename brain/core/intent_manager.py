@@ -126,15 +126,20 @@ class IntentManager:
         if initial_files:
             validated_files = self._validate_initial_files(initial_files, project_root)
         
-        # Generate deterministic UUID3 based on intent name
-        intent_id = str(uuid.uuid3(self.INTENT_NAMESPACE, name.strip()))
-        
-        # Generate slugified name for folder
-        slug = self._slugify(name)
-        folder_name = f".{slug}-{intent_id[:8]}"
-
         timestamp = datetime.now(timezone.utc).isoformat()
         clean_mandate_id = mandate_id.strip() if mandate_id else None
+
+        # dev/doc preserve the historical name-based identity. BSIP engine
+        # intents run under a Mandate, so their durable identity must include
+        # that Mandate: equal project names in separate Mandates must not
+        # collide, while a retry of the same request stays stable.
+        identity = name.strip()
+        if intent_type in _BSIP_ENGINE_TYPES and clean_mandate_id:
+            identity = f"{intent_type}:{clean_mandate_id}:{name.strip()}"
+        intent_id = str(uuid.uuid3(self.INTENT_NAMESPACE, identity))
+
+        slug = self._slugify(name)
+        folder_name = f".{slug}-{intent_id[:8]}"
 
         if intent_type in _BSIP_ENGINE_TYPES:
             if not clean_mandate_id:
@@ -171,20 +176,48 @@ class IntentManager:
             intents_base = self._intents_base(project_root)
             intent_path = intents_base / f".{intent_type}" / folder_name
 
-            state_mgr = IntentStateManager.create(
-                intent_root=intent_path,
-                intent_type=intent_type,
-                mandate_id=clean_mandate_id,
-                extra_overrides=extra_overrides or None,
-                intent_id=intent_id,
-            )
-            # 'name' e 'initial_files' no son parte del envelope oficial de
-            # ing/dis (ING §1 / DIS §1 no los declaran) — son metadata
-            # operativa que hydrate() necesita para saber qué procesar en
-            # .reception/ o .discovery/. set_metadata() los adjunta sin
-            # tocar el schema validado por spec.
-            state_mgr.set_metadata(name=name.strip(), initial_files=validated_files)
-            state_data = state_mgr.snapshot()
+            if intent_path.exists() and any(intent_path.iterdir()):
+                state_mgr = IntentStateManager.load(intent_path)
+                state_data = state_mgr.snapshot()
+                expected = {
+                    "intent_id": intent_id,
+                    "intent_type": intent_type,
+                    "mandate_id": clean_mandate_id,
+                    "name": name.strip(),
+                    "initial_files": validated_files,
+                }
+                conflicts = {
+                    key: {"expected": value, "actual": state_data.get(key)}
+                    for key, value in expected.items()
+                    if state_data.get(key) != value
+                }
+                if intent_type == "ing" and domain_baseline is not None:
+                    actual_baseline = state_data.get("domain_baseline")
+                    if actual_baseline != domain_baseline:
+                        conflicts["domain_baseline"] = {
+                            "expected": domain_baseline,
+                            "actual": actual_baseline,
+                        }
+                if conflicts:
+                    raise ValueError(
+                        f"Intent BSIP existente incompatible para mandate_id "
+                        f"'{clean_mandate_id}': {conflicts}"
+                    )
+            else:
+                state_mgr = IntentStateManager.create(
+                    intent_root=intent_path,
+                    intent_type=intent_type,
+                    mandate_id=clean_mandate_id,
+                    extra_overrides=extra_overrides or None,
+                    intent_id=intent_id,
+                )
+                # 'name' e 'initial_files' no son parte del envelope oficial de
+                # ing/dis (ING §1 / DIS §1 no los declaran) — son metadata
+                # operativa que hydrate() necesita para saber qué procesar en
+                # .reception/ o .discovery/. set_metadata() los adjunta sin
+                # tocar el schema validado por spec.
+                state_mgr.set_metadata(name=name.strip(), initial_files=validated_files)
+                state_data = state_mgr.snapshot()
             phase_active = state_data.get("phase_active")
 
             # Completa el resto del skeleton (fases restantes + espejo
@@ -218,7 +251,7 @@ class IntentManager:
             "type": intent_type,
             "initial_files": validated_files,
             "project_path": str(project_root),
-            "created_at": timestamp,
+            "created_at": state_data.get("created_at", timestamp),
             "mandate_id": clean_mandate_id,
             "phase_active": phase_active,
             "message": f"Intent '{name}' ({intent_type}) created successfully"

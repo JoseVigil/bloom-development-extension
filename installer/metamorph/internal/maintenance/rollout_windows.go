@@ -4,6 +4,7 @@ package maintenance
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -25,6 +26,100 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
+
+// deployRuntime keeps the previous installation available until the staged
+// Windows interpreter has passed the same functional checks used by Setup.
+func deployRuntime(src, dst string) (err error) {
+	if err = validateWindowsRuntime(src, false); err != nil {
+		return fmt.Errorf("validate source: %w", err)
+	}
+	parent := filepath.Dir(dst)
+	if err = os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+	stage, err := os.MkdirTemp(parent, ".runtime-stage-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	if _, err = copyDir(src, stage); err != nil {
+		return fmt.Errorf("stage runtime: %w", err)
+	}
+	pth := []byte(".\r\nLib\r\nDLLs\r\nLib\\site-packages\r\nimport site\r\n")
+	if err = os.WriteFile(filepath.Join(stage, "python310._pth"), pth, 0o644); err != nil {
+		return err
+	}
+	if err = validateWindowsRuntime(stage, true); err != nil {
+		return fmt.Errorf("validate staged runtime: %w", err)
+	}
+	backup := filepath.Join(parent, fmt.Sprintf(".runtime-backup-%d-%d", os.Getpid(), time.Now().UnixNano()))
+	old := false
+	if _, statErr := os.Stat(dst); statErr == nil {
+		if err = os.Rename(dst, backup); err != nil {
+			return fmt.Errorf("move previous runtime (possibly in use): %w", err)
+		}
+		old = true
+	} else if !os.IsNotExist(statErr) {
+		return statErr
+	}
+	if err = os.Rename(stage, dst); err != nil {
+		if old {
+			if restoreErr := os.Rename(backup, dst); restoreErr != nil {
+				return fmt.Errorf("activate runtime: %v; restore previous runtime: %w", err, restoreErr)
+			}
+		}
+		return fmt.Errorf("activate runtime: %w", err)
+	}
+	if err = validateWindowsRuntime(dst, true); err != nil {
+		if old {
+			failed := filepath.Join(parent, fmt.Sprintf(".runtime-failed-%d-%d", os.Getpid(), time.Now().UnixNano()))
+			if moveErr := os.Rename(dst, failed); moveErr != nil {
+				return fmt.Errorf("validate deployed runtime: %v; rollback blocked: %w", err, moveErr)
+			}
+			if restoreErr := os.Rename(backup, dst); restoreErr != nil {
+				return fmt.Errorf("validate deployed runtime: %v; restore previous runtime: %w", err, restoreErr)
+			}
+			_ = os.RemoveAll(failed)
+		} else if removeErr := os.RemoveAll(dst); removeErr != nil {
+			return fmt.Errorf("validate deployed runtime: %v; remove failed installation: %w", err, removeErr)
+		}
+		return fmt.Errorf("validate deployed runtime: %w", err)
+	}
+	if old {
+		if cleanupErr := os.RemoveAll(backup); cleanupErr != nil {
+			return fmt.Errorf("validated runtime installed; previous runtime retained at %s: %w", backup, cleanupErr)
+		}
+	}
+	return nil
+}
+
+func validateWindowsRuntime(dir string, requirePth bool) error {
+	for _, name := range []string{"python.exe", "python3.dll", "python310.dll", "vcruntime140.dll", "vcruntime140_1.dll", "DLLs", "Lib", filepath.Join("Lib", "site-packages")} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			return fmt.Errorf("required %s: %w", name, err)
+		}
+	}
+	if requirePth {
+		data, err := os.ReadFile(filepath.Join(dir, "python310._pth"))
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), []byte(".\nLib\nDLLs\nLib\\site-packages\nimport site\n")) {
+			return fmt.Errorf("unexpected python310._pth")
+		}
+	}
+	check := `import asyncio,bz2,ctypes,decimal,hashlib,importlib.metadata,json,lzma,multiprocessing,os,platform,socket,sqlite3,ssl,struct,subprocess,sys,sysconfig,time,tkinter,venv,ensurepip,_asyncio,_bz2,_ctypes,_decimal,_lzma,_multiprocessing,_socket,_sqlite3,_ssl,_tkinter; assert platform.python_version()=="3.10.20"; assert platform.python_implementation()=="CPython"; assert sys.platform=="win32" and platform.machine().upper()=="AMD64" and struct.calcsize("P")==8; assert sysconfig.get_platform()=="win-amd64" and sysconfig.get_config_var("EXT_SUFFIX")==".cp310-win_amd64.pyd"; assert "site" in sys.modules; print("BLOOM_RUNTIME_OK")`
+	cmd := exec.Command(filepath.Join(dir, "python.exe"), "-c", check)
+	cmd.Env = append(os.Environ(), "PYTHONNOUSERSITE=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("execute bundled Python: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if !bytes.Contains(out, []byte("BLOOM_RUNTIME_OK")) {
+		return fmt.Errorf("Python validation marker missing: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
 
 func scheduleMetamorphSelfRollout(
 	c *core.Core,

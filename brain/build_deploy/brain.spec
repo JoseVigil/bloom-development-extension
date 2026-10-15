@@ -208,6 +208,7 @@ hiddenimports = [
     'brain.core.health.websocket_status_manager',
     'brain.core.intelligence_supply',
     'brain.core.intent.effect_ledger',
+    'brain.core.intent.experiment',
     'brain.core.intent.fs_contracts',
     'brain.core.intent.gen_domain',
     'brain.core.intent.genesis_intelligence',
@@ -215,6 +216,7 @@ hiddenimports = [
     'brain.core.intent.recovery_manager',
     'brain.core.intent.response_parser',
     'brain.core.intent.staging_manager',
+    'brain.core.intent.test_experiment',
     'brain.core.intent.validation_manager',
     'brain.core.intent_manager',
     'brain.core.intent_state_manager',
@@ -282,6 +284,7 @@ hiddenimports = [
 from PyInstaller.utils.hooks import collect_data_files
 
 templates_src = PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'
+intent_schema_src = PROJECT_ROOT / 'brain' / 'core' / 'intent' / 'schema'
 
 datas = [
     # === Templates ===
@@ -322,6 +325,11 @@ datas = [
 (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
     (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
+
+datas.extend(
+    (str(schema), 'brain/core/intent/schema')
+    for schema in sorted(intent_schema_src.glob('*.json'))
+)
 
 datas += collect_data_files('chromadb')
 

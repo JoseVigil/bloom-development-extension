@@ -4,9 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from jsonschema import Draft202012Validator
 
-from brain.core.intelligence_supply import IntelligenceSupplyClient, SupplyError, digest, persist, read_json
+from brain.core.intelligence_supply import IntelligenceSupplyClient, SupplyError, digest, persist, read_json, text_digest
 from brain.core.intent.genesis_intelligence import GenesisIntelligence
+from brain.core.intent_manager import IntentManager
 from brain.core.intent_state_manager import IntentStateManager
 from aitap.accounting.store import AccountingStore
 from aitap.intelligence.service import IntelligenceService
@@ -41,27 +43,64 @@ def setup_lifecycle(tmp_path):
     manager.close_phaseless_act()
     index = tmp_path / "nucleus/.cache/.semantic-index.json"
     persist(index, {"domains": {}})
-    aitap_root = Path(__file__).resolve().parents[3] / "installer/aitap"
-    engine = RoutingEngine.from_files(aitap_root / "policies/genesis-runtime-intelligence-v2.json",
-                                      aitap_root / "registry/genesis-pilot-v2.json")
     provider = ControlledProvider()
-    service = IntelligenceService(engine, AccountingStore(tmp_path / "accounting"),
-                                  SimpleNamespace(resolve=lambda _: "test-only"), provider)
     def runner(command, **kwargs):
-        response = service.supply(read_json(command[-1]))
+        request = read_json(command[-1])
+        generated = provider.generate(payload=request["payload"], model="controlled-gemini")
+        raw = generated.raw_response
+        routing = {"routing_decision_id": "rd-controlled", "logical_inference_id": request["logical_inference_id"],
+                   "policy_version": request["routing"]["policy_version"],
+                   "effective_intelligence": {"provider": "google", "backend_id": "gemini_api",
+                                               "model": "controlled-gemini", "credential_ref": "credential-ref://gemini/default"}}
+        response = {"schema_version": "cognituum.intelligence-supply-result/v1",
+                    "request_id": request["request_id"], "logical_inference_id": request["logical_inference_id"],
+                    "outcome": "completed", "routing_decision_id": "rd-controlled", "routing_decision": routing,
+                    "raw_response": raw, "raw_response_digest": text_digest(raw),
+                    "usage": {"input_tokens": 15, "output_tokens": 20}, "provider": "google",
+                    "model": "controlled-gemini", "latency_ms": 1,
+                    "accounting_ref": "accounting://inference/" + request["logical_inference_id"][7:]}
         return SimpleNamespace(returncode=0, stdout=json.dumps(response), stderr="")
     client = IntelligenceSupplyClient(runner=runner)
-    return GenesisIntelligence(root, index, client), provider, service
+    return GenesisIntelligence(root, index, client), provider, SimpleNamespace()
 
 
 def approve():
     return [{"cluster_id": "c1", "human_decision": "approved"}]
 
 
+def test_classification_schema_exposes_new_identity_and_score_constraints():
+    schema_path = Path(__file__).parents[2] / "core/intent/schema/ing_classification_result_v1.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    value = {
+        "schema_version": "bloom.ing-classification/v1",
+        "intent_id": "intent-1",
+        "mandate_id": "mandate-1",
+        "turn_id": "1",
+        "input_digest": "sha256:" + "0" * 64,
+        "clusters": [cluster()],
+    }
+    validator = Draft202012Validator(schema)
+    assert not list(validator.iter_errors(value))
+
+    value["clusters"][0]["domain"]["score"] = 1
+    value["clusters"][0]["gene"]["score"] = 1
+    errors = list(validator.iter_errors(value))
+    assert len(errors) == 2
+    assert {tuple(error.absolute_path) for error in errors} == {
+        ("clusters", 0, "domain", "score"),
+        ("clusters", 0, "gene", "score"),
+    }
+
+
 def test_ing_waits_for_human_then_done_and_replays(tmp_path):
     lifecycle, provider, _ = setup_lifecycle(tmp_path)
     waiting = lifecycle.run()
     assert waiting["status"] == "awaiting_human_decision"
+    assert waiting["mandate_id"] == "MND-CONTROLLED"
+    assert waiting["classification"]["clusters"] == [cluster()]
+    assert waiting["classification_digest"].startswith("sha256:")
+    assert waiting["raw_response_digest"].startswith("sha256:")
+    assert waiting["routing_decision"]["policy_version"] == "mandate-gen/v1"
     assert read_json(lifecycle.index) == {"domains": {}}
     result = lifecycle.run(decisions=approve())
     assert result["status"] == "done"
@@ -172,3 +211,55 @@ def test_tampered_effect_evidence_blocks_done(tmp_path):
     lifecycle.index.write_text(json.dumps(index))
     with pytest.raises(Exception, match="evidence verification failed"):
         lifecycle.run()
+
+
+def _nucleus_root(tmp_path):
+    root = tmp_path / ".bloom" / ".nucleus-fixture"
+    (root / ".core").mkdir(parents=True)
+    (root / ".core" / ".nucleus-config.json").write_text("{}", encoding="utf-8")
+    return root
+
+
+def test_bsip_identity_is_scoped_by_mandate_and_replay_is_idempotent(tmp_path):
+    root = _nucleus_root(tmp_path)
+    manager = IntentManager()
+
+    first = manager.create_intent(
+        "ing", "sample_project", nucleus_path=root,
+        mandate_id="mandate-one", domain_baseline="empty",
+    )
+    replay = manager.create_intent(
+        "ing", "sample_project", nucleus_path=root,
+        mandate_id="mandate-one", domain_baseline="empty",
+    )
+    second = manager.create_intent(
+        "ing", "sample_project", nucleus_path=root,
+        mandate_id="mandate-two", domain_baseline="empty",
+    )
+
+    assert replay["intent_id"] == first["intent_id"]
+    assert replay["intent_path"] == first["intent_path"]
+    assert replay["created_at"] == first["created_at"]
+    assert second["intent_id"] != first["intent_id"]
+    assert second["intent_path"] != first["intent_path"]
+    assert IntentStateManager.load(Path(first["intent_path"])).snapshot()["mandate_id"] == "mandate-one"
+    assert IntentStateManager.load(Path(second["intent_path"])).snapshot()["mandate_id"] == "mandate-two"
+
+
+def test_bsip_replay_rejects_divergent_persisted_identity(tmp_path):
+    root = _nucleus_root(tmp_path)
+    manager = IntentManager()
+    created = manager.create_intent(
+        "ing", "sample_project", nucleus_path=root,
+        mandate_id="mandate-one", domain_baseline="empty",
+    )
+    state_path = Path(created["intent_path"]) / ".ing_state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["mandate_id"] = "different-mandate"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="existente incompatible"):
+        manager.create_intent(
+            "ing", "sample_project", nucleus_path=root,
+            mandate_id="mandate-one", domain_baseline="empty",
+        )

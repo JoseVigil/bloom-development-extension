@@ -316,7 +316,11 @@ func PersistHumanSyncActivity(input PersistHumanSyncInput) (PersistHumanSyncResu
 			return false, nil
 		}
 		if status, _ := signature["status"].(string); status != "" && status != "not_ready" && status != "pending" {
-			return false, fmt.Errorf("transición signature %s → pending inválida", status)
+			reconciliation, _ := rawMap["reconciliation"].(map[string]interface{})
+			recoveringLostWorkflow := status == "failed" && reconciliation["status"] == "required" && reconciliation["reason"] == "unsigned_without_active_workflow"
+			if !recoveringLostWorkflow {
+				return false, fmt.Errorf("transición signature %s → pending inválida", status)
+			}
 		}
 		signature["status"] = "pending"
 		signature["intentId"] = input.IntentID

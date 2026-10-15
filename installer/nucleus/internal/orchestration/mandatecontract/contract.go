@@ -25,6 +25,7 @@ type Contract struct {
 	Objective       string        `json:"objective"`
 	Domain          Domain        `json:"domain"`
 	Action          Action        `json:"action"`
+	Actions         []Action      `json:"actions,omitempty"`
 	Intelligence    *Intelligence `json:"intelligence,omitempty"`
 	Inputs          []Input       `json:"inputs"`
 	Gravity         []GravityRef  `json:"gravity"`
@@ -52,6 +53,7 @@ type Intelligence struct {
 	MaxUSD              string  `json:"maxUsd"`
 	MaxTotalTokens      int     `json:"maxTotalTokens"`
 	MaxOutputTokens     int     `json:"maxOutputTokens"`
+	SupplyGrantID       string  `json:"supplyGrantId"`
 }
 
 type Domain struct {
@@ -72,12 +74,50 @@ type GravityRef struct {
 }
 
 type Action struct {
-	ActionID       string `json:"actionId"`
-	Type           string `json:"type"`
-	IntentType     string `json:"intentType"`
-	DomainID       string `json:"domainId"`
-	ArtifactRef    string `json:"artifactRef"`
-	IdempotencyKey string `json:"idempotencyKey"`
+	ActionID       string   `json:"actionId"`
+	Type           string   `json:"type"`
+	IntentType     string   `json:"intentType"`
+	DomainID       string   `json:"domainId"`
+	ArtifactRef    string   `json:"artifactRef"`
+	IdempotencyKey string   `json:"idempotencyKey"`
+	DependsOn      []string `json:"dependsOn,omitempty"`
+	WhenResult     string   `json:"whenResult,omitempty"`
+}
+
+// ValidateMandateActions pins the executable v4 plan to the approved vertical.
+// Branch conditions are part of the signed contract, never a workflow signal.
+func ValidateMandateActions(actions []Action) error {
+	if len(actions) != 6 {
+		return errors.New("Mandate requires exactly six signed Actions")
+	}
+	types := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
+	seen := make(map[string]bool, len(actions))
+	keys := make(map[string]bool, len(actions))
+	for i, action := range actions {
+		if action.ActionID == "" || seen[action.ActionID] || action.Type != "run_intent" ||
+			action.IntentType != types[i] || action.IdempotencyKey == "" || keys[action.IdempotencyKey] {
+			return fmt.Errorf("invalid Mandate Action at position %d", i)
+		}
+		seen[action.ActionID] = true
+		keys[action.IdempotencyKey] = true
+		if i == 0 {
+			if len(action.DependsOn) != 0 || action.WhenResult != "" {
+				return errors.New("ING must be unconditional and first")
+			}
+			continue
+		}
+		if len(action.DependsOn) != 1 || action.DependsOn[0] != actions[i-1].ActionID {
+			return fmt.Errorf("Mandate Action %d has an invalid dependency", i)
+		}
+		expectedCondition := ""
+		if i == 4 {
+			expectedCondition = "remediation_required"
+		}
+		if action.WhenResult != expectedCondition {
+			return fmt.Errorf("Mandate Action %d has an invalid branch condition", i)
+		}
+	}
+	return nil
 }
 
 type Fulfillment struct {
@@ -89,33 +129,47 @@ type Fulfillment struct {
 // Validate rejects underspecified or externally directed effects. It does not
 // authorize signing, activation, filesystem writes, or the human approver.
 func (c Contract) Validate() error {
-	if c.ContractVersion != 1 && c.ContractVersion != 2 && c.ContractVersion != 3 {
+	if c.ContractVersion != 1 && c.ContractVersion != 2 && c.ContractVersion != 3 && c.ContractVersion != 4 {
 		return errors.New("unsupported Mandate contract version")
 	}
 	if c.MandateID == "" || c.ContractVersion == 0 || c.OrganizationID == "" || c.ProjectID == "" || c.ProjectBinding == "" || c.Objective == "" || c.Domain.ID == "" || c.Domain.Name == "" {
 		return errors.New("Mandate identity, governed project, objective and domain are required")
 	}
-	if c.Action.ActionID == "" || c.Action.Type != "run_intent" || c.Action.IntentType != "gen" || c.Action.DomainID != c.Domain.ID || c.Action.IdempotencyKey == "" {
-		return errors.New("exactly one bound gen Action is required")
+	if c.ContractVersion == 4 {
+		if c.Action.ActionID != "" || c.Action.IntentType != "" {
+			return errors.New("v4 cannot carry a legacy Action")
+		}
+		if err := ValidateMandateActions(c.Actions); err != nil {
+			return err
+		}
+		i := c.Intelligence
+		if i == nil || i.PolicyVersion == "" || !filepath.IsAbs(i.PolicyRef) || !hexDigest(i.PolicySHA256) ||
+			!filepath.IsAbs(i.RegistryRef) || !hexDigest(i.RegistrySHA256) || i.MaxTotalTokens < 1 || i.MaxOutputTokens < 1 {
+			return errors.New("v4 signed intelligence policy, registry and limits are required")
+		}
+	} else {
+		if len(c.Actions) != 0 || c.Action.ActionID == "" || c.Action.Type != "run_intent" || c.Action.IntentType != "gen" || c.Action.DomainID != c.Domain.ID || c.Action.IdempotencyKey == "" {
+			return errors.New("exactly one bound gen Action is required")
+		}
+		if c.Action.ArtifactRef != "domain_definition.json" {
+			return errors.New("first vertical requires domain_definition.json")
+		}
 	}
-	if c.Action.ArtifactRef != "domain_definition.json" {
-		return errors.New("first vertical requires domain_definition.json")
-	}
-	if c.ContractVersion >= 2 {
+	if c.ContractVersion >= 2 && c.ContractVersion <= 3 {
 		i := c.Intelligence
 		if i == nil || i.Model == "" || !filepath.IsAbs(i.PolicyRef) || !hexDigest(i.PolicySHA256) ||
 			!filepath.IsAbs(i.RegistryRef) || !hexDigest(i.RegistrySHA256) || i.MaxUSD == "" ||
-			i.MaxTotalTokens < 1 || i.MaxOutputTokens < 1 {
+			i.MaxTotalTokens < 1 || i.MaxOutputTokens < 1 || (c.ContractVersion == 2 && i.SupplyGrantID == "") {
 			return errors.New("Mandate intelligence selection or explicit budget missing")
 		}
 		usd, parseErr := strconv.ParseFloat(i.MaxUSD, 64)
 		if parseErr != nil {
 			return errors.New("Mandate intelligence USD ceiling invalid")
 		}
-		if c.ContractVersion == 2 && (i.Provider != "anthropic" || i.BackendID != "anthropic_api" ||
-			i.CredentialRef == nil || *i.CredentialRef != "credential-ref://anthropic/default" ||
+		if c.ContractVersion == 2 && (i.Provider != "google" || i.BackendID != "gemini_api" ||
+			i.CredentialRef == nil || *i.CredentialRef != "credential-ref://gemini/default" ||
 			i.PolicyVersion != "mandate-gen/v1" || !(usd > 0 && usd <= 1)) {
-			return errors.New("Mandate v2 Anthropic selection invalid")
+			return errors.New("Mandate v2 Gemini selection invalid")
 		}
 		if c.ContractVersion == 3 && (i.MaxOutputTokens > i.MaxTotalTokens || i.Provider != "ollama" || i.ModelID == "" ||
 			!strings.HasPrefix(i.BackendID, "local.ollama.") || i.CredentialRef != nil || i.Privacy != "local" ||
@@ -125,7 +179,12 @@ func (c Contract) Validate() error {
 			return errors.New("Mandate v3 local selection invalid")
 		}
 	}
-	if c.Fulfillment.Evaluator != "domain-definition-structure" || c.Fulfillment.EvaluatorVersion != "1" ||
+	if c.ContractVersion == 4 {
+		if c.Fulfillment.Evaluator != "exp-ready" || c.Fulfillment.EvaluatorVersion != "1" ||
+			!reflect.DeepEqual(c.Fulfillment.RequiredFields, []string{"ing", "dis", "doc", "exp"}) {
+			return errors.New("unsupported Mandate fulfillment evaluator")
+		}
+	} else if c.Fulfillment.Evaluator != "domain-definition-structure" || c.Fulfillment.EvaluatorVersion != "1" ||
 		!reflect.DeepEqual(c.Fulfillment.RequiredFields, []string{"domainId", "purpose", "boundaries", "concepts", "decisions", "sources"}) {
 		return errors.New("unsupported fulfillment evaluator for first local vertical")
 	}

@@ -42,6 +42,7 @@ type DomainAction struct {
 
 type MandateExecutionInput struct {
 	MandateID string
+	Adopted   bool
 	Project   string
 	// MandatesRoot — CAMPO NUEVO esta sesión: requerido por
 	// ScaffoldDomainActivity y PersistExecutionResultActivity para ubicar
@@ -186,6 +187,22 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 	// the signed version and rejects unbound Files before any effect.
 	if input.MandateID == "" || input.MandatesRoot == "" || input.Project != "" || input.ProjectID != "" || input.IntentType != "" || len(input.Domains) != 0 {
 		return MandateExecutionResult{Success: false, Error: "execution request contains an unsigned plan or lacks Mandate identity"}, nil
+	}
+	if input.Adopted {
+		var ing activities.MandateIntentResult
+		if err := workflow.ExecuteActivity(ctx, "MandateIntentActivity", activities.MandateIntentInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+		}).Get(ctx, &ing); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		if ing.MandateID != input.MandateID || ing.ActionID == "" || ing.ContractDigest == "" || ing.IntentID == "" ||
+			ing.EvidenceRef == "" || ing.EvidenceDigest == "" || ing.Status != "awaiting_human_decision" {
+			return MandateExecutionResult{Success: false, Error: "ING returned incomplete evidence"}, nil
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGResultActivity, ing, input.MandatesRoot).Get(ctx, nil); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		return MandateExecutionResult{Success: true, Fulfilled: false}, nil
 	}
 	var genResult activities.MandateGenResult
 	if err := workflow.ExecuteActivity(ctx, "MandateGenActivity", activities.MandateGenInput{

@@ -130,6 +130,13 @@ test('versioned mandate transports stateVersion and updatedAt', async () => {
   assert.equal(response.updatedAt, '2026-08-27T12:00:00.000Z');
 });
 
+test('Genesis continuity identities are exposed by catch-up', async () => {
+  const { response } = await listFixture({ status: 'building', projectId: 'project-1', mandateLaunchId: 'launch-1', recoveryRequestId: 'request-1' });
+  assert.equal(response.projectId, 'project-1');
+  assert.equal(response.mandateLaunchId, 'launch-1');
+  assert.equal(response.recoveryRequestId, 'request-1');
+});
+
 test('legacy mandate invents no revision metadata', async () => {
   const { response } = await listFixture({ status: 'building' });
   assert.equal(Object.hasOwn(response, 'stateVersion'), false);
@@ -137,14 +144,18 @@ test('legacy mandate invents no revision metadata', async () => {
 });
 
 test('create handler dual-writes mandate_state.json and dual-emits response', async () => {
-  await withWorkspace(async ({ mandatesRoot }) => {
-    const mandateId = 'created-fixture';
+  await withWorkspace(async ({ workspace, mandatesRoot }) => {
+    const projectPath = path.join(workspace, 'fixture-project');
+    fs.mkdirSync(projectPath);
+    fs.writeFileSync(path.join(projectPath, 'README.md'), '# fixture\n');
     const reply = makeReply();
     const request = {
       body: {
-        mandateId,
+        mandateLaunchId: '44444444-4444-4444-8444-444444444444',
         mandateType: 'genesis',
+        projectId: 'project-created-fixture',
         project: 'fixture-project',
+        projectPath,
         name: 'fixture-genesis',
         source: 'fixture',
       },
@@ -153,10 +164,15 @@ test('create handler dual-writes mandate_state.json and dual-emits response', as
 
     await createMandateHandler(request, reply);
 
+    const mandateId = reply.payload.mandateId;
+    assert.equal(typeof mandateId, 'string');
+
     const written = JSON.parse(
       fs.readFileSync(path.join(mandatesRoot, mandateId, 'mandate_state.json'), 'utf8'),
     );
     assert.equal(written.status, 'building');
+    assert.equal(written.projectId, 'project-created-fixture');
+    assert.equal(written.mandateLaunchId, '44444444-4444-4444-8444-444444444444');
     assert.equal(written.currentStatus, 'building');
     assert.equal(reply.payload.status, 'building');
     assert.equal(reply.payload.currentStatus, 'building');

@@ -29,6 +29,8 @@ Linux x86_64 — cpython-3.10.20+20260414
 https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.10.20+20260414-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
 Para Linux ARM64:
 https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.10.20+20260414-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz
+Windows 
+https://github.com/astral-sh/python-build-standalone/releases/download/20260414/cpython-3.10.20+20260414-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
 
 OpenCode
 https://github.com/opencode-ai/opencode/releases

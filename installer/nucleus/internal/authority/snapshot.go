@@ -605,7 +605,7 @@ func validateProjectionForVersion(f FullContent, org, schemaVersion string) erro
 				issuerHuman = true
 			}
 		}
-		readGrant := g.Consumer == "aitap" && g.Permission == "vault.key.read" && g.KeyID == "anthropic-key:default" && (g.Purpose == "mandate_genesis_intelligence" || g.Purpose == "mandate_gen_intelligence")
+		readGrant := g.Consumer == "aitap" && g.Permission == "vault.key.read" && (g.KeyID == "anthropic-key:default" || g.KeyID == "gemini-key:default") && (g.Purpose == "mandate_intelligence" || g.Purpose == "mandate_genesis_intelligence" || g.Purpose == "mandate_gen_intelligence")
 		writeGrant := g.Consumer == "onboarding" && g.Permission == "vault.key.write" && g.KeyID == "gemini-key:default" && g.Purpose == "onboarding_gemini"
 		if !unique(grants, g.GrantID) || g.OrganizationID != org || g.InstallationID == "" || (!readGrant && !writeGrant) || len(key) != 32 || base64.RawURLEncoding.EncodeToString(key) != g.ServicePublicKey || !issuerHuman || !g.ValidUntil.After(g.ValidFrom) || err != nil {
 			return errors.New("invalid vault service grant")
@@ -619,7 +619,7 @@ func validateProjectionForVersion(f FullContent, org, schemaVersion string) erro
 	}
 	intelligenceGrants := map[string]bool{}
 	const maxSafeInteger = uint64(9007199254740991)
-	money := regexp.MustCompile(`^(0|[1-9][0-9]*\.[0-9]{6})$`)
+	money := regexp.MustCompile(`^(0|0\.[0-9]{6}|[1-9][0-9]*\.[0-9]{6})$`)
 	if f.IntelligenceSupplyGrants != nil {
 		for _, g := range *f.IntelligenceSupplyGrants {
 			actorHuman, issuerHuman := false, false

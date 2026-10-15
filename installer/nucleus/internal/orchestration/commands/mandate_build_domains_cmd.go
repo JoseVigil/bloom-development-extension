@@ -70,8 +70,10 @@ func createDomainsSubcommand(c *core.Core) *cobra.Command {
 		Use:   "domains",
 		Short: "Gestiona los dominios de un Mandate en preparación (list/confirm/reject)",
 		Annotations: map[string]string{
-			"category": "MANDATES",
+			"category":      "MANDATES",
+			"json_response": `{"command":"domains","subcommands":["list","confirm","reject"]}`,
 		},
+		Example: "  nucleus mandate build domains --help\n  nucleus --json mandate build domains list --id MANDATE_ID",
 	}
 	cmd.AddCommand(createDomainsListSubcommand(c))
 	cmd.AddCommand(createDomainsConfirmSubcommand(c))
@@ -85,6 +87,12 @@ func createDomainsListSubcommand(c *core.Core) *cobra.Command {
 		Use:   "list",
 		Short: "Lista los dominios candidatos detectados por Brain (Fase 2)",
 		Args:  cobra.NoArgs,
+		Annotations: map[string]string{
+			"category":      "MANDATES",
+			"json_response": `[{"domainId":"DOMAIN_ID","name":"Domain","cohesionScore":0.95,"suggestedActionCount":1}]`,
+		},
+		Example: `  nucleus mandate build domains list --id MANDATE_ID
+  nucleus --json mandate build domains list --id MANDATE_ID`,
 		Run: func(cmd *cobra.Command, args []string) {
 			state, _, err := readMandateState(mandateID)
 			if err != nil {
@@ -113,6 +121,7 @@ func createDomainsListSubcommand(c *core.Core) *cobra.Command {
 func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 	var mandateID string
 	var domainIDs []string
+	var docs []string
 	cmd := &cobra.Command{
 		Use:     "confirm",
 		Short:   "Confirma un dominio y congela Files con hash y tamaño",
@@ -157,7 +166,24 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 				fail(c, err)
 				return
 			}
-			frozenFiles, err := mandatecontract.FreezeFiles(filepath.Join(cfg.MandatesRoot(), mandateID), state.DocsProvided)
+			mandateDir := filepath.Join(cfg.MandatesRoot(), mandateID)
+			if len(docs) > 0 {
+				if len(state.DocsProvided) == 0 {
+					state.DocsProvided, err = copyDocsInto(mandateDir, docs)
+					if err != nil {
+						fail(c, fmt.Errorf("no pude incorporar documentación antes de confirmar: %w", err))
+						return
+					}
+					if len(state.DocsProvided) == 0 {
+						fail(c, fmt.Errorf("--docs no produjo ningún documento regular"))
+						return
+					}
+				} else if err := verifyExistingDocs(mandateDir, state.DocsProvided, docs); err != nil {
+					fail(c, fmt.Errorf("la documentación ya persistida no puede sustituirse: %w", err))
+					return
+				}
+			}
+			frozenFiles, err := mandatecontract.FreezeFiles(mandateDir, state.DocsProvided)
 			if err != nil {
 				fail(c, fmt.Errorf("no pude congelar Files: %w", err))
 				return
@@ -180,7 +206,7 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 			state.Phases.Validate.HumanSync.ConfirmedBy = confirmedBy
 			state.Phases.Validate.HumanSync.Files = frozenFiles
 
-			if err := writeMandateStateValidate(mandateID, raw, state.Phases.Validate); err != nil {
+			if err := writeMandateStateValidate(mandateID, raw, state.DocsProvided, state.Phases.Validate); err != nil {
 				fail(c, err)
 				return
 			}
@@ -252,7 +278,64 @@ func createDomainsConfirmSubcommand(c *core.Core) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&mandateID, "id", "", "ID del mandate (requerido)")
 	cmd.Flags().StringSliceVar(&domainIDs, "domain-id", nil, "domainId a confirmar (repetible)")
+	cmd.Flags().StringSliceVar(&docs, "docs", nil, "Archivo o carpeta documental a incorporar si el Mandate todavía no tiene documentos (repetible)")
 	return cmd
+}
+
+func verifyExistingDocs(mandateDir string, persisted, sources []string) error {
+	expected := make(map[string][]byte, len(persisted))
+	for _, name := range persisted {
+		content, err := os.ReadFile(filepath.Join(mandateDir, "docs", name))
+		if err != nil {
+			return fmt.Errorf("no pude leer documento persistido %q: %w", name, err)
+		}
+		expected[name] = content
+	}
+	seen := make(map[string]bool, len(expected))
+	verifyOne := func(source string) error {
+		name := filepath.Base(source)
+		if seen[name] {
+			return fmt.Errorf("documento duplicado %q", name)
+		}
+		content, err := os.ReadFile(source)
+		if err != nil {
+			return err
+		}
+		persistedContent, ok := expected[name]
+		if !ok || !reflect.DeepEqual(content, persistedContent) {
+			return fmt.Errorf("%q difiere del documento congelable", name)
+		}
+		seen[name] = true
+		return nil
+	}
+	for _, source := range sources {
+		info, err := os.Stat(source)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			if err := verifyOne(source); err != nil {
+				return err
+			}
+			continue
+		}
+		entries, err := os.ReadDir(source)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if err := verifyOne(filepath.Join(source, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	if len(seen) != len(expected) {
+		return fmt.Errorf("el conjunto documental no coincide")
+	}
+	return nil
 }
 
 func createDomainsRejectSubcommand(c *core.Core) *cobra.Command {
@@ -262,6 +345,12 @@ func createDomainsRejectSubcommand(c *core.Core) *cobra.Command {
 		Use:   "reject",
 		Short: "Rechaza un dominio candidato (no pasa a Fase 4)",
 		Args:  cobra.NoArgs,
+		Annotations: map[string]string{
+			"category":      "MANDATES",
+			"json_response": `{"success":true,"mandateId":"MANDATE_ID","domainId":"DOMAIN_ID","persisted":false}`,
+		},
+		Example: `  nucleus mandate build domains reject --id MANDATE_ID --domain-id DOMAIN_ID
+  nucleus --json mandate build domains reject --id MANDATE_ID --domain-id DOMAIN_ID`,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Implementación deliberadamente mínima: rechazar hoy solo
 			// significa "no incluirlo en el próximo confirm" — no hay
@@ -272,7 +361,12 @@ func createDomainsRejectSubcommand(c *core.Core) *cobra.Command {
 			// que la superficie de CLI coincida con el contrato §4, pero
 			// avisa explícitamente en vez de fingir un efecto que no
 			// tiene.
-			c.Logger.Printf("[INFO] 'reject' no persiste estado propio todavía — simplemente no incluyas %q en 'domains confirm'", domainID)
+			if c.IsJSON {
+				data, _ := json.Marshal(map[string]interface{}{"success": true, "mandateId": mandateID, "domainId": domainID, "persisted": false})
+				fmt.Println(string(data))
+			} else {
+				c.Logger.Printf("[INFO] 'reject' no persiste estado propio todavía — simplemente no incluyas %q en 'domains confirm'", domainID)
+			}
 			_ = mandateID
 		},
 	}
@@ -315,14 +409,14 @@ func readMandateState(mandateID string) (mandateStateDoc, map[string]interface{}
 // del documento crudo ya leído, preservando todo lo demás tal cual estaba
 // (ingest/cluster, mandateType, source, etc. — este comando no es dueño de
 // esos campos).
-func writeMandateStateValidate(mandateID string, _ map[string]interface{}, validate validatePhaseJSON) error {
+func writeMandateStateValidate(mandateID string, _ map[string]interface{}, docsProvided []string, validate validatePhaseJSON) error {
 	cfg, err := supervisor.LoadNucleusConfig()
 	if err != nil {
 		return fmt.Errorf("no pude leer nucleus.json: %w", err)
 	}
 
 	path := filepath.Join(cfg.MandatesRoot(), mandateID, "mandate_state.json")
-	_, err = mutateMandateStateValidate(path, validate)
+	_, err = mutateMandateStateDocsAndValidate(path, docsProvided, validate)
 	if err != nil {
 		return fmt.Errorf("no pude escribir mandate_state.json de %s: %w", mandateID, err)
 	}
@@ -330,6 +424,10 @@ func writeMandateStateValidate(mandateID string, _ map[string]interface{}, valid
 }
 
 func mutateMandateStateValidate(path string, validate validatePhaseJSON) (uint64, error) {
+	return mutateMandateStateDocsAndValidate(path, nil, validate)
+}
+
+func mutateMandateStateDocsAndValidate(path string, docsProvided []string, validate validatePhaseJSON) (uint64, error) {
 	validateBytes, err := json.Marshal(validate)
 	if err != nil {
 		return 0, fmt.Errorf("no pude serializar phases.validate: %w", err)
@@ -340,6 +438,18 @@ func mutateMandateStateValidate(path string, validate validatePhaseJSON) (uint64
 	}
 
 	return mandatestate.Mutate(path, func(rawMap map[string]interface{}) (bool, error) {
+		changed := false
+		if docsProvided != nil {
+			if prior, exists := rawMap["docsProvided"]; exists && !reflect.DeepEqual(prior, stringSliceAsAny(docsProvided)) {
+				if priorSlice, ok := prior.([]interface{}); ok && len(priorSlice) > 0 {
+					return false, fmt.Errorf("docsProvided ya persistido no puede sustituirse")
+				}
+			}
+			if !reflect.DeepEqual(rawMap["docsProvided"], stringSliceAsAny(docsProvided)) {
+				rawMap["docsProvided"] = docsProvided
+				changed = true
+			}
+		}
 		phases, ok := rawMap["phases"].(map[string]interface{})
 		if !ok {
 			phases = map[string]interface{}{}
@@ -358,13 +468,21 @@ func mutateMandateStateValidate(path string, validate validatePhaseJSON) (uint64
 			}
 		}
 		if reflect.DeepEqual(current["humanSync"], desiredHumanSync) {
-			return false, nil
+			return changed, nil
 		}
 		current["humanSync"] = desiredHumanSync
 		phases["validate"] = current
 		rawMap["phases"] = phases
 		return true, nil
 	})
+}
+
+func stringSliceAsAny(values []string) []interface{} {
+	result := make([]interface{}, len(values))
+	for index, value := range values {
+		result[index] = value
+	}
+	return result
 }
 
 func fail(c *core.Core, err error) {

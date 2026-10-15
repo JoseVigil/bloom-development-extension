@@ -57,6 +57,18 @@ describe('isolated human/admin HTTP journey on temporary D1',()=>{
   expect(payload.keys).toMatchObject([{key_id:vector.key_id,status:'active'}]);
   await provisionFixtureTrustManifest(db,org,fixture);
   expect(await loadTrustManifest(db,org)).toBe(first);
+  const renewalTime='2026-09-16T12:05:00Z',renewal={...fixture,now:()=>renewalTime};
+  await provisionFixtureTrustManifest(db,org,renewal);
+  const second=await loadTrustManifest(db,org);
+  expect(second).not.toBe(first);
+  const renewed=await verifyTrustManifest(JSON.parse(second!), 'development-rfc8032-root',
+    '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo',renewalTime);
+  expect(renewed.manifest_version).toBe('2');
+  expect(Date.parse(renewed.expires_at)).toBeGreaterThan(Date.parse(renewalTime));
+  const history=await db.prepare('SELECT manifest_version,envelope_json FROM authority_trust_manifests WHERE organization_id=? ORDER BY CAST(manifest_version AS INTEGER)').bind(org).all<{manifest_version:string;envelope_json:string}>();
+  expect(history.results).toEqual([{manifest_version:'1',envelope_json:first},{manifest_version:'2',envelope_json:second}]);
+  await provisionFixtureTrustManifest(db,org,renewal);
+  expect(await loadTrustManifest(db,org)).toBe(second);
   const noFixtureOrg=await initialize();
   await provisionFixtureTrustManifest(db,noFixtureOrg,{...fixture,allowTestFixtures:false});
   expect(await loadTrustManifest(db,noFixtureOrg)).toBeNull();

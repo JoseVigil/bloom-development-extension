@@ -1,8 +1,20 @@
 // webview/app/src/lib/api.ts
 // UPDATED VERSION with all required exports for enhanced onboarding components
 
-const API_BASE_URL = 'http://localhost:48215/api/v1';
-const WS_BASE_URL = 'ws://localhost:4124';
+function runnerCoreLoopbackUrl(value: string | undefined, protocol: 'http:' | 'ws:'): string | undefined {
+  if (!value) return undefined;
+  const url = new URL(value);
+  if (url.protocol !== protocol || url.hostname !== '127.0.0.1' || !url.port ||
+      url.username || url.password || url.search || url.hash) {
+    throw new Error('Invalid Runner Core loopback URL');
+  }
+  return url.toString().replace(/\/$/, '');
+}
+
+const API_BASE_URL = runnerCoreLoopbackUrl(import.meta.env.VITE_RUNNER_CORE_API_BASE_URL, 'http:')
+  ?? 'http://localhost:48215/api/v1';
+const WS_BASE_URL = runnerCoreLoopbackUrl(import.meta.env.VITE_RUNNER_CORE_WS_BASE_URL, 'ws:')
+  ?? 'ws://localhost:4124';
 
 console.log('🔡 [API] Configuration:', {
   API_BASE_URL,
@@ -465,6 +477,7 @@ export interface MandateSummary {
   mandateId: string;
   mandateType?: 'standard' | 'genesis' | 'domain_expansion';
   project?: string;
+	projectId?: string;
   name?: string;
   source?: string;
   status?: string;
@@ -473,6 +486,8 @@ export interface MandateSummary {
   stateVersion?: number;
   updatedAt?: string;
   createdAt?: string;
+	mandateLaunchId?: string;
+	recoveryRequestId?: string;
   /** 'state' = leído de mandate_state.json (genesis/domain_expansion en curso). 'draft' = mandate_draft.json (standard sin confirmar). */
   fileKind?: 'state' | 'draft';
 }
@@ -484,9 +499,15 @@ export async function listMandates(): Promise<{ mandates: MandateSummary[] }> {
 
 export interface CreateMandateParams {
   mandateType: 'genesis' | 'domain_expansion' | 'standard';
+  /** Identidad durable de la solicitud Genesis; Backend genera mandateId. */
+  mandateLaunchId?: string;
+	/** Nucleus reservation identity for project-level Genesis recovery. */
+	recoveryRequestId?: string;
   /** Identidad durable del proyecto; requerida para genesis/domain_expansion. */
   projectId?: string;
   project: string;
+  /** Ruta durable del proyecto Genesis; Core toma de aquí el snapshot documental inicial. */
+  projectPath?: string;
   /** Requerido por el schema del server para genesis/domain_expansion/standard (GenesisCreateBody.name, ver create-mandate.schema.ts). */
   name: string;
   /** Requerido para genesis/domain_expansion — origen del mandate (path o marcador, ej. 'onboarding'). */

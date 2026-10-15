@@ -7,9 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"nucleus/internal/authority"
+	"nucleus/internal/core"
 	"nucleus/internal/governance/ownershipcontract"
 	"os"
 	"path/filepath"
@@ -70,7 +72,7 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	state := authority.FullContent{Principals: []authority.Principal{{PrincipalID: "human", PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{}}},
 		Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{},
 		VaultServiceGrants: []authority.VaultServiceGrant{{GrantID: "grant", OrganizationID: org, InstallationID: installation, Consumer: "aitap", Permission: "vault.key.read",
-			KeyID: "anthropic-key:default", Purpose: mandateGenPurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
+			KeyID: "gemini-key:default", Purpose: mandateGenPurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
 			ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)},
 			{GrantID: "gemini-write", OrganizationID: org, InstallationID: installation, Consumer: "onboarding", Permission: "vault.key.write",
 				KeyID: "gemini-key:default", Purpose: "onboarding_gemini", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
@@ -93,9 +95,17 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 		t.Fatal(err)
 	}
 	writeVaultStatus(t, false)
+	// The service request is governed by the installed active organization.
+	// A background-process override may point at a synthetic workspace, but it
+	// must not redirect the Vault status away from the already validated root.
+	decoyRoot := filepath.Join(dir, "synthetic-workspace", ".bloom", ".nucleus-synthetic")
+	if err := os.MkdirAll(decoyRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BLOOM_NUCLEUS_ROOT", decoyRoot)
 	fake := withFakeKeyring(t)
 	const secret = "sensitive-fixture-secret"
-	fake.store[vaultServiceName()+"/anthropic-key:default"] = secret
+	fake.store[vaultServiceName()+"/gemini-key:default"] = secret
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +113,7 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	defer listener.Close()
 	nonce := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32))
 	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{4}, 32))
-	request := ServiceRequest{GrantID: "grant", OrganizationID: org, InstallationID: installation, KeyID: "anthropic-key:default", Purpose: mandateGenPurpose,
+	request := ServiceRequest{GrantID: "grant", OrganizationID: org, InstallationID: installation, KeyID: "gemini-key:default", Purpose: mandateGenPurpose,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano), Nonce: nonce, ChannelPort: listener.Addr().(*net.TCPAddr).Port, ChannelToken: token}
 	request.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(servicePrivate, serviceMessage(request)))
 	encoded, _ := json.Marshal(request)
@@ -135,6 +145,23 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	encoded, _ = json.Marshal(request)
 	if err = RunServiceRequest(bytes.NewReader(encoded), app); err == nil || len(fake.calls) != calls {
 		t.Fatal("invalid signature reached keyring")
+	}
+	var denied *serviceDeniedError
+	if !errors.Is(err, errServiceDenied) || !errors.As(err, &denied) || denied.stage != "signature" || strings.Contains(err.Error(), request.Signature) {
+		t.Fatal("signature denial stage was not safely attributed")
+	}
+	command := createVaultServiceRequestCommand(&core.Core{Paths: core.Paths{AppDataDir: app}})
+	var commandOut, commandErr bytes.Buffer
+	command.SetIn(strings.NewReader("{}"))
+	command.SetOut(&commandOut)
+	command.SetErr(&commandErr)
+	command.SilenceUsage = true
+	command.SilenceErrors = true
+	if executeErr := command.Execute(); !errors.Is(executeErr, ErrUnauthorized) {
+		t.Fatal("service request CLI did not preserve generic denial", executeErr)
+	}
+	if commandOut.Len() != 0 || commandErr.String() != "VAULT_DENIAL_STAGE=binding\n" || strings.Contains(commandErr.String(), secret) {
+		t.Fatal("service request CLI did not emit only the safe denial stage")
 	}
 	request.Timestamp = time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano)
 	request.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(servicePrivate, serviceMessage(request)))

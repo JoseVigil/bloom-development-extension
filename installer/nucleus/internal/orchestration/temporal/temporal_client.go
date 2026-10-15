@@ -43,6 +43,15 @@ const (
 
 // NewClient crea un nuevo cliente Temporal
 func NewClient(ctx context.Context, paths *core.Paths, jsonMode bool) (*Client, error) {
+	return NewClientAt(ctx, paths, jsonMode, "localhost:7233")
+}
+
+// NewClientAt uses an explicitly selected Temporal endpoint. The ordinary
+// Nucleus entry point continues to use localhost:7233 through NewClient.
+func NewClientAt(ctx context.Context, paths *core.Paths, jsonMode bool, hostPort string) (*Client, error) {
+	if hostPort == "" {
+		return nil, errors.New("temporal hostPort vacío")
+	}
 	// Crear logger específico para Temporal
 	temporalLogger, err := core.InitTemporalLogger(paths, jsonMode)
 	if err != nil {
@@ -50,7 +59,7 @@ func NewClient(ctx context.Context, paths *core.Paths, jsonMode bool) (*Client, 
 	}
 
 	opts := client.Options{
-		HostPort:  "localhost:7233",
+		HostPort:  hostPort,
 		Namespace: "default",
 		Logger:    temporalLogger,
 	}
@@ -490,6 +499,21 @@ func (c *Client) GetWorkflowExecutionState(ctx context.Context, workflowID strin
 		return WorkflowExecutionUnknown, err
 	}
 	return classifyWorkflowExecutionStatus(resp.GetWorkflowExecutionInfo().GetStatus()), nil
+}
+
+// GetMandateWorkflowStates is the authoritative recovery query. Recovery
+// must inspect both workflow identities; checking only the build workflow
+// could supersede a Mandate whose execution child is still running.
+func (c *Client) GetMandateWorkflowStates(ctx context.Context, mandateID string) (map[string]WorkflowExecutionState, error) {
+	states := make(map[string]WorkflowExecutionState, 2)
+	for _, workflowID := range []string{"mandate_build_" + mandateID, "mandate_execution_" + mandateID} {
+		state, err := c.GetWorkflowExecutionState(ctx, workflowID)
+		if err != nil {
+			return nil, fmt.Errorf("no pude consultar estado de %s: %w", workflowID, err)
+		}
+		states[workflowID] = state
+	}
+	return states, nil
 }
 
 func classifyWorkflowExecutionStatus(status enums.WorkflowExecutionStatus) WorkflowExecutionState {

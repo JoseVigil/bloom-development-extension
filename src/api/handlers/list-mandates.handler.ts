@@ -9,6 +9,7 @@ export interface MandateListItem {
   mandateId: string;
   mandateType?: string;
   project?: string;
+	projectId?: string;
   name?: string;
   source?: string;
   status?: string;
@@ -17,6 +18,8 @@ export interface MandateListItem {
   stateVersion?: number;
   updatedAt?: string;
   createdAt?: string;
+	mandateLaunchId?: string;
+	recoveryRequestId?: string;
   /** 'state' = leído de mandate_state.json. 'draft' = mandate_draft.json (standard sin confirmar). */
   fileKind: 'state' | 'draft';
 }
@@ -139,11 +142,14 @@ export async function listMandatesHandler(
         mandateId: parsed.mandateId || mandateId,
         mandateType: parsed.mandateType,
         project: parsed.project,
+		projectId: parsed.projectId,
         source: parsed.source,
         ...normalizedStatus,
         currentPhase: parsed.currentPhase,
         ...revision,
         createdAt: parsed.createdAt,
+		mandateLaunchId: parsed.mandateLaunchId ?? parsed.genesisLaunchId,
+		recoveryRequestId: parsed.recoveryRequestId,
         fileKind: 'state',
       });
       continue;

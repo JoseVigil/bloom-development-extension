@@ -25,11 +25,15 @@ contextBridge.exposeInMainWorld('onboarding', {
   listRepos:     (params) => ipcRenderer.invoke('onboarding:list-repos', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),
 
-  // D-23 — flag "arrancá Genesis" (onboarding.pending_genesis_launch en
-  // nucleus.json). Core lo llama una vez al bootear; el handler en Main
-  // consume Y borra el flag, no solo lo lee. Ver onboarding-handlers.js →
-  // 'onboarding:consume-pending-genesis-launch'.
-  consumePendingGenesisLaunch: () => ipcRenderer.invoke('onboarding:consume-pending-genesis-launch'),
+  // D-23 — Core lee el pending sin borrarlo y lo confirma sólo después del
+  // POST exitoso. El acknowledge correlacionado elimina el flag durable.
+  readPendingGenesisLaunch: () => ipcRenderer.invoke('onboarding:read-pending-genesis-launch'),
+  ackPendingGenesisLaunch: (params) => ipcRenderer.invoke('onboarding:ack-pending-genesis-launch', params),
+
+  // Durable Genesis continuity owned by Nucleus.
+  recoverGenesis: (params) => ipcRenderer.invoke('core:genesis-recover', params),
+  ackGenesisRecovery: (params) => ipcRenderer.invoke('core:genesis-ack-recovery', params),
+  genesisProjectStatus: (params) => ipcRenderer.invoke('core:genesis-project-status', params),
 
   // Marcar step como completado (confirmación externa o fallback manual)
   markStepComplete: (params) => ipcRenderer.invoke('onboarding:mark-step-complete', params),

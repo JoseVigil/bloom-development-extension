@@ -21,12 +21,74 @@ func TestBuildDomainsConfirmHasExactPublicPathAndDualHelpMetadata(t *testing.T) 
 	if err != nil || cmd == nil || cmd.CommandPath() != "nucleus mandate build domains confirm" {
 		t.Fatalf("public path: cmd=%v err=%v", cmd, err)
 	}
-	if cmd.Short == "" || cmd.Long == "" || cmd.Example == "" || cmd.Flags().Lookup("id") == nil || cmd.Flags().Lookup("domain-id") == nil {
+	if cmd.Short == "" || cmd.Long == "" || cmd.Example == "" || cmd.Flags().Lookup("id") == nil || cmd.Flags().Lookup("domain-id") == nil || cmd.Flags().Lookup("docs") == nil {
 		t.Fatal("human help or flags missing")
 	}
 	var sample map[string]interface{}
 	if err := json.Unmarshal([]byte(cmd.Annotations["json_response"]), &sample); err != nil || sample["mandateId"] == nil {
 		t.Fatalf("JSON help invalid: %#v err=%v", sample, err)
+	}
+}
+
+func TestDomainsConfirmCanProvisionMissingDocsOnceAndRetryIdentically(t *testing.T) {
+	root := t.TempDir()
+	mandateDir := filepath.Join(root, "mandate")
+	if err := os.MkdirAll(mandateDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "project")
+	if err := os.MkdirAll(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("# Fixture\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "main.py"), []byte("print('ok')\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	docs, err := copyDocsInto(mandateDir, []string{source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate := validatePhaseJSON{Status: "pending"}
+	validate.HumanSync.ConfirmedDomainIds = []string{"dom-1"}
+	files, err := mandatecontract.FreezeFiles(mandateDir, docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate.HumanSync.Files = files
+	statePath := filepath.Join(mandateDir, "mandate_state.json")
+	raw, _ := json.Marshal(map[string]interface{}{
+		"stateVersion": 1,
+		"docsProvided": []string{},
+		"phases":       map[string]interface{}{"validate": map[string]interface{}{"status": "pending", "humanSync": map[string]interface{}{}}},
+	})
+	if err := os.WriteFile(statePath, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	version, err := mutateMandateStateDocsAndValidate(statePath, docs, validate)
+	if err != nil || version != 2 {
+		t.Fatalf("version=%d err=%v", version, err)
+	}
+	version, err = mutateMandateStateDocsAndValidate(statePath, docs, validate)
+	if err != nil || version != 2 {
+		t.Fatalf("idempotent version=%d err=%v", version, err)
+	}
+	if err := verifyExistingDocs(mandateDir, docs, []string{source}); err != nil {
+		t.Fatalf("identical retry rejected: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("changed\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyExistingDocs(mandateDir, docs, []string{source}); err == nil {
+		t.Fatal("document substitution accepted")
+	}
+	replacement := append([]string(nil), docs...)
+	replacement[0] = "other.md"
+	if _, err := mutateMandateStateDocsAndValidate(statePath, replacement, validate); err == nil {
+		t.Fatal("docsProvided substitution accepted")
 	}
 }
 

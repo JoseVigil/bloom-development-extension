@@ -176,7 +176,7 @@ func TestMandateGenReconstructsSignedInputsAndReconcilesArtifact(t *testing.T) {
 		MandateID: mandateID, ContractVersion: 2, OrganizationID: "org", ProjectID: "project", ProjectBinding: "binding",
 		Objective: "Define Billing", Domain: mandatecontract.Domain{ID: "d1", Name: "Billing"},
 		Action:       mandatecontract.Action{ActionID: "a1", Type: "run_intent", IntentType: "gen", DomainID: "d1", ArtifactRef: "domain_definition.json", IdempotencyKey: "key1"},
-		Intelligence: &mandatecontract.Intelligence{Provider: "anthropic", BackendID: "anthropic_api", Model: "test-model", CredentialRef: stringPtr("credential-ref://anthropic/default"), PolicyRef: policyRef, PolicyVersion: "mandate-gen/v1", PolicySHA256: hex.EncodeToString(policySum[:]), RegistryRef: registryRef, RegistrySHA256: hex.EncodeToString(registrySum[:]), MaxUSD: "0.01", MaxTotalTokens: 1000, MaxOutputTokens: 100},
+		Intelligence: &mandatecontract.Intelligence{Provider: "google", BackendID: "gemini_api", Model: "test-model", CredentialRef: stringPtr("credential-ref://gemini/default"), PolicyRef: policyRef, PolicyVersion: "mandate-gen/v1", PolicySHA256: hex.EncodeToString(policySum[:]), RegistryRef: registryRef, RegistrySHA256: hex.EncodeToString(registrySum[:]), MaxUSD: "0.01", MaxTotalTokens: 1000, MaxOutputTokens: 100, SupplyGrantID: "grant-test"},
 		Inputs:       []mandatecontract.Input{{Ref: "inputs/source.md", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(source))}},
 		Fulfillment:  mandatecontract.Fulfillment{Evaluator: "domain-definition-structure", EvaluatorVersion: "1", RequiredFields: []string{"domainId", "purpose", "boundaries", "concepts", "decisions", "sources"}},
 	}
@@ -235,14 +235,15 @@ func TestMandateGenReconstructsSignedInputsAndReconcilesArtifact(t *testing.T) {
 			return nil, err
 		}
 		requestRaw, _ := json.Marshal(map[string]interface{}{"logical_inference_id": logicalID, "intent": map[string]string{"mandate_id": mandateID, "intent_type": "gen", "phase": "generation"}, "payload": map[string]string{"contractDigest": payload.ContractDigest}, "routing": map[string]string{"policy_version": "mandate-gen/v1"}})
-		resultRaw, _ := json.Marshal(map[string]interface{}{"logical_inference_id": logicalID, "outcome": "completed", "raw_response": string(proposal), "raw_response_digest": "sha256:" + hex.EncodeToString(proposalSum[:]), "accounting_ref": accountingRef, "model": "test-model", "routing_decision": map[string]interface{}{"effective_intelligence": map[string]string{"backend_id": "anthropic_api", "credential_ref": "credential-ref://anthropic/default"}}})
+		routingDecision := map[string]interface{}{"logical_inference_id": logicalID, "effective_intelligence": map[string]string{"backend_id": "gemini_api", "model": "test-model", "credential_ref": "credential-ref://gemini/default"}}
+		resultRaw, _ := json.Marshal(map[string]interface{}{"logical_inference_id": logicalID, "outcome": "completed", "raw_response": string(proposal), "raw_response_digest": "sha256:" + hex.EncodeToString(proposalSum[:]), "accounting_ref": accountingRef, "model": "test-model", "routing_decision": routingDecision})
 		if err := os.WriteFile(filepath.Join(payload.Supply.Directory, ".request.json"), requestRaw, 0600); err != nil {
 			return nil, err
 		}
 		if err := os.WriteFile(filepath.Join(payload.Supply.Directory, ".supply_result.json"), resultRaw, 0600); err != nil {
 			return nil, err
 		}
-		journal := map[string]interface{}{"state": "completed", "attempts": []interface{}{map[string]string{"outcome": "completed"}}, "result": map[string]string{"logical_inference_id": logicalID, "raw_response_digest": "sha256:" + hex.EncodeToString(proposalSum[:])}}
+		journal := map[string]interface{}{"state": "completed", "attempts": []interface{}{map[string]interface{}{"number": 1, "outcome": "completed", "routing_decision": routingDecision}}, "result": map[string]interface{}{"logical_inference_id": logicalID, "raw_response_digest": "sha256:" + hex.EncodeToString(proposalSum[:]), "routing_decision": routingDecision}}
 		journalCanonical, _ := json.Marshal(journal)
 		journalSum := sha256.Sum256(journalCanonical)
 		journalRaw, _ := json.Marshal(map[string]interface{}{"journal": journal, "journal_digest": "sha256:" + hex.EncodeToString(journalSum[:])})
@@ -299,6 +300,82 @@ func TestMandateGenReconstructsSignedInputsAndReconcilesArtifact(t *testing.T) {
 	}
 	if _, err := activity.Run(context.Background(), input); err == nil {
 		t.Fatal("tampered Files accepted")
+	}
+}
+
+func TestVerifyCompletedInferenceAttemptsEnforcesSafeRetryContract(t *testing.T) {
+	logicalID := "sha256:" + strings.Repeat("a", 64)
+	reservation := map[string]interface{}{"tokens": 1200, "usd": "0.01"}
+	routing := func(backend string) map[string]interface{} {
+		return map[string]interface{}{
+			"logical_inference_id":   logicalID,
+			"effective_intelligence": map[string]string{"backend_id": backend, "model": "gemini-test"},
+		}
+	}
+	attempt := func(number int, outcome string, retryable, uncertain bool, backend string, budget map[string]interface{}) json.RawMessage {
+		value := map[string]interface{}{
+			"number": number, "outcome": outcome, "routing_decision": routing(backend),
+		}
+		if outcome == "error" {
+			value["error"] = map[string]interface{}{"retryable": retryable, "details": map[string]bool{"delivery_uncertain": uncertain}}
+		}
+		if budget != nil {
+			value["budget_reservation"] = budget
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	resultRouting, err := json.Marshal(routing("gemini_api"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope := mandatecontract.Envelope{Contract: mandatecontract.Contract{ContractVersion: 2,
+		Intelligence: &mandatecontract.Intelligence{BackendID: "gemini_api", Model: "gemini-test"}}}
+
+	tests := []struct {
+		name     string
+		attempts []json.RawMessage
+		wantErr  bool
+	}{
+		{name: "one completed attempt", attempts: []json.RawMessage{
+			attempt(1, "completed", false, false, "gemini_api", reservation),
+		}},
+		{name: "explicit retryable failure then completion", attempts: []json.RawMessage{
+			attempt(1, "error", true, false, "gemini_api", reservation),
+			attempt(2, "completed", false, false, "gemini_api", reservation),
+		}},
+		{name: "uncertain delivery cannot authorize retry", wantErr: true, attempts: []json.RawMessage{
+			attempt(1, "error", true, true, "gemini_api", reservation),
+			attempt(2, "completed", false, false, "gemini_api", reservation),
+		}},
+		{name: "non retryable failure cannot authorize retry", wantErr: true, attempts: []json.RawMessage{
+			attempt(1, "error", false, false, "gemini_api", reservation),
+			attempt(2, "completed", false, false, "gemini_api", reservation),
+		}},
+		{name: "changed reservation is rejected", wantErr: true, attempts: []json.RawMessage{
+			attempt(1, "error", true, false, "gemini_api", reservation),
+			attempt(2, "completed", false, false, "gemini_api", map[string]interface{}{"tokens": 1300, "usd": "0.01"}),
+		}},
+		{name: "changed backend is rejected", wantErr: true, attempts: []json.RawMessage{
+			attempt(1, "error", true, false, "gemini_api", reservation),
+			attempt(2, "completed", false, false, "other_backend", reservation),
+		}},
+		{name: "three attempts are rejected", wantErr: true, attempts: []json.RawMessage{
+			attempt(1, "error", true, false, "gemini_api", reservation),
+			attempt(2, "error", true, false, "gemini_api", reservation),
+			attempt(3, "completed", false, false, "gemini_api", reservation),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := verifyCompletedInferenceAttempts(tt.attempts, resultRouting, envelope, logicalID)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("verifyCompletedInferenceAttempts() error = %v, wantErr %t", err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -375,6 +452,46 @@ func TestPersistHumanSyncTransitionsSignaturePendingOnce(t *testing.T) {
 	second, err := PersistHumanSyncActivity(input)
 	if err != nil || second.StateVersion != 2 {
 		t.Fatalf("retry=%#v err=%v", second, err)
+	}
+}
+
+func TestPersistHumanSyncRecoversSignatureOnlyForLostWorkflow(t *testing.T) {
+	root := t.TempDir()
+	mandateID := "fixture-recovered-signature"
+	path := writeGenesisStateFixture(t, root, mandateID)
+	state := readGenesisStateFixture(t, path)
+	state["signature"] = map[string]interface{}{"status": "failed", "failure": map[string]interface{}{"code": "SIGNATURE_FAILED"}}
+	state["reconciliation"] = map[string]interface{}{"status": "required", "reason": "unsigned_without_active_workflow"}
+	raw, _ := json.Marshal(state)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := PersistHumanSyncInput{MandatesRoot: root, MandateID: mandateID, IntentID: "intent-1", ReceptionRef: "reception", DomainProposalRef: "domain_proposal.json", CandidateDomains: []DomainCandidateState{{DomainID: "dom-1", Name: "Core"}}, ConfirmedDomainIds: []string{"dom-1"}}
+	if _, err := PersistHumanSyncActivity(input); err != nil {
+		t.Fatal(err)
+	}
+	got := readGenesisStateFixture(t, path)
+	if got["signature"].(map[string]interface{})["status"] != "pending" {
+		t.Fatalf("signature = %#v", got["signature"])
+	}
+	if got["reconciliation"].(map[string]interface{})["reason"] != "unsigned_without_active_workflow" {
+		t.Fatalf("reconciliation evidence lost: %#v", got)
+	}
+}
+
+func TestPersistHumanSyncRejectsUnreconciledFailedSignature(t *testing.T) {
+	root := t.TempDir()
+	mandateID := "fixture-unreconciled-signature"
+	path := writeGenesisStateFixture(t, root, mandateID)
+	state := readGenesisStateFixture(t, path)
+	state["signature"] = map[string]interface{}{"status": "failed"}
+	raw, _ := json.Marshal(state)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := PersistHumanSyncActivity(PersistHumanSyncInput{MandatesRoot: root, MandateID: mandateID, IntentID: "intent-1", ReceptionRef: "reception", DomainProposalRef: "domain_proposal.json", CandidateDomains: []DomainCandidateState{{DomainID: "dom-1", Name: "Core"}}, ConfirmedDomainIds: []string{"dom-1"}})
+	if err == nil {
+		t.Fatal("unreconciled failed signature was reopened")
 	}
 }
 

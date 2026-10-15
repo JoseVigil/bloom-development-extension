@@ -16,6 +16,16 @@ export function mandatesRoot(fsCtx: MandateFsContext): string {
   return path.join(fsCtx.workspacePath, '.bloom', `.nucleus-${fsCtx.org}`, '.mandates');
 }
 
+/** Durable request journal kept outside .mandates so the Nucleus watcher never
+ * mistakes idempotency metadata for a Mandate directory. */
+export function genesisLaunchJournalRoot(fsCtx: MandateFsContext): string {
+  return path.join(fsCtx.workspacePath, '.bloom', `.nucleus-${fsCtx.org}`, '.core', 'genesis-launches');
+}
+
+export function genesisLaunchJournalPath(fsCtx: MandateFsContext, mandateLaunchId: string): string {
+  return path.join(genesisLaunchJournalRoot(fsCtx), `${mandateLaunchId}.json`);
+}
+
 // SIN punto adelante: mandate.go (Go) escribe la carpeta como
 // filepath.Join(cfg.MandatesRoot(), mandateID) — sin prefijo "." en mandateID.
 export function mandateDir(fsCtx: MandateFsContext, mandateId: string): string {

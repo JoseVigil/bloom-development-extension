@@ -26,7 +26,8 @@
   "intelligence_supply": {
     "state_directory_environment": "AITAP_STATE_DIR",
     "credential_references": {
-      "credential-ref://anthropic/default": "anthropic-key:default"
+      "credential-ref://anthropic/default": "anthropic-key:default",
+      "credential-ref://gemini/default": "gemini-key:default"
     },
     "real_provider_tests": "explicit opt-in and token budget required"
   }

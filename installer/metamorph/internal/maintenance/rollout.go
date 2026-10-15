@@ -3,6 +3,7 @@ package maintenance
 import (
 	"archive/tar"
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"metamorph/internal/core"
+	"metamorph/internal/inspection"
 
 	"github.com/spf13/cobra"
 )
@@ -464,7 +466,8 @@ var allComponents = []component{
 				return filepath.Join(r, "installer", "resources", "runtime-linux")
 			}
 		},
-		DestFn: func(b string) string { return filepath.Join(b, "bin", "engine", "runtime") },
+		DestFn:    func(b string) string { return filepath.Join(b, "bin", "engine", "runtime") },
+		ExtractFn: deployRuntime,
 	},
 	{
 		Key: "chrome",
@@ -1662,6 +1665,7 @@ type deployedEntry struct {
 }
 
 type rolloutResult struct {
+	AITAP          *aitapRolloutReport  `json:"aitap,omitempty"`
 	Status         string               `json:"status"`
 	DryRun         bool                 `json:"dry_run"`
 	Only           string               `json:"only"`
@@ -1792,6 +1796,19 @@ func runRollout(c *core.Core, dryRun bool, only, workspace, organization string)
 	for _, comp := range comps {
 		src := comp.SourceFn(repoRoot)
 		dst := comp.DestFn(basePath)
+		if comp.Key == "aitap" {
+			report := runAITAPRollout(src, dst, dryRun)
+			result.AITAP = &report
+			if report.Error != "" {
+				result.Errors = append(result.Errors, "aitap: "+report.Error)
+				result.Status = "partial"
+				c.Logger.Error("❌ aitap: %s", report.Error)
+			} else if !dryRun {
+				result.Deployed = append(result.Deployed, deployedEntry{Component: "AITap", Source: src, Destination: dst, FilesCopied: report.Files, Version: report.NewVersion, Build: report.Build})
+				c.Logger.Success("✅ AITap: %d files → %s", report.Files, dst)
+			}
+			continue
+		}
 
 		info, err := os.Stat(src)
 		if err != nil {
@@ -1815,6 +1832,9 @@ func runRollout(c *core.Core, dryRun bool, only, workspace, organization string)
 		}
 
 		if dryRun {
+			if comp.Key == "runtime" {
+				c.Logger.Info("🔍 [dry-run] runtime: would stage and validate %s, replace %s, and verify deployed Python", src, dst)
+			}
 			c.Logger.Info("🔍 [dry-run] %s: %s → %s", comp.Key, src, dst)
 			result.Deployed = append(result.Deployed, deployedEntry{
 				Component:   titleCase(comp.Key),
@@ -2215,4 +2235,187 @@ func copyDir(src, dst string) (int, error) {
 		return nil
 	})
 	return count, err
+}
+
+type aitapRolloutReport struct {
+	State           string            `json:"state"`
+	PreviousVersion string            `json:"previous_version,omitempty"`
+	NewVersion      string            `json:"new_version,omitempty"`
+	Build           int               `json:"build"`
+	Integrity       string            `json:"integrity,omitempty"`
+	Files           int               `json:"files"`
+	Smokes          map[string]string `json:"smokes,omitempty"`
+	Swap            string            `json:"swap,omitempty"`
+	Rollback        string            `json:"rollback,omitempty"`
+	Error           string            `json:"error,omitempty"`
+}
+
+func runAITAPRollout(src, dst string, dryRun bool) (report aitapRolloutReport) {
+	return runAITAPRolloutWithSmokes(src, dst, dryRun, aitapSmokes)
+}
+
+func runAITAPRolloutWithSmokes(src, dst string, dryRun bool, smoke func(string, string, int) (map[string]string, error)) (report aitapRolloutReport) {
+	report.State = "rejected_before_copy"
+	version, build, digest, count, err := inspection.VerifyAITAPBundle(src)
+	if err != nil {
+		report.Error = fmt.Sprintf("source integrity: %v", err)
+		return
+	}
+	report.NewVersion, report.Build, report.Integrity, report.Files = version, build, digest, count
+	if oldVersion, _, oldDigest, _, oldErr := inspection.VerifyAITAPBundle(dst); oldErr == nil {
+		report.PreviousVersion = oldVersion
+		if oldDigest == digest {
+			if !dryRun {
+				report.Smokes, err = smoke(dst, version, build)
+				if err != nil {
+					report.Error = fmt.Sprintf("current bundle smoke: %v", err)
+					return
+				}
+			}
+			report.State = "completed"
+			report.Swap = "already_current"
+			return
+		}
+	}
+	if dryRun {
+		report.State = "source_validated"
+		report.Swap = "planned"
+		return
+	}
+	if err = os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		report.Error = err.Error()
+		return
+	}
+	stage, err := os.MkdirTemp(filepath.Dir(dst), ".aitap-stage-*")
+	if err != nil {
+		report.Error = err.Error()
+		return
+	}
+	defer os.RemoveAll(stage)
+	report.State = "staging_failed"
+	if _, err = copyDir(src, stage); err != nil {
+		report.Error = fmt.Sprintf("stage copy: %v", err)
+		return
+	}
+	_, _, stagedDigest, _, err := inspection.VerifyAITAPBundle(stage)
+	if err != nil || stagedDigest != digest {
+		report.Error = fmt.Sprintf("stage integrity: %v", err)
+		return
+	}
+	report.Smokes, err = smoke(stage, version, build)
+	if err != nil {
+		report.Error = fmt.Sprintf("staging smoke: %v", err)
+		return
+	}
+	backup := filepath.Join(filepath.Dir(dst), fmt.Sprintf(".aitap-backup-%d-%d", os.Getpid(), time.Now().UnixNano()))
+	hadPrevious := false
+	if _, statErr := os.Stat(dst); statErr == nil {
+		if err = os.Rename(dst, backup); err != nil {
+			report.State = "activation_failed_and_restored"
+			report.Error = fmt.Sprintf("preserve previous bundle: %v", err)
+			return
+		}
+		hadPrevious = true
+	} else if !os.IsNotExist(statErr) {
+		report.Error = statErr.Error()
+		return
+	}
+	restore := func(cause error) {
+		report.Error = cause.Error()
+		failed := filepath.Join(filepath.Dir(dst), fmt.Sprintf(".aitap-failed-%d-%d", os.Getpid(), time.Now().UnixNano()))
+		if _, statErr := os.Stat(dst); statErr == nil {
+			if moveErr := os.Rename(dst, failed); moveErr != nil {
+				report.State = "rollback_failed"
+				report.Rollback = moveErr.Error()
+				return
+			}
+		}
+		if hadPrevious {
+			if restoreErr := os.Rename(backup, dst); restoreErr != nil {
+				report.State = "rollback_failed"
+				report.Rollback = restoreErr.Error()
+				return
+			}
+		}
+		report.State = "production_failed_and_restored"
+		report.Rollback = "restored"
+		_ = os.RemoveAll(failed)
+	}
+	if err = os.Rename(stage, dst); err != nil {
+		restore(fmt.Errorf("activate bundle: %w", err))
+		if report.State == "production_failed_and_restored" {
+			report.State = "activation_failed_and_restored"
+		}
+		return
+	}
+	report.Swap = "activated"
+	_, _, productionDigest, _, err := inspection.VerifyAITAPBundle(dst)
+	if err != nil || productionDigest != digest {
+		restore(fmt.Errorf("production integrity: %v", err))
+		return
+	}
+	var productionSmokes map[string]string
+	productionSmokes, err = smoke(dst, version, build)
+	if err != nil {
+		restore(fmt.Errorf("production smoke: %w", err))
+		return
+	}
+	report.Smokes = productionSmokes
+	report.State = "completed"
+	if hadPrevious {
+		if cleanupErr := os.RemoveAll(backup); cleanupErr != nil {
+			report.Swap = "activated; backup retained: " + backup
+		}
+	}
+	return
+}
+
+func aitapSmokes(root, expectedVersion string, expectedBuild int) (map[string]string, error) {
+	commands := map[string][]string{
+		"system.version": {"--json", "system", "version"}, "system.info": {"--json", "system", "info"},
+		"json_help": {"--json-help"}, "route.policy": {"--json", "route", "policy"},
+		"local.preflight": {"--json", "local", "preflight"},
+	}
+	results := make(map[string]string, len(commands))
+	defaultPath := "/usr/bin:/bin"
+	if runtime.GOOS == "windows" {
+		defaultPath = filepath.Join(os.Getenv("SystemRoot"), "System32")
+	}
+	for name, args := range commands {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cmd := exec.CommandContext(ctx, filepath.Join(root, exe("aitap")), args...)
+		cmd.Dir = os.TempDir()
+		for _, item := range os.Environ() {
+			key := strings.SplitN(item, "=", 2)[0]
+			if key == "PYTHONPATH" || key == "PYTHONHOME" || key == "BLOOM_PROJECT_ROOT" || key == "AITAP_REAL_PROVIDER_OPT_IN" || key == "AITAP_REAL_OLLAMA" || strings.EqualFold(key, "PATH") {
+				continue
+			}
+			cmd.Env = append(cmd.Env, item)
+		}
+		cmd.Env = append(cmd.Env, "PYTHONNOUSERSITE=1", "PYTHONSAFEPATH=1", "PATH="+root+string(os.PathListSeparator)+defaultPath)
+		out, runErr := cmd.Output()
+		cancel()
+		if runErr != nil {
+			return results, fmt.Errorf("%s: %w", name, runErr)
+		}
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal(out, &payload); err != nil || payload == nil {
+			return results, fmt.Errorf("%s did not emit a JSON object", name)
+		}
+		if name == "system.version" || name == "system.info" {
+			var version string
+			var build int
+			if err := json.Unmarshal(payload["version"], &version); err != nil {
+				return results, fmt.Errorf("%s missing version", name)
+			}
+			if err := json.Unmarshal(payload["build_number"], &build); err != nil {
+				return results, fmt.Errorf("%s missing build_number", name)
+			}
+			if version != expectedVersion || build != expectedBuild {
+				return results, fmt.Errorf("%s version/build mismatch", name)
+			}
+		}
+		results[name] = "passed"
+	}
+	return results, nil
 }

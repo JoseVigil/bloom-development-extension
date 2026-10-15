@@ -7,6 +7,8 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { paths } = require('../config/paths');
 const { getLogger } = require('../../shared/logger');
+const { validatePythonRuntimePair } = require('./runtime-installer');
+const { certifyAitapBundle } = require('./aitap-bundle-installer');
 
 const logger = getLogger('installer');
 
@@ -26,7 +28,7 @@ const _directoriesTargets = _isDarwin
      'bin/chrome-mac', 'config', 'profiles', 'logs']
   : ['bin', 'bin/nucleus', 'bin/sentinel', 'bin/brain',
      'bin/host', 'bin/cortex', 'bin/ollama', 'bin/conductor',
-     'bin/chrome-win', 'config', 'engine/runtime', 'profiles', 'logs'];
+     'bin/chrome-win', 'config', 'bin/engine/runtime', 'profiles', 'logs'];
 
 const _chromiumVerification = _isDarwin
   ? { method: 'file_exists_and_smoke', targets: ['bin/chrome-mac/Chromium.app/Contents/MacOS/Chromium'], smoke_test: '--version', result: null }
@@ -34,7 +36,16 @@ const _chromiumVerification = _isDarwin
 
 const _brainRuntimeVerification = _isDarwin
   ? { method: 'file_exists', targets: ['bin/brain/brain'], result: null }           // Darwin: Python embebido en brain, no runtime suelto
-  : { method: 'file_exists', targets: ['engine/runtime/python.exe'], result: null };
+  : _isWin
+    ? {
+        method: 'python_runtime_smoke',
+        targets: ['bin/engine/runtime/python.exe', 'bin/engine/runtime/python310.dll', 'bin/engine/runtime/python310._pth'],
+        expected_version: '3.10.20',
+        expected_platform: 'win32',
+        expected_arch: 'AMD64',
+        result: null,
+      }
+    : { method: 'file_exists', targets: ['bin/engine/runtime/bin/python3.10'], result: null };
 
 const _binariesComponents = _isDarwin
   ? {
@@ -45,7 +56,7 @@ const _binariesComponents = _isDarwin
       metamorph: ['metamorph'],
       impact:    ['impact'],   // estático, sin servicio ni dependencias — mismo patrón que sentinel
       monitor:   ['monitor'],  // estático, sin servicio ni dependencias — mismo patrón que sentinel
-      aitap:     ['aitap'],    // estático, sin servicio ni dependencias — mismo patrón que sentinel
+      aitap:     ['aitap', '_internal', 'help', 'bundle-manifest.json'],
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama'],
       opencode:  ['opencode'],
@@ -54,7 +65,6 @@ const _binariesComponents = _isDarwin
       conductor: ['Bloom Nucleus Workspace.app']
     }
   : {
-      runtime:   ['python.exe', 'Lib', 'python310._pth'],
       brain:     ['brain.exe', '_internal'],
       host:      ['bloom-host.exe', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll'],
       nssm:      ['nssm.exe'],
@@ -63,7 +73,9 @@ const _binariesComponents = _isDarwin
       metamorph: ['metamorph.exe', 'help', 'metamorph-config.json'],
       impact:    ['impact.exe', 'help'],
       monitor:   ['monitor.exe', 'help'],
-      aitap:     ['aitap.exe', 'help'],
+      aitap:     _isWin
+        ? ['aitap.exe', '_internal', 'help', 'bundle-manifest.json']
+        : ['aitap', '_internal', 'help', 'bundle-manifest.json'],
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama.exe', 'lib'],
       opencode:  ['opencode.exe'],
@@ -129,11 +141,34 @@ function validateHostRuntime(hostExe = paths.hostBinary) {
   };
 }
 
+function validateInstalledAitapBundle(aitapDir = paths.aitapDir, options = {}) {
+  try {
+    return {
+      valid: true,
+      evidence: certifyAitapBundle(aitapDir, options),
+      error: null,
+      code: null,
+      phase: null,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      evidence: null,
+      error: error.message,
+      code: error.code || 'AITAP_VALIDATION_FAILED',
+      phase: error.phase || 'validation',
+    };
+  }
+}
+
 function validateBinaryArtifacts() {
   const host = validateHostArtifacts();
   const missing = host.missing.map(name => `host/${name}`);
   const hostRuntime = host.valid ? validateHostRuntime() : { valid: false, skipped: true };
   if (host.valid && !hostRuntime.valid) missing.push('host/runtime-load-check');
+
+  const aitap = validateInstalledAitapBundle();
+  if (!aitap.valid) missing.push(`aitap/${aitap.code}`);
 
   if (_isWin) {
     if (!fs.existsSync(paths.opencodeExe)) missing.push('opencode/opencode.exe');
@@ -144,11 +179,34 @@ function validateBinaryArtifacts() {
     valid: missing.length === 0,
     host,
     host_runtime: hostRuntime,
+    aitap,
     required: _isWin
-      ? [...host.required.map(name => `host/${name}`), 'opencode/opencode.exe', 'workspace/bloom-workspace.exe']
-      : host.required.map(name => `host/${name}`),
+      ? [
+          ...host.required.map(name => `host/${name}`),
+          ..._binariesComponents.aitap.map(name => `aitap/${name}`),
+          'opencode/opencode.exe',
+          'workspace/bloom-workspace.exe',
+        ]
+      : [
+          ...host.required.map(name => `host/${name}`),
+          ..._binariesComponents.aitap.map(name => `aitap/${name}`),
+        ],
     missing,
   };
+}
+
+function validateBrainRuntime() {
+  if (!_isWin) {
+    const executable = _isDarwin ? paths.brainExe : paths.pythonExe;
+    const valid = fs.existsSync(executable);
+    return {
+      valid,
+      executable,
+      platform: process.platform,
+      errors: valid ? [] : [`Runtime executable not found: ${executable}`],
+    };
+  }
+  return validatePythonRuntimePair(paths.runtimeSource, paths.runtimeDir);
 }
 
 const _sensorVerification = _isDarwin
@@ -525,6 +583,7 @@ class NucleusManager {
         const binariesMilestone = this.state.milestones?.binaries;
         if (binariesMilestone?.verification?.components) {
           binariesMilestone.verification.components.host = [..._requiredHostArtifacts];
+          binariesMilestone.verification.components.aitap = [..._binariesComponents.aitap];
           binariesMilestone.verification.components.opencode = [..._binariesComponents.opencode];
           if (_isWin) binariesMilestone.verification.components.workspace = ['bloom-workspace.exe'];
           stateChanged = true;
@@ -543,6 +602,37 @@ class NucleusManager {
           };
           stateChanged = true;
         }
+        const runtimeMilestone = this.state.milestones?.brain_runtime;
+        const previousRuntimeVerificationMethod = runtimeMilestone?.verification?.method;
+        if (runtimeMilestone) {
+          runtimeMilestone.verification = {
+            ..._brainRuntimeVerification,
+            result: runtimeMilestone.verification?.result ?? null,
+          };
+          stateChanged = true;
+        }
+
+        // La migración desde file_exists debe ejecutar el nuevo instalador al
+        // menos una vez. Además de validar Python, esto reinstala Nucleus con
+        // BLOOM_PYTHON_PATH y el runtime administrado al inicio del PATH.
+        if (
+          _isWin &&
+          runtimeMilestone?.status === 'passed' &&
+          previousRuntimeVerificationMethod !== _brainRuntimeVerification.method
+        ) {
+          runtimeMilestone.status = 'pending';
+          runtimeMilestone.completed_at = null;
+          runtimeMilestone.error = 'Python runtime requires executable validation and service environment migration';
+          this.state.installation.completed = false;
+          this.state.installation.completed_at = null;
+          stateChanged = true;
+          logger.info('↻ brain_runtime invalidado para migrar validación y entorno del servicio');
+        }
+
+        if (_isWin && binariesMilestone?.verification?.components?.runtime) {
+          delete binariesMilestone.verification.components.runtime;
+          stateChanged = true;
+        }
 
         if (binariesMilestone?.status === 'passed') {
           const binariesValidation = validateBinaryArtifacts();
@@ -555,6 +645,20 @@ class NucleusManager {
             this.state.installation.completed_at = null;
             stateChanged = true;
             logger.warn(`⚠️ binaries invalidado; faltan artefactos: ${binariesValidation.missing.join(', ')}`);
+          }
+        }
+
+        if (runtimeMilestone?.status === 'passed') {
+          const runtimeValidation = validateBrainRuntime();
+          if (!runtimeValidation.valid) {
+            runtimeMilestone.status = 'pending';
+            runtimeMilestone.completed_at = null;
+            runtimeMilestone.error = `Python runtime invalid: ${runtimeValidation.errors.join(', ')}`;
+            runtimeMilestone.verification.result = runtimeValidation;
+            this.state.installation.completed = false;
+            this.state.installation.completed_at = null;
+            stateChanged = true;
+            logger.warn(`⚠️ brain_runtime invalidado: ${runtimeValidation.errors.join(', ')}`);
           }
         }
         
@@ -632,6 +736,18 @@ class NucleusManager {
       if (!binariesValidation.valid) {
         throw new Error(`Cannot complete binaries milestone; missing binary artifacts: ${binariesValidation.missing.join(', ')}`);
       }
+      verificationResult = {
+        ...(verificationResult || {}),
+        aitap: binariesValidation.aitap.evidence,
+      };
+    }
+
+    if (milestoneName === 'brain_runtime') {
+      const runtimeValidation = validateBrainRuntime();
+      if (!runtimeValidation.valid) {
+        throw new Error(`Cannot complete brain_runtime milestone; Python runtime validation failed: ${runtimeValidation.errors.join(', ')}`);
+      }
+      verificationResult = runtimeValidation;
     }
 
     this.state.milestones[milestoneName].status = 'passed';
@@ -745,8 +861,8 @@ class NucleusManager {
     const darwinOrder = [
       'directories',
       'chromium',
-      'brain_runtime',
       'binaries',
+      'brain_runtime',
       'metamorph_audit',
       'brain_service_install',
       'nucleus_service_install',
@@ -761,8 +877,8 @@ class NucleusManager {
     const windowsOrder = [
       'directories',
       'chromium',
-      'brain_runtime',
       'binaries',
+      'brain_runtime',
       'metamorph_audit',
       'brain_service_install',
       'nucleus_service_install',
@@ -946,5 +1062,7 @@ module.exports = {
   NucleusManager,
   validateHostArtifacts,
   validateHostRuntime,
+  validateInstalledAitapBundle,
   validateBinaryArtifacts,
+  validateBrainRuntime,
 };

@@ -21,7 +21,7 @@ func TestVaultServiceGrantRequiresAcceptedSnapshotAndCheckpoint(t *testing.T) {
 	state := FullContent{Principals: []Principal{{PrincipalID: "human", PrincipalType: "human", Status: "active", ExternalIdentities: []ExternalIdentity{}}},
 		Memberships: []Membership{}, RoleDefinitions: []RoleDefinition{}, RoleAssignments: []RoleAssignment{}, Revocations: []Revocation{},
 		VaultServiceGrants: []VaultServiceGrant{{GrantID: "grant", OrganizationID: "org", InstallationID: "installation", Consumer: "aitap", Permission: "vault.key.read",
-			KeyID: "anthropic-key:default", Purpose: "mandate_genesis_intelligence", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic),
+			KeyID: "anthropic-key:default", Purpose: "mandate_intelligence", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic),
 			IssuedByPrincipalID: "human", ValidFrom: at.Add(-time.Minute), ValidUntil: at.Add(time.Hour)}}}
 	p.Content, _ = json.Marshal(state)
 	dir := t.TempDir()
@@ -34,20 +34,23 @@ func TestVaultServiceGrantRequiresAcceptedSnapshotAndCheckpoint(t *testing.T) {
 		_, err := ResolveVaultServiceGrant(v.Store, v.Checkpoint, org, installation, "grant", key, purpose, when)
 		return err
 	}
-	if err = resolve("org", "installation", "anthropic-key:default", "mandate_genesis_intelligence", at); err != nil {
+	if err = resolve("org", "installation", "anthropic-key:default", "mandate_intelligence", at); err != nil {
 		t.Fatal(err)
+	}
+	if resolve("org", "installation", "anthropic-key:default", "mandate_genesis_intelligence", at) == nil {
+		t.Fatal("new-purpose grant accepted for legacy-purpose request")
 	}
 	if grants, evidenceErr := ActiveVaultServiceGrantEvidence(v.Store, v.Checkpoint, "org", at); evidenceErr != nil || len(grants) != 1 || grants[0].GrantID != "grant" {
 		t.Fatal("active grant preflight failed", evidenceErr)
 	}
-	for _, binding := range [][4]string{{"other", "installation", "anthropic-key:default", "mandate_genesis_intelligence"},
-		{"org", "other", "anthropic-key:default", "mandate_genesis_intelligence"}, {"org", "installation", "other", "mandate_genesis_intelligence"},
+	for _, binding := range [][4]string{{"other", "installation", "anthropic-key:default", "mandate_intelligence"},
+		{"org", "other", "anthropic-key:default", "mandate_intelligence"}, {"org", "installation", "other", "mandate_intelligence"},
 		{"org", "installation", "anthropic-key:default", "other"}} {
 		if resolve(binding[0], binding[1], binding[2], binding[3], at) == nil {
 			t.Fatalf("accepted mismatch: %v", binding)
 		}
 	}
-	if resolve("org", "installation", "anthropic-key:default", "mandate_genesis_intelligence", at.Add(2*time.Hour)) == nil {
+	if resolve("org", "installation", "anthropic-key:default", "mandate_intelligence", at.Add(2*time.Hour)) == nil {
 		t.Fatal("expired grant accepted")
 	}
 	state.Revocations = append(state.Revocations, Revocation{RevocationID: "revoke", TargetType: "vault_service_grant", TargetID: "grant", EffectiveAt: at, RecordedInAuthorityVersion: "2", ReasonCode: "master_revocation"})
@@ -57,7 +60,7 @@ func TestVaultServiceGrantRequiresAcceptedSnapshotAndCheckpoint(t *testing.T) {
 	if _, err = v.VerifyAndAccept(signedFixture(t, p, priv, "key"), "revoke"); err != nil {
 		t.Fatal(err)
 	}
-	if resolve("org", "installation", "anthropic-key:default", "mandate_genesis_intelligence", at) == nil {
+	if resolve("org", "installation", "anthropic-key:default", "mandate_intelligence", at) == nil {
 		t.Fatal("revoked grant accepted")
 	}
 	if grants, evidenceErr := ActiveVaultServiceGrantEvidence(v.Store, v.Checkpoint, "org", at); evidenceErr != nil || len(grants) != 0 {
@@ -66,8 +69,35 @@ func TestVaultServiceGrantRequiresAcceptedSnapshotAndCheckpoint(t *testing.T) {
 	if err = os.Remove(v.Checkpoint.Path); err != nil {
 		t.Fatal(err)
 	}
-	if resolve("org", "installation", "anthropic-key:default", "mandate_genesis_intelligence", at) == nil {
+	if resolve("org", "installation", "anthropic-key:default", "mandate_intelligence", at) == nil {
 		t.Fatal("missing checkpoint accepted")
+	}
+}
+
+func TestLegacyVaultPurposeRemainsBoundToLegacyRequests(t *testing.T) {
+	p, pub, priv := fullFixture(t, "1")
+	servicePublic, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 9, 4, 12, 1, 0, 0, time.UTC)
+	state := FullContent{Principals: []Principal{{PrincipalID: "human", PrincipalType: "human", Status: "active", ExternalIdentities: []ExternalIdentity{}}},
+		Memberships: []Membership{}, RoleDefinitions: []RoleDefinition{}, RoleAssignments: []RoleAssignment{}, Revocations: []Revocation{},
+		VaultServiceGrants: []VaultServiceGrant{{GrantID: "legacy", OrganizationID: "org", InstallationID: "installation", Consumer: "aitap", Permission: "vault.key.read",
+			KeyID: "anthropic-key:default", Purpose: "mandate_genesis_intelligence", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic),
+			IssuedByPrincipalID: "human", ValidFrom: at.Add(-time.Minute), ValidUntil: at.Add(time.Hour)}}}
+	p.Content, _ = json.Marshal(state)
+	dir := t.TempDir()
+	v := &Verifier{Trust: TrustBundle{"issuer": {"key": pub}}, Binding: Binding{"org", "issuer", "installation"},
+		Store: &Store{Path: filepath.Join(dir, "state.json")}, Checkpoint: &CheckpointStore{Path: filepath.Join(dir, "checkpoint.json")}, Now: func() time.Time { return at }}
+	if _, err := v.VerifyAndAccept(signedFixture(t, p, priv, "key"), "legacy"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveVaultServiceGrant(v.Store, v.Checkpoint, "org", "installation", "legacy", "anthropic-key:default", "mandate_genesis_intelligence", at); err != nil {
+		t.Fatal("legacy grant rejected for legacy request", err)
+	}
+	if _, err := ResolveVaultServiceGrant(v.Store, v.Checkpoint, "org", "installation", "legacy", "anthropic-key:default", "mandate_intelligence", at); err == nil {
+		t.Fatal("legacy grant accepted for new-purpose request")
 	}
 }
 

@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 
 from aitap.accounting.store import AccountingStore, canonical, digest, text_digest
 from aitap.providers.anthropic import AnthropicProvider
+from aitap.providers.gemini import GeminiProvider
 from aitap.providers.base import SupplyError
 from aitap.routing.engine import RoutingError
 from aitap.runtime_paths import resource_root
@@ -21,6 +22,18 @@ def validate_contract(name, value):
     schema = json.loads((ROOT / "contracts" / "v2" / name).read_text(encoding="utf-8"))
     if next(Draft202012Validator(schema).iter_errors(value), None):
         raise SupplyError("INVALID_REQUEST", "envelope", "Transport schema validation failed")
+
+
+def vault_purpose(intent):
+    contract = (intent["intent_type"], intent["phase"])
+    purposes = {
+        ("ing", "classification"): "mandate_intelligence",
+        ("gen", "generation"): "mandate_gen_intelligence",
+    }
+    purpose = purposes.get(contract)
+    if purpose is None:
+        raise SupplyError("INVALID_REQUEST", "vault", "Intent contract is not authorized for Vault access")
+    return purpose
 
 
 class LocalSupplyContext:
@@ -80,7 +93,7 @@ class LocalSupplyContext:
 class IntelligenceService:
     def __init__(self, engine, store, vault=None, provider=None, local=None):
         self.engine, self.store = engine, store
-        self.vault, self.provider = vault or VaultClient(), provider or AnthropicProvider()
+        self.vault, self.provider = vault or VaultClient(), provider
         self.local = local or LocalSupplyContext()
 
     def supply(self, request):
@@ -98,7 +111,7 @@ class IntelligenceService:
                         or type(budget["max_total_tokens"]) is not int
                         or not 1 <= budget["max_total_tokens"] <= 50000
                         or budget.get("max_inferences") != 1
-                        or rule["max_attempts"] != 1 or rule.get("fallback")
+                        or rule["max_attempts"] != 2 or rule.get("fallback")
                         or type(rule["max_output_tokens"]) is not int
                         or not 1 <= rule["max_output_tokens"] <= 8192):
                     raise ValueError()
@@ -112,6 +125,15 @@ class IntelligenceService:
                 return self._supply(request, (store, identity, budget))
         return self._supply(request)
 
+    def _provider(self, backend):
+        if self.provider is not None:
+            return self.provider
+        providers = {"anthropic": AnthropicProvider, "google": GeminiProvider}
+        constructor = providers.get(backend.get("provider"))
+        if constructor is None:
+            raise SupplyError("NO_ELIGIBLE_ROUTE", "routing")
+        return constructor()
+
     def _reserve(self, context, request, backend, rule, secret):
         store, identity, limits = context
         try:
@@ -124,8 +146,9 @@ class IntelligenceService:
                 raise ValueError()
         except (KeyError, ArithmeticError, ValueError, TypeError):
             raise SupplyError("INVALID_REQUEST", "budget", "Invalid approved budget ceiling") from None
-        if rule["max_attempts"] != 1 or rule.get("fallback"):
-            raise SupplyError("INVALID_REQUEST", "budget", "Budgeted E2E forbids retries and failover")
+        if (type(rule["max_attempts"]) is not int or not 1 <= rule["max_attempts"] <= 2
+                or rule.get("fallback")):
+            raise SupplyError("INVALID_REQUEST", "budget", "Budgeted E2E allows at most two attempts and forbids failover")
         rates = backend.get("cost_per_million_tokens_usd")
         if not rates or any(Decimal(str(rates[k])) <= 0 for k in ("input", "output")):
             raise SupplyError("INVALID_REQUEST", "budget", "Approved tariff required")
@@ -143,7 +166,7 @@ class IntelligenceService:
             previous = self.store.read(previous_id)
             if not previous or previous.get("state") != "completed":
                 raise SupplyError("STATE_CONFLICT", "budget", "Prior reservation is unresolved; reconciliation required")
-        count = self.provider.count_input_tokens(payload=request["payload"], model=backend["model"],
+        count = self._provider(backend).count_input_tokens(payload=request["payload"], model=backend["model"],
                                                 secret=secret, timeout=rule["timeout_seconds"])
         if type(count) is not int or count < 0:
             raise SupplyError("TOKEN_COUNT_FAILED", "budget")
@@ -214,11 +237,7 @@ class IntelligenceService:
                 route = routes[min(number, len(routes) - 1)]
                 backend = route["effective_intelligence"]
                 try:
-                    purpose = ("mandate_gen_intelligence" if budget_context
-                               and intent["intent_type"] == "gen" and intent["phase"] == "generation"
-                               else "mandate_genesis_intelligence" if budget_context
-                               and intent["intent_type"] == "ing" and intent["phase"] == "classification" else None)
-                    secret = self.vault.resolve(backend["credential_ref"], purpose=purpose)
+                    secret = self.vault.resolve(backend["credential_ref"], purpose=vault_purpose(intent))
                 except SupplyError as exc:
                     journal.update(state="failed", error=exc.envelope()["error"])
                     self.store.write(identity, journal)
@@ -227,7 +246,10 @@ class IntelligenceService:
                     "started_at": datetime.now(timezone.utc).isoformat(), "outcome": "in_flight"}
                 if budget_context:
                     try:
-                        attempt["budget_reservation"] = self._reserve(budget_context, request, backend, rule, secret)
+                        # A transport retry remains the same logical inference and
+                        # therefore reuses its original signed budget reservation.
+                        attempt["budget_reservation"] = (journal["attempts"][0]["budget_reservation"]
+                            if journal["attempts"] else self._reserve(budget_context, request, backend, rule, secret))
                     except SupplyError as exc:
                         secret = None
                         journal.update(state="failed", error=exc.envelope()["error"])
@@ -238,7 +260,7 @@ class IntelligenceService:
                 self.store.write(identity, journal)
                 start = time.monotonic()
                 try:
-                    output = self.provider.generate(payload=request["payload"], model=backend["model"],
+                    output = self._provider(backend).generate(payload=request["payload"], model=backend["model"],
                         secret=secret, max_tokens=rule["max_output_tokens"], timeout=rule["timeout_seconds"])
                 except SupplyError as exc:
                     attempt.update(outcome="error", error=exc.envelope()["error"],

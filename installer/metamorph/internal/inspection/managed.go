@@ -1,16 +1,134 @@
 package inspection
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
 	"metamorph/internal/core"
 )
+
+type aitapBundleFile struct {
+	Path   string `json:"path"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+type aitapBundleManifest struct {
+	SchemaVersion         string            `json:"schema_version"`
+	Product               string            `json:"product"`
+	Version               string            `json:"version"`
+	BuildNumber           int               `json:"build_number"`
+	Platform              string            `json:"platform"`
+	Architecture          string            `json:"architecture"`
+	EmbeddedPythonVersion string            `json:"embedded_python_version"`
+	PackagingMode         string            `json:"packaging_mode"`
+	InventorySHA256       string            `json:"inventory_sha256"`
+	RequiredPaths         []string          `json:"required_paths"`
+	Smokes                map[string]string `json:"smokes"`
+	Files                 []aitapBundleFile `json:"files"`
+}
+
+// VerifyAITAPBundle checks the complete onedir inventory against Build's v1 manifest.
+func VerifyAITAPBundle(root string) (string, int, string, int, error) {
+	data, err := os.ReadFile(filepath.Join(root, "bundle-manifest.json"))
+	if err != nil {
+		return "", 0, "", 0, err
+	}
+	var manifest aitapBundleManifest
+	if err = json.Unmarshal(data, &manifest); err != nil {
+		return "", 0, "", 0, err
+	}
+	if manifest.SchemaVersion != "bloom.aitap-bundle/v1" || manifest.Product != "AITAP" || manifest.PackagingMode != "pyinstaller-onedir" || manifest.Version == "" || len(manifest.Files) == 0 {
+		return "", 0, "", 0, fmt.Errorf("invalid AITAP bundle manifest")
+	}
+	if manifest.Platform != runtime.GOOS || manifest.EmbeddedPythonVersion == "" {
+		return "", 0, "", 0, fmt.Errorf("AITAP manifest platform or embedded Python mismatch")
+	}
+	wantArch := runtime.GOARCH
+	if wantArch == "amd64" && runtime.GOOS != "windows" {
+		wantArch = "x86_64"
+	}
+	if manifest.Architecture != wantArch {
+		return "", 0, "", 0, fmt.Errorf("AITAP manifest architecture %q, expected %q", manifest.Architecture, wantArch)
+	}
+	for _, smoke := range []string{"system.version", "system.info", "json_help", "route.policy", "local.preflight"} {
+		if manifest.Smokes[smoke] != "passed" {
+			return "", 0, "", 0, fmt.Errorf("AITAP manifest smoke %s not passed", smoke)
+		}
+	}
+	for _, required := range append([]string{core.ExeName("aitap"), "_internal", "_internal/contracts", "_internal/policies", "_internal/registry", "_internal/local/catalog", "_internal/aitap.config.json", "_internal/VERSION", "help/aitap_help.json", "help/aitap_help.txt"}, manifest.RequiredPaths...) {
+		if required == "" || filepath.IsAbs(required) || strings.Contains(required, "..") {
+			return "", 0, "", 0, fmt.Errorf("unsafe required path %q", required)
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(required))); err != nil {
+			return "", 0, "", 0, fmt.Errorf("required %s: %w", required, err)
+		}
+	}
+	if info, err := os.Stat(filepath.Join(root, core.ExeName("aitap"))); err != nil || !info.Mode().IsRegular() {
+		return "", 0, "", 0, fmt.Errorf("AITAP executable missing or not a regular file")
+	}
+	if info, err := os.Stat(filepath.Join(root, "_internal")); err != nil || !info.IsDir() {
+		return "", 0, "", 0, fmt.Errorf("AITAP _internal directory missing")
+	}
+	var actual []aitapBundleFile
+	err = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("non-regular bundle entry: %s", path)
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "bundle-manifest.json" {
+			return nil
+		}
+		hash, err := CalculateSHA256(path)
+		if err != nil {
+			return err
+		}
+		actual = append(actual, aitapBundleFile{Path: rel, Size: info.Size(), SHA256: hash})
+		return nil
+	})
+	if err != nil {
+		return "", 0, "", 0, err
+	}
+	sort.Slice(actual, func(i, j int) bool { return actual[i].Path < actual[j].Path })
+	if len(actual) != len(manifest.Files) {
+		return "", 0, "", 0, fmt.Errorf("AITAP inventory count mismatch: %d vs %d", len(actual), len(manifest.Files))
+	}
+	for i := range actual {
+		if actual[i] != manifest.Files[i] {
+			return "", 0, "", 0, fmt.Errorf("AITAP inventory mismatch at %s", actual[i].Path)
+		}
+	}
+	// Build canonicalizes a list of objects with alphabetically sorted JSON keys.
+	parts := make([]string, 0, len(actual))
+	for _, file := range actual {
+		p, _ := json.Marshal(file.Path)
+		h, _ := json.Marshal(file.SHA256)
+		parts = append(parts, fmt.Sprintf(`{"path":%s,"sha256":%s,"size":%d}`, p, h, file.Size))
+	}
+	digest := sha256.Sum256([]byte("[" + strings.Join(parts, ",") + "]"))
+	inventoryHash := hex.EncodeToString(digest[:])
+	if inventoryHash != manifest.InventorySHA256 {
+		return "", 0, "", 0, fmt.Errorf("AITAP inventory digest mismatch")
+	}
+	return manifest.Version, manifest.BuildNumber, inventoryHash, len(actual), nil
+}
 
 // metamorphAppConfig represents the subset of metamorph-config.json that inspection
 // cares about.  The file lives in the same directory as the metamorph executable
@@ -336,6 +454,23 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 
 	if !FileExists(path) {
 		binary.Status = "missing"
+		return binary, nil
+	}
+	if name == "AITap" {
+		version, build, digest, _, verifyErr := VerifyAITAPBundle(filepath.Dir(path))
+		if verifyErr != nil {
+			binary.Status = "corrupted"
+			binary.Hash = "invalid_bundle"
+			return binary, verifyErr
+		}
+		binary.Version, binary.BuildNumber, binary.Hash = version, build, digest
+		_ = filepath.Walk(filepath.Dir(path), func(_ string, info os.FileInfo, err error) error {
+			if err == nil && info.Mode().IsRegular() {
+				binary.SizeBytes += info.Size()
+			}
+			return err
+		})
+		binary.Status = "healthy"
 		return binary, nil
 	}
 

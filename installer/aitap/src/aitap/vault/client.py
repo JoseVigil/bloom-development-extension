@@ -3,6 +3,7 @@ import os
 import secrets
 import socket
 import subprocess
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,11 +11,22 @@ from aitap.providers.base import SupplyError
 from aitap.service_identity import ServiceIdentityError, app_data_dir, b64url, load_binding, load_signer
 
 
+_DENIAL_STAGES = {"service_identity", "installation_binding", "request", "binding", "timestamp", "nonce", "channel", "active_context", "grant",
+                  "signature", "replay", "vault_status", "credential", "channel_connect", "channel_write"}
+
+
+def _denial_message(stderr):
+    match = re.search(r"(?:^|\s)VAULT_DENIAL_STAGE=([a-z_]+)(?:\s|$)", stderr or "")
+    stage = match.group(1) if match and match.group(1) in _DENIAL_STAGES else None
+    return f"VAULT_ACCESS_DENIED [stage={stage}]" if stage else "VAULT_ACCESS_DENIED"
+
+
 def _identity(app_data):
     try:
         return load_signer(app_data)
     except ServiceIdentityError:
-        raise SupplyError("VAULT_ACCESS_DENIED", "vault") from None
+        raise SupplyError("VAULT_ACCESS_DENIED", "vault",
+                          "VAULT_ACCESS_DENIED [stage=service_identity]") from None
 
 
 def _binding(app_data):
@@ -25,7 +37,8 @@ def _binding(app_data):
             raise ValueError()
         return binding.organization_id, binding.installation_id, grant_id
     except (ServiceIdentityError, ValueError, KeyError):
-        raise SupplyError("VAULT_ACCESS_DENIED", "vault") from None
+        raise SupplyError("VAULT_ACCESS_DENIED", "vault",
+                          "VAULT_ACCESS_DENIED [stage=installation_binding]") from None
 
 
 class VaultClient:
@@ -35,11 +48,13 @@ class VaultClient:
         self.app_data = Path(app_data) if app_data is not None else app_data_dir()
 
     def resolve(self, reference, purpose=None):
-        if reference != "credential-ref://anthropic/default":
+        references = {"credential-ref://anthropic/default": "anthropic-key:default",
+                      "credential-ref://gemini/default": "gemini-key:default"}
+        if reference not in references:
             raise SupplyError("CREDENTIAL_NOT_FOUND", "vault")
-        if purpose not in ("mandate_genesis_intelligence", "mandate_gen_intelligence"):
+        if purpose not in ("mandate_intelligence", "mandate_genesis_intelligence", "mandate_gen_intelligence"):
             raise SupplyError("VAULT_ACCESS_DENIED", "vault")
-        key_id = "anthropic-key:default"
+        key_id = references[reference]
         signer = _identity(self.app_data)
         organization_id, installation_id, grant_id = _binding(self.app_data)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
@@ -69,7 +84,7 @@ class VaultClient:
             except (OSError, subprocess.TimeoutExpired):
                 raise SupplyError("VAULT_UNAVAILABLE", "vault") from None
             if result.returncode:
-                raise SupplyError("VAULT_ACCESS_DENIED", "vault")
+                raise SupplyError("VAULT_ACCESS_DENIED", "vault", _denial_message(result.stderr))
             try:
                 if json.loads(result.stdout) != {"status": "delivered"}:
                     raise ValueError()

@@ -29,7 +29,7 @@ import (
 
 func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 	var id string
-	var model, modelID, supply, policyRef, registryRef, maxUSD string
+	var model, modelID, supply, policyRef, registryRef, maxUSD, supplyGrantID string
 	var maxTotalTokens, maxOutputTokens int
 	short := "Aprueba el contrato exacto de un Mandate con consentimiento humano de Authority"
 	if operation == "activate" {
@@ -39,7 +39,7 @@ func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 		Example: "  nucleus mandate " + operation + " --id MANDATE_ID\n  nucleus --json mandate " + operation + " --id MANDATE_ID", Args: cobra.NoArgs,
 		Annotations: map[string]string{"category": "MANDATES", "json_response": `{"success":true,"mandateId":"MANDATE_ID","operation":"` + operation + `","contractDigest":"SHA256","principalId":"AUTHORITY_PRINCIPAL"}`},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			selection := &mandatecontract.Intelligence{Model: model, ModelID: modelID, PolicyRef: policyRef, RegistryRef: registryRef, MaxUSD: maxUSD, MaxTotalTokens: maxTotalTokens, MaxOutputTokens: maxOutputTokens}
+			selection := &mandatecontract.Intelligence{Model: model, ModelID: modelID, PolicyRef: policyRef, RegistryRef: registryRef, MaxUSD: maxUSD, MaxTotalTokens: maxTotalTokens, MaxOutputTokens: maxOutputTokens, SupplyGrantID: supplyGrantID}
 			if operation == "approve" && supply == "local" {
 				selection.Privacy = "local"
 			} else if operation == "approve" && supply != "" && supply != "cloud" {
@@ -69,7 +69,7 @@ func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&id, "id", "", "ID del Mandate (requerido)")
 	if operation == "approve" {
-		cmd.Flags().StringVar(&model, "model", "", "Modelo Anthropic elegido para este contrato")
+		cmd.Flags().StringVar(&model, "model", "", "Modelo cloud elegido para este contrato")
 		cmd.Flags().StringVar(&supply, "supply", "cloud", "Suministro de inteligencia: cloud o local")
 		cmd.Flags().StringVar(&modelID, "model-id", "", "ID del modelo local en el catálogo AITAP")
 		cmd.Flags().StringVar(&policyRef, "policy", "", "Política AITAP verificada que se firmará")
@@ -77,6 +77,7 @@ func createMandateActCommand(c *core.Core, operation string) *cobra.Command {
 		cmd.Flags().StringVar(&maxUSD, "max-usd", "", "Presupuesto máximo explícito en USD")
 		cmd.Flags().IntVar(&maxTotalTokens, "max-total-tokens", 0, "Límite total explícito de tokens")
 		cmd.Flags().IntVar(&maxOutputTokens, "max-output-tokens", 0, "Límite explícito de tokens de salida")
+		cmd.Flags().StringVar(&supplyGrantID, "supply-grant-id", "", "Grant vigente de Authority para este suministro cloud")
 	}
 	_ = cmd.MarkFlagRequired("id")
 	return cmd
@@ -152,6 +153,11 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 			contract, err = buildConfirmedContract(dir, id, active.OrganizationID, authorityDir, selected)
 			if err != nil {
 				return result, err
+			}
+			if contract.ContractVersion == 2 {
+				if err := verifyIntelligenceGrant(authorityDir, identity.InstallationID, contract.OrganizationID, *contract.Intelligence); err != nil {
+					return result, err
+				}
 			}
 			digest, err = mandatecontract.Digest(contract)
 			if err != nil {
@@ -461,8 +467,8 @@ func verifyIntelligenceSelection(selected mandatecontract.Intelligence) (mandate
 		return selected, errors.New("invalid explicit USD ceiling")
 	}
 	if selected.Privacy != "local" {
-		credential := "credential-ref://anthropic/default"
-		selected.Provider, selected.BackendID, selected.CredentialRef, selected.PolicyVersion = "anthropic", "anthropic_api", &credential, "mandate-gen/v1"
+		credential := "credential-ref://gemini/default"
+		selected.Provider, selected.BackendID, selected.CredentialRef, selected.PolicyVersion = "google", "gemini_api", &credential, "mandate-gen/v1"
 	}
 	for _, file := range []struct {
 		ref    *string
@@ -500,7 +506,11 @@ func verifyIntelligenceSelection(selected mandatecontract.Intelligence) (mandate
 		} `json:"intelligence_supply"`
 	}
 	policyBytes, _ := os.ReadFile(selected.PolicyRef)
-	if json.Unmarshal(policyBytes, &policy) != nil || policy.PolicyVersion != selected.PolicyVersion || policy.Supply.BackendID != selected.BackendID || len(policy.Supply.Fallback) != 0 || policy.Supply.MaxAttempts != 1 || policy.Supply.MaxOutputTokens != selected.MaxOutputTokens || !policy.Supply.Budget.PerMandate || (selected.Privacy != "local" && policy.Supply.Budget.MaxUSD != selected.MaxUSD) || policy.Supply.Budget.MaxTotalTokens != selected.MaxTotalTokens || policy.Supply.Budget.MaxInferences != 1 {
+	expectedAttempts := 2
+	if selected.Privacy == "local" {
+		expectedAttempts = 1
+	}
+	if json.Unmarshal(policyBytes, &policy) != nil || policy.PolicyVersion != selected.PolicyVersion || policy.Supply.BackendID != selected.BackendID || len(policy.Supply.Fallback) != 0 || policy.Supply.MaxAttempts != expectedAttempts || policy.Supply.MaxOutputTokens != selected.MaxOutputTokens || !policy.Supply.Budget.PerMandate || (selected.Privacy != "local" && policy.Supply.Budget.MaxUSD != selected.MaxUSD) || policy.Supply.Budget.MaxTotalTokens != selected.MaxTotalTokens || policy.Supply.Budget.MaxInferences != 1 {
 		return selected, errors.New("AITAP policy does not match the explicit signed budget")
 	}
 	var registry struct {
@@ -525,11 +535,45 @@ func verifyIntelligenceSelection(selected mandatecontract.Intelligence) (mandate
 	}
 	for _, backend := range registry.Backends {
 		credentialMatches := backend.CredentialRef == nil && selected.CredentialRef == nil || backend.CredentialRef != nil && selected.CredentialRef != nil && *backend.CredentialRef == *selected.CredentialRef
-		if backend.BackendID == selected.BackendID && backend.Provider == selected.Provider && backend.Model == selected.Model && credentialMatches && backend.Health == "healthy" && backend.Enabled && (selected.Privacy != "local" || backend.Privacy == "local" && backend.ModelDigest == selected.ModelManifestSHA256) {
+		healthEligible := backend.Health == "healthy" || backend.Health == "degraded" || backend.Health == "unknown"
+		if backend.BackendID == selected.BackendID && backend.Provider == selected.Provider && backend.Model == selected.Model && credentialMatches && healthEligible && backend.Enabled && (selected.Privacy != "local" || backend.Privacy == "local" && backend.ModelDigest == selected.ModelManifestSHA256) {
 			return selected, nil
 		}
 	}
 	return selected, errors.New("selected model is not marked available in verified AITAP registry")
+}
+
+func verifyIntelligenceGrant(authorityDir, installationID, organizationID string, selected mandatecontract.Intelligence) error {
+	evidence, err := authority.ResolveIntelligenceSupplyGrant(
+		&authority.Store{Path: filepath.Join(authorityDir, "state.json")},
+		&authority.CheckpointStore{Path: filepath.Join(authorityDir, "checkpoint.json")},
+		organizationID, installationID, selected.SupplyGrantID, time.Now().UTC())
+	if err != nil || evidence.ConsumerID != "brain" || evidence.Purpose != "mandate_intelligence" ||
+		!contains(evidence.AllowedCapabilities, "text.generate") || !contains(evidence.AllowedCapabilities, "structured_output") ||
+		!contains(evidence.AllowedPrivacy, "approved_cloud") || evidence.Limits.MaxInferences < 1 ||
+		evidence.Limits.MaxTotalTokens < uint64(selected.MaxTotalTokens) || evidence.Limits.MaxOutputTokensPerInference < uint64(selected.MaxOutputTokens) {
+		return errors.New("Authority intelligence supply grant does not authorize the signed selection")
+	}
+	grantUSD, grantErr := strconv.ParseFloat(evidence.Limits.MaxUSD, 64)
+	selectedUSD, selectedErr := strconv.ParseFloat(selected.MaxUSD, 64)
+	if grantErr != nil || selectedErr != nil || selectedUSD > grantUSD {
+		return errors.New("Authority intelligence supply grant does not authorize the signed budget")
+	}
+	for _, destination := range evidence.AllowedDestinations {
+		if destination.Provider == selected.Provider && destination.BackendID == selected.BackendID && contains(destination.Models, selected.Model) {
+			return nil
+		}
+	}
+	return errors.New("Authority intelligence supply grant does not authorize the signed destination")
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func prepareLocalSelection(ctx context.Context, selected mandatecontract.Intelligence, run mandateintelligence.Runner) (mandatecontract.Intelligence, error) {

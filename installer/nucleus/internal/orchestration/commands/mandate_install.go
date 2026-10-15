@@ -20,6 +20,7 @@ import (
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/mandateinstall"
+	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/supervisor"
 
 	"github.com/spf13/cobra"
@@ -146,11 +147,27 @@ func runInstallMandate(c *core.Core, mandateID string) InstallMandateResult {
 		logger.Error("%v", err)
 		return InstallMandateResult{Success: false, MandateID: mandateID, Error: err.Error()}
 	}
+	if delivery.Envelope.MandateID != mandateID || filepath.Base(mandateID) != mandateID ||
+		delivery.Envelope.OrganizationID != active.OrganizationID || delivery.Envelope.InstallationID != identity.InstallationID {
+		return InstallMandateResult{Success: false, MandateID: mandateID, Error: "verified delivery identity differs from active installation"}
+	}
 
 	path, alreadyInstalled, err := mandateinstall.MaterializeFile(cfg.MandatesRoot(), delivery.Envelope.MandateID, content)
 	if err != nil {
 		logger.Error("%v", err)
 		return InstallMandateResult{Success: false, MandateID: delivery.Envelope.MandateID, Error: err.Error()}
+	}
+	verified, err := mandatecontract.LoadVerified(filepath.Dir(path), identityPath)
+	if err != nil {
+		return InstallMandateResult{Success: false, MandateID: delivery.Envelope.MandateID, Error: fmt.Sprintf("installed contract verification failed: %v", err)}
+	}
+	if verified.Contract.ContractVersion == 4 {
+		if verified.Contract.OrganizationID != active.OrganizationID || verified.Contract.MandateID != delivery.Envelope.MandateID {
+			return InstallMandateResult{Success: false, MandateID: delivery.Envelope.MandateID, Error: "delivered contract identity differs from active organization"}
+		}
+		if _, err := mandateinstall.AdoptJournal(cfg.MandatesRoot(), receipt, delivery, verified.ContractDigest); err != nil {
+			return InstallMandateResult{Success: false, MandateID: delivery.Envelope.MandateID, Error: fmt.Sprintf("adoption failed: %v", err)}
+		}
 	}
 
 	if alreadyInstalled {

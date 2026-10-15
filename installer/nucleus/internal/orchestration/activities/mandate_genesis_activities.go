@@ -3,11 +3,11 @@ package activities
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/hex"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,12 +52,14 @@ const (
 )
 
 type ScaffoldDomainInput struct {
-	MandateID    string
-	ActionID     string
-	DomainName   string
-	Files        []string
-	Mode         ScaffoldMode
-	MandatesRoot string // requerido en ambos modos: dónde vive {mandateID}/
+	MandateID            string
+	ActionID             string
+	DomainName           string
+	Files                []string
+	Mode                 ScaffoldMode
+	MandatesRoot         string // requerido en ambos modos: dónde vive {mandateID}/
+	Domains              []ProposedDomain
+	ClassificationDigest string
 }
 
 type ScaffoldDomainResult struct {
@@ -110,30 +112,16 @@ func domainSlug(domainName string) string {
 	return s
 }
 
-// randomSuffix genera el sufijo corto que evita colisión entre dos
-// dominios cuyo nombre normalice al mismo slug (p. ej. "Billing" y
-// "billing " en el mismo proposal). 4 bytes hex = 8 caracteres es más de
-// lo que pediste en el ejemplo (a3f1, 4 chars) — uso 2 bytes (4 hex chars)
-// para calzar exacto con el ejemplo dado.
-func randomSuffix() string {
-	b := make([]byte, 2)
-	if _, err := rand.Read(b); err != nil {
-		// no debería pasar con crypto/rand, pero si pasa, un id sin
-		// sufijo random sigue siendo mejor que un error duro acá — el
-		// riesgo de colisión sube, no se cae todo el proposal por esto.
-		return "0000"
-	}
-	return hex.EncodeToString(b)
-}
-
-// newDomainID arma el id estable definitivo: dom_{slug}_{sufijo}.
-func newDomainID(domainName string) string {
-	return fmt.Sprintf("dom_%s_%s", domainSlug(domainName), randomSuffix())
+// newDomainID deriva identidad durable de la evidencia clasificada.
+func newDomainID(mandateID, clusterID, domainName string) string {
+	sum := sha256.Sum256([]byte(mandateID + "\x00" + clusterID + "\x00" + domainName))
+	return fmt.Sprintf("dom_%s_%x", domainSlug(domainName), sum[:4])
 }
 
 type DomainProposal struct {
-	Status  string           `json:"status"` // "proposed"
-	Domains []ProposedDomain `json:"domains"`
+	Status               string           `json:"status"` // "proposed"
+	ClassificationDigest string           `json:"classificationDigest"`
+	Domains              []ProposedDomain `json:"domains"`
 }
 
 // ScaffoldDomainActivity habla por TCP (puerto 5678) con Brain para generar
@@ -214,18 +202,10 @@ func scaffoldDryRun(input ScaffoldDomainInput) (string, []ProposedDomain, error)
 		return "", nil, fmt.Errorf("no pude crear %s: %w", dir, err)
 	}
 
-	proposal := DomainProposal{
-		Status: "proposed",
-		Domains: []ProposedDomain{
-			{
-				ID:                   newDomainID(input.DomainName),
-				DomainName:           input.DomainName,
-				CohesionScore:        1.0, // sin clustering real, cohesión no significa nada — placeholder explícito
-				SuggestedActionCount: 1,   // idem — sin clustering real, siempre 1
-				Files:                input.Files,
-			},
-		},
+	if input.ClassificationDigest == "" || len(input.Domains) == 0 {
+		return "", nil, fmt.Errorf("ScaffoldDomainActivity: clasificación validada obligatoria")
 	}
+	proposal := DomainProposal{Status: "proposed", ClassificationDigest: input.ClassificationDigest, Domains: input.Domains}
 
 	data, err := json.MarshalIndent(proposal, "", "  ")
 	if err != nil {
@@ -287,9 +267,15 @@ func PublishMandateEventActivity(event string, data map[string]interface{}) erro
 // (puerto 48215, el mismo que expone bootControlPlane en service.go).
 func publishMandateEvent(event string, data map[string]interface{}) {
 	body, _ := json.Marshal(map[string]interface{}{"event": event, "data": data})
+	target := os.Getenv("BLOOM_MANDATE_EVENT_URL")
+	if target == "" {
+		target = "http://localhost:48215/internal/mandate-event"
+	} else if parsed, err := url.Parse(target); err != nil || parsed.Scheme != "http" || (parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "::1") {
+		return
+	}
 	go func() {
 		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Post("http://localhost:48215/internal/mandate-event",
+		resp, err := client.Post(target,
 			"application/json", bytes.NewBuffer(body))
 		if err != nil {
 			return
@@ -349,9 +335,148 @@ type IngestReceptionInput struct {
 }
 
 type IngestReceptionResult struct {
-	IntentID   string
-	FolderName string
-	FilesCount int
+	IntentID             string
+	FolderName           string
+	FilesCount           int
+	ClassificationRef    string
+	ClassificationDigest string
+	RawResponseDigest    string
+	Domains              []ProposedDomain
+}
+
+type brainClassification struct {
+	Clusters []struct {
+		ClusterID string   `json:"cluster_id"`
+		Files     []string `json:"files"`
+		Domain    struct {
+			Name  string   `json:"name"`
+			Score *float64 `json:"score"`
+		} `json:"domain"`
+	} `json:"clusters"`
+}
+
+func proposedDomainsFromSupply(mandateID string, data map[string]interface{}) ([]ProposedDomain, error) {
+	raw, err := json.Marshal(data["classification"])
+	if err != nil {
+		return nil, err
+	}
+	var classification brainClassification
+	if err := json.Unmarshal(raw, &classification); err != nil || len(classification.Clusters) == 0 {
+		return nil, fmt.Errorf("clasificación Brain ausente o inválida")
+	}
+	totalFiles := 0
+	for _, cluster := range classification.Clusters {
+		totalFiles += len(cluster.Files)
+	}
+	domains := make([]ProposedDomain, 0, len(classification.Clusters))
+	for _, cluster := range classification.Clusters {
+		if cluster.ClusterID == "" || cluster.Domain.Name == "" || len(cluster.Files) == 0 {
+			return nil, fmt.Errorf("cluster Brain incompleto")
+		}
+		cohesion := float64(len(cluster.Files)) / float64(totalFiles)
+		if cluster.Domain.Score != nil {
+			cohesion = *cluster.Domain.Score
+		}
+		domains = append(domains, ProposedDomain{ID: newDomainID(mandateID, cluster.ClusterID, cluster.Domain.Name), DomainName: cluster.Domain.Name, CohesionScore: cohesion, SuggestedActionCount: 1, Files: cluster.Files})
+	}
+	return domains, nil
+}
+
+type LoadMandateBuildCheckpointInput struct {
+	MandatesRoot string
+	MandateID    string
+	Phase        string
+}
+
+type MandateBuildCheckpoint struct {
+	Reception        IngestReceptionResult
+	Scaffold         ScaffoldDomainResult
+	CandidateDomains []DomainCandidateState
+}
+
+func LoadMandateBuildCheckpointActivity(input LoadMandateBuildCheckpointInput) (MandateBuildCheckpoint, error) {
+	if input.MandatesRoot == "" || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: MandatesRoot y MandateID válidos son obligatorios")
+	}
+	if input.Phase != "cluster" && input.Phase != "validate" {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: fase %q no recuperable", input.Phase)
+	}
+	intentsRoot := filepath.Join(resolveNucleusRootFromMandatesRoot(input.MandatesRoot), ".intents", ".ing")
+	entries, err := os.ReadDir(intentsRoot)
+	if err != nil {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: no pude leer intents ing: %w", err)
+	}
+	var reception IngestReceptionResult
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		raw, readErr := os.ReadFile(filepath.Join(intentsRoot, entry.Name(), ".ing_state.json"))
+		if readErr != nil {
+			continue
+		}
+		var state struct {
+			IntentID  string `json:"intent_id"`
+			MandateID string `json:"mandate_id"`
+			Status    string `json:"status"`
+		}
+		if json.Unmarshal(raw, &state) == nil && state.MandateID == input.MandateID && state.IntentID != "" && state.Status == "hydrated" {
+			if reception.IntentID != "" {
+				return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: más de un intent ing pertenece al mandate %s", input.MandateID)
+			}
+			reception = IngestReceptionResult{IntentID: state.IntentID, FolderName: entry.Name()}
+		}
+	}
+	if reception.IntentID == "" {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: intent ing hidratado ausente para mandate %s", input.MandateID)
+	}
+	classificationDir := filepath.Join(intentsRoot, reception.FolderName, ".classification", ".turn_1")
+	classificationRaw, err := os.ReadFile(filepath.Join(classificationDir, ".files", ".domain_resolution.json"))
+	if err != nil {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: clasificación Brain ausente: %w", err)
+	}
+	var classification interface{}
+	if err := json.Unmarshal(classificationRaw, &classification); err != nil {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: clasificación Brain inválida: %w", err)
+	}
+	var report struct {
+		ParsedResultDigest string `json:"parsed_result_digest"`
+	}
+	var supply struct {
+		RawResponseDigest string `json:"raw_response_digest"`
+	}
+	if raw, readErr := os.ReadFile(filepath.Join(classificationDir, ".report.json")); readErr != nil || json.Unmarshal(raw, &report) != nil || report.ParsedResultDigest == "" {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: reporte de clasificación inválido")
+	}
+	if raw, readErr := os.ReadFile(filepath.Join(classificationDir, ".supply_result.json")); readErr != nil || json.Unmarshal(raw, &supply) != nil || supply.RawResponseDigest == "" {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: evidencia de supply inválida")
+	}
+	domains, err := proposedDomainsFromSupply(input.MandateID, map[string]interface{}{"classification": classification})
+	if err != nil {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: dominios clasificados inválidos: %w", err)
+	}
+	reception.ClassificationRef = filepath.Join(classificationDir, ".files", ".domain_resolution.json")
+	reception.ClassificationDigest = report.ParsedResultDigest
+	reception.RawResponseDigest = supply.RawResponseDigest
+	reception.Domains = domains
+	checkpoint := MandateBuildCheckpoint{Reception: reception}
+	if input.Phase == "cluster" {
+		return checkpoint, nil
+	}
+	raw, err := os.ReadFile(filepath.Join(input.MandatesRoot, input.MandateID, "domain_proposal.json"))
+	if err != nil {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: domain_proposal.json ausente: %w", err)
+	}
+	var proposal DomainProposal
+	if err := json.Unmarshal(raw, &proposal); err != nil || proposal.Status != "proposed" || len(proposal.Domains) == 0 {
+		return MandateBuildCheckpoint{}, fmt.Errorf("checkpoint: domain_proposal.json inválido")
+	}
+	checkpoint.Scaffold = ScaffoldDomainResult{ResultRef: "domain_proposal.json", Domains: proposal.Domains}
+	checkpoint.CandidateDomains = make([]DomainCandidateState, 0, len(proposal.Domains))
+	for _, domain := range proposal.Domains {
+		checkpoint.CandidateDomains = append(checkpoint.CandidateDomains, DomainCandidateState{DomainID: domain.ID, Name: domain.DomainName, CohesionScore: domain.CohesionScore, SuggestedActionCount: domain.SuggestedActionCount})
+	}
+	return checkpoint, nil
 }
 
 func resolveNucleusRootFromMandatesRoot(mandatesRoot string) string {
@@ -513,23 +638,78 @@ func IngestReceptionActivity(input IngestReceptionInput) (IngestReceptionResult,
 			"IngestReceptionActivity: brain intent create no devolvió intent_id (mandate %s)", input.MandateID,
 		)
 	}
+	intentRoot := filepath.Join(nucleusRoot, ".intents", ".ing", folderName)
 
-	hydrateArgs := []string{
-		"--json", "intent", "hydrate",
-		"--id", intentID,
-		"--nucleus-path", nucleusRoot,
+	phase, err := readINGIntentPhase(intentRoot, input.MandateID, intentID)
+	if err != nil {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: estado ing inválido (intent %s, mandate %s): %w", intentID, input.MandateID, err)
 	}
-	if len(docFiles) > 0 {
-		hydrateArgs = append(hydrateArgs, "--files", strings.Join(docFiles, ","))
+	if phase == "created" {
+		hydrateArgs := []string{
+			"--json", "intent", "hydrate",
+			"--id", intentID,
+			"--nucleus-path", nucleusRoot,
+		}
+		if len(docFiles) > 0 {
+			hydrateArgs = append(hydrateArgs, "--files", strings.Join(docFiles, ","))
+		}
+		if _, err := runBrainIntentJSON(brainPath, hydrateArgs); err != nil {
+			return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: brain intent hydrate falló (intent %s, mandate %s): %w", intentID, input.MandateID, err)
+		}
+	} else if phase != "hydrated" {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: fase ing %q no reanudable (intent %s, mandate %s)", phase, intentID, input.MandateID)
 	}
-	if _, err := runBrainIntentJSON(brainPath, hydrateArgs); err != nil {
-		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: brain intent hydrate falló (intent %s, mandate %s): %w", intentID, input.MandateID, err)
+	semanticIndex := filepath.Join(nucleusRoot, ".cache", ".semantic-index.json")
+	supplyOut, err := runBrainIntentJSON(brainPath, []string{
+		"--json", "intent", "supply", "--intent-root", intentRoot,
+		"--semantic-index", semanticIndex, "--policy-version", "mandate-gen/v1",
+	})
+	if err != nil {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: brain intent supply falló (intent %s, mandate %s): %w", intentID, input.MandateID, err)
+	}
+	status, _ := supplyOut.Data["status"].(string)
+	phaseActive, _ := supplyOut.Data["phase_active"].(string)
+	classificationRef, _ := supplyOut.Data["classification_ref"].(string)
+	classificationDigest, _ := supplyOut.Data["classification_digest"].(string)
+	rawResponseDigest, _ := supplyOut.Data["raw_response_digest"].(string)
+	if status != "awaiting_human_decision" || phaseActive != "consolidation" || classificationRef == "" || classificationDigest == "" || rawResponseDigest == "" {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: supply no produjo evidencia awaiting_human_decision completa")
+	}
+	domains, err := proposedDomainsFromSupply(input.MandateID, supplyOut.Data)
+	if err != nil {
+		return IngestReceptionResult{}, fmt.Errorf("IngestReceptionActivity: clasificación inválida: %w", err)
 	}
 	return IngestReceptionResult{
-		IntentID:   intentID,
-		FolderName: folderName,
-		FilesCount: len(docFiles),
+		IntentID: intentID, FolderName: folderName, FilesCount: len(docFiles),
+		ClassificationRef: classificationRef, ClassificationDigest: classificationDigest,
+		RawResponseDigest: rawResponseDigest, Domains: domains,
 	}, nil
+}
+
+func readINGIntentPhase(intentRoot, mandateID, intentID string) (string, error) {
+	raw, err := os.ReadFile(filepath.Join(intentRoot, ".ing_state.json"))
+	if err != nil {
+		return "", err
+	}
+	var state struct {
+		IntentID    string `json:"intent_id"`
+		MandateID   string `json:"mandate_id"`
+		Status      string `json:"status"`
+		PhaseActive string `json:"phase_active"`
+	}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return "", err
+	}
+	if state.IntentID != intentID || state.MandateID != mandateID {
+		return "", fmt.Errorf("identidad no correlacionada")
+	}
+	if state.Status == "" && state.PhaseActive == "reception" {
+		return "created", nil
+	}
+	if state.Status == "hydrated" && state.PhaseActive == "classification" {
+		return "hydrated", nil
+	}
+	return "", fmt.Errorf("status=%q phase_active=%q no reanudables", state.Status, state.PhaseActive)
 }
 
 // runBrainIntentJSON ejecuta brain con --json y parsea stdout como

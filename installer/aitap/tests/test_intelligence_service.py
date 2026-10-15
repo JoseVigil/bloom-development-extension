@@ -38,6 +38,47 @@ def gen_request():
     return value
 
 
+def gen_service(tmp_path, provider=None):
+    engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    engine.policy["intelligence_supply"].update(max_output_tokens=100, retry_delay_seconds=0)
+    engine.policy["intelligence_supply"]["budget"].update(max_usd="1.00", max_total_tokens=5000)
+    provider = provider or Provider()
+    provider.count_input_tokens = lambda **kwargs: 100
+    return IntelligenceService(engine, AccountingStore(tmp_path), Vault(), provider)
+
+
+def test_gen_explicit_retryable_error_reuses_one_logical_inference_and_reservation(tmp_path):
+    supplied = gen_service(tmp_path, Provider([
+        SupplyError("PROVIDER_UNAVAILABLE", "provider", "Gemini HTTP 503", uncertain=False)
+    ]))
+
+    result = supplied.supply(gen_request())
+
+    assert result["outcome"] == "completed" and supplied.provider.calls == 2
+    journal = supplied.store.read(gen_request()["logical_inference_id"])
+    assert journal["logical_inference_id"] == gen_request()["logical_inference_id"]
+    assert [attempt["outcome"] for attempt in journal["attempts"]] == ["error", "completed"]
+    assert journal["attempts"][0]["error"]["message"] == "Gemini HTTP 503"
+    assert journal["attempts"][0]["budget_reservation"] == journal["attempts"][1]["budget_reservation"]
+    budget_records = list((tmp_path / "budgets").glob("*.json"))
+    assert len(budget_records) == 1
+    budget = json.loads(budget_records[0].read_text(encoding="utf-8"))["journal"]
+    assert list(budget["reservations"]) == [gen_request()["logical_inference_id"]]
+
+
+def test_gen_uncertain_delivery_never_uses_second_transport_attempt(tmp_path):
+    supplied = gen_service(tmp_path, Provider([
+        SupplyError("PROVIDER_TIMEOUT", "provider", "Gemini delivery uncertain", uncertain=True)
+    ]))
+
+    with pytest.raises(SupplyError) as exc:
+        supplied.supply(gen_request())
+
+    assert exc.value.uncertain is True and supplied.provider.calls == 1
+    journal = supplied.store.read(gen_request()["logical_inference_id"])
+    assert journal["state"] == "failed" and len(journal["attempts"]) == 1
+
+
 def test_gen_replay_and_uncertain_inference_never_calls_provider_twice(tmp_path):
     engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
     engine.policy["intelligence_supply"].update(max_output_tokens=100)
@@ -89,6 +130,7 @@ def test_gen_requires_generation_phase_before_vault_or_provider(tmp_path):
 
 def test_unconfigured_gen_policy_rejects_before_vault(tmp_path):
     engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json", ROOT / "registry/genesis-pilot-v2.json")
+    engine.policy["intelligence_supply"]["budget"]["max_usd"] = None
     vault, provider = Vault(), Provider()
     with pytest.raises(SupplyError, match="Explicit Mandate gen budget required"):
         IntelligenceService(engine, AccountingStore(tmp_path), vault, provider).supply(gen_request())
@@ -98,9 +140,13 @@ def test_unconfigured_gen_policy_rejects_before_vault(tmp_path):
 def test_gen_route_supply_cli_fails_before_vault_when_budget_unset(tmp_path):
     request_path = tmp_path / "gen-request.json"
     request_path.write_text(json.dumps(gen_request()), encoding="utf-8")
+    policy = json.loads((ROOT / "policies/mandate-gen-v1.json").read_text(encoding="utf-8"))
+    policy["intelligence_supply"]["budget"]["max_usd"] = None
+    policy_path = tmp_path / "unset-policy.json"
+    policy_path.write_text(json.dumps(policy), encoding="utf-8")
     process = subprocess.run([sys.executable, "-B", "-m", "aitap", "--json", "route", "supply",
         "--request", str(request_path), "--state-dir", str(tmp_path / "accounting"),
-        "--policy", str(ROOT / "policies/mandate-gen-v1.json"),
+        "--policy", str(policy_path),
         "--registry", str(ROOT / "registry/genesis-pilot-v2.json")],
         capture_output=True, text=True, encoding="utf-8", timeout=30,
         env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONDONTWRITEBYTECODE": "1"})
@@ -137,7 +183,7 @@ class Vault:
     def resolve(self, reference, purpose=None):
         self.calls += 1
         self.purposes.append(purpose)
-        assert reference == "credential-ref://anthropic/default"
+        assert reference in {"credential-ref://anthropic/default", "credential-ref://gemini/default"}
         return "test-secret-not-a-real-credential"
 
 
@@ -168,9 +214,41 @@ def test_real_journal_replay_after_service_restart(tmp_path):
     assert second.supply(request()) == expected
     assert first.provider.calls == 1 and second.provider.calls == 0
     assert first.vault.calls == 1 and second.vault.calls == 0
+    assert first.vault.purposes == ["mandate_intelligence"]
     journal = second.store.read(request()["logical_inference_id"])
     assert journal["attempts"][0]["usage"] == {"input_tokens": 23, "output_tokens": 7}
     assert "test-secret-not-a-real-credential" not in first.store.path(request()["logical_inference_id"]).read_text()
+
+
+def test_ing_classification_uses_genesis_purpose_without_budget_context(tmp_path):
+    engine = RoutingEngine.from_files(ROOT / "policies/mandate-gen-v1.json",
+                                      ROOT / "registry/genesis-pilot-v2.json")
+    engine.policy["intelligence_supply"].update(max_output_tokens=100, retry_delay_seconds=0)
+    vault, provider = Vault(), Provider()
+    request_value = request()
+    request_value["routing"]["policy_version"] = "mandate-gen/v1"
+    request_value["logical_inference_id"] = digest(["intent-1", "classification", "1",
+                                                     request_value["input_digest"], "mandate-gen/v1"])
+
+    IntelligenceService(engine, AccountingStore(tmp_path), vault, provider).supply(request_value)
+
+    assert vault.purposes == ["mandate_intelligence"]
+    assert provider.calls == 1
+
+
+def test_unapproved_intent_contract_never_reaches_vault_or_provider(tmp_path):
+    supplied = service(tmp_path)
+    request_value = request()
+    request_value["intent"].update(intent_type="dis", phase="mapping")
+    request_value["logical_inference_id"] = digest(["intent-1", "mapping", "1",
+                                                     request_value["input_digest"],
+                                                     request_value["routing"]["policy_version"]])
+
+    with pytest.raises(SupplyError, match="not authorized for Vault access"):
+        supplied.supply(request_value)
+
+    assert supplied.vault.calls == 0
+    assert supplied.provider.calls == 0
 
 
 def test_digest_conflict_fails_without_call(tmp_path):
@@ -260,7 +338,7 @@ def budget_service(tmp_path):
 def test_budget_survives_restart_and_limits_two_inferences(tmp_path):
     supplied = budget_service(tmp_path)
     first = supplied.supply(budget_request())
-    assert supplied.vault.purposes == ["mandate_genesis_intelligence"]
+    assert supplied.vault.purposes == ["mandate_intelligence"]
     recovered = budget_service(tmp_path)
     assert recovered.supply(budget_request()) == first
     assert recovered.vault.calls == 0

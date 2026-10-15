@@ -69,6 +69,10 @@ export function mountOrreryScene(
 	resolveDisplay: DisplayResolver = simulatedDisplayResolver,
 	positionHints?: Map<string, Position3>
 ): OrreryHandle {
+	// styles.css is shared by standalone Orrery and the embedded Workspace
+	// integration. Keep every Orrery selector behind this explicit boundary so
+	// generic names such as `.panel`, `header` or `.hint` cannot affect Core.
+	container.classList.add('orrery-scope');
 	renderChrome(container);
 	renderObjectOptions(container, tree, resolveDisplay);
 	renderSimulatedBadge(container, tree);

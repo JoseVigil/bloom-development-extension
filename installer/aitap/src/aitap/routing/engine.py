@@ -25,7 +25,6 @@ def _digest(value: Any) -> str:
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 # Proveedor admitido segun la privacidad del pedido. privacy local es un techo:
 # nunca selecciona un proveedor de nube, ni por fallback.
-_SUPPLY_PROVIDER = {"approved_cloud": "anthropic", "local": "ollama"}
 
 
 @dataclass(frozen=True)
@@ -88,13 +87,12 @@ class RoutingEngine:
             self.validate_local_supply()
         rule = self.policy.get("intelligence_supply", {})
         backends = {b["backend_id"]: b for b in self.registry["intelligence_backends"]}
-        provider = _SUPPLY_PROVIDER.get(request["routing"]["privacy"])
         routes = []
         for backend_id in dict.fromkeys([rule.get("backend_id"), *rule.get("fallback", [])]):
             backend = backends.get(backend_id)
             if not backend or backend.get("supply_enabled") is not True:
                 continue
-            if backend["health"] == "unavailable" or backend["provider"] != provider:
+            if backend["health"] == "unavailable":
                 continue
             if set(request["routing"]["required_capabilities"]) - set(backend["capabilities"]):
                 continue

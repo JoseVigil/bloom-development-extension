@@ -427,6 +427,11 @@ def _setup_logger() -> None:
     """
     global _logger, _log_file_path
 
+    # PowerShell can expose stdout as cp1252 even when the build emits Unicode.
+    # Keep the console diagnostic stream aligned with the UTF-8 file log.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     log_dir = _resolve_log_dir()
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -788,7 +793,7 @@ def build_brain() -> StepResult:
 
 
 def build_aitap() -> StepResult:
-    """Empaqueta AITAP y genera sus ayudas desde el artefacto resultante."""
+    """Prueba AITAP y construye su bundle desde entornos Python aislados."""
     aitap_log = NUCLEUS_HOME / "logs" / "build" / "aitap.build.log"
     aitap_log.parent.mkdir(parents=True, exist_ok=True)
     aitap_log.write_text(
@@ -809,31 +814,74 @@ def build_aitap() -> StepResult:
         record(f"FAILED: {error}")
         return StepResult("AITAP", False, error=error)
 
-    python_exe = sys.executable
-    dependency_check = subprocess.run(
-        [python_exe, "-c", "import PyInstaller, jsonschema, rich, typer, cryptography"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if dependency_check.returncode != 0:
-        log("  Instalando dependencias de AITAP y PyInstaller ...")
-        # Mismo criterio que builds/unix/build-brain.sh: dependencias directo en el
-        # Python del sistema, sin venv. No se instala AITAP en modo editable: aitap.spec
-        # toma el codigo desde installer/aitap/src.
-        with (ROOT / "installer" / "aitap" / "pyproject.toml").open("rb") as pyproject:
-            aitap_deps = tomllib.load(pyproject)["project"]["dependencies"]
-        pip_cmd = [python_exe, "-m", "pip", "install", "--quiet"]
-        if not IS_WINDOWS:
-            # PEP 668: el Python de Homebrew/Debian rechaza pip sin este flag.
-            pip_cmd.append("--break-system-packages")
-        code, out = run_streaming(
-            [*pip_cmd, *aitap_deps, "pyinstaller"],
-            cwd=ROOT,
-            mirror_log=aitap_log,
-        )
+    python_exe = Path(sys.executable).resolve()
+    if sys.version_info < (3, 11):
+        error = f"AITAP requiere Python >= 3.11 para compilar; recibido {sys.version.split()[0]}"
+        record(f"FAILED: {error}")
+        return StepResult("AITAP", False, error=error)
+    try:
+        python_exe.relative_to(NUCLEUS_HOME.resolve())
+    except ValueError:
+        pass
+    else:
+        error = f"El Python productivo administrado no puede usarse para compilar AITAP: {python_exe}"
+        record(f"FAILED: {error}")
+        return StepResult("AITAP", False, error=error)
+
+    aitap_root = ROOT / "installer" / "aitap"
+    env_root = ROOT / ".tmp" / "aitap-build-env" / f"{sys.platform}_{_platform.machine().lower()}"
+    test_env = env_root / "test"
+    package_env = env_root / "package"
+    shutil.rmtree(env_root, ignore_errors=True)
+
+    def venv_python(path: Path) -> Path:
+        return path / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
+
+    def execute(command: list[str], *, cwd: Path = ROOT, env: dict | None = None, stage: str) -> tuple[bool, str]:
+        code, output = run_streaming(command, cwd=cwd, env=env, mirror_log=aitap_log)
         if code != 0:
-            record(f"FAILED: dependency installation exited with code {code}")
+            record(f"FAILED: {stage} exited with code {code}")
+            return False, output
+        return True, output
+
+    for name, target in (("test", test_env), ("package", package_env)):
+        log(f"  Creando entorno limpio de {name}: {target}")
+        ok, out = execute([str(python_exe), "-m", "venv", str(target)], stage=f"create {name} environment")
+        if not ok:
             return StepResult("AITAP", False, error=out)
+
+    runtime_lock = aitap_root / "requirements" / "runtime.lock"
+    test_lock = aitap_root / "requirements" / "test.lock"
+    build_lock = aitap_root / "requirements" / "build.lock"
+    installs = (
+        (venv_python(test_env), runtime_lock, "test runtime dependencies"),
+        (venv_python(test_env), test_lock, "test dependencies"),
+        (venv_python(package_env), runtime_lock, "package runtime dependencies"),
+        (venv_python(package_env), build_lock, "build dependencies"),
+    )
+    for interpreter, lock, stage in installs:
+        ok, out = execute(
+            [str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "-r", str(lock)],
+            stage=stage,
+        )
+        if not ok:
+            return StepResult("AITAP", False, error=out)
+
+    test_environment = {**os.environ, "PYTHONPATH": str(aitap_root / "src")}
+    for key in ("AITAP_REAL_PROVIDER_OPT_IN", "AITAP_REAL_OLLAMA"):
+        test_environment.pop(key, None)
+    log("  Ejecutando suite completa de AITAP ...")
+    pytest_tmp = aitap_log.parent / ".aitap-pytest" / str(os.getpid())
+    pytest_tmp.parent.mkdir(parents=True, exist_ok=True)
+    ok, out = execute(
+        [str(venv_python(test_env)), "-m", "pytest", "-p", "no:cacheprovider",
+         "--basetemp", str(pytest_tmp), str(aitap_root / "tests")],
+        cwd=aitap_root,
+        env=test_environment,
+        stage="AITAP test suite",
+    )
+    if not ok:
+        return StepResult("AITAP", False, error=out)
 
     # Incrementar y resolver build number antes de lanzar el script — mismo
     # patrón que Brain/Go: build.py lee BLOOM_BUILD_NUMBER y regenera
@@ -844,7 +892,7 @@ def build_aitap() -> StepResult:
 
     log(f"Empaquetando AITAP con {build_script.name} ...")
     code, out = run_streaming(
-        [python_exe, str(build_script)],
+        [str(venv_python(package_env)), str(build_script)],
         cwd=build_script.parent,
         env=aitap_env,
         mirror_log=aitap_log,

@@ -1,11 +1,81 @@
 package inspection
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
 	"testing"
+
+	"metamorph/internal/core"
 )
+
+func TestAITAPBundleInventoryDetectsInternalDrift(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"aitap": "binary", "_internal/contracts/contract.json": "contract",
+		"_internal/policies/policy.json": "{}", "_internal/registry/registry.json": "{}",
+		"_internal/local/catalog/catalog.json": "{}", "_internal/aitap.config.json": "{}",
+		"_internal/VERSION":    "0.1.0",
+		"help/aitap_help.json": "{}", "help/aitap_help.txt": "help",
+	}
+	if filepath.Ext(core.ExeName("aitap")) == ".exe" {
+		files["aitap.exe"] = files["aitap"]
+		delete(files, "aitap")
+	}
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	entries := make([]map[string]any, 0, len(paths))
+	canonical := make([]string, 0, len(paths))
+	for _, rel := range paths {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(files[rel]), 0644); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256([]byte(files[rel]))
+		hash := hex.EncodeToString(sum[:])
+		entries = append(entries, map[string]any{"path": rel, "sha256": hash, "size": len(files[rel])})
+		quoted, _ := json.Marshal(rel)
+		canonical = append(canonical, fmt.Sprintf(`{"path":%s,"sha256":"%s","size":%d}`, quoted, hash, len(files[rel])))
+	}
+	digest := sha256.Sum256([]byte("[" + strings.Join(canonical, ",") + "]"))
+	arch := runtime.GOARCH
+	if arch == "amd64" && runtime.GOOS != "windows" {
+		arch = "x86_64"
+	}
+	manifest := map[string]any{"schema_version": "bloom.aitap-bundle/v1", "product": "AITAP", "version": "0.1.0", "build_number": 15, "platform": runtime.GOOS, "architecture": arch, "embedded_python_version": "3.12.10", "packaging_mode": "pyinstaller-onedir", "inventory_sha256": hex.EncodeToString(digest[:]), "required_paths": []string{"_internal/contracts"}, "smokes": map[string]string{"system.version": "passed", "system.info": "passed", "json_help": "passed", "route.policy": "passed", "local.preflight": "passed"}, "files": entries}
+	data, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(root, "bundle-manifest.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, inventoryDigest, _, err := VerifyAITAPBundle(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := compareAgainstReference("AITap", filepath.Join(root, core.ExeName("aitap")), inventoryDigest); got.Status != statusSynced {
+		t.Fatalf("expected synced bundle: %+v", got)
+	}
+	if err := os.WriteFile(filepath.Join(root, "_internal", "contracts", "contract.json"), []byte("changed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, _, err := VerifyAITAPBundle(root); err == nil {
+		t.Fatal("internal drift was not detected")
+	}
+	if got := compareAgainstReference("AITap", filepath.Join(root, core.ExeName("aitap")), inventoryDigest); got.Status != statusDrifted {
+		t.Fatalf("internal drift not reported: %+v", got)
+	}
+}
 
 func TestInspectBootstrapReadsMetadataWithoutPython(t *testing.T) {
 	binRoot := t.TempDir()

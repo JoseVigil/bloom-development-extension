@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -42,6 +43,15 @@ func (a mandateWatcherTemporalClient) StartMandateBuildWorkflow(ctx context.Cont
 	return a.client.StartMandateBuildWorkflow(ctx, mandateID, input)
 }
 
+func (a mandateWatcherTemporalClient) StartMandateExecutionWorkflow(ctx context.Context, mandateID string, input temporalworkflows.MandateExecutionInput) (client.WorkflowRun, error) {
+	return a.client.GetClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID: "mandate_execute_" + mandateID, TaskQueue: "mandate-orchestration",
+		WorkflowIDReusePolicy:                    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDConflictPolicy:                 enums.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowExecutionErrorWhenAlreadyStarted: true,
+	}, "MandateExecutionWorkflow", input)
+}
+
 func (a mandateWatcherTemporalClient) IsWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
 	return a.client.IsWorkflowRunning(ctx, workflowID)
 }
@@ -53,6 +63,26 @@ func (a mandateWatcherTemporalClient) GetWorkflowExecutionState(ctx context.Cont
 
 func mandatesRootForWorker(nucleusRoot string) string {
 	return filepath.Join(nucleusRoot, ".mandates")
+}
+
+// ensureAITAPStateDir keeps AITAP's durable journals, budgets and local state
+// under the product app-data root unless an explicit override was supplied.
+func ensureAITAPStateDir(appDataDir string) (string, error) {
+	stateDir := os.Getenv("AITAP_STATE_DIR")
+	if stateDir == "" {
+		stateDir = filepath.Join(appDataDir, "aitap")
+	}
+	absolute, err := filepath.Abs(stateDir)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(absolute, 0700); err != nil {
+		return "", err
+	}
+	if err := os.Setenv("AITAP_STATE_DIR", absolute); err != nil {
+		return "", err
+	}
+	return absolute, nil
 }
 
 // NewWorker crea un nuevo worker
@@ -83,6 +113,7 @@ type namedActivityRegistrar interface {
 // productivo exclusivo de Human Sync y firma. No registra adaptadores BSIP.
 func registerMandateGenesisSignatureActivities(registrar activityRegistrar) {
 	registrar.RegisterActivity(activities.PersistHumanSyncActivity)
+	registrar.RegisterActivity(activities.LoadMandateBuildCheckpointActivity)
 	registrar.RegisterActivity(activities.SignMandateActivity)
 	registrar.RegisterActivity(activities.PersistSignatureFailureActivity)
 	registrar.RegisterActivity(activities.PersistCandidateDomainsActivity)
@@ -275,8 +306,15 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			}
 			defer logger.Close()
 
+			aitapStateDir, err := ensureAITAPStateDir(c.Paths.AppDataDir)
+			if err != nil {
+				logger.Error("Fallo al preparar estado durable de AITAP: %v", err)
+				return
+			}
+
 			logger.Info("Iniciando Temporal Worker...")
 			logger.Info("Task Queue: %s", taskQueue)
+			logger.Info("AITAP state: %s", aitapStateDir)
 
 			// ── PID file guard ───────────────────────────────────────────────
 			// Evita que health --fix levante una segunda instancia mientras
@@ -467,6 +505,11 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Sin este registro, un mandate real fallaría en runtime con
 			// "unable to find activity type" apenas terminara el primer scaffold.
 			mandateWorker.RegisterActivity(activities.PersistExecutionResultActivity)
+			mandateWorker.RegisterActivity(activities.PersistAdoptedINGResultActivity)
+			mandateWorker.RegisterActivityWithOptions((&activities.MandateIntentActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    genBrainPath,
+			}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
 			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
 			// fase: mandate_genesis_phase_activities.go). MandateBuildWorkflow
 			// ahora la invoca después de ingest/cluster/validate y, condicional a

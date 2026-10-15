@@ -4,18 +4,40 @@
 from __future__ import annotations
 
 import datetime
+import importlib
 import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
+
+from verify_bundle import run_smokes, verify_manifest, write_manifest
 
 
 AITAP_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = Path(os.environ.get("BLOOM_PROJECT_ROOT", AITAP_ROOT.parents[1])).resolve()
+RUNTIME_IMPORTS = ("typer", "rich", "jsonschema", "cryptography")
+SOURCE_RESOURCES = ("contracts", "policies", "registry", "local/catalog", "VERSION", "aitap.config.json")
+
+
+def validate_dependencies(imports: tuple[str, ...] = RUNTIME_IMPORTS) -> None:
+    missing = []
+    for name in imports:
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            missing.append(name)
+    if missing:
+        raise RuntimeError("dependencias productivas ausentes: " + ", ".join(missing))
+
+
+def validate_source_resources(root: Path = AITAP_ROOT) -> None:
+    resource_root = root / "_internal" if (root / "_internal").is_dir() else root
+    missing = [relative for relative in SOURCE_RESOURCES if not (resource_root / relative).exists()]
+    if missing:
+        raise RuntimeError("recursos productivos ausentes: " + ", ".join(missing))
 
 
 def _write_build_info() -> None:
@@ -65,21 +87,10 @@ def run(command: list[str], cwd: Path | None = None) -> None:
 def main() -> int:
     try:
         import PyInstaller  # noqa: F401
-        import jsonschema  # noqa: F401
-        import rich  # noqa: F401
-        import typer  # noqa: F401
-        import cryptography  # noqa: F401
-    except ImportError as exc:
-        with (AITAP_ROOT / "pyproject.toml").open("rb") as pyproject:
-            deps = tomllib.load(pyproject)["project"]["dependencies"]
-        flag = "" if os.name == "nt" else " --break-system-packages"
-        quoted = " ".join(f'"{dep}"' for dep in deps)
-        print(
-            "Falta una dependencia de build. Ejecutar: "
-            f"{sys.executable} -m pip install{flag} {quoted} pyinstaller",
-            file=sys.stderr,
-        )
-        print(str(exc), file=sys.stderr)
+        validate_dependencies()
+        validate_source_resources()
+    except (ImportError, RuntimeError) as exc:
+        print(f"Preflight de build AITAP falló: {exc}", file=sys.stderr)
         return 1
 
     _write_build_info()
@@ -89,7 +100,6 @@ def main() -> int:
     dist_root = temp_root / "dist"
     work_root = temp_root / "work"
 
-    shutil.rmtree(output_dir, ignore_errors=True)
     temp_root.mkdir(parents=True, exist_ok=True)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
 
@@ -109,10 +119,8 @@ def main() -> int:
     built_dir = dist_root / "aitap"
     if not built_dir.is_dir():
         raise RuntimeError(f"PyInstaller no produjo {built_dir}")
-    shutil.copytree(built_dir, output_dir)
-
-    executable = output_dir / ("aitap.exe" if os.name == "nt" else "aitap")
-    help_dir = output_dir / "help"
+    executable = built_dir / ("aitap.exe" if os.name == "nt" else "aitap")
+    help_dir = built_dir / "help"
     shared_help_dir = REPO_ROOT / "installer" / "help"
     help_dir.mkdir(parents=True, exist_ok=True)
     shared_help_dir.mkdir(parents=True, exist_ok=True)
@@ -135,11 +143,29 @@ def main() -> int:
     }
     for name, content in outputs.items():
         (help_dir / name).write_text(content, encoding="utf-8")
+
+    validate_source_resources(built_dir)
+    smokes = run_smokes(built_dir)
+    with (AITAP_ROOT / "VERSION").open(encoding="utf-8") as version_file:
+        version = version_file.read().strip()
+    manifest = write_manifest(
+        built_dir,
+        version=version,
+        build_number=int(os.environ.get("BLOOM_BUILD_NUMBER", "0")),
+        smokes=smokes,
+    )
+    verify_manifest(built_dir)
+
+    shutil.rmtree(output_dir, ignore_errors=True)
+    shutil.copytree(built_dir, output_dir)
+    verify_manifest(output_dir)
+    for name, content in outputs.items():
         (shared_help_dir / name).write_text(content, encoding="utf-8")
 
-    print(f"AITAP empaquetado: {executable}")
-    print(f"Help generado: {help_dir}")
+    print(f"AITAP empaquetado: {output_dir / executable.name}")
+    print(f"Help generado: {output_dir / 'help'}")
     print(f"Help compartido: {shared_help_dir}")
+    print(f"Manifest verificado: {output_dir / manifest.name}")
     return 0
 
 

@@ -2,6 +2,11 @@ package watchers
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,10 +14,77 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"go.temporal.io/sdk/client"
 
+	"nucleus/internal/authority"
+	"nucleus/internal/core"
+	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/orchestration/temporal/workflows"
 )
+
+func TestAdoptedMandateDispatchesOnceAcrossWatcherRestart(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "mandate-1")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := &authority.LocalIdentity{InstallationID: "installation-1", PublicKey: public, PrivateKey: private}
+	identityPath := filepath.Join(root, "identity.json")
+	identityRaw, _ := json.Marshal(map[string]string{"installation_id": identity.InstallationID, "public_key": base64.StdEncoding.EncodeToString(public)})
+	if err := os.WriteFile(identityPath, identityRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	types := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
+	actions := make([]mandatecontract.Action, len(types))
+	for i, kind := range types {
+		actions[i] = mandatecontract.Action{ActionID: string(rune('a' + i)), Type: "run_intent", IntentType: kind, IdempotencyKey: string(rune('k' + i))}
+		if i > 0 {
+			actions[i].DependsOn = []string{actions[i-1].ActionID}
+		}
+	}
+	actions[4].WhenResult = "remediation_required"
+	contract := mandatecontract.Contract{MandateID: "mandate-1", ContractVersion: 4, OrganizationID: "org-1",
+		ProjectID: "project-1", ProjectBinding: "binding-1", Objective: "Classify approved inputs",
+		Domain: mandatecontract.Domain{ID: "domain-1", Name: "Project"}, Actions: actions,
+		Intelligence: &mandatecontract.Intelligence{PolicyVersion: "mandate-gen/v1", PolicyRef: filepath.Join(root, "policy.json"),
+			PolicySHA256: hex.EncodeToString(make([]byte, 32)), RegistryRef: filepath.Join(root, "registry.json"),
+			RegistrySHA256: hex.EncodeToString(make([]byte, 32)), MaxTotalTokens: 100, MaxOutputTokens: 50},
+		Inputs:      []mandatecontract.Input{{Ref: "inputs/source.md", SHA256: hex.EncodeToString(make([]byte, 32)), Size: 1}},
+		Fulfillment: mandatecontract.Fulfillment{Evaluator: "exp-ready", EvaluatorVersion: "1", RequiredFields: []string{"ing", "dis", "doc", "exp"}}}
+	envelope, err := mandatecontract.Sign(contract, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(envelope)
+	if err := os.WriteFile(filepath.Join(dir, "mandate.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	journalRaw, _ := json.Marshal(map[string]any{"mandateId": "mandate-1", "adoption": map[string]string{
+		"organizationId": "org-1", "installationId": "installation-1", "version": "v1",
+		"digest": hex.EncodeToString(sum[:]), "contractDigest": envelope.ContractDigest}})
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	tc := &syntheticMandateBuildTemporalClient{state: WorkflowExecutionNotFound}
+	verified := func(string, mandatecontract.Envelope, string) error { return nil }
+	w := &MandateWatcher{mandatesRoot: root, identityPath: identityPath, tc: tc, verifyActs: verified}
+	w.onAdoptedMandate(context.Background(), dir, "mandate-1", "v1", hex.EncodeToString(sum[:]), envelope.ContractDigest, "adopted")
+	if tc.executionStarts != 1 {
+		t.Fatalf("first dispatches=%d", tc.executionStarts)
+	}
+	tc.state = WorkflowExecutionRunning
+	restarted := &MandateWatcher{mandatesRoot: root, identityPath: identityPath, tc: tc, verifyActs: verified}
+	restarted.onAdoptedMandate(context.Background(), dir, "mandate-1", "v1", hex.EncodeToString(sum[:]), envelope.ContractDigest, "adopted")
+	if tc.executionStarts != 1 {
+		t.Fatalf("restart duplicated dispatch: %d", tc.executionStarts)
+	}
+}
 
 func TestMandateBuildDispatchClassifiesLiveDuplicate(t *testing.T) {
 	if got := classifyBuildDuplicate(true, nil); got != buildDuplicateActive {
@@ -50,12 +122,68 @@ func TestMandateBuildInputPreservesProjectID(t *testing.T) {
 	}
 }
 
+func TestMandateBuildInputCarriesResumePhase(t *testing.T) {
+	input := mandateBuildInput(MandateState{MandateID: "m", CurrentPhase: "validate"}, "root")
+	if input.ResumeFrom != "validate" {
+		t.Fatalf("ResumeFrom = %q", input.ResumeFrom)
+	}
+}
+
+func TestDispatchBuildSupportsFreshAndReconciledCheckpoints(t *testing.T) {
+	cases := []struct {
+		name, phase, ingest, reconciliationStatus, reconciliationReason string
+		want                                                            bool
+	}{
+		{"fresh ingest", "ingest", "pending", "", "", true},
+		{"recovered cluster", "cluster", "completed", "required", "unsigned_without_active_workflow", true},
+		{"recovered validate", "validate", "completed", "required", "unsigned_without_active_workflow", true},
+		{"active validate", "validate", "completed", "", "", false},
+		{"terminal signed", "signed", "completed", "required", "unsigned_without_active_workflow", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ms := MandateState{Status: "building", CurrentPhase: tc.phase}
+			ms.Phases.Ingest.Status = tc.ingest
+			ms.Reconciliation.Status = tc.reconciliationStatus
+			ms.Reconciliation.Reason = tc.reconciliationReason
+			if got := shouldDispatchBuild(ms); got != tc.want {
+				t.Fatalf("shouldDispatchBuild() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSupersededGenesisIsExcludedFromWatcher(t *testing.T) {
+	root := t.TempDir()
+	mandates := filepath.Join(root, ".mandates")
+	_ = os.MkdirAll(mandates, 0755)
+	projects := filepath.Join(root, ".core", "genesis-projects")
+	_ = os.MkdirAll(projects, 0755)
+	raw, _ := json.Marshal(map[string]any{"attempts": []map[string]any{{"mandateId": "old", "relationshipStatus": "superseded"}}})
+	_ = os.WriteFile(filepath.Join(projects, "project.json"), raw, 0644)
+	w := &MandateWatcher{mandatesRoot: mandates}
+	if !w.isSupersededGenesis(MandateState{MandateID: "old", MandateType: "genesis", ProjectID: "project"}) {
+		t.Fatal("superseded Genesis was not excluded")
+	}
+	if w.isSupersededGenesis(MandateState{MandateID: "new", MandateType: "genesis", ProjectID: "project"}) {
+		t.Fatal("current/unknown Genesis was excluded")
+	}
+}
+
 type syntheticMandateBuildTemporalClient struct {
-	state WorkflowExecutionState
-	err   error
+	state           WorkflowExecutionState
+	err             error
+	starts          int
+	executionStarts int
+}
+
+func (f *syntheticMandateBuildTemporalClient) StartMandateExecutionWorkflow(context.Context, string, workflows.MandateExecutionInput) (client.WorkflowRun, error) {
+	f.executionStarts++
+	return nil, nil
 }
 
 func (f *syntheticMandateBuildTemporalClient) StartMandateBuildWorkflow(context.Context, string, workflows.MandateBuildInput) (client.WorkflowRun, error) {
+	f.starts++
 	return nil, nil
 }
 func (f *syntheticMandateBuildTemporalClient) IsWorkflowRunning(context.Context, string) (bool, error) {
@@ -84,6 +212,28 @@ func syntheticMandateState(t *testing.T, root string, updatedAt time.Time) strin
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestCreatedMandateDirectoryProcessesStateAlreadyWritten(t *testing.T) {
+	mandates := t.TempDir()
+	statePath := syntheticMandateState(t, mandates, time.Now())
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fsw.Close()
+	tc := &syntheticMandateBuildTemporalClient{state: WorkflowExecutionNotFound}
+	w := &MandateWatcher{mandatesRoot: mandates, tc: tc, watcher: fsw,
+		progress: newMandateProgress(), logger: &core.Logger{}}
+	event := fsnotify.Event{Name: filepath.Dir(statePath), Op: fsnotify.Create}
+	w.handleEvent(context.Background(), event)
+	if tc.starts != 1 {
+		t.Fatalf("starts=%d, want one dispatch for state written before directory notification", tc.starts)
+	}
+	w.handleEvent(context.Background(), event)
+	if tc.starts != 1 {
+		t.Fatalf("duplicate directory notification started %d workflows", tc.starts)
+	}
 }
 
 func readSyntheticState(t *testing.T, path string) map[string]interface{} {

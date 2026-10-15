@@ -2,19 +2,19 @@
   "schema_version": "cognituum.routing-policy/v2",
   "policy_version": "mandate-gen/v1",
   "intelligence_supply": {
-    "backend_id": "anthropic_api",
+    "backend_id": "gemini_api",
     "fallback": [],
-    "max_attempts": 1,
+    "max_attempts": 2,
     "budget": {
       "per_mandate": true,
-      "max_usd": null,
-      "max_total_tokens": null,
+      "max_usd": "0.10",
+      "max_total_tokens": 50000,
       "max_inferences": 1,
       "input_margin_tokens": 1024
     },
-    "max_output_tokens": null,
+    "max_output_tokens": 4096,
     "max_input_bytes": 131072,
-    "timeout_seconds": 60,
+    "timeout_seconds": 120,
     "retry_delay_seconds": 1
   },
   "stages": {}

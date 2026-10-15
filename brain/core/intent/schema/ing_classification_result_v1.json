@@ -73,6 +73,40 @@
               "name",
               "score"
             ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "new"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "domain_id": {
+                      "const": null
+                    },
+                    "score": {
+                      "const": null
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "domain_id": {
+                      "type": "string"
+                    },
+                    "score": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            ],
             "additionalProperties": false
           },
           "gene": {
@@ -104,6 +138,40 @@
               "status",
               "gene_id",
               "score"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "new"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "gene_id": {
+                      "const": null
+                    },
+                    "score": {
+                      "const": null
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "gene_id": {
+                      "type": "string"
+                    },
+                    "score": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
             ],
             "additionalProperties": false
           },

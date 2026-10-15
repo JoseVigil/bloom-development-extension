@@ -534,11 +534,14 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       }
       console.log(`[synapse-simulator] Project fuente=${PROJECT_SOURCE}; destino importado=${PROJECT_PATH}; ${PROJECT_FILES.length} archivos verificados`);
       const selected = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
-        onboarding?: { organizations?: Array<{ org_slug: string; workspace_path: string; projects?: Array<{ project_name: string; project_path: string }> }> };
+        onboarding?: { active_project_id?: string; organizations?: Array<{ org_slug: string; workspace_path: string; projects?: Array<{ project_id: string; project_name: string; project_path: string; genesis_launch_required?: boolean }> }> };
       };
       const org = selected.onboarding?.organizations?.find(item => item.org_slug === 'elias-repos');
       expect(org?.workspace_path).toBe(WORKSPACE_PATH);
-      expect(org?.projects?.find(project => project.project_name === 'sample_project')?.project_path).toBe(PROJECT_PATH);
+      const selectedProject = org?.projects?.find(project => project.project_name === 'sample_project');
+      expect(selectedProject?.project_path).toBe(PROJECT_PATH);
+      expect(selectedProject?.genesis_launch_required).toBe(false);
+      expect(selected.onboarding?.active_project_id).toBe(selectedProject?.project_id);
       if (!resumeCurrent) verifyOrganizationIdentity('antes de finalizar', false);
       await conductor!.mainWindow.click('#btn-project-continue');
       await conductor!.mainWindow.locator('#screen-mandate.active').waitFor({ state: 'visible' });
@@ -551,6 +554,10 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         };
         return data.onboarding?.completed;
       }, { timeout: 30_000 }).toBe(true);
+      const completedState = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+        onboarding?: { pending_genesis_launch?: unknown };
+      };
+      expect(completedState.onboarding?.pending_genesis_launch).toBeUndefined();
       if (!resumeCurrent) verifyOrganizationIdentity('onboarding finalizado', true);
     });
   } finally {

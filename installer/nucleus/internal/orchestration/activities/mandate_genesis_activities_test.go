@@ -3,6 +3,8 @@ package activities
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -236,5 +238,131 @@ func TestRunBrainIntentJSONRejectsExitCodeMismatchAndInvalidJSON(t *testing.T) {
 	})
 	if !errors.As(err, &cliErr) || cliErr.Code != "INVALID_JSON_RESPONSE" {
 		t.Fatalf("invalid JSON error = %#v (%v)", cliErr, err)
+	}
+}
+
+func writeCheckpointFixture(t *testing.T, mandateID string, includeProposal bool) (string, string) {
+	t.Helper()
+	nucleusRoot := t.TempDir()
+	mandatesRoot := filepath.Join(nucleusRoot, ".mandates")
+	mandateDir := filepath.Join(mandatesRoot, mandateID)
+	intentDir := filepath.Join(nucleusRoot, ".intents", ".ing", ".fixture-intent")
+	if err := os.MkdirAll(mandateDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(intentDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	state := []byte(`{"intent_id":"intent-fixture","mandate_id":"` + mandateID + `","status":"hydrated"}`)
+	if err := os.WriteFile(filepath.Join(intentDir, ".ing_state.json"), state, 0644); err != nil {
+		t.Fatal(err)
+	}
+	classificationDir := filepath.Join(intentDir, ".classification", ".turn_1")
+	if err := os.MkdirAll(filepath.Join(classificationDir, ".files"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	classification := []byte(`{"schema_version":"bloom.ing-classification/v1","intent_id":"intent-fixture","mandate_id":"` + mandateID + `","turn_id":"1","input_digest":"sha256:input","clusters":[{"cluster_id":"cluster-1","files":["README.md"],"domain":{"status":"new","domain_id":null,"name":"Core","score":null}}]}`)
+	if err := os.WriteFile(filepath.Join(classificationDir, ".files", ".domain_resolution.json"), classification, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(classificationDir, ".report.json"), []byte(`{"status":"validated","parsed_result_digest":"sha256:classification"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(classificationDir, ".supply_result.json"), []byte(`{"raw_response_digest":"sha256:raw"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if includeProposal {
+		proposal := []byte(`{"status":"proposed","classificationDigest":"sha256:classification","domains":[{"id":"dom-fixture","domainName":"Core","cohesionScore":1,"suggestedActionCount":1,"files":["README.md"]}]}`)
+		if err := os.WriteFile(filepath.Join(mandateDir, "domain_proposal.json"), proposal, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return mandatesRoot, intentDir
+}
+
+func TestClassifiedDomainsHaveDeterministicIdentity(t *testing.T) {
+	data := map[string]interface{}{"classification": map[string]interface{}{"clusters": []interface{}{map[string]interface{}{
+		"cluster_id": "cluster-1", "files": []interface{}{"README.md"},
+		"domain": map[string]interface{}{"name": "Workspace Core", "score": nil},
+	}}}}
+	first, err := proposedDomainsFromSupply("mandate-1", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := proposedDomainsFromSupply("mandate-1", data)
+	if err != nil || !reflect.DeepEqual(first, second) || len(first) != 1 || !strings.HasPrefix(first[0].ID, "dom_workspace_core_") {
+		t.Fatalf("deterministic domains = %#v / %#v, err=%v", first, second, err)
+	}
+}
+
+func TestScaffoldDryRunRequiresValidatedClassification(t *testing.T) {
+	_, _, err := scaffoldDryRun(ScaffoldDomainInput{MandatesRoot: t.TempDir(), MandateID: "m", Mode: ScaffoldModeDryRun})
+	if err == nil || !strings.Contains(err.Error(), "clasificación validada") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestReadINGIntentPhaseAllowsCreatedAndHydratedReplay(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, ".ing_state.json")
+	fixtures := []struct{ expected, state string }{
+		{"created", `{"intent_id":"intent-1","mandate_id":"mandate-1","phase_active":"reception"}`},
+		{"hydrated", `{"intent_id":"intent-1","mandate_id":"mandate-1","status":"hydrated","phase_active":"classification"}`},
+	}
+	for _, fixture := range fixtures {
+		state := []byte(fixture.state)
+		if err := os.WriteFile(statePath, state, 0644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := readINGIntentPhase(root, "mandate-1", "intent-1")
+		if err != nil || got != fixture.expected {
+			t.Fatalf("phase %q: got=%q err=%v", fixture.expected, got, err)
+		}
+	}
+}
+
+func TestReadINGIntentPhaseRejectsDifferentIdentity(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".ing_state.json"), []byte(`{"intent_id":"intent-1","mandate_id":"other","status":"hydrated","phase_active":"classification"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readINGIntentPhase(root, "mandate-1", "intent-1"); err == nil {
+		t.Fatal("different mandate identity accepted")
+	}
+}
+
+func TestLoadMandateBuildCheckpointRestoresValidateArtifacts(t *testing.T) {
+	root, _ := writeCheckpointFixture(t, "mandate-checkpoint", true)
+	got, err := LoadMandateBuildCheckpointActivity(LoadMandateBuildCheckpointInput{MandatesRoot: root, MandateID: "mandate-checkpoint", Phase: "validate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Reception.IntentID != "intent-fixture" || got.Scaffold.ResultRef != "domain_proposal.json" || len(got.CandidateDomains) != 1 || got.CandidateDomains[0].DomainID != "dom-fixture" {
+		t.Fatalf("checkpoint = %#v", got)
+	}
+}
+
+func TestLoadMandateBuildCheckpointRejectsMissingOrCorruptProposal(t *testing.T) {
+	root, _ := writeCheckpointFixture(t, "mandate-missing", false)
+	if _, err := LoadMandateBuildCheckpointActivity(LoadMandateBuildCheckpointInput{MandatesRoot: root, MandateID: "mandate-missing", Phase: "validate"}); err == nil {
+		t.Fatal("missing proposal accepted")
+	}
+	path := filepath.Join(root, "mandate-missing", "domain_proposal.json")
+	if err := os.WriteFile(path, []byte(`{"status":"broken"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadMandateBuildCheckpointActivity(LoadMandateBuildCheckpointInput{MandatesRoot: root, MandateID: "mandate-missing", Phase: "validate"}); err == nil {
+		t.Fatal("corrupt proposal accepted")
+	}
+}
+
+func TestLoadMandateBuildCheckpointRejectsDifferentMandateIdentity(t *testing.T) {
+	root, intentDir := writeCheckpointFixture(t, "mandate-owner", true)
+	wrong := []byte(`{"intent_id":"intent-fixture","mandate_id":"another-mandate","status":"hydrated"}`)
+	if err := os.WriteFile(filepath.Join(intentDir, ".ing_state.json"), wrong, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadMandateBuildCheckpointActivity(LoadMandateBuildCheckpointInput{MandatesRoot: root, MandateID: "mandate-owner", Phase: "cluster"}); err == nil {
+		t.Fatal("checkpoint with a different mandate identity accepted")
 	}
 }

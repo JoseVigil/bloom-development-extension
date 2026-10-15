@@ -14,6 +14,11 @@ import (
 	"metamorph/internal/core"
 )
 
+func deployRuntime(src, dst string) error {
+	_, err := copyDir(src, dst)
+	return err
+}
+
 // Unix can rename a directory entry while its executable remains mapped.
 // Returning nil leaves the existing synchronous copyDir path authoritative.
 func scheduleMetamorphSelfRollout(

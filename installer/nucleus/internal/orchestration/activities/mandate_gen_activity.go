@@ -378,8 +378,11 @@ func verifyGenSupplyEvidence(dir string, envelope mandatecontract.Envelope, arti
 			RoutingDecision json.RawMessage `json:"routing_decision"`
 		} `json:"result"`
 	}
-	if json.Unmarshal(journalBytes, &recorded) != nil || json.Unmarshal(recorded.JournalRaw, &journal) != nil || journal.State != "completed" || len(journal.Attempts) != 1 || journal.Result.LogicalID != logicalID || journal.Result.RawDigest != rawDigest {
+	if json.Unmarshal(journalBytes, &recorded) != nil || json.Unmarshal(recorded.JournalRaw, &journal) != nil || journal.State != "completed" || journal.Result.LogicalID != logicalID || journal.Result.RawDigest != rawDigest {
 		return errors.New("AITAP accounting journal is incomplete or uncertain")
+	}
+	if err := verifyCompletedInferenceAttempts(journal.Attempts, journal.Result.RoutingDecision, envelope, logicalID); err != nil {
+		return err
 	}
 	canonicalJournal, err := authority.Canonicalize(recorded.JournalRaw)
 	if err != nil {
@@ -414,6 +417,75 @@ func verifyGenSupplyEvidence(dir string, envelope mandatecontract.Envelope, arti
 		if !reflect.DeepEqual(proposed[field], artifact[field]) {
 			return errors.New("domain definition differs from AITAP response")
 		}
+	}
+	return nil
+}
+
+func verifyCompletedInferenceAttempts(rawAttempts []json.RawMessage, resultRouting json.RawMessage, envelope mandatecontract.Envelope, logicalID string) error {
+	maximum := 1
+	if envelope.Contract.ContractVersion == 2 {
+		maximum = 2
+	}
+	if len(rawAttempts) < 1 || len(rawAttempts) > maximum {
+		return errors.New("AITAP accounting journal has an invalid attempt count")
+	}
+	type recordedAttempt struct {
+		Number  int    `json:"number"`
+		Outcome string `json:"outcome"`
+		Error   struct {
+			Retryable bool `json:"retryable"`
+			Details   struct {
+				DeliveryUncertain bool `json:"delivery_uncertain"`
+			} `json:"details"`
+		} `json:"error"`
+		RoutingDecision struct {
+			LogicalID string `json:"logical_inference_id"`
+			Effective struct {
+				BackendID string `json:"backend_id"`
+				Model     string `json:"model"`
+			} `json:"effective_intelligence"`
+		} `json:"routing_decision"`
+		BudgetReservation json.RawMessage `json:"budget_reservation"`
+	}
+	attempts := make([]recordedAttempt, len(rawAttempts))
+	for index, raw := range rawAttempts {
+		if json.Unmarshal(raw, &attempts[index]) != nil || attempts[index].Number != index+1 ||
+			attempts[index].RoutingDecision.LogicalID != logicalID ||
+			attempts[index].RoutingDecision.Effective.BackendID != envelope.Contract.Intelligence.BackendID ||
+			attempts[index].RoutingDecision.Effective.Model != envelope.Contract.Intelligence.Model {
+			return errors.New("AITAP accounting attempt differs from signed intelligence")
+		}
+	}
+	last := attempts[len(attempts)-1]
+	if last.Outcome != "completed" {
+		return errors.New("AITAP accounting journal has no completed final attempt")
+	}
+	completedRouting, err := authority.Canonicalize(rawAttempts[len(rawAttempts)-1])
+	if err != nil {
+		return errors.New("AITAP completed attempt is unreadable")
+	}
+	var completedEnvelope struct {
+		RoutingDecision json.RawMessage `json:"routing_decision"`
+	}
+	if json.Unmarshal(completedRouting, &completedEnvelope) != nil {
+		return errors.New("AITAP completed attempt is unreadable")
+	}
+	left, leftErr := authority.Canonicalize(completedEnvelope.RoutingDecision)
+	right, rightErr := authority.Canonicalize(resultRouting)
+	if leftErr != nil || rightErr != nil || !bytes.Equal(left, right) {
+		return errors.New("AITAP completed attempt differs from durable result")
+	}
+	if len(attempts) == 1 {
+		return nil
+	}
+	first := attempts[0]
+	if first.Outcome != "error" || !first.Error.Retryable || first.Error.Details.DeliveryUncertain {
+		return errors.New("AITAP second attempt was not authorized by a safe retryable failure")
+	}
+	firstReservation, firstErr := authority.Canonicalize(first.BudgetReservation)
+	secondReservation, secondErr := authority.Canonicalize(last.BudgetReservation)
+	if firstErr != nil || secondErr != nil || len(first.BudgetReservation) == 0 || !bytes.Equal(firstReservation, secondReservation) {
+		return errors.New("AITAP retry changed or omitted the signed budget reservation")
 	}
 	return nil
 }

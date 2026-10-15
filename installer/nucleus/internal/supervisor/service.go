@@ -32,13 +32,13 @@ import (
 type ProcessState string
 
 const (
-	StateIdle      ProcessState = "IDLE"
-	StateStarting  ProcessState = "STARTING"
-	StateReady     ProcessState = "READY"
-	StateDegraded  ProcessState = "DEGRADED"
-	StateFailed    ProcessState = "FAILED"
-	StateStopping  ProcessState = "STOPPING"
-	StateStopped   ProcessState = "STOPPED"
+	StateIdle     ProcessState = "IDLE"
+	StateStarting ProcessState = "STARTING"
+	StateReady    ProcessState = "READY"
+	StateDegraded ProcessState = "DEGRADED"
+	StateFailed   ProcessState = "FAILED"
+	StateStopping ProcessState = "STOPPING"
+	StateStopped  ProcessState = "STOPPED"
 )
 
 // ManagedProcess represents a process under supervision
@@ -54,14 +54,14 @@ type ManagedProcess struct {
 
 // Supervisor manages all Nucleus processes
 type Supervisor struct {
-	processes       map[string]*ManagedProcess
-	logsDir         string
-	binDir          string
-	mu              sync.RWMutex
-	supervisorCtx   context.Context // lives for the duration of the service; used by watchWorker
+	processes         map[string]*ManagedProcess
+	logsDir           string
+	binDir            string
+	mu                sync.RWMutex
+	supervisorCtx     context.Context // lives for the duration of the service; used by watchWorker
 	workerWatchOnce   sync.Once       // ensures only one watchWorker goroutine runs per supervisor
 	temporalWatchOnce sync.Once       // ensures only one watchTemporal goroutine runs per supervisor
-	log             *core.Logger    // structured logger — nil until initLogger() is called
+	log               *core.Logger    // structured logger — nil until initLogger() is called
 }
 
 // NewSupervisor creates a new process supervisor
@@ -128,11 +128,13 @@ func mandatesRootForService() (string, error) {
 // Fix: pidfiles en disco bajo <install>/run/<name>.pid, escritos por quien
 // spawnea el proceso y leídos por cualquier invocación posterior del CLI.
 // Se eligió pidfile sobre socket de control IPC porque:
-//   (a) sobrevive a que el proceso "start" esté colgado o no responda —
-//       igual se puede matar por PID leído del archivo;
-//   (b) no requiere mantener un listener adicional corriendo;
-//   (c) es el mecanismo estándar para este tipo de supervisión y no choca
-//       con cómo NSSM ya gestiona el proceso "start" en Windows.
+//
+//	(a) sobrevive a que el proceso "start" esté colgado o no responda —
+//	    igual se puede matar por PID leído del archivo;
+//	(b) no requiere mantener un listener adicional corriendo;
+//	(c) es el mecanismo estándar para este tipo de supervisión y no choca
+//	    con cómo NSSM ya gestiona el proceso "start" en Windows.
+//
 // Trade-off: puede quedar stale si el proceso muere sin limpiar su pidfile —
 // por eso isProcessAlive() siempre valida el PID antes de confiar en él, y
 // killByPidFile() borra el pidfile aunque el proceso ya esté muerto.
@@ -322,15 +324,15 @@ func killByPidFile(binDir, name string, timeout time.Duration) (int, error) {
 // Por qué hace falta: nucleus_worker tiene DOS mecanismos de pidfile
 // independientes que nunca se reconciliaron entre sí:
 //
-//   1. El pidfile de bookkeeping del supervisor: runDir(binDir)/nucleus_worker.pid
-//      (escrito por writePidFile en startWorkerManager, leído/matado por
-//      killByPidFile). Este SOLO conoce workers que ESTE supervisor arrancó.
+//  1. El pidfile de bookkeeping del supervisor: runDir(binDir)/nucleus_worker.pid
+//     (escrito por writePidFile en startWorkerManager, leído/matado por
+//     killByPidFile). Este SOLO conoce workers que ESTE supervisor arrancó.
 //
-//   2. El pidfile de self-guard que el propio proceso worker escribe sobre
-//      sí mismo en worker.go: <logsDir>/../history/workers/nucleus_worker.pid.
-//      Este es el que el worker usa para decidir "ya hay uno corriendo,
-//      no arranco" — y es el que causa el warning "Worker already running
-//      (PID X) — exiting to avoid duplicate".
+//  2. El pidfile de self-guard que el propio proceso worker escribe sobre
+//     sí mismo en worker.go: <logsDir>/../history/workers/nucleus_worker.pid.
+//     Este es el que el worker usa para decidir "ya hay uno corriendo,
+//     no arranco" — y es el que causa el warning "Worker already running
+//     (PID X) — exiting to avoid duplicate".
 //
 // Un worker arrancado por una generación anterior del supervisor (que ya
 // no existe) puede seguir vivo y polleando Temporal indefinidamente. El
@@ -553,10 +555,9 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 	}
 
 	// Generate log filename with date
-	today := time.Now()
-	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	dateStr := utcLogDate(time.Now())
 	logPath := filepath.Join(s.logsDir, "temporal", "server", fmt.Sprintf("temporal_server_%s.log", dateStr))
-	
+
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create temporal log directory: %w", err)
 	}
@@ -569,7 +570,7 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 	// CRÍTICO: exec.Command SIN contexto — Temporal es un servidor de larga duración
 	// que debe sobrevivir al bootCtx (120s). Con CommandContext, Go lo mataría cuando
 	// el ctx del boot expire, causando que el worker pierda conexión silenciosamente.
-	cmd := exec.Command(temporalBin, "server", "start-dev")
+	cmd := exec.Command(temporalBin, temporalServerArgs(s.logsDir)...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(temporalBin) // Set working directory
@@ -604,6 +605,16 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 	})
 
 	return proc, nil
+}
+
+func temporalServerArgs(logsDir string) []string {
+	return []string{
+		"server", "start-dev",
+		"--db-filename", filepath.Join(logsDir, "temporal", "temporal.db"),
+		"--ui-port", "8233",
+		"--log-format", "pretty",
+		"--log-level", "info",
+	}
 }
 
 // waitForTemporalReady waits for Temporal Server to be ready via gRPC health check
@@ -745,10 +756,9 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 	}
 
 	// Generate log filename with date
-	today := time.Now()
-	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	dateStr := utcLogDate(time.Now())
 	logPath := filepath.Join(s.logsDir, "nucleus", "worker", fmt.Sprintf("worker_manager_%s.log", dateStr))
-	
+
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create worker log directory: %w", err)
 	}
@@ -904,8 +914,7 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 	}
 
 	// Log file con fecha
-	today := time.Now()
-	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	dateStr := utcLogDate(time.Now())
 	logPath := filepath.Join(s.logsDir, "brain", "service", fmt.Sprintf("brain_service_%s.log", dateStr))
 
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
@@ -1154,10 +1163,13 @@ func (s *Supervisor) StartNodeProcess(ctx context.Context, name string, scriptPa
 // registerStream registra un stream de proceso via nucleus telemetry register.
 // Es la única forma correcta de escribir a telemetry.json desde el supervisor —
 // delega en registerStreamCLI que maneja locking, merge atómico y verificación post-write.
+var telemetryNucleusBinResolver = resolveNucleusBin
+
 func (s *Supervisor) registerStream(streamID, label, logPath, description, source string, priority int, categories []string) {
-	nucleusBin, err := resolveNucleusBin(s.binDir)
+	nucleusBin, err := telemetryNucleusBinResolver(s.binDir)
 	if err != nil {
-		return // nucleus no disponible — no crítico
+		s.slog("WARN", "telemetry stream %s was not registered: %v", streamID, err)
+		return
 	}
 
 	normalizedPath := strings.ReplaceAll(logPath, "\\", "/")
@@ -1180,7 +1192,17 @@ func (s *Supervisor) registerStream(streamID, label, logPath, description, sourc
 	// reach stdout and contaminate JSON output in --json mode.
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		s.slog("WARN", "telemetry stream %s registration failed: %v", streamID, err)
+	}
+}
+
+func utcLogDate(now time.Time) string {
+	return now.UTC().Format("20060102")
+}
+
+func svelteDevTelemetryCategories() []string {
+	return []string{"nucleus", "conductor"}
 }
 
 // monitorProcess watches a process and updates its state + telemetry when it exits.
@@ -1337,7 +1359,7 @@ func (s *Supervisor) watchWorker() {
 		// Check if supervisor is shutting down — don't restart in that case.
 		select {
 		case <-s.supervisorCtx.Done():
-		s.slog("INFO", "watchWorker: supervisor shutting down — stopping watch loop")
+			s.slog("INFO", "watchWorker: supervisor shutting down — stopping watch loop")
 			return
 		default:
 		}
@@ -1352,7 +1374,7 @@ func (s *Supervisor) watchWorker() {
 			state := proc.State
 			proc.mu.RUnlock()
 			if state == StateStopped {
-			s.slog("INFO", "watchWorker: worker stopped cleanly — no restart")
+				s.slog("INFO", "watchWorker: worker stopped cleanly — no restart")
 				return
 			}
 		}
@@ -1516,9 +1538,10 @@ func (s *Supervisor) verifyWorkerRunning(ctx context.Context) error {
 // separately by bootSynapseSimulator, which is ALWAYS called before this function.
 //
 // Path resolution (via getOwnershipPath — single source of truth):
-//   SIMULATION:      installer/nucleus/scripts/simulation_env/.bloom/.ownership.json
-//   PRE-ONBOARDING:  skipped (no file required — SynapseSimulator runs in stub mode)
-//   POST-ONBOARDING: <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
+//
+//	SIMULATION:      installer/nucleus/scripts/simulation_env/.bloom/.ownership.json
+//	PRE-ONBOARDING:  skipped (no file required — SynapseSimulator runs in stub mode)
+//	POST-ONBOARDING: <nucleusRepo>/.bloom/.nucleus-{org}/.ownership.json
 func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error {
 	onboardingDone := isOnboardingCompleted()
 
@@ -1721,8 +1744,7 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 
 	// Log file: logs/nucleus/control_plane/nucleus_control_plane_YYYYMMDD.log
 	// Sigue spec: {source}_{module}_{date}.log en logs/{source}/{module}/
-	today := time.Now()
-	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	dateStr := utcLogDate(time.Now())
 	logDir := filepath.Join(s.logsDir, "nucleus", "control_plane")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create control plane log directory: %w", err)
@@ -1863,8 +1885,7 @@ func (s *Supervisor) startSvelteDev(ctx context.Context) (*ManagedProcess, error
 	}
 
 	// Log file: logs/nucleus/svelte_dev/nucleus_svelte_dev_YYYYMMDD.log
-	today := time.Now()
-	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	dateStr := utcLogDate(time.Now())
 	logDir := filepath.Join(s.logsDir, "nucleus", "svelte_dev")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create svelte log directory: %w", err)
@@ -1912,7 +1933,7 @@ func (s *Supervisor) startSvelteDev(ctx context.Context) (*ManagedProcess, error
 		"Vite/SvelteKit dev server log — UI frontend on port 5173",
 		"nucleus",
 		3,
-		[]string{"nucleus", "frontend"},
+		svelteDevTelemetryCategories(),
 	)
 
 	return proc, nil

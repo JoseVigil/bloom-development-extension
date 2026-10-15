@@ -277,6 +277,20 @@ usa variables de entorno como fallback de credenciales. La única referencia
 del piloto es `credential-ref://anthropic/default` → `anthropic-key:default`,
 resuelta mediante `nucleus --json vault request`.
 
+En ejecución productiva, el worker de Nucleus fija por defecto
+`AITAP_STATE_DIR` en `<BloomNucleus>/aitap`: `%LOCALAPPDATA%/BloomNucleus/aitap`
+en Windows, `$XDG_DATA_HOME/BloomNucleus/aitap` (o
+`~/.local/share/BloomNucleus/aitap`) en Linux y
+`~/Library/BloomNucleus/aitap` en macOS. Un valor explícito se conserva para
+aislamiento controlado de tests. Los journals de inferencia, presupuestos y
+estado local son durables; el directorio temporal no es el destino productivo.
+
+Mandate Genesis con Gemini admite como máximo dos intentos de transporte para
+una sola inferencia lógica y una sola reserva presupuestaria. El segundo intento
+solo ocurre ante un error HTTP explícitamente reintentable y con entrega no
+ambigua. Timeouts, desconexiones y resultados de entrega incierta fallan cerrados
+sin reinvocar al proveedor; no hay backend de fallback.
+
 La policy `intelligence_supply` selecciona directamente Anthropic, sin runtime
 de ejecución. El modelo viene del registry. `supply_enabled` expresa autorización
 del piloto, no un health probe: los runtimes mantienen health desconocido.

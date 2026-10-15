@@ -27,16 +27,26 @@ export async function provisionFixtureTrustManifest(db:D1Database,organizationId
  }catch{throw new HumanIdentityError('configuration_missing');}
  const now=s.now();
  const existing=await loadTrustManifest(db,organizationId);
- const envelope:SignedArtifact<TrustPayload>=existing?JSON.parse(existing) as SignedArtifact<TrustPayload>
-  :await signTrustManifest({schema:'bloom.authority.trust-manifest',schema_version:'1.0',manifest_id:crypto.randomUUID(),
-    issuer:s.issuer,organization_id:organizationId,manifest_version:'1',issued_at:now,not_before:now,
-    expires_at:new Date(Date.parse(now)+7*24*60*60*1000).toISOString(),root_key_id:DEVELOPMENT_ROOT_KEY_ID,
-    keys:[{key_id:s.signer.keyId,public_key:issuerPublicKey,status:'active',valid_from:now,valid_until:null}]},s.fixtureTrustRootPkcs8);
+ const previous=existing?JSON.parse(existing) as SignedArtifact<TrustPayload>:null;
+ const previousCheckAt=previous&&Date.parse(previous.payload.expires_at)<=Date.parse(now)
+  ?new Date(Math.max(Date.parse(previous.payload.issued_at),Date.parse(previous.payload.not_before))).toISOString():now;
+ const previousVerified=previous
+  ?await verifyTrustManifest(previous,DEVELOPMENT_ROOT_KEY_ID,DEVELOPMENT_ROOT_PUBLIC_KEY,previousCheckAt):null;
+ if(previousVerified&&previousVerified.organization_id===organizationId&&previousVerified.issuer===s.issuer&&
+  previousVerified.keys.length===1&&previousVerified.keys[0].key_id===s.signer.keyId&&
+  previousVerified.keys[0].public_key===issuerPublicKey&&previousVerified.keys[0].status==='active'&&
+  Date.parse(previousVerified.expires_at)>Date.parse(now))return;
+ const expectedVersion=previousVerified?.manifest_version??null;
+ const manifestVersion=expectedVersion===null?'1':String(BigInt(expectedVersion)+1n);
+ const envelope=await signTrustManifest({schema:'bloom.authority.trust-manifest',schema_version:'1.0',manifest_id:crypto.randomUUID(),
+   issuer:s.issuer,organization_id:organizationId,manifest_version:manifestVersion,issued_at:now,not_before:now,
+   expires_at:new Date(Date.parse(now)+7*24*60*60*1000).toISOString(),root_key_id:DEVELOPMENT_ROOT_KEY_ID,
+   keys:[{key_id:s.signer.keyId,public_key:issuerPublicKey,status:'active',valid_from:now,valid_until:null}]},s.fixtureTrustRootPkcs8);
  const verified=await verifyTrustManifest(envelope,DEVELOPMENT_ROOT_KEY_ID,DEVELOPMENT_ROOT_PUBLIC_KEY,now);
  if(verified.organization_id!==organizationId||verified.issuer!==s.issuer||verified.keys.length!==1||
     verified.keys[0].key_id!==s.signer.keyId||verified.keys[0].public_key!==issuerPublicKey||verified.keys[0].status!=='active')
   throw new HumanIdentityError('fixture_trust_manifest_invalid');
- if(!existing)await persistTrustManifest(db,envelope,{allowTestFixtures:true,expectedVersion:null});
+ await persistTrustManifest(db,envelope,{allowTestFixtures:true,expectedVersion});
 }
 // Invitaciones a organización ajena, Fase B (Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
 // §2/§4, aprobada por Jose 2026-09-22). Mismo esquema de mapeo a status HTTP que ya usan

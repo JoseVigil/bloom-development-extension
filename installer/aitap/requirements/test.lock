@@ -1,0 +1,6 @@
+# Validation-only dependencies. This file is never installed in the package environment.
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+pygments==2.21.0
+pytest==9.1.1

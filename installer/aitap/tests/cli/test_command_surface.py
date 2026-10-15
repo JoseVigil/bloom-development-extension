@@ -108,6 +108,23 @@ def test_human_mode_never_prints_json(tmp_path):
     assert result.returncode == 0 and not result.stdout.lstrip().startswith("{")
 
 
+def test_route_supply_separates_human_and_json_errors(tmp_path):
+    request = tmp_path / "invalid-supply-request.json"
+    request.write_text("{}", encoding="utf-8")
+    state = tmp_path / "accounting"
+
+    human = _cli("route", "supply", "--request", str(request), "--state-dir", str(state))
+    assert human.returncode == 1
+    assert human.stdout == "" and "Error [INVALID_REQUEST/" in human.stderr
+
+    machine = _cli("--json", "route", "supply", "--request", str(request), "--state-dir", str(state))
+    assert machine.returncode == 1 and machine.stderr == ""
+    error = json.loads(machine.stdout)["error"]
+    assert error["code"] == "INVALID_REQUEST" and set(error) == {
+        "code", "message", "stage", "retryable", "details"
+    }
+
+
 def test_local_preflight_rejects_unknown_model(tmp_path):
     result = _cli("--json", "local", "preflight", "--model", "no-existe", env={"BLOOM_APPDATA_DIR": str(tmp_path)})
     assert result.returncode == 1 and json.loads(result.stdout)["error"]["code"] == "UNKNOWN_MODEL"

@@ -3,10 +3,8 @@
 // D-23 / B.4.1 (BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6,
 // Fase B): hook de arranque automático de Genesis del lado de Core.
 //
-// Contraparte de onboarding-handlers.js → 'onboarding:consume-pending-
-// genesis-launch': si Onboarding acaba de cerrar y dejó
-// onboarding.pending_genesis_launch en nucleus.json, Core lo consume (lee +
-// borra, vía el mismo IPC, sin cambios acá) al bootear.
+// Contraparte de onboarding-handlers.js: Core lee el pending sin borrarlo,
+// crea el Mandate y recién entonces confirma el launch con el mandateId.
 //
 // CAMBIO (implementación post Mandate_Event_Mechanism_Auditoria_v1.md,
 // frente 1): la creación del mandate en sí pasó de Camino 1 (IPC → CLI Go,
@@ -21,9 +19,8 @@
 // hook corra — ver mismo documento, Addendum B — así que no hay riesgo de
 // carrera al cambiar de camino.
 //
-// El consumo del flag (lectura + borrado de onboarding.pending_genesis_launch
-// en nucleus.json) sigue siendo IPC — eso es lógica de archivo del proceso
-// main de Electron, no tiene camino alternativo ni falta cambiarlo.
+// La lectura y el acknowledge del flag siguen siendo IPC: el proceso main de
+// Electron conserva la propiedad de nucleus.json.
 //
 // Alcance: este módulo dispara la creación y logea el resultado. La
 // hidratación de la UI (abrir/actualizar el tab correspondiente) ya no
@@ -35,19 +32,87 @@
 import { createMandate as createMandateApi } from '$lib/api';
 
 type PendingGenesisLaunch = {
+  mandateLaunchId: string;
   projectId: string;
   project: string;
   projectPath: string;
 };
 
-type ConsumePendingGenesisLaunchResult = {
+type ReadPendingGenesisLaunchResult = {
   success: boolean;
   pending: PendingGenesisLaunch | null;
   error?: string;
 };
 
+export type GenesisAttempt = {
+  mandateId: string;
+  mandateLaunchId?: string;
+  kind: 'legacy' | 'contract_v1';
+  relationshipStatus: 'pending' | 'current' | 'superseded';
+  recoveryRequestId?: string;
+};
+
+export type GenesisProjectRecord = {
+  schemaVersion: 1;
+  projectId: string;
+  projectName: string;
+  currentMandateId?: string;
+  pendingRecovery?: { recoveryRequestId: string; mandateLaunchId: string };
+  attempts: GenesisAttempt[];
+};
+
 function getOnboardingBridge(): any {
   return typeof window !== 'undefined' ? (window as any).onboarding : undefined;
+}
+
+export async function readGenesisProjectStatus(projectId: string): Promise<GenesisProjectRecord | null> {
+  const bridge = getOnboardingBridge();
+  if (!bridge?.genesisProjectStatus) return null;
+  const result = await bridge.genesisProjectStatus({ projectId });
+  if (!result?.success) throw new Error(result?.error || 'genesis_project_status_failed');
+  return result.record ?? null;
+}
+
+export async function recoverGenesis(input: {
+  projectId: string;
+  project: string;
+  previousMandateId: string;
+  projectPath?: string;
+  source?: string;
+}): Promise<{ mandateId: string; replayed?: boolean }> {
+  const bridge = getOnboardingBridge();
+  if (!bridge?.recoverGenesis || !bridge?.ackGenesisRecovery) {
+    throw new Error('genesis_recovery_bridge_unavailable');
+  }
+  const recoveryRequestId = crypto.randomUUID();
+  const prepared = await bridge.recoverGenesis({
+    projectId: input.projectId,
+    project: input.project,
+    source: input.source || 'core-recovery',
+    expectedPreviousMandateId: input.previousMandateId,
+    recoveryRequestId,
+  });
+  if (!prepared?.success) throw new Error(prepared?.error || 'genesis_recovery_prepare_failed');
+  const created = await createMandateApi({
+    mandateType: 'genesis',
+    mandateLaunchId: prepared.mandateLaunchId,
+    recoveryRequestId: prepared.recoveryRequestId,
+    projectId: prepared.projectId,
+    project: prepared.project,
+    name: prepared.project,
+    source: prepared.source,
+    projectPath: prepared.projectPath || input.projectPath,
+  });
+  const acknowledged = await bridge.ackGenesisRecovery({
+    projectId: prepared.projectId,
+    recoveryRequestId: prepared.recoveryRequestId,
+    mandateLaunchId: prepared.mandateLaunchId,
+    mandateId: created.mandateId,
+  });
+  if (!acknowledged?.schemaVersion || acknowledged.currentMandateId !== created.mandateId) {
+    throw new Error(acknowledged?.error || 'genesis_recovery_ack_failed');
+  }
+  return { mandateId: created.mandateId, replayed: prepared.replayed };
 }
 
 /**
@@ -60,33 +125,34 @@ function getOnboardingBridge(): any {
  */
 export async function runPendingGenesisLaunch(): Promise<void> {
   const onboarding = getOnboardingBridge();
-  if (!onboarding?.consumePendingGenesisLaunch) {
+  if (!onboarding?.readPendingGenesisLaunch || !onboarding?.ackPendingGenesisLaunch) {
     // No es un error: pasa en cualquier entorno sin preload_core.js (dev
     // server standalone del webview, fuera de Electron).
     return;
   }
 
-  let consumeResult: ConsumePendingGenesisLaunchResult;
+  let readResult: ReadPendingGenesisLaunchResult;
   try {
-    consumeResult = await onboarding.consumePendingGenesisLaunch();
+    readResult = await onboarding.readPendingGenesisLaunch();
   } catch (e) {
-    console.error('[genesisLaunch] consumePendingGenesisLaunch falló:', e);
+    console.error('[genesisLaunch] readPendingGenesisLaunch falló:', e);
     return;
   }
 
-  if (!consumeResult?.success) {
-    console.warn('[genesisLaunch] consumePendingGenesisLaunch — success:false', consumeResult);
+  if (!readResult?.success) {
+    console.warn('[genesisLaunch] readPendingGenesisLaunch — success:false', readResult);
     return;
   }
 
-  const pending = consumeResult.pending;
+  const pending = readResult.pending;
   if (!pending) {
     // Camino normal en cualquier apertura de Core que no viene de un
     // Onboarding recién cerrado — nada que hacer.
     return;
   }
-  if (!pending.projectId) {
-    console.error('[genesisLaunch] pending_genesis_launch sin projectId — no se crea el Mandate', pending);
+  const mandateLaunchId = pending.mandateLaunchId || (pending as PendingGenesisLaunch & { genesisLaunchId?: string }).genesisLaunchId;
+  if (!pending.projectId || !mandateLaunchId) {
+    console.error('[genesisLaunch] pending_genesis_launch sin identidad completa — no se crea el Mandate', pending);
     return;
   }
 
@@ -94,9 +160,11 @@ export async function runPendingGenesisLaunch(): Promise<void> {
 
   try {
     const result = await createMandateApi({
+      mandateLaunchId,
       mandateType: 'genesis',
       projectId: pending.projectId,
       project: pending.project,
+      projectPath: pending.projectPath,
       // No existe todavía un concepto de "nombre" separado del proyecto en
       // este flujo (ver mandate.go: la CLI tampoco lo pedía) — se reusa el
       // nombre de proyecto, igual que hacía Camino 1 implícitamente.
@@ -106,6 +174,11 @@ export async function runPendingGenesisLaunch(): Promise<void> {
       // exige source no vacío, así que se cae a un marcador explícito.
       source: pending.projectPath || 'onboarding',
     });
+    const ack = await onboarding.ackPendingGenesisLaunch({
+      mandateLaunchId,
+      mandateId: result.mandateId,
+    });
+    if (!ack?.success) throw new Error(`genesis_launch_ack_failed:${ack?.error || 'unknown'}`);
     console.log('[genesisLaunch] Genesis Mandate creado automáticamente al entrar a Core (Camino 2):', result);
   } catch (e) {
     console.error('[genesisLaunch] createMandate (Camino 2) falló:', e);

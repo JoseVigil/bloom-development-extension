@@ -25,16 +25,67 @@
   import { onMount } from 'svelte';
   import { docsGate, hasAnyDocs } from '$lib/stores/docsGate';
   import { mandateById, type MandatePhase } from '$lib/stores/mandateStore';
+	import { listMandates } from '$lib/api';
+	import { readGenesisProjectStatus, recoverGenesis, type GenesisProjectRecord } from '$lib/bootstrap/genesisLaunch';
 
   export let mandateId: string;
 
   $: mandate = mandateById(mandateId);
 
   let dragActive = false;
+	let projectId = '';
+	let projectName = '';
+	let genesisRecord: GenesisProjectRecord | null = null;
+	let recoveryState: 'idle' | 'running' | 'done' | 'error' = 'idle';
+	let recoveryMessage = '';
+	let continuityLoadSequence = 0;
 
   onMount(() => {
     docsGate.scanDetectedDocs(fetch);
   });
+
+	async function loadGenesisContinuity(activeMandateId: string): Promise<void> {
+	  const sequence = ++continuityLoadSequence;
+	  projectId = '';
+	  projectName = '';
+	  genesisRecord = null;
+	  recoveryState = 'idle';
+	  recoveryMessage = '';
+	  try {
+		const listed = (await listMandates()).mandates.find((item) => item.mandateId === activeMandateId);
+		if (sequence !== continuityLoadSequence || mandateId !== activeMandateId) return;
+		projectId = listed?.projectId || '';
+		projectName = listed?.project || listed?.name || '';
+		if (projectId) {
+		  const record = await readGenesisProjectStatus(projectId);
+		  if (sequence !== continuityLoadSequence || mandateId !== activeMandateId) return;
+		  genesisRecord = record;
+		}
+	  } catch (error) {
+		if (sequence === continuityLoadSequence && mandateId === activeMandateId) {
+		  console.warn('[MandateTab] No se pudo cargar continuidad Genesis:', error);
+		}
+	  }
+	}
+
+	// The layout reuses this component while switching tabs. onMount runs
+	// only once, so continuity must follow the mandate identity explicitly.
+	$: if (mandateId) void loadGenesisContinuity(mandateId);
+
+	async function handleGenesisRecovery() {
+	  if (!projectId || !projectName || recoveryState === 'running') return;
+	  recoveryState = 'running';
+	  recoveryMessage = 'Nucleus está verificando el intento anterior…';
+	  try {
+		const result = await recoverGenesis({ projectId, project: projectName, previousMandateId: mandateId });
+		recoveryState = 'done';
+		recoveryMessage = `Nuevo intento Genesis creado: ${result.mandateId}`;
+		genesisRecord = await readGenesisProjectStatus(projectId);
+	  } catch (error) {
+		recoveryState = 'error';
+		recoveryMessage = error instanceof Error ? error.message : String(error);
+	  }
+	}
 
   function handleDrop(e: DragEvent) {
     e.preventDefault();
@@ -71,6 +122,7 @@
     <header class="mandate-header">
       <span class="eyebrow">Mandate · {$mandate.mandateType}</span>
       <h1>{$mandate.title}</h1>
+      <p class="mandate-id">{mandateId}</p>
       {#if $mandate.domainBaseline === 'empty'}
         <p class="subtitle">
           Este dominio arranca vacío — todavía no hay código base. Fase 1 va a
@@ -99,6 +151,23 @@
         {/each}
       </ol>
     </section>
+
+	{#if $mandate.mandateType === 'genesis' && projectId && $mandate.currentStatus !== 'completed'}
+	  <section class="panel recovery-panel">
+		<h2>Continuidad de Genesis</h2>
+		{#if genesisRecord?.attempts?.length}
+		  <ul class="attempt-list">
+			{#each genesisRecord.attempts as attempt}
+			  <li><code>{attempt.mandateId}</code><span>{attempt.relationshipStatus}</span></li>
+			{/each}
+		  </ul>
+		{/if}
+		<button class="btn-continue" disabled={recoveryState === 'running'} on:click={handleGenesisRecovery}>
+		  {recoveryState === 'running' ? 'Reanudando lanzamiento…' : 'Reintentar Genesis'}
+		</button>
+		{#if recoveryMessage}<p class:error={recoveryState === 'error'} class="gate-note">{recoveryMessage}</p>{/if}
+	  </section>
+	{/if}
 
     <section class="panel">
       <h2>Documentación del proyecto</h2>
@@ -223,6 +292,14 @@
     margin: var(--space-xs) 0;
   }
 
+  .mandate-id {
+    margin: 0 0 var(--space-sm);
+    color: var(--color-text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
   .subtitle {
     color: var(--color-text-secondary);
     font-size: 13px;
@@ -238,6 +315,11 @@
     border-radius: var(--radius-md);
     animation: fadeInUp 0.3s var(--ease-system) both;
   }
+
+  .attempt-list { list-style: none; padding: 0; margin: 0 0 var(--space-sm); }
+  .attempt-list li { display: flex; justify-content: space-between; gap: var(--space-sm); padding: 6px 0; color: var(--color-text-secondary); }
+  .attempt-list code { overflow: hidden; text-overflow: ellipsis; }
+  .recovery-panel .error { color: var(--color-error); }
 
   @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(6px); }

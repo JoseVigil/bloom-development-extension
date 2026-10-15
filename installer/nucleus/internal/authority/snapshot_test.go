@@ -43,7 +43,7 @@ func intelligenceGrantFixture(now time.Time) IntelligenceSupplyGrant {
 		GrantID: "grant-new", OrganizationID: "org", InstallationIDs: []string{"installation"},
 		ConsumerID: "brain", ActorPrincipalID: "actor", Purpose: "mandate_intelligence",
 		AllowedCapabilities: []string{"structured_output", "text.generate"}, AllowedPrivacy: []string{"approved_cloud"},
-		AllowedDestinations: []IntelligenceSupplyDestination{{Provider: "anthropic", BackendID: "anthropic_api", Models: []string{"model-a"}}},
+		AllowedDestinations: []IntelligenceSupplyDestination{{Provider: "google", BackendID: "gemini_api", Models: []string{"gemini-3.8-flash"}}},
 		Limits:              IntelligenceSupplyLimits{MaxTotalTokens: 10000, MaxOutputTokensPerInference: 2000, MaxInferences: 5, MaxUSD: "1.500000"},
 		IssuedByPrincipalID: "issuer-human", ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour), ReplacesGrantID: &replaced,
 	}
@@ -384,6 +384,7 @@ func TestSnapshotWire11DeltaGrantAndImmutability(t *testing.T) {
 	}
 	grant := intelligenceGrantFixture(p.IssuedAt)
 	grant.ReplacesGrantID = nil
+	grant.Limits.MaxUSD = "0.100000"
 	values := []IntelligenceSupplyGrant{grant}
 	result.IntelligenceSupplyGrants = &values
 	digest, err := StateDigest(result, "org")

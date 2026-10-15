@@ -132,8 +132,9 @@ export function normalizeState(input: WireFullContent, organizationId: string, s
     object(g, ["grant_id", "organization_id", "installation_id", "consumer", "permission", "key_id", "purpose", "service_public_key", "issued_by_principal_id", "valid_from", "valid_until"]);
     for (const v of [g.grant_id, g.installation_id, g.key_id, g.issued_by_principal_id]) text(v, "grant identity");
     if (g.organization_id !== organizationId || !(
-      (g.consumer === "aitap" && g.permission === "vault.key.read" && g.key_id === "anthropic-key:default"
-        && ["mandate_genesis_intelligence", "mandate_gen_intelligence"].includes(g.purpose))
+      (g.consumer === "aitap" && g.permission === "vault.key.read"
+        && ["anthropic-key:default", "gemini-key:default"].includes(g.key_id)
+        && ["mandate_intelligence", "mandate_genesis_intelligence", "mandate_gen_intelligence"].includes(g.purpose))
       || (g.consumer === "onboarding" && g.permission === "vault.key.write"
         && g.key_id === "gemini-key:default" && g.purpose === "onboarding_gemini")
     )) fail("grant binding");
@@ -163,7 +164,7 @@ export function normalizeState(input: WireFullContent, organizationId: string, s
       || !Number.isSafeInteger(g.limits.max_output_tokens_per_inference) || g.limits.max_output_tokens_per_inference < 1
       || g.limits.max_output_tokens_per_inference > g.limits.max_total_tokens
       || !Number.isSafeInteger(g.limits.max_inferences) || g.limits.max_inferences < 1
-      || typeof g.limits.max_usd !== "string" || !/^(0|[1-9][0-9]*\.[0-9]{6})$/.test(g.limits.max_usd)) fail("intelligence supply limits");
+      || typeof g.limits.max_usd !== "string" || !/^(0|0\.[0-9]{6}|[1-9][0-9]*\.[0-9]{6})$/.test(g.limits.max_usd)) fail("intelligence supply limits");
     g.valid_from = normalizeWireTime(g.valid_from); g.valid_until = normalizeWireTime(g.valid_until);
     if (instant(g.valid_until) <= instant(g.valid_from)) fail("intelligence supply grant validity");
     if (g.replaces_grant_id !== null) text(g.replaces_grant_id, "replaced grant ID");

@@ -13,7 +13,9 @@
     "paths": {
       "$lib": ["./src/lib"],
       "$lib/*": ["./src/lib/*"],
-      "$contracts/*": ["../../contracts/*"]
+	  "$contracts/*": ["../../contracts/*"],
+	  "$orrery": ["../../installer/conductor/workspace/core/orrery/src/main.ts"],
+	  "$orrery/*": ["../../installer/conductor/workspace/core/orrery/src/*"]
     }
   }
 }

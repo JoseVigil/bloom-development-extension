@@ -3,6 +3,7 @@ Intent creation command - CLI Layer.
 Handles the creation of new development or documentation intents.
 """
 
+import json
 import typer
 from pathlib import Path
 from typing import Optional, List
@@ -174,11 +175,17 @@ class CreateCommand(BaseCommand):
                 gc.output(result, self._render_success)
                 
             except ValueError as e:
-                self._handle_error(gc, f"Validation error: {e}")
+                self._handle_error(
+                    gc, f"Validation error: {e}", code="INVALID_ARGUMENT",
+                    exit_code=2, retryable=False)
             except FileNotFoundError as e:
-                self._handle_error(gc, f"File not found: {e}")
+                self._handle_error(
+                    gc, f"File not found: {e}", code="RESOURCE_NOT_FOUND",
+                    exit_code=3, retryable=False)
             except Exception as e:
-                self._handle_error(gc, f"Unexpected error: {e}")
+                self._handle_error(
+                    gc, f"Unexpected error: {e}", code="INTERNAL_ERROR",
+                    exit_code=1, retryable=True)
     
     def _render_success(self, data: dict):
         """
@@ -203,7 +210,16 @@ class CreateCommand(BaseCommand):
         
         typer.echo(f"\n💡 Next step: brain intent hydrate --intent-id {intent_data['intent_id']}")
     
-    def _handle_error(self, gc, message: str):
+    def _handle_error(
+        self,
+        gc,
+        message: str,
+        *,
+        code: str = "INVALID_ARGUMENT",
+        exit_code: int = 2,
+        retryable: bool = False,
+        details: Optional[dict] = None,
+    ):
         """
         Unified error handling for CLI.
         
@@ -212,8 +228,17 @@ class CreateCommand(BaseCommand):
             message: Error message to display
         """
         if gc.json_mode:
-            import json
-            typer.echo(json.dumps({"status": "error", "message": message}))
+            typer.echo(json.dumps({
+                "status": "error",
+                "operation": "intent_create",
+                "error": {
+                    "code": code,
+                    "message": message,
+                    "retryable": retryable,
+                    "details": details or {},
+                },
+                "exit_code": exit_code,
+            }, ensure_ascii=False))
         else:
             typer.echo(f"❌ {message}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=exit_code)

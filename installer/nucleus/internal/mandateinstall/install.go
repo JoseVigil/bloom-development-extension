@@ -35,9 +35,77 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"nucleus/internal/mandatedelivery"
 )
+
+// AdoptJournal binds an installed artifact to the verified delivery receipt.
+// Existing local-build journals cannot be silently converted to adopted ones.
+func AdoptJournal(mandatesRoot string, receipt mandatedelivery.Receipt, delivery mandatedelivery.Delivery, contractDigest string) (bool, error) {
+	e := delivery.Envelope
+	if receipt.MandateID == "" || filepath.Base(e.MandateID) != e.MandateID || receipt.MandateID != e.MandateID || receipt.OrganizationID != e.OrganizationID ||
+		receipt.InstallationID != e.InstallationID || receipt.Version != e.Version || receipt.Digest != e.Digest ||
+		receipt.KeyID != e.KeyID || receipt.Domain != mandatedelivery.Domain || contractDigest == "" {
+		return false, fmt.Errorf("delivery receipt and adopted contract identity differ")
+	}
+	artifact := filepath.Join(mandatesRoot, e.MandateID, "mandate.json")
+	raw, err := os.ReadFile(artifact)
+	if err != nil || sha256HexOf(raw) != e.Digest {
+		return false, fmt.Errorf("installed Mandate differs from verified delivery")
+	}
+	path := filepath.Join(mandatesRoot, e.MandateID, "mandate_state.json")
+	if existing, err := os.ReadFile(path); err == nil {
+		var state struct {
+			MandateID string `json:"mandateId"`
+			Adoption  struct {
+				Version        string `json:"version"`
+				Digest         string `json:"digest"`
+				ContractDigest string `json:"contractDigest"`
+				OrganizationID string `json:"organizationId"`
+				InstallationID string `json:"installationId"`
+			} `json:"adoption"`
+		}
+		if json.Unmarshal(existing, &state) != nil || state.MandateID != e.MandateID || state.Adoption.Version != e.Version ||
+			state.Adoption.Digest != e.Digest || state.Adoption.ContractDigest != contractDigest ||
+			state.Adoption.OrganizationID != e.OrganizationID || state.Adoption.InstallationID != e.InstallationID {
+			return false, fmt.Errorf("existing Mandate journal conflicts with verified delivery")
+		}
+		return true, nil
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	state := map[string]any{
+		"mandateId": e.MandateID, "status": "adopted", "stateVersion": 1,
+		"createdAt": time.Now().UTC().Format(time.RFC3339Nano),
+		"adoption": map[string]string{"version": e.Version, "digest": e.Digest,
+			"contractDigest": contractDigest, "organizationId": e.OrganizationID, "installationId": e.InstallationID},
+		"actions": map[string]any{},
+	}
+	encoded, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if os.IsExist(err) {
+		return AdoptJournal(mandatesRoot, receipt, delivery, contractDigest)
+	}
+	if err != nil {
+		return false, err
+	}
+	if _, err = f.Write(append(encoded, '\n')); err != nil {
+		f.Close()
+		return false, err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return false, err
+	}
+	if err = f.Close(); err != nil {
+		return false, err
+	}
+	return false, nil
+}
 
 // sha256HexOf recalcula el sha256 de bytes ya en memoria — copia local de la misma
 // fórmula que ya usa internal/orchestration/commands.sha256HexOf (mandate_publish.go); no

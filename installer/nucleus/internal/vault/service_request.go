@@ -21,10 +21,18 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-const servicePurpose = "mandate_genesis_intelligence"
+const servicePurpose = "mandate_intelligence"
+const legacyServicePurpose = "mandate_genesis_intelligence"
 const mandateGenPurpose = "mandate_gen_intelligence"
 
 var errServiceDenied = errors.New("VAULT_ACCESS_DENIED")
+
+type serviceDeniedError struct {
+	stage string
+}
+
+func (e *serviceDeniedError) Error() string { return errServiceDenied.Error() }
+func (e *serviceDeniedError) Unwrap() error { return errServiceDenied }
 
 type ServiceStoreRequest struct {
 	GrantID        string `json:"grant_id"`
@@ -97,7 +105,7 @@ func RunServiceStore(input io.Reader, appDataDir string) (*ServiceStoreReceipt, 
 	if err != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, serviceStoreMessage(r), signature) {
 		return deny()
 	}
-	status, err := GetVaultStatus()
+	status, err := getVaultStatusAt(filepath.Join(active.NucleusRoot, "vault.json"))
 	if err != nil || status.Locked {
 		return deny()
 	}
@@ -119,7 +127,7 @@ func RunServiceStore(input io.Reader, appDataDir string) (*ServiceStoreReceipt, 
 		status.KeyCount++
 	}
 	status.LastAccess = now
-	if err = saveVaultStatus(status); err != nil {
+	if err = saveVaultStatusAt(filepath.Join(active.NucleusRoot, "vault.json"), status); err != nil {
 		return deny()
 	}
 	return &ServiceStoreReceipt{Status: "stored", KeyID: r.KeyID, GrantID: r.GrantID, OrganizationID: r.OrganizationID}, nil
@@ -179,74 +187,76 @@ func legacyVaultAllowed() bool {
 }
 
 func RunServiceRequest(input io.Reader, appDataDir string) error {
-	deny := func() error { return errServiceDenied }
+	deny := func(stage string) error {
+		return &serviceDeniedError{stage: stage}
+	}
 	raw, readErr := io.ReadAll(io.LimitReader(input, 8193))
 	if readErr != nil || len(raw) > 8192 {
-		return deny()
+		return deny("request")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	var r ServiceRequest
 	if decoder.Decode(&r) != nil || decoder.Decode(new(any)) != io.EOF {
-		return deny()
+		return deny("request")
 	}
 	fields := []string{r.GrantID, r.OrganizationID, r.InstallationID, r.KeyID, r.Purpose, r.Timestamp, r.Nonce, r.ChannelToken, r.Signature}
 	for _, field := range fields {
 		if field == "" || strings.ContainsAny(field, "\r\n") {
-			return deny()
+			return deny("binding")
 		}
 	}
-	if r.KeyID != "anthropic-key:default" || (r.Purpose != servicePurpose && r.Purpose != mandateGenPurpose) || r.ChannelPort < 1 || r.ChannelPort > 65535 {
-		return deny()
+	if (r.KeyID != "anthropic-key:default" && r.KeyID != "gemini-key:default") || (r.Purpose != servicePurpose && r.Purpose != legacyServicePurpose && r.Purpose != mandateGenPurpose) || r.ChannelPort < 1 || r.ChannelPort > 65535 {
+		return deny("binding")
 	}
 	now := time.Now().UTC()
 	timestamp, err := time.Parse(time.RFC3339Nano, r.Timestamp)
 	if err != nil || timestamp.Before(now.Add(-30*time.Second)) || timestamp.After(now.Add(30*time.Second)) {
-		return deny()
+		return deny("timestamp")
 	}
 	nonce, err := base64.RawURLEncoding.DecodeString(r.Nonce)
 	if err != nil || len(nonce) != 32 || base64.RawURLEncoding.EncodeToString(nonce) != r.Nonce {
-		return deny()
+		return deny("nonce")
 	}
 	token, err := base64.RawURLEncoding.DecodeString(r.ChannelToken)
 	if err != nil || len(token) != 32 || base64.RawURLEncoding.EncodeToString(token) != r.ChannelToken {
-		return deny()
+		return deny("channel")
 	}
 	active, err := core.ResolveActiveOrgContext()
 	if err != nil || active.OrganizationID != r.OrganizationID || !remoteEnforcedAt(active.NucleusRoot) {
-		return deny()
+		return deny("active_context")
 	}
 	statePath := filepath.Join(appDataDir, "authority", "state.json")
 	checkpointPath := filepath.Join(appDataDir, "authority", "checkpoint.json")
 	publicKey, err := authority.ResolveVaultServiceGrant(&authority.Store{Path: statePath}, &authority.CheckpointStore{Path: checkpointPath}, r.OrganizationID, r.InstallationID, r.GrantID, r.KeyID, r.Purpose, now)
 	if err != nil {
-		return deny()
+		return deny("grant")
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(r.Signature)
 	if err != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, serviceMessage(r), signature) {
-		return deny()
+		return deny("signature")
 	}
 	if err = ClaimNonce(filepath.Join(appDataDir, "authority", "vault-service-replay.json"), r.GrantID, r.Nonce, now); err != nil {
-		return deny()
+		return deny("replay")
 	}
-	status, err := GetVaultStatus()
+	status, err := getVaultStatusAt(filepath.Join(active.NucleusRoot, "vault.json"))
 	if err != nil || status.Locked {
-		return deny()
+		return deny("vault_status")
 	}
 	secret, err := osKeyring.Get(vaultServiceName(), r.KeyID)
 	if err != nil || secret == "" {
-		return deny()
+		return deny("credential")
 	}
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(r.ChannelPort)), 3*time.Second)
 	if err != nil {
-		return deny()
+		return deny("channel_connect")
 	}
 	defer conn.Close()
 	if err = conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
-		return deny()
+		return deny("channel_write")
 	}
 	if err = json.NewEncoder(conn).Encode(map[string]string{"token": r.ChannelToken, "key": secret}); err != nil {
-		return deny()
+		return deny("channel_write")
 	}
 	return nil
 }
