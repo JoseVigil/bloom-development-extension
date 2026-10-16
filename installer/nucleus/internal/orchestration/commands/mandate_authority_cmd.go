@@ -139,29 +139,34 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 			return result, receiptErr
 		} else {
 			if _, statErr := os.Stat(filepath.Join(dir, "mandate.json")); statErr == nil {
-				return result, errors.New("signed Mandate exists without a recorded human approval")
+				envelope, loadErr := loadAdoptedV4Contract(dir, id, active.OrganizationID, identityPath)
+				if loadErr != nil {
+					return result, loadErr
+				}
+				contract, digest = envelope.Contract, envelope.ContractDigest
 			} else if !os.IsNotExist(statErr) {
 				return result, statErr
-			}
-			if selected != nil && selected.Privacy == "local" {
-				prepared, prepareErr := prepareLocalSelection(context.Background(), *selected, nil)
-				if prepareErr != nil {
-					return result, recordLocalActDenial(mandateLog, id, operation, "selection", "", prepareErr)
+			} else {
+				if selected != nil && selected.Privacy == "local" {
+					prepared, prepareErr := prepareLocalSelection(context.Background(), *selected, nil)
+					if prepareErr != nil {
+						return result, recordLocalActDenial(mandateLog, id, operation, "selection", "", prepareErr)
+					}
+					selected = &prepared
 				}
-				selected = &prepared
-			}
-			contract, err = buildConfirmedContract(dir, id, active.OrganizationID, authorityDir, selected)
-			if err != nil {
-				return result, err
-			}
-			if contract.ContractVersion == 2 {
-				if err := verifyIntelligenceGrant(authorityDir, identity.InstallationID, contract.OrganizationID, *contract.Intelligence); err != nil {
+				contract, err = buildConfirmedContract(dir, id, active.OrganizationID, authorityDir, selected)
+				if err != nil {
 					return result, err
 				}
-			}
-			digest, err = mandatecontract.Digest(contract)
-			if err != nil {
-				return result, err
+				if contract.ContractVersion == 2 {
+					if err := verifyIntelligenceGrant(authorityDir, identity.InstallationID, contract.OrganizationID, *contract.Intelligence); err != nil {
+						return result, err
+					}
+				}
+				digest, err = mandatecontract.Digest(contract)
+				if err != nil {
+					return result, err
+				}
 			}
 		}
 	}
@@ -172,6 +177,11 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 		}
 		contract = envelope.Contract
 		digest = envelope.ContractDigest
+		if contract.ContractVersion == 4 {
+			if _, err := loadAdoptedV4Contract(dir, id, active.OrganizationID, identityPath); err != nil {
+				return result, err
+			}
+		}
 		approval, loadErr := mandatecontract.LoadActReceipt(dir, "approve")
 		if loadErr != nil {
 			return result, loadErr
@@ -183,11 +193,19 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 	if contract.OrganizationID != active.OrganizationID {
 		return result, errors.New("Mandate organization differs from active Authority binding")
 	}
-	if (contract.ContractVersion != 2 && contract.ContractVersion != 3) || contract.Intelligence == nil {
+	if contract.ContractVersion == 4 {
+		adopted, loadErr := loadAdoptedV4Contract(dir, id, active.OrganizationID, identityPath)
+		if loadErr != nil || adopted.ContractDigest != digest {
+			return result, errors.New("adopted Mandate differs from its signed delivery")
+		}
+	}
+	if (contract.ContractVersion != 2 && contract.ContractVersion != 3 && contract.ContractVersion != 4) || contract.Intelligence == nil {
 		return result, errors.New("Mandate lacks signed intelligence policy, model or budget")
 	}
-	if _, err := verifyIntelligenceSelection(*contract.Intelligence); err != nil {
-		return result, err
+	if contract.ContractVersion != 4 {
+		if _, err := verifyIntelligenceSelection(*contract.Intelligence); err != nil {
+			return result, err
+		}
 	}
 	if operation == "approve" && contract.ContractVersion == 3 {
 		if err := verifyLocalObservation(context.Background(), *contract.Intelligence, nil); err != nil {
@@ -198,7 +216,7 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 		if err := mandatecontract.VerifyActReceipt(existing, identity, authority.DevelopmentPinnedRoots(), operation, id, digest, contract.ProjectID); err != nil {
 			return result, fmt.Errorf("recorded Mandate act invalid: %w", err)
 		}
-		if operation == "approve" {
+		if operation == "approve" && contract.ContractVersion != 4 {
 			if err := persistApprovedContract(dir, contract, identity); err != nil {
 				return result, err
 			}
@@ -211,8 +229,10 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 				return result, err
 			}
 		}
-		if err := signalMandateAct(c, id, operation, digest); err != nil {
-			return result, err
+		if contract.ContractVersion != 4 {
+			if err := signalMandateAct(c, id, operation, digest); err != nil {
+				return result, err
+			}
 		}
 		emit("mandate.act.recovered", map[string]any{"contractDigest": digest, "principalId": existing.Decision.PrincipalID})
 		return mandateActResult{Success: true, MandateID: id, Operation: operation, ContractDigest: digest, PrincipalID: existing.Decision.PrincipalID}, nil
@@ -269,7 +289,7 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 	}
 	emit("mandate.act.verified", map[string]any{"contractDigest": digest, "principalId": attestation.PrincipalID, "attestationId": attestation.AttestationID, "authorityVersion": decision.AuthorityVersion, "stateDigest": decision.StateDigest})
 	// Both source selection and contract bytes must still match the human digest.
-	if operation == "approve" {
+	if operation == "approve" && contract.ContractVersion != 4 {
 		latest, buildErr := buildConfirmedContract(dir, id, active.OrganizationID, authorityDir, contract.Intelligence)
 		if buildErr != nil {
 			return result, buildErr
@@ -283,10 +303,21 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 			}
 		}
 	}
+	if operation == "approve" && contract.ContractVersion == 4 {
+		latest, loadErr := loadAdoptedV4Contract(dir, id, active.OrganizationID, identityPath)
+		if loadErr != nil || latest.ContractDigest != digest {
+			return result, errors.New("adopted Mandate changed after human consent")
+		}
+	}
 	if operation == "activate" {
 		latest, loadErr := mandatecontract.LoadVerified(dir, identityPath)
 		if loadErr != nil || latest.ContractDigest != digest {
 			return result, errors.New("signed Mandate changed after human consent")
+		}
+		if contract.ContractVersion == 4 {
+			if _, loadErr := loadAdoptedV4Contract(dir, id, active.OrganizationID, identityPath); loadErr != nil {
+				return result, loadErr
+			}
 		}
 	}
 	// Persist the original signed trust envelope, not the parsed manifest struct.
@@ -301,7 +332,7 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 		return result, err
 	}
 	emit("mandate.act.recorded", map[string]any{"contractDigest": digest, "principalId": attestation.PrincipalID, "attestationId": attestation.AttestationID})
-	if operation == "approve" {
+	if operation == "approve" && contract.ContractVersion != 4 {
 		if err := persistApprovedContract(dir, contract, identity); err != nil {
 			return result, err
 		}
@@ -314,11 +345,51 @@ func runMandateAct(cmd *cobra.Command, c *core.Core, operation, id string, selec
 			return result, err
 		}
 	}
-	if err := signalMandateAct(c, id, operation, digest); err != nil {
-		emit("mandate.act.signal_failed", map[string]any{"contractDigest": digest, "reason": err.Error()})
-		return result, fmt.Errorf("acto persistido; reintente la señal tras recuperar Temporal: %w", err)
+	if contract.ContractVersion != 4 {
+		if err := signalMandateAct(c, id, operation, digest); err != nil {
+			emit("mandate.act.signal_failed", map[string]any{"contractDigest": digest, "reason": err.Error()})
+			return result, fmt.Errorf("acto persistido; reintente la señal tras recuperar Temporal: %w", err)
+		}
 	}
 	return mandateActResult{Success: true, MandateID: id, Operation: operation, ContractDigest: digest, PrincipalID: attestation.PrincipalID}, nil
+}
+
+func loadAdoptedV4Contract(dir, id, organizationID, identityPath string) (mandatecontract.Envelope, error) {
+	envelope, err := mandatecontract.LoadVerified(dir, identityPath)
+	if err != nil {
+		return mandatecontract.Envelope{}, err
+	}
+	if envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != id || envelope.Contract.OrganizationID != organizationID {
+		return mandatecontract.Envelope{}, errors.New("signed Mandate is not an adopted v4 contract for this organization")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "mandate.json"))
+	if err != nil {
+		return mandatecontract.Envelope{}, err
+	}
+	journalRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
+	if err != nil {
+		return mandatecontract.Envelope{}, err
+	}
+	var journal struct {
+		MandateID string `json:"mandateId"`
+		Status    string `json:"status"`
+		Adoption  struct {
+			Digest         string `json:"digest"`
+			ContractDigest string `json:"contractDigest"`
+			OrganizationID string `json:"organizationId"`
+			InstallationID string `json:"installationId"`
+		} `json:"adoption"`
+	}
+	if err := json.Unmarshal(journalRaw, &journal); err != nil {
+		return mandatecontract.Envelope{}, err
+	}
+	sum := sha256.Sum256(raw)
+	if journal.MandateID != id || journal.Status != "adopted" || journal.Adoption.Digest != hex.EncodeToString(sum[:]) ||
+		journal.Adoption.ContractDigest != envelope.ContractDigest || journal.Adoption.OrganizationID != organizationID ||
+		journal.Adoption.InstallationID != envelope.SignatureKeyID {
+		return mandatecontract.Envelope{}, errors.New("adopted Mandate journal does not match signed delivery")
+	}
+	return envelope, nil
 }
 
 func recordLocalActDenial(log *core.Logger, mandateID, operation, stage, digest string, cause error) error {

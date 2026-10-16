@@ -454,6 +454,7 @@ func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, v
 		verify = verifyAdoptedActs
 	}
 	if err := verify(dir, envelope, w.identityPath); err != nil {
+		w.logger.Warning("[mandate_watcher] adopted Mandate %s awaits valid approve and activate receipts: %v", mandateID, err)
 		return
 	}
 	journalRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))

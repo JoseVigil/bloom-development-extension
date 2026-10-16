@@ -311,3 +311,64 @@ func TestConfirmedContractAndLocalActStateRecoverWithoutChangingDigest(t *testin
 		t.Fatal("altered frozen File accepted")
 	}
 }
+
+func TestAdoptedV4ContractKeepsSignedDeliveryAndRejectsMismatchedDigest(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "mandate-1")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := &authority.LocalIdentity{InstallationID: "installation-1", PublicKey: public, PrivateKey: private}
+	identityPath := filepath.Join(root, "identity.json")
+	identityRaw, _ := json.Marshal(map[string]string{"installation_id": identity.InstallationID, "public_key": base64.StdEncoding.EncodeToString(public)})
+	if err := os.WriteFile(identityPath, identityRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	intents := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
+	actions := make([]mandatecontract.Action, len(intents))
+	for i, intent := range intents {
+		actions[i] = mandatecontract.Action{ActionID: fmt.Sprintf("action-%d", i), Type: "run_intent", IntentType: intent, IdempotencyKey: fmt.Sprintf("key-%d", i)}
+		if i > 0 {
+			actions[i].DependsOn = []string{actions[i-1].ActionID}
+		}
+	}
+	actions[4].WhenResult = "remediation_required"
+	contract := mandatecontract.Contract{MandateID: "mandate-1", ContractVersion: 4, OrganizationID: "org-1", ProjectID: "project-1", ProjectBinding: "binding-1", Objective: "Classify inputs", Domain: mandatecontract.Domain{ID: "domain-1", Name: "Project"}, Actions: actions,
+		Intelligence: &mandatecontract.Intelligence{PolicyVersion: "mandate-gen/v1", PolicyRef: filepath.Join(root, "policy.json"), PolicySHA256: strings.Repeat("0", 64), RegistryRef: filepath.Join(root, "registry.json"), RegistrySHA256: strings.Repeat("0", 64), MaxTotalTokens: 100, MaxOutputTokens: 50},
+		Inputs:       []mandatecontract.Input{{Ref: "inputs/source.md", SHA256: strings.Repeat("0", 64), Size: 1}},
+		Fulfillment:  mandatecontract.Fulfillment{Evaluator: "exp-ready", EvaluatorVersion: "1", RequiredFields: []string{"ing", "dis", "doc", "exp"}}}
+	envelope, err := mandatecontract.Sign(contract, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(envelope)
+	if err := os.WriteFile(filepath.Join(dir, "mandate.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	journal := map[string]any{"mandateId": "mandate-1", "status": "adopted", "adoption": map[string]string{"digest": hex.EncodeToString(sum[:]), "contractDigest": envelope.ContractDigest, "organizationId": "org-1", "installationId": identity.InstallationID}}
+	journalRaw, _ := json.Marshal(journal)
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadAdoptedV4Contract(dir, "mandate-1", "org-1", identityPath)
+	if err != nil || loaded.ContractDigest != envelope.ContractDigest {
+		t.Fatalf("adopted contract rejected: %v", err)
+	}
+	unchanged, _ := os.ReadFile(filepath.Join(dir, "mandate.json"))
+	if string(unchanged) != string(raw) {
+		t.Fatal("adopted contract changed")
+	}
+	journal["adoption"].(map[string]string)["digest"] = strings.Repeat("f", 64)
+	journalRaw, _ = json.Marshal(journal)
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadAdoptedV4Contract(dir, "mandate-1", "org-1", identityPath); err == nil {
+		t.Fatal("mismatched delivery digest accepted")
+	}
+}

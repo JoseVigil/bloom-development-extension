@@ -127,6 +127,8 @@ webview/package-lock.json
 libs/
 /.tmp/
 /.tmp-go-cache/
+/.tmp-go-cache-core-gate/
+synapse-runner/.runner-core-temp/
 
 # ============================================================================
 # Versioning

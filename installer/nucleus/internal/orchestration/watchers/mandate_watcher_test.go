@@ -72,14 +72,30 @@ func TestAdoptedMandateDispatchesOnceAcrossWatcherRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	tc := &syntheticMandateBuildTemporalClient{state: WorkflowExecutionNotFound}
-	verified := func(string, mandatecontract.Envelope, string) error { return nil }
-	w := &MandateWatcher{mandatesRoot: root, identityPath: identityPath, tc: tc, verifyActs: verified}
+	logger, err := core.InitLogger(&core.Paths{LogsDir: filepath.Join(root, "logs")}, "MANDATE", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logger.Close()
+	consented := false
+	verified := func(string, mandatecontract.Envelope, string) error {
+		if !consented {
+			return errors.New("approve or activate receipt missing")
+		}
+		return nil
+	}
+	w := &MandateWatcher{mandatesRoot: root, identityPath: identityPath, tc: tc, verifyActs: verified, logger: logger}
+	w.onAdoptedMandate(context.Background(), dir, "mandate-1", "v1", hex.EncodeToString(sum[:]), envelope.ContractDigest, "adopted")
+	if tc.executionStarts != 0 {
+		t.Fatalf("dispatch before consent: %d", tc.executionStarts)
+	}
+	consented = true
 	w.onAdoptedMandate(context.Background(), dir, "mandate-1", "v1", hex.EncodeToString(sum[:]), envelope.ContractDigest, "adopted")
 	if tc.executionStarts != 1 {
 		t.Fatalf("first dispatches=%d", tc.executionStarts)
 	}
 	tc.state = WorkflowExecutionRunning
-	restarted := &MandateWatcher{mandatesRoot: root, identityPath: identityPath, tc: tc, verifyActs: verified}
+	restarted := &MandateWatcher{mandatesRoot: root, identityPath: identityPath, tc: tc, verifyActs: verified, logger: logger}
 	restarted.onAdoptedMandate(context.Background(), dir, "mandate-1", "v1", hex.EncodeToString(sum[:]), envelope.ContractDigest, "adopted")
 	if tc.executionStarts != 1 {
 		t.Fatalf("restart duplicated dispatch: %d", tc.executionStarts)
