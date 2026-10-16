@@ -27,7 +27,7 @@ export const BUILTIN_ROLE_CATALOG: readonly Readonly<{ role_id: string; role_ver
 ]);
 const builtinPermissions = (roleId: string, roleVersion: string) =>
   BUILTIN_ROLE_CATALOG.find(r => r.role_id === roleId && r.role_version === roleVersion)?.permissions ?? null;
-const permissions = new Set([...master, "vault.key.read", "vault.key.write", "vault.key.delete", "executor.command.execute", "executor.filesystem.write", "executor.network.access", "executor.change.promote"]);
+const permissions = new Set([...master, "gene.contribution.ratify", "vault.key.read", "vault.key.write", "vault.key.delete", "executor.command.execute", "executor.filesystem.write", "executor.network.access", "executor.change.promote"]);
 const statuses = ["pending", "active", "suspended", "expired", "revoked"];
 const scopes = ["organization", "project", "mandate", "intent", "resource", "environment"];
 const fail = (message: string): never => { throw new Error(`authority_wire: ${message}`); };

@@ -66,6 +66,20 @@ beforeAll(async()=>{
 afterAll(async()=>{if(mf)await mf.dispose();if(temp)rmSync(temp,{recursive:true,force:true});},30000);
 
 describe("administrative commit on temporary D1",()=>{
+  it("commits the initial Project ratifier concession once with audit and replay",async()=>{
+    const org=await initialize();
+    await db.prepare(`INSERT INTO authority_project_scope_evidence VALUES (?, 'project-fixture', '1', 'fixture:project', 'test-fixture', 'active', '2026-09-09T00:00:00Z')`).bind(org).run();
+    const command:AdministrationCommand={kind:"concede_initial_gene_ratifier",projectId:"project-fixture",roleId:"gene-ratifier",assignmentId:"gene-ratifier-assignment"};
+    const req=await request(org,"gene-concession",command);
+    const result=await administerAuthority(db,req,services);
+    expect(result.status).toBe("committed");
+    expect(await administerAuthority(db,req,services)).toEqual(result);
+    const state=(await loadCurrentEmission(db,org))!.state;
+    expect(state.role_definitions.find(r=>r.role_id==="gene-ratifier")?.permissions).toEqual(["gene.contribution.ratify"]);
+    expect(state.role_assignments.find(a=>a.assignment_id==="gene-ratifier-assignment")?.scope).toEqual({type:"project",id:"project-fixture"});
+    expect(await counts(org)).toEqual({emissions:2,requests:1,audit:1,outbox:1,head:result.authorityVersion});
+    await expect(administerAuthority(db,await request(org,"gene-concession-again",{...command,roleId:"another-role",assignmentId:"another-assignment"}),services)).rejects.toThrow("initial_concession_exists");
+  });
   it.each(['session','identity','recipient'])('aborts the complete administrative commit after a concurrent %s change',async changed=>{
     const org=await initialize();
     await db.prepare("INSERT INTO authority_human_identities VALUES(?,?,'123456789','fixture:owner','test-fixture','1','active',NULL,'')").bind(org,owner).run();

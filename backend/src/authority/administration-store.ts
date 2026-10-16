@@ -1,6 +1,6 @@
 import { canonicalizeJson, digestWire } from "./canonical";
 import { normalizeMetadata, normalizeWireTime, wireVersion } from "./emission";
-import { EmissionStoreError, loadCurrentEmission, prepareEmission, type EmissionSigner, type PreparedEmission } from "./emission-store";
+import { EmissionStoreError, loadCurrentEmission, loadEmissionVersion, prepareEmission, type EmissionSigner, type PreparedEmission } from "./emission-store";
 import { AdministrationError, authorityInstant, evaluateAdministration,
   type AdministrationCommand, type AdministrationProposal, type ProjectEvidence, type VerifiedHumanActor, type InitialHumanIdentity } from "./administration";
 import type { WireEmissionMetadata } from "./schema";
@@ -64,11 +64,26 @@ export async function administerAuthority(db: D1Database, request: Administratio
     if (row) proposal={proposalId:row.proposal_id,grantorId:row.grantor_id,recipientId:row.recipient_id,body:JSON.parse(row.body_json),status:row.status};
   }
   const projectRows = await session.prepare("SELECT * FROM authority_project_scope_evidence WHERE organization_id=?").bind(org).all<ProjectEvidence>();
+  let initialPrincipalId: string | undefined;
+  if (command.kind === "concede_initial_gene_ratifier") {
+    const initial = await loadEmissionVersion(db,org,"1");
+    if (!initial || initial.baseVersion !== null) throw new AdministrationError("initial_emission_unavailable");
+    if (services.allowTestFixtures === true) {
+      const firstMaster = initial.state.role_assignments.find(a => a.role_id === "master" && a.scope.type === "organization" && a.scope.id === org);
+      initialPrincipalId = initial.state.memberships.find(m => m.membership_id === firstMaster?.membership_id)?.principal_id;
+    } else {
+      const receipt = await session.prepare("SELECT principal_id FROM authority_initial_emission_commits WHERE organization_id=? AND authority_version='1'")
+        .bind(org).first<{principal_id:string}>();
+      initialPrincipalId = receipt?.principal_id;
+    }
+    if (!initialPrincipalId || !initial.state.principals.some(p => p.principal_id === initialPrincipalId && p.principal_type === "human"))
+      throw new AdministrationError("initial_principal_required");
+  }
   const decisionTime = normalizeWireTime(services.now());validActor(decisionTime);
   if (authorityInstant(metadata.issued_at)>authorityInstant(decisionTime) || authorityInstant(metadata.not_before)>authorityInstant(decisionTime)
     || authorityInstant(metadata.expires_at)<=authorityInstant(decisionTime)) throw new AdministrationError("invalid_emission_time");
   const context={organizationId:org,authorityVersion:metadata.authority_version,now:decisionTime,effectiveAt:decisionTime,revocationId:`admin:${request.requestId}`,
-    projects:projectRows.results,allowTestFixtures:services.allowTestFixtures===true,proposal,
+    projects:projectRows.results,allowTestFixtures:services.allowTestFixtures===true,proposal,initialPrincipalId,
     initialIdentity:command.kind==='propose_membership'&&!current.state.principals.some(p=>p.principal_id===command.principalId)
       ?await services.initialIdentity?.(org,command.principalId):undefined};
   const plan = evaluateAdministration(current.state,actor!,command,context);

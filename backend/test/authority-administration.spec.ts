@@ -25,6 +25,20 @@ const grant=():AdministrationCommand=>({kind:"propose_assignment",proposalId:"pr
 const run=(command:AdministrationCommand,s=fixture(),a=actor(),c=context())=>evaluateAdministration(s,a,command,c);
 
 describe("bounded organizational administration",()=>{
+  it("limits the initial Gene ratifier concession to the verified initial human and one Project",()=>{
+    const command:AdministrationCommand={kind:"concede_initial_gene_ratifier",projectId:"project-fixture",roleId:"gene-ratifier-fixture",assignmentId:"gene-ratifier-assignment"};
+    const c={...context(),initialPrincipalId:owner};
+    const result=run(command,fixture(),actor(),c);
+    expect(result.state.role_assignments.find(a=>a.assignment_id===command.assignmentId)).toMatchObject({scope:{type:"project",id:"project-fixture"},status:"active"});
+    expect(result.state.role_definitions.find(r=>r.role_id===command.roleId)?.permissions).toEqual(["gene.contribution.ratify"]);
+    expect(result.state.role_definitions.find(r=>r.role_id==="master")?.permissions).not.toContain("gene.contribution.ratify");
+    expect(result.projectChecks).toHaveLength(1);
+    expect(()=>run(command,result.state,actor(),c)).toThrow("relationship_exists");
+    expect(()=>run({...command,roleId:"another-role",assignmentId:"another-assignment"},result.state,actor(),c)).toThrow("initial_concession_exists");
+    expect(()=>run(command,fixture(),actor(recipient),c)).toThrow("initial_principal_required");
+    expect(()=>run(command,fixture(),actor(),{...c,projects:[]})).toThrow("scope_unverifiable");
+    expect(()=>run(command,fixture(),actor(),{...c,initialPrincipalId:undefined})).toThrow("initial_principal_required");
+  });
   it('imports only initial verified identity through an authorized membership proposal, without a grant',()=>{
     const principal={principal_id:'initial-human',principal_type:'human' as const,status:'active' as const,external_identities:[{provider:'github',subject:'initial-subject',display_handle:'new',status:'verified' as const,verified_at:now}]};
     const c={...context(),initialIdentity:{organizationId:org,revision:'1',source:'test-fixture' as const,principal}};

@@ -23,6 +23,7 @@ export type AssignmentProposalCommand = Window & {
 };
 export type ProposalCommand = MembershipProposalCommand | AssignmentProposalCommand;
 export type AdministrationCommand = ProposalCommand | { kind: "accept"; proposalId: string }
+  | { kind: "concede_initial_gene_ratifier"; projectId: string; roleId: string; assignmentId: string }
   | { kind: "define_role"; role: WireRoleDefinition }
   | { kind: "suspend_membership" | "resume_membership" | "revoke_membership"; membershipId: string }
   | { kind: "suspend_assignment" | "resume_assignment" | "revoke_assignment"; assignmentId: string };
@@ -35,6 +36,7 @@ export interface AdministrationContext {
   effectiveAt?: string;
   projects: ProjectEvidence[]; allowTestFixtures: boolean; proposal?: AdministrationProposal;
   initialIdentity?: InitialHumanIdentity;
+  initialPrincipalId?: string;
 }
 export interface InitialHumanIdentity {organizationId:string;revision:string;source:'canonical'|'test-fixture';principal:WirePrincipal;}
 export interface AdministrationPlan {
@@ -59,6 +61,7 @@ function validateCommand(command: AdministrationCommand) {
     case "propose_assignment": keys(command,["kind","proposalId","assignmentId","membershipId","roleId","roleVersion","scope","validFrom","validUntil"]);id(command.proposalId);id(command.assignmentId);id(command.membershipId);id(command.roleId);wireVersion(command.roleVersion);keys(command.scope,["type","id"]);id(command.scope.id);break;
     case "accept": keys(command,["kind","proposalId"]);id(command.proposalId);break;
     case "define_role": keys(command,["kind","role"]);break;
+    case "concede_initial_gene_ratifier": keys(command,["kind","projectId","roleId","assignmentId"]);id(command.projectId);id(command.roleId);id(command.assignmentId);break;
     case "suspend_membership": case "resume_membership": case "revoke_membership": keys(command,["kind","membershipId"]);id(command.membershipId);break;
     case "suspend_assignment": case "resume_assignment": case "revoke_assignment": keys(command,["kind","assignmentId"]);id(command.assignmentId);break;
     default: deny("operation_unavailable");
@@ -187,6 +190,23 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
     if (b.kind === "propose_membership") state.memberships.push({ membership_id:b.membershipId,principal_id:b.principalId,organization_id:org,status:"active",valid_from:b.validFrom,valid_until:b.validUntil,accepted_at:effectiveAt });
     else state.role_assignments.push({ assignment_id:b.assignmentId,membership_id:b.membershipId,role_id:b.roleId,role_version:b.roleVersion,scope:b.scope,status:"active",valid_from:b.validFrom,valid_until:b.validUntil,accepted_at:effectiveAt });
     plan.consumedProposalId = command.proposalId;
+  } else if (command.kind === "concede_initial_gene_ratifier") {
+    if (!context.initialPrincipalId || actor.principalId !== context.initialPrincipalId) deny("initial_principal_required");
+    requirePermission(actor.principalId,"authority.assignment.manage");
+    requirePermission(actor.principalId,"authority.role_definition.manage");
+    const scope = {type:"project" as const,id:command.projectId};
+    scopeVerified(scope);
+    const membership = state.memberships.find(m => m.principal_id === actor.principalId && memberActive(m)
+      && covers(m.valid_from,m.valid_until,{validFrom:effectiveAt,validUntil:null}));
+    if (!membership) return deny("membership_unavailable");
+    if (state.role_definitions.some(r => r.role_id === command.roleId)
+      || state.role_assignments.some(a => a.assignment_id === command.assignmentId)
+      || historicalRevocation("role_assignment",command.assignmentId)) deny("relationship_exists");
+    if (state.role_assignments.some(a => a.scope.type === "project" && a.scope.id === command.projectId
+      && state.role_definitions.some(r => r.role_id === a.role_id && r.role_version === a.role_version
+        && r.permissions.includes("gene.contribution.ratify")))) deny("initial_concession_exists");
+    state.role_definitions.push({role_id:command.roleId,role_version:"1",role_origin:"organization",display_name:"Gene contribution ratifier",status:"active",permissions:["gene.contribution.ratify"]});
+    state.role_assignments.push({assignment_id:command.assignmentId,membership_id:membership.membership_id,role_id:command.roleId,role_version:"1",scope,status:"active",valid_from:effectiveAt,valid_until:null,accepted_at:effectiveAt});
   } else if (command.kind === "define_role") {
     requirePermission(actor.principalId,"authority.role_definition.manage");
     const r = command.role;
