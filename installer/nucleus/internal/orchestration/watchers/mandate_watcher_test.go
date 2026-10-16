@@ -100,6 +100,20 @@ func TestAdoptedMandateDispatchesOnceAcrossWatcherRestart(t *testing.T) {
 	if tc.executionStarts != 1 {
 		t.Fatalf("restart duplicated dispatch: %d", tc.executionStarts)
 	}
+	var durable map[string]any
+	if json.Unmarshal(journalRaw, &durable) != nil {
+		t.Fatal("invalid fixture")
+	}
+	durable["actions"] = map[string]any{"a": map[string]any{"status": "awaiting_human_decision"}}
+	durable["ingDecision"] = map[string]any{"actionId": "a", "contractDigest": envelope.ContractDigest, "decisionDigest": "decision-1"}
+	journalRaw, _ = json.Marshal(durable)
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	restarted.onAdoptedMandate(context.Background(), dir, "mandate-1", "v1", hex.EncodeToString(sum[:]), envelope.ContractDigest, "waiting_human")
+	if tc.decisionSignals != 1 || tc.executionStarts != 1 {
+		t.Fatalf("restart signals=%d starts=%d", tc.decisionSignals, tc.executionStarts)
+	}
 }
 
 func TestMandateBuildDispatchClassifiesLiveDuplicate(t *testing.T) {
@@ -191,6 +205,12 @@ type syntheticMandateBuildTemporalClient struct {
 	err             error
 	starts          int
 	executionStarts int
+	decisionSignals int
+}
+
+func (f *syntheticMandateBuildTemporalClient) SignalMandateExecutionWorkflow(context.Context, string, string) error {
+	f.decisionSignals++
+	return nil
 }
 
 func (f *syntheticMandateBuildTemporalClient) StartMandateExecutionWorkflow(context.Context, string, workflows.MandateExecutionInput) (client.WorkflowRun, error) {

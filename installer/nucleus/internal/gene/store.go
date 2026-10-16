@@ -8,15 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"syscall"
 )
 
 var idPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 type Store struct {
-	Root   string
-	hook   func(string) error
-	Logger EventLogger
+	Root                 string
+	hook                 func(string) error
+	Logger               EventLogger
+	RatificationVerifier ProductiveRatificationVerifier
+	RepositoryResolver   RepositoryBindingResolver
 }
 
 // EventLogger is the narrow contract implemented by core.Logger. G1 receives
@@ -188,6 +192,15 @@ func writeImmutable(path string, data []byte) error {
 	}
 	defer os.Remove(tmp)
 	if err = os.Link(tmp, path); err != nil {
+		if runtime.GOOS == "windows" {
+			// Windows MoveFile does not replace an existing destination. It is an
+			// atomic no-clobber fallback when hard-link creation is denied.
+			if renameErr := syscall.Rename(tmp, path); renameErr == nil {
+				return syncDirectory(filepath.Dir(path))
+			} else {
+				err = renameErr
+			}
+		}
 		if old, readErr := os.ReadFile(path); readErr == nil && bytes.Equal(old, data) {
 			return nil
 		}

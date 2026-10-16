@@ -52,6 +52,10 @@ func (a mandateWatcherTemporalClient) StartMandateExecutionWorkflow(ctx context.
 	}, "MandateExecutionWorkflow", input)
 }
 
+func (a mandateWatcherTemporalClient) SignalMandateExecutionWorkflow(ctx context.Context, mandateID, decisionDigest string) error {
+	return a.client.GetClient().SignalWorkflow(ctx, "mandate_execute_"+mandateID, "", "mandate:ing:decision", decisionDigest)
+}
+
 func (a mandateWatcherTemporalClient) IsWorkflowRunning(ctx context.Context, workflowID string) (bool, error) {
 	return a.client.IsWorkflowRunning(ctx, workflowID)
 }
@@ -506,10 +510,15 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// "unable to find activity type" apenas terminara el primer scaffold.
 			mandateWorker.RegisterActivity(activities.PersistExecutionResultActivity)
 			mandateWorker.RegisterActivity(activities.PersistAdoptedINGResultActivity)
+			mandateWorker.RegisterActivity(activities.PersistAdoptedINGCompletionActivity)
 			mandateWorker.RegisterActivityWithOptions((&activities.MandateIntentActivity{
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,
 			}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
+			mandateWorker.RegisterActivityWithOptions((&activities.MandateIntentActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    genBrainPath,
+			}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
 			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
 			// fase: mandate_genesis_phase_activities.go). MandateBuildWorkflow
 			// ahora la invoca después de ingest/cluster/validate y, condicional a

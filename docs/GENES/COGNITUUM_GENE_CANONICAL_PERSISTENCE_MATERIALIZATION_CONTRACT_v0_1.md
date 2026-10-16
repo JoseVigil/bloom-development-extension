@@ -220,17 +220,11 @@ Las pruebas deben demostrar:
 - head sin objetos ausentes;
 - compilación de publishers Windows, Linux y macOS.
 
-## 11. Frontera de G2
+## 11. Extensión productiva G2
 
-G1 no crea caller productivo, no marca effect ledgers y no implementa RatificationEnvelope ni MergeReceipt. G2 deberá decidir el coordinador efectivo de ING/DIS y sólo marcar un efecto después de publicar y releer el canonical commit. GravityGraph, BISP, Location y Orrery serán consumidores derivados read-only en incrementos posteriores.
+G2 habilita la API interna del materializador para Contributions productivas sin convertirla en comando Cobra ni registrar una segunda superficie pública. El caller productivo y el gate ING/DIS siguen perteneciendo al Work de integración de Mandate; no se presumen por la existencia de adaptadores.
 
-No se crea aquí un primer Gene productivo, no se registran Project/Repository reales y no se incorporan decisiones humanas reales.
-
-### 11.1 Caller productivo pendiente
-
-El caller material no existe todavía. El recorrido observado termina en un effect ledger sin invocación productiva del materializador. `mandate_genesis_activities.go` no se presume caller sólo por contener adaptadores relacionados.
-
-G2 deberá implementar explícitamente:
+El recorrido completo de integración posterior es:
 
 ```text
 RatificationEnvelope
@@ -246,20 +240,45 @@ RatificationEnvelope
 
 El materializador no recibirá propuestas libres. Un crash posterior a publicación se recuperará consultando `contribution_id` y digest. El effect ledger sólo podrá marcarse después de comprobar alcanzabilidad desde head.
 
-### 11.2 Evidencia productiva de ratificación pendiente
+### 11.1 RatificationEnvelope
 
-G2 considerará una Contribution ratificada únicamente con evidencia que contenga, como mínimo:
+Authority reconoce el permiso `gene.contribution.ratify`. No se concede implícitamente a un rol builtin: debe provenir de una asignación efectiva y acotada. El `RatificationEnvelope` es JCS, SHA-256 y Ed25519 con domain separation; liga de manera exacta:
 
-- `decision_id`, `decision_type=gene_contribution`, Project, Contribution y digest exactos;
-- actor humano estable, fuente de identidad y prueba verificable;
-- modo, scope, rol, versión, revisión de control y razón de Authority;
-- outcome exacto `RATIFIED`, `decided_at` autoritativo normalizado y condiciones;
-- Intent, stage `ING|DIS`, turn, control ref/digest y effect-ledger ref/digest.
+- principal, permiso y outcome `ratified`;
+- Project, Gene, Contribution y `contribution_digest` exactos;
+- Mandate, Intent y decisión;
+- Repository IDs ordenados;
+- versión y digest del estado de Authority;
+- revisiones de controles y `decided_at` UTC.
 
-La validación deberá probar identidad del actor, autoridad y scope efectivos, coincidencia exacta del payload, `commit_requested=true`, effect ledger íntegro y cadena de provenance completa hasta ING o DIS y Mandate. No bastan `human_decision`, username del SO, evidencia arbitraria no vacía, MergeReceipt, tests exitosos ni existencia previa del contenido.
+El Gene store sólo recibe un verificador de Authority y material público; nunca claves privadas. Firma inválida, digest distinto o cualquier diferencia de scope falla como `RATIFICATION_ENVELOPE_INVALID` sin publicar head.
 
-Los diagnósticos internos distinguirán `RATIFICATION_MISSING`, `RATIFICATION_ACTOR_UNVERIFIED`, `RATIFICATION_AUTHORITY_INVALID`, `RATIFICATION_SCOPE_MISMATCH`, `RATIFICATION_PAYLOAD_MISMATCH`, `RATIFICATION_PROVENANCE_BROKEN` y `RATIFICATION_DECISION_NOT_ALLOW` bajo el error contractual `CONTRIBUTION_NOT_RATIFIED`.
+### 11.2 Repository binding autorizado
 
-### 11.3 Domain
+La ruta productiva no admite el mapa `repository_id → root` del caller. Resuelve cada Repository mediante el store local durable de Authority. Cada binding liga Project, Repository, raíz absoluta canónica, instalación, versión de Authority, principal autorizante, revisión monotónica, estado y digest JCS.
 
-El materializador no crea Domain. Un Gene puede publicarse sin relación Domain o con referencia externa a un Domain ya ratificado. La referencia externa contiene `domain_id`, `source_ref`, `source_revision_or_version`, `source_digest` y `ratification_decision_ref`. El store sólo valida y registra esa referencia; no completa, corrige ni publica Domain.
+El `repository_id` nunca se deriva del path, nombre de carpeta ni remote Git. Binding ausente, corrupto, perteneciente a otro Project o con raíz no disponible falla cerrado. La lista ordenada de digests de bindings utilizados queda incorporada al canonical commit y al receipt.
+
+### 11.3 Workspace effect y MergeReceipt
+
+El primer corte admite exclusivamente `workspace_effect=none`: los assets deben existir previamente y Nucleus los relee y hashea. La ausencia de `MergeReceipt` sólo es válida bajo ese valor explícito. Cualquier otro efecto falla como `WORKSPACE_EFFECT_INVALID`.
+
+El futuro componente que efectúe un merge gobernado será el productor del `MergeReceipt`; G2 no atribuye esa evidencia al Gene store ni al caller.
+
+### 11.4 GeneMaterializationReceipt
+
+El receipt liga Project, Contribution y digest, Revision, canonical commit, generación publicada, digest del head publicado, capacidad de durabilidad, efecto de workspace, digest de ratificación y digests de repository bindings. La verificación independiente:
+
+1. relee y valida head;
+2. prueba que el commit sigue alcanzable desde el head actual;
+3. recalcula los digests de commit, Contribution y Revision;
+4. compara transición, generación y toda la evidencia productiva;
+5. tolera commits posteriores sin invalidar un receipt anterior.
+
+Replay idéntico devuelve la misma cadena canónica con `replay=true`; mismo UUID con digest distinto falla. Contributions legacy `contribution-...` se rechazan: G2 no las convierte silenciosamente. Nuevas Contributions usan UUID canónicos; una migración futura deberá conservar el ID legacy como referencia explícita y ratificada.
+
+### 11.5 Domain y fronteras
+
+El primer Gene productivo puede publicarse sin relación Domain. El materializador no crea Domain ni convierte declaraciones de Mandate en evidencia ratificada. La relación Domain↔Gene queda para un incremento que disponga de Domain canónico y ratificado.
+
+G2 no modifica Brain, ING/DIS, Temporal, Mandates, GravityGraph, BISP, Location u Orrery; no marca effect ledgers y no crea por sí mismo un Gene en estado productivo real. Tampoco agrega comando o categoría de help. Los eventos usan el `EventLogger` recibido del caller, inicializado por `core.InitLogger(..., "GENE", ...)`, dentro del stream estable `nucleus_gene`; el store no escribe `telemetry.json` ni registra streams duplicados.

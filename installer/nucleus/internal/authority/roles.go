@@ -6,11 +6,12 @@ import (
 )
 
 const (
-	RoleMaster                     = "master"
-	RoleSpecialist                 = "specialist"
-	RoleOperator                   = "operator" // Working name (ex-delegate); scope-project admin. See Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md §1, §2.1.
-	PermissionIntentCorMerge       = "intent.cor.merge"
-	PermissionAgentIssuerDesignate = "agent.issuer.designate"
+	RoleMaster                       = "master"
+	RoleSpecialist                   = "specialist"
+	RoleOperator                     = "operator" // Working name (ex-delegate); scope-project admin. See Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md §1, §2.1.
+	PermissionIntentCorMerge         = "intent.cor.merge"
+	PermissionAgentIssuerDesignate   = "agent.issuer.designate"
+	PermissionGeneContributionRatify = "gene.contribution.ratify"
 )
 
 // NOTA — límite permanente de diseño, confirmado 2026-09-17
@@ -38,7 +39,8 @@ var PermissionsV1 = map[string]struct{}{
 	"authority.binding.approve": {}, "authority.cutover.approve": {},
 	"mandate.create": {}, "mandate.sign": {}, "mandate.promote": {}, "mandate.install": {},
 	"intent.create": {}, PermissionIntentCorMerge: {}, PermissionAgentIssuerDesignate: {},
-	"vault.key.read": {}, "vault.key.write": {}, "vault.key.delete": {},
+	PermissionGeneContributionRatify: {},
+	"vault.key.read":                 {}, "vault.key.write": {}, "vault.key.delete": {},
 	"executor.command.execute": {}, "executor.filesystem.write": {}, "executor.network.access": {}, "executor.change.promote": {},
 	"create_project": {}, // NUEVO — ver Propuesta_Diseno_P3_PoliticaDesconexion_y_MapeoGravity_v0_1.md §1
 }

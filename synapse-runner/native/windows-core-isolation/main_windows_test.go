@@ -110,3 +110,29 @@ func TestProbeRequiresEveryAccessOutcome(t *testing.T) {
 		t.Fatal("incomplete probe accepted")
 	}
 }
+
+func TestGeneG2FixtureValidation(t *testing.T) {
+	parent, err := filepath.Abs(filepath.Join("..", "..", ".runner-core-temp"))
+	if err != nil { t.Fatal(err) }
+	if err = os.MkdirAll(parent, 0700); err != nil { t.Fatal(err) }
+	root, err := os.MkdirTemp(parent, "rc-")
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	if err = os.MkdirAll(filepath.Join(root, ".runner-core"), 0700); err != nil { t.Fatal(err) }
+	if err = os.MkdirAll(filepath.Join(root, "bin"), 0700); err != nil { t.Fatal(err) }
+	executable := filepath.Join(root, "bin", "gene-g2.test.exe")
+	if err = os.WriteFile(executable, []byte("synthetic"), 0600); err != nil { t.Fatal(err) }
+	manifest := map[string]any{"kind":"gene_g2", "runId":"test-run", "root":root}
+	raw, _ := json.Marshal(manifest)
+	if err = os.WriteFile(filepath.Join(root, ".runner-core", "manifest.json"), raw, 0600); err != nil { t.Fatal(err) }
+	t.Setenv("RUNNER_CORE_GENE_G2_ROOT", root)
+	t.Setenv("RUNNER_CORE_RUN_ID", "test-run")
+	t.Setenv("RUNNER_CORE_GENE_G2_EVIDENCE", filepath.Join(root, ".runner-core", "gene-g2-evidence.json"))
+	if runID, err := geneG2Fixture(root, executable); err != nil || runID != "test-run" { t.Fatalf("valid fixture rejected: %s %v", runID, err) }
+	if _, err := geneG2Fixture(root, filepath.Join(parent, "outside.exe")); err == nil { t.Fatal("external executable accepted") }
+	t.Setenv("RUNNER_CORE_RUN_ID", "wrong-run")
+	if _, err := geneG2Fixture(root, executable); err == nil { t.Fatal("wrong run accepted") }
+	t.Setenv("RUNNER_CORE_RUN_ID", "test-run")
+	t.Setenv("RUNNER_CORE_GENE_G2_ROOT", filepath.Join(parent, "rc-other"))
+	if _, err := geneG2Fixture(root, executable); err == nil { t.Fatal("wrong root accepted") }
+}

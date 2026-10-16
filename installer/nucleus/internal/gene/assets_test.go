@@ -4,8 +4,21 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+type staticBindingResolver struct {
+	root, digest        string
+	project, repository string
+}
+
+func (r staticBindingResolver) ResolveRepository(project, repository string) (string, string, error) {
+	if project != r.project || repository != r.repository {
+		return "", "", ErrRepositoryBinding
+	}
+	return r.root, r.digest, nil
+}
 
 func TestResolveAuthorizedAssetKinds(t *testing.T) {
 	root := t.TempDir()
@@ -25,6 +38,22 @@ func TestResolveAuthorizedAssetKinds(t *testing.T) {
 		if a.AssetID == "" || a.Observed.SHA256 == "" || a.Observed.SizeBytes == 0 {
 			t.Fatalf("unresolved: %#v", a)
 		}
+	}
+}
+
+func TestResolveAuthorizedAssetsUsesExactBinding(t *testing.T) {
+	root := t.TempDir()
+	_ = os.WriteFile(filepath.Join(root, "file.go"), []byte("package fixture\n"), 0600)
+	project := "11111111-1111-4111-8111-111111111111"
+	repo := "22222222-2222-4222-8222-222222222222"
+	digest := "sha256:" + strings.Repeat("a", 64)
+	asset := AssetRef{ProjectID: project, RepositoryID: repo, Kind: "file", RepositoryRelativePath: "file.go"}
+	got, bindings, err := ResolveAuthorizedAssets(project, []AssetRef{asset}, staticBindingResolver{root: root, digest: digest, project: project, repository: repo})
+	if err != nil || len(got) != 1 || len(bindings) != 1 || bindings[0] != digest {
+		t.Fatalf("got=%+v bindings=%v err=%v", got, bindings, err)
+	}
+	if _, _, err = ResolveAuthorizedAssets("99999999-9999-4999-8999-999999999999", []AssetRef{asset}, staticBindingResolver{root: root, digest: digest, project: project, repository: repo}); !errors.Is(err, ErrProjectMismatch) {
+		t.Fatalf("%v", err)
 	}
 }
 

@@ -28,6 +28,255 @@ type MandateIntentResult struct {
 	MandateID, ActionID, ContractDigest, IntentID, EvidenceRef, EvidenceDigest, Status string
 }
 
+type MandateINGCompletionResult struct {
+	MandateID, ActionID, NextActionID, ContractDigest, IntentID, ResultRef, ResultDigest, LedgerRef, LedgerDigest, DecisionDigest string
+}
+
+// CompleteING consumes the decision already committed by Nucleus. The signal
+// that wakes the workflow is only a hint and cannot supply another decision.
+func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIntentInput) (MandateINGCompletionResult, error) {
+	var result MandateINGCompletionResult
+	if input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID || input.MandatesRoot == "" || a.IdentityPath == "" || a.BrainPath == "" {
+		return result, fmt.Errorf("invalid ING completion request")
+	}
+	dir := filepath.Join(input.MandatesRoot, input.MandateID)
+	envelope, err := mandatecontract.LoadVerified(dir, a.IdentityPath)
+	if err != nil {
+		return result, err
+	}
+	if envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != input.MandateID {
+		return result, fmt.Errorf("signed ING contract invalid")
+	}
+	identity, err := authority.LoadExistingLocalIdentity(a.IdentityPath)
+	if err != nil {
+		return result, err
+	}
+	roots := a.TrustRoots
+	if roots == nil {
+		roots = authority.DevelopmentPinnedRoots()
+	}
+	for _, operation := range []string{"approve", "activate"} {
+		receipt, loadErr := mandatecontract.LoadActReceipt(dir, operation)
+		if loadErr != nil {
+			return result, loadErr
+		}
+		if verifyErr := mandatecontract.VerifyActReceipt(receipt, identity, roots, operation, input.MandateID, envelope.ContractDigest, envelope.Contract.ProjectID); verifyErr != nil {
+			return result, verifyErr
+		}
+	}
+	var journal struct {
+		Adoption struct {
+			ContractDigest string `json:"contractDigest"`
+			Digest         string `json:"digest"`
+			Version        string `json:"version"`
+			OrganizationID string `json:"organizationId"`
+			InstallationID string `json:"installationId"`
+		} `json:"adoption"`
+		Actions map[string]struct {
+			IntentID             string `json:"intentId"`
+			Status               string `json:"status"`
+			EvidenceRef          string `json:"evidenceRef"`
+			EvidenceSHA256       string `json:"evidenceSha256"`
+			ClassificationRef    string `json:"classificationRef"`
+			ClassificationSHA256 string `json:"classificationSha256"`
+		} `json:"actions"`
+		INGDecision struct {
+			ActionID             string           `json:"actionId"`
+			ContractDigest       string           `json:"contractDigest"`
+			IntentID             string           `json:"intentId"`
+			ClassificationDigest string           `json:"classificationDigest"`
+			DecisionDigest       string           `json:"decisionDigest"`
+			Decisions            []map[string]any `json:"decisions"`
+		} `json:"ingDecision"`
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
+	if err != nil {
+		return result, err
+	}
+	mandateRaw, err := os.ReadFile(filepath.Join(dir, "mandate.json"))
+	if err != nil {
+		return result, err
+	}
+	deliverySum := sha256.Sum256(mandateRaw)
+	if json.Unmarshal(raw, &journal) != nil || journal.Adoption.ContractDigest != envelope.ContractDigest || journal.Adoption.Digest != hex.EncodeToString(deliverySum[:]) || journal.Adoption.Version == "" || journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID {
+		return result, fmt.Errorf("adopted journal invalid")
+	}
+	action := envelope.Contract.Actions[0]
+	entry, ok := journal.Actions[action.ActionID]
+	decision := journal.INGDecision
+	classificationRef, classificationDigest := entry.EvidenceRef, entry.EvidenceSHA256
+	if entry.Status == "completed" {
+		classificationRef, classificationDigest = entry.ClassificationRef, entry.ClassificationSHA256
+	}
+	if !ok || (entry.Status != "awaiting_human_decision" && entry.Status != "completed") || entry.IntentID == "" || decision.ActionID != action.ActionID || decision.ContractDigest != envelope.ContractDigest || decision.IntentID != entry.IntentID || decision.ClassificationDigest != classificationDigest || len(decision.Decisions) == 0 {
+		return result, fmt.Errorf("ING decision is not bound to waiting Action")
+	}
+	canonical, _ := json.Marshal(decision.Decisions)
+	sum := sha256.Sum256(canonical)
+	if hex.EncodeToString(sum[:]) != decision.DecisionDigest {
+		return result, fmt.Errorf("ING decision digest changed")
+	}
+	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
+	intentRoot, foundID, err := findAdoptedING(nucleusRoot, input.MandateID)
+	if err != nil {
+		return result, err
+	}
+	if foundID != entry.IntentID {
+		return result, fmt.Errorf("ING Intent identity changed")
+	}
+	classification, err := os.ReadFile(classificationRef)
+	if err != nil {
+		return result, err
+	}
+	classificationSum := sha256.Sum256(classification)
+	if hex.EncodeToString(classificationSum[:]) != classificationDigest {
+		return result, fmt.Errorf("ING classification changed")
+	}
+	var classificationData struct {
+		SchemaVersion string `json:"schema_version"`
+		IntentID      string `json:"intent_id"`
+		MandateID     string `json:"mandate_id"`
+		Clusters      []struct {
+			ClusterID string `json:"cluster_id"`
+		} `json:"clusters"`
+	}
+	if json.Unmarshal(classification, &classificationData) != nil || classificationData.SchemaVersion != "bloom.ing-classification/v1" || classificationData.IntentID != entry.IntentID || classificationData.MandateID != input.MandateID || len(classificationData.Clusters) != len(decision.Decisions) {
+		return result, fmt.Errorf("ING classification and decisions differ")
+	}
+	known := map[string]bool{}
+	for _, cluster := range classificationData.Clusters {
+		known[cluster.ClusterID] = true
+	}
+	for _, item := range decision.Decisions {
+		id, _ := item["cluster_id"].(string)
+		if !known[id] {
+			return result, fmt.Errorf("ING decision cluster is not classified")
+		}
+		delete(known, id)
+	}
+	if err := verifySignedINGResources(envelope.Contract); err != nil {
+		return result, err
+	}
+	decisionsFile, err := os.CreateTemp(intentRoot, ".mandate-decisions-*.json")
+	if err != nil {
+		return result, err
+	}
+	defer os.Remove(decisionsFile.Name())
+	if _, err := decisionsFile.Write(canonical); err != nil {
+		decisionsFile.Close()
+		return result, err
+	}
+	if err := decisionsFile.Sync(); err != nil {
+		decisionsFile.Close()
+		return result, err
+	}
+	if err := decisionsFile.Close(); err != nil {
+		return result, err
+	}
+	brain, err := runBrainIntentJSONWithRunner(a.BrainPath, []string{"--json", "intent", "supply", "--intent-root", intentRoot,
+		"--semantic-index", filepath.Join(nucleusRoot, ".cache", ".semantic-index.json"), "--policy-version", envelope.Contract.Intelligence.PolicyVersion, "--decisions", decisionsFile.Name()},
+		func(path string, argv []string) ([]byte, []byte, int, error) {
+			cmd := exec.CommandContext(ctx, path, argv...)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			runErr := cmd.Run()
+			code := 0
+			if runErr != nil {
+				code = -1
+				if exit, ok := runErr.(*exec.ExitError); ok {
+					code = exit.ExitCode()
+				}
+			}
+			return stdout.Bytes(), stderr.Bytes(), code, runErr
+		})
+	if err != nil {
+		return result, err
+	}
+	if status, _ := brain.Data["status"].(string); status != "done" {
+		return result, fmt.Errorf("ING did not finish consolidation")
+	}
+	if err := verifySignedINGResources(envelope.Contract); err != nil {
+		return result, err
+	}
+	resultRef := filepath.Join(intentRoot, "ing_result.json")
+	resultBytes, err := os.ReadFile(resultRef)
+	if err != nil {
+		return result, err
+	}
+	var checked map[string]any
+	if json.Unmarshal(resultBytes, &checked) != nil || checked["schema_version"] != "bloom.ing-result/v1" || checked["intent_id"] != entry.IntentID || checked["mandate_id"] != input.MandateID || checked["status"] != "done" {
+		return result, fmt.Errorf("ING result invalid")
+	}
+	ledgerRef := filepath.Join(intentRoot, ".consolidation", ".turn_1", ".effect_ledger.json")
+	ledgerBytes, err := os.ReadFile(ledgerRef)
+	if err != nil {
+		return result, err
+	}
+	if err := verifyINGEffectLedger(ledgerBytes, checked, entry.IntentID); err != nil {
+		return result, err
+	}
+	semanticRaw, err := os.ReadFile(filepath.Join(nucleusRoot, ".cache", ".semantic-index.json"))
+	if err != nil {
+		return result, err
+	}
+	var semantic any
+	if json.Unmarshal(semanticRaw, &semantic) != nil {
+		return result, fmt.Errorf("ING semantic index invalid")
+	}
+	canonicalSemantic, err := pythonCanonicalJSON(semantic)
+	if err != nil {
+		return result, err
+	}
+	semanticSum := sha256.Sum256(canonicalSemantic)
+	if checked["semantic_index_digest"] != "sha256:"+hex.EncodeToString(semanticSum[:]) {
+		return result, fmt.Errorf("ING semantic index digest mismatch")
+	}
+	ledgerSum := sha256.Sum256(ledgerBytes)
+	resultSum := sha256.Sum256(resultBytes)
+	return MandateINGCompletionResult{MandateID: input.MandateID, ActionID: action.ActionID, NextActionID: envelope.Contract.Actions[1].ActionID, ContractDigest: envelope.ContractDigest, IntentID: entry.IntentID,
+		ResultRef: resultRef, ResultDigest: hex.EncodeToString(resultSum[:]), LedgerRef: ledgerRef, LedgerDigest: hex.EncodeToString(ledgerSum[:]), DecisionDigest: decision.DecisionDigest}, nil
+}
+
+func verifyINGEffectLedger(ledgerBytes []byte, checked map[string]any, intentID string) error {
+	var ledger map[string]any
+	if json.Unmarshal(ledgerBytes, &ledger) != nil || ledger["state"] != "state_advanced" || ledger["state_advanced"] != true || ledger["closure_semantics"] != "logical_contributions" {
+		return fmt.Errorf("ING effect ledger incomplete")
+	}
+	ledgerIdentity, _ := ledger["identity"].(map[string]any)
+	if ledgerIdentity == nil || ledgerIdentity["intent_id"] != intentID || ledgerIdentity["intent_type"] != "ing" || ledgerIdentity["stage"] != "consolidation" {
+		return fmt.Errorf("ING ledger identity invalid")
+	}
+	effects, _ := ledger["effects"].([]any)
+	if len(effects) != 3 {
+		return fmt.Errorf("ING ledger obligations incomplete")
+	}
+	for _, value := range effects {
+		effect, _ := value.(map[string]any)
+		if effect == nil || effect["status"] != "applied" {
+			return fmt.Errorf("ING effect unapplied")
+		}
+	}
+	canonicalLedger, err := pythonCanonicalJSON(ledger)
+	if err != nil {
+		return err
+	}
+	canonicalSum := sha256.Sum256(canonicalLedger)
+	if checked["effect_ledger_digest"] != "sha256:"+hex.EncodeToString(canonicalSum[:]) {
+		return fmt.Errorf("ING result ledger digest mismatch")
+	}
+	return nil
+}
+
+func pythonCanonicalJSON(value any) ([]byte, error) {
+	var output bytes.Buffer
+	encoder := json.NewEncoder(&output)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSpace(output.Bytes()), nil
+}
+
 // Run executes only the first signed ING Action. It leaves the action waiting
 // for the real human decision returned by Brain, without claiming completion.
 func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInput) (MandateIntentResult, error) {

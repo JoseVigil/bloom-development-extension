@@ -42,3 +42,33 @@ func TestRecoveryBeforeAndAfterHeadReplace(t *testing.T) {
 		})
 	}
 }
+
+func TestProductiveRecoveryPreservesRatificationAndBindings(t *testing.T) {
+	root := t.TempDir()
+	s, req := productiveRequest(t, root)
+	injected := errors.New("productive crash after publish")
+	s.hook = func(at string) error {
+		if at == "after_head_replace" {
+			return injected
+		}
+		return nil
+	}
+	if _, err := s.Materialize(req); !errors.Is(err, injected) {
+		t.Fatalf("%v", err)
+	}
+	s.hook = nil
+	receipt, err := s.Materialize(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !receipt.Replay || receipt.RatificationDigest == "" || len(receipt.RepositoryBindings) != 1 {
+		t.Fatalf("%+v", receipt)
+	}
+	if err = s.VerifyMaterializationReceipt(receipt); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := s.Recover(req.ProjectID)
+	if err != nil || len(recovered) != 1 || recovered[0].RatificationDigest != receipt.RatificationDigest || !equalStrings(recovered[0].RepositoryBindings, receipt.RepositoryBindings) {
+		t.Fatalf("recovered=%+v err=%v", recovered, err)
+	}
+}

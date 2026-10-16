@@ -107,6 +107,68 @@ func PersistAdoptedINGResultActivity(ctx context.Context, input MandateIntentRes
 	return PersistExecutionResultResult{StateVersion: version}, nil
 }
 
+// PersistAdoptedINGCompletionActivity commits logical ING closure once. The
+// journal still records physical materialization as pending in Brain's ledger.
+func PersistAdoptedINGCompletionActivity(ctx context.Context, input MandateINGCompletionResult, mandatesRoot string) (PersistExecutionResultResult, error) {
+	if ctx.Err() != nil {
+		return PersistExecutionResultResult{}, ctx.Err()
+	}
+	if input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID || input.ActionID == "" || input.NextActionID == "" || input.NextActionID == input.ActionID || input.ContractDigest == "" || input.IntentID == "" || input.DecisionDigest == "" || mandatesRoot == "" {
+		return PersistExecutionResultResult{}, fmt.Errorf("ING completion identity missing")
+	}
+	intentBase := filepath.Join(filepath.Dir(filepath.Clean(mandatesRoot)), ".intents", ".ing")
+	for _, evidence := range []struct{ ref, digest string }{{input.ResultRef, input.ResultDigest}, {input.LedgerRef, input.LedgerDigest}} {
+		rel, err := filepath.Rel(intentBase, evidence.ref)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return PersistExecutionResultResult{}, fmt.Errorf("ING evidence outside Intent storage")
+		}
+		content, err := os.ReadFile(evidence.ref)
+		if err != nil {
+			return PersistExecutionResultResult{}, err
+		}
+		sum := sha256.Sum256(content)
+		if hex.EncodeToString(sum[:]) != evidence.digest {
+			return PersistExecutionResultResult{}, fmt.Errorf("ING evidence changed")
+		}
+	}
+	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		adoption, _ := state["adoption"].(map[string]interface{})
+		actions, _ := state["actions"].(map[string]interface{})
+		decision, _ := state["ingDecision"].(map[string]interface{})
+		if adoption == nil || adoption["contractDigest"] != input.ContractDigest || state["mandateId"] != input.MandateID || actions == nil || decision == nil || decision["decisionDigest"] != input.DecisionDigest || decision["actionId"] != input.ActionID {
+			return false, fmt.Errorf("ING completion does not match adopted decision")
+		}
+		prior, _ := actions[input.ActionID].(map[string]interface{})
+		if prior == nil || prior["intentId"] != input.IntentID {
+			return false, fmt.Errorf("ING Action identity changed")
+		}
+		if prior["status"] == "completed" {
+			next, _ := actions[input.NextActionID].(map[string]interface{})
+			if prior["resultRef"] == input.ResultRef && prior["resultSha256"] == input.ResultDigest && prior["ledgerRef"] == input.LedgerRef && prior["ledgerSha256"] == input.LedgerDigest && prior["decisionDigest"] == input.DecisionDigest && prior["classificationRef"] != "" && prior["classificationSha256"] != "" && next != nil && next["status"] == "pending" {
+				return false, nil
+			}
+			return false, fmt.Errorf("ING completion conflicts with prior result")
+		}
+		if prior["status"] != "awaiting_human_decision" {
+			return false, fmt.Errorf("ING is not awaiting decision")
+		}
+		record := map[string]interface{}{"intentId": input.IntentID, "status": "completed", "classificationRef": prior["evidenceRef"], "classificationSha256": prior["evidenceSha256"], "resultRef": input.ResultRef, "resultSha256": input.ResultDigest, "ledgerRef": input.LedgerRef, "ledgerSha256": input.LedgerDigest, "decisionDigest": input.DecisionDigest}
+		actions[input.ActionID] = record
+		if _, exists := actions[input.NextActionID]; exists {
+			return false, fmt.Errorf("DIS Action already recorded")
+		}
+		actions[input.NextActionID] = map[string]interface{}{"status": "pending", "dependsOn": input.ActionID}
+		state["status"] = "in_progress"
+		state["currentAction"] = input.NextActionID
+		return true, nil
+	})
+	if err != nil {
+		return PersistExecutionResultResult{}, err
+	}
+	return PersistExecutionResultResult{StateVersion: version}, nil
+}
+
 func executionResultKey(input PersistExecutionResultInput) string {
 	if input.ActionID != "" {
 		return input.ActionID

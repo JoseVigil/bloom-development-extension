@@ -23,7 +23,13 @@ var (
 	ErrObjectMissing           = errors.New("CANONICAL_OBJECT_MISSING")
 	ErrRecoveryRequired        = errors.New("RECOVERY_REQUIRED")
 	ErrDigestInvalid           = errors.New("DIGEST_INVALID")
+	ErrRepositoryBinding       = errors.New("REPOSITORY_BINDING_INVALID")
+	ErrRatificationEnvelope    = errors.New("RATIFICATION_ENVELOPE_INVALID")
+	ErrWorkspaceEffect         = errors.New("WORKSPACE_EFFECT_INVALID")
+	ErrReceiptInvalid          = errors.New("MATERIALIZATION_RECEIPT_INVALID")
 )
+
+const WorkspaceEffectNone = "none"
 
 type Origin struct {
 	MandateID  string `json:"mandate_id"`
@@ -130,6 +136,9 @@ type CanonicalCommit struct {
 	CreatedGeneIDs        []string             `json:"created_gene_ids"`
 	RevisionTransitions   []RevisionTransition `json:"revision_transitions"`
 	InstalledObjects      []ObjectRef          `json:"installed_objects"`
+	WorkspaceEffect       string               `json:"workspace_effect"`
+	RatificationDigest    string               `json:"ratification_envelope_digest,omitempty"`
+	RepositoryBindings    []string             `json:"repository_binding_digests,omitempty"`
 	CanonicalCommitDigest string               `json:"canonical_commit_digest"`
 }
 
@@ -142,24 +151,46 @@ type Transaction struct {
 	ExpectedGeneration    uint64 `json:"expected_generation"`
 	State                 string `json:"state"`
 	CanonicalCommitDigest string `json:"canonical_commit_digest,omitempty"`
+	WorkspaceEffect       string `json:"workspace_effect,omitempty"`
+	RatificationDigest    string `json:"ratification_envelope_digest,omitempty"`
+}
+
+// ProductiveRatificationVerifier is implemented by Authority. The Gene store
+// deliberately receives only a verifier, never signing material.
+type ProductiveRatificationVerifier interface {
+	VerifyGeneRatification(raw []byte, projectID, geneID, contributionID, contributionDigest, mandateID, intentID, decisionID string, repositoryIDs []string) (string, error)
+}
+
+// RepositoryBindingResolver is implemented by Authority's durable local
+// repository binding store. The returned digest identifies the exact binding
+// used by the materialization.
+type RepositoryBindingResolver interface {
+	ResolveRepository(projectID, repositoryID string) (root, bindingDigest string, err error)
 }
 
 type MaterializeRequest struct {
-	ProjectID          string
-	ExpectedGeneration uint64
-	ExpectedHeadDigest string
-	Identity           Identity
-	Contribution       Contribution
-	Repositories       map[string]string
+	ProjectID            string
+	ExpectedGeneration   uint64
+	ExpectedHeadDigest   string
+	Identity             Identity
+	Contribution         Contribution
+	Repositories         map[string]string
+	WorkspaceEffect      string
+	RatificationEnvelope []byte
 }
 
 type Receipt struct {
-	Status                string `json:"status"`
-	ProjectID             string `json:"project_id"`
-	ContributionID        string `json:"contribution_id"`
-	ContributionDigest    string `json:"contribution_digest"`
-	RevisionDigest        string `json:"revision_digest"`
-	CanonicalCommitDigest string `json:"canonical_commit_digest"`
-	PublishedGeneration   uint64 `json:"published_generation"`
-	DurabilityCapability  string `json:"durability_capability"`
+	Status                string   `json:"status"`
+	ProjectID             string   `json:"project_id"`
+	ContributionID        string   `json:"contribution_id"`
+	ContributionDigest    string   `json:"contribution_digest"`
+	RevisionDigest        string   `json:"revision_digest"`
+	CanonicalCommitDigest string   `json:"canonical_commit_digest"`
+	PublishedGeneration   uint64   `json:"published_generation"`
+	DurabilityCapability  string   `json:"durability_capability"`
+	WorkspaceEffect       string   `json:"workspace_effect"`
+	RatificationDigest    string   `json:"ratification_envelope_digest,omitempty"`
+	RepositoryBindings    []string `json:"repository_binding_digests,omitempty"`
+	PublishedHeadDigest   string   `json:"published_head_digest"`
+	Replay                bool     `json:"replay"`
 }

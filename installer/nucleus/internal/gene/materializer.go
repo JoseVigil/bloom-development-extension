@@ -24,8 +24,17 @@ func (s *Store) Materialize(req MaterializeRequest) (receipt Receipt, retErr err
 	if !idPattern.MatchString(req.Identity.GeneID) || req.Contribution.GeneID != req.Identity.GeneID || !idPattern.MatchString(req.Contribution.ContributionID) {
 		return Receipt{}, ErrVerificationFailed
 	}
-	if req.Contribution.Ratification.Classification != "test_only" || !req.Contribution.Ratification.Synthetic || req.Contribution.Ratification.Productive {
+	testOnly := req.Contribution.Ratification.Classification == "test_only" && req.Contribution.Ratification.Synthetic && !req.Contribution.Ratification.Productive
+	productive := req.Contribution.Ratification.Classification == "productive" && !req.Contribution.Ratification.Synthetic && req.Contribution.Ratification.Productive
+	if !testOnly && !productive {
 		return Receipt{}, ErrContributionNotRatified
+	}
+	workspaceEffect := req.WorkspaceEffect
+	if testOnly && workspaceEffect == "" {
+		workspaceEffect = WorkspaceEffectNone
+	}
+	if workspaceEffect != WorkspaceEffectNone {
+		return Receipt{}, ErrWorkspaceEffect
 	}
 	if req.Identity.Origin.DecisionID != req.Contribution.Ratification.DecisionID || req.Identity.Origin.MandateID != req.Contribution.MandateID || req.Identity.Origin.IntentID != req.Contribution.IntentID {
 		return Receipt{}, ErrContributionNotRatified
@@ -42,7 +51,13 @@ func (s *Store) Materialize(req MaterializeRequest) (receipt Receipt, retErr err
 
 	contribution := normalizeContribution(req.Contribution)
 	contribution.SchemaVersion = SchemaVersion
-	resolved, err := ResolveAssets(req.ProjectID, contribution.Assets, req.Repositories)
+	var resolved []AssetRef
+	var repositoryBindings []string
+	if productive {
+		resolved, repositoryBindings, err = ResolveAuthorizedAssets(req.ProjectID, contribution.Assets, s.RepositoryResolver)
+	} else {
+		resolved, err = ResolveAssets(req.ProjectID, contribution.Assets, req.Repositories)
+	}
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -60,6 +75,27 @@ func (s *Store) Materialize(req MaterializeRequest) (receipt Receipt, retErr err
 		return Receipt{}, ErrContributionIDConflict
 	}
 	contribution.ContributionDigest = calculatedContributionDigest
+	var ratificationDigest string
+	if productive {
+		if s.RatificationVerifier == nil || len(req.RatificationEnvelope) == 0 {
+			return Receipt{}, ErrRatificationEnvelope
+		}
+		repositoryIDs := make([]string, 0, len(contribution.Assets))
+		seenRepositories := map[string]bool{}
+		for _, asset := range contribution.Assets {
+			if !seenRepositories[asset.RepositoryID] {
+				seenRepositories[asset.RepositoryID] = true
+				repositoryIDs = append(repositoryIDs, asset.RepositoryID)
+			}
+		}
+		sort.Strings(repositoryIDs)
+		ratificationDigest, err = s.RatificationVerifier.VerifyGeneRatification(req.RatificationEnvelope, req.ProjectID, req.Identity.GeneID, contribution.ContributionID, contribution.ContributionDigest, contribution.MandateID, contribution.IntentID, contribution.Ratification.DecisionID, repositoryIDs)
+		if err != nil || !digestPattern.MatchString(ratificationDigest) {
+			return Receipt{}, errors.Join(ErrRatificationEnvelope, err)
+		}
+		s.logEvent("INFO", "GENE_RATIFICATION_VERIFIED", map[string]any{"project_id": req.ProjectID, "contribution_id": contribution.ContributionID, "ratification_envelope_digest": ratificationDigest})
+		s.logEvent("INFO", "GENE_REPOSITORY_BINDINGS_VERIFIED", map[string]any{"project_id": req.ProjectID, "contribution_id": contribution.ContributionID, "binding_digests": repositoryBindings})
+	}
 
 	if receipt, ok, err := s.findReplay(req.ProjectID, contribution.ContributionID, contribution.ContributionDigest); err != nil && !errors.Is(err, ErrRecoveryRequired) {
 		return Receipt{}, err
@@ -145,7 +181,7 @@ func (s *Store) Materialize(req MaterializeRequest) (receipt Receipt, retErr err
 		PublishedGeneration: head.Generation + 1, PreviousCommitDigest: previous,
 		Contributions: []ObjectRef{contributionObject}, CreatedGeneIDs: created,
 		RevisionTransitions: []RevisionTransition{{GeneID: identity.GeneID, From: contribution.BaseRevisionDigest, To: revision.RevisionDigest}},
-		InstalledObjects:    objects,
+		InstalledObjects:    objects, WorkspaceEffect: workspaceEffect, RatificationDigest: ratificationDigest, RepositoryBindings: repositoryBindings,
 	}
 	commitPayload, _ := withoutField(commit, "canonical_commit_digest")
 	commit.CanonicalCommitDigest, _, err = digestValue(commitPayload)
@@ -167,7 +203,7 @@ func (s *Store) Materialize(req MaterializeRequest) (receipt Receipt, retErr err
 	if err != nil {
 		return Receipt{}, err
 	}
-	tx := Transaction{SchemaVersion: SchemaVersion, TransactionID: txID, ProjectID: req.ProjectID, ContributionID: contribution.ContributionID, ContributionDigest: contribution.ContributionDigest, ExpectedGeneration: head.Generation, State: "READY_TO_COMMIT", CanonicalCommitDigest: commit.CanonicalCommitDigest}
+	tx := Transaction{SchemaVersion: SchemaVersion, TransactionID: txID, ProjectID: req.ProjectID, ContributionID: contribution.ContributionID, ContributionDigest: contribution.ContributionDigest, ExpectedGeneration: head.Generation, State: "READY_TO_COMMIT", CanonicalCommitDigest: commit.CanonicalCommitDigest, WorkspaceEffect: workspaceEffect, RatificationDigest: ratificationDigest}
 	if _, err = s.writeObject(req.ProjectID, "transactions", txID, true, tx); err != nil {
 		return Receipt{}, err
 	}
@@ -191,7 +227,11 @@ func (s *Store) Materialize(req MaterializeRequest) (receipt Receipt, retErr err
 		durability = "fsync_fallback_degraded"
 		s.logEvent("WARNING", "GENE_DURABILITY_DEGRADED", map[string]any{"project_id": req.ProjectID, "canonical_commit_digest": commit.CanonicalCommitDigest, "capability": durability})
 	}
-	receipt = Receipt{Status: "committed", ProjectID: req.ProjectID, ContributionID: contribution.ContributionID, ContributionDigest: contribution.ContributionDigest, RevisionDigest: revision.RevisionDigest, CanonicalCommitDigest: commit.CanonicalCommitDigest, PublishedGeneration: newHead.Generation, DurabilityCapability: durability}
+	publishedHeadDigest, _, digestErr := digestValue(newHead)
+	if digestErr != nil {
+		return Receipt{}, digestErr
+	}
+	receipt = Receipt{Status: "committed", ProjectID: req.ProjectID, ContributionID: contribution.ContributionID, ContributionDigest: contribution.ContributionDigest, RevisionDigest: revision.RevisionDigest, CanonicalCommitDigest: commit.CanonicalCommitDigest, PublishedGeneration: newHead.Generation, DurabilityCapability: durability, WorkspaceEffect: workspaceEffect, RatificationDigest: ratificationDigest, RepositoryBindings: repositoryBindings, PublishedHeadDigest: publishedHeadDigest, Replay: false}
 	s.logEvent("SUCCESS", "GENE_CANONICAL_HEAD_PUBLISHED", map[string]any{"project_id": req.ProjectID, "contribution_id": contribution.ContributionID, "revision_digest": revision.RevisionDigest, "canonical_commit_digest": commit.CanonicalCommitDigest, "published_generation": newHead.Generation, "durability_capability": durability})
 	return receipt, nil
 }
@@ -224,8 +264,19 @@ func (s *Store) findReplay(projectID, contributionID, contributionDigest string)
 }
 
 func validateCommitReferences(c CanonicalCommit) error {
-	if c.PublishedGeneration != c.ExpectedGeneration+1 || len(c.RevisionTransitions) == 0 {
+	if c.PublishedGeneration != c.ExpectedGeneration+1 || len(c.RevisionTransitions) == 0 || c.WorkspaceEffect != WorkspaceEffectNone {
 		return fmt.Errorf("%w: invalid commit", ErrVerificationFailed)
+	}
+	if c.RatificationDigest != "" && !digestPattern.MatchString(c.RatificationDigest) {
+		return ErrVerificationFailed
+	}
+	if !sort.StringsAreSorted(c.RepositoryBindings) {
+		return ErrVerificationFailed
+	}
+	for _, digest := range c.RepositoryBindings {
+		if !digestPattern.MatchString(digest) {
+			return ErrVerificationFailed
+		}
 	}
 	return nil
 }

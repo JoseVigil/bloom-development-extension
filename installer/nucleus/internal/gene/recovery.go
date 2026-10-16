@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Store) recoverContribution(projectID, contributionID, contributionDigest string) (Receipt, bool, error) {
-	head, _, err := s.loadHead(projectID)
+	head, headDigest, err := s.loadHead(projectID)
 	if err != nil {
 		return Receipt{}, false, err
 	}
@@ -45,7 +45,7 @@ func (s *Store) recoverContribution(projectID, contributionID, contributionDiges
 				return Receipt{}, false, ErrRecoveryRequired
 			}
 			transition := commit.RevisionTransitions[0]
-			return Receipt{Status: "replay", ProjectID: projectID, ContributionID: contributionID, ContributionDigest: contributionDigest, RevisionDigest: transition.To, CanonicalCommitDigest: digest, PublishedGeneration: commit.PublishedGeneration, DurabilityCapability: "previously_published"}, true, nil
+			return Receipt{Status: "replay", ProjectID: projectID, ContributionID: contributionID, ContributionDigest: contributionDigest, RevisionDigest: transition.To, CanonicalCommitDigest: digest, PublishedGeneration: commit.PublishedGeneration, DurabilityCapability: "previously_published", WorkspaceEffect: commit.WorkspaceEffect, RatificationDigest: commit.RatificationDigest, RepositoryBindings: append([]string(nil), commit.RepositoryBindings...), PublishedHeadDigest: headDigest, Replay: true}, true, nil
 		}
 	}
 	return Receipt{}, false, ErrRecoveryRequired

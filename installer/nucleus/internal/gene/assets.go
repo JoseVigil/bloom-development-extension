@@ -8,10 +8,45 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
 func ResolveAssets(projectID string, assets []AssetRef, repositories map[string]string) ([]AssetRef, error) {
+	return resolveAssets(projectID, assets, func(repositoryID string) (string, string, error) {
+		root, ok := repositories[repositoryID]
+		if !ok || root == "" {
+			return "", "", ErrRepositoryUnresolved
+		}
+		return root, "", nil
+	})
+}
+
+func ResolveAuthorizedAssets(projectID string, assets []AssetRef, resolver RepositoryBindingResolver) ([]AssetRef, []string, error) {
+	if resolver == nil {
+		return nil, nil, ErrRepositoryBinding
+	}
+	bindings := map[string]string{}
+	resolved, err := resolveAssets(projectID, assets, func(repositoryID string) (string, string, error) {
+		root, digest, err := resolver.ResolveRepository(projectID, repositoryID)
+		if err != nil || root == "" || !digestPattern.MatchString(digest) {
+			return "", "", ErrRepositoryBinding
+		}
+		bindings[repositoryID] = digest
+		return root, digest, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	digests := make([]string, 0, len(bindings))
+	for _, digest := range bindings {
+		digests = append(digests, digest)
+	}
+	sort.Strings(digests)
+	return resolved, digests, nil
+}
+
+func resolveAssets(projectID string, assets []AssetRef, resolve func(string) (string, string, error)) ([]AssetRef, error) {
 	out := make([]AssetRef, len(assets))
 	for i, asset := range assets {
 		if asset.ProjectID != projectID {
@@ -20,8 +55,11 @@ func ResolveAssets(projectID string, assets []AssetRef, repositories map[string]
 		if asset.RepositoryID == "" {
 			return nil, ErrRepositoryIDRequired
 		}
-		root, ok := repositories[asset.RepositoryID]
-		if !ok || root == "" {
+		root, _, resolveErr := resolve(asset.RepositoryID)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if root == "" {
 			return nil, ErrRepositoryUnresolved
 		}
 		if asset.Kind != "file" && asset.Kind != "document" && asset.Kind != "test" {

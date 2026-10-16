@@ -65,6 +65,20 @@ func TestMasterHasIntentCorMerge(t *testing.T) {
 		t.Fatal("architect must not be built-in")
 	}
 }
+
+func TestGeneContributionRatifyIsMappedButNotImplicitlyBuiltin(t *testing.T) {
+	if _, ok := PermissionsV1[PermissionGeneContributionRatify]; !ok {
+		t.Fatal("gene.contribution.ratify must be evaluable")
+	}
+	for _, role := range []string{RoleMaster, RoleSpecialist, RoleOperator} {
+		if HasBuiltinPermission(role, PermissionGeneContributionRatify) {
+			t.Fatalf("%s must not receive gene ratification implicitly", role)
+		}
+	}
+	if err := ValidateRoleDefinition(RoleDefinition{RoleID: "gene-ratifier", RoleVersion: "1", RoleOrigin: "organization", Permissions: []string{PermissionGeneContributionRatify}}); err != nil {
+		t.Fatal(err)
+	}
+}
 func TestCustomRolesRejectReservedIDsAndWildcards(t *testing.T) {
 	for _, r := range []RoleDefinition{{RoleID: RoleMaster, RoleVersion: "1", RoleOrigin: "organization", Permissions: []string{"intent.create"}}, {RoleID: "custom", RoleVersion: "1", RoleOrigin: "organization", Permissions: []string{"intent.*"}}} {
 		if ValidateRoleDefinition(r) == nil {

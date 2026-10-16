@@ -202,6 +202,25 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGResultActivity, ing, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
+		decisionChannel := workflow.GetSignalChannel(ctx, "mandate:ing:decision")
+		var decisionDigest string
+		decisionChannel.Receive(ctx, &decisionDigest)
+		if decisionDigest == "" {
+			return MandateExecutionResult{Success: false, Error: "ING decision signal has no digest"}, nil
+		}
+		var completed activities.MandateINGCompletionResult
+		if err := workflow.ExecuteActivity(ctx, "MandateINGCompletionActivity", activities.MandateIntentInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+		}).Get(ctx, &completed); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		if completed.MandateID != input.MandateID || completed.ActionID != ing.ActionID || completed.NextActionID == "" || completed.ContractDigest != ing.ContractDigest ||
+			completed.IntentID != ing.IntentID || completed.DecisionDigest != decisionDigest || completed.ResultRef == "" || completed.ResultDigest == "" || completed.LedgerRef == "" || completed.LedgerDigest == "" {
+			return MandateExecutionResult{Success: false, Error: "ING completion evidence or decision mismatched"}, nil
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGCompletionActivity, completed, input.MandatesRoot).Get(ctx, nil); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
 		return MandateExecutionResult{Success: true, Fulfilled: false}, nil
 	}
 	var genResult activities.MandateGenResult

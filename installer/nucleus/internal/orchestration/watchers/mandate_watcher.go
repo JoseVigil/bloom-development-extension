@@ -131,6 +131,7 @@ type MandateWatcher struct {
 type MandateBuildTemporalClient interface {
 	StartMandateBuildWorkflow(context.Context, string, workflows.MandateBuildInput) (client.WorkflowRun, error)
 	StartMandateExecutionWorkflow(context.Context, string, workflows.MandateExecutionInput) (client.WorkflowRun, error)
+	SignalMandateExecutionWorkflow(context.Context, string, string) error
 	IsWorkflowRunning(context.Context, string) (bool, error)
 	GetWorkflowExecutionState(context.Context, string) (WorkflowExecutionState, error)
 }
@@ -467,6 +468,14 @@ func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, v
 			OrganizationID string `json:"organizationId"`
 			InstallationID string `json:"installationId"`
 		} `json:"adoption"`
+		INGDecision struct {
+			ActionID       string `json:"actionId"`
+			ContractDigest string `json:"contractDigest"`
+			DecisionDigest string `json:"decisionDigest"`
+		} `json:"ingDecision"`
+		Actions map[string]struct {
+			Status string `json:"status"`
+		} `json:"actions"`
 	}
 	if err != nil || json.Unmarshal(journalRaw, &journal) != nil || journal.MandateID != mandateID ||
 		journal.Adoption.Version != version || journal.Adoption.Digest != deliveryDigest || journal.Adoption.ContractDigest != contractDigest ||
@@ -478,6 +487,24 @@ func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, v
 	state, err := w.tc.GetWorkflowExecutionState(ctx, workflowID)
 	if err != nil {
 		w.logger.Error("[mandate_watcher] Temporal state unavailable for %s: %v", mandateID, err)
+		return
+	}
+	if state == WorkflowExecutionRunning && journal.INGDecision.DecisionDigest != "" {
+		decision := journal.INGDecision
+		if decision.ContractDigest != contractDigest || decision.ActionID != envelope.Contract.Actions[0].ActionID {
+			w.logger.Error("[mandate_watcher] adopted ING decision binding invalid for %s", mandateID)
+			return
+		}
+		if journal.Actions[decision.ActionID].Status == "completed" {
+			return
+		}
+		if journal.Actions[decision.ActionID].Status != "awaiting_human_decision" {
+			w.logger.Error("[mandate_watcher] adopted ING state invalid for %s", mandateID)
+			return
+		}
+		if err := w.tc.SignalMandateExecutionWorkflow(ctx, mandateID, decision.DecisionDigest); err != nil {
+			w.logger.Warning("[mandate_watcher] ING decision signal pending mandateId=%s actionId=%s contractDigest=%s outcome=pending reason=%v", mandateID, decision.ActionID, contractDigest, err)
+		}
 		return
 	}
 	if state != WorkflowExecutionNotFound {

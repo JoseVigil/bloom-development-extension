@@ -1771,6 +1771,59 @@ func gate2Supervisor(root string, grpcPort, uiPort int, temporalOnly bool) error
 	return nil
 }
 
+func geneG2Fixture(root, executable string) (string, error) {
+	clean := filepath.Clean(root)
+	const parent = `C:\repos\bloom-development-extension\synapse-runner\.runner-core-temp`
+	if !filepath.IsAbs(clean) || !strings.EqualFold(filepath.Dir(clean), parent) ||
+		!strings.HasPrefix(filepath.Base(clean), "rc-") || os.Getenv("RUNNER_CORE_GENE_G2_ROOT") != clean {
+		return "", errors.New("gene_g2_root_invalid")
+	}
+	if err := assertNoReparseAncestors(clean); err != nil { return "", err }
+	manifestPath := filepath.Join(clean, ".runner-core", "manifest.json")
+	if err := assertNoReparseAncestors(manifestPath); err != nil { return "", err }
+	var manifest struct { Kind, RunID, Root string }
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil { return "", err }
+	if err = json.Unmarshal(raw, &manifest); err != nil { return "", err }
+	if manifest.Kind != "gene_g2" || manifest.RunID == "" ||
+		manifest.RunID != os.Getenv("RUNNER_CORE_RUN_ID") ||
+		!strings.EqualFold(filepath.Clean(manifest.Root), clean) ||
+		executable != filepath.Join(clean, "bin", "gene-g2.test.exe") ||
+		os.Getenv("RUNNER_CORE_GENE_G2_EVIDENCE") != filepath.Join(clean, ".runner-core", "gene-g2-evidence.json") {
+		return "", errors.New("gene_g2_manifest_invalid")
+	}
+	if err = assertNoReparseAncestors(executable); err != nil { return "", err }
+	info, err := os.Stat(executable)
+	if err != nil || !info.Mode().IsRegular() { return "", errors.New("gene_g2_executable_invalid") }
+	return manifest.RunID, nil
+}
+
+func geneG2Supervisor(root, executable string) error {
+	runID, err := geneG2Fixture(root, executable)
+	if err != nil { return err }
+	job, _, e := createJobObject.Call(0, 0)
+	if job == 0 { return winCallError("CreateJobObjectW", e) }
+	defer closeHandle.Call(job)
+	limits := jobExtendedLimitInformation{}
+	limits.Basic.LimitFlags = 0x00002000 // KILL_ON_JOB_CLOSE
+	if ok, _, e := setInformationJobObject.Call(job, 9, uintptr(unsafe.Pointer(&limits)), uintptr(unsafe.Sizeof(limits))); ok == 0 {
+		return winCallError("SetInformationJobObject", e)
+	}
+	command := fmt.Sprintf("\"%s\" -test.run ^TestRunnerCoreGeneG2$ -test.v -test.timeout 90s", executable)
+	pid, err := functionalSpawn(job, executable, root, command, filepath.Join(root, ".runner-core", "gene-g2.log"))
+	if err != nil { return err }
+	const synchronizeAndQuery = 0x00100000 | 0x00001000
+	process, _, e := openProcess.Call(synchronizeAndQuery, 0, uintptr(pid))
+	if process == 0 { return winCallError("OpenProcess", e) }
+	defer closeHandle.Call(process)
+	if status, _, _ := waitForSingleObject.Call(process, 120000); status != 0 { return errors.New("gene_g2_process_timeout") }
+	var exitCode uint32
+	if ok, _, e := getExitCodeProcess.Call(process, uintptr(unsafe.Pointer(&exitCode))); ok == 0 { return winCallError("GetExitCodeProcess", e) }
+	if exitCode != 0 { return fmt.Errorf("gene_g2_test_failed:%d", exitCode) }
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"kind":"gene_g2_supervisor", "runId":runID, "childAssignedToJob":true, "exitCode":exitCode})
+	return nil
+}
+
 func copyFunctionalSelf(source, target string) error {
 	in, err := os.Open(source)
 	if err != nil {
@@ -1795,6 +1848,12 @@ func main() {
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	case "gene-g2-supervisor":
+		if len(os.Args) != 4 { os.Exit(2) }
+		if err := geneG2Supervisor(os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(3)
+		}
 	case "gate2-supervisor":
 		if len(os.Args) != 6 {
 			os.Exit(2)
@@ -1846,7 +1905,7 @@ func main() {
 		}
 		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{
 			"name":     "windows-core-isolation",
-			"commands": []string{"capabilities", "prepare-root", "verify-root", "desktop-job-fixture", "functional-supervisor", "gate2-supervisor"},
+			"commands": []string{"capabilities", "prepare-root", "verify-root", "desktop-job-fixture", "functional-supervisor", "gate2-supervisor", "gene-g2-supervisor"},
 			"scope":    "restricted access probes and a disposable functional Core Job; functional mode has no filesystem isolation",
 		})
 	case "capabilities":
