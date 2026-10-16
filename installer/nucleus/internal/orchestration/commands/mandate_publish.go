@@ -54,6 +54,7 @@ import (
 
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
+	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/supervisor"
 
 	"github.com/spf13/cobra"
@@ -135,9 +136,9 @@ instalación necesita estar registrada contra Authority.`,
   "bootstrap_assigned": true
 }`,
 		},
-		Example: `  nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug genesis-bootstrap
-  nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap --bootstrap=false
-  nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap`,
+		Example: `  nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug initial-mandate
+  nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug initial-mandate --bootstrap=false
+  nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug initial-mandate`,
 		PreRun: func(cmd *cobra.Command, args []string) {
 			if err := requireMandateMaster(c); err != nil {
 				fmt.Printf("Error: %v\n", err)
@@ -221,6 +222,10 @@ func runPublishMandate(c *core.Core, mandateID, authorityURL, slug, visibility, 
 		logger.Error("no pude cargar la identidad de instalación: %v", err)
 		return PublishMandateResult{Success: false, Error: fmt.Sprintf("no pude cargar la identidad de instalación: %v", err)}
 	}
+	verified, err := mandatecontract.LoadVerified(filepath.Join(cfg.MandatesRoot(), mandateID), identityPath)
+	if err != nil || verified.Contract.ContractVersion != 4 || verified.Contract.MandateID != mandateID || verified.Contract.OrganizationID != active.OrganizationID {
+		return PublishMandateResult{Success: false, Error: "el contrato v4 firmado no coincide con el Mandate y la organización activos"}
+	}
 
 	digest := sha256HexOf(mandateBytes)
 	requestBody := publishMandateRequestBody{
@@ -266,8 +271,12 @@ func readSignedMandateFile(mandatesRoot, mandateID string) ([]byte, error) {
 	if err := json.Unmarshal(raw, &status); err != nil {
 		return nil, fmt.Errorf("%s no es JSON válido: %w", path, err)
 	}
-	if status.Status != "signed" {
-		return nil, fmt.Errorf("mandate %s no está firmado todavía (status=%q en %s) — esperá a que 'mandate build' termine", mandateID, status.Status, path)
+	if status.Status == "signed" {
+		return nil, fmt.Errorf("mandate %s usa el contrato legado de una sola Action", mandateID)
+	}
+	var envelope mandatecontract.Envelope
+	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != mandateID || envelope.Contract.Validate() != nil {
+		return nil, fmt.Errorf("mandate %s no contiene un contrato v4 válido", mandateID)
 	}
 	return raw, nil
 }

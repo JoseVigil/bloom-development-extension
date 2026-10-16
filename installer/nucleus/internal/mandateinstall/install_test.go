@@ -16,6 +16,42 @@ import (
 const installTestOrgID = "org-test"
 const installTestInstallationID = "installation-test"
 
+func TestAdoptJournalPreservesRecoveredMandateEvidence(t *testing.T) {
+	root := t.TempDir()
+	id := "4e028a82-3f94-48ab-957d-116340dbcc7f"
+	dir := filepath.Join(root, id)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(`{"contract":{"mandateId":"4e028a82-3f94-48ab-957d-116340dbcc7f"}}`)
+	if err := os.WriteFile(filepath.Join(dir, "mandate.json"), content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	prior := []byte(`{"mandateId":"4e028a82-3f94-48ab-957d-116340dbcc7f","source":"core-recovery","status":"building","signature":{"status":"pending"},"evidence":"retained"}`)
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), prior, 0600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256HexOfTestContent(content)
+	delivery := mandatedelivery.Delivery{Envelope: mandatedelivery.Envelope{MandateID: id, OrganizationID: installTestOrgID,
+		InstallationID: installTestInstallationID, Version: "1.0.0", Digest: digest, KeyID: "key-1"}}
+	receipt := mandatedelivery.Receipt{MandateID: id, OrganizationID: installTestOrgID,
+		InstallationID: installTestInstallationID, Version: "1.0.0", Digest: digest, KeyID: "key-1", Domain: mandatedelivery.Domain}
+	if already, err := AdoptJournal(root, receipt, delivery, "contract-digest"); err != nil || already {
+		t.Fatalf("adoption failed: %v", err)
+	}
+	var state struct {
+		Status          string          `json:"status"`
+		BuildProvenance json.RawMessage `json:"buildProvenance"`
+	}
+	updated, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
+	if err != nil || json.Unmarshal(updated, &state) != nil || state.Status != "adopted" || !json.Valid(state.BuildProvenance) {
+		t.Fatalf("recovered provenance missing: %v", err)
+	}
+	if already, err := AdoptJournal(root, receipt, delivery, "contract-digest"); err != nil || !already {
+		t.Fatalf("replay failed: %v", err)
+	}
+}
+
 func sha256HexOfTestContent(content []byte) string {
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])

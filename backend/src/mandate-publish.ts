@@ -14,7 +14,7 @@
 // genesis). Metadata mínima: description default '' (columna NOT NULL), pillar/origin_type
 // quedan NULL (no se exponen en el body todavía).
 
-import { sha256HexBytes } from './authority/canonical';
+import { canonicalizeJson, sha256Hex, sha256HexBytes } from './authority/canonical';
 
 export class PublishError extends Error {
   constructor(public status: 400 | 409 | 500, message: string) { super(message); }
@@ -37,6 +37,24 @@ export interface PublishMandateResult {
 }
 
 const HEX_64 = /^[a-fA-F0-9]{64}$/;
+const UUID = /^[a-fA-F0-9]{8}-(?:[a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}$/;
+
+async function signedV4Identity(bytes: Uint8Array, organizationId: string): Promise<string | null> {
+  let value: any;
+  try { value = JSON.parse(new TextDecoder().decode(bytes)); } catch { return null; }
+  if (value?.contract?.contractVersion !== 4) return null;
+  const contract = value.contract;
+  if (!UUID.test(contract.mandateId ?? '') || contract.organizationId !== organizationId ||
+      !Array.isArray(contract.actions) || contract.actions.map((action: any) => action.intentType).join(',') !== 'ing,dis,doc,exp,dev,exp' ||
+      !HEX_64.test(value.contractDigest ?? '') || typeof value.signature !== 'string' ||
+      !value.signature || typeof value.signatureKeyId !== 'string' || !value.signatureKeyId) {
+    throw new PublishError(400, 'invalid_signed_v4_identity');
+  }
+  if (await sha256Hex(canonicalizeJson(contract)) !== value.contractDigest.toLowerCase()) {
+    throw new PublishError(400, 'contract_digest_mismatch');
+  }
+  return contract.mandateId;
+}
 
 function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
@@ -81,13 +99,15 @@ export async function publishMandate(env: Env, organizationId: string, rawBody: 
   }
   const digest = await sha256HexBytes(bytes);
   if (digest !== body.sha256.toLowerCase()) throw new PublishError(400, 'sha256_mismatch');
+  const signedId = await signedV4Identity(bytes, organizationId);
 
   const publishedAt = now.getTime();
 
   // Paso 2: mandates — buscar por (origin_org_id, slug); crear o actualizar latest_version.
   const existingMandate = await env.DB.prepare('SELECT id FROM mandates WHERE origin_org_id = ? AND slug = ?')
     .bind(organizationId, body.slug).first<{ id: string }>();
-  const mandateId = existingMandate?.id ?? crypto.randomUUID();
+  if (existingMandate && signedId && existingMandate.id !== signedId) throw new PublishError(409, 'mandate_id_conflict');
+  const mandateId = existingMandate?.id ?? signedId ?? crypto.randomUUID();
   if (existingMandate) {
     await env.DB.prepare('UPDATE mandates SET latest_version = ? WHERE id = ?')
       .bind(body.version, mandateId).run();

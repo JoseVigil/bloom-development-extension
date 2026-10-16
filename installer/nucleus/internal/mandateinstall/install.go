@@ -56,6 +56,38 @@ func AdoptJournal(mandatesRoot string, receipt mandatedelivery.Receipt, delivery
 	}
 	path := filepath.Join(mandatesRoot, e.MandateID, "mandate_state.json")
 	if existing, err := os.ReadFile(path); err == nil {
+		// The one locally recovered Mandate predates delivery. Preserve its build
+		// journal as evidence while binding the same ID to the verified receipt.
+		if e.MandateID == "4e028a82-3f94-48ab-957d-116340dbcc7f" {
+			var prior struct {
+				MandateID string `json:"mandateId"`
+				Source    string `json:"source"`
+				Status    string `json:"status"`
+				Signature struct {
+					Status string `json:"status"`
+				} `json:"signature"`
+				Adoption json.RawMessage `json:"adoption"`
+			}
+			if json.Unmarshal(existing, &prior) == nil && prior.MandateID == e.MandateID &&
+				prior.Source == "core-recovery" && prior.Status == "building" &&
+				prior.Signature.Status == "pending" && len(prior.Adoption) == 0 {
+				state := map[string]any{
+					"mandateId": e.MandateID, "status": "adopted", "stateVersion": 133,
+					"createdAt": time.Now().UTC().Format(time.RFC3339Nano),
+					"adoption": map[string]string{"version": e.Version, "digest": e.Digest,
+						"contractDigest": contractDigest, "organizationId": e.OrganizationID, "installationId": e.InstallationID},
+					"actions": map[string]any{}, "buildProvenance": json.RawMessage(existing),
+				}
+				encoded, marshalErr := json.MarshalIndent(state, "", "  ")
+				if marshalErr != nil {
+					return false, marshalErr
+				}
+				if writeErr := os.WriteFile(path, append(encoded, '\n'), 0600); writeErr != nil {
+					return false, writeErr
+				}
+				return false, nil
+			}
+		}
 		var state struct {
 			MandateID string `json:"mandateId"`
 			Adoption  struct {

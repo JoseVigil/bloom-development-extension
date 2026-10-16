@@ -53,7 +53,7 @@ function bytesFor(seed: number): Uint8Array { return new Uint8Array([seed, seed 
 
 async function body(overrides: Partial<PublishMandateBody> = {}, bytes: Uint8Array = bytesFor(1)): Promise<PublishMandateBody> {
   return {
-    slug: "genesis-bootstrap",
+    slug: "initial-mandate",
     version: "1.0.0",
     visibility: "private",
     mandate_base64: Buffer.from(bytes).toString("base64"),
@@ -88,16 +88,32 @@ beforeEach(async () => {
 });
 
 describe("publishMandate", () => {
+  it("preserva el ID firmado del v4 y rechaza otra identidad en el mismo slug", async () => {
+    const e = await env();
+    const signedId = "4e028a82-3f94-48ab-957d-116340dbcc7f";
+    const artifact = async (id: string) => {
+      const contract = { mandateId: id, organizationId: "org-test", contractVersion: 4,
+        actions: ["ing", "dis", "doc", "exp", "dev", "exp"].map(intentType => ({ intentType })) };
+      return new TextEncoder().encode(JSON.stringify({ contract,
+        contractDigest: await sha256HexBytes(new TextEncoder().encode(canonicalizeJson(contract))),
+        signature: "signature", signatureKeyId: "installation-test" }));
+    };
+    const first = await publishMandate(e, "org-test", await body({}, await artifact(signedId)));
+    expect(first.mandate_id).toBe(signedId);
+    await expect(publishMandate(e, "org-test", await body({}, await artifact("11111111-1111-4111-8111-111111111111"))))
+      .rejects.toMatchObject({ status: 409 });
+    expect((await db.prepare("SELECT COUNT(*) n FROM mandates").first<{ n: number }>())?.n).toBe(1);
+  });
   it("publicación exitosa crea las tres filas (mandates, mandate_versions, organization_bootstrap_mandates)", async () => {
     const e = await env();
     const result = await publishMandate(e, "org-test", await body());
     expect(result.bootstrap_assigned).toBe(true);
 
     const mandate = await db.prepare("SELECT * FROM mandates WHERE id = ?").bind(result.mandate_id).first<any>();
-    expect(mandate).toMatchObject({ origin_org_id: "org-test", slug: "genesis-bootstrap", visibility: "private", latest_version: "1.0.0", pillar: null, origin_type: null });
+    expect(mandate).toMatchObject({ origin_org_id: "org-test", slug: "initial-mandate", visibility: "private", latest_version: "1.0.0", pillar: null, origin_type: null });
 
     const version = await db.prepare("SELECT * FROM mandate_versions WHERE id = ?").bind(result.mandate_version_id).first<any>();
-    expect(version).toMatchObject({ mandate_id: result.mandate_id, version: "1.0.0", r2_key: `mandates/org-test/genesis-bootstrap/1.0.0.json` });
+    expect(version).toMatchObject({ mandate_id: result.mandate_id, version: "1.0.0", r2_key: `mandates/org-test/initial-mandate/1.0.0.json` });
 
     const bootstrap = await db.prepare("SELECT * FROM organization_bootstrap_mandates WHERE organization_id = ?").bind("org-test").first<any>();
     expect(bootstrap).toMatchObject({ mandate_version_id: result.mandate_version_id });

@@ -41,7 +41,7 @@ func TestReadSignedMandateFileNotSigned(t *testing.T) {
 	}
 }
 
-func TestReadSignedMandateFileSignedReturnsRawBytes(t *testing.T) {
+func TestReadSignedMandateFileRejectsLegacySignedAction(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "m1")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -51,12 +51,8 @@ func TestReadSignedMandateFileSignedReturnsRawBytes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "mandate.json"), raw, 0644); err != nil {
 		t.Fatal(err)
 	}
-	got, err := readSignedMandateFile(root, "m1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if string(got) != string(raw) {
-		t.Fatalf("bytes mismatch: got %s want %s", got, raw)
+	if _, err := readSignedMandateFile(root, "m1"); err == nil {
+		t.Fatal("legacy one-Action mandate must not be published")
 	}
 }
 
@@ -140,7 +136,7 @@ func TestPostMandatePublishSignsWithInstallationAuthDomain(t *testing.T) {
 	defer server.Close()
 
 	body := publishMandateRequestBody{
-		Slug: "genesis-bootstrap", Version: "1.0.0", Description: "", Visibility: "private",
+		Slug: "initial-mandate", Version: "1.0.0", Description: "", Visibility: "private",
 		MandateBase64: base64.StdEncoding.EncodeToString([]byte(`{"status":"signed"}`)),
 		SHA256:        sha256HexOf([]byte(`{"status":"signed"}`)),
 		Bootstrap:     true,
