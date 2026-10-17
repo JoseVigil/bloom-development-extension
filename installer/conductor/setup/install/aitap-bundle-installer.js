@@ -70,8 +70,20 @@ function assertSafeRelativePath(relativePath, field) {
   }
 }
 
+// Inventory rules mirror installer/aitap/scripts/verify_bundle.py (Path.rglob + is_file,
+// Python >= 3.13) and Metamorph's managed bundle validator:
+//   - a link to a regular file is followed and inventoried under the link's own path
+//     (size and sha256 come from the target, read later through the link);
+//   - a link to a directory is not traversed and produces no entry;
+//   - a broken or looping link, a link resolving outside the bundle, or a link to
+//     anything that is neither a file nor a directory is always rejected.
+// The bundle root is compared through realpath because on macOS /tmp and /var are
+// themselves links to /private/..., which would make legitimate internal links look
+// like they escape.
 function listBundleFiles(rootDir) {
   const files = [];
+  const realRoot = fs.realpathSync(rootDir);
+  const insideBundle = target => target === realRoot || target.startsWith(realRoot + path.sep);
 
   function visit(currentDir) {
     const entries = fs.readdirSync(currentDir, { withFileTypes: true })
@@ -81,7 +93,26 @@ function listBundleFiles(rootDir) {
       const absolute = path.join(currentDir, entry.name);
       const relative = path.relative(rootDir, absolute).split(path.sep).join('/');
       if (entry.isSymbolicLink()) {
-        fail('AITAP_SYMLINK_FORBIDDEN', 'integrity', `Symbolic link is not allowed in AITAP bundle: ${relative}`);
+        let target;
+        try {
+          target = fs.realpathSync(absolute);
+        } catch (_) {
+          fail('AITAP_SYMLINK_BROKEN', 'integrity', `Broken or looping symbolic link in AITAP bundle: ${relative}`);
+        }
+        if (!insideBundle(target)) {
+          fail('AITAP_SYMLINK_ESCAPES', 'integrity', `Symbolic link escapes AITAP bundle: ${relative}`);
+        }
+        const targetStat = fs.statSync(target);
+        if (targetStat.isDirectory()) {
+          continue;
+        }
+        if (!targetStat.isFile()) {
+          fail('AITAP_SYMLINK_UNSUPPORTED', 'integrity', `Symbolic link to a non-regular file in AITAP bundle: ${relative}`);
+        }
+        if (relative !== AITAP_MANIFEST_NAME) {
+          files.push(relative);
+        }
+        continue;
       }
       if (entry.isDirectory()) {
         visit(absolute);

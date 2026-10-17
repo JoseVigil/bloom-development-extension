@@ -1,6 +1,8 @@
 #!/usr/bin/env ts-node
 import { resolve } from 'node:path';
-import { runEnvironmentChecks, formatEnvironmentChecks } from '../src/preflight/environment-check';
+import {
+  assertR0Isolation, formatEnvironmentChecks, runEnvironmentChecks, summarizeDarwinR0Evidence, type DarwinR0Evidence,
+} from '../src/preflight/environment-check';
 import { checkExtensionParity, formatParityResult } from '../src/preflight/extension-parity-check';
 
 /**
@@ -18,6 +20,20 @@ async function main(): Promise<void> {
   const repoRoot = resolve(__dirname, '..', '..');
 
   console.log('\n🔎 synapse-runner — preflight checks\n');
+
+  // Darwin: gate fail-closed antes de 00a. Si no se demuestra el entorno de
+  // prueba aislado, el preflight termina con código distinto de cero y
+  // `npm run test:headed` no llega a Playwright.
+  if (process.platform === 'darwin') {
+    try {
+      const evidence = assertR0Isolation('before-00a') as DarwinR0Evidence;
+      console.log(`✅ R0 Darwin before-00a: ${JSON.stringify(summarizeDarwinR0Evidence(evidence))}`);
+    } catch (err) {
+      console.error(`🔴 ${(err as Error).message}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
 
   const envResults = await runEnvironmentChecks();
   console.log(formatEnvironmentChecks(envResults));
@@ -38,8 +54,14 @@ async function main(): Promise<void> {
   }
 }
 
-// Mantiene el export para consumidores de diagnóstico; Playwright no lo registra en esta corrida.
-export default function globalSetup(): void {}
+/**
+ * globalSetup de Playwright (registrado en playwright.config.ts). En Darwin
+ * aborta antes de crear workers si el entorno de prueba aislado no está
+ * demostrado; en Windows y Linux no hace nada, como hasta ahora.
+ */
+export default function globalSetup(): void {
+  if (process.platform === 'darwin') assertR0Isolation('before-00a');
+}
 
 if (require.main === module) {
   main().catch((err) => {

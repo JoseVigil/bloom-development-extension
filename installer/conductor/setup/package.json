@@ -305,6 +305,22 @@
         {
           "from": "shared_node_modules",
           "to": "node_modules"
+        },
+        {
+          "from": "../../chrome/chrome-mac.zip",
+          "to": "chrome-mac"
+        },
+        {
+          "from": "../../ollama/darwin",
+          "to": "ollama"
+        },
+        {
+          "from": "../../node/darwin",
+          "to": "node"
+        },
+        {
+          "from": "../../temporal/darwin",
+          "to": "temporal"
         }
       ]
     },

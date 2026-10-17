@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { test, expect } from '../fixtures/synapse-runner-fixture';
@@ -14,14 +14,28 @@ import {
 import { connectToDiscovery, type DiscoverySurface } from '../../src/surfaces/discovery-chromium';
 import { findSynapseSimulator, selectDiscoveryMessage, sendDiscoveryMessage, waitForSimulatorTargets } from '../../src/surfaces/synapse-simulator';
 import { getBloomPaths, resetOnboardingState } from '../../src/config/bloom-paths';
+import {
+  assertDarwinProfileProcess, assertR0Isolation, summarizeDarwinR0Evidence, type DarwinR0Evidence,
+} from '../../src/preflight/environment-check';
 
 const DISCOVERY_URL = /chrome-extension:\/\/[^/]+\/discovery\/index\.html/;
 const SIMULATOR_URL = /chrome-extension:\/\/[^/]+\/synapse-simulator\/index\.html/;
-const WORKSPACE_BASE = join(homedir(), 'repos');
-const WORKSPACE_PATH = join(WORKSPACE_BASE, 'elias-repos');
-const PROJECT_SOURCE = process.env.SYNAPSE_TEST_PROJECT_SOURCE || (
+const IS_DARWIN = process.platform === 'darwin';
+function requiredDarwinEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`[onboarding-simulator] Darwin exige ${name}`);
+  return value;
+}
+// Darwin: workspace, organización y proyecto vienen sólo del entorno de prueba
+// (R0 verifica que estén bajo el home del usuario de prueba). Windows/Linux
+// conservan los valores históricos.
+const WORKSPACE_ORG = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_ORG') : 'elias-repos';
+const WORKSPACE_PATH = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_PATH') : join(homedir(), 'repos', 'elias-repos');
+const WORKSPACE_BASE = dirname(WORKSPACE_PATH);
+const NUCLEUS_MARKER = `.nucleus-${WORKSPACE_ORG}`;
+const PROJECT_SOURCE = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_PROJECT_SOURCE') : (process.env.SYNAPSE_TEST_PROJECT_SOURCE || (
   process.platform === 'win32' ? 'C:\\TEMP\\TMP\\sample_project' : '/srv/share/sample_project'
-);
+));
 const PROJECT_PATH = join(WORKSPACE_PATH, 'sample_project');
 const PROJECT_FILES = ['.gitignore', 'main.py', 'README.md', 'storage.py', 'tasks.py', 'test_tasks.py'];
 const execFileAsync = promisify(execFile);
@@ -78,6 +92,22 @@ async function waitForProfileClosed(): Promise<string | undefined> {
             SYNAPSE_TEST_OLD_HOST_PID: String(oldHostPid ?? 0) },
         });
       processes = JSON.parse(processOutput) as Array<{ ProcessId: number; Name: string }>;
+    } else if (IS_DARWIN) {
+      // Procesos del usuario de prueba atribuibles al perfil: Chromium con su
+      // id/user-data-dir en la línea de comando, o el host anterior por PID.
+      const { stdout: processOutput } = await execFileAsync('/bin/ps', ['-axww', '-o', 'pid=,uid=,args='], { timeout: 10_000 });
+      const ownUid = process.getuid!();
+      const rows = processOutput.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+        const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/);
+        if (!match) throw new Error('[onboarding-simulator] Inventario de procesos Darwin ilegible');
+        return { pid: Number(match[1]), uid: Number(match[2]), args: match[3] };
+      });
+      const related = rows.filter(row => row.pid !== process.pid && (row.args.includes(profileId) ||
+        (oldHostPid != null && oldHostPid > 0 && row.pid === oldHostPid)));
+      if (related.some(row => row.uid !== ownUid)) {
+        throw new Error('[onboarding-simulator] Proceso del perfil con otro uid: el entorno no es exclusivo del usuario de prueba');
+      }
+      processes = related.map(row => ({ ProcessId: row.pid, Name: row.args.split(/\s+/, 1)[0] }));
     } else {
       const { stdout: processOutput } = await execFileAsync('ps', ['-eo', 'pid=,comm=,args='], { timeout: 10_000 });
       processes = processOutput.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
@@ -139,6 +169,15 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
     })}`);
   };
   try {
+    if (IS_DARWIN && resumeCurrent) {
+      throw new Error('[onboarding-simulator] SYNAPSE_RESUME_CURRENT no está habilitado en Darwin');
+    }
+    if (IS_DARWIN) {
+      await synapseRunner.runStep('r0_before_00a', undefined, async () => {
+        const evidence = assertR0Isolation('before-00a') as DarwinR0Evidence;
+        console.log(`[synapse-simulator] R0 before-00a: ${JSON.stringify(summarizeDarwinR0Evidence(evidence))}`);
+      });
+    }
     if (resumeCurrent) {
       await synapseRunner.runStep('resume_state', undefined, async () => {
         const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
@@ -150,8 +189,8 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         for (const step of ['backend_identity_check', 'nucleus_create', 'github_app_auth', 'vault_init']) {
           expect(data.onboarding?.completed_steps).toContain(step);
         }
-        expect(data.onboarding?.organizations?.find(org => org.org_slug === 'elias-repos')?.workspace_path).toBe(WORKSPACE_PATH);
-        expect(existsSync(join(WORKSPACE_PATH, '.bloom', '.nucleus-elias-repos'))).toBe(true);
+        expect(data.onboarding?.organizations?.find(org => org.org_slug === WORKSPACE_ORG)?.workspace_path).toBe(WORKSPACE_PATH);
+        expect(existsSync(join(WORKSPACE_PATH, '.bloom', NUCLEUS_MARKER))).toBe(true);
         expect(existsSync(PROJECT_PATH)).toBe(false);
         console.log(`[synapse-simulator] Reanudando estado real en google_auth; Nucleus=${WORKSPACE_PATH}`);
       });
@@ -175,6 +214,12 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       resetOnboardingState();
       conductor = await launchConductor({ browser: flow.browser, backendOrigin: env.backendOrigin });
       await installMilestoneBuffer(conductor.mainWindow);
+      if (IS_DARWIN) {
+        await synapseRunner.runStep('r0_after_conductor', undefined, async () => {
+          const evidence = assertR0Isolation('after-conductor') as DarwinR0Evidence;
+          console.log(`[synapse-simulator] R0 after-conductor: ${JSON.stringify(summarizeDarwinR0Evidence(evidence))}`);
+        });
+      }
 
       await synapseRunner.runStep('backend_identity_check', undefined, async () => {
       await conductor!.mainWindow.click('#screen-entry .btn-primary');
@@ -187,10 +232,10 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       });
 
       await synapseRunner.runStep('workspace', undefined, async () => {
-      const nucleusMarkerPath = join(WORKSPACE_PATH, '.bloom', '.nucleus-elias-repos');
+      const nucleusMarkerPath = join(WORKSPACE_PATH, '.bloom', NUCLEUS_MARKER);
       const alreadyInitialized = existsSync(nucleusMarkerPath);
       await conductor!.mainWindow.fill('#ws-path-input', WORKSPACE_BASE);
-      await conductor!.mainWindow.fill('#ws-org-input', 'elias-repos');
+      await conductor!.mainWindow.fill('#ws-org-input', WORKSPACE_ORG);
       await conductor!.mainWindow.click('#btn-continue-workspace');
       if (alreadyInitialized) {
         await conductor!.mainWindow.locator('#ws-err-use-existing').waitFor({ state: 'visible' });
@@ -204,8 +249,8 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       const nucleus = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
         onboarding?: { active_org_slug?: string; organizations?: Array<{ org_slug: string; workspace_path: string }> };
       };
-      expect(nucleus.onboarding?.active_org_slug).toBe('elias-repos');
-      expect(nucleus.onboarding?.organizations?.find(org => org.org_slug === 'elias-repos')?.workspace_path).toBe(WORKSPACE_PATH);
+      expect(nucleus.onboarding?.active_org_slug).toBe(WORKSPACE_ORG);
+      expect(nucleus.onboarding?.organizations?.find(org => org.org_slug === WORKSPACE_ORG)?.workspace_path).toBe(WORKSPACE_PATH);
       verifyOrganizationIdentity('después de Workspace', false);
       console.log(`[synapse-simulator] Workspace ${alreadyInitialized ? 'existente vinculado' : 'nuevo creado'}: ${WORKSPACE_PATH}`);
       });
@@ -237,6 +282,14 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         console.log('[synapse-simulator] Resume: conectando al perfil abierto sin repetir onboarding:launch-discovery');
       }
       const endpoint = resumeEndpoint ?? await waitForDiscoveryCdpEndpoint(launchStartedAt);
+      if (IS_DARWIN) {
+        const master = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as { master_profile?: string };
+        const spec = JSON.parse(readFileSync(join(getBloomPaths().configDir, 'profile', String(master.master_profile),
+          'ignition_spec.json'), 'utf-8')) as { paths?: { user_data?: string } };
+        if (!spec.paths?.user_data) throw new Error('[onboarding-simulator] ignition_spec sin user_data');
+        assertDarwinProfileProcess(Number(new URL(endpoint).port), spec.paths.user_data, getBloomPaths().baseDir);
+        console.log('[synapse-simulator] R0 perfil: CDP pertenece al Chromium del perfil de prueba');
+      }
       await waitForSimulatorTargets(endpoint);
       discovery = await connectToDiscovery(endpoint, DISCOVERY_URL);
       const firstSimulator = await findSynapseSimulator(discovery.browser);
@@ -341,7 +394,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
           }
           return result;
         };
-        const ownership = JSON.parse(readFileSync(join(WORKSPACE_PATH, '.bloom', '.nucleus-elias-repos', '.ownership.json'), 'utf-8')) as {
+        const ownership = JSON.parse(readFileSync(join(WORKSPACE_PATH, '.bloom', NUCLEUS_MARKER, '.ownership.json'), 'utf-8')) as {
           authority_mode?: string; binding?: { state?: string }; organization?: { canonical_id?: string };
           legacy_authority?: { owner?: { source?: string; subject?: string } } | null;
         };
@@ -393,7 +446,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         // es necesariamente null (ver Investigacion_CanonicalId_Null_OnboardingSimulator):
         // releemos .ownership.json desde disco después del primer sync exitoso en vez
         // de comparar contra la copia leída antes de sync.
-        const ownershipAfterSync = JSON.parse(readFileSync(join(WORKSPACE_PATH, '.bloom', '.nucleus-elias-repos', '.ownership.json'), 'utf-8')) as {
+        const ownershipAfterSync = JSON.parse(readFileSync(join(WORKSPACE_PATH, '.bloom', NUCLEUS_MARKER, '.ownership.json'), 'utf-8')) as {
           organization?: { canonical_id?: string };
         };
         expect(ownershipAfterSync.organization?.canonical_id).toBe(registration.organizationId);
@@ -507,6 +560,17 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await conductor!.mainWindow.locator('#screen-project.active').waitFor({ state: 'visible' });
       expect(existsSync(PROJECT_SOURCE)).toBe(true);
       const projectExistedBefore = existsSync(PROJECT_PATH);
+      // Verificación previa: la fuente tiene los seis archivos; si el destino ya
+      // existe, se registran sus hashes para exigir después que no se sobrescribió.
+      const digest = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+      const snapshot = (root: string) => Object.fromEntries(PROJECT_FILES.map(name => {
+        const path = join(root, name);
+        expect(existsSync(path), `${name} falta en ${root}`).toBe(true);
+        return [name, digest(path)];
+      })) as Record<string, string>;
+      const sourceBefore = snapshot(PROJECT_SOURCE);
+      const destinationBefore = projectExistedBefore ? snapshot(PROJECT_PATH) : undefined;
+      console.log(`[synapse-simulator] Project antes de importar: fuente=${PROJECT_SOURCE} (${PROJECT_FILES.length} archivos), destino ${projectExistedBefore ? 'existente, se reutiliza sin copiar' : 'inexistente, se importa'}=${PROJECT_PATH}`);
 
       // Playwright no controla el selector nativo de Electron. Solo ese diálogo
       // devuelve la fuente confirmada; la tarjeta y el resto del flujo son UI real.
@@ -528,15 +592,18 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
           : 'la importación por UI debe crear el proyecto en destino'
       ).toBe(true);
       console.log(`[synapse-simulator] Project UI: ${await conductor!.mainWindow.locator('#project-import-status').innerText()}`);
+      const sourceAfter = snapshot(PROJECT_SOURCE);
+      const destinationAfter = snapshot(PROJECT_PATH);
+      expect(sourceAfter, 'la fuente del proyecto no debe cambiar').toEqual(sourceBefore);
+      if (destinationBefore) expect(destinationAfter, 'el destino existente no debe sobrescribirse').toEqual(destinationBefore);
       for (const name of PROJECT_FILES) {
-        const digest = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
-        expect(digest(join(PROJECT_PATH, name)), `${name} difiere de la fuente`).toBe(digest(join(PROJECT_SOURCE, name)));
+        expect(destinationAfter[name], `${name} difiere de la fuente`).toBe(sourceAfter[name]);
       }
       console.log(`[synapse-simulator] Project fuente=${PROJECT_SOURCE}; destino importado=${PROJECT_PATH}; ${PROJECT_FILES.length} archivos verificados`);
       const selected = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
         onboarding?: { active_project_id?: string; organizations?: Array<{ org_slug: string; workspace_path: string; projects?: Array<{ project_id: string; project_name: string; project_path: string; genesis_launch_required?: boolean }> }> };
       };
-      const org = selected.onboarding?.organizations?.find(item => item.org_slug === 'elias-repos');
+      const org = selected.onboarding?.organizations?.find(item => item.org_slug === WORKSPACE_ORG);
       expect(org?.workspace_path).toBe(WORKSPACE_PATH);
       const selectedProject = org?.projects?.find(project => project.project_name === 'sample_project');
       expect(selectedProject?.project_path).toBe(PROJECT_PATH);

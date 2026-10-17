@@ -210,7 +210,9 @@ function resolveDevLaunchArgs(): ConductorLaunchArgs {
   // chrome-sandbox setuid root — ver installer/metamorph rollout.go,
   // applySandboxSetuid()). Solo en linux/darwin: dev:linux vs dev (mac) del
   // package.json distinguen esto; en Windows no aplica sandbox de este tipo.
-  if (process.platform !== 'win32') {
+  // Darwin: sin --no-sandbox, igual que `dev:darwin` (`electron .`) en
+  // installer/conductor/workspace/package.json.
+  if (process.platform === 'linux') {
     args.push('--no-sandbox');
   }
 

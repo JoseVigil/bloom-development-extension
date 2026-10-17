@@ -14,6 +14,9 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  // Gate R0: en Darwin aborta antes de crear workers sin entorno aislado
+  // demostrado; en Windows/Linux es un no-op (ver scripts/preflight-check.ts).
+  globalSetup: require.resolve('./scripts/preflight-check'),
   // 240s (era 120s) — confirmado esta sesión: launchConductor() espera hasta
   // 150s por firstWindow() (bootServices()/`nucleus dev-start` en
   // main_conductor.js tiene su propio timeout interno de 120s — "Temporal

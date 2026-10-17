@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { env } from './env';
+import { assertR0Isolation } from '../preflight/environment-check';
 
 /**
  * Resolución de paths de BloomNucleus, en Node, espejando
@@ -141,6 +142,15 @@ export function getMasterProfileExtensionPath(paths: BloomPaths = getBloomPaths(
  * onboarding desde cero, antes de `launchConductor()`.
  */
 export function resetOnboardingState(paths: BloomPaths = getBloomPaths()): void {
+  // Darwin: escritura destructiva del wizard sólo con el entorno de prueba
+  // demostrado (usuario macOS de prueba, instalación, Keychain, workspace,
+  // Backend y puertos). Lanza antes de leer o escribir nucleus.json.
+  if (process.platform === 'darwin') {
+    const evidence = assertR0Isolation('before-00a');
+    if (!('platform' in evidence) || resolve(paths.nucleusJson) !== join(evidence.runnerBase, 'config', 'nucleus.json')) {
+      throw new Error('R0: nucleus.json a resetear no pertenece a la instalación de prueba verificada');
+    }
+  }
   if (!existsSync(paths.nucleusJson)) {
     throw new Error(`[bloom-paths] nucleus.json no encontrado en ${paths.nucleusJson} — no se puede resetear.`);
   }

@@ -3,7 +3,9 @@ import { after, test } from 'node:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { canonicalExistingPath, validateR0Evidence, type R0Evidence } from '../../src/preflight/environment-check';
+import {
+  canonicalExistingPath, validateDarwinR0Evidence, validateR0Evidence, type DarwinR0Evidence, type R0Evidence,
+} from '../../src/preflight/environment-check';
 import { resetOnboardingState } from '../../src/config/bloom-paths';
 import playwrightGlobalSetup from '../../scripts/preflight-check';
 
@@ -227,4 +229,156 @@ test('globalSetup de Playwright aborta antes de crear workers sin aislamiento', 
     if (previous === undefined) delete process.env.BLOOM_APPDATA_DIR;
     else process.env.BLOOM_APPDATA_DIR = previous;
   }
+});
+
+// ── Darwin: usuario macOS de prueba ─────────────────────────────────────────
+const darwinRoot = join(fixture, 'darwin');
+const testHome = join(darwinRoot, 'Users', 'bloom-runner');
+const personalHome = join(darwinRoot, 'Users', 'personal');
+const darwinBase = join(testHome, 'Library', 'BloomNucleus');
+const darwinRepo = join(testHome, 'repos', 'bloom-development-extension');
+const darwinD1 = join(darwinBase, 'backend-d1');
+for (const path of [personalHome, darwinD1, join(darwinRepo, 'backend')]) mkdirSync(path, { recursive: true });
+
+function darwinEvidence(): DarwinR0Evidence {
+  const conductor = join(darwinRepo, 'installer', 'conductor', 'workspace');
+  return {
+    platform: 'darwin', target: 'isolated', phase: 'before-00a', uid: 502, personalUid: 501,
+    home: testHome, passwdHome: testHome, personalHome, launchdManager: 'Aqua',
+    defaultKeychain: join(testHome, 'Library', 'Keychains', 'login.keychain-db'),
+    runnerBase: darwinBase, expectedBase: darwinBase, repoRoot: darwinRepo,
+    workspacePath: join(darwinBase, 'workspaces', 'runner-test'), workspaceOrg: 'runner-test',
+    projectSource: join(testHome, 'fixtures', 'sample_project'),
+    masterProfilePath: join(darwinBase, 'profiles', 'master'),
+    masterExtensionPath: join(darwinBase, 'profiles', 'master', 'extension'),
+    nucleusExe: join(darwinBase, 'bin', 'nucleus', 'nucleus'),
+    sentinelExe: join(darwinBase, 'bin', 'sentinel', 'sentinel'),
+    brainCliExe: join(darwinBase, 'bin', 'brain', 'brain'),
+    conductorSource: conductor, expectedConductorSource: conductor,
+    electronExe: join(conductor, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron'),
+    backendOrigin: 'http://127.0.0.1:8787', backendRepo: join(darwinRepo, 'backend'), backendPort: 8787,
+    requiredPorts: [8787],
+    ports: [
+      { port: 8787, reachable: true, processes: [
+        { pid: 40, uid: 502, executablePath: join(darwinRepo, 'backend', 'node_modules', 'workerd'), commandLine: 'workerd serve' },
+        { pid: 39, uid: 502, executablePath: '/usr/local/bin/node',
+          commandLine: `node ${join(darwinRepo, 'backend', 'node_modules', 'wrangler', 'bin', 'wrangler.js')} dev --local --persist-to ${darwinD1}` }] },
+      { port: 5678, reachable: false, processes: [] },
+      { port: 7233, reachable: false, processes: [] },
+    ],
+  };
+}
+
+test('Darwin: acepta usuario de prueba con instalación, Keychain, workspace y D1 propios', () => {
+  assert.deepEqual(validateDarwinR0Evidence(darwinEvidence()), []);
+});
+
+test('Darwin: rechaza el usuario personal, HOME falso, sin Aqua y Keychain ajeno', () => {
+  const same = darwinEvidence(); same.uid = same.personalUid;
+  assert.match(validateDarwinR0Evidence(same).join(' '), /usuario personal/);
+  const spoof = darwinEvidence(); spoof.home = join(darwinRoot, 'otro');
+  assert.match(validateDarwinR0Evidence(spoof).join(' '), /HOME no coincide/);
+  const noGui = darwinEvidence(); noGui.launchdManager = 'Background';
+  assert.match(validateDarwinR0Evidence(noGui).join(' '), /Aqua/);
+  const keychain = darwinEvidence(); keychain.defaultKeychain = join(personalHome, 'Library', 'Keychains', 'login.keychain-db');
+  assert.match(validateDarwinR0Evidence(keychain).join(' '), /Keychain/);
+});
+
+test('Darwin: rechaza instalación, checkout, workspace o fixture fuera del home de prueba', () => {
+  const base = darwinEvidence(); base.runnerBase = join(personalHome, 'Library', 'BloomNucleus');
+  assert.match(validateDarwinR0Evidence(base).join(' '), /<home>\/Library\/BloomNucleus/);
+  const repo = darwinEvidence(); repo.repoRoot = join(personalHome, 'repos', 'bloom-development-extension');
+  assert.match(validateDarwinR0Evidence(repo).join(' '), /checkout/);
+  const ws = darwinEvidence(); ws.workspacePath = join(personalHome, 'repos', 'runner-test');
+  assert.match(validateDarwinR0Evidence(ws).join(' '), /workspace fuera/);
+  const org = darwinEvidence(); org.workspaceOrg = 'elias-repos'; org.workspacePath = join(darwinBase, 'workspaces', 'elias-repos');
+  assert.match(validateDarwinR0Evidence(org).join(' '), /organización de prueba/);
+  const project = darwinEvidence(); project.projectSource = join(personalHome, 'sample_project');
+  assert.match(validateDarwinR0Evidence(project).join(' '), /proyecto fixture/);
+  const brain = darwinEvidence(); brain.brainCliExe = join(personalHome, 'Library', 'BloomNucleus', 'bin', 'brain', 'brain');
+  assert.match(validateDarwinR0Evidence(brain).join(' '), /CLI Brain/);
+});
+
+test('Darwin: un puerto de otro usuario o sin dueño visible es colisión', () => {
+  const hidden = darwinEvidence(); hidden.ports[2] = { port: 7233, reachable: true, processes: [] };
+  assert.match(validateDarwinR0Evidence(hidden).join(' '), /colisión: puerto 7233 .*dueño no visible/);
+  const foreign = darwinEvidence();
+  foreign.ports[1] = { port: 5678, reachable: true, processes: [{ pid: 8104, uid: 501,
+    executablePath: join(personalHome, 'Library', 'BloomNucleus', 'bin', 'brain', 'brain'), commandLine: 'brain' }] };
+  assert.match(validateDarwinR0Evidence(foreign).join(' '), /colisión: puerto 5678 pertenece al uid 501/);
+  const unattributed = darwinEvidence();
+  unattributed.ports[1] = { port: 5678, reachable: true, processes: [{ pid: 9, uid: 502, executablePath: '/usr/bin/python3', commandLine: 'python3 -m http.server 5678' }] };
+  assert.match(validateDarwinR0Evidence(unattributed).join(' '), /puerto 5678 sin proceso atribuible/);
+  const own = darwinEvidence(); own.phase = 'after-conductor'; own.requiredPorts = [8787, 5678, 7233];
+  own.ports[1] = { port: 5678, reachable: true, processes: [{ pid: 9, uid: 502, executablePath: join(darwinBase, 'bin', 'brain', 'brain'), commandLine: 'brain' }] };
+  assert.match(validateDarwinR0Evidence(own).join(' '), /puerto 7233 requerido sin proceso escuchando/);
+  own.ports[2] = { port: 7233, reachable: true, processes: [{ pid: 10, uid: 502, executablePath: join(darwinBase, 'bin', 'temporal', 'temporal'), commandLine: 'temporal server start-dev' }] };
+  assert.deepEqual(validateDarwinR0Evidence(own), []);
+});
+
+test('Darwin: Backend debe ser Wrangler del checkout de prueba con D1 en la instalación de prueba', () => {
+  const foreign = darwinEvidence(); foreign.ports[0].processes = foreign.ports[0].processes.map(p => ({ ...p, uid: 501 }));
+  assert.match(validateDarwinR0Evidence(foreign).join(' '), /colisión: puerto 8787/);
+  const otherD1 = darwinEvidence(); const shared = join(darwinRepo, 'backend', '.wrangler'); mkdirSync(shared, { recursive: true });
+  otherD1.ports[0].processes[1].commandLine = `node ${join(darwinRepo, 'backend', 'wrangler.js')} dev --local --persist-to ${shared}`;
+  assert.match(validateDarwinR0Evidence(otherD1).join(' '), /backend-d1/);
+  const relative = darwinEvidence();
+  relative.ports[0].processes[1].commandLine = `node ${join(darwinRepo, 'backend', 'wrangler.js')} dev --local --persist-to .wrangler`;
+  assert.match(validateDarwinR0Evidence(relative).join(' '), /ruta absoluta/);
+});
+
+// ── Darwin installed: la instalación del usuario actual ─────────────────────
+const ownHome = join(darwinRoot, 'Users', 'owner');
+const ownBase = join(ownHome, 'Library', 'BloomNucleus');
+const ownRepo = join(ownHome, 'repos', 'bloom-development-extension');
+const ownD1 = join(ownRepo, 'backend', '.wrangler');
+mkdirSync(ownD1, { recursive: true });
+
+function installedDarwinEvidence(): DarwinR0Evidence {
+  const conductor = join(ownRepo, 'installer', 'conductor', 'workspace');
+  return {
+    platform: 'darwin', target: 'installed', phase: 'before-00a', uid: 501, personalUid: 501,
+    home: ownHome, passwdHome: ownHome, personalHome: ownHome, launchdManager: 'Aqua',
+    defaultKeychain: join(ownHome, 'Library', 'Keychains', 'login.keychain-db'),
+    runnerBase: ownBase, expectedBase: ownBase, repoRoot: ownRepo,
+    workspacePath: join(ownHome, 'repos', 'runner-mac'), workspaceOrg: 'runner-mac',
+    projectSource: join(ownHome, 'fixtures', 'sample_project'),
+    masterProfilePath: join(ownBase, 'profiles', 'master'),
+    masterExtensionPath: join(ownBase, 'profiles', 'master', 'extension'),
+    nucleusExe: join(ownBase, 'bin', 'nucleus', 'nucleus'),
+    sentinelExe: join(ownBase, 'bin', 'sentinel', 'sentinel'),
+    brainCliExe: join(ownBase, 'bin', 'brain', 'brain'),
+    conductorSource: conductor, expectedConductorSource: conductor,
+    electronExe: join(conductor, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron'),
+    backendOrigin: 'http://127.0.0.1:8787', backendRepo: join(ownRepo, 'backend'), backendPort: 8787,
+    requiredPorts: [8787],
+    ports: [
+      { port: 8787, reachable: true, processes: [
+        { pid: 40, uid: 501, executablePath: join(ownRepo, 'backend', 'node_modules', 'workerd'), commandLine: 'workerd serve' },
+        { pid: 39, uid: 501, executablePath: '/usr/local/bin/node',
+          commandLine: `node ${join(ownRepo, 'backend', 'node_modules', 'wrangler', 'bin', 'wrangler.js')} dev --local --persist-to ${ownD1}` }] },
+      { port: 5678, reachable: true, processes: [{ pid: 8104, uid: 501, executablePath: join(ownBase, 'bin', 'brain', 'brain'), commandLine: 'brain' }] },
+      { port: 7233, reachable: false, processes: [] },
+    ],
+  };
+}
+
+test('Darwin installed: acepta la instalación del usuario actual con workspace en ~/repos y D1 del checkout', () => {
+  assert.deepEqual(validateDarwinR0Evidence(installedDarwinEvidence()), []);
+});
+
+test('Darwin installed: rechaza otro usuario, otra instalación, workspace fuera de ~/repos y D1 ajena', () => {
+  const other = installedDarwinEvidence(); other.personalUid = 502;
+  assert.match(validateDarwinR0Evidence(other).join(' '), /usuario y home actuales/);
+  const base = installedDarwinEvidence(); base.runnerBase = join(ownHome, 'otra', 'BloomNucleus');
+  assert.match(validateDarwinR0Evidence(base).join(' '), /<home>\/Library\/BloomNucleus/);
+  const ws = installedDarwinEvidence(); ws.workspacePath = join(ownBase, 'workspaces', 'runner-mac');
+  assert.match(validateDarwinR0Evidence(ws).join(' '), /workspace instalado/);
+  const project = installedDarwinEvidence(); project.projectSource = join(ownHome, 'repos', 'runner-mac', 'sample_project');
+  assert.match(validateDarwinR0Evidence(project).join(' '), /proyecto fixture/);
+  const d1 = installedDarwinEvidence();
+  d1.ports[0].processes[1].commandLine = `node ${join(ownRepo, 'backend', 'wrangler.js')} dev --local --persist-to ${darwinD1}`;
+  assert.match(validateDarwinR0Evidence(d1).join(' '), /backend\/\.wrangler/);
+  const foreign = installedDarwinEvidence(); foreign.ports[2] = { port: 7233, reachable: true, processes: [] };
+  assert.match(validateDarwinR0Evidence(foreign).join(' '), /colisión: puerto 7233/);
 });
