@@ -40,6 +40,19 @@ def validate_source_resources(root: Path = AITAP_ROOT) -> None:
         raise RuntimeError("recursos productivos ausentes: " + ", ".join(missing))
 
 
+def copy_bundle(source: Path, destination: Path) -> None:
+    """Copia el bundle onedir conservando los enlaces simbolicos.
+
+    En macOS PyInstaller arma ``_internal/Python.framework`` con enlaces
+    (``Versions/Current``, ``Resources``, ``Python``). Si la copia los
+    resuelve, el destino gana archivos que el manifiesto no inventario y la
+    verificacion SHA-256 falla. El destino debe ser identico al bundle
+    verificado.
+    """
+    shutil.rmtree(destination, ignore_errors=True)
+    shutil.copytree(source, destination, symlinks=True)
+
+
 def _write_build_info() -> None:
     """
     Regenera src/aitap/_build_info.py con el build number que build-all.py
@@ -156,8 +169,7 @@ def main() -> int:
     )
     verify_manifest(built_dir)
 
-    shutil.rmtree(output_dir, ignore_errors=True)
-    shutil.copytree(built_dir, output_dir)
+    copy_bundle(built_dir, output_dir)
     verify_manifest(output_dir)
     for name, content in outputs.items():
         (shared_help_dir / name).write_text(content, encoding="utf-8")
