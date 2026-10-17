@@ -9,44 +9,50 @@ Estilo de este documento y de los que referencia: **son punteros a fuentes
 reales, no resumenes que puedan quedar desactualizados.** Si un dato de acá
 contradice el codigo, el codigo gana — actualizá este archivo, no al revés.
 
-## Autoridad y permisos de escritura
+## Autoridad, alcance y cambios
 
-José Vigil es la única autoridad de diseño, decisión, nombres y alcance en
-este repo. Ningún agente (Claude Code, Codex, OpenCode u otro) decide por su
-cuenta qué se construye, cómo se llama, ni cuánto abarca un cambio.
+José Vigil decide los objetivos, las decisiones de diseño y el alcance del
+trabajo en este repo. Los agentes pueden resolver los detalles de
+implementación necesarios para cumplir una tarea que José haya pedido, sin
+solicitar aprobación archivo por archivo.
 
-**Por defecto, todo es modo lectura/propuesta.** Leer código, docs, config,
-árboles, logs y `git status`; investigar; reconstruir hechos verificables;
-armar hipótesis; proponer planes o alternativas — nada de eso necesita
-permiso, hacelo con confianza y todas las veces que haga falta.
+Un pedido concreto de implementación, corrección o refactorización autoriza
+a leer, crear y editar los archivos necesarios dentro de ese objetivo. Antes
+de empezar, el agente explica brevemente qué entendió y por dónde va a
+trabajar. Durante el trabajo informa los hallazgos que cambien el rumbo; al
+terminar, enumera los archivos modificados, las verificaciones realizadas y
+cualquier limitación relevante. No necesita presentar un parche ni esperar
+otro OK para las ediciones que ya están comprendidas en el pedido.
 
-**Escribir sí necesita permiso explícito, cambio por cambio.** Esto incluye
-crear, editar, borrar o renombrar cualquier archivo — código, tests, docs,
-config, schemas — y cualquier operación de `git` (`add`, `commit`, `push`,
-branches) o de pipelines/CI. No importa si el pedido original sonaba amplio
-("mejorá esto", "dejalo prolijo", "avanzá con la migración"): antes de tocar
-un archivo, decí exactamente cuáles vas a tocar y esperá el OK sobre esa
-lista puntual.
+Si José pide investigar, revisar, diagnosticar, proponer o planificar, el
+trabajo es de solo lectura. Una aprobación de la dirección general autoriza
+a preparar una propuesta, pero no convierte por sí sola esa propuesta en un
+pedido de implementación.
 
-Reglas concretas:
+El agente debe detenerse y consultar antes de:
 
-- Una aprobación conceptual ("me gusta esa idea", "dale, esa dirección") no
-  autoriza a escribir nada — autoriza a armar el plan. El plan enumera
-  archivos y cambios exactos; recién con luz verde sobre esa lista se
-  ejecuta.
-- Ejecutá solo lo que está en la lista aprobada. Si en el camino aparece la
-  necesidad de tocar un archivo que no estaba, parate y preguntá — no lo
-  sumes silenciosamente al alcance.
-- No inventes nombres, carpetas, subsistemas, arquitectura ni alcance que
-  José no haya pedido explícitamente.
-- Ante cualquier ambigüedad sobre qué está autorizado, parate y consultá. No
-  asumas la interpretación más productiva y avances sobre esa base.
-- `git` y el estado durable del repo (staging, commits, push, config de CI)
-  se tocan solo cuando José lo pide para esa acción puntual — nunca como
-  efecto colateral de "dejar todo prolijo" o de un plan más grande.
+- cambiar el objetivo, ampliar el trabajo a otro sistema o introducir una
+  decisión de arquitectura, contrato público o nombre que José no haya
+  definido;
+- hacer una migración amplia, borrar información o realizar un cambio
+  difícil de revertir que no se desprenda claramente del pedido;
+- modificar archivos ajenos al objetivo solo para corregir problemas
+  encontrados durante la investigación;
+- ejecutar `git add`, `commit`, `push`, crear o cambiar ramas, o modificar
+  pipelines y configuración de CI, salvo que José haya pedido expresamente
+  esa acción.
 
-Esto no es para frenar el trabajo — es para que lo que se construya sea
-exactamente lo que José decidió, ni más ni menos.
+Un archivo adicional puede incorporarse sin pedir permiso si es una
+consecuencia directa y necesaria del objetivo acordado, por ejemplo, un test
+o una referencia que debe actualizarse para que el cambio funcione. El
+agente lo informa al finalizar. Si su inclusión implica una decisión nueva
+o amplía el objetivo, consulta primero.
+
+La investigación debe ser proporcional al pedido. Los problemas cercanos
+que no impidan completar la tarea se registran de forma breve como
+observaciones; no se investigan ni se corrigen por iniciativa propia. Si
+aparece un bloqueo real, el agente explica el hecho concreto y propone el
+siguiente paso más acotado.
 
 ## Mapa de sistemas (de arriba hacia abajo)
 
@@ -116,5 +122,5 @@ el contrato documentado en `installer/aitap/README.md`.
 
 Si vas a trabajar en una carpeta que no tiene su propio `AGENTS.md`/
 `CLAUDE.md` todavia y el trabajo es no trivial, consideralo una señal para
-proponerle a José crear uno — no crearlo por tu cuenta (ver "Autoridad y
-permisos de escritura" arriba).
+proponerle a José crear uno — no crearlo por tu cuenta (ver "Autoridad,
+alcance y cambios" arriba).
