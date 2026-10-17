@@ -831,6 +831,27 @@ func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 	return nil
 }
 
+// nucleusControlPlaneTimeout is the window nucleusPostDeploy waits for the
+// Control Plane to answer after a FULL Nucleus service restart (binary
+// replaced on disk, then launchd/systemd --user/SCM restarts the OS
+// service). This is deliberately much longer than bootstrapPostDeploy's
+// 10s: bootstrap only reloads bundle.js inside an already-running Nucleus
+// process (no process spawn), while `rollout --only nucleus` restarts the
+// whole OS service from a cold process — binary exec, supervisor init,
+// Control Plane boot — which reliably takes longer than 10s on Darwin.
+//
+// FIX (false fatal on `metamorph rollout --only nucleus`, Darwin): before
+// this, nucleusPostDeploy reused the same 10s timeout as bootstrapPostDeploy.
+// The Nucleus service restart here is strictly heavier than bootstrap's
+// bundle-reload-only restart, so 10s was consistently too short — the
+// Control Plane came up correctly a few seconds later, but rollout had
+// already reported a fatal error and the run showed errors > 0 even though
+// the deploy itself fully succeeded. Widening the window (not converting
+// the failure to a warning — health is still mandatory here, see below)
+// fixes the false negative while still catching a Control Plane that
+// genuinely never comes up.
+const nucleusControlPlaneTimeout = 60 * time.Second
+
 // nucleusPostDeploy starts the Nucleus service again once the new binary is
 // in place, then polls the Control Plane's health endpoint the same way
 // bootstrapPostDeploy does, so the operator gets immediate confirmation the
@@ -849,7 +870,8 @@ func nucleusPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 		return err
 	}
 	if !dryRun && wasNucleusActive {
-		if err := waitForControlPlane(10 * time.Second); err != nil {
+		c.Logger.Info("🔎 Waiting for Control Plane to come up after full Nucleus restart (up to %s) ...", nucleusControlPlaneTimeout)
+		if err := waitForControlPlane(nucleusControlPlaneTimeout); err != nil {
 			return fmt.Errorf("nucleus: restored service but Control Plane health check failed: %w", err)
 		}
 		c.Logger.Success("✅ Control Plane healthy at http://127.0.0.1:48215/api/docs")

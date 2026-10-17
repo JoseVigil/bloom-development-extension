@@ -35,6 +35,146 @@ type aitapBundleManifest struct {
 	Files                 []aitapBundleFile `json:"files"`
 }
 
+// walkBundleEntries walks an AITAP bundle root the same way Build's
+// _inventory() does via Path.rglob("*") + Path.is_file():
+//
+//   - A symlink to a regular file is followed and included — the inventory
+//     entry keeps the symlink's own relative path, but size/sha256 come
+//     from the resolved target, exactly what Build's sha256_file()/stat()
+//     compute for the equivalent Path object (confirmed case:
+//     _internal/Python, a symlink to the embedded Python framework's
+//     shared library).
+//   - A symlink to a directory is NOT recursed into. Build's own
+//     verify_bundle.py runs under a Python whose Path.rglob()/glob()
+//     default to recurse_symlinks=False (the behavior since Python 3.13):
+//     the symlinked directory is enumerated as one Path, Path.is_file() on
+//     it is False, so it contributes no inventory entry and nothing
+//     beneath it is visited through that route — confirmed case: a macOS
+//     PyInstaller bundle's Python.framework/Resources, which chains
+//     through Versions/Current to the real Versions/3.x/Resources tree.
+//     Its files still count, but only via whatever real, non-symlinked
+//     path reaches them elsewhere (recursing here instead produced an
+//     inventory count 3 entries higher than Build's manifest — confirmed
+//     against a real bundle).
+//
+// Unlike is_file(), which simply returns False (dropping the entry, no
+// error) for a broken symlink, a symlink that escapes the bundle root, or a
+// symlink to something that's neither a regular file nor a directory (a
+// device, socket, ...), this treats all three as hard failures. Build never
+// produces such a link itself, so a bundle that reaches Metamorph with one
+// has already deviated from what Build verified — "treat it as absent" (or
+// worse, "accept any symlink blindly") would be the unsafe default this fix
+// exists to avoid.
+//
+// visit is called once per regular file (or resolved-through-symlink file)
+// with: rel (slash-separated path relative to root, built through whatever
+// symlink was followed to reach it — this is what goes in the manifest,
+// matching Build's path.relative_to(root)), info (the resolved target's
+// FileInfo, for .Size()), and resolvedPath (the real path to hash).
+func walkBundleEntries(root string, visit func(rel string, info os.FileInfo, resolvedPath string) error) error {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	// Resolve root itself too: on macOS /tmp is a symlink to /private/tmp,
+	// so a bundle exercised from a temp dir would otherwise look like every
+	// internal symlink "escapes" the root purely because of that ancestor
+	// symlink, not because the link itself is unsafe.
+	if resolvedRoot, rErr := filepath.EvalSymlinks(absRoot); rErr == nil {
+		absRoot = resolvedRoot
+	}
+	return walkBundleDir(absRoot, root, "", visit)
+}
+
+func walkBundleDir(absRoot, dir, relPrefix string, visit func(string, os.FileInfo, string) error) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		rel := e.Name()
+		if relPrefix != "" {
+			rel = relPrefix + "/" + e.Name()
+		}
+		fullPath := filepath.Join(dir, e.Name())
+
+		// DirEntry.Info() reports the entry itself (Lstat semantics) — it
+		// does not follow a symlink, which is exactly what we need to
+		// detect one before deciding how to handle it.
+		info, err := e.Info()
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, terr := filepath.EvalSymlinks(fullPath)
+			if terr != nil {
+				return fmt.Errorf("unsafe bundle symlink %s: broken symlink (or symlink loop): %w", rel, terr)
+			}
+			relToRoot, rErr := filepath.Rel(absRoot, target)
+			if rErr != nil || relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("unsafe bundle symlink %s: escapes bundle root (resolves to %s)", rel, target)
+			}
+			targetInfo, sErr := os.Stat(target)
+			if sErr != nil {
+				return fmt.Errorf("unsafe bundle symlink %s: could not stat resolved target %s: %w", rel, target, sErr)
+			}
+
+			if targetInfo.IsDir() {
+				// FIX (inventory count mismatch vs Build, confirmed on Mac:
+				// 140 actual vs 137 manifest — exactly 3 duplicate entries):
+				// an earlier version of this fix recursed into a symlinked
+				// directory (the Python.framework convention: Resources /
+				// Headers / Python chain through Versions/Current down to
+				// the real Versions/3.x/ tree). That double-counted every
+				// file ALSO reachable via its real, non-symlinked path
+				// elsewhere in the tree (e.g. Versions/3.x/Resources/*,
+				// walked directly with no symlink involved).
+				//
+				// Build's own verify_bundle.py runs under a Python whose
+				// Path.rglob()/glob() default to recurse_symlinks=False
+				// (the behavior since Python 3.13): it does NOT descend
+				// into a symlinked directory at all. The symlinked
+				// directory itself is enumerated as one Path, but
+				// Path.is_file() on it is False (it's a directory), so
+				// it's excluded from the inventory — and nothing beneath
+				// it is ever visited THROUGH that symlinked route. Its
+				// files still count, but only via whatever real path
+				// reaches them elsewhere.
+				//
+				// So: validate the link (not broken, doesn't escape the
+				// bundle — both checks already run above) and then skip
+				// it outright. No recursion, no inventory entry for the
+				// directory itself — matching is_file() == False with no
+				// side effect, not "accept and expand it".
+				continue
+			}
+			if !targetInfo.Mode().IsRegular() {
+				return fmt.Errorf("unsafe bundle symlink %s: resolves to a non-regular file (mode %s)", rel, targetInfo.Mode())
+			}
+			if err := visit(rel, targetInfo, target); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if info.IsDir() {
+			if err := walkBundleDir(absRoot, fullPath, rel, visit); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("non-regular bundle entry: %s", fullPath)
+		}
+		if err := visit(rel, info, fullPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // VerifyAITAPBundle checks the complete onedir inventory against Build's v1 manifest.
 func VerifyAITAPBundle(root string) (string, int, string, int, error) {
 	data, err := os.ReadFile(filepath.Join(root, "bundle-manifest.json"))
@@ -77,26 +217,31 @@ func VerifyAITAPBundle(root string) (string, int, string, int, error) {
 	if info, err := os.Stat(filepath.Join(root, "_internal")); err != nil || !info.IsDir() {
 		return "", 0, "", 0, fmt.Errorf("AITAP _internal directory missing")
 	}
+	// FIX (false rejection of a Build-approved bundle, then an inventory
+	// count mismatch): macOS PyInstaller onedir bundles embed a
+	// Python.framework whose Resources/Headers/Python entries are
+	// framework-convention symlinks (chaining through Versions/Current
+	// down to the real Versions/3.x/ tree). The original walk here used
+	// filepath.Walk, which never follows symlinks, so a symlinked
+	// directory arrived as a single Lstat'd entry whose
+	// info.Mode().IsRegular() is never true — it failed outright with
+	// "non-regular bundle entry: ...". A first fix attempt followed
+	// symlinked directories recursively, assuming Build's
+	// Path.rglob("*") does the same — it compiled and ran, but produced an
+	// inventory 3 entries larger than Build's manifest (confirmed against
+	// a real bundle), because Build's rglob (Python 3.13+ default
+	// recurse_symlinks=False) does NOT descend into a symlinked directory
+	// at all, so files reachable only through that route are never
+	// double-counted on Build's side. walkBundleEntries (above) now
+	// matches that: it follows a symlink to a regular file, but a symlink
+	// to a directory is validated for safety and then skipped — no
+	// recursion, no inventory entry.
 	var actual []aitapBundleFile
-	err = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("non-regular bundle entry: %s", path)
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
+	err = walkBundleEntries(root, func(rel string, info os.FileInfo, resolvedPath string) error {
 		if rel == "bundle-manifest.json" {
 			return nil
 		}
-		hash, err := CalculateSHA256(path)
+		hash, err := CalculateSHA256(resolvedPath)
 		if err != nil {
 			return err
 		}

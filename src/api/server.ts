@@ -270,6 +270,31 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   // la org (workspace-scan) como para el árbol de mandates.
   const workspacePath = process.env.BLOOM_NUCLEUS_PATH;
 
+  // FIX (crash-loop pre-onboarding — puerto 48215 nunca abría): antes,
+  // cuando workspacePath estaba seteada, se llamaba a resolveOrg() sin
+  // try/catch. Durante pre-onboarding (el usuario todavía no creó ni se
+  // unió a una organización) es NORMAL que bajo workspacePath no exista
+  // todavía un Nucleus completo — resolveOrg() tira en ese caso (ENOENT,
+  // nucleus incompleto, lo que sea), y esa excepción subía sin atajar hasta
+  // bootstrap() en server-bootstrap.js. createAPIServer() nunca llegaba a
+  // devolver la instancia, apiServer.listen() nunca se ejecutaba, y el
+  // Control Plane entero quedaba caído (sin health, sin Swagger, sin rutas
+  // de onboarding) solo porque todavía no había organización.
+  //
+  // La ausencia/inconsistencia de organización es un estado VÁLIDO durante
+  // pre-onboarding, así que ahora se ataja y degrada: no se registran las
+  // rutas de mandates, pero el resto del server (health, Swagger, auth,
+  // onboarding) sigue en pie y apiServer.listen() se alcanza.
+  //
+  // Post-onboarding (BLOOM_USER_ROLE !== 'pre-onboarding') la ausencia de
+  // organización SIGUE siendo un error real — en ese estado se espera que
+  // el Nucleus ya exista — así que el fallo explícito se repropaga igual
+  // que antes.
+  const userRole = process.env.BLOOM_USER_ROLE || 'pre-onboarding';
+  const isPreOnboarding = userRole === 'pre-onboarding';
+
+  let fsCtx: MandateFsContext | undefined;
+
   if (!workspacePath) {
     console.warn(
       '[Server] ⚠️  ⚠️  ⚠️  BLOOM_NUCLEUS_PATH no está definida en el entorno de ESTE proceso.',
@@ -281,6 +306,28 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
       '[Server] ⚠️  No van a aparecer en /api/docs ni van a responder (404). Seteá BLOOM_NUCLEUS_PATH y reiniciá el server.',
     );
   } else {
+    try {
+      // Mismo fix que en create-mandate.handler.ts: resolveOrg hace
+      // workspace-scan (paridad con supervisor.LoadNucleusConfig(), Go) y
+      // necesita la raíz del workspace, no el dir de datos de máquina.
+      const org = await resolveOrg(workspacePath);
+      // Mismo fix que en create-mandate.handler.ts: org es el slug (string).
+      fsCtx = { workspacePath, org: org.name };
+    } catch (err) {
+      if (!isPreOnboarding) {
+        throw err;
+      }
+      console.warn(
+        `[Server] ⚠️  No se pudo resolver organización bajo BLOOM_NUCLEUS_PATH=${workspacePath} ` +
+          `(role=pre-onboarding → estado válido, todavía no hay org): ${(err as Error).message}`,
+      );
+      console.warn(
+        '[Server] ⚠️  Las rutas /api/v1/mandates y /api/internal/mandate-event NO se van a registrar hasta completar onboarding.',
+      );
+    }
+  }
+
+  if (fsCtx) {
     // FIX (Swagger def-0/def-1/def-2): addSchema tiene que llamarse acá, en
     // el fastify raíz —donde también se registra el plugin de swagger—, y
     // no dentro de registerMandateRoutes (instancia hija creada por el
@@ -292,16 +339,14 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
     // abajo — cae a un nombre posicional (def-0, def-1, def-2) en
     // components.schemas, y Swagger UI no puede resolver el discriminator
     // sin nombres reales.
+    //
+    // Se mueve adentro de este if (antes se registraba siempre que hubiera
+    // workspacePath, sin importar si resolveOrg tuvo éxito): registrar
+    // schemas de mandates cuando no hay fsCtx no tiene sentido y además
+    // ensucia /api/docs con validadores para rutas que no se van a montar.
     fastify.addSchema(StandardCreateBody);
     fastify.addSchema(GenesisCreateBody);
     fastify.addSchema(DomainExpansionCreateBody);
-
-    // Mismo fix que en create-mandate.handler.ts: resolveOrg hace
-    // workspace-scan (paridad con supervisor.LoadNucleusConfig(), Go) y
-    // necesita la raíz del workspace, no el dir de datos de máquina.
-    const org = await resolveOrg(workspacePath);
-    // Mismo fix que en create-mandate.handler.ts: org es el slug (string).
-    const fsCtx: MandateFsContext = { workspacePath, org: org.name };
 
     await fastify.register(
       async (instance) => registerMandateRoutes(instance, { fsCtx }),

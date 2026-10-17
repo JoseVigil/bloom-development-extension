@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — darwin
-# Generated: 2026-10-16 20:59:35
+# Generated: 2026-10-16 23:27:05
 
 ---
 brain/__build__.py
@@ -48,15 +48,15 @@ installer/conductor/setup/version.json
 
 ---
 installer/bootstrap/VERSION
-4
+6
 
 ---
 installer/bootstrap/bootstrap.meta.json
 {
   "version": "1.0.0",
-  "build_number": 4,
+  "build_number": 6,
   "info": "Bloom Bootstrap",
-  "build_date": "2026-10-16T23:18:40Z"
+  "build_date": "2026-10-17T01:28:35Z"
 }
 
 ---
@@ -109,11 +109,11 @@ installer/impact/scripts/build_number.txt
 
 ---
 installer/metamorph/scripts/build_number.effective.txt
-4
+8
 
 ---
 installer/metamorph/scripts/build_number.txt
-4
+8
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
