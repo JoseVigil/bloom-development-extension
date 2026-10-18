@@ -41,7 +41,19 @@ export async function findSynapseSimulator(browser: Browser, timeoutMs = 30_000)
   throw new Error('[synapse-simulator] No apareció la pestaña synapse-simulator/index.html');
 }
 
+/**
+ * Darwin: Discovery abre pestañas activas (github.com/login/device, login de
+ * Google, consola de API) con chrome.tabs.create. En macOS Chromium deja de
+ * pintar la pestaña que queda en segundo plano y el clic de Playwright espera
+ * un cuadro de animación que no llega. Antes de interactuar con una pestaña
+ * propia se la trae al frente. En Windows/Linux no cambia el comportamiento.
+ */
+export async function bringToFrontOnDarwin(page: Page): Promise<void> {
+  if (process.platform === 'darwin') await page.bringToFront();
+}
+
 export async function selectDiscoveryMessage(page: Page, id: string): Promise<Record<string, unknown>> {
+  await bringToFrontOnDarwin(page);
   const item = page.locator(`.message-item[data-protocol="discovery"][data-msg-id="${id}"]`);
   const section = item.locator('xpath=ancestor::*[contains(@class,"protocol-section")]');
   if (await section.locator('.protocol-section-body').evaluate((body) => body.classList.contains('collapsed'))) {
@@ -77,6 +89,7 @@ export async function sendDiscoveryMessage(
     if (!matched) throw new Error(`[synapse-simulator] Campo ${name} ausente en ${id}`);
   }
   if (detectGoogleTab) {
+    await bringToFrontOnDarwin(page);
     const group = groups.filter({ has: page.locator('.field-label', { hasText: 'tabId' }) });
     const detectButton = group.getByRole('button', { name: /Detect/ });
     try {
@@ -95,6 +108,7 @@ export async function sendDiscoveryMessage(
     throw new Error(`[synapse-simulator] Payload ${id} contiene un valor automático sin resolver: ${JSON.stringify(payload)}`);
   }
   console.log(`[synapse-simulator] UI send ${id}: ${JSON.stringify(payload)}`);
+  await bringToFrontOnDarwin(page);
   const sendButton = page.locator('#btn-send');
   try {
     await sendButton.click({ timeout: 3_000, noWaitAfter: true });

@@ -21,7 +21,33 @@ export interface DiscoverySurface {
   close(): Promise<void>;
 }
 
+/**
+ * Darwin: si el perfil arranca con pestañas restauradas que nunca se
+ * mostraron (por ejemplo una segunda Discovery), macOS no las pinta y
+ * connectOverCDP queda esperando que terminen de inicializarse. Antes de
+ * conectar se activa cada pestaña una vez por el endpoint HTTP de DevTools y
+ * se deja al frente el Simulator. No cierra ninguna pestaña: los duplicados
+ * los resuelve el spec por launch_id ya conectado. En Windows/Linux no hace nada.
+ */
+async function activatePageTargetsOnDarwin(cdpEndpoint: string): Promise<void> {
+  if (process.platform !== 'darwin') return;
+  const response = await fetch(`${cdpEndpoint}/json/list`, { signal: AbortSignal.timeout(5_000) });
+  if (!response.ok) throw new Error(`[discovery-chromium] /json/list HTTP ${response.status}`);
+  const targets = (await response.json() as Array<{ id?: string; type?: string; url?: string }>)
+    .filter((target) => target.type === 'page' && target.id);
+  const simulator = targets.filter((target) => /\/synapse-simulator\/index\.html/.test(target.url || ''));
+  const ordered = [...targets.filter((target) => !simulator.includes(target)), ...simulator];
+  for (const target of ordered) {
+    const url = `${cdpEndpoint}/json/activate/${encodeURIComponent(target.id!)}`;
+    let activated = await fetch(url, { signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
+    if (!activated?.ok) activated = await fetch(url, { method: 'PUT', signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
+    console.log(`[discovery-chromium] activar pestaña antes de CDP: ${target.url} → ${activated?.ok ? 'ok' : 'sin respuesta'}`);
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
+}
+
 export async function connectToDiscovery(cdpEndpoint: string, urlPattern: RegExp): Promise<DiscoverySurface> {
+  await activatePageTargetsOnDarwin(cdpEndpoint);
   const browser = await chromium.connectOverCDP(cdpEndpoint);
   const context = browser.contexts()[0] ?? (await browser.newContext());
 

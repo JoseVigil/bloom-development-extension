@@ -12,7 +12,9 @@ import {
   type ConductorHandle,
 } from '../../src/surfaces/electron-conductor';
 import { connectToDiscovery, type DiscoverySurface } from '../../src/surfaces/discovery-chromium';
-import { findSynapseSimulator, selectDiscoveryMessage, sendDiscoveryMessage, waitForSimulatorTargets } from '../../src/surfaces/synapse-simulator';
+import {
+  bringToFrontOnDarwin, findSynapseSimulator, selectDiscoveryMessage, sendDiscoveryMessage, waitForSimulatorTargets,
+} from '../../src/surfaces/synapse-simulator';
 import { getBloomPaths, resetOnboardingState } from '../../src/config/bloom-paths';
 import {
   assertDarwinProfileProcess, assertR0Isolation, summarizeDarwinR0Evidence, type DarwinR0Evidence,
@@ -492,6 +494,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
     await synapseRunner.runStep('sim_google', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'google_auth' });
       await pages.discoveryPage.locator('#screen-google-auth-login.active').waitFor({ state: 'visible' });
+      await bringToFrontOnDarwin(pages.discoveryPage);
       await pages.discoveryPage.click('#btn-open-google-login');
       await expect(pages.discoveryPage.locator('#btn-open-google-login')).toContainText('Google abierto');
       const detectedHost = 'myaccount.google.com';
@@ -518,6 +521,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
     await synapseRunner.runStep('sim_ai_provider', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'ai_provider_setup' });
       await pages.discoveryPage.locator('#screen-api-waiting.active').waitFor({ state: 'visible' });
+      await bringToFrontOnDarwin(pages.discoveryPage);
       await pages.discoveryPage.click('#btn-open-console');
       await expect(pages.discoveryPage.locator('#screen-api-success.active')).toHaveCount(0);
       const sent = await sendDiscoveryMessage(pages.simulator, 'api_key_registered', { provider: 'gemini' });
