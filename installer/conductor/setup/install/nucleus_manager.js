@@ -971,7 +971,13 @@ class NucleusManager {
     let candidate = resolved;
     let found = false;
 
-    for (let depth = 0; depth < 10; depth++) {
+    // El setup empaquetado de Darwin corre desde
+    // installer/native/bin/darwin_<arch>/setup/mac/bloom-setup.app/Contents/Resources/nucleus:
+    // la raíz del repo queda 10 niveles arriba, fuera del límite anterior (10
+    // candidatos = 0..9). Windows (win-unpacked/resources) y Linux
+    // (linux-unpacked/resources) la encuentran en el nivel 8. El walk termina
+    // igual en la raíz del filesystem, así que el límite sólo acota el caso sin repo.
+    for (let depth = 0; depth < 16; depth++) {
       const hasMarker = ROOT_MARKERS.some(m => {
         try { fs.statSync(path.join(candidate, m)); return true; } catch { return false; }
       });

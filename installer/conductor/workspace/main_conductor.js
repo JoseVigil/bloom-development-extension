@@ -294,6 +294,19 @@ function createWorkspaceWindow(url) {
 // onboarding se loguearan igual en conductor_onboarding_*.log. Ahora el
 // logger es un parámetro — cada call-site de abajo pasa `coreLog` o `log`
 // según el branch (onboardingDone / !onboardingDone) en el que se encuentra.
+// ipcMain.handle() lanza si un canal ya tiene handler. En macOS cerrar la
+// última ventana no termina la app (window-all-closed no llama app.quit), y
+// 'activate' (ícono del Dock) vuelve a pasar por el registro: sin este guard
+// el proceso principal cae con "Attempted to register a second handler for
+// 'onboarding:gemini-vault-prepare'". Los handlers resuelven ventana, reactor y
+// registry por getters, así que registrarlos una sola vez por proceso alcanza.
+let _onboardingHandlersRegistered = false;
+function registerOnboardingHandlersOnce() {
+  if (_onboardingHandlersRegistered) return;
+  registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
+  _onboardingHandlersRegistered = true;
+}
+
 function initOnboardingBridge(logger = log) {
   if (_onboardingBridge) return;
 
@@ -701,7 +714,7 @@ app.whenReady().then(async () => {
     // (ej. reintentar un step no-blocking) y dependen de () => _reactor / () => _registry.
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:5173';
     createWorkspaceWindow(url);
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
+    registerOnboardingHandlersOnce();
     // FIX (Problema 2.5, Escenario A): onboarding.completed ya es true al
     // boot — cualquier milestone no-bloqueante que llegue de acá en adelante
     // (ai_provider_setup, google_auth) es tráfico de Core, no de onboarding.
@@ -713,7 +726,7 @@ app.whenReady().then(async () => {
     createOnboardingWindow();
     // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
     // para que los handlers siempre resuelvan la ventana actual
-    registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
+    registerOnboardingHandlersOnce();
     // Inicializar el bridge de synapse para el onboarding.
     // El listener reemite cada mensaje de Brain al renderer via synapse:raw-event
     // para que el panel SYNAPSE RAW de synapse-simulator.html lo muestre en tiempo real.
@@ -738,14 +751,14 @@ app.on('activate', () => {
         // comentario ahí. Sin esto, reactivar la app en macOS (dock icon) con
         // onboarding ya completo tampoco levantaba el bridge.
         createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:5173');
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
+        registerOnboardingHandlersOnce();
         log.info('[HANDOFF] Onboarding completado — logging de esta sesión continúa en conductor_core');
         coreLog.info('[HANDOFF] Sesión post-onboarding — asumiendo logging de milestones no bloqueantes');
         initOnboardingBridge(coreLog);
       } else {
         createOnboardingWindow();
         // FIX: pasa getter () => mainWindow en lugar del valor mainWindow
-        registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, () => mainWindow, () => _reactor, () => _registry, createWorkspaceWindow);
+        registerOnboardingHandlersOnce();
         initOnboardingBridge(log);
       }
     }

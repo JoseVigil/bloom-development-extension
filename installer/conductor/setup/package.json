@@ -299,6 +299,10 @@
           "to": "cortex"
         },
         {
+          "from": "../../native/bin/bootstrap",
+          "to": "bootstrap"
+        },
+        {
           "from": "../../native/bin/darwin_${arch}/conductor",
           "to": "conductor"
         },
