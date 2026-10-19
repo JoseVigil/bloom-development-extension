@@ -791,6 +791,31 @@ func bootstrapPostDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error 
 	return nil
 }
 
+// nucleusPortReleaseTimeout is the window nucleusPreDeploy waits for a
+// managed port (Brain's or the Control Plane's) to actually go free after
+// stopManagedService asked the OS service to stop.
+//
+// FIX (false fatal on `metamorph rollout --only nucleus`, Darwin — mirror
+// image of the nucleusControlPlaneTimeout fix above): stopManagedService's
+// stop path (launchctlControl on macOS, rollout_unix.go) runs `launchctl
+// stop <label>` and then only sleeps a fixed 2s before returning — that
+// command asks launchd to stop the job, it does not block until the
+// process has actually exited and released its listening socket. A Node
+// process doing a graceful shutdown of the Control Plane's HTTP server can
+// take longer than that 2s sleep plus the previous 10s waitForPortFree
+// window combined, and when it does, the port still reads as "in use" when
+// nucleusPreDeploy gives up — even though it would have gone free a few
+// seconds later.
+//
+// UPDATE (2026-10-19): raising this to 30s alone did not fix Darwin. Two
+// separate causes kept 48215 busy: (1) `launchctl stop` on a KeepAlive job
+// lets launchd respawn it — fixed by unload/load in launchctlControl; and
+// (2) an orphaned Control Plane (`node bundle.js`) from an older generation,
+// untracked because a crashed successor overwrote its pidfile — fixed by
+// the Unix stopOwnedNucleusProcesses in rollout_unix.go, which no longer is
+// a no-op. This timeout now only covers a genuinely slow graceful exit.
+const nucleusPortReleaseTimeout = 30 * time.Second
+
 // nucleusPreDeploy stops the Nucleus service before its own binary is
 // overwritten. Mirrors bootstrapPreDeploy: ensureElevated() is a no-op on
 // macOS/Linux and re-launches under UAC on Windows if needed. Returning an
@@ -819,11 +844,11 @@ func nucleusPreDeploy(c *core.Core, repoRoot, dst string, dryRun bool) error {
 			_ = nucleusPostDeploy(c, repoRoot, dst, false)
 			return fmt.Errorf("nucleus: managed-process shutdown: %w", err)
 		}
-		if err := waitForPortFree(brainPort, 10*time.Second); err != nil {
+		if err := waitForPortFree(brainPort, nucleusPortReleaseTimeout); err != nil {
 			_ = nucleusPostDeploy(c, repoRoot, dst, false)
 			return fmt.Errorf("nucleus: %w", err)
 		}
-		if err := waitForPortFree("48215", 10*time.Second); err != nil {
+		if err := waitForPortFree("48215", nucleusPortReleaseTimeout); err != nil {
 			_ = nucleusPostDeploy(c, repoRoot, dst, false)
 			return fmt.Errorf("nucleus: %w", err)
 		}
