@@ -7,8 +7,7 @@
 // (requireMandateMaster → governance.RequireMaster) y por lo tanto internal/governance no
 // puede importar internal/orchestration/commands sin crear un ciclo (governance → commands
 // → governance). internal/mandateinstall no importa ni commands ni governance, así que
-// ambos pueden importarlo sin ciclo — ver
-// Encargo_Implementacion_AutoEncadenamiento_Sync_Install_y_Validacion_Backend_v1_0.md §2.1.
+// ambos pueden importarlo sin ciclo.
 //
 // Alcance (idéntico al del encargo original — esta mudanza no cambia comportamiento, sólo
 // el paquete y la visibilidad de los símbolos):
@@ -185,7 +184,7 @@ func LoadLatestReceipt(appDataDir, organizationID, installationID, mandateID str
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return mandatedelivery.Receipt{}, fmt.Errorf("no hay una entrega verificada para %s — corré 'nucleus authority sync' primero", mandateID)
+			return mandatedelivery.Receipt{}, fmt.Errorf("no hay una entrega verificada para %s", mandateID)
 		}
 		return mandatedelivery.Receipt{}, fmt.Errorf("no pude leer %s: %w", dir, err)
 	}
@@ -197,7 +196,7 @@ func LoadLatestReceipt(appDataDir, organizationID, installationID, mandateID str
 		}
 	}
 	if len(versionDirs) == 0 {
-		return mandatedelivery.Receipt{}, fmt.Errorf("no hay una entrega verificada para %s — corré 'nucleus authority sync' primero", mandateID)
+		return mandatedelivery.Receipt{}, fmt.Errorf("no hay una entrega verificada para %s", mandateID)
 	}
 
 	var receipts []mandatedelivery.Receipt

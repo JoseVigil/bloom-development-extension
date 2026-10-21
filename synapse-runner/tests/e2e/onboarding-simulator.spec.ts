@@ -605,13 +605,13 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       }
       console.log(`[synapse-simulator] Project fuente=${PROJECT_SOURCE}; destino importado=${PROJECT_PATH}; ${PROJECT_FILES.length} archivos verificados`);
       const selected = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
-        onboarding?: { active_project_id?: string; organizations?: Array<{ org_slug: string; workspace_path: string; projects?: Array<{ project_id: string; project_name: string; project_path: string; genesis_launch_required?: boolean }> }> };
+        onboarding?: { active_project_id?: string; organizations?: Array<{ org_slug: string; workspace_path: string; projects?: Array<{ project_id: string; project_name: string; project_path: string; genesis_launch_required?: unknown }> }> };
       };
       const org = selected.onboarding?.organizations?.find(item => item.org_slug === WORKSPACE_ORG);
       expect(org?.workspace_path).toBe(WORKSPACE_PATH);
       const selectedProject = org?.projects?.find(project => project.project_name === 'sample_project');
       expect(selectedProject?.project_path).toBe(PROJECT_PATH);
-      expect(selectedProject?.genesis_launch_required).toBe(false);
+      expect(selectedProject?.genesis_launch_required, 'onboarding no escribe un flag de lanzamiento de Genesis').toBeUndefined();
       expect(selected.onboarding?.active_project_id).toBe(selectedProject?.project_id);
       if (!resumeCurrent) verifyOrganizationIdentity('antes de finalizar', false);
       await conductor!.mainWindow.click('#btn-project-continue');
@@ -628,7 +628,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       const completedState = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
         onboarding?: { pending_genesis_launch?: unknown };
       };
-      expect(completedState.onboarding?.pending_genesis_launch).toBeUndefined();
+      expect(completedState.onboarding?.pending_genesis_launch, 'cerrar onboarding no deja un lanzamiento de Genesis pendiente').toBeUndefined();
       if (!resumeCurrent) verifyOrganizationIdentity('onboarding finalizado', true);
     });
   } finally {

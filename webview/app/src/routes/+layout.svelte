@@ -11,7 +11,6 @@
   import { regimeStore } from '$lib/stores/regimeStore';
   import { websocketStore } from '$lib/stores/websocket';
   import { listMandates } from '$lib/api';
-  import { runPendingGenesisLaunch } from '$lib/bootstrap/genesisLaunch';
 
   // ============================================================================
   // NOTA DE FIX (ver detalle en el PR/commit):
@@ -72,13 +71,9 @@
     // por ese estado. Solo un breve loading inicial para evitar flash.
     isChecking = false;
 
-    // D-23 / B.4.1 (roadmap v3.2 §1.2/§6): al bootear, consumir el flag
-    // "arrancá Genesis" si Onboarding lo dejó pendiente. No-op silencioso
-    // fuera de Electron o si no hay nada pendiente — ver genesisLaunch.ts.
-	// Complete the durable launch handshake before the first reconciliation,
-	// so the initial GET can already see the newly created Mandate even when
-	// the WebSocket event arrived before this renderer subscribed.
-	void runPendingGenesisLaunch().finally(requestMandateReconciliation);
+    // Abrir Core sólo lee: la reconciliación inicial lista los Mandates
+    // existentes y no crea, descarga ni instala ninguno.
+    requestMandateReconciliation();
 
     // Mandate_Event_Mechanism_Auditoria_v1.md, frente 3: antes el WS solo
     // se conectaba desde routes/debug/+page.svelte — el arranque normal de

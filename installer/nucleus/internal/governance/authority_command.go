@@ -20,8 +20,6 @@ import (
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/governance/ownershipcontract"
-	"nucleus/internal/mandatedelivery"
-	"nucleus/internal/mandateinstall"
 )
 
 type AuthorityEvidenceReport struct {
@@ -377,7 +375,7 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 			report.Evidence["authority_version"] = result.State.Monotonic.HighWaterMark
 			report.Evidence["state_digest"] = result.State.Monotonic.StateDigest
 			// Reconciliación de identidad de organización (+ Tenant, Sovereign Tenant
-			// Fase 5) — mismo call site que mandate_delivery abajo, mismos valores que
+			// Fase 5) — mismos valores que
 			// ya están en scope (ningún fetch adicional para organizationId/
 			// installationId/issuer/trust anchor). Falla no-fatal — el sync de
 			// autoridad ya terminó con éxito para cuando se llega acá; ver
@@ -521,94 +519,26 @@ func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
 				if mode == ModeRemoteEnforced {
 					report.Evidence["effective_mode"] = string(ModeRemoteEnforced)
 					report.Evidence["cutover"] = false
-					goto cutoverComplete
-				}
-				principalID, principalErr := resolveCutoverPrincipal(result.State, legacySubject, active.OrganizationID, authorityCommandNow())
-				if principalErr != nil {
-					report.OK = false
-					report.Evidence["cutover_error"] = principalErr.Error()
-					return report, AuthorityCommandError{"remote_identity_ambiguous"}
-				}
-				var cp authority.Checkpoint
-				cpRaw, cpErr := os.ReadFile(checkpoint)
-				if cpErr != nil || json.Unmarshal(cpRaw, &cp) != nil {
-					report.OK = false
-					return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
-				}
-				if cutoverErr := CutoverRemoteEnforced(active.NucleusRoot, RemoteEnforcedCutoverEvidence{OrganizationID: active.OrganizationID, TenantID: *tenantID, IssuerID: binding.Issuer, TrustAnchorID: trustAnchorID, TrustAnchorFingerprint: trustAnchorFingerprint, AuthorityVersion: result.State.Monotonic.HighWaterMark, StateDigest: result.State.Monotonic.StateDigest, CheckpointHighWaterMark: cp.HighWaterMark, CheckpointStateDigest: cp.StateDigest, PrincipalID: principalID, Snapshot: result.State, SnapshotExpiresAt: result.State.Emission.ExpiresAt, ProjectBindings: bindings, RequiredProjectIDs: required}, authorityCommandNow()); cutoverErr != nil {
-					report.OK = false
-					report.Evidence["cutover_error"] = cutoverErr.Error()
-					return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
-				}
-				report.Evidence["effective_mode"] = string(ModeRemoteEnforced)
-				report.Evidence["cutover"] = true
-			}
-		cutoverComplete:
-			deliveryClient := mandatedelivery.Client{BaseURL: active.AuthorityBaseURL, HTTP: httpClient, Signer: identity.PrivateKey, Context: mandatedelivery.Context{OrganizationID: active.OrganizationID, InstallationID: identity.InstallationID, Issuer: binding.Issuer, Trust: trust, Now: authorityCommandNow}, Store: &mandatedelivery.Store{Root: filepath.Join(dir, "mandate-delivery")}}
-			deliveryResult, deliveryErr := deliveryClient.Receive(context.Background())
-			if deliveryErr != nil {
-				report.Evidence["mandate_delivery"] = "error"
-				report.Evidence["mandate_delivery_error"] = deliveryErr.Error()
-			} else {
-				report.Evidence["mandate_delivery"] = deliveryResult.Status
-				// Auto-encadenamiento sync→install (Encargo_Implementacion_AutoEncadenamiento_
-				// Sync_Install_y_Validacion_Backend_v1_0.md §2.3): tanto "accepted" como
-				// "replay" ya pasaron Verify con éxito (la única diferencia entre ambos es si
-				// ese digest ya se había aceptado antes), así que MandateID está poblado en
-				// los dos casos — ver mandatedelivery.AcceptOutcome. Encadenar también en
-				// "replay" es lo que resuelve, sin migración especial, el caso de una
-				// instalación que ya sincronizó antes de este cambio. Una falla acá NO debe
-				// romper sync (el sync de autoridad ya terminó con éxito para cuando se llega
-				// a este bloque) — se reporta como advertencia en la evidencia, mismo criterio
-				// no-bloqueante que ya tiene mandate_delivery_error arriba; report.OK no se
-				// toca por esta rama.
-				if deliveryResult.Status == "accepted" || deliveryResult.Status == "replay" {
-					// Mismo stream de telemetría "nucleus_mandate" que ya usa el comando manual
-					// 'nucleus mandate install' (ver commands/mandate_install.go,
-					// core.InitLogger(&c.Paths, "MANDATE", ...)) — no se crea un stream nuevo.
-					// InitLogger registra/rota el stream en telemetry.json automáticamente
-					// (core/logger.go: rolloverLocked → tm.RegisterStream); este bloque sólo
-					// necesita escribir líneas, igual que ya hace runInstallMandate para la
-					// misma operación disparada a mano.
-					mandateLogger, loggerErr := core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)
-					if loggerErr != nil {
-						report.Evidence["mandate_installed"] = false
-						report.Evidence["mandate_install_error"] = fmt.Sprintf("no pude inicializar el logger de MANDATE: %v", loggerErr)
-					} else {
-						defer mandateLogger.Close()
-						receipt, receiptErr := mandateinstall.LoadLatestReceipt(c.Paths.AppDataDir, active.OrganizationID, identity.InstallationID, deliveryResult.MandateID)
-						if receiptErr != nil {
-							mandateLogger.Error("auto-instalación (desde authority sync) falló al leer el recibo: %v", receiptErr)
-							report.Evidence["mandate_installed"] = false
-							report.Evidence["mandate_install_error"] = receiptErr.Error()
-						} else if mandateDelivery, content, extractErr := mandateinstall.ExtractContent(receipt); extractErr != nil {
-							mandateLogger.Error("auto-instalación (desde authority sync) falló al extraer el contenido: %v", extractErr)
-							report.Evidence["mandate_installed"] = false
-							report.Evidence["mandate_install_error"] = extractErr.Error()
-						} else {
-							// mandatesRoot equivale a supervisor.LoadNucleusConfig().MandatesRoot()
-							// (<workspace>/.bloom/.nucleus-{org}/.mandates) pero se deriva de
-							// active.NucleusRoot, ya resuelto arriba por core.ResolveActiveOrgContext
-							// — evita un import de internal/supervisor y una segunda lectura de
-							// nucleus.json sólo para recomputar el mismo path.
-							mandatesRoot := filepath.Join(active.NucleusRoot, ".mandates")
-							path, alreadyInstalled, materializeErr := mandateinstall.MaterializeFile(mandatesRoot, mandateDelivery.Envelope.MandateID, content)
-							if materializeErr != nil {
-								mandateLogger.Error("auto-instalación (desde authority sync) falló al materializar: %v", materializeErr)
-								report.Evidence["mandate_installed"] = false
-								report.Evidence["mandate_install_error"] = materializeErr.Error()
-							} else {
-								if alreadyInstalled {
-									mandateLogger.Success("mandate %s ya estaba materializado en %s (auto-encadenado desde authority sync, idempotente)", mandateDelivery.Envelope.MandateID, path)
-								} else {
-									mandateLogger.Success("mandate %s materializado automáticamente en %s (auto-encadenado desde authority sync)", mandateDelivery.Envelope.MandateID, path)
-								}
-								report.Evidence["mandate_installed"] = true
-								report.Evidence["mandate_id"] = mandateDelivery.Envelope.MandateID
-								report.Evidence["mandate_path"] = path
-							}
-						}
+				} else {
+					principalID, principalErr := resolveCutoverPrincipal(result.State, legacySubject, active.OrganizationID, authorityCommandNow())
+					if principalErr != nil {
+						report.OK = false
+						report.Evidence["cutover_error"] = principalErr.Error()
+						return report, AuthorityCommandError{"remote_identity_ambiguous"}
 					}
+					var cp authority.Checkpoint
+					cpRaw, cpErr := os.ReadFile(checkpoint)
+					if cpErr != nil || json.Unmarshal(cpRaw, &cp) != nil {
+						report.OK = false
+						return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
+					}
+					if cutoverErr := CutoverRemoteEnforced(active.NucleusRoot, RemoteEnforcedCutoverEvidence{OrganizationID: active.OrganizationID, TenantID: *tenantID, IssuerID: binding.Issuer, TrustAnchorID: trustAnchorID, TrustAnchorFingerprint: trustAnchorFingerprint, AuthorityVersion: result.State.Monotonic.HighWaterMark, StateDigest: result.State.Monotonic.StateDigest, CheckpointHighWaterMark: cp.HighWaterMark, CheckpointStateDigest: cp.StateDigest, PrincipalID: principalID, Snapshot: result.State, SnapshotExpiresAt: result.State.Emission.ExpiresAt, ProjectBindings: bindings, RequiredProjectIDs: required}, authorityCommandNow()); cutoverErr != nil {
+						report.OK = false
+						report.Evidence["cutover_error"] = cutoverErr.Error()
+						return report, AuthorityCommandError{"remote_enforced_cutover_failed"}
+					}
+					report.Evidence["effective_mode"] = string(ModeRemoteEnforced)
+					report.Evidence["cutover"] = true
 				}
 			}
 		case "decision":
@@ -863,3 +793,12 @@ func init() {
 		return NewAuthorityCommand(defaultAuthorityServices(c), func() bool { return c.IsJSON })
 	})
 }
+
+// ConfirmedContextEvidence exposes the read projection of `authority
+// context-read` to other commands. It never claims, syncs or writes.
+func ConfirmedContextEvidence(appDataDir, selectedOrg, selectedProject string) map[string]any {
+	return confirmedContextEvidence(appDataDir, selectedOrg, selectedProject)
+}
+
+// AuthorityRoots returns the pinned roots that verify the trust manifest.
+func AuthorityRoots() map[string]ed25519.PublicKey { return authorityCommandRoots() }

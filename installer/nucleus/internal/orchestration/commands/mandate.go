@@ -26,7 +26,7 @@ func createMandateCommand(c *core.Core) *cobra.Command {
 		Short: "Gestiona mandates (standard, genesis, domain_expansion)",
 		Annotations: map[string]string{
 			"category":      "MANDATES",
-			"json_response": `{"command":"mandate","subcommands":["create","build","genesis","status","publish","install","approve","activate","ing-decision"]}`,
+			"json_response": `{"command":"mandate","subcommands":["create","build","genesis","status","publish","install","offer","approve","activate","ing-decision"]}`,
 		},
 		Example: "  nucleus mandate --help\n  nucleus --json mandate status --id MANDATE_ID",
 	}
@@ -37,6 +37,7 @@ func createMandateCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(mandateStatusSubcommand(c))
 	cmd.AddCommand(createPublishMandateSubcommand(c))
 	cmd.AddCommand(createInstallMandateSubcommand(c))
+	cmd.AddCommand(createMandateOfferCommand(c))
 	cmd.AddCommand(createMandateActCommand(c, "approve"))
 	cmd.AddCommand(createMandateActCommand(c, "activate"))
 	cmd.AddCommand(createMandateINGDecisionCommand(c))

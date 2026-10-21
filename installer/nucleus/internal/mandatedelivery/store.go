@@ -167,3 +167,6 @@ func (s *Store) Accept(raw []byte, ctx Context) (AcceptOutcome, error) {
 	}
 	return AcceptOutcome{Status: "accepted", MandateID: e.MandateID}, nil
 }
+
+// ReceiptPath is where Accept stores the receipt of an envelope.
+func (s *Store) ReceiptPath(e Envelope) string { return s.path(e) }

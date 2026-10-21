@@ -21,6 +21,7 @@ const { registerHealthHandlers }   = require('./core/ipc/health-handlers');
 const { registerProfilesHandlers } = require('./core/ipc/profiles-handlers');
 const { registerIntelligenceSupplyHandlers } = require('./core/ipc/intelligence-supply-handlers');
 const { registerConfirmedContextHandlers } = require('./core/ipc/confirmed-context-handlers');
+const { registerWisdomOfferHandlers } = require('./core/ipc/wisdom-offer-handlers');
 // synapse-bridge.js vive en conductor/shared/ — un nivel arriba de workspace/
 const { SynapseBridge, ONBOARDING_EVENTS } = require(path.join(__dirname, '..', 'shared', 'synapse-bridge'));
 const { MilestoneRegistry } = require('./onboarding/milestone-registry');
@@ -667,6 +668,7 @@ app.whenReady().then(async () => {
   registerProfilesHandlers(execNucleus, NUCLEUS_JSON, coreLog);
   registerIntelligenceSupplyHandlers(execNucleus, NUCLEUS_JSON, paths.aitapExe, coreLog);
   registerConfirmedContextHandlers(execNucleus, NUCLEUS_JSON, coreLog);
+  registerWisdomOfferHandlers(execNucleus, NUCLEUS_JSON, coreLog);
 
   const onboardingDone = nucleusData?.onboarding?.completed === true;
 

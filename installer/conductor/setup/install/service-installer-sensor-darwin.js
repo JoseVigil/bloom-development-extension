@@ -2,6 +2,8 @@
 // Instala bloom-sensor como LaunchAgent del usuario actual.
 // Registra el plist en ~/Library/LaunchAgents y lo carga con launchctl.
 // No delega en `sensor install` — ese subcomando no existe en el binario Darwin.
+// El binario lo despliega Metamorph (`metamorph rollout --only sensor`); el setup
+// sólo registra y carga el agente. El comando de ejecución del sensor es `run`.
 
 'use strict';
 
@@ -17,6 +19,8 @@ const LAUNCH_AGENT_ID  = 'com.bloom.sensor';
 const PLIST_FILENAME   = `${LAUNCH_AGENT_ID}.plist`;
 const LAUNCH_AGENTS_DIR = path.join(os.homedir(), 'Library', 'LaunchAgents');
 const PLIST_PATH       = path.join(LAUNCH_AGENTS_DIR, PLIST_FILENAME);
+// Ninguna llamada externa del paso 11 puede bloquear el setup sin límite.
+const EXEC_TIMEOUT_MS  = 10000;
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -35,7 +39,7 @@ function buildPlist(sensorExe) {
   <key>ProgramArguments</key>
   <array>
     <string>${sensorExe}</string>
-    <string>serve</string>
+    <string>run</string>
   </array>
 
   <!-- Reiniciar automáticamente si el proceso muere -->
@@ -63,6 +67,7 @@ function getSensorPid() {
     const out = execSync(`launchctl list ${LAUNCH_AGENT_ID} 2>/dev/null`, {
       encoding: 'utf8',
       stdio: 'pipe',
+      timeout: EXEC_TIMEOUT_MS,
     }).trim();
     // Formato: PID  Status  Label
     const match = out.match(/^(\d+)\s+/m);
@@ -85,8 +90,7 @@ async function installSensor() {
   if (!await fs.pathExists(sensorExe)) {
     throw new Error(
       `bloom-sensor no encontrado en: ${sensorExe}\n` +
-      `  Asegúrate de que el step de copia usa el nombre '${SENSOR_BIN_NAME}' ` +
-      `(consistente con el system_map en nucleus.json).`
+      `  Desplegalo con: metamorph rollout --only sensor`
     );
   }
 
@@ -100,16 +104,20 @@ async function installSensor() {
     execSync(`launchctl bootout gui/$(id -u) ${PLIST_PATH} 2>/dev/null || true`, {
       shell: true,
       stdio: 'ignore',
+      timeout: EXEC_TIMEOUT_MS,
     });
     await new Promise(r => setTimeout(r, 400));
     console.log('   ✓ LaunchAgent previo descargado (si existía)');
   } catch (_) {}
 
-  // pkill por si el proceso corría fuera de launchd (e.g. inicio manual anterior)
+  // pkill por si el proceso corría fuera de launchd (e.g. inicio manual anterior).
+  // -x compara el nombre exacto del proceso: con -f el patrón coincidía también
+  // con la shell que ejecuta este mismo comando.
   try {
-    execSync(`pkill -f "${SENSOR_BIN_NAME}" 2>/dev/null || true`, {
+    execSync(`pkill -x "${SENSOR_BIN_NAME}" 2>/dev/null || true`, {
       shell: true,
       stdio: 'ignore',
+      timeout: EXEC_TIMEOUT_MS,
     });
     await new Promise(r => setTimeout(r, 300));
   } catch (_) {}
@@ -132,6 +140,7 @@ async function installSensor() {
       shell: true,
       encoding: 'utf8',
       stdio: 'pipe',
+      timeout: EXEC_TIMEOUT_MS,
     });
     console.log('   ✓ launchctl bootstrap OK');
   } catch (err) {
@@ -157,8 +166,8 @@ async function installSensor() {
   // Fallback: verificar con pgrep por si launchctl list tarda
   try {
     const pgrepOut = execSync(
-      `pgrep -x "${SENSOR_BIN_NAME}" 2>/dev/null || pgrep -f "${SENSOR_BIN_NAME} serve" 2>/dev/null || true`,
-      { shell: true, encoding: 'utf8', stdio: 'pipe' }
+      `pgrep -x "${SENSOR_BIN_NAME}" 2>/dev/null || true`,
+      { shell: true, encoding: 'utf8', stdio: 'pipe', timeout: EXEC_TIMEOUT_MS }
     ).trim();
 
     if (pgrepOut) {
@@ -184,6 +193,7 @@ async function uninstallSensor() {
     execSync(`launchctl bootout gui/$(id -u) ${PLIST_PATH} 2>/dev/null || true`, {
       shell: true,
       stdio: 'ignore',
+      timeout: EXEC_TIMEOUT_MS,
     });
     console.log('   ✓ LaunchAgent descargado');
   } catch (_) {}
@@ -196,9 +206,10 @@ async function uninstallSensor() {
 
   // Matar cualquier proceso residual
   try {
-    execSync(`pkill -f "${SENSOR_BIN_NAME}" 2>/dev/null || true`, {
+    execSync(`pkill -x "${SENSOR_BIN_NAME}" 2>/dev/null || true`, {
       shell: true,
       stdio: 'ignore',
+      timeout: EXEC_TIMEOUT_MS,
     });
   } catch (_) {}
 

@@ -464,10 +464,9 @@ export async function finalizeIntent(id: string, nucleusPath?: string): Promise<
 // MANDATE API
 //
 // Implementación del plan derivado de Mandate_Event_Mechanism_Auditoria_v1.md
-// (frentes 1 y 2): Camino 2 (Fastify → Node, POST /mandates) pasa a ser el
-// que dispara genesisLaunch.ts porque emite publishMandateEvent de forma
-// síncrona sin depender de la cadena watcher→workflow→activity que sigue
-// muerta bajo dev-start (Camino 1, CLI). listMandates() es el mecanismo de
+// (frentes 1 y 2): Camino 2 (Fastify → Node, POST /mandates) emite
+// publishMandateEvent de forma síncrona sin depender de la cadena
+// watcher→workflow→activity (Camino 1, CLI). listMandates() es el mecanismo de
 // catch-up (Addendum A del mismo documento): antes no existía ninguna forma
 // de que Core supiera qué mandates ya existían en disco al montar — el WS
 // solo entrega eventos en vivo, no repite nada de antes de conectarse.

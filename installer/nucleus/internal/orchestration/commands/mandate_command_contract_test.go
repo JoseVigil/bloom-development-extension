@@ -29,6 +29,11 @@ func TestMandateCommandMetadataContracts(t *testing.T) {
 		"mandate genesis recover acknowledge",
 		"mandate genesis project-status",
 		"mandate genesis adopt",
+		"mandate offer",
+		"mandate offer list",
+		"mandate offer installed",
+		"mandate offer install",
+		"mandate offer prepare",
 	}
 	byPath := map[string]*cobra.Command{}
 	var visit func(*cobra.Command, string)

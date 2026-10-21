@@ -219,7 +219,7 @@ func TestResolveCutoverPrincipalRequiresExactlyOneVerifiedLegacyIdentity(t *test
 	}
 }
 
-func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testing.T) {
+func TestAuthoritySyncWiresIdentityRegistrationTrustWithoutMandateDelivery(t *testing.T) {
 	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	rootPublic, rootPrivate, _ := ed25519.GenerateKey(rand.Reader)
 	issuerPublic, issuerPrivate, _ := ed25519.GenerateKey(rand.Reader)
@@ -241,7 +241,7 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		t.Fatal(err)
 	}
 
-	registrationCount, projectClaimCount, mandateMode := 0, 0, "pending"
+	registrationCount, projectClaimCount, mandateMode, mandateDeliveryRequests := 0, 0, "pending", 0
 	capabilityGets, capabilityPuts, capabilityRevision := 0, 0, "1"
 	capability11 := false
 	failureStage := ""
@@ -348,6 +348,7 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 			_ = json.Unmarshal(signEnvelope(check, "BLOOM-AUTHORITY-CURRENT-PULL-v1", "issuer-key", issuerPrivate), &checkEnvelope)
 			_ = json.NewEncoder(w).Encode(map[string]any{"snapshot": json.RawMessage(snapshot), "current_check": checkEnvelope})
 		case "/v1/mandate/bootstrap":
+			mandateDeliveryRequests++
 			if mandateMode == "pending" {
 				w.WriteHeader(404)
 				return
@@ -417,35 +418,32 @@ func TestAuthoritySyncWiresIdentityRegistrationTrustAndMandateDelivery(t *testin
 		authorityCommandNow = func() time.Time { return time.Now().UTC() }
 	}()
 	// LogsDir/TelemetryDir replican lo que core.InitPaths() arma en producción
-	// (filepath.Join(appDataDir, "logs")) — necesario porque el auto-encadenamiento de
-	// sync ahora usa core.InitLogger(&c.Paths, "MANDATE", ...) (mismo stream de
-	// telemetría "nucleus_mandate" que ya usa 'nucleus mandate install' manual); sin
-	// LogsDir, InitLogger escribiría con un path relativo vacío fuera de t.TempDir().
+	// (filepath.Join(appDataDir, "logs")); sin LogsDir, el logger de GOVERNANCE
+	// escribiría con un path relativo vacío fuera de t.TempDir().
 	services := defaultAuthorityServices(&core.Core{Paths: core.Paths{AppDataDir: appData, LogsDir: filepath.Join(appData, "logs"), TelemetryDir: filepath.Join(appData, "logs")}})
-	for _, expected := range []string{"pending", "accepted", "replay", "error"} {
-		mandateMode = expected
+	// La recepción y materialización de Mandates no forman parte de authority sync:
+	// el Backend ofrece una entrega en cada modo y el sync no la pide, no deja recibos
+	// ni escribe mandate.json. La instalación ocurre sólo por un gesto explícito.
+	for _, offer := range []string{"pending", "accepted", "replay", "error"} {
+		mandateMode = offer
 		report, err := services.Run("sync", nil)
-		if err != nil || !report.OK || report.Evidence["mandate_delivery"] != expected {
-			t.Fatalf("mode=%s report=%+v err=%v", expected, report, err)
+		if err != nil || !report.OK {
+			t.Fatalf("offer=%s report=%+v err=%v", offer, report, err)
 		}
-		// Auto-encadenamiento sync→install (Encargo_Implementacion_AutoEncadenamiento_
-		// Sync_Install_y_Validacion_Backend_v1_0.md §2.4): tanto "accepted" como "replay"
-		// deben terminar con el mandate materializado en disco de verdad — no alcanza con
-		// que el campo de evidencia diga true, hay que leer mandate.json del filesystem y
-		// confirmar el contenido exacto que sirvió el handler fake de /v1/mandate/bootstrap.
-		if expected == "accepted" || expected == "replay" {
-			if report.Evidence["mandate_installed"] != true {
-				t.Fatalf("mode=%s expected mandate_installed=true, report=%+v", expected, report)
-			}
-			mandatePath := filepath.Join(nucleusRoot, ".mandates", "mandate", "mandate.json")
-			got, readErr := os.ReadFile(mandatePath)
-			if readErr != nil {
-				t.Fatalf("mode=%s no pude leer el mandate.json materializado en %s: %v", expected, mandatePath, readErr)
-			}
-			if string(got) != "mandate" {
-				t.Fatalf("mode=%s contenido de mandate.json inesperado: got %q", expected, got)
+		for _, key := range []string{"mandate_delivery", "mandate_delivery_error", "mandate_installed", "mandate_install_error", "mandate_id", "mandate_path"} {
+			if _, present := report.Evidence[key]; present {
+				t.Fatalf("offer=%s sync reported mandate evidence %q: %+v", offer, key, report.Evidence)
 			}
 		}
+	}
+	if mandateDeliveryRequests != 0 {
+		t.Fatalf("authority sync requested mandate delivery %d times", mandateDeliveryRequests)
+	}
+	if _, err := os.Stat(filepath.Join(appData, "authority", "mandate-delivery")); !os.IsNotExist(err) {
+		t.Fatalf("authority sync created a mandate delivery store: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(nucleusRoot, ".mandates")); !os.IsNotExist(err) {
+		t.Fatalf("authority sync wrote under .mandates: err=%v", err)
 	}
 	if registrationCount != 4 {
 		t.Fatalf("registration count=%d", registrationCount)

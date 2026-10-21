@@ -2,34 +2,21 @@
 //
 // Step: mandate_genesis — screen-mandate.
 //
-// REDEFINIDO (D-22, BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6,
-// Fase B — diseño ya cerrado, esto es la implementación): este step deja de
-// disparar la creación real del Genesis Mandate. Ya no llama a
-// `window.onboarding.createMandate(...)` — esa llamada (mismo canal IPC,
-// sin cambios de Electron) se mueve a Core, disparada automáticamente al
-// bootear si viene de un Onboarding recién cerrado (D-23,
-// onboarding.pending_genesis_launch en nucleus.json) o a demanda más
-// adelante. Ver onboarding-handlers.js 'onboarding:create-mandate' (handler
-// sin tocar, solo cambia quién lo invoca) y 'onboarding:complete'
-// (quien escribe el flag antes de abrir Core).
+// Pantalla explicativa: confirma que el proyecto seleccionado o importado
+// queda como contexto del workspace. No crea, descarga ni instala Mandates;
+// Genesis se instala desde Wisdom, por gesto explícito del Paladín y sobre un
+// proyecto ya existente.
 //
-// Este step pasa a ser una pantalla puramente explicativa: comunica qué es
-// Genesis y qué va a pasar al entrar a Core, sin ejecutar nada de negocio.
-// El criterio de "step completo" ya no es `genesis_mandate_id` (a esta
-// altura del flujo ese mandate todavía no existe) — pasa a ser
-// `onboarding.mandate_screen_acknowledged`, seteado por el mismo mecanismo
-// genérico que ya usan otros steps sin cortex_events propios:
+// El step se completa con `onboarding.mandate_screen_acknowledged`, mediante
 // window.onboarding.markStepComplete({step:'mandate_genesis'}) →
 // onboarding-handlers.js 'onboarding:mark-step-complete' →
-// reactor.handleMilestone() → _persistStepComplete() (milestone-reactor.js).
-// No se inventa un mecanismo de verificación nuevo — ver step-verifiers.js
-// (D-22), que ya soporta json_field sobre cualquier campo booleano.
+// reactor.handleMilestone() → _persistStepComplete() (milestone-reactor.js),
+// verificado por step-verifiers.js con json_field.
 
 import { log } from '../core/ipc-bridge.js';
 import { addNotification } from '../core/notifications.js';
 import { navigateTo, registerStepHandler } from '../core/navigation.js';
 import { registerMilestoneHandler } from '../core/ipc-bridge.js';
-import { selection } from '../core/shared-state.js';
 
 function getStatusEl() {
   return document.getElementById('mandate-status');
@@ -67,23 +54,6 @@ function hideMandateStatus() {
  */
 function resetMandateScreen() {
   hideMandateStatus();
-  const required = selection.genesisLaunchRequired === true;
-  const title = document.getElementById('mandate-title');
-  const body = document.getElementById('mandate-body');
-  const details = document.getElementById('mandate-details');
-  const milestoneSummary = document.getElementById('milestone-summary');
-  const mandateState = document.querySelector('#mn-mandate .m-node-state');
-  const launchGenesis = document.querySelector('#ll-3 .launch-text');
-  if (title) title.innerHTML = required ? 'Meet your<br>Genesis Mandate.' : 'Project context<br>is ready.';
-  if (body) body.textContent = required
-    ? 'Genesis is the first Mandate for a new project. Here\'s what happens once you enter your workspace:'
-    : 'You selected or imported an existing project. Bloom will use it as workspace context without starting Genesis.';
-  if (details) details.hidden = !required;
-  if (milestoneSummary) milestoneSummary.innerHTML = required
-    ? 'Your system now exists.<br>Your first mandate is ready.'
-    : 'Your system now exists.<br>Your project context is ready.';
-  if (mandateState) mandateState.textContent = required ? 'Pending launch' : 'Not required';
-  if (launchGenesis) launchGenesis.textContent = required ? 'Preparing Genesis Mandate' : 'Confirming project context';
   const btn = getContinueBtn();
   if (btn) {
     btn.disabled = false;
@@ -94,8 +64,7 @@ function resetMandateScreen() {
 
 /**
  * Único trabajo de este step: registrar que el usuario reconoció la
- * pantalla explicativa de Genesis. NO crea ningún mandate — eso ocurre
- * después, del lado de Core (ver comentario de cabecera).
+ * pantalla explicativa. No crea ningún Mandate.
  */
 export async function acknowledgeMandateScreen() {
   log('info', 'click — btn-mandate-continue (acknowledge, sin crear mandate)');
@@ -113,12 +82,7 @@ export async function acknowledgeMandateScreen() {
 
   if (result.success) {
     showMandateStatus('✓ Got it', 'success');
-    addNotification(
-      selection.genesisLaunchRequired === true
-        ? 'Genesis will start once you enter your workspace'
-        : 'Existing project confirmed — Genesis is not required',
-      { icon: '✓', type: 'success' }
-    );
+    addNotification('Project confirmed', { icon: '✓', type: 'success' });
     navigateTo('__onboarding_complete__');
   } else {
     if (btn) {

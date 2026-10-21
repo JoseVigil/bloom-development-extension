@@ -1776,6 +1776,14 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		return nil, nodeErr
 	}
 
+	// Never spawn on top of a live Control Plane: the new child would crash
+	// with EADDRINUSE after overwriting control_plane_api.pid, orphaning the
+	// real listener. See reclaimControlPlanePort (control_plane_reclaim_*.go).
+	if err := reclaimControlPlanePort(nodePath, bundleScript); err != nil {
+		logFile.Close()
+		return nil, err
+	}
+
 	// CRÍTICO: exec.Command SIN contexto (no exec.CommandContext).
 	// bootCtx tiene timeout de 120s — si usáramos CommandContext, Go mandaría
 	// SIGKILL al proceso Node cuando el ctx expire, matando el Control Plane

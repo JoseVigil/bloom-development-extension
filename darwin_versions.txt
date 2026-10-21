@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — darwin
-# Generated: 2026-10-18 03:57:51
+# Generated: 2026-10-20 19:19:07
 
 ---
 brain/__build__.py
@@ -109,15 +109,15 @@ installer/impact/scripts/build_number.txt
 
 ---
 installer/metamorph/scripts/build_number.effective.txt
-8
+11
 
 ---
 installer/metamorph/scripts/build_number.txt
-8
+11
 
 ---
 installer/nucleus/scripts/build_number.effective.txt
-65
+67
 
 ---
 installer/sensor/scripts/build_number.effective.txt

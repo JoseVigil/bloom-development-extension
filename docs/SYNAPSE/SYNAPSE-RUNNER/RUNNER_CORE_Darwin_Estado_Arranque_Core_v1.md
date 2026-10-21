@@ -43,6 +43,7 @@ Workspace Core abre en Darwin con `npm run dev:darwin` (desde `installer/conduct
 7. **SynapseBridge y reapertura desde el Dock.** El bridge guarda la ventana por valor; tras `activate` podría emitir a la ventana anterior. No probado.
 8. **Windows y Linux** tampoco incluyen `native/bin/bootstrap` en `extraResources`; no se tocaron.
 9. **Node del sistema 20.18.0**: `vite@7` de Orrery standalone exige ≥20.19; no afecta a Core (usa el Vite 6 de `webview/app`).
+10. **Ciclo de vida del Svelte dev server (mejora independiente, fuera de S1+P1).** Nucleus lo arranca por tres caminos (`dev-start`, arranque del servicio en `service.go:2183`, `health --fix` en `health.go:641`), siempre como `npm run dev` en `<origin_path>/webview/app` con grupo de procesos propio y sin pidfile. Si `:5173` ya responde, lo adopta sin PID. `Shutdown()` lo excluye a propósito y no existe comando de parada: el único medio documentado es manual (Ctrl-C o `pkill`). Mejora propuesta: pidfile de `svelte_dev` (PID, grupo, `cwd`, inicio) escrito por `startSvelteDev()`/`fixSvelteDev()`, y un subcomando de `service` (nombre a definir) que detenga sólo ese grupo tras verificar identidad (usuario, `cwd` = `<origin_path>/webview/app`, comando `vite dev`/`npm run dev`), espere a liberar `:5173` y se niegue ante cualquier ambigüedad. Sin cambios en `Shutdown()`.
 
 ## 4. Siguiente paso sugerido
 

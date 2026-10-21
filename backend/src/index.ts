@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { DeliveryError, resolveMandateDelivery } from './mandate-delivery';
 import { PublishError, publishMandate, type PublishMandateBody } from './mandate-publish';
+import { configuredDefinitionKey, deliverMandateOffer, enableMandateOffer, listMandateOffers, OfferError,
+  operatorAuthorized, publishMandateDefinition } from './mandate-offers';
 import { manifestEtag, resolveIonManifest } from "./manifest";
 import {
   readInstallationAuthHeaders,
@@ -9,7 +11,7 @@ import {
 } from "./authority/identity";
 import { resolveTrustBundle } from "./authority/snapshot";
 import { authoritySnapshotResponse } from "./authority/snapshot-route";
-import { configuredAuthorityHumanResponse } from "./authority/administration-route";
+import { configuredAuthorityHumanResponse, provisionFixtureTrustManifestFromEnv } from "./authority/administration-route";
 import { configuredAuthorityTrustResponse } from './authority/trust-route';
 import { AuthoritySyncObject } from './authority/sync-object';
 import { authorityEvidenceResponse } from './authority/evidence-route';
@@ -164,6 +166,67 @@ app.get('/v1/mandate/bootstrap', verifyInstallationAuth, async (context) => {
   } catch (error) {
     if (error instanceof DeliveryError) return context.json({ error: error.message }, error.status);
     return context.json({ error: 'mandate_delivery_failed' }, 500);
+  }
+});
+
+// --- Oferta inicial de Mandate (Wisdom) -------------------------------------------
+// Catálogo sin bytes y entrega de la versión exacta: autenticación de instalación.
+// Publicación y habilitación: operador, sólo en modo fixture local.
+const offerError = (context: any, error: unknown) => error instanceof OfferError
+  ? context.json({ error: error.message }, error.status)
+  : context.json({ error: 'mandate_offer_failed' }, 500);
+
+app.get('/v1/mandate/offers', verifyInstallationAuth, async (context) => {
+  if (context.req.queries('org')?.length !== 1) return context.json({ error: 'invalid_query' }, 400);
+  try {
+    context.header('Cache-Control', 'no-store');
+    return context.json(await listMandateOffers(context.env, context.req.query('org')!));
+  } catch (error) { return offerError(context, error); }
+});
+
+app.get('/v1/mandate/offers/:definitionId/versions/:version', verifyInstallationAuth, async (context) => {
+  const installationId = context.req.query('installation_id');
+  const digest = context.req.query('digest');
+  if (!installationId || !digest || context.req.queries('installation_id')?.length !== 1 ||
+      context.req.queries('digest')?.length !== 1 || context.req.queries('org')?.length !== 1)
+    return context.json({ error: 'invalid_recipient_query' }, 400);
+  if (installationId !== context.req.header('X-Bloom-Installation-Id')) return context.json({ error: 'recipient_mismatch' }, 403);
+  try {
+    const delivery = await deliverMandateOffer(context.env, context.req.query('org')!, installationId,
+      context.req.param('definitionId'), context.req.param('version'), digest);
+    context.header('Cache-Control', 'no-store');
+    return context.json(delivery);
+  } catch (error) { return offerError(context, error); }
+});
+
+app.post('/v1/mandate/offers/publish', async (context) => {
+  if (!operatorAuthorized(context.env, context.req.raw)) return context.json({ error: 'operator_unauthorized' }, 401);
+  const key = configuredDefinitionKey(context.env);
+  if (!key) return context.json({ error: 'mandate_definition_key_unconfigured' }, 503);
+  const body = await context.req.json<{ definition_base64?: unknown }>().catch(() => null);
+  if (!body || typeof body.definition_base64 !== 'string') return context.json({ error: 'invalid_body' }, 400);
+  let bytes: Uint8Array;
+  try { bytes = Uint8Array.from(atob(body.definition_base64), c => c.charCodeAt(0)); }
+  catch { return context.json({ error: 'invalid_base64' }, 400); }
+  try { return context.json(await publishMandateDefinition(context.env, key, bytes)); }
+  catch (error) { return offerError(context, error); }
+});
+
+app.post('/v1/mandate/offers/enable', async (context) => {
+  if (!operatorAuthorized(context.env, context.req.raw)) return context.json({ error: 'operator_unauthorized' }, 401);
+  if (!configuredDefinitionKey(context.env)) return context.json({ error: 'mandate_definition_key_unconfigured' }, 503);
+  const body = await context.req.json<{ organization_id?: unknown; definition_id?: unknown; version?: unknown; digest?: unknown }>().catch(() => null);
+  if (!body || [body.organization_id, body.definition_id, body.version, body.digest].some(v => typeof v !== 'string'))
+    return context.json({ error: 'invalid_body' }, 400);
+  try {
+    const enabled = await enableMandateOffer(context.env, body.organization_id as string, body.definition_id as string,
+      body.version as string, body.digest as string);
+    // Sin la clave del publicador en el trust manifest, Nucleus no puede verificar la oferta.
+    await provisionFixtureTrustManifestFromEnv(context.env as any, body.organization_id as string);
+    return context.json(enabled);
+  } catch (error) {
+    if (error instanceof OfferError) return offerError(context, error);
+    return context.json({ error: 'mandate_offer_enable_failed' }, 500);
   }
 });
 

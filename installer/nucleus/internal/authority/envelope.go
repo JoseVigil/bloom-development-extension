@@ -202,14 +202,25 @@ func checkWireShape(value any, t reflect.Type) error {
 		if !ok {
 			return errors.New("wire object required")
 		}
-		if len(m) != t.NumField() {
-			return errors.New("missing or unknown wire property")
+		// Una propiedad marcada `wire:"optional"` puede faltar; ninguna otra.
+		// Toda propiedad presente debe corresponder a un campo declarado.
+		known := map[string]bool{}
+		for i := 0; i < t.NumField(); i++ {
+			known[strings.Split(t.Field(i).Tag.Get("json"), ",")[0]] = true
+		}
+		for key := range m {
+			if !known[key] {
+				return errors.New("missing or unknown wire property")
+			}
 		}
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
 			key := strings.Split(field.Tag.Get("json"), ",")[0]
 			v, exists := m[key]
 			if !exists {
+				if field.Tag.Get("wire") == "optional" {
+					continue
+				}
 				return fmt.Errorf("missing wire property %s", key)
 			}
 			if field.Type == reflect.TypeOf(json.RawMessage{}) && v == nil && key != "value" {

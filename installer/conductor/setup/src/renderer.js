@@ -236,6 +236,16 @@ class InstallationManager {
 
       console.log("✅ [AUTO] installService() resolvió. Profile:", this.profileId);
 
+      // Si el launch del perfil ya estaba completo de una corrida anterior,
+      // installer.js lo saltea y main.js nunca emite heartbeat:starting.
+      // Sin esto la pantalla queda congelada en el último paso que reportó
+      // progreso. Pasamos a la pantalla de heartbeat y verificamos por polling.
+      if (this.ui.currentScreen === 'installation-screen') {
+        console.log("🔁 [AUTO] Launch salteado (ya completado) → verificación por polling");
+        this.ui.showScreen('heartbeat-screen');
+        this._startHeartbeatFallbackPoll();
+      }
+
       // Limpiar suscripción Synapse cuando la instalación termina exitosamente.
       // El listener de heartbeat:validated ya manejó la transición de UI;
       // no necesitamos más eventos granulares desde el renderer.
@@ -273,6 +283,8 @@ class InstallationManager {
           if (sub) sub.textContent = 'Perfil conectado · Handshake exitoso';
           await this.sleep(1800);
           this.ui.showScreen('connection-success-screen');
+          const ob = document.getElementById('start-onboarding-btn');
+          if (ob) ob.disabled = false;
           return;
         }
       } catch (e) { console.warn('[Fallback poll] error:', e.message); }

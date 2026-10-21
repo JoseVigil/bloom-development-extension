@@ -7,7 +7,7 @@ import { createWindowsFunctionalRoot, type FunctionalRoot } from '../../src/runn
 import { launchFunctionalCore, type FunctionalLaunch } from '../../src/runner-core/windows-functional-launcher';
 import { assertProductControlsUnchanged, snapshotProductControls, verifyFunctionalFixture } from '../../src/runner-core/windows-functional-preflight';
 
-test('Core consumes one synthetic Genesis pending and sends exactly one simulated POST', async () => {
+test('Core leaves a legacy Genesis pending inert and sends no Mandate POST', async () => {
   test.skip(process.platform !== 'win32', 'Windows Job functional gate');
   test.setTimeout(1_200_000);
   const controls = {
@@ -24,7 +24,11 @@ test('Core consumes one synthetic Genesis pending and sends exactly one simulate
   try {
     fixture = createWindowsFunctionalRoot(resolvePackagedWorkspaceSource(), path.resolve(__dirname, '../../../webview/app'));
     verifyFunctionalFixture(fixture);
-    fs.writeFileSync(path.join(fixture.root, '.runner-core', 'fail-next-post'), 'controlled');
+    // El fixture conserva un pending_genesis_launch y genesis_launch_required del
+    // modelo anterior: son residuos inertes que Core no debe consumir.
+    const initialOnboarding = JSON.parse(fs.readFileSync(fixture.nucleusJson, 'utf8')).onboarding;
+    const mandatesDir = path.join(fixture.workspace, '.bloom', `.nucleus-${fixture.orgSlug}`, '.mandates');
+    const mandatesBefore = fs.existsSync(mandatesDir) ? fs.readdirSync(mandatesDir).sort() : null;
     launched = await launchFunctionalCore(fixture);
     const userData = path.join(fixture.root, 'electron-user-data');
     const activePort = path.join(userData, 'DevToolsActivePort');
@@ -41,7 +45,11 @@ test('Core consumes one synthetic Genesis pending and sends exactly one simulate
       expect(page).toBeTruthy();
       await expect(page!).toHaveURL('http://127.0.0.1:5173/', { timeout: 60_000 });
       await expect(page!.locator('body')).toBeVisible();
-      await expect.poll(() => page!.evaluate(() => typeof (window as any).onboarding?.readPendingGenesisLaunch), { timeout: 30_000 }).toBe('function');
+      await expect.poll(() => page!.evaluate(() => typeof (window as any).onboarding?.genesisProjectStatus), { timeout: 30_000 }).toBe('function');
+      expect(await page!.evaluate(() => ({
+        read: typeof (window as any).onboarding?.readPendingGenesisLaunch,
+        ack: typeof (window as any).onboarding?.ackPendingGenesisLaunch,
+      }))).toEqual({ read: 'undefined', ack: 'undefined' });
       const apiConfiguration = await page!.evaluate(async () => {
         const api = await (new Function('return import("/src/lib/api.ts")')() as Promise<{API_BASE_URL:string; WS_BASE_URL:string}>);
         return { apiBaseUrl: api.API_BASE_URL, wsBaseUrl: api.WS_BASE_URL };
@@ -50,44 +58,17 @@ test('Core consumes one synthetic Genesis pending and sends exactly one simulate
       expect(apiConfiguration.wsBaseUrl).toBe(`ws://127.0.0.1:${launched.wsPort}`);
       const capture = path.join(fixture.root, '.runner-core', 'captured-post.json');
       const attempts = path.join(fixture.root, '.runner-core', 'post-attempts.txt');
-      try {
-        await expect.poll(() => fs.existsSync(capture), { timeout: 15_000,
-          message: `Core consumed pending but mock received no POST; API=${apiConfiguration.apiBaseUrl}` }).toBe(true);
-      } catch (firstFailure) {
-        const rendererSignals: string[] = [];
-        page!.on('console', message => rendererSignals.push(`console:${message.type()}:${message.text()}`));
-        page!.on('pageerror', error => rendererSignals.push(`pageerror:${error.message}`));
-        page!.on('requestfailed', request => rendererSignals.push(`requestfailed:${request.method()}:${request.url()}:${request.failure()?.errorText}`));
-        // El pending debe seguir durable después de cualquier fallo del POST;
-        // el test sólo recarga Core, nunca lo reconstruye manualmente.
-        await page!.reload();
-        await page!.waitForTimeout(5000);
-        console.log('functional_renderer_replay_diagnostic', rendererSignals.filter(signal =>
-          /genesisLaunch|Creating mandate|POST:|requestfailed|pageerror|Network request failed|API.*Configuration/i.test(signal))
-          .map(signal => signal.slice(0, 500)).join('\n'));
-        await expect.poll(() => fs.existsSync(capture), { timeout: 15_000,
-          message: `Core did not replay the durable pending after the controlled POST failure; API=${apiConfiguration.apiBaseUrl}` }).toBe(true);
-      }
-      const payload = JSON.parse(fs.readFileSync(capture, 'utf8'));
-      expect(payload).toEqual({
-        mandateLaunchId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
-        mandateType: 'genesis', projectId: fixture.projectId, project: 'core-genesis-fixture',
-        name: 'core-genesis-fixture', source: fixture.projectPath,
-      });
-      const state = JSON.parse(fs.readFileSync(fixture.nucleusJson, 'utf8'));
-      expect(state.onboarding.pending_genesis_launch).toBeUndefined();
-      const receipt = state.onboarding.genesis_launch_receipts[payload.mandateLaunchId];
-      expect(receipt.mandateId).toBeTruthy();
-      expect(receipt.projectId).toBe(fixture.projectId);
-      expect(receipt.authority).toBe(false);
-      const ackReplay = await page!.evaluate(async ({ mandateLaunchId, mandateId }) =>
-        (window as any).onboarding.ackPendingGenesisLaunch({ mandateLaunchId, mandateId }),
-        { mandateLaunchId: payload.mandateLaunchId, mandateId: receipt.mandateId });
-      expect(ackReplay).toEqual({ success: true, alreadyAcknowledged: true });
+      // Apertura y recarga sin gesto: el servicio simulado no debe recibir ningún POST.
+      await page!.waitForTimeout(10_000);
       await page!.reload();
       await expect(page!.locator('body')).toBeVisible();
-      await page!.waitForTimeout(1000);
-      expect(fs.readFileSync(attempts, 'utf8').trim()).toBe('2');
+      await page!.waitForTimeout(10_000);
+      expect(fs.existsSync(attempts), 'Core no debe enviar POST /api/v1/mandates sin gesto').toBe(false);
+      expect(fs.existsSync(capture), 'Core no debe enviar POST /api/v1/mandates sin gesto').toBe(false);
+      const state = JSON.parse(fs.readFileSync(fixture.nucleusJson, 'utf8'));
+      expect(state.onboarding.pending_genesis_launch, 'el pending del modelo anterior queda intacto').toEqual(initialOnboarding.pending_genesis_launch);
+      expect(state.onboarding.genesis_launch_receipts).toBeUndefined();
+      expect(fs.existsSync(mandatesDir) ? fs.readdirSync(mandatesDir).sort() : null).toEqual(mandatesBefore);
     } finally {
       await browser.close();
     }

@@ -813,7 +813,7 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // de forma optimista antes de create-mandate, para que un resume
   // interrumpido no pierda la selección. create-mandate puede sobrescribir
   // project_path después con el valor definitivo — no hay conflicto.
-  ipcMain.handle('onboarding:select-project', async (event, { projectName, projectPath, genesisLaunchRequired }) => {
+  ipcMain.handle('onboarding:select-project', async (event, { projectName, projectPath }) => {
     log.info('[IPC] onboarding:select-project — projectName:', projectName, '| projectPath:', projectPath || '(none)');
     try {
       const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
@@ -839,11 +839,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         projectName,
         projectPath: projectPath || null,
       });
-      if (typeof genesisLaunchRequired !== 'boolean') {
-        throw new Error('onboarding:select-project requiere genesisLaunchRequired booleano');
-      }
-      project.genesis_launch_required = genesisLaunchRequired;
-
       // Red de seguridad (mismo patrón que nucleus_create en init-nucleus, y
       // que create-mandate más abajo): pushear el propio stepId a
       // completed_steps[] acá, no solo depender de que MilestoneReactor lo
@@ -862,7 +857,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
           projectId: project.project_id,
           projectName: project.project_name,
           projectPath: project.project_path,
-          genesisLaunchRequired: project.genesis_launch_required,
         },
       };
     } catch (err) {
@@ -1027,14 +1021,9 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   });
 
   // ── HANDLER: Completar onboarding + handoff al workspace ────────────────
-  // D-23 (BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6): sólo un
-  // proyecto NUEVO con genesis_launch_required=true produce
-  // onboarding.pending_genesis_launch. Seleccionar o importar un proyecto
-  // existente elimina cualquier pending residual. No existe un canal de Electron
-  // (query string, additionalArguments, env var) para esto — createWorkspaceWindow
-  // solo recibe la URL — así que se usa el mismo patrón que ya domina este
-  // archivo: un flag persistido en nucleus.json, leído y luego confirmado por
-  // Core mediante el protocolo read → POST → acknowledge.
+  // Cerrar onboarding no crea, descarga ni instala Mandates: Genesis se instala
+  // sólo por un gesto explícito del Paladín en Wisdom, sobre un proyecto ya
+  // creado o importado.
   ipcMain.handle('onboarding:complete', async (event, { workspaceUrl, projectId }) => {
     log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:5173');
     try {
@@ -1099,30 +1088,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       if (!selectedProject.project_name) {
         throw new Error(`projectId ${projectId} no tiene project_name persistido`);
       }
-      if (selectedProject.genesis_launch_required === true) {
-        const previousLaunch = nucleusData.onboarding.pending_genesis_launch;
-        nucleusData.onboarding.pending_genesis_launch = {
-          mandateLaunchId: previousLaunch?.projectId === selectedProject.project_id && (previousLaunch?.mandateLaunchId || previousLaunch?.genesisLaunchId)
-            ? (previousLaunch.mandateLaunchId || previousLaunch.genesisLaunchId)
-            : crypto.randomUUID(),
-          projectId:   selectedProject.project_id,
-          project:     selectedProject.project_name,
-          projectPath: selectedProject.project_path || '',
-        };
-        log.info(
-          '[IPC] onboarding:complete — pending_genesis_launch escrito para proyecto nuevo, projectId:',
-          selectedProject.project_id,
-          '| project:',
-          selectedProject.project_name
-        );
-      } else {
-        delete nucleusData.onboarding.pending_genesis_launch;
-        log.info(
-          '[IPC] onboarding:complete — proyecto existente/importado; pending_genesis_launch no requerido, projectId:',
-          selectedProject.project_id
-        );
-      }
-
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
 
       // Opción C: ventana nueva con preload_conductor.js (createWorkspaceWindow,
@@ -1144,69 +1109,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       return { success: true };
     } catch (err) {
       log.error('[IPC] onboarding:complete — FAILED:', err.message);
-      return { success: false, error: err.message };
-    }
-  });
-
-  // ── HANDLERS: leer y confirmar el lanzamiento de Genesis ───────────────
-  // Leer nunca borra. Core confirma sólo después de que POST /mandates haya
-  // persistido y devuelto el mandateId correlacionado.
-  ipcMain.handle('onboarding:read-pending-genesis-launch', async () => {
-    log.info('[IPC] onboarding:read-pending-genesis-launch');
-    try {
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const pending = data.onboarding?.pending_genesis_launch || null;
-      if (pending && !pending.mandateLaunchId && pending.genesisLaunchId) {
-        pending.mandateLaunchId = pending.genesisLaunchId;
-      }
-      return { success: true, pending };
-    } catch (err) {
-      log.error('[IPC] onboarding:read-pending-genesis-launch — FAILED:', err.message);
-      return { success: false, pending: null, error: err.message };
-    }
-  });
-
-  ipcMain.handle('onboarding:ack-pending-genesis-launch', async (_event, { mandateLaunchId, mandateId }) => {
-    log.info('[IPC] onboarding:ack-pending-genesis-launch');
-    try {
-      if (!mandateLaunchId || !mandateId) throw new Error('mandateLaunchId y mandateId son requeridos');
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      data.onboarding = data.onboarding || {};
-      const receipts = data.onboarding.genesis_launch_receipts || {};
-      const recorded = receipts[mandateLaunchId];
-      if (!data.onboarding.pending_genesis_launch) {
-        if (recorded?.mandateId === mandateId) return { success: true, alreadyAcknowledged: true };
-        throw new Error('pending_genesis_launch ausente o no correlacionado');
-      }
-      const pending = data.onboarding.pending_genesis_launch;
-      if ((pending.mandateLaunchId || pending.genesisLaunchId) !== mandateLaunchId) throw new Error('mandateLaunchId no coincide con el pending vigente');
-
-	  // Nucleus owns the durable project ↔ Genesis-attempt relationship.
-	  // Adopt before deleting the onboarding pending so a CLI/IPC failure is
-	  // retryable and cannot leave Core without authoritative continuity.
-	  const adoption = await execNucleus([
-		'--json', 'mandate', 'genesis', 'adopt',
-		'--project-id', pending.projectId,
-		'--project', pending.project,
-		'--genesis-launch-id', mandateLaunchId,
-		'--mandate-id', mandateId,
-	  ], 30_000);
-	  if (adoption?.schemaVersion !== 1 || adoption?.currentMandateId !== mandateId) {
-		throw new Error('genesis_project_adoption_failed');
-	  }
-      receipts[mandateLaunchId] = {
-        mandateId,
-        projectId: pending.projectId,
-        acknowledgedAt: new Date().toISOString(),
-        authority: false,
-      };
-      data.onboarding.genesis_launch_receipts = receipts;
-      delete data.onboarding.pending_genesis_launch;
-      data.onboarding.updated_at = new Date().toISOString();
-      writeJsonAtomic(NUCLEUS_JSON, data);
-      return { success: true, alreadyAcknowledged: false };
-    } catch (err) {
-      log.error('[IPC] onboarding:ack-pending-genesis-launch — FAILED:', err.message);
       return { success: false, error: err.message };
     }
   });
@@ -1355,7 +1257,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   //     completed: boolean,        // true si onboarding.completed === true
   //     completedSteps: string[],  // ej: ['nucleus_create', 'github_app_auth']
   //     activeProjectId: string|null,
-  //     genesisLaunchRequired: boolean|null,
   //   }
   ipcMain.handle('onboarding:get-resume-state', async () => {
     log.info('[IPC] onboarding:get-resume-state');
@@ -1390,15 +1291,12 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       migrateToNestedSchema(nucleusData.onboarding);
       const activeProject = getActiveProject(nucleusData.onboarding);
       const activeProjectId = activeProject?.project_id || null;
-      const genesisLaunchRequired = activeProject
-        ? activeProject.genesis_launch_required === true
-        : null;
 
       log.success('[IPC] onboarding:get-resume-state — ok:', JSON.stringify({
-        stepId, produced, activeProjectId, genesisLaunchRequired,
+        stepId, produced, activeProjectId,
       }));
 
-      return { success: true, stepId, produced, activeProjectId, genesisLaunchRequired };
+      return { success: true, stepId, produced, activeProjectId };
     } catch (err) {
       log.error('[IPC] onboarding:get-resume-state — FAILED:', err.message);
       // Fallback seguro: si el motor falla, arrancar desde el primer step

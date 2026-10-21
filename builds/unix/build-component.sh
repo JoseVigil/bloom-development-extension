@@ -261,14 +261,16 @@ HELP_JSON_RC=$?
 "${OUTPUT_BINARY}" --help > "${HELP_OUT_DIR}/${COMPONENT}_help.txt" 2>> "${LOG_FILE}"
 HELP_TXT_RC=$?
 
-if [[ "${COMPONENT}" == "impact" ]]; then
+if [[ "${COMPONENT}" == "impact" || "${COMPONENT}" == "nucleus" ]]; then
     if [[ ${HELP_JSON_RC} -ne 0 || ${HELP_TXT_RC} -ne 0 ]]; then
-        echo "Impact help generation failed" >> "${LOG_FILE}"
+        echo "${COMPONENT} help generation failed" >> "${LOG_FILE}"
         exit 1
     fi
     mkdir -p "${PROJECT_ROOT}/installer/help"
-    cp "${HELP_OUT_DIR}/impact_help.json" "${PROJECT_ROOT}/installer/help/impact_help.json" || exit 1
-    cp "${HELP_OUT_DIR}/impact_help.txt" "${PROJECT_ROOT}/installer/help/impact_help.txt" || exit 1
+    cp "${HELP_OUT_DIR}/${COMPONENT}_help.json" "${PROJECT_ROOT}/installer/help/${COMPONENT}_help.json" || exit 1
+    cp "${HELP_OUT_DIR}/${COMPONENT}_help.txt" "${PROJECT_ROOT}/installer/help/${COMPONENT}_help.txt" || exit 1
+    echo "✅ ${COMPONENT}_help.{json,txt} → installer/help/"
+    echo "✅ Help promovido a ${PROJECT_ROOT}/installer/help/" >> "${LOG_FILE}"
 fi
 
 if [[ ${HELP_JSON_RC} -ne 0 ]]; then

@@ -25,11 +25,6 @@ contextBridge.exposeInMainWorld('onboarding', {
   listRepos:     (params) => ipcRenderer.invoke('onboarding:list-repos', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),
 
-  // D-23 — Core lee el pending sin borrarlo y lo confirma sólo después del
-  // POST exitoso. El acknowledge correlacionado elimina el flag durable.
-  readPendingGenesisLaunch: () => ipcRenderer.invoke('onboarding:read-pending-genesis-launch'),
-  ackPendingGenesisLaunch: (params) => ipcRenderer.invoke('onboarding:ack-pending-genesis-launch', params),
-
   // Durable Genesis continuity owned by Nucleus.
   recoverGenesis: (params) => ipcRenderer.invoke('core:genesis-recover', params),
   ackGenesisRecovery: (params) => ipcRenderer.invoke('core:genesis-ack-recovery', params),
@@ -80,4 +75,13 @@ contextBridge.exposeInMainWorld('intelligenceSupply', {
 
 contextBridge.exposeInMainWorld('confirmedContext', {
   read: () => ipcRenderer.invoke('core:confirmed-context-read')
+});
+
+// Wisdom: lecturas separadas (catálogo remoto, instalaciones locales, proyectos)
+// y una única acción explícita de instalación. Nada de esto prepara ni ejecuta.
+contextBridge.exposeInMainWorld('wisdom', {
+  readOffers: () => ipcRenderer.invoke('core:wisdom-offers-read'),
+  readInstallations: () => ipcRenderer.invoke('core:wisdom-installations-read'),
+  readProjects: () => ipcRenderer.invoke('core:wisdom-projects-read'),
+  install: (selection) => ipcRenderer.invoke('core:wisdom-install', selection)
 });

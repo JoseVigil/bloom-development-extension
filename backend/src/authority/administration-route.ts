@@ -10,10 +10,10 @@ import { createOrganizationUnderTenant, listTenantOrganizations, TenantStoreErro
 import { createInvitation, listInvitations, revokeInvitation, InvitationStoreError, type InvitationStoreFailure } from './invitation-store';
 import { vaultServiceGrantResponse } from './vault-service-grant-route';
 import { intelligenceSupplyGrantResponse } from './intelligence-supply-grant-route';
-import { loadTrustManifest, persistTrustManifest, signTrustManifest, verifyTrustManifest, type SignedArtifact, type TrustPayload } from './trust-manifest';
+import { loadTrustManifest, persistTrustManifest, signTrustManifest, verifyTrustManifest, type SignedArtifact, type TrustKey, type TrustPayload } from './trust-manifest';
 const DEVELOPMENT_ROOT_KEY_ID='development-rfc8032-root';
 const DEVELOPMENT_ROOT_PUBLIC_KEY='11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo';
-export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;fixtureTrustRootPkcs8?:ArrayBuffer;}
+export interface HumanRouteServices extends HumanServices {origin:string;issuer?:string;signer:EmissionSigner;fixtureTrustRootPkcs8?:ArrayBuffer;mandateDefinitionKey?:{keyId:string;publicKey:string}|null;}
 
 export async function provisionFixtureTrustManifest(db:D1Database,organizationId:string,s:HumanRouteServices):Promise<void>{
  if(!s.allowTestFixtures)return;
@@ -32,19 +32,25 @@ export async function provisionFixtureTrustManifest(db:D1Database,organizationId
   ?new Date(Math.max(Date.parse(previous.payload.issued_at),Date.parse(previous.payload.not_before))).toISOString():now;
  const previousVerified=previous
   ?await verifyTrustManifest(previous,DEVELOPMENT_ROOT_KEY_ID,DEVELOPMENT_ROOT_PUBLIC_KEY,previousCheckAt):null;
+ // Con clave de publicador configurada el manifest pasa a schema 1.1 y lleva dos claves con
+ // propósito explícito; sin ella se conserva exactamente el manifest 1.0 de una clave.
+ const publisher=s.mandateDefinitionKey??null;
+ const wanted:TrustKey[]=publisher
+  ?[{key_id:s.signer.keyId,public_key:issuerPublicKey,status:'active',valid_from:now,valid_until:null,purpose:'authority'},
+    {key_id:publisher.keyId,public_key:publisher.publicKey,status:'active',valid_from:now,valid_until:null,purpose:'mandate-definition'}]
+  :[{key_id:s.signer.keyId,public_key:issuerPublicKey,status:'active',valid_from:now,valid_until:null}];
+ const sameKeys=(keys:TrustKey[])=>keys.length===wanted.length&&wanted.every(w=>keys.some(k=>k.key_id===w.key_id&&k.public_key===w.public_key&&k.status==='active'&&k.purpose===w.purpose));
  if(previousVerified&&previousVerified.organization_id===organizationId&&previousVerified.issuer===s.issuer&&
-  previousVerified.keys.length===1&&previousVerified.keys[0].key_id===s.signer.keyId&&
-  previousVerified.keys[0].public_key===issuerPublicKey&&previousVerified.keys[0].status==='active'&&
+  previousVerified.schema_version===(publisher?'1.1':'1.0')&&sameKeys(previousVerified.keys)&&
   Date.parse(previousVerified.expires_at)>Date.parse(now))return;
  const expectedVersion=previousVerified?.manifest_version??null;
  const manifestVersion=expectedVersion===null?'1':String(BigInt(expectedVersion)+1n);
- const envelope=await signTrustManifest({schema:'bloom.authority.trust-manifest',schema_version:'1.0',manifest_id:crypto.randomUUID(),
+ const envelope=await signTrustManifest({schema:'bloom.authority.trust-manifest',schema_version:publisher?'1.1':'1.0',manifest_id:crypto.randomUUID(),
    issuer:s.issuer,organization_id:organizationId,manifest_version:manifestVersion,issued_at:now,not_before:now,
    expires_at:new Date(Date.parse(now)+7*24*60*60*1000).toISOString(),root_key_id:DEVELOPMENT_ROOT_KEY_ID,
-   keys:[{key_id:s.signer.keyId,public_key:issuerPublicKey,status:'active',valid_from:now,valid_until:null}]},s.fixtureTrustRootPkcs8);
+   keys:wanted},s.fixtureTrustRootPkcs8);
  const verified=await verifyTrustManifest(envelope,DEVELOPMENT_ROOT_KEY_ID,DEVELOPMENT_ROOT_PUBLIC_KEY,now);
- if(verified.organization_id!==organizationId||verified.issuer!==s.issuer||verified.keys.length!==1||
-    verified.keys[0].key_id!==s.signer.keyId||verified.keys[0].public_key!==issuerPublicKey||verified.keys[0].status!=='active')
+ if(verified.organization_id!==organizationId||verified.issuer!==s.issuer||!sameKeys(verified.keys))
   throw new HumanIdentityError('fixture_trust_manifest_invalid');
  await persistTrustManifest(db,envelope,{allowTestFixtures:true,expectedVersion});
 }
@@ -331,6 +337,27 @@ export async function configuredAuthorityHumanResponse(env:HumanRouteEnv,request
   if(fixtureMode)console.warn('[authority] AUTHORITY_ALLOW_TEST_FIXTURES activo: login de GitHub simulado por inyección de estado, sin tocar github.com. NUNCA debe estar activo en un despliegue real.');
   return authorityHumanResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),allowTestFixtures:fixtureMode,
    fixtureTrustRootPkcs8:fixtureMode&&env.AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64?Uint8Array.from(atob(env.AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64),c=>c.charCodeAt(0)).buffer:undefined,
-   signer:{keyId:env.AUTHORITY_SIGNING_KEY_ID,privateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer}});
+   signer:{keyId:env.AUTHORITY_SIGNING_KEY_ID,privateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer},
+   mandateDefinitionKey:fixtureMode?configuredMandateDefinitionTrustKey(env as HumanRouteEnv&{MANDATE_DEFINITION_KEY_ID?:string;MANDATE_DEFINITION_PUBLIC_KEY_B64URL?:string}):null});
  }catch{return new Response(JSON.stringify({error:'authority_human_configuration_unavailable'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});}
+}
+
+// Clave del publicador de definiciones de Mandate para el trust manifest del modo
+// fixture. Sólo la parte pública: la privada vive fuera del Worker.
+export function configuredMandateDefinitionTrustKey(env:{MANDATE_DEFINITION_KEY_ID?:string;MANDATE_DEFINITION_PUBLIC_KEY_B64URL?:string}){
+ return env.MANDATE_DEFINITION_KEY_ID&&env.MANDATE_DEFINITION_PUBLIC_KEY_B64URL
+  ?{keyId:env.MANDATE_DEFINITION_KEY_ID,publicKey:env.MANDATE_DEFINITION_PUBLIC_KEY_B64URL}:null;
+}
+
+// Reemite el trust manifest del modo fixture para una organización con la clave del
+// publicador. Lo usa la habilitación de una oferta: sin esa clave en el manifest,
+// Nucleus no puede verificar la definición y rechaza la instalación.
+export async function provisionFixtureTrustManifestFromEnv(env:HumanRouteEnv&{MANDATE_DEFINITION_KEY_ID?:string;MANDATE_DEFINITION_PUBLIC_KEY_B64URL?:string},organizationId:string){
+ if(env.AUTHORITY_ALLOW_TEST_FIXTURES!=='true'||!env.AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64||!env.AUTHORITY_SIGNING_KEY_PKCS8_B64||!env.AUTHORITY_SIGNING_KEY_ID)
+  throw new HumanIdentityError('configuration_missing');
+ await provisionFixtureTrustManifest(env.DB,organizationId,{origin:env.AUTHORITY_HUMAN_ORIGIN??'',issuer:env.AUTHORITY_ISSUER,now:()=>new Date().toISOString(),
+  allowTestFixtures:true,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64??'',provider:testFixtureProvider(),
+  fixtureTrustRootPkcs8:Uint8Array.from(atob(env.AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64),c=>c.charCodeAt(0)).buffer,
+  signer:{keyId:env.AUTHORITY_SIGNING_KEY_ID,privateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer},
+  mandateDefinitionKey:configuredMandateDefinitionTrustKey(env)} as HumanRouteServices);
 }

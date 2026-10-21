@@ -1,14 +1,8 @@
 // internal/orchestration/commands/mandate_install.go
 //
-// Wrapper delgado de 'nucleus mandate install' sobre internal/mandateinstall — la lógica de
-// materialización pura se mudó ahí en
-// Encargo_Implementacion_AutoEncadenamiento_Sync_Install_y_Validacion_Backend_v1_0.md §2.1
-// porque internal/governance necesita invocarla también (para el auto-encadenamiento
-// sync→install) y este paquete (commands) ya importa internal/governance
-// (requireMandateMaster → governance.RequireMaster), así que governance no puede importar
-// commands sin crear un ciclo. Este archivo conserva el comando cobra, los flags, el
-// logging (core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)) y el Annotations —
-// comportamiento observable del comando CLI, idéntico a como era antes de la mudanza.
+// Wrapper delgado de 'nucleus mandate install' sobre internal/mandateinstall, que contiene
+// la lógica de materialización pura. Este archivo conserva el comando cobra, los flags, el
+// logging (core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)) y el Annotations.
 package commands
 
 import (
@@ -41,7 +35,7 @@ func createInstallMandateSubcommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Materializa un mandate ya entregado y verificado como mandate.json local",
-		Long: `Lee el recibo ya verificado de un mandate entregado (ver 'nucleus authority sync')
+		Long: `Lee el recibo ya verificado de un mandate entregado
 desde AppDataDir/authority/mandate-delivery/receipts/..., extrae el contenido firmado
 (MandateBase64), confirma su integridad (sha256 contra Envelope.Digest — la firma Ed25519
 ya se verificó una vez, con éxito, para que el recibo exista) y lo escribe byte por byte
@@ -52,8 +46,8 @@ El mandate queda materializado en disco pero INACTIVO: ningún motor de ejecuci�
 recoge todavía — ese enganche con .ownership.json es un encargo aparte, deliberadamente
 separado, y no se resuelve acá.
 
-Requiere que 'nucleus authority sync' ya haya entregado el mandate (recibo verificado
-presente) — este comando no llama a red ni re-verifica la firma Ed25519 del delivery.
+Requiere un recibo de entrega ya verificado — este comando no llama a red ni
+re-verifica la firma Ed25519 del delivery.
 Re-ejecutarlo con el mismo recibo es idempotente.`,
 		Args: cobra.NoArgs,
 		Annotations: map[string]string{

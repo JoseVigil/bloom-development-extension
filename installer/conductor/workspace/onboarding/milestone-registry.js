@@ -230,14 +230,9 @@ const FALLBACK_STEPS = [
     screen:             'mandate-genesis',
     vault_required:     true,
     requires:           ['project_name'],
-    // D-22 (BLOOM_Mandate_Genesis_Roadmap_Maestro_v3_2.md §1.2/§6, diseño
-    // cerrado, Fase B): este step deja de disparar la creación real del
-    // mandate (eso se mueve a Core, ver D-23 / onboarding-handlers.js
-    // 'onboarding:consume-pending-genesis-launch') y pasa a ser una pantalla
-    // puramente explicativa. produces/verifyArgs pasan de 'genesis_mandate_id'
-    // (que a esta altura del flujo todavía no existe) a
-    // 'mandate_screen_acknowledged' — mismo mecanismo verify:'json_field'
-    // que ya usa el resto de esta lista, sin tipo de verify nuevo.
+    // Pantalla puramente explicativa: no crea, descarga ni instala Mandates.
+    // Se completa con 'mandate_screen_acknowledged' — mismo mecanismo
+    // verify:'json_field' que ya usa el resto de esta lista.
     produces:           'mandate_screen_acknowledged',
     verify:             'json_field',
     verifyArgs:         { field: 'onboarding.mandate_screen_acknowledged' },

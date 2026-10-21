@@ -703,6 +703,17 @@ class NucleusManager {
   }
 
   /**
+   * Devuelve los datos persistidos de un hito completado: lo que se pasó como
+   * verificationResult a completeMilestone (guardado en verification.result).
+   * Lo usa launchMasterProfile en reruns para recuperar launch_id/chrome_pid.
+   * @param {string} milestoneName - Nombre del hito
+   * @returns {object|null}
+   */
+  getMilestoneData(milestoneName) {
+    return this.state?.milestones?.[milestoneName]?.verification?.result ?? null;
+  }
+
+  /**
    * Marca un hito como iniciado
    * @param {string} milestoneName - Nombre del hito
    */

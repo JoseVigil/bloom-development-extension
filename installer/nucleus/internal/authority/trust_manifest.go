@@ -19,7 +19,24 @@ type TrustKey struct {
 	Status     string     `json:"status"`
 	ValidFrom  time.Time  `json:"valid_from"`
 	ValidUntil *time.Time `json:"valid_until"`
+	// Purpose sólo existe desde schema_version 1.1. En 1.0 está ausente y la
+	// clave es de Authority. En 1.1 es obligatorio y separa las claves que firman
+	// actos de Authority de las que firman definiciones de Mandate publicadas.
+	Purpose string `json:"purpose,omitempty" wire:"optional"`
 }
+
+const (
+	TrustKeyPurposeAuthority         = "authority"
+	TrustKeyPurposeMandateDefinition = "mandate-definition"
+)
+
+func (k TrustKey) effectivePurpose() string {
+	if k.Purpose == "" {
+		return TrustKeyPurposeAuthority
+	}
+	return k.Purpose
+}
+
 type TrustManifestPayload struct {
 	Schema          string     `json:"schema"`
 	SchemaVersion   string     `json:"schema_version"`
@@ -74,7 +91,7 @@ func ParseAndVerifyTrustManifest(raw []byte, roots map[string]ed25519.PublicKey,
 	if err = decodeWire(env.Payload, &p); err != nil {
 		return nil, err
 	}
-	if p.Schema != "bloom.authority.trust-manifest" || p.SchemaVersion != "1.0" || p.ManifestID == "" || p.RootKeyID != env.Integrity.KeyID {
+	if p.Schema != "bloom.authority.trust-manifest" || (p.SchemaVersion != "1.0" && p.SchemaVersion != "1.1") || p.ManifestID == "" || p.RootKeyID != env.Integrity.KeyID {
 		return nil, errors.New("invalid trust manifest")
 	}
 	if p.OrganizationID != binding.OrganizationID || p.Issuer != binding.Issuer || p.RootKeyID == "" {
@@ -92,6 +109,9 @@ func ParseAndVerifyTrustManifest(raw []byte, roots map[string]ed25519.PublicKey,
 	}
 	for i := range p.Keys {
 		k := &p.Keys[i]
+		if (p.SchemaVersion == "1.0" && k.Purpose != "") || (p.SchemaVersion == "1.1" && k.Purpose != TrustKeyPurposeAuthority && k.Purpose != TrustKeyPurposeMandateDefinition) {
+			return nil, errors.New("invalid trust key purpose")
+		}
 		if k.KeyID == "" || seen[k.KeyID] || (k.Status != "active" && k.Status != "retired") || (k.ValidUntil != nil && !k.ValidFrom.Before(*k.ValidUntil)) {
 			return nil, errors.New("invalid trust key")
 		}
@@ -111,18 +131,36 @@ func (m *VerifiedTrustManifest) SnapshotTrust(at time.Time) (TrustBundle, error)
 	if m == nil {
 		return nil, errors.New("trust manifest required")
 	}
+	keys := m.activeKeys(at, TrustKeyPurposeAuthority)
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no active authority key at %s", at.UTC().Format(time.RFC3339Nano))
+	}
+	return TrustBundle{m.Payload.Issuer: keys}, nil
+}
+
+// MandateDefinitionKeys devuelve sólo las claves activas y vigentes con
+// propósito mandate-definition. Nunca incluye claves de Authority: una
+// definición firmada con una clave de Authority se rechaza.
+func (m *VerifiedTrustManifest) MandateDefinitionKeys(at time.Time) map[string]ed25519.PublicKey {
+	if m == nil {
+		return map[string]ed25519.PublicKey{}
+	}
+	return m.activeKeys(at, TrustKeyPurposeMandateDefinition)
+}
+
+func (m *VerifiedTrustManifest) activeKeys(at time.Time, purpose string) map[string]ed25519.PublicKey {
 	keys := map[string]ed25519.PublicKey{}
 	for _, k := range m.Payload.Keys {
+		if k.effectivePurpose() != purpose {
+			continue
+		}
 		if k.Status != "active" || at.Before(k.ValidFrom) || (k.ValidUntil != nil && !at.Before(*k.ValidUntil)) {
 			continue
 		}
 		raw, _ := base64.RawURLEncoding.DecodeString(k.PublicKey)
 		keys[k.KeyID] = ed25519.PublicKey(raw)
 	}
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no active authority key at %s", at.UTC().Format(time.RFC3339Nano))
-	}
-	return TrustBundle{m.Payload.Issuer: keys}, nil
+	return keys
 }
 
 func (m *VerifiedTrustManifest) Root() (string, ed25519.PublicKey) {

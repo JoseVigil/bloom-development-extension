@@ -44,8 +44,7 @@ contextBridge.exposeInMainWorld('onboarding', {
   importProject: (params) => ipcRenderer.invoke('onboarding:import-project', params),
   // selectProject — persiste project_name/project_path elegidos en PROJECT
   // (repo de GitHub o carpeta local ya importada). Payload:
-  // { projectName: string, projectPath: string, genesisLaunchRequired: boolean }.
-  // Sólo la futura rama "crear proyecto nuevo" debe enviar true. Ver onboarding-handlers.js
+  // { projectName: string, projectPath: string }. Ver onboarding-handlers.js
   // → 'onboarding:select-project'.
   selectProject: (params) => ipcRenderer.invoke('onboarding:select-project', params),
   createMandate: (params) => ipcRenderer.invoke('onboarding:create-mandate', params),

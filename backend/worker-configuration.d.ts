@@ -15,4 +15,12 @@ interface Env {
   // Sólo local, vía .dev.vars (wrangler dev). Nunca en wrangler.jsonc ni en un
   // despliegue real: wrangler deploy no lee .dev.vars. Ver README.md § Modo fixture.
   AUTHORITY_ALLOW_TEST_FIXTURES?: string;
+  // Raíz de prueba RFC 8032 para el trust manifest del modo fixture (sólo .dev.vars).
+  AUTHORITY_TEST_TRUST_ROOT_PKCS8_B64?: string;
+  // Clave pública del publicador de definiciones de Mandate (propósito
+  // mandate-definition del trust manifest). La privada nunca vive en el Worker.
+  MANDATE_DEFINITION_KEY_ID?: string;
+  MANDATE_DEFINITION_PUBLIC_KEY_B64URL?: string;
+  // Token de operador para publicar y habilitar ofertas; sólo con fixtures activos.
+  MANDATE_OFFER_OPERATOR_TOKEN?: string;
 }

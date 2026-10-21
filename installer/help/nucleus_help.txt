@@ -231,121 +231,209 @@
     --------------------------------------------------------------------------------
 
   > AUTHORITY
-    Inspect Authority evidence without changing enforcement mode
+    Inspect and synchronize verified Authority evidence
 
     Usage: nucleus authority
 
     Subcommands:
-      checkpoint            Report Authority checkpoint evidence
+      checkpoint            Report the durable Authority checkpoint
         nucleus authority checkpoint
-      decision              Report Authority decision evidence
+      context-read          Read confirmed context evidence for an explicit selection
+        nucleus authority context-read
+      decision              Report the current effective Authority decision evidence
         nucleus authority decision
-      observation           Report Authority observation evidence
+      observation           Report shadow Authority observation evidence
         nucleus authority observation
-      service-grants        Report Authority service-grants evidence
+      register              Register the active installation before its initial Authority emission
+        nucleus authority register
+      service-grants        Report active Vault service Grant evidence
         nucleus authority service-grants
-      service-identity      Report Authority service-identity evidence
+      service-identity      Report the local AITAP service identity public evidence
         nucleus authority service-identity
-      status                Report Authority status evidence
+      status                Report locally available Authority state and checkpoint evidence
         nucleus authority status
-      sync                  Report Authority sync evidence
+      supply-read           Read material Workspace context and Intelligence Supply authority state
+        nucleus authority supply-read
+      sync                  Synchronize verified Authority evidence for the active organization
         nucleus authority sync
 
     Subcommand Details:
 
       └─ CHECKPOINT
-        Report Authority checkpoint evidence
+        Report the durable Authority checkpoint
 
         Usage: nucleus authority checkpoint
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority checkpoint
+            nucleus --json authority checkpoint
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"checkpoint","ok":true,"evidence":{"organization_id":"organization-123","authority_version":"42","state_digest":"sha256-digest"}}
+
+        ----------------------------------------------------------------------
+
+      └─ CONTEXT-READ
+        Read confirmed context evidence for an explicit selection
+
+        Usage: nucleus authority context-read
+
+        Arguments:
+          arguments             optional
+
+        Example:
+            nucleus authority context-read acme 11111111-1111-4111-8111-111111111111
+            nucleus --json authority context-read acme 11111111-1111-4111-8111-111111111111
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"context-read","ok":true,"evidence":{"schema":"bloom.confirmed-context/v1","selection":{"orgSlug":"acme","projectId":"11111111-1111-4111-8111-111111111111"},"identityAndMembership":{"status":"not_evaluable"},"projectBinding":{"status":"not_evaluable"},"localLocation":{"status":"present","source":"conductor_project_catalog","path":"C:/projects/one","checkedAt":"2026-10-03T12:00:00Z"},"projectIdContinuity":{"status":"matched","source":"nucleus_material_project_catalog","catalogPath":"C:/projects/.bloom/.nucleus-acme/.core/.nucleus-config.json","checkedAt":"2026-10-03T12:00:00Z"},"cognitumCompatibility":{"status":"not_evaluable"},"intelligencePreference":{"status":"not_evaluable"}}}
 
         ----------------------------------------------------------------------
 
       └─ DECISION
-        Report Authority decision evidence
+        Report the current effective Authority decision evidence
 
         Usage: nucleus authority decision
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority decision
+            nucleus --json authority decision
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"decision","ok":true,"evidence":{"effective_mode":"local_legacy","cutover":false,"outcome":"not_evaluable"}}
 
         ----------------------------------------------------------------------
 
       └─ OBSERVATION
-        Report Authority observation evidence
+        Report shadow Authority observation evidence
 
         Usage: nucleus authority observation
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority observation
+            nucleus --json authority observation
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"observation","ok":true,"evidence":{"effective_mode":"local_legacy","cutover":false,"outcome":"match"}}
+
+        ----------------------------------------------------------------------
+
+      └─ REGISTER
+        Register the active installation before its initial Authority emission
+
+        Usage: nucleus authority register
+
+        Arguments:
+          arguments             optional
+
+        Example:
+            nucleus --json authority register
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"register","ok":true,"evidence":{"installation_id":"installation-123","organization_id":"organization-123","registered":true}}
 
         ----------------------------------------------------------------------
 
       └─ SERVICE-GRANTS
-        Report Authority service-grants evidence
+        Report active Vault service Grant evidence
 
         Usage: nucleus authority service-grants
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority service-grants
+            nucleus --json authority service-grants
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"service-grants","ok":true,"evidence":{"grants":[]}}
 
         ----------------------------------------------------------------------
 
       └─ SERVICE-IDENTITY
-        Report Authority service-identity evidence
+        Report the local AITAP service identity public evidence
 
         Usage: nucleus authority service-identity
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority service-identity
+            nucleus --json authority service-identity
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"service-identity","ok":true,"evidence":{"consumer":"aitap","service_public_key":"base64url-public-key"}}
 
         ----------------------------------------------------------------------
 
       └─ STATUS
-        Report Authority status evidence
+        Report locally available Authority state and checkpoint evidence
 
         Usage: nucleus authority status
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority status
+            nucleus --json authority status
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"status","ok":true,"evidence":{"accepted_state_available":true,"checkpoint_available":true,"effective_mode":"local_legacy","cutover":false}}
+
+        ----------------------------------------------------------------------
+
+      └─ SUPPLY-READ
+        Read material Workspace context and Intelligence Supply authority state
+
+        Usage: nucleus authority supply-read
+
+        Arguments:
+          arguments             optional
+
+        Example:
+            nucleus --json authority supply-read <selected-org-slug> <selected-project-id-or-dash>
+
+        JSON Response:
+          {"schema":"bloom.authority.cli-evidence/v1","command":"supply-read","ok":true,"evidence":{"context":{"status":"verified"},"authority":{"status":"not_evaluable","reason":"session_subject_grant_link_unavailable"}}}
 
         ----------------------------------------------------------------------
 
       └─ SYNC
-        Report Authority sync evidence
+        Synchronize verified Authority evidence for the active organization
 
         Usage: nucleus authority sync
 
         Arguments:
           arguments             optional
 
+        Example:
+            nucleus authority sync
+            nucleus --json authority sync
+
         JSON Response:
-          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+          {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"installation_id":"installation-123","organization_id":"organization-123","authority_version":"42","state_digest":"sha256-digest","capability_confirmed":true}}
 
         ----------------------------------------------------------------------
 
+    Example:
+        nucleus authority status
+        nucleus authority sync
+        nucleus --json authority status
+
     JSON Response:
-      {"schema":"bloom.authority.cli-evidence/v1","command":"sync","ok":true,"evidence":{"performed":true,"authority_version":"1","mandate_delivery":"pending"}}
+      {"schema":"bloom.authority.cli-evidence/v1","command":"status","ok":true,"evidence":{"accepted_state_available":true,"checkpoint_available":true,"effective_mode":"local_legacy","cutover":false}}
 
     --------------------------------------------------------------------------------
 
@@ -502,6 +590,8 @@
         nucleus vault request
       service-request       Resolve a delegated service credential through a local channel
         nucleus vault service-request
+      service-store         Store an Authority-authorized onboarding credential from stdin
+        nucleus vault service-store
       set                   Store or rotate a key in the vault
         nucleus vault set
       status                Display vault status
@@ -579,6 +669,16 @@
 
         JSON Response:
           {"status":"delivered"}
+
+        ----------------------------------------------------------------------
+
+      └─ SERVICE-STORE
+        Store an Authority-authorized onboarding credential from stdin
+
+        Usage: nucleus vault service-store
+
+        JSON Response:
+          {"status":"stored","key_id":"gemini-key:default","grant_id":"...","organization_id":"..."}
 
         ----------------------------------------------------------------------
 
@@ -1524,8 +1624,14 @@
         nucleus mandate build
       create                Crea un mandate standard (draft → firmado por confirmación explícita)
         nucleus mandate create
+      genesis               Gestiona la continuidad Genesis por proyecto
+        nucleus mandate genesis
+      ing-decision          Registra la decisión humana de ING
+        nucleus mandate ing-decision
       install               Materializa un mandate ya entregado y verificado como mandate.json local
         nucleus mandate install
+      offer                 Oferta de Mandate de Wisdom: catálogo, instalación explícita e instalaciones locales
+        nucleus mandate offer
       publish               Publica un mandate firmado (mandate.json) hacia Backend y, opcionalmente, lo asigna como bootstrap de la organización
         nucleus mandate publish
       status                Muestra el estado actual de un mandate (lee mandate.json o mandate_state.json)
@@ -1560,11 +1666,12 @@
           --max-output-tokens        Límite explícito de tokens de salida [default: 0]
           --max-total-tokens         Límite total explícito de tokens [default: 0]
           --max-usd                  Presupuesto máximo explícito en USD
-          --model                    Modelo Anthropic elegido para este contrato
+          --model                    Modelo cloud elegido para este contrato
           --model-id                 ID del modelo local en el catálogo AITAP
           --policy                   Política AITAP verificada que se firmará
           --registry                 Registro AITAP verificado del modelo
           --supply                   Suministro de inteligencia: cloud o local [default: cloud]
+          --supply-grant-id          Grant vigente de Authority para este suministro cloud
 
         Example:
             nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS
@@ -1610,6 +1717,13 @@
 
         Usage: nucleus mandate build domains
 
+        Example:
+            nucleus mandate build domains --help
+            nucleus --json mandate build domains list --id MANDATE_ID
+
+        JSON Response:
+          {"command":"domains","subcommands":["list","confirm","reject"]}
+
         ----------------------------------------------------------------------
 
       └─ CONFIRM
@@ -1618,6 +1732,7 @@
         Usage: nucleus mandate build domains confirm
 
         Flags:
+          --docs                     Archivo o carpeta documental a incorporar si el Mandate todavía no tiene documentos (repetible) [default: []]
           --domain-id                domainId a confirmar (repetible) [default: []]
           --id                       ID del mandate (requerido)
 
@@ -1638,6 +1753,13 @@
         Flags:
           --id                       ID del mandate (requerido)
 
+        Example:
+            nucleus mandate build domains list --id MANDATE_ID
+            nucleus --json mandate build domains list --id MANDATE_ID
+
+        JSON Response:
+          [{"domainId":"DOMAIN_ID","name":"Domain","cohesionScore":0.95,"suggestedActionCount":1}]
+
         ----------------------------------------------------------------------
 
       └─ REJECT
@@ -1648,6 +1770,13 @@
         Flags:
           --domain-id                domainId a rechazar (informativo)
           --id                       ID del mandate (requerido)
+
+        Example:
+            nucleus mandate build domains reject --id MANDATE_ID --domain-id DOMAIN_ID
+            nucleus --json mandate build domains reject --id MANDATE_ID --domain-id DOMAIN_ID
+
+        JSON Response:
+          {"success":true,"mandateId":"MANDATE_ID","domainId":"DOMAIN_ID","persisted":false}
 
         ----------------------------------------------------------------------
 
@@ -1675,6 +1804,130 @@
 
         ----------------------------------------------------------------------
 
+      └─ GENESIS
+        Gestiona la continuidad Genesis por proyecto
+
+        Usage: nucleus mandate genesis
+
+        Example:
+            nucleus mandate genesis project-status --project-id PROJECT_ID
+            nucleus --json mandate genesis project-status --project-id PROJECT_ID
+
+        JSON Response:
+          {"command":"genesis","subcommands":["recover","project-status","adopt"]}
+
+        ----------------------------------------------------------------------
+
+      └─ ADOPT
+        Adopta el primer Mandate Genesis de un proyecto
+
+        Usage: nucleus mandate genesis adopt
+
+        Flags:
+          --genesis-launch-id        Genesis launch
+          --mandate-id               Mandate creado
+          --project                  Nombre
+          --project-id               Proyecto
+
+        Example:
+            nucleus mandate genesis adopt --project-id PROJECT_ID --project PROJECT --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID
+            nucleus --json mandate genesis adopt --project-id PROJECT_ID --project PROJECT --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID
+
+        JSON Response:
+          {"success":true,"projectId":"PROJECT_ID","currentMandateId":"MANDATE_ID"}
+
+        ----------------------------------------------------------------------
+
+      └─ PROJECT-STATUS
+        Consulta la continuidad Genesis de un proyecto
+
+        Usage: nucleus mandate genesis project-status
+
+        Flags:
+          --project-id               Proyecto
+
+        Example:
+            nucleus mandate genesis project-status --project-id PROJECT_ID
+            nucleus --json mandate genesis project-status --project-id PROJECT_ID
+
+        JSON Response:
+          {"success":true,"projectId":"PROJECT_ID","record":null}
+
+        ----------------------------------------------------------------------
+
+      └─ RECOVER
+        Prepara y confirma reintentos Genesis
+
+        Usage: nucleus mandate genesis recover
+
+        Example:
+            nucleus mandate genesis recover prepare --help
+            nucleus --json mandate genesis recover prepare --help
+
+        JSON Response:
+          {"command":"recover","subcommands":["prepare","acknowledge"]}
+
+        ----------------------------------------------------------------------
+
+      └─ ACKNOWLEDGE
+        Confirma el Mandate creado por una recuperación
+
+        Usage: nucleus mandate genesis recover acknowledge
+
+        Flags:
+          --genesis-launch-id        Genesis launch
+          --mandate-id               Mandate creado
+          --project-id               Proyecto
+          --recovery-request-id      Recovery request
+
+        Example:
+            nucleus mandate genesis recover acknowledge --project-id PROJECT_ID --recovery-request-id REQUEST_ID --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID
+            nucleus --json mandate genesis recover acknowledge --project-id PROJECT_ID --recovery-request-id REQUEST_ID --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID
+
+        JSON Response:
+          {"success":true,"projectId":"PROJECT_ID","currentMandateId":"MANDATE_ID","recoveryRequestId":"REQUEST_ID"}
+
+        ----------------------------------------------------------------------
+
+      └─ PREPARE
+        Prepara una recuperación Genesis idempotente
+
+        Usage: nucleus mandate genesis recover prepare
+
+        Flags:
+          --expected-previous-mandate-id  Mandate Genesis vigente esperado
+          --project                  Nombre del proyecto
+          --project-id               Identidad durable del proyecto
+          --recovery-request-id      Idempotency key UUID
+          --source                   Origen del lanzamiento [default: core-recovery]
+
+        Example:
+            nucleus mandate genesis recover prepare --project-id PROJECT_ID --project PROJECT --expected-previous-mandate-id MANDATE_ID --recovery-request-id REQUEST_ID
+            nucleus --json mandate genesis recover prepare --project-id PROJECT_ID --project PROJECT --expected-previous-mandate-id MANDATE_ID --recovery-request-id REQUEST_ID
+
+        JSON Response:
+          {"success":true,"projectId":"PROJECT_ID","recoveryRequestId":"REQUEST_ID","mandateLaunchId":"LAUNCH_ID"}
+
+        ----------------------------------------------------------------------
+
+      └─ ING-DECISION
+        Registra la decisión humana de ING
+
+        Usage: nucleus mandate ing-decision
+
+        Flags:
+          --decisions                Archivo JSON con una decisión por cluster
+          --id                       ID del Mandate adoptado
+
+        Example:
+            nucleus mandate ing-decision --id MANDATE_ID --decisions decisions.json
+            nucleus --json mandate ing-decision --id MANDATE_ID --decisions decisions.json
+
+        JSON Response:
+          {"success":true,"mandateId":"MANDATE_ID","actionId":"ACTION_ID","contractDigest":"SHA256","intentId":"INTENT_ID","decisionDigest":"SHA256","signalPending":false}
+
+        ----------------------------------------------------------------------
+
       └─ INSTALL
         Materializa un mandate ya entregado y verificado como mandate.json local
 
@@ -1697,6 +1950,86 @@
 
         ----------------------------------------------------------------------
 
+      └─ OFFER
+        Oferta de Mandate de Wisdom: catálogo, instalación explícita e instalaciones locales
+
+        Usage: nucleus mandate offer
+
+        Example:
+            nucleus mandate offer list
+            nucleus mandate offer installed
+            nucleus --json mandate offer list
+
+        JSON Response:
+          {"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer","subcommands":["list","installed","install","prepare"]}
+
+        ----------------------------------------------------------------------
+
+      └─ INSTALL
+        Instala exactamente la versión seleccionada para un proyecto elegible (instalada e inactiva)
+
+        Usage: nucleus mandate offer install
+
+        Flags:
+          --definition               definition_id de la oferta (requerido)
+          --digest                   digest exacto mostrado en el catálogo (requerido)
+          --project                  project_id elegible (requerido)
+          --version                  versión exacta mostrada en el catálogo (requerido)
+
+        Example:
+            nucleus mandate offer install --definition DEFINITION_ID --version 1.0.0 --digest SHA256_HEX --project PROJECT_ID
+            nucleus --json mandate offer install --definition DEFINITION_ID --version 1.0.0 --digest SHA256_HEX --project PROJECT_ID
+
+        JSON Response:
+          {"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer install","ok":true,"result":{"status":"installed","mandateId":"MANDATE_ID","statePath":"PATH/mandate_state.json","definitionPath":"PATH/definition.json","receiptPath":"PATH/receipt.json","receiptStatus":"accepted","instance":{"schema":"bloom.mandate-instance","schemaVersion":"1.0","mandateId":"MANDATE_ID","status":"installed","organizationId":"ORGANIZATION_ID","projectId":"PROJECT_ID","definition":{"definitionId":"DEFINITION_ID","version":"1.0.0","digest":"SHA256_HEX"},"authorization":{"kind":"master_local","installationId":"INSTALLATION_ID"}}}}
+
+        ----------------------------------------------------------------------
+
+      └─ INSTALLED
+        Lista las ofertas instaladas en esta máquina (sin red)
+
+        Usage: nucleus mandate offer installed
+
+        Example:
+            nucleus mandate offer installed
+            nucleus --json mandate offer installed
+
+        JSON Response:
+          {"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer installed","ok":true,"result":{"installations":[{"statePath":"PATH/mandate_state.json","instance":{"schema":"bloom.mandate-instance","schemaVersion":"1.0","mandateId":"MANDATE_ID","status":"installed","organizationId":"ORGANIZATION_ID","projectId":"PROJECT_ID","projectBinding":{"revision":"1","checkedAt":"2026-10-19T00:00:00Z"},"definition":{"definitionId":"DEFINITION_ID","version":"1.0.0","digest":"SHA256_HEX","label":"LABEL","publisherKeyId":"KEY_ID","preparation":"not_defined"},"receiptRef":"RECEIPT_REF","authorization":{"kind":"master_local","installationId":"INSTALLATION_ID"},"installedAt":"2026-10-19T00:00:00Z"},"consistent":true}]}}
+
+        ----------------------------------------------------------------------
+
+      └─ LIST
+        Lee el catálogo de ofertas habilitadas para la organización activa (sin descargar bytes)
+
+        Usage: nucleus mandate offer list
+
+        Example:
+            nucleus mandate offer list
+            nucleus --json mandate offer list
+
+        JSON Response:
+          {"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer list","ok":true,"result":{"schema":"bloom.mandate-offers","schema_version":"1.0","organization_id":"ORGANIZATION_ID","offers":[{"definition_id":"DEFINITION_ID","version":"1.0.0","digest":"SHA256_HEX","label":"LABEL","purpose":"PURPOSE","publisher":{"publisher_id":"PUBLISHER_ID","key_id":"KEY_ID"},"published_at":"2026-10-19T00:00:00Z","size_bytes":1024,"requires":{"contract_version":4,"project":true},"preparation":{"status":"not_defined"}}]}}
+
+        ----------------------------------------------------------------------
+
+      └─ PREPARE
+        Preparación (T2) de una oferta instalada: rechazada mientras la definición no la defina
+
+        Usage: nucleus mandate offer prepare
+
+        Flags:
+          --mandate-id               mandateId de la instancia instalada (requerido)
+
+        Example:
+            nucleus mandate offer prepare --mandate-id MANDATE_ID
+            nucleus --json mandate offer prepare --mandate-id MANDATE_ID
+
+        JSON Response:
+          {"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer prepare","ok":false,"error":{"code":"preparation_not_defined","message":"mandate definition preparation is not defined: this version can be installed but not prepared"}}
+
+        ----------------------------------------------------------------------
+
       └─ PUBLISH
         Publica un mandate firmado (mandate.json) hacia Backend y, opcionalmente, lo asigna como bootstrap de la organización
 
@@ -1712,9 +2045,9 @@
           --visibility               Visibilidad del mandate ('private' o 'public') [default: private]
 
         Example:
-            nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug genesis-bootstrap
-            nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap --bootstrap=false
-            nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap
+            nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug initial-mandate
+            nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug initial-mandate --bootstrap=false
+            nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug initial-mandate
 
         JSON Response:
           {
@@ -1735,9 +2068,20 @@
           --id                       ID del mandate (requerido)
 
         Example:
-            nucleus mandate status --id mandate_abc123
+            nucleus mandate status --id MANDATE_ID
+            nucleus --json mandate status --id MANDATE_ID
+
+        JSON Response:
+          {"mandateId":"MANDATE_ID","status":"building","currentPhase":"validate"}
 
         ----------------------------------------------------------------------
+
+    Example:
+        nucleus mandate --help
+        nucleus --json mandate status --id MANDATE_ID
+
+    JSON Response:
+      {"command":"mandate","subcommands":["create","build","genesis","status","publish","install","offer","approve","activate","ing-decision"]}
 
     --------------------------------------------------------------------------------
 

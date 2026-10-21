@@ -62,7 +62,7 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
    await consumeMandateConsentToken(db,actor,digest,consentToken,s);
    const manifestRaw=await loadTrustManifest(db,p.organizationId);if(!manifestRaw)throw new TrustError('manifest_unavailable');
    let manifest:any;try{manifest=JSON.parse(manifestRaw).payload;}catch{throw new TrustError('recovery_required');}
-   const currentKey=manifest?.issuer===s.issuer&&Array.isArray(manifest.keys)?manifest.keys.find((k:any)=>k?.key_id===s.attestationKeyId&&k.status==='active'&&Date.parse(k.valid_from)<=Date.parse(s.now())&&(k.valid_until===null||Date.parse(s.now())<Date.parse(k.valid_until))):undefined;
+   const currentKey=manifest?.issuer===s.issuer&&Array.isArray(manifest.keys)?manifest.keys.find((k:any)=>k?.key_id===s.attestationKeyId&&(k.purpose===undefined||k.purpose==='authority')&&k.status==='active'&&Date.parse(k.valid_from)<=Date.parse(s.now())&&(k.valid_until===null||Date.parse(s.now())<Date.parse(k.valid_until))):undefined;
    if(!currentKey)throw new TrustError('signing_key_unavailable');
    const now=normalizeWireTime(s.now()),payload:ActorAttestation={schema:'bloom.authority.actor-attestation',schema_version:'1.2',attestation_id:crypto.randomUUID(),issuer:s.issuer,organization_id:p.organizationId,installation_id:p.installationId,principal_id:actor.principalId,actor_public_key:p.actorPublicKey,audience:p.audience,challenge_digest:digest,issued_at:now,expires_at:new Date(Date.parse(now)+120000).toISOString(),operation:row.mandate_operation as 'approve'|'activate',mandate_id:row.mandate_id,contract_digest:row.contract_digest};
    const envelope=await signAttestation(payload,s),raw=canonicalizeJson(envelope);
@@ -86,7 +86,7 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
   const actor=await resolveHumanSession(db,token,body.organizationId,s);if(!actor)throw new HumanIdentityError('session_invalid');
   const manifestRaw=await loadTrustManifest(db,body.organizationId);if(!manifestRaw)throw new TrustError('manifest_unavailable');
   let manifest:any;try{manifest=JSON.parse(manifestRaw).payload;}catch{throw new TrustError('recovery_required');}
-  const currentKey=manifest?.issuer===s.issuer&&Array.isArray(manifest.keys)?manifest.keys.find((k:any)=>k?.key_id===s.attestationKeyId&&k.status==='active'&&Date.parse(k.valid_from)<=Date.parse(s.now())&&(k.valid_until===null||Date.parse(s.now())<Date.parse(k.valid_until))):undefined;
+  const currentKey=manifest?.issuer===s.issuer&&Array.isArray(manifest.keys)?manifest.keys.find((k:any)=>k?.key_id===s.attestationKeyId&&(k.purpose===undefined||k.purpose==='authority')&&k.status==='active'&&Date.parse(k.valid_from)<=Date.parse(s.now())&&(k.valid_until===null||Date.parse(s.now())<Date.parse(k.valid_until))):undefined;
   if(!currentKey)throw new TrustError('signing_key_unavailable');
   const challengeDigest=await hashSecret(body.challenge);const row=await db.prepare("SELECT * FROM authority_actor_challenges WHERE challenge_hash=? AND organization_id=? AND installation_id=? AND status='pending'").bind(challengeDigest,body.organizationId,body.installationId).first<{actor_public_key_raw:string;audience:string;expires_at:string}>();
   if(!row||row.actor_public_key_raw!==body.actorPublicKey||row.audience!==body.audience||Date.parse(row.expires_at)<=Date.parse(s.now()))throw new TrustError('challenge_invalid');

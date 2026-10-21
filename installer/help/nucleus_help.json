@@ -95,7 +95,7 @@
     "name": "checkpoint",
     "path": "nucleus authority checkpoint",
     "use": "checkpoint [arguments]",
-    "short": "Report Authority checkpoint evidence",
+    "short": "Report the durable Authority checkpoint",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -103,13 +103,29 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority checkpoint\n  nucleus --json authority checkpoint",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"checkpoint\",\"ok\":true,\"evidence\":{\"organization_id\":\"organization-123\",\"authority_version\":\"42\",\"state_digest\":\"sha256-digest\"}}"
+  },
+  {
+    "name": "context-read",
+    "path": "nucleus authority context-read",
+    "use": "context-read [arguments]",
+    "short": "Read confirmed context evidence for an explicit selection",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "arguments",
+        "required": false
+      }
+    ],
+    "example": "  nucleus authority context-read acme 11111111-1111-4111-8111-111111111111\n  nucleus --json authority context-read acme 11111111-1111-4111-8111-111111111111",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"context-read\",\"ok\":true,\"evidence\":{\"schema\":\"bloom.confirmed-context/v1\",\"selection\":{\"orgSlug\":\"acme\",\"projectId\":\"11111111-1111-4111-8111-111111111111\"},\"identityAndMembership\":{\"status\":\"not_evaluable\"},\"projectBinding\":{\"status\":\"not_evaluable\"},\"localLocation\":{\"status\":\"present\",\"source\":\"conductor_project_catalog\",\"path\":\"C:/projects/one\",\"checkedAt\":\"2026-10-03T12:00:00Z\"},\"projectIdContinuity\":{\"status\":\"matched\",\"source\":\"nucleus_material_project_catalog\",\"catalogPath\":\"C:/projects/.bloom/.nucleus-acme/.core/.nucleus-config.json\",\"checkedAt\":\"2026-10-03T12:00:00Z\"},\"cognitumCompatibility\":{\"status\":\"not_evaluable\"},\"intelligencePreference\":{\"status\":\"not_evaluable\"}}}"
   },
   {
     "name": "decision",
     "path": "nucleus authority decision",
     "use": "decision [arguments]",
-    "short": "Report Authority decision evidence",
+    "short": "Report the current effective Authority decision evidence",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -117,13 +133,14 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority decision\n  nucleus --json authority decision",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"decision\",\"ok\":true,\"evidence\":{\"effective_mode\":\"local_legacy\",\"cutover\":false,\"outcome\":\"not_evaluable\"}}"
   },
   {
     "name": "observation",
     "path": "nucleus authority observation",
     "use": "observation [arguments]",
-    "short": "Report Authority observation evidence",
+    "short": "Report shadow Authority observation evidence",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -131,13 +148,29 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority observation\n  nucleus --json authority observation",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"observation\",\"ok\":true,\"evidence\":{\"effective_mode\":\"local_legacy\",\"cutover\":false,\"outcome\":\"match\"}}"
+  },
+  {
+    "name": "register",
+    "path": "nucleus authority register",
+    "use": "register [arguments]",
+    "short": "Register the active installation before its initial Authority emission",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "arguments",
+        "required": false
+      }
+    ],
+    "example": "  nucleus --json authority register",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"register\",\"ok\":true,\"evidence\":{\"installation_id\":\"installation-123\",\"organization_id\":\"organization-123\",\"registered\":true}}"
   },
   {
     "name": "service-grants",
     "path": "nucleus authority service-grants",
     "use": "service-grants [arguments]",
-    "short": "Report Authority service-grants evidence",
+    "short": "Report active Vault service Grant evidence",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -145,13 +178,14 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority service-grants\n  nucleus --json authority service-grants",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"service-grants\",\"ok\":true,\"evidence\":{\"grants\":[]}}"
   },
   {
     "name": "service-identity",
     "path": "nucleus authority service-identity",
     "use": "service-identity [arguments]",
-    "short": "Report Authority service-identity evidence",
+    "short": "Report the local AITAP service identity public evidence",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -159,13 +193,14 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority service-identity\n  nucleus --json authority service-identity",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"service-identity\",\"ok\":true,\"evidence\":{\"consumer\":\"aitap\",\"service_public_key\":\"base64url-public-key\"}}"
   },
   {
     "name": "status",
     "path": "nucleus authority status",
     "use": "status [arguments]",
-    "short": "Report Authority status evidence",
+    "short": "Report locally available Authority state and checkpoint evidence",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -173,13 +208,29 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority status\n  nucleus --json authority status",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"status\",\"ok\":true,\"evidence\":{\"accepted_state_available\":true,\"checkpoint_available\":true,\"effective_mode\":\"local_legacy\",\"cutover\":false}}"
+  },
+  {
+    "name": "supply-read",
+    "path": "nucleus authority supply-read",
+    "use": "supply-read [arguments]",
+    "short": "Read material Workspace context and Intelligence Supply authority state",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "arguments",
+        "required": false
+      }
+    ],
+    "example": "  nucleus --json authority supply-read \u003cselected-org-slug\u003e \u003cselected-project-id-or-dash\u003e",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"supply-read\",\"ok\":true,\"evidence\":{\"context\":{\"status\":\"verified\"},\"authority\":{\"status\":\"not_evaluable\",\"reason\":\"session_subject_grant_link_unavailable\"}}}"
   },
   {
     "name": "sync",
     "path": "nucleus authority sync",
     "use": "sync [arguments]",
-    "short": "Report Authority sync evidence",
+    "short": "Synchronize verified Authority evidence for the active organization",
     "category": "GOVERNANCE",
     "args": [
       {
@@ -187,7 +238,8 @@
         "required": false
       }
     ],
-    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"authority_version\":\"1\",\"mandate_delivery\":\"pending\"}}"
+    "example": "  nucleus authority sync\n  nucleus --json authority sync",
+    "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"sync\",\"ok\":true,\"evidence\":{\"performed\":true,\"installation_id\":\"installation-123\",\"organization_id\":\"organization-123\",\"authority_version\":\"42\",\"state_digest\":\"sha256-digest\",\"capability_confirmed\":true}}"
   },
   {
     "name": "begin-drain",
@@ -456,7 +508,7 @@
       },
       {
         "name": "model",
-        "usage": "Modelo Anthropic elegido para este contrato"
+        "usage": "Modelo cloud elegido para este contrato"
       },
       {
         "name": "model-id",
@@ -474,6 +526,10 @@
         "name": "supply",
         "usage": "Suministro de inteligencia: cloud o local",
         "default": "cloud"
+      },
+      {
+        "name": "supply-grant-id",
+        "usage": "Grant vigente de Authority para este suministro cloud"
       }
     ],
     "example": "  nucleus mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS\n  nucleus --json mandate approve --id MANDATE_ID --model MODEL_ID --policy POLICY.json --registry REGISTRY.json --max-usd USD --max-total-tokens TOKENS --max-output-tokens TOKENS\n  nucleus mandate approve --id MANDATE_ID --supply local --model-id CATALOG_MODEL_ID --policy LOCAL_POLICY.json --registry LOCAL_REGISTRY.json --max-usd 0 --max-total-tokens TOKENS --max-output-tokens TOKENS",
@@ -517,7 +573,9 @@
     "path": "nucleus mandate build domains",
     "use": "domains",
     "short": "Gestiona los dominios de un Mandate en preparación (list/confirm/reject)",
-    "category": "MANDATES"
+    "category": "MANDATES",
+    "example": "  nucleus mandate build domains --help\n  nucleus --json mandate build domains list --id MANDATE_ID",
+    "json_response": "{\"command\":\"domains\",\"subcommands\":[\"list\",\"confirm\",\"reject\"]}"
   },
   {
     "name": "confirm",
@@ -526,6 +584,11 @@
     "short": "Confirma un dominio y congela Files con hash y tamaño",
     "category": "MANDATES",
     "options": [
+      {
+        "name": "docs",
+        "usage": "Archivo o carpeta documental a incorporar si el Mandate todavía no tiene documentos (repetible)",
+        "default": "[]"
+      },
       {
         "name": "domain-id",
         "usage": "domainId a confirmar (repetible)",
@@ -550,7 +613,9 @@
         "name": "id",
         "usage": "ID del mandate (requerido)"
       }
-    ]
+    ],
+    "example": "  nucleus mandate build domains list --id MANDATE_ID\n  nucleus --json mandate build domains list --id MANDATE_ID",
+    "json_response": "[{\"domainId\":\"DOMAIN_ID\",\"name\":\"Domain\",\"cohesionScore\":0.95,\"suggestedActionCount\":1}]"
   },
   {
     "name": "reject",
@@ -567,7 +632,9 @@
         "name": "id",
         "usage": "ID del mandate (requerido)"
       }
-    ]
+    ],
+    "example": "  nucleus mandate build domains reject --id MANDATE_ID --domain-id DOMAIN_ID\n  nucleus --json mandate build domains reject --id MANDATE_ID --domain-id DOMAIN_ID",
+    "json_response": "{\"success\":true,\"mandateId\":\"MANDATE_ID\",\"domainId\":\"DOMAIN_ID\",\"persisted\":false}"
   },
   {
     "name": "create",
@@ -590,6 +657,144 @@
     "json_response": "{\n  \"success\": true,\n  \"mandate_id\": \"mandate_abc123\",\n  \"status\": \"signed\",\n  \"project\": \"example-project\"\n}"
   },
   {
+    "name": "genesis",
+    "path": "nucleus mandate genesis",
+    "use": "genesis",
+    "short": "Gestiona la continuidad Genesis por proyecto",
+    "category": "MANDATES",
+    "example": "  nucleus mandate genesis project-status --project-id PROJECT_ID\n  nucleus --json mandate genesis project-status --project-id PROJECT_ID",
+    "json_response": "{\"command\":\"genesis\",\"subcommands\":[\"recover\",\"project-status\",\"adopt\"]}"
+  },
+  {
+    "name": "adopt",
+    "path": "nucleus mandate genesis adopt",
+    "use": "adopt",
+    "short": "Adopta el primer Mandate Genesis de un proyecto",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "genesis-launch-id",
+        "usage": "Genesis launch"
+      },
+      {
+        "name": "mandate-id",
+        "usage": "Mandate creado"
+      },
+      {
+        "name": "project",
+        "usage": "Nombre"
+      },
+      {
+        "name": "project-id",
+        "usage": "Proyecto"
+      }
+    ],
+    "example": "  nucleus mandate genesis adopt --project-id PROJECT_ID --project PROJECT --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID\n  nucleus --json mandate genesis adopt --project-id PROJECT_ID --project PROJECT --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID",
+    "json_response": "{\"success\":true,\"projectId\":\"PROJECT_ID\",\"currentMandateId\":\"MANDATE_ID\"}"
+  },
+  {
+    "name": "project-status",
+    "path": "nucleus mandate genesis project-status",
+    "use": "project-status",
+    "short": "Consulta la continuidad Genesis de un proyecto",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "project-id",
+        "usage": "Proyecto"
+      }
+    ],
+    "example": "  nucleus mandate genesis project-status --project-id PROJECT_ID\n  nucleus --json mandate genesis project-status --project-id PROJECT_ID",
+    "json_response": "{\"success\":true,\"projectId\":\"PROJECT_ID\",\"record\":null}"
+  },
+  {
+    "name": "recover",
+    "path": "nucleus mandate genesis recover",
+    "use": "recover",
+    "short": "Prepara y confirma reintentos Genesis",
+    "category": "MANDATES",
+    "example": "  nucleus mandate genesis recover prepare --help\n  nucleus --json mandate genesis recover prepare --help",
+    "json_response": "{\"command\":\"recover\",\"subcommands\":[\"prepare\",\"acknowledge\"]}"
+  },
+  {
+    "name": "acknowledge",
+    "path": "nucleus mandate genesis recover acknowledge",
+    "use": "acknowledge",
+    "short": "Confirma el Mandate creado por una recuperación",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "genesis-launch-id",
+        "usage": "Genesis launch"
+      },
+      {
+        "name": "mandate-id",
+        "usage": "Mandate creado"
+      },
+      {
+        "name": "project-id",
+        "usage": "Proyecto"
+      },
+      {
+        "name": "recovery-request-id",
+        "usage": "Recovery request"
+      }
+    ],
+    "example": "  nucleus mandate genesis recover acknowledge --project-id PROJECT_ID --recovery-request-id REQUEST_ID --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID\n  nucleus --json mandate genesis recover acknowledge --project-id PROJECT_ID --recovery-request-id REQUEST_ID --genesis-launch-id LAUNCH_ID --mandate-id MANDATE_ID",
+    "json_response": "{\"success\":true,\"projectId\":\"PROJECT_ID\",\"currentMandateId\":\"MANDATE_ID\",\"recoveryRequestId\":\"REQUEST_ID\"}"
+  },
+  {
+    "name": "prepare",
+    "path": "nucleus mandate genesis recover prepare",
+    "use": "prepare",
+    "short": "Prepara una recuperación Genesis idempotente",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "expected-previous-mandate-id",
+        "usage": "Mandate Genesis vigente esperado"
+      },
+      {
+        "name": "project",
+        "usage": "Nombre del proyecto"
+      },
+      {
+        "name": "project-id",
+        "usage": "Identidad durable del proyecto"
+      },
+      {
+        "name": "recovery-request-id",
+        "usage": "Idempotency key UUID"
+      },
+      {
+        "name": "source",
+        "usage": "Origen del lanzamiento",
+        "default": "core-recovery"
+      }
+    ],
+    "example": "  nucleus mandate genesis recover prepare --project-id PROJECT_ID --project PROJECT --expected-previous-mandate-id MANDATE_ID --recovery-request-id REQUEST_ID\n  nucleus --json mandate genesis recover prepare --project-id PROJECT_ID --project PROJECT --expected-previous-mandate-id MANDATE_ID --recovery-request-id REQUEST_ID",
+    "json_response": "{\"success\":true,\"projectId\":\"PROJECT_ID\",\"recoveryRequestId\":\"REQUEST_ID\",\"mandateLaunchId\":\"LAUNCH_ID\"}"
+  },
+  {
+    "name": "ing-decision",
+    "path": "nucleus mandate ing-decision",
+    "use": "ing-decision",
+    "short": "Registra la decisión humana de ING",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "decisions",
+        "usage": "Archivo JSON con una decisión por cluster"
+      },
+      {
+        "name": "id",
+        "usage": "ID del Mandate adoptado"
+      }
+    ],
+    "example": "  nucleus mandate ing-decision --id MANDATE_ID --decisions decisions.json\n  nucleus --json mandate ing-decision --id MANDATE_ID --decisions decisions.json",
+    "json_response": "{\"success\":true,\"mandateId\":\"MANDATE_ID\",\"actionId\":\"ACTION_ID\",\"contractDigest\":\"SHA256\",\"intentId\":\"INTENT_ID\",\"decisionDigest\":\"SHA256\",\"signalPending\":false}"
+  },
+  {
     "name": "install",
     "path": "nucleus mandate install",
     "use": "install",
@@ -603,6 +808,75 @@
     ],
     "example": "  nucleus mandate install --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f\n  nucleus --json mandate install --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f",
     "json_response": "{\n  \"success\": true,\n  \"mandate_id\": \"3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f\",\n  \"mandate_path\": \"{MandatesRoot}/3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f/mandate.json\",\n  \"already_installed\": false\n}"
+  },
+  {
+    "name": "offer",
+    "path": "nucleus mandate offer",
+    "use": "offer",
+    "short": "Oferta de Mandate de Wisdom: catálogo, instalación explícita e instalaciones locales",
+    "category": "MANDATES",
+    "example": "  nucleus mandate offer list\n  nucleus mandate offer installed\n  nucleus --json mandate offer list",
+    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer\",\"subcommands\":[\"list\",\"installed\",\"install\",\"prepare\"]}"
+  },
+  {
+    "name": "install",
+    "path": "nucleus mandate offer install",
+    "use": "install",
+    "short": "Instala exactamente la versión seleccionada para un proyecto elegible (instalada e inactiva)",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "definition",
+        "usage": "definition_id de la oferta (requerido)"
+      },
+      {
+        "name": "digest",
+        "usage": "digest exacto mostrado en el catálogo (requerido)"
+      },
+      {
+        "name": "project",
+        "usage": "project_id elegible (requerido)"
+      },
+      {
+        "name": "version",
+        "usage": "versión exacta mostrada en el catálogo (requerido)"
+      }
+    ],
+    "example": "  nucleus mandate offer install --definition DEFINITION_ID --version 1.0.0 --digest SHA256_HEX --project PROJECT_ID\n  nucleus --json mandate offer install --definition DEFINITION_ID --version 1.0.0 --digest SHA256_HEX --project PROJECT_ID",
+    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer install\",\"ok\":true,\"result\":{\"status\":\"installed\",\"mandateId\":\"MANDATE_ID\",\"statePath\":\"PATH/mandate_state.json\",\"definitionPath\":\"PATH/definition.json\",\"receiptPath\":\"PATH/receipt.json\",\"receiptStatus\":\"accepted\",\"instance\":{\"schema\":\"bloom.mandate-instance\",\"schemaVersion\":\"1.0\",\"mandateId\":\"MANDATE_ID\",\"status\":\"installed\",\"organizationId\":\"ORGANIZATION_ID\",\"projectId\":\"PROJECT_ID\",\"definition\":{\"definitionId\":\"DEFINITION_ID\",\"version\":\"1.0.0\",\"digest\":\"SHA256_HEX\"},\"authorization\":{\"kind\":\"master_local\",\"installationId\":\"INSTALLATION_ID\"}}}}"
+  },
+  {
+    "name": "installed",
+    "path": "nucleus mandate offer installed",
+    "use": "installed",
+    "short": "Lista las ofertas instaladas en esta máquina (sin red)",
+    "category": "MANDATES",
+    "example": "  nucleus mandate offer installed\n  nucleus --json mandate offer installed",
+    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer installed\",\"ok\":true,\"result\":{\"installations\":[{\"statePath\":\"PATH/mandate_state.json\",\"instance\":{\"schema\":\"bloom.mandate-instance\",\"schemaVersion\":\"1.0\",\"mandateId\":\"MANDATE_ID\",\"status\":\"installed\",\"organizationId\":\"ORGANIZATION_ID\",\"projectId\":\"PROJECT_ID\",\"projectBinding\":{\"revision\":\"1\",\"checkedAt\":\"2026-10-19T00:00:00Z\"},\"definition\":{\"definitionId\":\"DEFINITION_ID\",\"version\":\"1.0.0\",\"digest\":\"SHA256_HEX\",\"label\":\"LABEL\",\"publisherKeyId\":\"KEY_ID\",\"preparation\":\"not_defined\"},\"receiptRef\":\"RECEIPT_REF\",\"authorization\":{\"kind\":\"master_local\",\"installationId\":\"INSTALLATION_ID\"},\"installedAt\":\"2026-10-19T00:00:00Z\"},\"consistent\":true}]}}"
+  },
+  {
+    "name": "list",
+    "path": "nucleus mandate offer list",
+    "use": "list",
+    "short": "Lee el catálogo de ofertas habilitadas para la organización activa (sin descargar bytes)",
+    "category": "MANDATES",
+    "example": "  nucleus mandate offer list\n  nucleus --json mandate offer list",
+    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer list\",\"ok\":true,\"result\":{\"schema\":\"bloom.mandate-offers\",\"schema_version\":\"1.0\",\"organization_id\":\"ORGANIZATION_ID\",\"offers\":[{\"definition_id\":\"DEFINITION_ID\",\"version\":\"1.0.0\",\"digest\":\"SHA256_HEX\",\"label\":\"LABEL\",\"purpose\":\"PURPOSE\",\"publisher\":{\"publisher_id\":\"PUBLISHER_ID\",\"key_id\":\"KEY_ID\"},\"published_at\":\"2026-10-19T00:00:00Z\",\"size_bytes\":1024,\"requires\":{\"contract_version\":4,\"project\":true},\"preparation\":{\"status\":\"not_defined\"}}]}}"
+  },
+  {
+    "name": "prepare",
+    "path": "nucleus mandate offer prepare",
+    "use": "prepare",
+    "short": "Preparación (T2) de una oferta instalada: rechazada mientras la definición no la defina",
+    "category": "MANDATES",
+    "options": [
+      {
+        "name": "mandate-id",
+        "usage": "mandateId de la instancia instalada (requerido)"
+      }
+    ],
+    "example": "  nucleus mandate offer prepare --mandate-id MANDATE_ID\n  nucleus --json mandate offer prepare --mandate-id MANDATE_ID",
+    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer prepare\",\"ok\":false,\"error\":{\"code\":\"preparation_not_defined\",\"message\":\"mandate definition preparation is not defined: this version can be installed but not prepared\"}}"
   },
   {
     "name": "publish",
@@ -643,7 +917,7 @@
         "default": "private"
       }
     ],
-    "example": "  nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug genesis-bootstrap\n  nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap --bootstrap=false\n  nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug genesis-bootstrap",
+    "example": "  nucleus mandate publish --id 3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f --authority-url https://authority.bloom.dev --slug initial-mandate\n  nucleus mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug initial-mandate --bootstrap=false\n  nucleus --json mandate publish --id 3f9c1a2e-... --authority-url https://authority.bloom.dev --slug initial-mandate",
     "json_response": "{\n  \"success\": true,\n  \"mandate_id\": \"3f9c1a2e-8b7d-4c1a-9e2f-1a2b3c4d5e6f\",\n  \"mandate_version_id\": \"a1b2c3d4-...\",\n  \"bootstrap_assigned\": true\n}"
   },
   {
@@ -658,7 +932,8 @@
         "usage": "ID del mandate (requerido)"
       }
     ],
-    "example": "  nucleus mandate status --id mandate_abc123"
+    "example": "  nucleus mandate status --id MANDATE_ID\n  nucleus --json mandate status --id MANDATE_ID",
+    "json_response": "{\"mandateId\":\"MANDATE_ID\",\"status\":\"building\",\"currentPhase\":\"validate\"}"
   },
   {
     "name": "remove",
@@ -1157,6 +1432,14 @@
     "short": "Resolve a delegated service credential through a local channel",
     "category": "VAULT",
     "json_response": "{\"status\":\"delivered\"}"
+  },
+  {
+    "name": "service-store",
+    "path": "nucleus vault service-store",
+    "use": "service-store",
+    "short": "Store an Authority-authorized onboarding credential from stdin",
+    "category": "VAULT",
+    "json_response": "{\"status\":\"stored\",\"key_id\":\"gemini-key:default\",\"grant_id\":\"...\",\"organization_id\":\"...\"}"
   },
   {
     "name": "set",

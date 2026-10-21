@@ -184,15 +184,12 @@ export async function importSelectedProject() {
     const selectResult = await window.onboarding.selectProject({
       projectName: project.name,
       projectPath: project.path,
-      // Un proyecto ya presente en el workspace no necesita Genesis.
-      genesisLaunchRequired: false,
     });
     if (!selectResult.success || !selectResult.project?.projectId) {
       showImportStatus(`No se pudo identificar el proyecto: ${selectResult?.error || 'projectId ausente'}`, 'error');
       return;
     }
     selection.selectedProjectId = selectResult.project.projectId;
-    selection.genesisLaunchRequired = selectResult.project.genesisLaunchRequired === true;
     if (btn) {
       btn.disabled = false;
       btn.onclick = advanceToMandateStep;
@@ -207,8 +204,6 @@ export async function importSelectedProject() {
     const selectResult = await window.onboarding.selectProject({
       projectName: project.name,
       projectPath: '',
-      // Un repositorio seleccionado/importado no es un proyecto nuevo.
-      genesisLaunchRequired: false,
     });
     if (!selectResult.success || !selectResult.project?.projectId) {
       const error = selectResult?.error || 'La selección no devolvió un projectId';
@@ -216,7 +211,6 @@ export async function importSelectedProject() {
       return;
     }
     selection.selectedProjectId = selectResult.project.projectId;
-    selection.genesisLaunchRequired = selectResult.project.genesisLaunchRequired === true;
     if (btn) {
       btn.disabled = false;
       btn.onclick = advanceToMandateStep;
@@ -247,9 +241,6 @@ export async function importSelectedProject() {
   const selectResult = await window.onboarding.selectProject({
     projectName: project.name,
     projectPath: importResult.destPath,
-    // La copia importa un proyecto existente; no debe disparar Genesis.
-    // La futura rama "crear proyecto nuevo" deberá enviar true.
-    genesisLaunchRequired: false,
   });
   if (!selectResult.success || !selectResult.project?.projectId) {
     const error = selectResult?.error || 'La selección no devolvió un projectId';
@@ -257,7 +248,6 @@ export async function importSelectedProject() {
     return;
   }
   selection.selectedProjectId = selectResult.project.projectId;
-  selection.genesisLaunchRequired = selectResult.project.genesisLaunchRequired === true;
 
   if (importResult.gitExcluded && importResult.gitExcluded.length > 0) {
     addNotification(

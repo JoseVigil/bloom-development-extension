@@ -256,7 +256,7 @@ export function navigateToNode(nodeName) {
  * Resume de sesión interrumpida — reemplaza resumeOnboarding()/goTo(n)
  * hardcodeado. Se alimenta directamente de la respuesta de
  * onboarding:get-resume-state, que ya corre resolution-engine.js en Main:
- *   { success, stepId, produced, activeProjectId, genesisLaunchRequired }
+ *   { success, stepId, produced, activeProjectId }
  * stepId es el entry point calculado dinámicamente (Requerimiento 1).
  * produced es la lista de artefactos que YA existen de verdad — se usa
  * para: (a) marcar established los nodos correspondientes en el sidebar,
@@ -280,14 +280,13 @@ export async function resumeFromEntryPoint() {
     return;
   }
 
-  const { stepId, produced = [], activeProjectId = null, genesisLaunchRequired = null } = resume;
+  const { stepId, produced = [], activeProjectId = null } = resume;
   const producedSet = new Set(produced);
 
   // selectedProjectId era sólo estado de renderer y se perdía al reiniciar
   // Conductor. Restaurarlo desde el puntero durable permite completar el
   // handoff sin volver a seleccionar/importar el proyecto.
   selection.selectedProjectId = activeProjectId;
-  selection.genesisLaunchRequired = genesisLaunchRequired === true;
 
   if (!stepId) {
     log('info', 'resumeFromEntryPoint: sin stepId — fresh start');
