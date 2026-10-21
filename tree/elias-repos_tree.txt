@@ -1,2 +1,61 @@
-bloom-development-extension/
-└── elias-repos [NOT FOUND]
+elias-repos/
+├── .DS_Store
+├── .bloom/
+│   ├── .DS_Store
+│   └── .nucleus-elias-repos/
+│       ├── .DS_Store
+│       ├── .cache/
+│       │   ├── .last-sync.json
+│       │   ├── .projects-snapshot.json
+│       │   └── .semantic-index.json
+│       ├── .core/
+│       │   ├── .ai_bot.sovereign.bl
+│       │   ├── .meta.json
+│       │   ├── .nucleus-config.json
+│       │   ├── .policies.bl
+│       │   ├── .rules.bl
+│       │   └── .standards.bl
+│       ├── .governance/
+│       │   ├── .DS_Store
+│       │   ├── architecture/
+│       │   │   ├── .decisions/
+│       │   │   ├── .patterns.bl
+│       │   │   └── .principles.bl
+│       │   ├── quality/
+│       │   │   ├── .code-standards.bl
+│       │   │   └── .testing-requirements.bl
+│       │   └── security/
+│       │       ├── .compliance-requirements.bl
+│       │       └── .security-standards.bl
+│       ├── .gravity/
+│       │   ├── .edges/
+│       │   ├── .governed-creation.lock
+│       │   ├── .index/
+│       │   ├── .organization/
+│       │   │   └── org_1792556399/
+│       │   │       └── node.json
+│       │   ├── nucleus.node.json
+│       │   └── nucleus.node.json.lock
+│       ├── .intents/
+│       │   ├── .DS_Store
+│       │   └── .exp/
+│       ├── .mandates/
+│       ├── .master
+│       ├── .nucleus-governance.json
+│       ├── .ownership.json
+│       ├── .ownership.json.migration.lock
+│       ├── .relations/
+│       │   └── .project-links.json
+│       ├── findings/
+│       │   └── README.md
+│       ├── reports/
+│       │   ├── exports/
+│       │   └── health-dashboard.json
+│       └── vault.json
+└── sample_project/
+    ├── .gitignore
+    ├── README.md
+    ├── main.py
+    ├── storage.py
+    ├── tasks.py
+    └── test_tasks.py
