@@ -95,6 +95,7 @@ _BUILD_NUMBER_DIRS: dict[str, Path] = {
     "impact":           ROOT / "installer/impact/scripts",
     "monitor":          ROOT / "installer/monitor/scripts",
     "aitap":            ROOT / "installer/aitap/scripts",
+    "uninstall":        ROOT / "installer/uninstall/scripts",
     "host":             ROOT / "installer/host",
     "cortex":     ROOT / "installer/cortex/build-cortex",
     "workspace":  ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
@@ -358,6 +359,10 @@ BUILDS: dict[str, Path | None] = {
     # AITAP: aplicación Python empaquetada con PyInstaller mediante su builder
     # multiplataforma propio.
     "aitap": ROOT / "installer/aitap/scripts/build.py",
+
+    # Bloom Uninstall: paquete Go propio, siempre cross-compilado para Windows
+    # AMD64. No usa el builder Go genérico porque no expone help/Cobra.
+    "uninstall": ROOT / "installer/uninstall",
 
     # Host (C++): solo macOS/Linux — None en Windows indica skip explícito
     "host": (
@@ -1069,6 +1074,90 @@ def build_go_component(component: str) -> StepResult:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult(component.capitalize(), False, error=tail)
     return StepResult(component.capitalize(), True, output=out)
+
+
+def build_uninstall() -> StepResult:
+    """Compila y verifica Bloom Uninstall como artefacto Windows AMD64."""
+    component = "uninstall"
+    source_dir = ROOT / "installer" / component
+    scripts_dir = _BUILD_NUMBER_DIRS[component]
+    output_dir = ROOT / "installer/native/bin/win64/uninstall"
+    output_file = output_dir / "bloom-uninstall.exe"
+
+    required = (source_dir / "go.mod", source_dir / "main.go", source_dir / "version.go", source_dir / "VERSION")
+    missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
+    if missing:
+        return StepResult("Uninstall", False, error="Fuentes requeridas ausentes: " + ", ".join(missing))
+
+    _ensure_build_number_files(scripts_dir, component)
+    previous_base = _read_int(scripts_dir / "build_number.txt", 0)
+    windows_offset = _read_int(scripts_dir / "build_number.windows.txt", 0)
+    _increment_build_number(component)
+    new_base = _read_int(scripts_dir / "build_number.txt", 0)
+    effective = new_base + windows_offset
+    try:
+        (scripts_dir / "build_number.effective.txt").write_text(str(effective), encoding="utf-8")
+    except OSError as exc:
+        return StepResult("Uninstall", False, error=f"No se pudo persistir el build efectivo: {exc}")
+
+    product_version = (source_dir / "VERSION").read_text(encoding="utf-8").strip()
+
+    now = datetime.datetime.now()
+    build_date = now.strftime("%Y-%m-%d")
+    build_time = now.strftime("%H:%M:%S")
+    env = {**os.environ}
+    env.update({
+        "GOOS": "windows",
+        "GOARCH": "amd64",
+        "CGO_ENABLED": "0",
+        "BLOOM_BUILD_NUMBER": str(effective),
+        "BLOOM_PROJECT_ROOT": str(ROOT),
+    })
+
+    log(f"  Base: {previous_base} → {new_base}")
+    log(f"  Ajuste Windows: {windows_offset}")
+    log(f"  Build efectivo: {new_base} + {windows_offset} = {effective}")
+    log("  Target: windows/amd64 (CGO_ENABLED=0)")
+
+    if IS_WINDOWS:
+        log("  Ejecutando go test ./... en Bloom Uninstall ...")
+        code, out, _ = run(["go", "test", "./..."], cwd=source_dir, env=env)
+        if code != 0:
+            tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+            return StepResult("Uninstall", False, error=f"go test falló:\n{tail}")
+    else:
+        log("  Host no Windows: se omite ejecución de tests/binario; se valida cross-compilación.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ldflags = (
+        f"-s -w -X main.buildNumber={effective} "
+        f"-X main.BuildDate={build_date} -X main.BuildTime={build_time}"
+    )
+    command = [
+        "go", "build", "-p", "1", "-buildvcs=false",
+        "-ldflags", ldflags, "-o", str(output_file), ".",
+    ]
+    log(f"  Compilando paquete completo . → {output_file}")
+    code, out, _ = run(command, cwd=source_dir, env=env)
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult("Uninstall", False, error=f"go build falló:\n{tail}")
+    if not output_file.is_file():
+        return StepResult("Uninstall", False, error=f"Go no produjo el artefacto esperado: {output_file}")
+
+    if IS_WINDOWS:
+        code, version_output, _ = run([str(output_file), "--version"], cwd=source_dir, env=env)
+        expected = f"v{product_version}-build.{effective}"
+        if code != 0 or expected not in version_output or build_date not in version_output or build_time not in version_output:
+            detail = version_output.strip() or f"exit code {code}"
+            return StepResult("Uninstall", False, error=f"Verificación --version inválida: {detail}")
+        log(f"  ✅ Versión verificada: {version_output.strip()}")
+
+    detail = (
+        f"base {previous_base}→{new_base}; windows offset {windows_offset}; "
+        f"effective {effective}; artifact {output_file}"
+    )
+    return StepResult("Uninstall", True, output=detail)
 
 
 def build_host() -> StepResult:
@@ -1926,7 +2015,7 @@ def _print_summary(results: list[StepResult]) -> int:
 
 _NATIVE_BIN_COMPONENTS = (
     "nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor",
-    "brain", "host", "setup", "workspace", "aitap",
+    "brain", "host", "setup", "workspace", "aitap", "uninstall",
 )
 
 
@@ -1950,7 +2039,13 @@ def _print_native_destinations(ran_keys: list[str]) -> None:
     log(_sep())
 
     for key in _NATIVE_BIN_COMPONENTS:
-        comp_dir = _DEV_BIN_BASE / key
+        # Uninstall es, por contrato, un artefacto Windows AMD64 incluso cuando
+        # el host de BUILD es Linux o Darwin.
+        comp_dir = (
+            ROOT / "installer/native/bin/win64/uninstall"
+            if key == "uninstall"
+            else _DEV_BIN_BASE / key
+        )
         try:
             rel = comp_dir.relative_to(ROOT)
         except ValueError:
@@ -1981,7 +2076,7 @@ def _print_native_destinations(ran_keys: list[str]) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 ALL_STEP_NAMES = [
-    "parser", "brain", "aitap", "host", "nucleus", "sentinel", "metamorph",
+    "parser", "brain", "aitap", "uninstall", "host", "nucleus", "sentinel", "metamorph",
     "sensor", "impact", "monitor", "setup", "workspace", "cortex", "bootstrap", "vsix",
 ]
 
@@ -2535,7 +2630,7 @@ def main() -> None:
     # Los componentes que entran en este build muestran "actual → próximo".
     # Los que se saltean muestran solo el valor actual.
     log(f"Build numbers ({_PLATFORM_SUFFIX}):")
-    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor", "aitap", "host", "cortex", "setup", "workspace"):
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "impact", "monitor", "aitap", "uninstall", "host", "cortex", "setup", "workspace"):
         if comp == "cortex":
             meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
             try:
@@ -2548,9 +2643,10 @@ def main() -> None:
         scripts_dir = _BUILD_NUMBER_DIRS.get(comp)
         if scripts_dir:
             base      = _read_int(scripts_dir / "build_number.txt", 0)
-            offset    = _read_int(scripts_dir / f"build_number.{_PLATFORM_SUFFIX}.txt", 0)
+            target_suffix = "windows" if comp == "uninstall" else _PLATFORM_SUFFIX
+            offset    = _read_int(scripts_dir / f"build_number.{target_suffix}.txt", 0)
             effective = base + offset
-            offset_str = f"  (+{offset} {_PLATFORM_SUFFIX})" if offset else ""
+            offset_str = f"  (+{offset} {target_suffix})" if offset else ""
             will_build = (
                 (_only_set_preview is None or comp in _only_set_preview)
                 and comp not in _skip_set_preview
@@ -2586,6 +2682,7 @@ def main() -> None:
         ("nucleus",   "Nucleus",   lambda: build_go_component("nucleus")),
         ("brain",     "Brain",     build_brain),
         ("aitap",     "AITAP",     build_aitap),
+        ("uninstall", "Uninstall", build_uninstall),
         ("host",      "Host",      build_host),
         ("sentinel",  "Sentinel",  lambda: build_go_component("sentinel")),
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
@@ -2679,6 +2776,20 @@ def main() -> None:
             rollout_result = rollout_bootstrap()
             _print_result(rollout_result)
             results.append(rollout_result)
+
+    # Uninstall es un artefacto de distribución, no un componente instalado.
+    # Su selector aislado debe limitarse estrictamente a compilar/verificar y no
+    # puede alterar config, PATH, telemetría ni metamorph.json de la instalación.
+    if only_set == {"uninstall"}:
+        failed_count = _print_summary(results)
+        _print_native_destinations([key for key, _, _ in steps])
+        if failed_count > 0:
+            log("")
+            log("⚠️  El build de Uninstall terminó con errores.")
+            sys.exit(1)
+        log("")
+        log("🎉 Build de Uninstall completo (sin rollout ni cambios en la instalación activa).")
+        return
 
     # ── Rollout: config ────────────────────────────────────────────────────
     # A diferencia del resto, "config" no tiene build_*() propio — no es un
