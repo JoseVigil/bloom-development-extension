@@ -27,6 +27,20 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
+func checkUninstallReplaceable(path string) error {
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	// An exclusive DELETE handle detects mapped or open executables before any
+	// rename, so a blocked replacement leaves the previous file in place.
+	handle, err := windows.CreateFile(name, windows.DELETE, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		return err
+	}
+	return windows.CloseHandle(handle)
+}
+
 // deployRuntime keeps the previous installation available until the staged
 // Windows interpreter has passed the same functional checks used by Setup.
 func deployRuntime(src, dst string) (err error) {

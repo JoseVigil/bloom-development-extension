@@ -150,6 +150,14 @@ var allComponents = []component{
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "metamorph") },
 	},
 	{
+		Key: "uninstall",
+		SourceFn: func(r string) string {
+			return filepath.Join(r, "installer", "native", "bin", "win64", "uninstall", "bloom-uninstall.exe")
+		},
+		DestFn:    func(b string) string { return filepath.Join(b, "bin", "uninstall") },
+		Platforms: []string{"windows"},
+	},
+	{
 		Key: "host",
 		SourceFn: func(r string) string {
 			return nativeBin(r, "host")
@@ -1659,6 +1667,7 @@ Linux, and LaunchAgent on macOS.`,
   metamorph rollout --only nucleus
   metamorph rollout --only sentinel
   metamorph rollout --only metamorph
+  metamorph rollout --only uninstall
   metamorph rollout --only host
   metamorph rollout --only workspace
   metamorph rollout --only setup
@@ -1712,20 +1721,21 @@ type deployedEntry struct {
 }
 
 type rolloutResult struct {
-	AITAP          *aitapRolloutReport  `json:"aitap,omitempty"`
-	Status         string               `json:"status"`
-	DryRun         bool                 `json:"dry_run"`
-	Only           string               `json:"only"`
-	RepoRoot       string               `json:"repo_root"`
-	Deployed       []deployedEntry      `json:"deployed"`
-	Skipped        []string             `json:"skipped"`
-	Errors         []string             `json:"errors"`
-	Pending        []rolloutHandoff     `json:"pending,omitempty"`
-	Workspace      string               `json:"workspace,omitempty"`
-	Organization   string               `json:"organization,omitempty"`
-	LegacyLayout   *batcaveLegacyLayout `json:"legacy_layout,omitempty"`
-	CleanupPending bool                 `json:"cleanup_pending"`
-	Warnings       []string             `json:"warnings"`
+	AITAP          *aitapRolloutReport     `json:"aitap,omitempty"`
+	Uninstall      *uninstallRolloutReport `json:"uninstall,omitempty"`
+	Status         string                  `json:"status"`
+	DryRun         bool                    `json:"dry_run"`
+	Only           string                  `json:"only"`
+	RepoRoot       string                  `json:"repo_root"`
+	Deployed       []deployedEntry         `json:"deployed"`
+	Skipped        []string                `json:"skipped"`
+	Errors         []string                `json:"errors"`
+	Pending        []rolloutHandoff        `json:"pending,omitempty"`
+	Workspace      string                  `json:"workspace,omitempty"`
+	Organization   string                  `json:"organization,omitempty"`
+	LegacyLayout   *batcaveLegacyLayout    `json:"legacy_layout,omitempty"`
+	CleanupPending bool                    `json:"cleanup_pending"`
+	Warnings       []string                `json:"warnings"`
 }
 
 // rolloutHandoff describes a deployment that cannot finish while the current
@@ -1843,6 +1853,33 @@ func runRollout(c *core.Core, dryRun bool, only, workspace, organization string)
 	for _, comp := range comps {
 		src := comp.SourceFn(repoRoot)
 		dst := comp.DestFn(basePath)
+		if comp.Key == "uninstall" {
+			if only == "" {
+				if _, statErr := os.Stat(src); os.IsNotExist(statErr) {
+					result.Skipped = append(result.Skipped, "uninstall: source not found at "+src)
+					continue
+				}
+			}
+			report, deployErr := rolloutUninstall(src, filepath.Join(dst, "bloom-uninstall.exe"), dryRun)
+			result.Uninstall = &report
+			if deployErr != nil {
+				msg := fmt.Sprintf("uninstall: %v", deployErr)
+				result.Errors = append(result.Errors, msg)
+				result.Status = "partial"
+				c.Logger.Error("❌ %s", msg)
+			} else {
+				verb := "deployed"
+				filesCopied := 1
+				if dryRun {
+					verb, filesCopied = "[dry-run]", 0
+				} else if report.Result == "unchanged" {
+					verb, filesCopied = "unchanged", 0
+				}
+				c.Logger.Info("%s uninstall: %s → %s (v%s-build.%d, SHA-256 %s)", verb, src, report.Destination, report.Version, report.Build, report.SHA256)
+				result.Deployed = append(result.Deployed, deployedEntry{Component: "Uninstall", Source: src, Destination: report.Destination, FilesCopied: filesCopied, Version: report.Version, Build: report.Build})
+			}
+			continue
+		}
 		if comp.Key == "aitap" {
 			report := runAITAPRollout(src, dst, dryRun)
 			result.AITAP = &report
@@ -2005,12 +2042,18 @@ func runRollout(c *core.Core, dryRun bool, only, workspace, organization string)
 
 	if c.Config.OutputJSON {
 		c.OutputJSON(result)
+		if only == "uninstall" && len(result.Errors) > 0 {
+			return fmt.Errorf("uninstall rollout failed: %s", strings.Join(result.Errors, "; "))
+		}
 		return nil
 	}
 
 	if !dryRun {
 		fmt.Printf("\nRollout complete — %d deployed, %d skipped, %d errors\n",
 			len(result.Deployed), len(result.Skipped), len(result.Errors))
+	}
+	if only == "uninstall" && len(result.Errors) > 0 {
+		return fmt.Errorf("uninstall rollout failed: %s", strings.Join(result.Errors, "; "))
 	}
 	return nil
 }

@@ -17,6 +17,10 @@ import (
 	"metamorph/internal/core"
 )
 
+func checkUninstallReplaceable(path string) error {
+	return fmt.Errorf("uninstall rollout is only supported on Windows")
+}
+
 func deployRuntime(src, dst string) error {
 	_, err := copyDir(src, dst)
 	return err
