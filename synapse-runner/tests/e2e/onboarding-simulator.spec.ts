@@ -29,10 +29,11 @@ function requiredDarwinEnv(name: string): string {
   return value;
 }
 // Darwin: workspace, organización y proyecto vienen sólo del entorno de prueba
-// (R0 verifica que estén bajo el home del usuario de prueba). Windows/Linux
-// conservan los valores históricos.
+// (R0 verifica que estén bajo el home del usuario de prueba). Windows usa el
+// workspace canónico C:\repos\elias-repos; Linux conserva su ruta local.
 const WORKSPACE_ORG = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_ORG') : 'elias-repos';
-const WORKSPACE_PATH = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_PATH') : join(homedir(), 'repos', 'elias-repos');
+const WORKSPACE_PATH = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_PATH') :
+  (process.platform === 'win32' ? 'C:\\repos\\elias-repos' : join(homedir(), 'repos', 'elias-repos'));
 const WORKSPACE_BASE = dirname(WORKSPACE_PATH);
 const NUCLEUS_MARKER = `.nucleus-${WORKSPACE_ORG}`;
 const PROJECT_SOURCE = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_PROJECT_SOURCE') : (process.env.SYNAPSE_TEST_PROJECT_SOURCE || (
@@ -171,6 +172,15 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
     })}`);
   };
   try {
+    if (process.platform === 'win32' && !resumeCurrent) {
+      const current = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+        onboarding?: { active_org_slug?: string };
+      };
+      const activeSlug = current.onboarding?.active_org_slug;
+      if (activeSlug && activeSlug !== WORKSPACE_ORG) {
+        throw new Error(`[onboarding-simulator] Instalación activa con org_slug=${activeSlug}; se aborta antes de 00a/reset. Se requiere una instalación nueva de ${WORKSPACE_ORG}.`);
+      }
+    }
     if (IS_DARWIN && resumeCurrent) {
       throw new Error('[onboarding-simulator] SYNAPSE_RESUME_CURRENT no está habilitado en Darwin');
     }

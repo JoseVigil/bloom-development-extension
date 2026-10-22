@@ -12,7 +12,10 @@ test('Human Sync gate: real Gemini classification reaches validate and stops', a
   test.skip(process.env.RUNNER_CORE_REAL_GEMINI !== '1', 'Explicit real Gemini authorization required');
   test.setTimeout(900_000);
   const controls={files:[path.join(os.homedir(),'AppData','Local','BloomNucleus','config','nucleus.json')],
-    directories:['C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates']};
+    directories:[
+      'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates',
+      'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.mandates',
+    ]};
   const before=snapshotProductControls(controls);
   let fixture:GenesisBackendRoot|undefined; let launch:Gate2Launch|undefined; let api:Gate2Api|undefined;
   try {

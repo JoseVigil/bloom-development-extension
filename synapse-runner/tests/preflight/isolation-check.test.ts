@@ -61,7 +61,7 @@ function installedEvidence(): R0Evidence {
   item.nucleusBase = personal;
   item.localAppDataDir = dirname(personal);
   item.appDataDir = personalAppData;
-  item.workspaceOrg = 'eias-repos';
+  item.workspaceOrg = 'elias-repos';
   item.workspacePath = join('C:\\repos', item.workspaceOrg);
   item.masterProfilePath = join(personal, 'profiles', 'master');
   item.masterExtensionPath = join(personal, 'profiles', 'master', 'extension');

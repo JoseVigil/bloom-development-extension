@@ -102,7 +102,8 @@ export function validateR0Evidence(e: R0Evidence): string[] {
       (!inside(e.workspacePath, join(e.runnerBase, 'workspaces')) || samePath(e.workspacePath, e.personalBase))) {
     failures.push(installed ? 'workspace instalado no coincide con la organización declarada en C:\\repos' : 'workspace fuera de la instalación descartable');
   }
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(e.workspaceOrg) || (!installed && e.workspaceOrg.toLowerCase() === 'eias-repos')) {
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(e.workspaceOrg) ||
+      (!installed && ['elias-repos', 'eias-repos'].includes(e.workspaceOrg.toLowerCase()))) {
     failures.push('organización de prueba personal, ambigua o ausente');
   }
   for (const [name, path] of [

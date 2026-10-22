@@ -1628,9 +1628,22 @@ func functionalSpawn(job uintptr, exe, cwd, command, logPath string) (uint32, er
 	return pi.ProcessId, nil
 }
 
-func functionalWaitPort(port int) error {
+func functionalWaitPort(port int, pid uint32) error {
 	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	const synchronizeAndQuery = 0x00100000 | 0x1000
+	process, _, e := openProcess.Call(synchronizeAndQuery, 0, uintptr(pid))
+	if process == 0 {
+		return winCallError("OpenProcess", e)
+	}
+	defer closeHandle.Call(process)
 	for i := 0; i < 600; i++ {
+		if status, _, _ := waitForSingleObject.Call(process, 0); status == 0 {
+			var exitCode uint32
+			if ok, _, e := getExitCodeProcess.Call(process, uintptr(unsafe.Pointer(&exitCode))); ok == 0 {
+				return winCallError("GetExitCodeProcess", e)
+			}
+			return fmt.Errorf("functional_service_exit:%d:%d", pid, exitCode)
+		}
 		conn, err := net.DialTimeout("tcp", address, 200*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
@@ -1676,10 +1689,10 @@ func functionalSupervisor(root string, httpPort, wsPort, uiPort int) error {
 	if err != nil {
 		return err
 	}
-	if err := functionalWaitPort(httpPort); err != nil {
+	if err := functionalWaitPort(httpPort, service); err != nil {
 		return err
 	}
-	if err := functionalWaitPort(wsPort); err != nil {
+	if err := functionalWaitPort(wsPort, service); err != nil {
 		return err
 	}
 	node := filepath.Join(root, "bin", "node.exe")
@@ -1689,7 +1702,7 @@ func functionalSupervisor(root string, httpPort, wsPort, uiPort int) error {
 	if err != nil {
 		return err
 	}
-	if err := functionalWaitPort(uiPort); err != nil {
+	if err := functionalWaitPort(uiPort, ui); err != nil {
 		return err
 	}
 	workspace := filepath.Join(root, "bin", "bloom-workspace.exe")
@@ -1752,7 +1765,7 @@ func gate2Supervisor(root string, grpcPort, uiPort int, temporalOnly bool) error
 	if err != nil {
 		return err
 	}
-	if err := functionalWaitPort(grpcPort); err != nil {
+	if err := functionalWaitPort(grpcPort, temporalPID); err != nil {
 		return err
 	}
 	var watcherPID uint32

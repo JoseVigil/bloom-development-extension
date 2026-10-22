@@ -14,8 +14,12 @@ test('Core leaves a legacy Genesis pending inert and sends no Mandate POST', asy
     files: [
       path.join(os.homedir(), 'AppData', 'Local', 'BloomNucleus', 'config', 'nucleus.json'),
       'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.ownership.json',
+      'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.ownership.json',
     ],
-    directories: ['C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates'],
+    directories: [
+      'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates',
+      'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.mandates',
+    ],
   };
   const before = snapshotProductControls(controls);
   let fixture: FunctionalRoot | undefined;

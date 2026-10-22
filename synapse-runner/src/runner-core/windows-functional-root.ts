@@ -38,9 +38,11 @@ function inspectFunctionalWorkspaceSource(executable: string): { packageDir: str
   const packageDir = path.win32.dirname(path.win32.resolve(executable));
   assertNoWindowsReparsePoints(packageDir);
   for (const name of fs.readdirSync(packageDir)) {
+    if (/^\.rollout-previous-\d+$/.test(name) && fs.lstatSync(path.win32.join(packageDir, name)).isFile()) continue;
     if (!WORKSPACE_TOP_LEVEL.has(name.toLowerCase()) || FORBIDDEN_NAME.test(name)) throw new Error('functional_package_outer_unexpected');
   }
-  const sourceFiles = packageFileList(packageDir).filter(item => item.toLowerCase() !== 'electron.exe');
+  const sourceFiles = packageFileList(packageDir).filter(item =>
+    item.toLowerCase() !== 'electron.exe' && !/^\.rollout-previous-\d+$/.test(item));
   if (!sourceFiles.includes('bloom-workspace.exe') || !sourceFiles.includes('resources/app.asar') ||
       sourceFiles.some(item => item.split('/').some(part => FORBIDDEN_NAME.test(part)))) throw new Error('functional_package_content_invalid');
   return { packageDir, sourceFiles };

@@ -32,7 +32,11 @@ test('Gate 2: real Backend creation reaches one durable Temporal workflow withou
   const controls={files:[
     path.join(os.homedir(),'AppData','Local','BloomNucleus','config','nucleus.json'),
     'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.ownership.json',
-  ],directories:['C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates']};
+    'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.ownership.json',
+  ],directories:[
+    'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates',
+    'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.mandates',
+  ]};
   const before=snapshotProductControls(controls);
   let fixture:GenesisBackendRoot|undefined;
   let launch:Gate2Launch|undefined;
