@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,58 @@ func disposableRoot(t *testing.T) string {
 	}
 	t.Setenv("BLOOM_UNINSTALL_TEST_ROOT", root)
 	return root
+}
+
+func TestConfigPathsAreReferencesOnly(t *testing.T) {
+	root := `C:\Users\person\AppData\Local\BloomNucleus`
+	data := []byte(`{"binary":"C:\\Users\\person\\AppData\\Local\\BloomNucleus\\bin\\brain.exe","profile":"D:\\another\\profile","token":"secret"}`)
+	inside, outside := countConfigPaths(data, root)
+	if inside != 1 || outside != 1 {
+		t.Fatalf("rutas: internas=%d externas=%d", inside, outside)
+	}
+}
+
+func TestConfigSummaryRejectsUnexpectedSchema(t *testing.T) {
+	if count, ok := configItemCount("config/metamorph.json", []byte(`{"managed_binaries":[{},{}]}`)); !ok || count != 2 {
+		t.Fatal("no contó binarios")
+	}
+	if _, ok := configItemCount("config/metamorph.json", []byte(`{"managed_binaries":"invalid"}`)); ok {
+		t.Fatal("aceptó esquema inválido")
+	}
+}
+
+func TestProtectedPlanOnlyAllowsBloomHKLMHost(t *testing.T) {
+	if !allowedRegistryKey(`HKLM\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.bloom.nucleus.bridge`) {
+		t.Fatal("rechazó host Bloom")
+	}
+	for _, key := range []string{
+		`HKCU\Software\Google\Chrome\NativeMessagingHosts\com.bloom.nucleus.bridge`,
+		`HKLM\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.other.host`,
+		`HKLM\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.bloom.host\other`,
+	} {
+		if allowedRegistryKey(key) {
+			t.Fatalf("aceptó clave ajena: %s", key)
+		}
+	}
+}
+
+func TestCanceledElevationStopsBeforeUserCleanup(t *testing.T) {
+	root := disposableRoot(t)
+	workspace, bloom := disposableWorkspace(t)
+	tmp := t.TempDir()
+	previous := elevate
+	elevate = func(_, _ string) error { return errors.New("cancelled") }
+	t.Cleanup(func() { elevate = previous })
+	inv := inventory{root: root, workspace: workspace, bloomDir: bloom, services: []string{"BloomNucleusService"}}
+	if err := performProtectedStage(inv, filepath.Join(tmp, "worker.exe"), tmp, &bytes.Buffer{}); err == nil {
+		t.Fatal("cancelación aceptada")
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Fatal("borró instalación:", err)
+	}
+	if _, err := os.Stat(bloom); err != nil {
+		t.Fatal("borró .bloom:", err)
+	}
 }
 
 func disposableWorkspace(t *testing.T) (string, string) {

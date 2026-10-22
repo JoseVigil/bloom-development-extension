@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,6 +37,15 @@ type inventory struct {
 	registry  []string
 	workspace string
 	bloomDir  string
+	config    []string
+	warnings  []string
+	processes int
+}
+
+type protectedPlan struct {
+	Root     string   `json:"root"`
+	Services []string `json:"services"`
+	Registry []string `json:"registry"`
 }
 
 func main() {
@@ -49,6 +59,15 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 1 && (args[0] == "version" || args[0] == "--version") {
 		fmt.Fprintln(out, versionLine())
 		return nil
+	}
+	if len(args) == 2 && args[0] == "--internal-elevated" {
+		err := runProtectedPlan(args[1], out)
+		result := "OK"
+		if err != nil {
+			result = err.Error()
+		}
+		_ = os.WriteFile(args[1]+".result", []byte(result), 0600)
+		return err
 	}
 	root, test, err := installationRoot()
 	if err != nil {
@@ -75,12 +94,6 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	inv.workspace, inv.bloomDir = workspace, bloomDir
-	if !test {
-		check := `if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 1 }`
-		if _, err := command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", check); err != nil {
-			return errors.New("ejecutá bloom-uninstall.exe como administrador para retirar servicios")
-		}
-	}
 	fmt.Fprintf(out, "Instalación: %s\n", root)
 	for _, e := range inv.entries {
 		fmt.Fprintln(out, "  Archivo/directorio:", e)
@@ -91,6 +104,13 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	for _, r := range inv.registry {
 		fmt.Fprintln(out, "  Registro:", r)
 	}
+	for _, c := range inv.config {
+		fmt.Fprintln(out, "  Configuración:", c)
+	}
+	for _, w := range inv.warnings {
+		fmt.Fprintln(out, "  Aviso:", w)
+	}
+	fmt.Fprintf(out, "  Procesos asociados encontrados: %d\n", inv.processes)
 	fmt.Fprintf(out, "Workspace seleccionado: %s\nSe eliminará COMPLETA: %s\n", workspace, bloomDir)
 	fmt.Fprintln(out, "Se perderán la identidad local, los recibos y los Mandates allí guardados. Esta operación no es reversible; el backup/restore de Nucleus aún no está implementado ni verificado.")
 	fmt.Fprintln(out, "Los archivos del proyecto fuera de .bloom y Backend/D1 no se tocarán.")
@@ -113,6 +133,12 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		os.RemoveAll(tmp)
 		return err
 	}
+	if !test {
+		if err := performProtectedStage(inv, worker, tmp, out); err != nil {
+			_ = os.RemoveAll(tmp)
+			return err
+		}
+	}
 	cmd := exec.Command(worker, "--internal-worker", tmp, fmt.Sprint(os.Getpid()), workspace)
 	cmd.Env = os.Environ()
 	cmd.Stdin = in
@@ -125,6 +151,35 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	}
 	fmt.Fprintf(out, "Limpieza iniciada (PID %d).\n", cmd.Process.Pid)
 	return cmd.Process.Release()
+}
+
+func performProtectedStage(inv inventory, worker, tmp string, out io.Writer) error {
+	plan := protectedPlan{Root: inv.root, Services: append([]string(nil), inv.services...)}
+	for _, k := range inv.registry {
+		if strings.HasPrefix(strings.ToUpper(k), "HKLM\\") {
+			plan.Registry = append(plan.Registry, k)
+		}
+	}
+	if len(plan.Services)+len(plan.Registry) == 0 {
+		return nil
+	}
+	planPath := filepath.Join(tmp, "protected-plan.json")
+	data, err := json.Marshal(plan)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(planPath, data, 0600); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Windows solicitará elevación solo para servicios y registro HKLM.")
+	if err := elevate(worker, planPath); err != nil {
+		detail, readErr := os.ReadFile(planPath + ".result")
+		if readErr == nil && string(detail) != "OK" {
+			return fmt.Errorf("limpieza protegida fallida; no se borraron archivos ni .bloom: %s: %w", strings.TrimSpace(string(detail)), err)
+		}
+		return fmt.Errorf("elevación cancelada o fallida; no se borraron archivos ni .bloom: %w", err)
+	}
+	return nil
 }
 
 func installationRoot() (string, bool, error) {
@@ -155,12 +210,8 @@ func installationRoot() (string, bool, error) {
 
 func inspect(root string, test bool) (inventory, error) {
 	inv := inventory{root: root, test: test}
-	info, err := os.Lstat(root)
-	if err != nil {
+	if err := validateInstallationDirectory(root); err != nil {
 		return inv, err
-	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return inv, errors.New("la raíz no es un directorio real")
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -169,9 +220,31 @@ func inspect(root string, test bool) (inventory, error) {
 	for _, e := range entries {
 		inv.entries = append(inv.entries, filepath.Join(root, e.Name()))
 	}
+	for _, rel := range []string{"config/nucleus.json", "config/metamorph.json", "config/profiles.json"} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			inv.warnings = append(inv.warnings, rel+" ausente; se usará solo el inventario verificable")
+			continue
+		}
+		if err != nil || !json.Valid(data) {
+			inv.warnings = append(inv.warnings, rel+" ilegible o inválido; no se aceptarán rutas externas desde él")
+			continue
+		}
+		inside, outside := countConfigPaths(data, root)
+		itemCount, schemaOK := configItemCount(rel, data)
+		if !schemaOK {
+			inv.warnings = append(inv.warnings, rel+" tiene un esquema inesperado; no se usará para atribuir recursos")
+		}
+		inv.config = append(inv.config, fmt.Sprintf("%s (%d elementos, %d rutas dentro de la instalación, %d rutas externas solo como referencia)", rel, itemCount, inside, outside))
+		if outside > 0 {
+			inv.warnings = append(inv.warnings, rel+": las rutas externas no se borrarán sin prueba de pertenencia")
+		}
+	}
 	if test {
 		return inv, nil
 	}
+	inv.processes = ownedProcessCount(root)
 	for _, s := range services {
 		if ownedService(s, root) {
 			inv.services = append(inv.services, s)
@@ -211,6 +284,93 @@ func inspect(root string, test bool) (inventory, error) {
 		}
 	}
 	return inv, nil
+}
+
+func validateInstallationDirectory(root string) error {
+	info, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("la raíz no es un directorio real")
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil || !strings.EqualFold(resolved, filepath.Clean(root)) {
+		return errors.New("la raíz redirige a otra ruta")
+	}
+	return nil
+}
+
+func countConfigPaths(data []byte, root string) (int, int) {
+	var value any
+	if json.Unmarshal(data, &value) != nil {
+		return 0, 0
+	}
+	inside, outside := 0, 0
+	var walk func(any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			for _, child := range x {
+				walk(child)
+			}
+		case []any:
+			for _, child := range x {
+				walk(child)
+			}
+		case string:
+			if !filepath.IsAbs(x) {
+				return
+			}
+			clean := filepath.Clean(x)
+			if strings.EqualFold(clean, root) || strings.HasPrefix(strings.ToLower(clean), strings.ToLower(filepath.Clean(root)+string(os.PathSeparator))) {
+				inside++
+			} else {
+				outside++
+			}
+		}
+	}
+	walk(value)
+	return inside, outside
+}
+
+func configItemCount(rel string, data []byte) (int, bool) {
+	var object map[string]json.RawMessage
+	if json.Unmarshal(data, &object) != nil {
+		return 0, false
+	}
+	switch rel {
+	case "config/nucleus.json":
+		_, installation := object["installation"]
+		_, system := object["system_map"]
+		return 1, installation && system
+	case "config/metamorph.json":
+		var list []json.RawMessage
+		if json.Unmarshal(object["managed_binaries"], &list) != nil {
+			return 0, false
+		}
+		return len(list), true
+	case "config/profiles.json":
+		var list []json.RawMessage
+		if json.Unmarshal(object["profiles"], &list) == nil {
+			return len(list), true
+		}
+		var profiles map[string]json.RawMessage
+		if json.Unmarshal(object["profiles"], &profiles) == nil {
+			return len(profiles), true
+		}
+	}
+	return 0, false
+}
+
+func ownedProcessCount(root string) int {
+	ps := fmt.Sprintf(`$r='%s'; @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($r+'\',[StringComparison]::OrdinalIgnoreCase) }).Count`, strings.ReplaceAll(root, "'", "''"))
+	v, err := command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
+	if err != nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(strings.TrimSpace(v))
+	return n
 }
 
 func containsStringFold(values []string, needle string) bool {
@@ -315,6 +475,104 @@ func ownedRegistry(key, root string) bool {
 	return e == nil && containsRoot(v, root) && (!strings.Contains(strings.ToLower(key), `\nativemessaginghosts\`) || strings.HasPrefix(strings.ToLower(value), "com.bloom."))
 }
 
+func requestElevation(worker, planPath string) error {
+	// Start-Process keeps the original process (and its HKCU/LOCALAPPDATA)
+	// alive while Windows prompts for an administrator account.
+	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+	ps := fmt.Sprintf(`$ErrorActionPreference='Stop'; $p=Start-Process -FilePath '%s' -ArgumentList '--internal-elevated "%s"' -Verb RunAs -Wait -PassThru; if ($p.ExitCode -ne 0) { exit $p.ExitCode }`, q(worker), q(planPath))
+	v, err := command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
+	if err != nil {
+		return fmt.Errorf("UAC o proceso elevado: %s: %w", strings.TrimSpace(v), err)
+	}
+	return nil
+}
+
+var elevate = requestElevation
+
+func runProtectedPlan(planPath string, out io.Writer) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(exe)
+	if !strings.EqualFold(filepath.Dir(planPath), dir) || !strings.HasPrefix(strings.ToLower(filepath.Base(dir)), "bloom-uninstall-") {
+		return errors.New("plan protegido fuera del worker temporal")
+	}
+	data, err := os.ReadFile(planPath)
+	if err != nil {
+		return err
+	}
+	var plan protectedPlan
+	if err := json.Unmarshal(data, &plan); err != nil {
+		return err
+	}
+	if filepath.Base(plan.Root) != "BloomNucleus" || !filepath.IsAbs(plan.Root) {
+		return errors.New("raíz protegida inválida")
+	}
+	resolved, err := filepath.EvalSymlinks(plan.Root)
+	if err != nil || !strings.EqualFold(resolved, filepath.Clean(plan.Root)) {
+		return errors.New("raíz protegida redirigida")
+	}
+	for _, s := range plan.Services {
+		if !containsStringFold(services, s) || !ownedService(s, plan.Root) {
+			return fmt.Errorf("servicio no verificable: %s", s)
+		}
+	}
+	for _, k := range plan.Registry {
+		if !strings.HasPrefix(strings.ToUpper(k), "HKLM\\") || !allowedRegistryKey(k) || !ownedRegistry(k, plan.Root) {
+			return fmt.Errorf("registro HKLM no verificable: %s", k)
+		}
+	}
+	for _, s := range plan.Services {
+		if !ownedService(s, plan.Root) {
+			return fmt.Errorf("servicio cambió antes de retirarlo: %s", s)
+		}
+		_, _ = command("sc.exe", "stop", s)
+		for i := 0; i < 20; i++ {
+			v, _ := command("sc.exe", "query", s)
+			if strings.Contains(v, "STOPPED") {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		v, _ := command("sc.exe", "query", s)
+		if !strings.Contains(v, "STOPPED") {
+			return fmt.Errorf("servicio %s no se detuvo", s)
+		}
+		if v, err := command("sc.exe", "delete", s); err != nil {
+			return fmt.Errorf("eliminar servicio %s: %s: %w", s, strings.TrimSpace(v), err)
+		}
+		for i := 0; i < 20; i++ {
+			if _, err := command("sc.exe", "query", s); err != nil {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		if _, err := command("sc.exe", "query", s); err == nil {
+			return fmt.Errorf("servicio %s continúa registrado", s)
+		}
+		fmt.Fprintln(out, "Servicio retirado:", s)
+	}
+	for _, k := range plan.Registry {
+		if !ownedRegistry(k, plan.Root) {
+			return fmt.Errorf("registro HKLM cambió: %s", k)
+		}
+		if v, err := command("reg.exe", "delete", k, "/f"); err != nil {
+			return fmt.Errorf("eliminar %s: %s: %w", k, strings.TrimSpace(v), err)
+		}
+		if ownedRegistry(k, plan.Root) {
+			return fmt.Errorf("registro HKLM restante: %s", k)
+		}
+		fmt.Fprintln(out, "Registro HKLM retirado:", k)
+	}
+	return nil
+}
+
+func allowedRegistryKey(k string) bool {
+	lower := strings.ToLower(k)
+	return strings.HasPrefix(lower, `hklm\software\google\chrome\nativemessaginghosts\com.bloom.`) && !strings.Contains(strings.TrimPrefix(lower, `hklm\software\google\chrome\nativemessaginghosts\`), `\`)
+}
+
 func removeInstallation(root string, test bool, tempDir string, parentPID string, workspace string, out io.Writer) error {
 	if filepath.Base(tempDir) == "" || !strings.HasPrefix(strings.ToLower(filepath.Clean(tempDir)), strings.ToLower(filepath.Clean(os.TempDir()))+string(os.PathSeparator)) {
 		return errors.New("worker temporal inválido")
@@ -340,38 +598,15 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 		return err
 	}
 	if !test {
-		for _, s := range inv.services {
-			_, _ = command("sc.exe", "stop", s)
-			for i := 0; i < 20; i++ {
-				v, _ := command("sc.exe", "query", s)
-				if strings.Contains(v, "STOPPED") {
-					break
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-			v, _ := command("sc.exe", "query", s)
-			if !strings.Contains(v, "STOPPED") {
-				return fmt.Errorf("servicio %s no se detuvo", s)
-			}
-			if _, e := command("sc.exe", "delete", s); e != nil {
-				return fmt.Errorf("eliminar servicio %s: %w", s, e)
-			}
-			for i := 0; i < 20; i++ {
-				if _, e := command("sc.exe", "query", s); e != nil {
-					break
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-			if _, e := command("sc.exe", "query", s); e == nil {
-				return fmt.Errorf("servicio %s continúa registrado", s)
-			}
-		}
 		// Only processes whose ExecutablePath is inside this installation are terminated.
 		ps := fmt.Sprintf(`$ErrorActionPreference='Stop'; $r='%s'; $owned={ Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($r+'\',[StringComparison]::OrdinalIgnoreCase) } }; & $owned | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop }; Start-Sleep -Milliseconds 300; if (@(& $owned).Count -gt 0) { throw 'Procesos Bloom restantes' }`, strings.ReplaceAll(root, "'", "''"))
 		if _, e := command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps); e != nil {
 			return fmt.Errorf("detener procesos Bloom: %w", e)
 		}
 		for _, key := range inv.registry {
+			if !strings.HasPrefix(strings.ToUpper(key), "HKCU\\") {
+				continue
+			}
 			parts := strings.Split(key, `\`)
 			value := parts[len(parts)-1]
 			path := strings.Join(parts[:len(parts)-1], `\`)
@@ -383,6 +618,9 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 				return fmt.Errorf("eliminar registro %s: %w", key, e)
 			}
 		}
+	}
+	if err := validateInstallationDirectory(root); err != nil {
+		return err
 	}
 	if err := os.RemoveAll(root); err != nil {
 		return fmt.Errorf("eliminar %s: %w", root, err)
@@ -402,12 +640,10 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 		return errors.New("quedan archivos de la instalación")
 	}
 	if !test {
-		for _, s := range inv.services {
-			if ownedService(s, root) {
-				return fmt.Errorf("servicio restante: %s", s)
-			}
-		}
 		for _, k := range inv.registry {
+			if !strings.HasPrefix(strings.ToUpper(k), "HKCU\\") {
+				continue
+			}
 			if ownedRegistry(k, root) {
 				return fmt.Errorf("registro restante: %s", k)
 			}
