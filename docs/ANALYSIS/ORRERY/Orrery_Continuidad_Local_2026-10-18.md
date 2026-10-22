@@ -9,6 +9,10 @@
 3. **Interacción:** [guía original](ENCARGOS/Encargo_Orrery_Guia_Investigacion_Interaccion_Lente_Foco_Hover_v0_1.md), [research v0.2](INTERACTION/Orrery_Interaction_Research_Lente_Seleccion_Indicacion_v0_2.md) y [protocolo v0.1](INTERACTION/Orrery_Interaction_Experiment_Protocol_v0_1.md). El research v0.2 registra DJ-I1..I9 como decisiones de investigación, sin valor normativo. El protocolo sigue **en borrador para aprobación**.
 4. **Procedencia y detalle:** [traspaso de estado y orden de lectura](Orrery_Traspaso_Codex_Estado_y_Orden_de_Lectura_v1_0.md) y [traspaso Windows](Orrery_Traspaso_Codex_Windows_v1_0.md). Son actas, no autoridad sobre las fuentes. Los otros [encargos originales](ENCARGOS/) explican el propósito y los límites de los dos trabajos visuales.
 
+**Actualización del 2026-10-18:** leer la [corrección de continuidad del protocolo](INTERACTION/Orrery_Correccion_Continuidad_Protocolo_2026-10-18.md) antes de proponer el protocolo v0.2. José rechazó el cronograma fijo de unos 95 minutos y dos sesiones obligatorias del borrador v0.1. La experiencia de Orrery y su observación deben conservar la continuidad; los tiempos registrados no son límites de uso.
+
+**Exploración visual posterior:** [primer corte espacial](VISUAL/primer_corte/index.html). Archivo autónomo con datos sintéticos: muestra un árbol Tenant › Organization › Project, con Domain y Gene separados dentro del Project, una Lente de Trabajo con Anotaciones y una Lente Gravity activa sin datos. Es una propuesta para mirar y corregir con José; no reemplaza la escena gris de evidencia, no aprueba formas finales y no usa el código congelado de Orrery.
+
 ## Punto exacto de continuación
 
 Según el traspaso (§6.2), el frente quedó en la **fase 3 de 6: comparar**. Las fases 1 y 2 están documentadas en el research de interacción v0.2. Falta resolver el §0 del protocolo: tratamientos I-1..I-13, condiciones, tareas, umbrales, rúbrica e hipótesis. También falta definir número, perfil y distribución de sesiones de participantes. Los umbrales numéricos son propuestas del borrador, no decisiones aprobadas.

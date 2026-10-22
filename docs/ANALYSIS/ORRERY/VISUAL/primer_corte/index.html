@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orrery · primer corte espacial</title>
+<!--
+  Exploración visual, no diseño aprobado ni implementación de Workspace Core.
+  Datos sintéticos. No lee fuentes reales ni código de installer/.
+  Territorio y jerarquía: Vocabulario v1.1 §2; G-2/G-4/G-8 del research morfológico.
+  Lentes y cobertura: Experience Model v1.0 §5.3 y §5.6; DJ-I6.
+  Domain y Gene comparten Project; esta escena no representa su relación N:M.
+-->
+<style>
+  :root{color-scheme:dark;--bg:#0b1017;--panel:#131b25;--panel2:#19232f;--line:#304255;--text:#e4edf5;--muted:#9caebe;--soft:#71879c;--work:#d3b984;--focus:#eaf2f9;--unknown:#a7b8c8}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+  button{font:inherit}
+  .shell{min-height:100vh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 22px;border-bottom:1px solid var(--line);background:#101821}
+  .brand{display:flex;align-items:baseline;gap:14px}.brand strong{font-size:21px;letter-spacing:.12em;font-weight:600}.brand span{color:var(--muted);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+  .tag{border:1px solid #627387;color:#cad6e2;padding:6px 10px;border-radius:3px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+  .notice{padding:9px 22px;background:#202b37;border-bottom:1px solid #526174;color:#d9e5ef;font-size:12px;letter-spacing:.02em}
+  .main{display:grid;grid-template-columns:245px minmax(500px,1fr) 300px;min-height:620px}
+  aside{background:var(--panel);padding:22px;border-right:1px solid var(--line)}
+  aside.right{border-right:0;border-left:1px solid var(--line)}
+  h1{font-size:14px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;margin:0 0 8px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--soft);margin:0 0 12px;font-weight:600}
+  p{margin:0 0 15px;color:var(--muted)}
+  .small{font-size:12px;line-height:1.55}.faint{color:var(--soft)}
+  .divider{height:1px;background:var(--line);margin:22px 0}
+  .lens{display:flex;gap:11px;padding:13px 0;border-top:1px solid var(--line)}.lens:first-of-type{border-top:0}
+  .lens input{accent-color:var(--work);width:17px;height:17px;margin:2px 0 0;cursor:pointer}
+  .lens label{display:block;cursor:pointer;font-weight:600}.lens .meta{font-size:12px;color:var(--muted);margin-top:3px}
+  .state{display:inline-block;font-size:10px;letter-spacing:.09em;text-transform:uppercase;margin-top:8px;padding:3px 6px;border:1px solid var(--line);color:#d1deea}
+  .state.data{border-color:#988460;color:#e0c994}.state.unknown{border-style:dashed;color:#b8c8d6}
+  .stage{position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#172330 0,#0e1620 65%,#0b1017 100%)}
+  .stage svg{width:100%;height:100%;display:block;touch-action:none}
+  .stage:focus-within{outline:1px solid #748aa0;outline-offset:-1px}
+  .stagehead{position:absolute;z-index:2;left:20px;top:17px;pointer-events:none}.stagehead .over{font-size:10px;color:#a8bbcd;text-transform:uppercase;letter-spacing:.18em}.stagehead .title{font-size:20px;letter-spacing:.01em;margin-top:2px}.stagehead .sub{font-size:12px;color:#a1b2c2;margin-top:3px}
+  .hint{position:absolute;z-index:2;bottom:15px;left:20px;color:#a8bacb;font-size:11px;background:rgba(12,20,29,.85);padding:6px 8px;border:1px solid #33485a}
+  .tools{position:absolute;z-index:2;right:18px;top:18px;display:flex;gap:6px}
+  .tools button,.reset{background:#1b2936;color:var(--text);border:1px solid #405669;padding:7px 10px;cursor:pointer}.tools button:hover,.reset:hover{background:#294057}.tools button:focus-visible,.reset:focus-visible{outline:2px solid #eaf2f9;outline-offset:2px}
+  .grid line{stroke:#263747;stroke-width:1}.grid .axis{stroke:#395064}
+  .region{cursor:pointer}.region polygon{stroke-width:2;transition:fill .18s,stroke .18s}.region:hover polygon,.region:focus-visible polygon{stroke:#dce8f2;stroke-width:3}.region.focused polygon{stroke:var(--focus);stroke-width:4}
+  .region text,.node text{fill:#e0ebf4;pointer-events:none;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.region .minor{fill:#a9bbcc;font-size:10px;letter-spacing:.16em}.region .name{font-size:18px;font-weight:600}
+  .tenant polygon{fill:#1a2b3a;stroke:#748da4}.org polygon{fill:#203548;stroke:#8ba5b8}.project polygon{fill:#294458;stroke:#a3bacb}
+  .node{cursor:pointer}.node .stem{stroke:#91aabd;stroke-width:2}.node .plate{fill:#294659;stroke:#aac0d0;stroke-width:2}.node .body{fill:#315369;stroke:#b6cedd;stroke-width:2}.node:hover .body,.node:focus-visible .body{stroke:#fff;stroke-width:3}.node.focused .body{stroke:#fff;stroke-width:4}.node .minor{fill:#adc2d2;font-size:10px;letter-spacing:.14em}.node .name{font-size:15px;font-weight:600}
+  .workmark{display:none;pointer-events:none}.showwork .workmark{display:block}.workmark rect{fill:#4a4033;stroke:#c4aa77;stroke-width:1.5}.workmark text{fill:#f2dfb6;font:600 10px system-ui,sans-serif;letter-spacing:.07em}
+  .focustag{fill:#e5edf4;font:600 10px system-ui,sans-serif;letter-spacing:.12em}.noevents{pointer-events:none}
+  .path{color:#d6e4ef;font-size:12px;line-height:1.6;word-break:break-word}
+  .subject{font-size:24px;line-height:1.2;margin:13px 0 4px;font-weight:600}.type{color:#aabed0;font-size:12px;text-transform:uppercase;letter-spacing:.12em}
+  dl{margin:0}dt{color:var(--soft);font-size:11px;text-transform:uppercase;letter-spacing:.12em;margin-top:18px}dd{margin:4px 0 0;color:#d9e5ef}
+  .fact{padding:11px 12px;background:var(--panel2);border-left:3px solid #8caabe;margin-top:12px;font-size:12px;color:#dbe7f0}.fact.work{border-color:var(--work)}.fact.unknown{border-color:#92a6b8}
+  .foot{border-top:1px solid var(--line);background:#101821;color:#95a9bb;padding:10px 22px;font-size:11px;display:flex;gap:18px;flex-wrap:wrap}
+  @media(max-width:1050px){.main{grid-template-columns:220px minmax(400px,1fr)}aside.right{grid-column:1/3;border-left:0;border-top:1px solid var(--line)}.stage{min-height:570px}}
+  @media(max-width:650px){header{align-items:flex-start;flex-direction:column}.main{display:block}aside{border-right:0;border-bottom:1px solid var(--line)}.stage{height:520px;min-height:0}aside.right{border-top:1px solid var(--line)}.hint{right:15px;bottom:10px}.stagehead{left:14px;top:12px}.stagehead .title{font-size:16px}.tools{right:10px;top:10px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header><div class="brand"><strong>ORRERY</strong><span>Primer corte espacial · exploración</span></div><div class="tag">Propuesta visual · sin aprobar</div></header>
+  <div class="notice">DATOS SINTÉTICOS · La estructura y las lecturas de esta escena son ejemplos. Ninguna marca acredita una corrida de Genesis.</div>
+  <div class="main">
+    <aside>
+      <h1>Lecturas</h1>
+      <p class="small">Las Lentes añaden Anotaciones. Activarlas no crea, mueve ni oculta las Entidades del Territorio.</p>
+      <div class="lens"><input id="workToggle" type="checkbox" checked aria-labelledby="workLabel"><div><label id="workLabel" for="workToggle">Trabajo</label><div class="meta">Fuente de prueba disponible · 2 Anotaciones sintéticas</div><span id="workState" class="state data">Activa · visible</span></div></div>
+      <div class="lens"><input id="gravityToggle" type="checkbox" checked aria-labelledby="gravityLabel"><div><label id="gravityLabel" for="gravityToggle">Gravity</label><div class="meta">Sin Fuente ni Proyección disponible</div><span id="gravityState" class="state unknown">Activa · sin datos</span></div></div>
+      <div class="divider"></div>
+      <h2>Clave de lectura</h2>
+      <p class="small">Las áreas anidadas representan sólo el árbol con Fuente: Tenant › Organization › Project. Domain y Gene están dentro del Project como Entidades separadas.</p>
+      <p class="small">La relación Domain ↔ Gene no está representada aquí. Su cercanía no afirma pertenencia.</p>
+      <p class="small">La falta de marcas de Gravity significa <strong>desconocido</strong>. No significa que no haya colisiones.</p>
+    </aside>
+    <section class="stage" aria-label="Representación espacial del Territorio sintético">
+      <div class="stagehead"><div class="over">Territorio · ejemplo mínimo</div><div class="title">Un lugar que permanece</div><div class="sub">Seleccioná una Entidad para orientarte. Alterná las Lentes para ver qué cambia.</div></div>
+      <div class="tools"><button id="zoomOut" type="button" aria-label="Alejar">−</button><button id="zoomIn" type="button" aria-label="Acercar">+</button><button id="overview" type="button">Vista completa</button></div>
+      <svg id="space" viewBox="0 0 900 620" role="img" aria-label="Tenant, Organization, Project, Domain y Gene, con dos marcas sintéticas de Trabajo">
+        <defs><pattern id="crosshatch" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M0 12L12 0" stroke="#466075" stroke-width=".7" opacity=".25"/></pattern></defs>
+        <g class="grid noevents"><line x1="90" y1="550" x2="810" y2="550" class="axis"/><line x1="150" y1="80" x2="150" y2="570"/><line x1="300" y1="80" x2="300" y2="570"/><line x1="450" y1="80" x2="450" y2="570"/><line x1="600" y1="80" x2="600" y2="570"/><line x1="750" y1="80" x2="750" y2="570"/></g>
+        <g class="region tenant" data-id="tenant" tabindex="0" role="button" aria-label="Enfocar Tenant Cognituum"><polygon points="65,240 700,170 825,510 190,580"/><text x="200" y="552" class="minor">TENANT · FUENTE TERRITORIAL</text><text x="200" y="573" class="name">Cognituum</text></g>
+        <g class="region org" data-id="org" tabindex="0" role="button" aria-label="Enfocar Organization North Lab"><polygon points="155,297 670,240 755,490 240,548"/><text x="180" y="337" class="minor">ORGANIZATION</text><text x="180" y="361" class="name">North Lab</text></g>
+        <g class="region project" data-id="project" tabindex="0" role="button" aria-label="Enfocar Project Atlas"><polygon points="260,344 642,302 692,477 310,519"/><text x="290" y="382" class="minor">PROJECT</text><text x="290" y="406" class="name">Atlas</text></g>
+        <g class="node" data-id="domain" tabindex="0" role="button" aria-label="Enfocar Domain Identidad"><line class="stem" x1="394" y1="450" x2="394" y2="411"/><ellipse class="plate" cx="394" cy="450" rx="49" ry="16"/><rect class="body" x="366" y="382" width="56" height="47" rx="3"/><text x="394" y="375" text-anchor="middle" class="minor">DOMAIN</text><text x="394" y="408" text-anchor="middle" class="name">D</text><text x="394" y="474" text-anchor="middle" class="name">Identidad</text></g>
+        <g class="node" data-id="gene" tabindex="0" role="button" aria-label="Enfocar Gene Verificación de sesión"><line class="stem" x1="535" y1="430" x2="535" y2="390"/><ellipse class="plate" cx="535" cy="430" rx="47" ry="15"/><path class="body" d="M535 364L568 392L535 420L502 392Z"/><text x="535" y="357" text-anchor="middle" class="minor">GENE</text><text x="535" y="398" text-anchor="middle" class="name">G</text><text x="535" y="454" text-anchor="middle" class="name">Verificación</text></g>
+        <g class="workmark noevents" aria-label="Marcas de Trabajo sintéticas"><rect x="652" y="393" width="129" height="27" rx="2"/><text x="716" y="411" text-anchor="middle">TRABAJO · 1</text><rect x="332" y="485" width="125" height="27" rx="2"/><text x="395" y="503" text-anchor="middle">TRABAJO · 1</text></g>
+        <text id="focusTag" class="focustag noevents" x="579" y="328">FOCO</text>
+      </svg>
+      <div class="hint">Clic o Enter: Foco · Rueda o +/−: escala · Arrastrar: recorrer · El Territorio permanece</div>
+    </section>
+    <aside class="right">
+      <h2>Orientación</h2><div id="path" class="path"></div>
+      <div class="divider"></div><div id="subjectType" class="type"></div><div id="subjectName" class="subject"></div><p id="subjectDescription" class="small"></p>
+      <dl><dt>Procedencia</dt><dd id="provenance"></dd><dt>Trabajo</dt><dd id="workFact"></dd><dt>Gravity</dt><dd id="gravityFact"></dd></dl>
+      <div id="truthNote" class="fact unknown"></div>
+      <div class="divider"></div><p class="small faint">Esta Superficie explica el lugar enfocado. No ofrece actos de Mandate, edición ni captura.</p>
+    </aside>
+  </div>
+  <div class="foot"><span>Exploración v0.1 · archivo autónomo</span><span>Sin conexión con Nucleus, Genesis ni Workspace Core</span><span>La forma, escala y cámara se revisan con José</span></div>
+</div>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const space = $('space');
+  const entities = {
+    tenant:{type:'Tenant',name:'Cognituum',path:['Cognituum'],description:'Marco territorial soberano del ejemplo. Contiene la Organization indicada.',provenance:'Fuente territorial sintética',work:'Sin Anotación de Trabajo en este ejemplo',center:[430,380]},
+    org:{type:'Organization',name:'North Lab',path:['Cognituum','North Lab'],description:'Organization contenida en el Tenant. La contención está declarada en el Territorio sintético.',provenance:'Fuente territorial sintética',work:'Sin Anotación de Trabajo en este ejemplo',center:[465,390]},
+    project:{type:'Project',name:'Atlas',path:['Cognituum','North Lab','Atlas'],description:'Project que contiene Domain y Gene como Entidades separadas.',provenance:'Fuente territorial sintética',work:'1 Anotación sintética de Trabajo',center:[490,420]},
+    domain:{type:'Domain',name:'Identidad',path:['Cognituum','North Lab','Atlas','Identidad'],description:'Domain del Project. Su cercanía al Gene no expresa una relación entre ambos.',provenance:'Declarado por Mandate · sintético',work:'1 Anotación sintética de Trabajo',center:[394,415]},
+    gene:{type:'Gene',name:'Verificación de sesión',path:['Cognituum','North Lab','Atlas','Verificación de sesión'],description:'Gene del Project. La pertenencia Domain ↔ Gene queda fuera de esta escena.',provenance:'Fuente canónica sintética',work:'Sin Anotación de Trabajo en este ejemplo',center:[535,393]}
+  };
+  let focus='project';
+  let box={x:0,y:0,w:900,h:620};
+  let drag=null;
+  const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
+  function setBox(next){box=next;space.setAttribute('viewBox',`${box.x} ${box.y} ${box.w} ${box.h}`)}
+  function zoom(mult){const w=clamp(box.w*mult,370,1250),h=w*620/900,cx=box.x+box.w/2,cy=box.y+box.h/2;setBox({x:cx-w/2,y:cy-h/2,w,h})}
+  function focusEntity(id){if(!entities[id])return;focus=id;document.querySelectorAll('[data-id]').forEach(el=>el.classList.toggle('focused',el.dataset.id===id));const e=entities[id],workOn=$('workToggle').checked,gravityOn=$('gravityToggle').checked;
+    $('path').textContent=e.path.join('  ›  ');$('subjectType').textContent=e.type;$('subjectName').textContent=e.name;$('subjectDescription').textContent=e.description;$('provenance').textContent=e.provenance;
+    $('workFact').textContent=workOn?e.work:'Lente inactiva; el Territorio no cambia';
+    $('gravityFact').textContent=gravityOn?'Desconocido · Lente activa sin Fuente':'Lente inactiva';
+    $('truthNote').textContent=gravityOn?'La falta de datos de Gravity no permite concluir que no haya colisiones.':'Desactivar Gravity retira la lectura; no modifica la Entidad.';
+    $('focusTag').setAttribute('x',String(e.center[0]+52));$('focusTag').setAttribute('y',String(e.center[1]-75));
+  }
+  function updateLenses(){const workOn=$('workToggle').checked,gravityOn=$('gravityToggle').checked;space.classList.toggle('showwork',workOn);
+    $('workState').textContent=workOn?'Activa · visible':'Inactiva';$('workState').className=workOn?'state data':'state';
+    $('gravityState').textContent=gravityOn?'Activa · sin datos':'Inactiva';$('gravityState').className=gravityOn?'state unknown':'state';focusEntity(focus)
+  }
+  document.querySelectorAll('[data-id]').forEach(el=>{el.addEventListener('click',ev=>{ev.stopPropagation();focusEntity(el.dataset.id)});el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();focusEntity(el.dataset.id)}})});
+  $('workToggle').addEventListener('change',updateLenses);$('gravityToggle').addEventListener('change',updateLenses);
+  $('zoomIn').addEventListener('click',()=>zoom(.8));$('zoomOut').addEventListener('click',()=>zoom(1.25));$('overview').addEventListener('click',()=>setBox({x:0,y:0,w:900,h:620}));
+  space.addEventListener('wheel',ev=>{ev.preventDefault();zoom(ev.deltaY>0?1.1:.9)},{passive:false});
+  space.addEventListener('pointerdown',ev=>{if(ev.target.closest('[data-id]'))return;drag={x:ev.clientX,y:ev.clientY,bx:box.x,by:box.y,w:box.w,h:box.h};space.setPointerCapture(ev.pointerId)});
+  space.addEventListener('pointermove',ev=>{if(!drag)return;const r=space.getBoundingClientRect();setBox({x:drag.bx-(ev.clientX-drag.x)*drag.w/r.width,y:drag.by-(ev.clientY-drag.y)*drag.h/r.height,w:drag.w,h:drag.h})});
+  space.addEventListener('pointerup',()=>{drag=null});space.addEventListener('pointercancel',()=>{drag=null});
+  updateLenses();
+})();
+</script>
+</body>
+</html>
