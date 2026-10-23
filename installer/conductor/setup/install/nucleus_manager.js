@@ -9,6 +9,7 @@ const { paths } = require('../config/paths');
 const { getLogger } = require('../../shared/logger');
 const { validatePythonRuntimePair } = require('./runtime-installer');
 const { certifyAitapBundle } = require('./aitap-bundle-installer');
+const { validateInstalledBloomUninstall } = require('./bloom-uninstall-installer');
 
 const logger = getLogger('installer');
 
@@ -81,7 +82,8 @@ const _binariesComponents = _isDarwin
       opencode:  ['opencode.exe'],
       node:      ['node.exe', 'npm.cmd'],
       temporal:  ['temporal.exe'],
-      conductor: ['bloom-conductor.exe']
+      conductor: ['bloom-conductor.exe'],
+      ...(_isWin ? { uninstall: ['bloom-uninstall.exe'] } : {})
     };
 
 const _brainServiceVerification = _isDarwin
@@ -170,6 +172,11 @@ function validateBinaryArtifacts() {
   const aitap = validateInstalledAitapBundle();
   if (!aitap.valid) missing.push(`aitap/${aitap.code}`);
 
+  const uninstall = _isWin
+    ? validateInstalledBloomUninstall(paths.uninstallSourceExe, paths.uninstallExe)
+    : { valid: true, skipped: true };
+  if (_isWin && !uninstall.valid) missing.push(`uninstall/${uninstall.code}`);
+
   if (_isWin) {
     if (!fs.existsSync(paths.opencodeExe)) missing.push('opencode/opencode.exe');
     if (!fs.existsSync(paths.workspaceExe)) missing.push('workspace/bloom-workspace.exe');
@@ -180,10 +187,12 @@ function validateBinaryArtifacts() {
     host,
     host_runtime: hostRuntime,
     aitap,
+    uninstall,
     required: _isWin
       ? [
           ...host.required.map(name => `host/${name}`),
           ..._binariesComponents.aitap.map(name => `aitap/${name}`),
+          'uninstall/bloom-uninstall.exe',
           'opencode/opencode.exe',
           'workspace/bloom-workspace.exe',
         ]
@@ -585,7 +594,10 @@ class NucleusManager {
           binariesMilestone.verification.components.host = [..._requiredHostArtifacts];
           binariesMilestone.verification.components.aitap = [..._binariesComponents.aitap];
           binariesMilestone.verification.components.opencode = [..._binariesComponents.opencode];
-          if (_isWin) binariesMilestone.verification.components.workspace = ['bloom-workspace.exe'];
+          if (_isWin) {
+            binariesMilestone.verification.components.workspace = ['bloom-workspace.exe'];
+            binariesMilestone.verification.components.uninstall = [..._binariesComponents.uninstall];
+          }
           stateChanged = true;
         }
         if (this.state.milestones?.ollama_service_install) {
@@ -750,6 +762,7 @@ class NucleusManager {
       verificationResult = {
         ...(verificationResult || {}),
         aitap: binariesValidation.aitap.evidence,
+        ...(_isWin ? { uninstall: binariesValidation.uninstall } : {}),
       };
     }
 

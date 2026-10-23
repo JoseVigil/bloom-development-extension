@@ -12,7 +12,7 @@ process.env.LOCALAPPDATA = tempRoot;
 async function main() {
   const setupDir = path.resolve(__dirname, '..');
   const packageJson = require(path.join(setupDir, 'package.json'));
-  const { paths } = require('../../shared/global_paths');
+  const { paths, getPackagedResourcePath } = require('../../shared/global_paths');
   const ollamaInstaller = require('../install/service-installer-ollama');
   const opencodeInstaller = require('../install/service-installer-opencode');
   const { buildNucleusServiceEnvironment } = require('../install/service-installer-nucleus');
@@ -21,6 +21,11 @@ async function main() {
     deployAitapBundle,
     verifyAitapBundle,
   } = require('../install/aitap-bundle-installer');
+  const {
+    validateBloomUninstallExecutable,
+    validateInstalledBloomUninstall,
+    deployBloomUninstall,
+  } = require('../install/bloom-uninstall-installer');
   const {
     installRuntime,
     validatePythonRuntime,
@@ -85,6 +90,32 @@ async function main() {
     paths.aitapDir,
     path.join(tempRoot, 'BloomNucleus', 'bin', 'aitap')
   );
+  assert.strictEqual(
+    path.resolve(paths.uninstallSource),
+    path.resolve(setupDir, '..', '..', 'native', 'bin', 'win64', 'uninstall')
+  );
+  assert.strictEqual(
+    paths.uninstallSourceExe,
+    path.join(paths.uninstallSource, 'bloom-uninstall.exe')
+  );
+  assert.strictEqual(
+    paths.uninstallExe,
+    path.join(tempRoot, 'BloomNucleus', 'bin', 'uninstall', 'bloom-uninstall.exe')
+  );
+
+  const packagedResourcesRoot = path.join(tempRoot, 'packaged-resources');
+  assert.strictEqual(
+    getPackagedResourcePath('uninstall', packagedResourcesRoot, 'win32', 'win64'),
+    path.join(packagedResourcesRoot, 'uninstall', 'win64')
+  );
+  assert.strictEqual(
+    getPackagedResourcePath('uninstall', packagedResourcesRoot, 'win32', 'win32'),
+    path.join(packagedResourcesRoot, 'uninstall', 'win32')
+  );
+  assert.strictEqual(
+    getPackagedResourcePath('uninstall', packagedResourcesRoot, 'linux', 'linux_x64'),
+    null
+  );
 
   for (const platformConfig of ['win', 'linux', 'mac']) {
     const hostResource = packageJson.build[platformConfig].extraResources.find(entry =>
@@ -116,6 +147,73 @@ async function main() {
   const windowsRuntime = packageJson.build.win.extraResources.find(entry => entry.to === 'runtime');
   assert.ok(windowsRuntime);
   assert.strictEqual(windowsRuntime.from, '../../resources/runtime-windows');
+  const windowsUninstallResources = packageJson.build.win.extraResources
+    .filter(entry => entry.to.startsWith('uninstall/'));
+  assert.deepStrictEqual(windowsUninstallResources, [
+    { from: '../../native/bin/win64/uninstall', to: 'uninstall/win64' },
+    { from: '../../native/bin/win32/uninstall', to: 'uninstall/win32' },
+  ]);
+  assert.ok(packageJson.scripts['build:win64'].startsWith('npm run validate:uninstall:win64'));
+  assert.ok(packageJson.scripts['build:win32'].startsWith('npm run validate:uninstall:win32'));
+  assert.strictEqual(
+    packageJson.build.linux.extraResources.some(entry => entry.to.startsWith('uninstall')),
+    false
+  );
+  assert.strictEqual(
+    packageJson.build.mac.extraResources.some(entry => entry.to.startsWith('uninstall')),
+    false
+  );
+
+  const sourceUninstall = validateBloomUninstallExecutable(paths.uninstallSourceExe);
+  assert.strictEqual(sourceUninstall.valid, true, sourceUninstall.error);
+  assert.match(sourceUninstall.version, /^v1\.0\.0-build\.\d+$/);
+  assert.strictEqual(sourceUninstall.architecture, 'x64');
+  const wrongArchitecture = validateBloomUninstallExecutable(paths.uninstallSourceExe, {
+    expectedArch: 'ia32',
+  });
+  assert.strictEqual(wrongArchitecture.valid, false);
+  assert.strictEqual(wrongArchitecture.code, 'UNINSTALL_ARCHITECTURE_MISMATCH');
+
+  let versionInvocation = null;
+  const controlledVersion = validateBloomUninstallExecutable(paths.uninstallSourceExe, {
+    spawnSyncImpl: (executable, args, options) => {
+      versionInvocation = { executable, args, options };
+      return {
+        status: 0,
+        error: null,
+        stdout: 'Bloom Uninstall v1.0.0-build.999',
+        stderr: '',
+      };
+    },
+  });
+  assert.strictEqual(controlledVersion.valid, true);
+  assert.deepStrictEqual(versionInvocation.args, ['--version']);
+  assert.strictEqual(versionInvocation.options.shell, false);
+
+  const packagedUninstallDir = getPackagedResourcePath(
+    'uninstall',
+    packagedResourcesRoot,
+    'win32',
+    'win64'
+  );
+  const packagedUninstallExe = path.join(packagedUninstallDir, 'bloom-uninstall.exe');
+  fs.mkdirSync(packagedUninstallDir, { recursive: true });
+  fs.copyFileSync(paths.uninstallSourceExe, packagedUninstallExe);
+  const packagedInstallExe = path.join(
+    tempRoot,
+    'packaged-install',
+    'BloomNucleus',
+    'bin',
+    'uninstall',
+    'bloom-uninstall.exe'
+  );
+  const packagedDeployment = await deployBloomUninstall({
+    sourceExecutable: packagedUninstallExe,
+    installedExecutable: packagedInstallExe,
+  });
+  assert.strictEqual(packagedDeployment.success, true);
+  assert.strictEqual(packagedDeployment.evidence.version, sourceUninstall.version);
+  assert.strictEqual(packagedDeployment.evidence.hash_match, true);
 
   const sourceRuntime = validatePythonRuntime(paths.runtimeSource, { requirePth: false });
   assert.strictEqual(sourceRuntime.valid, true, sourceRuntime.errors.join('; '));
@@ -160,6 +258,7 @@ async function main() {
   assert.strictEqual(reconciled.milestones.brain_runtime.verification.method, 'python_runtime_smoke');
   assert.strictEqual(reconciled.installation.completed, false);
   assert.ok(validateBinaryArtifacts().missing.some(item => item.startsWith('aitap/')));
+  assert.ok(validateBinaryArtifacts().missing.some(item => item.startsWith('uninstall/')));
   assert.ok(reconciled.milestones.opencode_service_install);
   assert.strictEqual(reconciled.milestones.opencode_service_install.status, 'pending');
   assert.strictEqual(reconciled.milestones.opencode_service_install.non_critical, true);
@@ -230,6 +329,20 @@ async function main() {
     sourceAitap.manifest.embedded_python_version
   );
   assert.strictEqual(validateInstalledAitapBundle().valid, true);
+  assert.strictEqual(validateBinaryArtifacts().valid, false, 'Bloom Uninstall must be required by binaries');
+
+  const uninstallDeployment = await deployBloomUninstall({
+    sourceExecutable: paths.uninstallSourceExe,
+    installedExecutable: paths.uninstallExe,
+  });
+  assert.strictEqual(uninstallDeployment.success, true);
+  assert.strictEqual(uninstallDeployment.evidence.valid, true);
+  assert.strictEqual(uninstallDeployment.evidence.version, sourceUninstall.version);
+  assert.strictEqual(fs.existsSync(paths.uninstallExe), true);
+  assert.strictEqual(
+    validateInstalledBloomUninstall(paths.uninstallSourceExe, paths.uninstallExe).valid,
+    true
+  );
   assert.strictEqual(validateBinaryArtifacts().valid, true);
   await manager.completeMilestone('binaries', { contract_test: true });
   assert.strictEqual(manager.getState().milestones.binaries.status, 'passed');
@@ -241,6 +354,30 @@ async function main() {
     manager.getState().milestones.binaries.verification.result.aitap.integrity.status,
     'passed'
   );
+  assert.strictEqual(
+    manager.getState().milestones.binaries.verification.result.uninstall.version,
+    sourceUninstall.version
+  );
+  assert.strictEqual(
+    manager.getState().milestones.binaries.verification.result.uninstall.hash_match,
+    true
+  );
+
+  // A resumed setup must invalidate an approved binaries milestone when the
+  // installed executable no longer matches the currently packaged artifact.
+  fs.appendFileSync(paths.uninstallExe, 'stale-installed-copy');
+  const resumedManager = new NucleusManager();
+  const resumed = await resumedManager.initialize();
+  assert.strictEqual(resumed.milestones.binaries.status, 'pending');
+  assert.ok(
+    resumed.milestones.binaries.verification.result.missing
+      .includes('uninstall/UNINSTALL_SOURCE_DESTINATION_MISMATCH')
+  );
+  await deployBloomUninstall({
+    sourceExecutable: paths.uninstallSourceExe,
+    installedExecutable: paths.uninstallExe,
+  });
+  await resumedManager.completeMilestone('binaries', { contract_test: true });
 
   for (const name of installer.RUNTIME_MILESTONES_AFTER_BINARY_CLEANUP) {
     reconciled.milestones[name].status = 'passed';

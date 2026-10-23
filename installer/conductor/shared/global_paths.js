@@ -39,12 +39,28 @@ const repoRoot = path.join(__dirname, '..', '..');
 // ============================================================================
 // RESOURCE PATH RESOLUTION
 // ============================================================================
+const getPackagedResourcePath = (
+  resourceName,
+  resourcesRoot = process.resourcesPath,
+  platformName = platform,
+  platformArch = arch
+) => {
+  if (!resourcesRoot) return null;
+  if (resourceName === 'uninstall') {
+    if (platformName !== 'win32') return null;
+    return path.join(resourcesRoot, 'uninstall', platformArch);
+  }
+  return path.join(resourcesRoot, resourceName);
+};
+
 const getResourcePath = (resourceName) => {
   if (app && app?.isPackaged) {
-    const resourcePath = path.join(process.resourcesPath, resourceName);
+    const resourcePath = getPackagedResourcePath(resourceName);
+    if (!resourcePath) return null;
     
     const fs = require('fs');
-    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', resourceName);
+    const packagedRelativePath = path.relative(process.resourcesPath, resourcePath);
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', packagedRelativePath);
     
     if (fs.existsSync(unpackedPath)) {
       return unpackedPath;
@@ -179,6 +195,10 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sensor');
     case 'setup':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'setup');
+    case 'uninstall':
+      return platform === 'win32'
+        ? path.join(workspaceRoot, '..', 'native', 'bin', arch, 'uninstall')
+        : null;
     case 'temporal':
       if (platform === 'darwin') {
         return path.join(workspaceRoot, '..', 'temporal', 'darwin');
@@ -362,6 +382,14 @@ const paths = {
   setupExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'setup', 'bloom-setup.exe')
     : path.join(baseDir, 'bin', 'setup', 'bloom-setup'),
+
+  // Bloom Uninstall (product binary; independent from Electron/NSIS uninstaller)
+  uninstallDir: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'uninstall')
+    : null,
+  uninstallExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'uninstall', 'bloom-uninstall.exe')
+    : null,
   
   // Cortex (Extension Package)
   cortexDir: path.join(baseDir, 'bin', 'cortex'),
@@ -446,6 +474,10 @@ const paths = {
   sensorSource: getResourcePath('sensor'),
   opencodeSource: getResourcePath('opencode'),
   setupSource:  getResourcePath('setup'),
+  uninstallSource: platform === 'win32' ? getResourcePath('uninstall') : null,
+  uninstallSourceExe: platform === 'win32'
+    ? path.join(getResourcePath('uninstall'), 'bloom-uninstall.exe')
+    : null,
   cortexSource: getResourcePath('cortex'),
   temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),
@@ -532,6 +564,10 @@ const criticalPaths = [
   'configDir', 'profilesDir', 'logsDir'
 ];
 
+if (platform === 'win32') {
+  criticalPaths.push('uninstallDir', 'uninstallExe', 'uninstallSource', 'uninstallSourceExe');
+}
+
 for (const key of criticalPaths) {
   if (!paths[key]) {
     console.error(`❌ CRITICAL: Path '${key}' is undefined`);
@@ -556,6 +592,7 @@ console.log(`⚙️ Config directory: ${paths.configDir}`);
 module.exports = { 
   paths, 
   getResourcePath,
+  getPackagedResourcePath,
   getProfilePath,
   getProfilePaths,
   getSynapseManifestPath

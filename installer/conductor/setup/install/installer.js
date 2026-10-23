@@ -89,6 +89,7 @@ const {
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
 const { deployAitapBundle } = require('./aitap-bundle-installer');
+const { deployBloomUninstall } = require('./bloom-uninstall-installer');
 
 // ── Ollama service installer — condicional por plataforma ────────────────────
 const {
@@ -946,6 +947,20 @@ async function deployAllSystemBinaries(win) {
       logger.success('✅ AITAP bundle deployed, integrity verified and smokes passed');
     } else {
       throw new Error(`AITAP bundle source not found: ${paths.aitapSource}`);
+    }
+
+    // Bloom Uninstall es el ejecutable productivo de desinstalación y es
+    // independiente del uninstaller generado por NSIS. Sólo existe en Windows.
+    if (process.platform === 'win32') {
+      logger.info('\n🧹 BLOOM UNINSTALL');
+      results.uninstall = await deployBloomUninstall({
+        sourceExecutable: paths.uninstallSourceExe,
+        installedExecutable: paths.uninstallExe,
+      });
+      if (!await fs.pathExists(paths.uninstallExe)) {
+        throw new Error(`Bloom Uninstall not found after copy: ${paths.uninstallExe}`);
+      }
+      logger.success(`✅ Bloom Uninstall ${results.uninstall.evidence.version} deployed and verified`);
     }
 
     // En macOS asegurar permisos en todos los binarios Go
