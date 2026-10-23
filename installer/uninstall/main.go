@@ -15,7 +15,8 @@ import (
 	"time"
 )
 
-var services = []string{"BloomBrainService", "BloomNucleusService", "BloomOllamaService", "BloomOpencodeService"}
+// Stop the supervisor first; while running it may restart dependent services.
+var services = []string{"BloomNucleusService", "BloomBrainService", "BloomOllamaService", "BloomOpencodeService"}
 var registries = []string{
 	`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomSensor`,
 	`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomLauncher`,
@@ -79,7 +80,13 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	if len(args) == 4 && args[0] == "--internal-worker" {
-		return removeInstallation(root, test, args[1], args[2], args[3], out)
+		err := removeInstallation(root, test, args[1], args[2], args[3], out)
+		result := "OK"
+		if err != nil {
+			result = err.Error()
+		}
+		_ = os.WriteFile(filepath.Join(args[1], "cleanup.result"), []byte(result), 0600)
+		return err
 	}
 	if len(args) != 0 {
 		return errors.New("argumentos no reconocidos")
@@ -647,6 +654,13 @@ func runProtectedPlan(planPath string, out io.Writer) error {
 		if !ownedService(s, plan.Root) {
 			return fmt.Errorf("servicio cambió antes de retirarlo: %s", s)
 		}
+		// Nucleus detaches npm/Vite, so stopping the service alone can leave
+		// descendants holding files under logs. Capture their identities while
+		// the service parent still exists.
+		children, err := captureServiceDescendants(s)
+		if err != nil {
+			return fmt.Errorf("inventariar hijos de %s: %w", s, err)
+		}
 		_, _ = command("sc.exe", "stop", s)
 		for i := 0; i < 20; i++ {
 			v, _ := command("sc.exe", "query", s)
@@ -658,6 +672,9 @@ func runProtectedPlan(planPath string, out io.Writer) error {
 		v, _ := command("sc.exe", "query", s)
 		if !strings.Contains(v, "STOPPED") {
 			return fmt.Errorf("servicio %s no se detuvo", s)
+		}
+		if err := stopCapturedDescendants(children, out); err != nil {
+			return fmt.Errorf("detener hijos de %s: %w", s, err)
 		}
 		if v, err := command("sc.exe", "delete", s); err != nil {
 			return fmt.Errorf("eliminar servicio %s: %s: %w", s, strings.TrimSpace(v), err)
