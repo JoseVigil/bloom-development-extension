@@ -224,16 +224,76 @@ func TestWorkspaceComesFromNucleusOnboardingNotOriginPath(t *testing.T) {
 	}
 }
 
-func TestMissingConfiguredWorkspaceStopsUninstall(t *testing.T) {
+func TestMissingConfiguredWorkspaceIsSkipped(t *testing.T) {
 	root := disposableRoot(t)
 	workspace, _ := disposableWorkspace(t)
 	configureWorkspace(t, root, workspace)
 	if err := os.WriteFile(filepath.Join(root, "config", "nucleus.json"), []byte(`{"installation":{"origin_path":"C:\\repos\\source-code"}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := readConfiguredWorkspaces(root); err == nil {
-		t.Fatal("aceptó origin_path como workspace")
+	_, candidates, err := readConfiguredWorkspaces(root)
+	if err != nil || len(candidates) != 0 {
+		t.Fatalf("debe omitir .bloom sin onboarding: candidates=%v err=%v", candidates, err)
 	}
+}
+
+func TestConfiguredWorkspaceWithoutBloomIsSkipped(t *testing.T) {
+	root := disposableRoot(t)
+	workspace := t.TempDir()
+	configureWorkspace(t, root, workspace)
+	var out bytes.Buffer
+	got, bloom, err := selectConfiguredWorkspace(root, bufio.NewReader(strings.NewReader("")), &out)
+	if err != nil || got != "" || bloom != "" {
+		t.Fatalf("workspace=%q bloom=%q err=%v", got, bloom, err)
+	}
+	if !strings.Contains(out.String(), "se omite") {
+		t.Fatalf("faltó aviso: %s", out.String())
+	}
+}
+
+func TestExistingUnverifiedBloomStopsUninstall(t *testing.T) {
+	root := disposableRoot(t)
+	workspace, _ := disposableWorkspace(t)
+	configureWorkspace(t, root, workspace)
+	identity := filepath.Join(workspace, ".bloom", ".nucleus-test", ".core", ".nucleus-config.json")
+	if err := os.WriteFile(identity, []byte(`{"nucleus":{"path":"C:\\other","rootPath":"C:\\other"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readConfiguredWorkspaces(root); err == nil {
+		t.Fatal("aceptó .bloom existente no verificable")
+	}
+}
+
+func TestConfirmedInstallationWithoutOnboardingIsRemoved(t *testing.T) {
+	root := disposableRoot(t)
+	if err := os.MkdirAll(filepath.Join(root, "bin"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "bin", "fixture.exe"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(t.TempDir(), "bloom-uninstall.exe")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", exe, ".")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v: %s", err, output)
+	}
+	cmd := exec.Command(exe)
+	cmd.Stdin = strings.NewReader("SI\n")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("uninstall: %v: %s", err, output)
+	}
+	if !strings.Contains(string(output), "se omite la limpieza del workspace") {
+		t.Fatalf("faltó aviso de omisión: %s", output)
+	}
+	deadline := time.Now().Add(12 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Lstat(root); os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("worker no eliminó instalación sin onboarding")
 }
 
 func TestInvalidActiveOrganizationDoesNotSelectAnotherWorkspace(t *testing.T) {

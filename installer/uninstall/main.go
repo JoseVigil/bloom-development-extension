@@ -120,8 +120,12 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "  Proceso: %s (PID %d, %s)\n", p.Name, p.PID, origin)
 	}
-	fmt.Fprintf(out, "Workspace seleccionado: %s\nSe eliminará COMPLETA: %s\n", workspace, bloomDir)
-	fmt.Fprintln(out, "Se perderán la identidad local, los recibos y los Mandates allí guardados. Esta operación no es reversible; el backup/restore de Nucleus aún no está implementado ni verificado.")
+	if bloomDir == "" {
+		fmt.Fprintln(out, "Estado del workspace: no hay una carpeta .bloom configurada; se omitirá su eliminación.")
+	} else {
+		fmt.Fprintf(out, "Workspace seleccionado: %s\nSe eliminará COMPLETA: %s\n", workspace, bloomDir)
+		fmt.Fprintln(out, "Se perderán la identidad local, los recibos y los Mandates allí guardados. Esta operación no es reversible; el backup/restore de Nucleus aún no está implementado ni verificado.")
+	}
 	fmt.Fprintln(out, "Los archivos del proyecto fuera de .bloom y Backend/D1 no se tocarán.")
 	fmt.Fprint(out, "Escribí SI para desinstalar: ")
 	answer, _ := reader.ReadString('\n')
@@ -465,6 +469,9 @@ func nucleusIdentityMatches(workspace, name string) bool {
 
 func readConfiguredWorkspaces(root string) (string, []configuredWorkspace, error) {
 	data, err := os.ReadFile(filepath.Join(root, "config", "nucleus.json"))
+	if os.IsNotExist(err) {
+		return "", nil, nil
+	}
 	if err != nil {
 		return "", nil, fmt.Errorf("leer config/nucleus.json: %w", err)
 	}
@@ -485,19 +492,25 @@ func readConfiguredWorkspaces(root string) (string, []configuredWorkspace, error
 		if strings.TrimSpace(org.WorkspacePath) == "" || strings.TrimSpace(org.OrgSlug) == "" {
 			continue
 		}
+		if !filepath.IsAbs(org.WorkspacePath) {
+			return "", nil, fmt.Errorf("workspace_path no es absoluto para %s", org.OrgSlug)
+		}
+		bloom := filepath.Join(filepath.Clean(org.WorkspacePath), ".bloom")
+		if _, err := os.Lstat(bloom); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return "", nil, fmt.Errorf("inspeccionar %s: %w", bloom, err)
+		}
 		workspace, _, err := validateWorkspace(org.WorkspacePath, root)
 		if err != nil {
-			continue
+			return "", nil, fmt.Errorf(".bloom existente no verificable para %s: %w", org.OrgSlug, err)
 		}
 		// The organizational Nucleus for this record must exist. This avoids
 		// accepting a different organization's identity in the same workspace.
 		if !nucleusIdentityMatches(workspace, ".nucleus-"+org.OrgSlug) {
-			continue
+			return "", nil, fmt.Errorf(".bloom existente no coincide con la organización %s", org.OrgSlug)
 		}
 		candidates = append(candidates, configuredWorkspace{Org: org.OrgSlug, Path: workspace})
-	}
-	if len(candidates) == 0 {
-		return "", nil, errors.New("nucleus.json no contiene un workspace con identidad .bloom verificable; no se iniciará la desinstalación")
 	}
 	return cfg.Onboarding.ActiveOrgSlug, candidates, nil
 }
@@ -519,6 +532,10 @@ func selectConfiguredWorkspace(root string, reader *bufio.Reader, out io.Writer)
 	active, candidates, err := readConfiguredWorkspaces(root)
 	if err != nil {
 		return "", "", err
+	}
+	if len(candidates) == 0 {
+		fmt.Fprintln(out, "Onboarding sin .bloom: se omite la limpieza del workspace.")
+		return "", "", nil
 	}
 	selected := -1
 	for i, c := range candidates {
@@ -696,12 +713,31 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 	if err != nil {
 		return err
 	}
-	_, bloomDir, err := validateWorkspace(workspace, root)
-	if err != nil {
-		return err
+	bloomDir := ""
+	if workspace != "" {
+		if _, statErr := os.Lstat(filepath.Join(workspace, ".bloom")); os.IsNotExist(statErr) {
+			fmt.Fprintln(out, ".bloom desapareció antes de la limpieza; se omitirá.")
+			workspace = ""
+		} else if statErr != nil {
+			return statErr
+		}
 	}
-	if !configuredWorkspaceAllowed(root, workspace) {
-		return errors.New("el workspace ya no figura en la configuración de Nucleus")
+	if workspace == "" {
+		_, candidates, err := readConfiguredWorkspaces(root)
+		if err != nil {
+			return err
+		}
+		if len(candidates) != 0 {
+			return errors.New("apareció una .bloom configurada después de la confirmación")
+		}
+	} else {
+		_, bloomDir, err = validateWorkspace(workspace, root)
+		if err != nil {
+			return err
+		}
+		if !configuredWorkspaceAllowed(root, workspace) {
+			return errors.New("el workspace ya no figura en la configuración de Nucleus")
+		}
 	}
 	if !test {
 		if err := stopOwnedProcesses(root, out); err != nil {
@@ -726,19 +762,37 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 	if err := validateInstallationDirectory(root); err != nil {
 		return err
 	}
+	if workspace == "" {
+		_, candidates, err := readConfiguredWorkspaces(root)
+		if err != nil {
+			return err
+		}
+		if len(candidates) != 0 {
+			return errors.New("apareció una .bloom configurada durante la desinstalación")
+		}
+	}
 	if err := os.RemoveAll(root); err != nil {
 		return fmt.Errorf("eliminar %s: %w", root, err)
 	}
-	// Recheck immediately before removing the selected workspace state.
-	_, checkedBloomDir, err := validateWorkspace(workspace, root)
-	if err != nil || !strings.EqualFold(checkedBloomDir, bloomDir) {
-		return errors.New("la identidad del workspace cambió durante la desinstalación")
-	}
-	if err := os.RemoveAll(bloomDir); err != nil {
-		return fmt.Errorf("eliminar %s: %w", bloomDir, err)
-	}
-	if _, err := os.Lstat(bloomDir); !os.IsNotExist(err) {
-		return errors.New("quedan datos en .bloom")
+	if bloomDir != "" {
+		// Recheck immediately before removing the selected workspace state.
+		if _, statErr := os.Lstat(bloomDir); os.IsNotExist(statErr) {
+			fmt.Fprintln(out, ".bloom ya no existe; se omite su eliminación.")
+			bloomDir = ""
+		} else if statErr != nil {
+			return statErr
+		} else {
+			_, checkedBloomDir, err := validateWorkspace(workspace, root)
+			if err != nil || !strings.EqualFold(checkedBloomDir, bloomDir) {
+				return errors.New("la identidad del workspace cambió durante la desinstalación")
+			}
+			if err := os.RemoveAll(bloomDir); err != nil {
+				return fmt.Errorf("eliminar %s: %w", bloomDir, err)
+			}
+			if _, err := os.Lstat(bloomDir); !os.IsNotExist(err) {
+				return errors.New("quedan datos en .bloom")
+			}
+		}
 	}
 	if _, err := os.Lstat(root); !os.IsNotExist(err) {
 		return errors.New("quedan archivos de la instalación")
@@ -753,7 +807,11 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 			}
 		}
 	}
-	fmt.Fprintln(out, "Instalación y .bloom del workspace eliminado; ausencia de restos administrados verificada.")
+	if bloomDir == "" {
+		fmt.Fprintln(out, "Instalación eliminada; .bloom no existía y se omitió.")
+	} else {
+		fmt.Fprintln(out, "Instalación y .bloom del workspace eliminadas; ausencia de restos administrados verificada.")
+	}
 	// Windows cannot delete the running worker executable. This detached process
 	// removes only the unique temp directory after the worker exits.
 	cleanupScript := fmt.Sprintf(`Start-Sleep -Seconds 2; Remove-Item -LiteralPath '%s' -Recurse -Force`, strings.ReplaceAll(tempDir, "'", "''"))
