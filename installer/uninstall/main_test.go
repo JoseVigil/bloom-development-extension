@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"os"
@@ -91,9 +92,22 @@ func disposableWorkspace(t *testing.T) (string, string) {
 	return workspace, filepath.Join(workspace, ".bloom")
 }
 
+func configureWorkspace(t *testing.T, root, workspace string) {
+	t.Helper()
+	configDir := filepath.Join(root, "config")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"onboarding":{"active_org_slug":"test","organizations":[{"org_slug":"test","workspace_path":"` + strings.ReplaceAll(workspace, `\`, `\\`) + `"}]}}`
+	if err := os.WriteFile(filepath.Join(configDir, "nucleus.json"), []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCancellationPreservesInstallation(t *testing.T) {
 	root := disposableRoot(t)
 	workspace, bloom := disposableWorkspace(t)
+	configureWorkspace(t, root, workspace)
 	path := filepath.Join(root, "bin", "brain.exe")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
@@ -102,7 +116,7 @@ func TestCancellationPreservesInstallation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := run(nil, strings.NewReader(workspace+"\nNO\n"), &out); err != nil {
+	if err := run(nil, strings.NewReader("NO\n"), &out); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -141,6 +155,7 @@ func TestOwnershipRequiresPathBoundary(t *testing.T) {
 func TestConfirmedDisposableInstallationIsRemoved(t *testing.T) {
 	root := disposableRoot(t)
 	workspace, bloom := disposableWorkspace(t)
+	configureWorkspace(t, root, workspace)
 	project := filepath.Join(workspace, "project.txt")
 	if err := os.WriteFile(project, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
@@ -157,7 +172,7 @@ func TestConfirmedDisposableInstallationIsRemoved(t *testing.T) {
 		t.Fatalf("build: %v: %s", err, output)
 	}
 	cmd := exec.Command(exe)
-	cmd.Stdin = strings.NewReader(workspace + "\nSI\n")
+	cmd.Stdin = strings.NewReader("SI\n")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("uninstall: %v: %s", err, output)
 	}
@@ -184,5 +199,57 @@ func TestWorkspaceIdentityMismatchIsRejected(t *testing.T) {
 	}
 	if _, _, err := validateWorkspace(workspace, filepath.Join(workspace, "install")); err == nil {
 		t.Fatal("aceptó identidad ajena")
+	}
+}
+
+func TestWorkspaceComesFromNucleusOnboardingNotOriginPath(t *testing.T) {
+	root := disposableRoot(t)
+	workspace, _ := disposableWorkspace(t)
+	configureWorkspace(t, root, workspace)
+	data, err := os.ReadFile(filepath.Join(root, "config", "nucleus.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoy := `{"installation":{"origin_path":"C:\\repos\\source-code"},` + strings.TrimPrefix(string(data), "{")
+	if err := os.WriteFile(filepath.Join(root, "config", "nucleus.json"), []byte(decoy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	got, _, err := selectConfiguredWorkspace(root, bufio.NewReader(strings.NewReader("")), &out)
+	if err != nil || !strings.EqualFold(got, workspace) {
+		t.Fatalf("workspace=%q err=%v", got, err)
+	}
+	if !strings.Contains(out.String(), "config/nucleus.json") {
+		t.Fatal("no informó procedencia")
+	}
+}
+
+func TestMissingConfiguredWorkspaceStopsUninstall(t *testing.T) {
+	root := disposableRoot(t)
+	workspace, _ := disposableWorkspace(t)
+	configureWorkspace(t, root, workspace)
+	if err := os.WriteFile(filepath.Join(root, "config", "nucleus.json"), []byte(`{"installation":{"origin_path":"C:\\repos\\source-code"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readConfiguredWorkspaces(root); err == nil {
+		t.Fatal("aceptó origin_path como workspace")
+	}
+}
+
+func TestInvalidActiveOrganizationDoesNotSelectAnotherWorkspace(t *testing.T) {
+	root := disposableRoot(t)
+	workspace, _ := disposableWorkspace(t)
+	configureWorkspace(t, root, workspace)
+	config := filepath.Join(root, "config", "nucleus.json")
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.Replace(data, []byte(`"active_org_slug":"test"`), []byte(`"active_org_slug":"other"`), 1)
+	if err := os.WriteFile(config, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := selectConfiguredWorkspace(root, bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}); err == nil {
+		t.Fatal("eligió otra organización")
 	}
 }

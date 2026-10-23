@@ -39,13 +39,18 @@ type inventory struct {
 	bloomDir  string
 	config    []string
 	warnings  []string
-	processes int
+	processes []processTarget
 }
 
 type protectedPlan struct {
 	Root     string   `json:"root"`
 	Services []string `json:"services"`
 	Registry []string `json:"registry"`
+}
+
+type configuredWorkspace struct {
+	Org  string
+	Path string
 }
 
 func main() {
@@ -80,16 +85,11 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		return errors.New("argumentos no reconocidos")
 	}
 	reader := bufio.NewReader(in)
-	fmt.Fprint(out, "Ruta absoluta del workspace cuya .bloom se eliminará: ")
-	workspaceInput, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
-		return err
-	}
-	workspace, bloomDir, err := validateWorkspace(strings.TrimSpace(workspaceInput), root)
+	inv, err := inspect(root, test)
 	if err != nil {
 		return err
 	}
-	inv, err := inspect(root, test)
+	workspace, bloomDir, err := selectConfiguredWorkspace(root, reader, out)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,16 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	for _, w := range inv.warnings {
 		fmt.Fprintln(out, "  Aviso:", w)
 	}
-	fmt.Fprintf(out, "  Procesos asociados encontrados: %d\n", inv.processes)
+	if len(inv.processes) == 0 {
+		fmt.Fprintln(out, "  Procesos asociados: ninguno en este momento.")
+	}
+	for _, p := range inv.processes {
+		origin := "ejecutable instalado"
+		if p.External {
+			origin = "Node externo; ruta Vite del repositorio configurado"
+		}
+		fmt.Fprintf(out, "  Proceso: %s (PID %d, %s)\n", p.Name, p.PID, origin)
+	}
 	fmt.Fprintf(out, "Workspace seleccionado: %s\nSe eliminará COMPLETA: %s\n", workspace, bloomDir)
 	fmt.Fprintln(out, "Se perderán la identidad local, los recibos y los Mandates allí guardados. Esta operación no es reversible; el backup/restore de Nucleus aún no está implementado ni verificado.")
 	fmt.Fprintln(out, "Los archivos del proyecto fuera de .bloom y Backend/D1 no se tocarán.")
@@ -244,7 +253,10 @@ func inspect(root string, test bool) (inventory, error) {
 	if test {
 		return inv, nil
 	}
-	inv.processes = ownedProcessCount(root)
+	inv.processes, err = discoverProcesses(root)
+	if err != nil {
+		return inv, fmt.Errorf("no se pudo verificar el inventario de procesos; se cancela antes de borrar: %w", err)
+	}
 	for _, s := range services {
 		if ownedService(s, root) {
 			inv.services = append(inv.services, s)
@@ -363,16 +375,6 @@ func configItemCount(rel string, data []byte) (int, bool) {
 	return 0, false
 }
 
-func ownedProcessCount(root string) int {
-	ps := fmt.Sprintf(`$r='%s'; @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($r+'\',[StringComparison]::OrdinalIgnoreCase) }).Count`, strings.ReplaceAll(root, "'", "''"))
-	v, err := command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
-	if err != nil {
-		return 0
-	}
-	n, _ := strconv.Atoi(strings.TrimSpace(v))
-	return n
-}
-
 func containsStringFold(values []string, needle string) bool {
 	for _, v := range values {
 		if strings.EqualFold(v, needle) {
@@ -428,22 +430,7 @@ func validateWorkspace(input, installation string) (string, string, error) {
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), ".nucleus-") {
 			continue
 		}
-		nucleus := filepath.Join(bloom, entry.Name())
-		resolved, err := filepath.EvalSymlinks(nucleus)
-		if err != nil || !strings.EqualFold(resolved, nucleus) {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(nucleus, ".core", ".nucleus-config.json"))
-		if err != nil {
-			continue
-		}
-		var identity struct {
-			Nucleus struct {
-				Path     string `json:"path"`
-				RootPath string `json:"rootPath"`
-			} `json:"nucleus"`
-		}
-		if json.Unmarshal(data, &identity) == nil && strings.EqualFold(filepath.Clean(identity.Nucleus.RootPath), workspace) && strings.EqualFold(filepath.Clean(identity.Nucleus.Path), nucleus) {
+		if nucleusIdentityMatches(workspace, entry.Name()) {
 			matched = true
 			break
 		}
@@ -451,6 +438,122 @@ func validateWorkspace(input, installation string) (string, string, error) {
 	if !matched {
 		return "", "", errors.New(".bloom no contiene una identidad Nucleus que corresponda exactamente a este workspace")
 	}
+	return workspace, bloom, nil
+}
+
+func nucleusIdentityMatches(workspace, name string) bool {
+	if !strings.HasPrefix(name, ".nucleus-") || name == ".nucleus-" || filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+		return false
+	}
+	nucleus := filepath.Join(workspace, ".bloom", name)
+	resolved, err := filepath.EvalSymlinks(nucleus)
+	if err != nil || !strings.EqualFold(resolved, nucleus) {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(nucleus, ".core", ".nucleus-config.json"))
+	if err != nil {
+		return false
+	}
+	var identity struct {
+		Nucleus struct {
+			Path     string `json:"path"`
+			RootPath string `json:"rootPath"`
+		} `json:"nucleus"`
+	}
+	return json.Unmarshal(data, &identity) == nil && strings.EqualFold(filepath.Clean(identity.Nucleus.RootPath), workspace) && strings.EqualFold(filepath.Clean(identity.Nucleus.Path), nucleus)
+}
+
+func readConfiguredWorkspaces(root string) (string, []configuredWorkspace, error) {
+	data, err := os.ReadFile(filepath.Join(root, "config", "nucleus.json"))
+	if err != nil {
+		return "", nil, fmt.Errorf("leer config/nucleus.json: %w", err)
+	}
+	var cfg struct {
+		Onboarding struct {
+			ActiveOrgSlug string `json:"active_org_slug"`
+			Organizations []struct {
+				OrgSlug       string `json:"org_slug"`
+				WorkspacePath string `json:"workspace_path"`
+			} `json:"organizations"`
+		} `json:"onboarding"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return "", nil, fmt.Errorf("parsear onboarding en config/nucleus.json: %w", err)
+	}
+	var candidates []configuredWorkspace
+	for _, org := range cfg.Onboarding.Organizations {
+		if strings.TrimSpace(org.WorkspacePath) == "" || strings.TrimSpace(org.OrgSlug) == "" {
+			continue
+		}
+		workspace, _, err := validateWorkspace(org.WorkspacePath, root)
+		if err != nil {
+			continue
+		}
+		// The organizational Nucleus for this record must exist. This avoids
+		// accepting a different organization's identity in the same workspace.
+		if !nucleusIdentityMatches(workspace, ".nucleus-"+org.OrgSlug) {
+			continue
+		}
+		candidates = append(candidates, configuredWorkspace{Org: org.OrgSlug, Path: workspace})
+	}
+	if len(candidates) == 0 {
+		return "", nil, errors.New("nucleus.json no contiene un workspace con identidad .bloom verificable; no se iniciará la desinstalación")
+	}
+	return cfg.Onboarding.ActiveOrgSlug, candidates, nil
+}
+
+func configuredWorkspaceAllowed(root, workspace string) bool {
+	active, candidates, err := readConfiguredWorkspaces(root)
+	if err != nil {
+		return false
+	}
+	for _, c := range candidates {
+		if strings.EqualFold(c.Path, workspace) && (active == "" || c.Org == active) {
+			return true
+		}
+	}
+	return false
+}
+
+func selectConfiguredWorkspace(root string, reader *bufio.Reader, out io.Writer) (string, string, error) {
+	active, candidates, err := readConfiguredWorkspaces(root)
+	if err != nil {
+		return "", "", err
+	}
+	selected := -1
+	for i, c := range candidates {
+		if c.Org == active {
+			selected = i
+			break
+		}
+	}
+	if active != "" && selected < 0 {
+		return "", "", fmt.Errorf("la organización activa %q no tiene un workspace .bloom verificable", active)
+	}
+	if selected < 0 && len(candidates) == 1 {
+		selected = 0
+	}
+	if selected < 0 {
+		fmt.Fprintln(out, "Nucleus registra varios workspaces; elegí el número del que se quitará .bloom:")
+		for i, c := range candidates {
+			fmt.Fprintf(out, "  %d. %s (%s)\n", i+1, c.Path, c.Org)
+		}
+		fmt.Fprint(out, "Número: ")
+		answer, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", "", err
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(answer))
+		if err != nil || n < 1 || n > len(candidates) {
+			return "", "", errors.New("selección de workspace inválida")
+		}
+		selected = n - 1
+	}
+	workspace, bloom, err := validateWorkspace(candidates[selected].Path, root)
+	if err != nil {
+		return "", "", err
+	}
+	fmt.Fprintf(out, "Workspace obtenido de config/nucleus.json (organización %s): %s\n", candidates[selected].Org, workspace)
 	return workspace, bloom, nil
 }
 func ownedService(name, root string) bool {
@@ -597,11 +700,12 @@ func removeInstallation(root string, test bool, tempDir string, parentPID string
 	if err != nil {
 		return err
 	}
+	if !configuredWorkspaceAllowed(root, workspace) {
+		return errors.New("el workspace ya no figura en la configuración de Nucleus")
+	}
 	if !test {
-		// Only processes whose ExecutablePath is inside this installation are terminated.
-		ps := fmt.Sprintf(`$ErrorActionPreference='Stop'; $r='%s'; $owned={ Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($r+'\',[StringComparison]::OrdinalIgnoreCase) } }; & $owned | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop }; Start-Sleep -Milliseconds 300; if (@(& $owned).Count -gt 0) { throw 'Procesos Bloom restantes' }`, strings.ReplaceAll(root, "'", "''"))
-		if _, e := command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps); e != nil {
-			return fmt.Errorf("detener procesos Bloom: %w", e)
+		if err := stopOwnedProcesses(root, out); err != nil {
+			return err
 		}
 		for _, key := range inv.registry {
 			if !strings.HasPrefix(strings.ToUpper(key), "HKCU\\") {
