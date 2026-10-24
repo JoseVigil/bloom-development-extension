@@ -1,5 +1,15 @@
+# Lista positiva: por defecto nada del monorepo entra en el VSIX. Cada runtime
+# requerido debe habilitarse explícitamente más abajo para evitar que nuevos
+# worktrees, caches o repositorios locales inflen el paquete.
+**/*
+!package.json
+!README.md
+!out/**
+!resources/**
+
 # Carpetas que NO van en el VSIX
 brain/**
+backend/**
 build/**
 builds/**
 codebase/**
@@ -16,9 +26,14 @@ tasks/**
 tree/**
 webview/**
 .cache/**
+.codex-temp/**
+.pytest_cache/**
+.runner-isolation/**
+.tmp-go-cache-core-gate/**
 .vscode/**
 .vscode-test/**
 agentic-harness/**
+synapse-runner/**
 .claude/**
 BloomNucleus/**
 accounts/**

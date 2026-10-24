@@ -90,6 +90,7 @@ const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
 const { deployAitapBundle } = require('./aitap-bundle-installer');
 const { deployBloomUninstall } = require('./bloom-uninstall-installer');
+const { deployWorkspaceBundle } = require('./workspace-bundle-installer');
 
 // ── Ollama service installer — condicional por plataforma ────────────────────
 const {
@@ -1105,7 +1106,7 @@ async function deployAllSystemBinaries(win) {
     // Asset map:
     //   darwin amd64 → DIR bloom-workspace.app (desde darwin_x64/workspace/mac/)
     //   darwin arm64 → DIR bloom-workspace.app (desde darwin_x64/workspace/mac-arm64/)
-    //   windows      → FILE bloom-workspace.exe
+    //   windows      → DIR win-unpacked/ completo
     //   linux        → DIR linux-unpacked/
     //
     // CRÍTICO Darwin: copiar el .app bundle COMPLETO (no solo el ejecutable interno)
@@ -1172,18 +1173,20 @@ async function deployAllSystemBinaries(win) {
       }
     } else {
       // Windows
-      const workspaceExeName = 'bloom-workspace.exe';
-      const workspaceExeSrc  = path.join(paths.workspaceSource, workspaceExeName);
-      if (await fs.pathExists(workspaceExeSrc)) {
-        results.workspace = await copyFileSafe(
-          workspaceExeSrc,
-          paths.workspaceExe,
-          workspaceExeName
-        );
-      } else {
-        logger.warn('⚠️ bloom-workspace.exe not found, skipping');
-        results.workspace = { success: false, skipped: true };
+      logger.info('📦 Deploying complete Workspace win-unpacked bundle...');
+      logger.debug(`   Source: ${paths.workspaceSource}`);
+      logger.debug(`   Dest:   ${paths.workspaceDir}`);
+      results.workspace = await deployWorkspaceBundle({
+        sourceDir: paths.workspaceSource,
+        destinationDir: paths.workspaceDir,
+      });
+      if (results.workspace.backup_cleanup_error) {
+        logger.warn(`⚠️ Workspace previous-tree backup could not be removed: ${results.workspace.backup_cleanup_error}`);
       }
+      logger.success(
+        `✅ Workspace deployed and verified ` +
+        `(${results.workspace.evidence.destination.file_count} files)`
+      );
     }
 
     // ========================================================================

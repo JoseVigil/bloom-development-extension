@@ -10,16 +10,20 @@ import { assertProductControlsUnchanged, snapshotProductControls, verifyFunction
 test('Core leaves a legacy Genesis pending inert and sends no Mandate POST', async () => {
   test.skip(process.platform !== 'win32', 'Windows Job functional gate');
   test.setTimeout(1_200_000);
-  const controls = {
-    files: [
+  const controlFiles = [
       path.join(os.homedir(), 'AppData', 'Local', 'BloomNucleus', 'config', 'nucleus.json'),
       'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.ownership.json',
       'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.ownership.json',
-    ],
-    directories: [
+    ];
+  const controlDirectories = [
+      'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos',
       'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates',
       'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.mandates',
-    ],
+    ];
+  const absentControls = [...controlFiles, ...controlDirectories].filter(item => !fs.existsSync(item));
+  const controls = {
+    files: controlFiles.filter(item => fs.existsSync(item)),
+    directories: controlDirectories.filter(item => fs.existsSync(item)),
   };
   const before = snapshotProductControls(controls);
   let fixture: FunctionalRoot | undefined;
@@ -118,6 +122,7 @@ test('Core leaves a legacy Genesis pending inert and sends no Mandate POST', asy
         if (fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
       }
       assertProductControlsUnchanged(before, snapshotProductControls(controls));
+      for (const item of absentControls) expect(fs.existsSync(item), `el control ausente no debe aparecer: ${item}`).toBe(false);
     }
   }
 });

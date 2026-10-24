@@ -50,6 +50,9 @@ const getPackagedResourcePath = (
     if (platformName !== 'win32') return null;
     return path.join(resourcesRoot, 'uninstall', platformArch);
   }
+  if (resourceName === 'workspace' && platformName === 'win32') {
+    return path.join(resourcesRoot, 'workspace', platformArch);
+  }
   return path.join(resourcesRoot, resourceName);
 };
 
@@ -188,7 +191,9 @@ const getResourcePath = (resourceName) => {
       }
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
     case 'workspace':
-      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'workspace');
+      return platform === 'win32'
+        ? path.join(workspaceRoot, '..', 'native', 'bin', arch, 'workspace', 'win-unpacked')
+        : path.join(workspaceRoot, '..', 'native', 'bin', arch, 'workspace');
     case 'launcher':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
     case 'sensor':

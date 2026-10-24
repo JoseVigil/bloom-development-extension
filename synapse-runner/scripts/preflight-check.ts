@@ -21,13 +21,13 @@ async function main(): Promise<void> {
 
   console.log('\n🔎 synapse-runner — preflight checks\n');
 
-  // Darwin: gate fail-closed antes de 00a. Si no se demuestra el entorno de
+  // Windows/Darwin: gate fail-closed antes de 00a. Si no se demuestra el entorno de
   // prueba aislado, el preflight termina con código distinto de cero y
   // `npm run test:headed` no llega a Playwright.
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' || (process.platform === 'win32' && process.env.SYNAPSE_TEST_WORKSPACE_ORG)) {
     try {
       const evidence = assertR0Isolation('before-00a') as DarwinR0Evidence;
-      console.log(`✅ R0 Darwin before-00a: ${JSON.stringify(summarizeDarwinR0Evidence(evidence))}`);
+      console.log(`✅ R0 before-00a: ${JSON.stringify(process.platform === 'darwin' ? summarizeDarwinR0Evidence(evidence) : { target: evidence.target, phase: evidence.phase, runnerBase: evidence.runnerBase, workspacePath: evidence.workspacePath, workspaceOrg: evidence.workspaceOrg, backendOrigin: evidence.backendOrigin })}`);
     } catch (err) {
       console.error(`🔴 ${(err as Error).message}`);
       process.exitCode = 1;
@@ -55,9 +55,9 @@ async function main(): Promise<void> {
 }
 
 /**
- * globalSetup de Playwright (registrado en playwright.config.ts). En Darwin
- * aborta antes de crear workers si el entorno de prueba aislado no está
- * demostrado; en Windows y Linux no hace nada, como hasta ahora.
+ * globalSetup de Playwright (registrado en playwright.config.ts). Darwin
+ * exige aislamiento para toda la suite; Windows lo comprueba dentro del E2E
+ * de onboarding y antes del reset, sin bloquear los gates de RUNNER CORE.
  */
 export default function globalSetup(): void {
   if (process.platform === 'darwin') assertR0Isolation('before-00a');

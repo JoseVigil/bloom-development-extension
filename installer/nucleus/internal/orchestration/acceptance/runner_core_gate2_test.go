@@ -56,6 +56,14 @@ func (c runnerCoreGate2Client) StartMandateBuildWorkflow(ctx context.Context, id
 	return c.client.StartMandateBuildWorkflow(ctx, id, input)
 }
 
+func (runnerCoreGate2Client) StartMandateExecutionWorkflow(context.Context, string, workflows.MandateExecutionInput) (client.WorkflowRun, error) {
+	return nil, errors.New("runner_core_gate2_execution_forbidden")
+}
+
+func (runnerCoreGate2Client) SignalMandateExecutionWorkflow(context.Context, string, string) error {
+	return errors.New("runner_core_gate2_execution_forbidden")
+}
+
 // A separate short-lived probe proves that the Temporal server (including
 // after restart) has the workflow in its own durable store.
 func TestRunnerCoreGate2Describe(t *testing.T) {

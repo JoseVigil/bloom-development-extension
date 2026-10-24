@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import {githubAppProvider,hashSecret} from '../src/authority/human-identity';
+import {githubAppProvider,hashSecret,testFixtureProvider} from '../src/authority/human-identity';
 const config={clientId:'app-client',clientSecret:'test-only-secret',callbackUrl:'https://authority.test/v1/authority/human/callback'};
 describe('GitHub App contract (mock transport)',()=>{
  it('uses S256, state and exact callback; secrets stay out of authorize URL',async()=>{
@@ -26,5 +26,19 @@ describe('GitHub App contract (mock transport)',()=>{
   await expect(githubAppProvider(config,vi.fn().mockRejectedValue(new Error('network'))).identify('x')).rejects.toThrow('provider_unavailable');
   expect(()=>githubAppProvider({...config,clientSecret:''})).toThrow('configuration_missing');
   expect(()=>githubAppProvider({...config,callbackUrl:'http://bad.test'})).toThrow('configuration_invalid');
+ });
+});
+describe('Runner identity fixture',()=>{
+ it('keeps a unique subject while naming the organization by slug',async()=>{
+  const p=testFixtureProvider();
+  const first='runner:elias-repos:6c968ef1-42ae-4efc-b611-a255716cd82f';
+  const second='runner:elias-repos:dbd40d90-61a3-43d8-b188-7d3ab132c02b';
+  expect(await p.identify(first)).toEqual({subject:first,handle:'elias-repos'});
+  expect(await p.identify(second)).toEqual({subject:second,handle:'elias-repos'});
+ });
+ it('preserves legacy fixture subjects and rejects an empty subject',async()=>{
+  const p=testFixtureProvider();
+  expect(await p.identify('legacy-subject')).toEqual({subject:'legacy-subject',handle:'fixture-legacy-subject'});
+  await expect(p.identify('')).rejects.toThrow('provider_invalid');
  });
 });

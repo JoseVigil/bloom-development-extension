@@ -29,14 +29,19 @@ function describe(fixture: GenesisBackendRoot, launch: Gate2Launch, mandateId: s
 test('Gate 2: real Backend creation reaches one durable Temporal workflow without running activities',async()=>{
   test.skip(process.platform!=='win32','Windows disposable Job gate');
   test.setTimeout(600_000);
-  const controls={files:[
+  const controlFiles=[
     path.join(os.homedir(),'AppData','Local','BloomNucleus','config','nucleus.json'),
     'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.ownership.json',
     'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.ownership.json',
-  ],directories:[
+  ];
+  const controlDirectories=[
+    'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos',
     'C:\\repos\\eias-repos\\.bloom\\.nucleus-eias-repos\\.mandates',
     'C:\\repos\\elias-repos\\.bloom\\.nucleus-elias-repos\\.mandates',
-  ]};
+  ];
+  const absentControls=[...controlFiles,...controlDirectories].filter(item=>!fs.existsSync(item));
+  const controls={files:controlFiles.filter(item=>fs.existsSync(item)),
+    directories:controlDirectories.filter(item=>fs.existsSync(item))};
   const before=snapshotProductControls(controls);
   let fixture:GenesisBackendRoot|undefined;
   let launch:Gate2Launch|undefined;
@@ -102,7 +107,8 @@ test('Gate 2: real Backend creation reaches one durable Temporal workflow withou
     if (launch) await launch.stop();
     const after=snapshotProductControls(controls);
     let finalError:unknown;
-    try {assertProductControlsUnchanged(before,after);}
+    try {assertProductControlsUnchanged(before,after);
+      for(const item of absentControls) expect(fs.existsSync(item),`el control ausente no debe aparecer: ${item}`).toBe(false);}
     catch(controlError) {finalError=controlError;console.error('gate2_product_control_changed',controlError);}
     if (fixture) {
       let cleanupError:unknown;

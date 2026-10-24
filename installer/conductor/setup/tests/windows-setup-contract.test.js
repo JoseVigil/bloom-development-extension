@@ -27,6 +27,12 @@ async function main() {
     deployBloomUninstall,
   } = require('../install/bloom-uninstall-installer');
   const {
+    WINDOWS_WORKSPACE_REQUIRED_PATHS,
+    validateWorkspaceBundleSource,
+    compareWorkspaceBundles,
+    deployWorkspaceBundle,
+  } = require('../install/workspace-bundle-installer');
+  const {
     installRuntime,
     validatePythonRuntime,
     validatePythonRuntimePair,
@@ -80,7 +86,7 @@ async function main() {
   );
   assert.strictEqual(
     path.resolve(paths.workspaceSource),
-    path.resolve(setupDir, '..', '..', 'native', 'bin', 'win64', 'workspace')
+    path.resolve(setupDir, '..', '..', 'native', 'bin', 'win64', 'workspace', 'win-unpacked')
   );
   assert.strictEqual(
     path.resolve(paths.aitapSource),
@@ -116,6 +122,18 @@ async function main() {
     getPackagedResourcePath('uninstall', packagedResourcesRoot, 'linux', 'linux_x64'),
     null
   );
+  assert.strictEqual(
+    getPackagedResourcePath('workspace', packagedResourcesRoot, 'win32', 'win64'),
+    path.join(packagedResourcesRoot, 'workspace', 'win64')
+  );
+  assert.strictEqual(
+    getPackagedResourcePath('workspace', packagedResourcesRoot, 'win32', 'win32'),
+    path.join(packagedResourcesRoot, 'workspace', 'win32')
+  );
+  assert.strictEqual(
+    getPackagedResourcePath('workspace', packagedResourcesRoot, 'linux', 'linux_x64'),
+    path.join(packagedResourcesRoot, 'workspace')
+  );
 
   for (const platformConfig of ['win', 'linux', 'mac']) {
     const hostResource = packageJson.build[platformConfig].extraResources.find(entry =>
@@ -141,9 +159,9 @@ async function main() {
   const windowsOpencode = packageJson.build.win.extraResources.find(entry => entry.to === 'opencode');
   assert.ok(windowsOpencode);
   assert.strictEqual(windowsOpencode.from, '../../native/opencode/win64');
-  const windowsWorkspace = packageJson.build.win.extraResources.find(entry => entry.to === 'workspace/bloom-workspace.exe');
+  const windowsWorkspace = packageJson.build.win.extraResources.find(entry => entry.to === 'workspace/win64');
   assert.ok(windowsWorkspace);
-  assert.strictEqual(windowsWorkspace.from, '../../native/bin/win64/workspace/bloom-workspace.exe');
+  assert.strictEqual(windowsWorkspace.from, '../../native/bin/win64/workspace/win-unpacked');
   const windowsRuntime = packageJson.build.win.extraResources.find(entry => entry.to === 'runtime');
   assert.ok(windowsRuntime);
   assert.strictEqual(windowsRuntime.from, '../../resources/runtime-windows');
@@ -153,8 +171,8 @@ async function main() {
     { from: '../../native/bin/win64/uninstall', to: 'uninstall/win64' },
     { from: '../../native/bin/win32/uninstall', to: 'uninstall/win32' },
   ]);
-  assert.ok(packageJson.scripts['build:win64'].startsWith('npm run validate:uninstall:win64'));
-  assert.ok(packageJson.scripts['build:win32'].startsWith('npm run validate:uninstall:win32'));
+  assert.ok(packageJson.scripts['build:win64'].includes('npm run validate:workspace:win64'));
+  assert.ok(packageJson.scripts['build:win32'].includes('npm run validate:workspace:win32'));
   assert.strictEqual(
     packageJson.build.linux.extraResources.some(entry => entry.to.startsWith('uninstall')),
     false
@@ -163,6 +181,17 @@ async function main() {
     packageJson.build.mac.extraResources.some(entry => entry.to.startsWith('uninstall')),
     false
   );
+
+  const sourceWorkspace = validateWorkspaceBundleSource(paths.workspaceSource);
+  assert.strictEqual(sourceWorkspace.valid, true, sourceWorkspace.error);
+  assert.strictEqual(sourceWorkspace.inventory.file_count, 179);
+  assert.ok(sourceWorkspace.inventory.total_bytes > 0);
+  assert.match(sourceWorkspace.inventory.inventory_sha256, /^[a-f0-9]{64}$/);
+  for (const requiredPath of WINDOWS_WORKSPACE_REQUIRED_PATHS) {
+    const hasFile = sourceWorkspace.inventory.files.some(file => file.path === requiredPath);
+    const hasDirectory = sourceWorkspace.inventory.directories.includes(requiredPath);
+    assert.ok(hasFile || hasDirectory, `Workspace source is missing ${requiredPath}`);
+  }
 
   const sourceUninstall = validateBloomUninstallExecutable(paths.uninstallSourceExe);
   assert.strictEqual(sourceUninstall.valid, true, sourceUninstall.error);
@@ -259,6 +288,7 @@ async function main() {
   assert.strictEqual(reconciled.installation.completed, false);
   assert.ok(validateBinaryArtifacts().missing.some(item => item.startsWith('aitap/')));
   assert.ok(validateBinaryArtifacts().missing.some(item => item.startsWith('uninstall/')));
+  assert.ok(validateBinaryArtifacts().missing.some(item => item.startsWith('workspace/')));
   assert.ok(reconciled.milestones.opencode_service_install);
   assert.strictEqual(reconciled.milestones.opencode_service_install.status, 'pending');
   assert.strictEqual(reconciled.milestones.opencode_service_install.non_critical, true);
@@ -313,6 +343,12 @@ async function main() {
   fs.writeFileSync(paths.opencodeExe, 'contract-test');
   fs.mkdirSync(paths.workspaceDir, { recursive: true });
   fs.writeFileSync(paths.workspaceExe, 'contract-test');
+  fs.writeFileSync(path.join(paths.workspaceDir, 'stale-only-in-destination.txt'), 'stale');
+  const partialWorkspace = compareWorkspaceBundles(paths.workspaceSource, paths.workspaceDir);
+  assert.strictEqual(partialWorkspace.valid, false);
+  assert.ok(partialWorkspace.missing.includes('resources/app.asar'));
+  assert.ok(partialWorkspace.different_hash.includes('bloom-workspace.exe'));
+  assert.ok(partialWorkspace.extra.includes('stale-only-in-destination.txt'));
   assert.strictEqual(validateBinaryArtifacts().valid, false, 'AITAP must be required by binaries');
 
   const sourceAitap = verifyAitapBundle(paths.aitapSource);
@@ -343,6 +379,24 @@ async function main() {
     validateInstalledBloomUninstall(paths.uninstallSourceExe, paths.uninstallExe).valid,
     true
   );
+  assert.strictEqual(validateBinaryArtifacts().valid, false, 'complete Workspace bundle must be required by binaries');
+
+  const workspaceDeployment = await deployWorkspaceBundle({
+    sourceDir: paths.workspaceSource,
+    destinationDir: paths.workspaceDir,
+  });
+  assert.strictEqual(workspaceDeployment.success, true);
+  assert.strictEqual(workspaceDeployment.evidence.valid, true);
+  assert.strictEqual(workspaceDeployment.evidence.destination.file_count, sourceWorkspace.inventory.file_count);
+  assert.strictEqual(
+    workspaceDeployment.evidence.destination.inventory_sha256,
+    sourceWorkspace.inventory.inventory_sha256
+  );
+  assert.strictEqual(fs.existsSync(path.join(paths.workspaceDir, 'stale-only-in-destination.txt')), false);
+  const installedWorkspace = compareWorkspaceBundles(paths.workspaceSource, paths.workspaceDir);
+  assert.deepStrictEqual(installedWorkspace.missing, []);
+  assert.deepStrictEqual(installedWorkspace.different_hash, []);
+  assert.deepStrictEqual(installedWorkspace.extra, []);
   assert.strictEqual(validateBinaryArtifacts().valid, true);
   await manager.completeMilestone('binaries', { contract_test: true });
   assert.strictEqual(manager.getState().milestones.binaries.status, 'passed');
@@ -362,21 +416,30 @@ async function main() {
     manager.getState().milestones.binaries.verification.result.uninstall.hash_match,
     true
   );
+  assert.strictEqual(
+    manager.getState().milestones.binaries.verification.result.workspace.integrity,
+    'passed'
+  );
+  assert.strictEqual(
+    manager.getState().milestones.binaries.verification.result.workspace.source.inventory_sha256,
+    sourceWorkspace.inventory.inventory_sha256
+  );
 
   // A resumed setup must invalidate an approved binaries milestone when the
-  // installed executable no longer matches the currently packaged artifact.
-  fs.appendFileSync(paths.uninstallExe, 'stale-installed-copy');
+  // installed Workspace tree no longer matches the currently packaged bundle.
+  fs.appendFileSync(paths.workspaceExe, 'tampered-after-approved-milestone');
   const resumedManager = new NucleusManager();
   const resumed = await resumedManager.initialize();
   assert.strictEqual(resumed.milestones.binaries.status, 'pending');
   assert.ok(
     resumed.milestones.binaries.verification.result.missing
-      .includes('uninstall/UNINSTALL_SOURCE_DESTINATION_MISMATCH')
+      .includes('workspace/WORKSPACE_SOURCE_DESTINATION_MISMATCH')
   );
-  await deployBloomUninstall({
-    sourceExecutable: paths.uninstallSourceExe,
-    installedExecutable: paths.uninstallExe,
-  });
+  assert.ok(
+    resumed.milestones.binaries.verification.result.workspace.different_hash
+      .includes('bloom-workspace.exe')
+  );
+  fs.copyFileSync(path.join(paths.workspaceSource, 'bloom-workspace.exe'), paths.workspaceExe);
   await resumedManager.completeMilestone('binaries', { contract_test: true });
 
   for (const name of installer.RUNTIME_MILESTONES_AFTER_BINARY_CLEANUP) {

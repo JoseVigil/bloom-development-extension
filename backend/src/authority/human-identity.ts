@@ -61,6 +61,9 @@ export function testFixtureProvider():HumanProvider {
   return {token:code,expiresIn:28800};
  },async identify(token){
   if(!token)throw new HumanIdentityError('provider_invalid');
-  return {subject:token,handle:`fixture-${token}`};
+  // Runner keeps the subject unique while declaring the organization name
+  // separately. This format is accepted only by the test-fixture provider.
+  const runner=token.match(/^runner:([a-z0-9][a-z0-9-]{0,63}):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+  return {subject:token,handle:runner?runner[1]:`fixture-${token}`};
  }};
 }

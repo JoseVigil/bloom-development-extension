@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
-  canonicalExistingPath, validateDarwinR0Evidence, validateR0Evidence, type DarwinR0Evidence, type R0Evidence,
+  canonicalExistingPath, canonicalProspectivePath, validateDarwinR0Evidence, validateR0Evidence, type DarwinR0Evidence, type R0Evidence,
 } from '../../src/preflight/environment-check';
 import { resetOnboardingState } from '../../src/config/bloom-paths';
 import playwrightGlobalSetup from '../../scripts/preflight-check';
@@ -14,7 +14,7 @@ const personal = join(fixture, 'personal', 'BloomNucleus');
 const isolated = join(fixture, 'isolated', 'BloomNucleus');
 const appData = join(fixture, 'roaming');
 const personalAppData = join(fixture, 'personal', 'Roaming');
-const workspace = join(isolated, 'workspaces', 'runner');
+const workspace = join(isolated, 'workspaces', 'runner-test');
 const backend = join(fixture, 'backend');
 const d1 = join(isolated, 'backend-d1');
 for (const path of [personal, appData, personalAppData, workspace, backend, d1, join(backend, '.wrangler')]) mkdirSync(path, { recursive: true });
@@ -53,6 +53,25 @@ test('acepta rutas, D1 y procesos de una instalación descartable', () => {
   assert.deepEqual(validateR0Evidence(evidence()), []);
 });
 
+test('Workspace empaquetado debe pertenecer a la misma instalación descartable', () => {
+  const item = evidence();
+  item.conductorMode = 'packaged';
+  item.packagedWorkspaceExe = join(isolated, 'bin', 'workspace', 'bloom-workspace.exe');
+  item.packagedAsar = join(isolated, 'bin', 'workspace', 'resources', 'app.asar');
+  assert.deepEqual(validateR0Evidence(item), []);
+  item.packagedWorkspaceExe = join(personal, 'bin', 'workspace', 'bloom-workspace.exe');
+  assert.match(validateR0Evidence(item).join(' '), /Workspace empaquetado fuera/);
+});
+
+test('acepta el workspace aún ausente bajo la instalación aislada y el slug objetivo', () => {
+  const pending = join(isolated, 'workspaces', 'elias-repos');
+  assert.equal(canonicalProspectivePath(pending, 'workspace descartable'), pending);
+  const item = evidence();
+  item.workspacePath = pending;
+  item.workspaceOrg = 'elias-repos';
+  assert.deepEqual(validateR0Evidence(item), []);
+});
+
 function installedEvidence(): R0Evidence {
   const item = evidence();
   item.target = 'installed';
@@ -68,7 +87,9 @@ function installedEvidence(): R0Evidence {
   item.nucleusExe = join(personal, 'bin', 'nucleus', 'nucleus.exe');
   item.sentinelExe = join(personal, 'bin', 'sentinel', 'sentinel.exe');
   item.brainCliExe = join(personal, 'bin', 'brain', 'brain.exe');
-  item.ports[0].processes[1].commandLine = `node "${join(backend, 'wrangler.js')}" dev --local --persist-to "${join(backend, '.wrangler')}"`;
+  item.expectedD1Path = join(backend, '.wrangler-runner-elias');
+  mkdirSync(item.expectedD1Path, { recursive: true });
+  item.ports[0].processes[1].commandLine = `node "${join(backend, 'wrangler.js')}" dev --local --persist-to "${item.expectedD1Path}"`;
   item.ports[1].processes[0].executablePath = join(personal, 'bin', 'brain', 'brain.exe');
   return item;
 }
@@ -97,6 +118,10 @@ test('modo installed rechaza otro AppData, workspace, D1 o proceso ajeno', () =>
   const wrongD1 = installedEvidence();
   wrongD1.ports[0].processes[1].commandLine = `node "${join(backend, 'wrangler.js')}" dev --local --persist-to "${d1}"`;
   assert.match(validateR0Evidence(wrongD1).join(' '), /persistencia D1 fuera/);
+  const sharedD1 = installedEvidence();
+  sharedD1.expectedD1Path = join(backend, '.wrangler');
+  sharedD1.ports[0].processes[1].commandLine = `node "${join(backend, 'wrangler.js')}" dev --local --persist-to "${sharedD1.expectedD1Path}"`;
+  assert.match(validateR0Evidence(sharedD1).join(' '), /D1 de prueba ausente o compartida/);
   const foreign = installedEvidence();
   foreign.ports[1].processes[0].executablePath = join(isolated, 'bin', 'brain', 'brain.exe');
   assert.match(validateR0Evidence(foreign).join(' '), /puerto 5678/);

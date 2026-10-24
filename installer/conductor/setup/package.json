@@ -15,9 +15,9 @@
     "build:dist": "npm run build:linux:dist && npm run build:win && npm run build:darwin",
     "build:linux": "electron-builder --linux --x64 -c.directories.output=../../native/bin/linux_x64/setup",
     "build:linux:dist": "electron-builder --linux --x64 -c.linux.target=AppImage -c.linux.target=deb -c.linux.target=rpm -c.directories.output=../../native/bin/linux_x64/setup",
-    "build:win": "npm run validate:uninstall:win64 && node ../shared/bump-version.js && electron-builder --win --x64 -c.directories.output=../../native/bin/win64/setup",
-    "build:win32": "npm run validate:uninstall:win32 && node ../shared/bump-version.js && electron-builder --win --ia32 -c.directories.output=../../native/bin/win32/setup",
-    "build:win64": "npm run validate:uninstall:win64 && node ../shared/bump-version.js && electron-builder --win --x64 -c.directories.output=../../native/bin/win64/setup",
+    "build:win": "npm run validate:uninstall:win64 && npm run validate:workspace:win64 && node ../shared/bump-version.js && electron-builder --win --x64 -c.directories.output=../../native/bin/win64/setup",
+    "build:win32": "npm run validate:uninstall:win32 && npm run validate:workspace:win32 && node ../shared/bump-version.js && electron-builder --win --ia32 -c.directories.output=../../native/bin/win32/setup",
+    "build:win64": "npm run validate:uninstall:win64 && npm run validate:workspace:win64 && node ../shared/bump-version.js && electron-builder --win --x64 -c.directories.output=../../native/bin/win64/setup",
     "build:darwin": "npm run build:darwin:x64 && npm run build:darwin:arm",
     "build:darwin:x64": "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/setup",
     "build:darwin:arm": "electron-builder --mac --arm64 -c.directories.output=../../native/bin/darwin_arm64/setup",
@@ -26,10 +26,13 @@
     "dev:linux": "electron . --no-sandbox",
     "dev:no-admin": "electron .",
     "test:aitap-bundle-contract": "node tests/aitap-bundle-contract.test.js",
-    "test:setup-contract": "npm run test:aitap-bundle-contract && npm run test:windows-contract",
+    "test:setup-contract": "npm run test:aitap-bundle-contract && npm run test:windows-contract && npm run test:workspace-electron-contract",
     "test:windows-contract": "node tests/windows-setup-contract.test.js",
+    "test:workspace-electron-contract": "electron --no-sandbox tests/workspace-electron-fs-contract.test.js",
     "validate:uninstall:win32": "node scripts/validate-uninstall-artifact.js win32",
     "validate:uninstall:win64": "node scripts/validate-uninstall-artifact.js win64",
+    "validate:workspace:win32": "node scripts/validate-workspace-artifact.js win32",
+    "validate:workspace:win64": "node scripts/validate-workspace-artifact.js win64",
     "version:bump": "node ../shared/bump-version.js",
     "version:patch": "node ../shared/bump-version.js --patch",
     "version:minor": "node ../shared/bump-version.js --minor",
@@ -218,8 +221,8 @@
           "to": "cortex"
         },
         {
-          "from": "../../native/bin/win64/workspace/bloom-workspace.exe",
-          "to": "workspace/bloom-workspace.exe"
+          "from": "../../native/bin/win64/workspace/win-unpacked",
+          "to": "workspace/win64"
         },
         {
           "from": "../../native/nssm/win64",

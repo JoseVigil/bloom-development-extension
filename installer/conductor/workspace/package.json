@@ -103,6 +103,10 @@
           "to": "shared/onboarding-schema.js"
         },
         {
+          "from": "../shared/project-copier.js",
+          "to": "shared/project-copier.js"
+        },
+        {
           "from": "shared_node_modules",
           "to": "node_modules"
         }

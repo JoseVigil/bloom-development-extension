@@ -37,8 +37,12 @@ export interface R0Evidence {
   conductorSource: string;
   expectedConductorSource: string;
   electronExe: string;
+  conductorMode?: 'dev' | 'packaged';
+  packagedWorkspaceExe?: string;
+  packagedAsar?: string;
   backendOrigin: string;
   backendRepo: string;
+  expectedD1Path?: string;
   ports: ObservedPort[];
   backendPort: number;
   requiredPorts: number[];
@@ -51,6 +55,16 @@ export function canonicalExistingPath(path: string, label: string): string {
   return realpathSync.native(resolve(path));
 }
 const canonical = canonicalExistingPath;
+
+/** Resolve a workspace that onboarding has not created yet, checking its existing ancestor. */
+export function canonicalProspectivePath(path: string, label: string): string {
+  if (!path || !isAbsolute(path)) throw new Error(`R0: ${label} debe ser absoluto`);
+  const absolute = resolve(path);
+  if (existsSync(absolute)) return canonical(absolute, label);
+  const parent = dirname(absolute);
+  if (parent === absolute) throw new Error(`R0: ${label} sin ancestro existente`);
+  return join(canonicalProspectivePath(parent, label), basename(absolute));
+}
 
 function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
@@ -99,11 +113,12 @@ export function validateR0Evidence(e: R0Evidence): string[] {
     failures.push('Runner, Conductor y Nucleus no resuelven la misma instalación');
   }
   if (installed ? !samePath(e.workspacePath, join('C:\\repos', e.workspaceOrg)) :
-      (!inside(e.workspacePath, join(e.runnerBase, 'workspaces')) || samePath(e.workspacePath, e.personalBase))) {
+      (!inside(e.workspacePath, join(e.runnerBase, 'workspaces')) ||
+       basename(e.workspacePath) !== e.workspaceOrg || samePath(e.workspacePath, e.personalBase))) {
     failures.push(installed ? 'workspace instalado no coincide con la organización declarada en C:\\repos' : 'workspace fuera de la instalación descartable');
   }
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(e.workspaceOrg) ||
-      (!installed && ['elias-repos', 'eias-repos'].includes(e.workspaceOrg.toLowerCase()))) {
+      (!installed && e.workspaceOrg.toLowerCase() === 'eias-repos')) {
     failures.push('organización de prueba personal, ambigua o ausente');
   }
   for (const [name, path] of [
@@ -112,13 +127,18 @@ export function validateR0Evidence(e: R0Evidence): string[] {
   ] as const) {
     if (!inside(path, e.runnerBase)) failures.push(`${name} fuera de la instalación ${installed ? 'instalada' : 'descartable'}`);
   }
-  if (!samePath(e.conductorSource, e.expectedConductorSource) || !inside(e.electronExe, e.conductorSource)) {
+  if (e.conductorMode === 'packaged') {
+    if (!e.packagedWorkspaceExe || !samePath(e.packagedWorkspaceExe, join(e.runnerBase, 'bin', 'workspace', 'bloom-workspace.exe')) ||
+        !e.packagedAsar || !samePath(e.packagedAsar, join(e.runnerBase, 'bin', 'workspace', 'resources', 'app.asar'))) {
+      failures.push('Workspace empaquetado fuera de la instalación seleccionada');
+    }
+  } else if (!samePath(e.conductorSource, e.expectedConductorSource) || !inside(e.electronExe, e.conductorSource)) {
     failures.push('fuente o binario Electron de Conductor ajeno al checkout previsto');
   }
   const backend = e.ports.find(p => p.port === e.backendPort);
   if (!backend || backend.processes.length === 0) {
     failures.push('Backend sin proceso verificable');
-  } else if (!portsOnly) {
+  } else {
     const wrangler = backend.processes.find(p => /wrangler/i.test(p.commandLine || '') &&
       /\bdev\b/.test(p.commandLine || '') && /--local(?:\s|$)/.test(p.commandLine || '') &&
       (p.commandLine || '').toLowerCase().includes(e.backendRepo.toLowerCase()) && persistPath(p.commandLine || ''));
@@ -132,9 +152,13 @@ export function validateR0Evidence(e: R0Evidence): string[] {
         try { resolvedTarget = canonical(target, 'persistencia D1'); }
         catch { failures.push('persistencia D1 inexistente o inaccesible'); }
       }
-      const expectedD1 = installed ? join(e.backendRepo, '.wrangler') : join(e.runnerBase, 'backend-d1');
+      const expectedD1 = e.expectedD1Path || (installed ? join(e.backendRepo, '.wrangler') : join(e.runnerBase, 'backend-d1'));
       if (resolvedTarget && (!samePath(resolvedTarget, expectedD1) || (!installed && inside(resolvedTarget, e.personalBase)))) {
         failures.push(installed ? 'persistencia D1 fuera del Backend instalado' : 'persistencia D1 compartida o fuera de la instalación descartable');
+      }
+      if (installed && (!e.expectedD1Path || samePath(expectedD1, join(e.backendRepo, '.wrangler')) ||
+          samePath(expectedD1, e.personalBase) || inside(expectedD1, e.personalBase))) {
+        failures.push('D1 de prueba ausente o compartida con la instalación habitual');
       }
     }
   }
@@ -177,6 +201,7 @@ foreach ($port in @(${values})) {
     $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $current" -ErrorAction Stop
     if (-not $proc -or -not $proc.ExecutablePath -or -not $proc.CommandLine) { throw "process unavailable: $port" }
     $chain += [pscustomobject]@{ executablePath = $proc.ExecutablePath; commandLine = $proc.CommandLine }
+    if ($proc.CommandLine -match 'wrangler' -and $proc.CommandLine -match '--persist-to') { break }
     $current = [int]$proc.ParentProcessId
   }
   $answer += [pscustomobject]@{ port = $port; processes = @($chain) }
@@ -236,7 +261,7 @@ export function assertR0Isolation(phase: R0Phase = 'before-00a'): R0Evidence | D
   const personalBase = existsSync(personalRaw) ? canonical(personalRaw, 'instalación personal') : resolve(personalRaw);
   const personalAppRaw = join(require('node:os').homedir(), 'AppData', 'Roaming');
   const personalAppDataDir = existsSync(personalAppRaw) ? canonical(personalAppRaw, 'APPDATA personal') : resolve(personalAppRaw);
-  const workspacePath = canonical(workspaceRaw, target === 'installed' ? 'workspace instalado' : 'workspace descartable');
+  const workspacePath = canonicalProspectivePath(workspaceRaw, target === 'installed' ? 'workspace instalado' : 'workspace descartable');
   const profilesFile = canonical(join(runnerBase, 'config', 'profiles.json'), 'profiles.json aislado');
   const nucleusFile = canonical(join(runnerBase, 'config', 'nucleus.json'), 'nucleus.json aislado');
   if (!inside(profilesFile, runnerBase) || !inside(nucleusFile, runnerBase)) throw new Error('R0: configuración enlazada fuera de la instalación');
@@ -259,9 +284,15 @@ export function assertR0Isolation(phase: R0Phase = 'before-00a'): R0Evidence | D
   const requiredPorts = phase === 'before-00a' ? [backendPort] : [...new Set([backendPort, env.nativeHostPort, 7233])];
   const inspectedPorts = [...new Set([backendPort, env.nativeHostPort, Number(eventPort), Number(debugPort), 7233, 5173])];
   const expectedConductorSource = canonical(resolve(__dirname, '..', '..', '..', 'installer', 'conductor', 'workspace'), 'fuente Conductor');
-  if (env.useConductorPackagedBuild) throw new Error('R0: el build empaquetado de Conductor no está habilitado para esta prueba');
+  if (env.useConductorPackagedBuild && (!env.conductorExePathOverride || !isAbsolute(env.conductorExePathOverride))) {
+    throw new Error('R0: CONDUCTOR_EXE_PATH absoluto es obligatorio para Workspace empaquetado');
+  }
   const conductorSource = canonical(env.conductorWorkspaceRepoPathOverride || expectedConductorSource, 'fuente Conductor efectiva');
   if (!isAbsolute(env.brainCliBin)) throw new Error('R0: BRAIN_CLI_BIN debe ser una ruta absoluta de la instalación seleccionada');
+  const d1Raw = process.env.SYNAPSE_TEST_D1_PERSIST_PATH;
+  if (target === 'installed' && (!d1Raw || !isAbsolute(d1Raw))) {
+    throw new Error('R0: SYNAPSE_TEST_D1_PERSIST_PATH absoluto es obligatorio para la corrida instalada');
+  }
   const evidence: R0Evidence = {
     target, processInspection: target === 'installed' ? 'ports-only' : 'full',
     phase, runnerBase, conductorBase, nucleusBase, personalBase,
@@ -273,11 +304,19 @@ export function assertR0Isolation(phase: R0Phase = 'before-00a'): R0Evidence | D
     brainCliExe: canonical(env.brainCliBin, 'binario Brain'),
     conductorSource, expectedConductorSource,
     electronExe: canonical(join(conductorSource, 'node_modules', 'electron', 'dist', 'electron.exe'), 'binario Electron'),
+    conductorMode: env.useConductorPackagedBuild ? 'packaged' : 'dev',
+    packagedWorkspaceExe: env.useConductorPackagedBuild
+      ? canonical(env.conductorExePathOverride!, 'Workspace empaquetado') : undefined,
+    packagedAsar: env.useConductorPackagedBuild
+      ? canonical(join(dirname(env.conductorExePathOverride!), 'resources', 'app.asar'), 'app.asar empaquetado') : undefined,
     backendOrigin: origin.origin,
     backendRepo: canonical(resolve(__dirname, '..', '..', '..', 'backend'), 'checkout Backend'),
+    expectedD1Path: d1Raw ? canonical(d1Raw, 'D1 de prueba') : undefined,
     backendPort,
     requiredPorts,
-    ports: (target === 'installed' ? inspectListeningPorts(inspectedPorts) : inspectPorts(inspectedPorts)).map(port => ({
+    ports: (target === 'installed'
+      ? inspectListeningPorts(inspectedPorts).map(port => port.port === backendPort ? inspectPorts([backendPort])[0] : port)
+      : inspectPorts(inspectedPorts)).map(port => ({
       port: port.port,
       processes: port.processes.map(process => ({
         executablePath: process.executablePath ? canonical(process.executablePath, `ejecutable del puerto ${port.port}`) : undefined,
@@ -287,7 +326,7 @@ export function assertR0Isolation(phase: R0Phase = 'before-00a'): R0Evidence | D
   };
   const failures = validateR0Evidence(evidence);
   if (failures.length) throw new Error(`R0: instalación ${target} no verificada: ${failures.join('; ')}`);
-  if (target === 'installed') console.warn('R0 installed: puertos disponibles; no se verifican dueños, ancestros ni ubicación de D1');
+  if (target === 'installed') console.warn('R0 installed: Backend y D1 verificados; los otros puertos sólo se comprueban como disponibles');
   return evidence;
 }
 

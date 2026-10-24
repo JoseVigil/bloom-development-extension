@@ -23,20 +23,19 @@ import {
 const DISCOVERY_URL = /chrome-extension:\/\/[^/]+\/discovery\/index\.html/;
 const SIMULATOR_URL = /chrome-extension:\/\/[^/]+\/synapse-simulator\/index\.html/;
 const IS_DARWIN = process.platform === 'darwin';
-function requiredDarwinEnv(name: string): string {
+function requiredIsolatedEnv(name: string): string {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`[onboarding-simulator] Darwin exige ${name}`);
+  if (!value) throw new Error(`[onboarding-simulator] entorno aislado exige ${name}`);
   return value;
 }
-// Darwin: workspace, organización y proyecto vienen sólo del entorno de prueba
-// (R0 verifica que estén bajo el home del usuario de prueba). Windows usa el
-// workspace canónico C:\repos\elias-repos; Linux conserva su ruta local.
-const WORKSPACE_ORG = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_ORG') : 'elias-repos';
-const WORKSPACE_PATH = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_WORKSPACE_PATH') :
-  (process.platform === 'win32' ? 'C:\\repos\\elias-repos' : join(homedir(), 'repos', 'elias-repos'));
+// Windows y Darwin usan rutas explícitas verificadas por R0 antes de 00a.
+const WORKSPACE_ORG = IS_DARWIN || process.platform === 'win32'
+  ? requiredIsolatedEnv('SYNAPSE_TEST_WORKSPACE_ORG') : 'elias-repos';
+const WORKSPACE_PATH = IS_DARWIN || process.platform === 'win32'
+  ? requiredIsolatedEnv('SYNAPSE_TEST_WORKSPACE_PATH') : join(homedir(), 'repos', 'elias-repos');
 const WORKSPACE_BASE = dirname(WORKSPACE_PATH);
 const NUCLEUS_MARKER = `.nucleus-${WORKSPACE_ORG}`;
-const PROJECT_SOURCE = IS_DARWIN ? requiredDarwinEnv('SYNAPSE_TEST_PROJECT_SOURCE') : (process.env.SYNAPSE_TEST_PROJECT_SOURCE || (
+const PROJECT_SOURCE = IS_DARWIN ? requiredIsolatedEnv('SYNAPSE_TEST_PROJECT_SOURCE') : (process.env.SYNAPSE_TEST_PROJECT_SOURCE || (
   process.platform === 'win32' ? 'C:\\TEMP\\TMP\\sample_project' : '/srv/share/sample_project'
 ));
 const PROJECT_PATH = join(WORKSPACE_PATH, 'sample_project');
@@ -144,8 +143,13 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
   let phase0RegistrationId: string | undefined;
   let phase0Registration: Awaited<ReturnType<typeof finishPhase0FixtureRegistration>> | undefined;
   let phase0FixtureSubject: string | undefined;
+  let resumeBrowserSecret: string | undefined;
   let githubFixtureUsername: string | undefined;
   let previousLaunchId: string | undefined;
+  let resumeGoogleComplete = false;
+  let resumeAiProviderComplete = false;
+  let resumeCompletionOnly = false;
+  let resumeNeedsLaunch = false;
   const verifyOrganizationIdentity = (stage: string, expectedCompleted: boolean) => {
     const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
       onboarding?: { completed?: boolean; backend_identity_org_id?: string; active_org_slug?: string;
@@ -184,52 +188,156 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
     if (IS_DARWIN && resumeCurrent) {
       throw new Error('[onboarding-simulator] SYNAPSE_RESUME_CURRENT no está habilitado en Darwin');
     }
-    if (IS_DARWIN) {
+    if (IS_DARWIN || process.platform === 'win32') {
       await synapseRunner.runStep('r0_before_00a', undefined, async () => {
-        const evidence = assertR0Isolation('before-00a') as DarwinR0Evidence;
-        console.log(`[synapse-simulator] R0 before-00a: ${JSON.stringify(summarizeDarwinR0Evidence(evidence))}`);
+        const evidence = assertR0Isolation('before-00a');
+        console.log(`[synapse-simulator] R0 before-00a: ${JSON.stringify(IS_DARWIN ? summarizeDarwinR0Evidence(evidence as DarwinR0Evidence) : { target: evidence.target, phase: evidence.phase, runnerBase: evidence.runnerBase, workspacePath: evidence.workspacePath, workspaceOrg: evidence.workspaceOrg, backendOrigin: evidence.backendOrigin })}`);
       });
     }
     if (resumeCurrent) {
       await synapseRunner.runStep('resume_state', undefined, async () => {
         const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
-          onboarding?: { completed?: boolean; current_step?: string; completed_steps?: string[];
+          onboarding?: { completed?: boolean; current_step?: string; completed_steps?: string[]; ai_provider_key?: unknown;
             organizations?: Array<{ org_slug: string; workspace_path: string }> };
         };
         expect(data.onboarding?.completed).not.toBe(true);
-        expect(data.onboarding?.current_step).toBe('google_auth');
+        expect(data.onboarding?.current_step).toMatch(/^(github_app_auth|google_auth|ai_provider_setup|success)$/);
         for (const step of ['backend_identity_check', 'nucleus_create', 'github_app_auth', 'vault_init']) {
           expect(data.onboarding?.completed_steps).toContain(step);
         }
+        resumeGoogleComplete = data.onboarding?.completed_steps?.includes('google_auth') === true;
+        resumeAiProviderComplete = data.onboarding?.completed_steps?.includes('ai_provider_setup') === true;
+        resumeCompletionOnly = data.onboarding?.completed_steps?.includes('mandate_genesis') === true;
+        if (resumeAiProviderComplete) {
+          expect(resumeGoogleComplete, 'Gemini requiere Google completo').toBe(true);
+          expect(data.onboarding?.ai_provider_key, 'falta el marcador durable de Gemini').toBe(true);
+        }
+        const inventory = JSON.parse(readFileSync(getBloomPaths().profilesJson, 'utf-8')) as {
+          profiles?: Array<{ id?: string; runtime_state?: { status?: string; handshake_confirmed?: boolean } }>;
+        };
+        const master = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as { master_profile?: string };
+        const profile = inventory.profiles?.find(item => item.id === master.master_profile);
+        if (!profile) throw new Error('[onboarding-simulator] Perfil maestro ausente al reanudar');
+        resumeNeedsLaunch = profile.runtime_state?.status !== 'open' || profile.runtime_state.handshake_confirmed !== true;
         expect(data.onboarding?.organizations?.find(org => org.org_slug === WORKSPACE_ORG)?.workspace_path).toBe(WORKSPACE_PATH);
         expect(existsSync(join(WORKSPACE_PATH, '.bloom', NUCLEUS_MARKER))).toBe(true);
-        expect(existsSync(PROJECT_PATH)).toBe(false);
-        console.log(`[synapse-simulator] Reanudando estado real en google_auth; Nucleus=${WORKSPACE_PATH}`);
+        expect(existsSync(PROJECT_PATH)).toBe(resumeCompletionOnly);
+        if (resumeCompletionOnly) {
+          expect(data.onboarding?.current_step).toBe('success');
+          expect(data.onboarding?.completed_steps).toContain('project_select');
+          expect(resumeAiProviderComplete).toBe(true);
+        }
+        console.log(`[synapse-simulator] Reanudando estado real en ${data.onboarding?.current_step}; perfil ${resumeNeedsLaunch ? 'cerrado, se lanzará por UI' : 'abierto'}; Nucleus=${WORKSPACE_PATH}`);
       });
-      conductor = await launchConductor();
+      await synapseRunner.runStep('resume_founder_session', undefined, async () => {
+        const subject = process.env.SYNAPSE_FIXTURE_SUBJECT?.trim();
+        if (!subject || !new RegExp(`^runner:${WORKSPACE_ORG}:[0-9a-f-]{36}$`, 'i').test(subject)) {
+          throw new Error('[onboarding-simulator] Reanudación exige el subject original de elias-repos');
+        }
+        const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+          onboarding?: { active_org_slug?: string; backend_identity_org_id?: string;
+            organizations?: Array<{ org_slug?: string; organization_id?: string }> };
+        };
+        const organizations = data.onboarding?.organizations?.filter(org => org.org_slug === WORKSPACE_ORG) ?? [];
+        expect(data.onboarding?.active_org_slug).toBe(WORKSPACE_ORG);
+        expect(organizations).toHaveLength(1);
+        expect(organizations[0].organization_id).toBe(data.onboarding?.backend_identity_org_id);
+        const flow = await beginPhase0FixtureRegistration(env.backendOrigin);
+        const registration = await finishPhase0FixtureRegistration(env.backendOrigin, flow, subject);
+        expect(registration.created, 'la reautenticación no debe crear otra organización').toBe(false);
+        expect(registration.organizationId).toBe(organizations[0].organization_id);
+        phase0FixtureSubject = subject;
+        resumeBrowserSecret = flow.browser;
+        phase0Registration = registration;
+        phase0RegistrationId = registration.organizationId;
+        verifyOrganizationIdentity('reanudación', false);
+        console.log(`[synapse-simulator] Sesión recuperada para organización existente ${registration.organizationId}; created=false`);
+      });
+      conductor = await launchConductor({ browser: resumeBrowserSecret!, backendOrigin: env.backendOrigin });
       await installMilestoneBuffer(conductor.mainWindow);
-      await conductor.mainWindow.locator('#screen-identity.active').waitFor({ state: 'visible' });
+        await conductor.mainWindow.locator(resumeCompletionOnly ? '#screen-milestone.active'
+          : resumeAiProviderComplete ? '#screen-project.active' : '#screen-identity.active')
+          .waitFor({ state: 'visible' });
+      await synapseRunner.runStep('r0_after_conductor', undefined, async () => {
+        assertR0Isolation('after-conductor');
+      });
+      if (resumeCompletionOnly) {
+        await synapseRunner.runStep('retry_completion', undefined, async () => {
+          const renewal = await fetch(`${env.backendOrigin}/v1/authority/initial-emission`, {
+            method: 'POST',
+            headers: { Origin: env.backendOrigin, 'Content-Type': 'application/json',
+              Cookie: phase0Registration!.sessionCookie, 'X-Authority-CSRF': phase0Registration!.csrf },
+            body: JSON.stringify({ organizationId: phase0RegistrationId }),
+          });
+          const result = await renewal.json() as { status?: string; error?: string; authorityVersion?: string };
+          if (renewal.status === 409) expect(result.error).toBe('authority_initial_emission_already_exists');
+          else {
+            expect(renewal.ok, `renovación del snapshot: HTTP ${renewal.status} ${JSON.stringify(result)}`).toBe(true);
+            expect(result.status).toBe('renewed');
+          }
+          console.log(`[synapse-simulator] Snapshot previo al reintento de cierre: ${result.status || result.error}, versión=${result.authorityVersion || 'vigente'}`);
+          verifyOrganizationIdentity('antes de reintentar cierre', false);
+          await conductor!.mainWindow.click('#enter-btn');
+          await expect.poll(() => {
+            const state = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+              onboarding?: { completed?: boolean };
+            };
+            return state.onboarding?.completed;
+          }, { timeout: 30_000 }).toBe(true);
+          const authorityState = JSON.parse(readFileSync(join(getBloomPaths().baseDir, 'authority', 'state.json'), 'utf-8')) as {
+            emission?: { organization_id?: string; expires_at?: string };
+          };
+          expect(authorityState.emission?.organization_id).toBe(phase0RegistrationId);
+          expect(Date.parse(authorityState.emission?.expires_at || ''), 'el cierre debe aceptar un snapshot vigente').toBeGreaterThan(Date.now());
+          verifyOrganizationIdentity('reintento de onboarding finalizado', true);
+        });
+        return;
+      }
     } else {
       previousLaunchId = await synapseRunner.runStep('profile_closed_before_00a', undefined, waitForProfileClosed);
       const configuredFixtureSubject = process.env.SYNAPSE_FIXTURE_SUBJECT;
       if (configuredFixtureSubject !== undefined && !configuredFixtureSubject.trim()) {
         throw new Error('[onboarding-simulator] SYNAPSE_FIXTURE_SUBJECT no puede estar vacío');
       }
-      phase0FixtureSubject = configuredFixtureSubject?.trim() ?? randomUUID();
+      const freshWindows = process.platform === 'win32';
+      const isolatedWindows = freshWindows && (process.env.SYNAPSE_R0_TARGET || 'isolated') === 'isolated';
+      if (freshWindows && configuredFixtureSubject !== undefined) {
+        throw new Error('[onboarding-simulator] la corrida Windows de elias-repos exige un subject nuevo; no admite SYNAPSE_FIXTURE_SUBJECT');
+      }
+      phase0FixtureSubject = freshWindows
+        ? `runner:${WORKSPACE_ORG}:${randomUUID()}`
+        : configuredFixtureSubject?.trim() ?? randomUUID();
+      if (freshWindows) {
+        expect(WORKSPACE_ORG).toBe('elias-repos');
+        expect(WORKSPACE_PATH).toBe(isolatedWindows
+          ? join(getBloomPaths().baseDir, 'workspaces', 'elias-repos') : 'C:\\repos\\elias-repos');
+        console.log(`[synapse-simulator] Antes de 00a: organización Backend prevista=${WORKSPACE_ORG}, workspace=${WORKSPACE_PATH}, subject nuevo con UUID`);
+      }
       const flow = await synapseRunner.runStep('00a', undefined, () =>
         beginPhase0FixtureRegistration(env.backendOrigin));
       const registration = await synapseRunner.runStep('00b', undefined, () =>
         finishPhase0FixtureRegistration(env.backendOrigin, flow, phase0FixtureSubject!));
       console.log(`[synapse-simulator] 00b organizationId=${registration.organizationId}, created=${registration.created}`);
+      if (freshWindows) {
+        expect(registration.created, '00b debe crear una organización nueva para elias-repos').toBe(true);
+        const list = await fetch(`${env.backendOrigin}/v1/authority/tenant/organizations?organizationId=${encodeURIComponent(registration.organizationId)}`, {
+          headers: { Cookie: registration.sessionCookie },
+        });
+        expect(list.status, 'No se pudo verificar el nombre de la organización del Backend').toBe(200);
+        const body = await list.json() as { organizations?: Array<{ id: string; name: string }> };
+        expect(body.organizations?.filter(org => org.id === registration.organizationId))
+          .toMatchObject([{ id: registration.organizationId, name: WORKSPACE_ORG }]);
+        console.log(`[synapse-simulator] Backend confirmó organización nueva ${WORKSPACE_ORG}=${registration.organizationId}`);
+      }
       phase0RegistrationId = registration.organizationId;
       phase0Registration = registration;
       resetOnboardingState();
       conductor = await launchConductor({ browser: flow.browser, backendOrigin: env.backendOrigin });
       await installMilestoneBuffer(conductor.mainWindow);
-      if (IS_DARWIN) {
+      if (IS_DARWIN || process.platform === 'win32') {
         await synapseRunner.runStep('r0_after_conductor', undefined, async () => {
-          const evidence = assertR0Isolation('after-conductor') as DarwinR0Evidence;
-          console.log(`[synapse-simulator] R0 after-conductor: ${JSON.stringify(summarizeDarwinR0Evidence(evidence))}`);
+          const evidence = assertR0Isolation('after-conductor');
+          console.log(`[synapse-simulator] R0 after-conductor: ${JSON.stringify(IS_DARWIN ? summarizeDarwinR0Evidence(evidence as DarwinR0Evidence) : { target: evidence.target, phase: evidence.phase, runnerBase: evidence.runnerBase, workspacePath: evidence.workspacePath, workspaceOrg: evidence.workspaceOrg, backendOrigin: evidence.backendOrigin })}`);
         });
       }
 
@@ -268,10 +376,11 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       });
     }
 
+    if (!resumeAiProviderComplete) {
     const pages = await synapseRunner.runStep('profile_and_simulator', undefined, async () => {
       const launchStartedAt = Date.now();
       let resumeEndpoint: string | undefined;
-      if (!resumeCurrent) {
+      if (!resumeCurrent || resumeNeedsLaunch) {
         await conductor!.mainWindow.click('#btn-continue-identity');
         const launchUi = await conductor!.mainWindow.waitForFunction(() => {
           const poll = document.getElementById('identity-poll-status');
@@ -306,13 +415,13 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       discovery = await connectToDiscovery(endpoint, DISCOVERY_URL);
       const firstSimulator = await findSynapseSimulator(discovery.browser);
       const nucleus = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as { master_profile?: string };
-      const recordedLaunch = resumeCurrent ? undefined :
+      const recordedLaunch = resumeCurrent && !resumeNeedsLaunch ? undefined :
         (JSON.parse(readFileSync(getBloomPaths().profilesJson, 'utf-8')) as {
           profiles?: Array<{ id: string; last_launch_id?: string }>;
         }).profiles?.find(profile => profile.id === nucleus.master_profile)?.last_launch_id;
       const configFile = join(getBloomPaths().profilesDir, String(nucleus.master_profile), 'extension', 'discovery.synapse.config.js');
       const extensionLaunch = readFileSync(configFile, 'utf-8').match(/"launchId":\s*"([^"]+)"/)?.[1];
-      const expectedLaunch = resumeCurrent ? extensionLaunch : recordedLaunch;
+      const expectedLaunch = resumeCurrent && !resumeNeedsLaunch ? extensionLaunch : recordedLaunch;
       expect(expectedLaunch, 'profiles.json debe registrar el lanzamiento nuevo').toBeTruthy();
       if (!resumeCurrent) expect(expectedLaunch, 'el lanzamiento debe ser nuevo').not.toBe(previousLaunchId);
       if (resumeCurrent) {
@@ -360,6 +469,10 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       expect(identityPreview.profile_id).toBe(nucleus.master_profile);
       expect(identityPreview.launch_id).toBe(expectedLaunch);
       expect(String(identityPreview.launch_id)).not.toMatch(/^(?:undefined|null|\(not available\)|)$/);
+      if (resumeCurrent) {
+        expect(identityPreview.username).toMatch(/^[-A-Za-z0-9_]{1,39}$/);
+        githubFixtureUsername = String(identityPreview.username);
+      }
       console.log(`[synapse-simulator] pestaña viva y autos resueltos: profile_id=${identityPreview.profile_id}, launch_id=${identityPreview.launch_id}`);
       return { simulator, discoveryPage: currentDiscovery.page };
     });
@@ -385,7 +498,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await conductor!.mainWindow.locator('#screen-vault.active').waitFor({ state: 'visible' });
       await conductor!.mainWindow.click('#btn-continue-vault');
       });
-
+    }
       await synapseRunner.runStep('gemini_authority_grant', undefined, async () => {
         const registration = phase0Registration!;
         const prepared = await conductor!.mainWindow.evaluate(() =>
@@ -499,9 +612,8 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         expect(secondSync.authorityVersion).toBe(issued.authorityVersion);
         console.log(`[synapse-simulator] Gemini grant=${issued.grantId}, authority version=${secondSync.authorityVersion}, mode=${secondSync.effectiveMode}`);
       });
-    }
 
-    await synapseRunner.runStep('sim_google', undefined, async () => {
+    if (!resumeGoogleComplete) await synapseRunner.runStep('sim_google', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'google_auth' });
       await pages.discoveryPage.locator('#screen-google-auth-login.active').waitFor({ state: 'visible' });
       await bringToFrontOnDarwin(pages.discoveryPage);
@@ -527,6 +639,15 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await expect(conductor!.mainWindow.locator('#supply-choice-status')).toContainText('Gemini, modelo de frontera, seleccionado');
       await conductor!.mainWindow.click('#btn-continue-identity');
     });
+    if (resumeGoogleComplete) await synapseRunner.runStep('resume_gemini_ui', undefined, async () => {
+      const button = conductor!.mainWindow.locator('#btn-continue-identity');
+      await expect(conductor!.mainWindow.locator('#screen-identity.active')).toBeVisible();
+      await expect(conductor!.mainWindow.locator('input[name="intelligence-supply"][value="gemini"]')).toBeChecked();
+      if (await button.isEnabled() && (await button.innerText()).trim() === 'Validate') {
+        await button.click();
+      }
+      console.log('[synapse-simulator] Google ya estaba confirmado; continúa Gemini sobre el perfil vivo');
+    });
 
     await synapseRunner.runStep('sim_ai_provider', undefined, async () => {
       await sendDiscoveryMessage(pages.simulator, 'onboarding_navigate', { step: 'ai_provider_setup' });
@@ -549,13 +670,11 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       await waitForMilestone(conductor!.mainWindow, 'ai_provider_setup');
       await pages.discoveryPage.locator('#screen-api-success.active').waitFor({ state: 'visible', timeout: 30_000 });
       console.log(`[synapse-simulator] Nucleus Vault confirmó key_id=${receipt!.key_id}, grant_id=${receipt!.grant_id}; Conductor confirmó ai_provider_setup; Discovery mostró éxito`);
-      if (!resumeCurrent) {
-        const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
-          onboarding?: { ai_provider_key?: unknown };
-        };
-        // The reactor persists a boolean completion marker; the credential lives in Nucleus Vault.
-        expect(data.onboarding?.ai_provider_key).toBe(true);
-      }
+      const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
+        onboarding?: { ai_provider_key?: unknown };
+      };
+      // The reactor persists a boolean completion marker; the credential lives in Nucleus Vault.
+      expect(data.onboarding?.ai_provider_key).toBe(true);
     });
 
     await synapseRunner.runStep('sim_completion', undefined, async () => {
@@ -568,9 +687,16 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       expect(complete).toBe(true);
       await sendDiscoveryMessage(pages.simulator, 'discovery_complete');
     });
+    } else {
+      await synapseRunner.runStep('resume_project_ready', undefined, async () => {
+        await conductor!.mainWindow.locator('#screen-project.active').waitFor({ state: 'visible' });
+        verifyOrganizationIdentity('antes de Project', false);
+        console.log('[synapse-simulator] Reanudación: Gemini durable completo; Conductor abrió Project sin repetir Synapse');
+      });
+    }
 
     await synapseRunner.runStep('project_select_and_genesis', undefined, async () => {
-      await conductor!.mainWindow.click('#btn-continue-identity');
+      if (!resumeAiProviderComplete) await conductor!.mainWindow.click('#btn-continue-identity');
       await conductor!.mainWindow.locator('#screen-project.active').waitFor({ state: 'visible' });
       expect(existsSync(PROJECT_SOURCE)).toBe(true);
       const projectExistedBefore = existsSync(PROJECT_PATH);
@@ -623,11 +749,28 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       expect(selectedProject?.project_path).toBe(PROJECT_PATH);
       expect(selectedProject?.genesis_launch_required, 'onboarding no escribe un flag de lanzamiento de Genesis').toBeUndefined();
       expect(selected.onboarding?.active_project_id).toBe(selectedProject?.project_id);
-      if (!resumeCurrent) verifyOrganizationIdentity('antes de finalizar', false);
+      verifyOrganizationIdentity('antes de finalizar', false);
       await conductor!.mainWindow.click('#btn-project-continue');
       await conductor!.mainWindow.locator('#screen-mandate.active').waitFor({ state: 'visible' });
       await conductor!.mainWindow.click('#btn-mandate-continue');
       await conductor!.mainWindow.locator('#screen-milestone.active').waitFor({ state: 'visible' });
+      // El fixture firma snapshots de corta vigencia. Renovar únicamente vía
+      // Backend antes del cierre; onboarding:complete debe ejecutar su propio
+      // authority sync y rechazar un resultado fallido.
+      const renewal = await fetch(`${env.backendOrigin}/v1/authority/initial-emission`, {
+        method: 'POST',
+        headers: { Origin: env.backendOrigin, 'Content-Type': 'application/json',
+          Cookie: phase0Registration!.sessionCookie, 'X-Authority-CSRF': phase0Registration!.csrf },
+        body: JSON.stringify({ organizationId: phase0RegistrationId }),
+      });
+      const renewalResult = await renewal.json() as { status?: string; error?: string; authorityVersion?: string };
+      if (renewal.status === 409) {
+        expect(renewalResult.error).toBe('authority_initial_emission_already_exists');
+      } else {
+        expect(renewal.ok, `renovación del snapshot: HTTP ${renewal.status} ${JSON.stringify(renewalResult)}`).toBe(true);
+        expect(renewalResult.status).toBe('renewed');
+      }
+      console.log(`[synapse-simulator] Snapshot previo al cierre: ${renewalResult.status || renewalResult.error}, versión=${renewalResult.authorityVersion || 'vigente'}`);
       await conductor!.mainWindow.click('#enter-btn');
       await expect.poll(() => {
         const data = JSON.parse(readFileSync(getBloomPaths().nucleusJson, 'utf-8')) as {
@@ -639,7 +782,12 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         onboarding?: { pending_genesis_launch?: unknown };
       };
       expect(completedState.onboarding?.pending_genesis_launch, 'cerrar onboarding no deja un lanzamiento de Genesis pendiente').toBeUndefined();
-      if (!resumeCurrent) verifyOrganizationIdentity('onboarding finalizado', true);
+      const authorityState = JSON.parse(readFileSync(join(getBloomPaths().baseDir, 'authority', 'state.json'), 'utf-8')) as {
+        emission?: { organization_id?: string; expires_at?: string };
+      };
+      expect(authorityState.emission?.organization_id).toBe(phase0RegistrationId);
+      expect(Date.parse(authorityState.emission?.expires_at || ''), 'el cierre debe aceptar un snapshot vigente').toBeGreaterThan(Date.now());
+      verifyOrganizationIdentity('onboarding finalizado', true);
     });
   } finally {
     await discovery?.close();

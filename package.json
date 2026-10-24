@@ -533,7 +533,7 @@
     "installer:build": "cd installer/electron-app && npm run build",
     "installer:check-admin": "cd installer/electron-app && npm run check-admin",
     "package:installer": "npm run build:bridge:all && node installer/scripts/build.js",
-    "package:vscode": "vsce package --out installer/vscode/bloom-extension.vsix",
+    "package:vscode": "node scripts/package-vsix.js",
     "package:all": "npm run package:vscode && npm run package",
     "test:python-install": "python -m core verify"
   },

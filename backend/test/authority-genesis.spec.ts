@@ -7,6 +7,7 @@ import { beginGenesis, finishGenesis } from "../src/authority/genesis-store";
 import { beginHumanLogin, finishHumanLogin, initialHumanIdentity, resolveHumanSession, type HumanServices } from "../src/authority/human-session-store";
 import { authorityHumanResponse, type HumanRouteServices } from "../src/authority/administration-route";
 import { createInitialAuthorityEmission, initialEmissionGuardStatement } from "../src/authority/initial-emission";
+import { testFixtureProvider } from "../src/authority/human-identity";
 
 let db: D1Database, mf: Miniflare, temp: string, privateKey: ArrayBuffer;
 const now = "2026-09-13T12:00:00Z";
@@ -43,13 +44,24 @@ beforeAll(async () => {
     master_github_username TEXT NOT NULL, key_fingerprint TEXT NOT NULL, created_at INTEGER NOT NULL)`).run();
   await loadMigrations(["0001_authority_snapshot.sql", "0002_authority_security.sql", "0004_authority_emissions.sql",
     "0005_authority_administration.sql", "0006_authority_human_identity.sql", "0009_authority_role_definition_status.sql",
-    "0010_authority_initial_emission_guard.sql", "0013_authority_genesis.sql", "0015_tenants.sql", "0019_authority_master_create_project.sql"]);
+    "0010_authority_initial_emission_guard.sql", "0013_authority_genesis.sql", "0015_tenants.sql", "0017_authority_genesis_result.sql",
+    "0019_authority_master_create_project.sql"]);
   const pair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
   privateKey = await crypto.subtle.exportKey("pkcs8", pair.privateKey) as ArrayBuffer;
 }, 60000);
 afterAll(async () => { await mf?.dispose(); if (temp) rmSync(temp, { recursive: true, force: true }); }, 30000);
 
 describe("Génesis / Primer Registro", () => {
+  it("Runner creates a new elias-repos organization with its own unique subject", async () => {
+    const subject = "runner:elias-repos:6c968ef1-42ae-4efc-b611-a255716cd82f";
+    const result = await genesisLogin(subject, { ...services, provider: testFixtureProvider() });
+    expect(result.created).toBe(true);
+    const org = await db.prepare("SELECT id,name FROM organizations WHERE id=?").bind(result.organizationId).first<{id:string;name:string}>();
+    expect(org).toEqual({ id: result.organizationId, name: "elias-repos" });
+    const anchor = await db.prepare("SELECT subject FROM authority_genesis_registry WHERE organization_id=?")
+      .bind(result.organizationId).first<{subject:string}>();
+    expect(anchor?.subject).toBe(subject);
+  });
   it("(a) creates organization + canonical identity + registry anchor for a new subject", async () => {
     const result = await genesisLogin("alice");
     expect(result.created).toBe(true);

@@ -142,12 +142,12 @@ export function getMasterProfileExtensionPath(paths: BloomPaths = getBloomPaths(
  * onboarding desde cero, antes de `launchConductor()`.
  */
 export function resetOnboardingState(paths: BloomPaths = getBloomPaths()): void {
-  // Darwin: escritura destructiva del wizard sólo con el entorno de prueba
+  // Windows/Darwin: escritura destructiva del wizard sólo con el entorno de prueba
   // demostrado (usuario macOS de prueba, instalación, Keychain, workspace,
   // Backend y puertos). Lanza antes de leer o escribir nucleus.json.
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' || process.platform === 'win32') {
     const evidence = assertR0Isolation('before-00a');
-    if (!('platform' in evidence) || resolve(paths.nucleusJson) !== join(evidence.runnerBase, 'config', 'nucleus.json')) {
+    if (resolve(paths.nucleusJson).toLowerCase() !== join(evidence.runnerBase, 'config', 'nucleus.json').toLowerCase()) {
       throw new Error('R0: nucleus.json a resetear no pertenece a la instalación de prueba verificada');
     }
   }

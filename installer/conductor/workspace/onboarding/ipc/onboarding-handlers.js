@@ -201,21 +201,35 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       const profileId = nucleusData.master_profile;
       if (!profileId) throw new Error('master_profile not found');
 
-      // Detectar si el perfil ya tiene una sesión activa en profiles.json.
-      // Si status === 'open' y handshake_confirmed, el pre-flight de nucleus
-      // detecta la sesión existente y devuelve success:false. En ese caso
-      // usamos --skip-preflight para hacer re-attach a la sesión corriendo.
-      let skipPreflight = false;
+      // Reusar la sesión confirmada sin volver a ejecutar synapse launch: ese
+      // comando puede abrir pestañas Discovery duplicadas durante un resume.
       try {
         const profilesPath = path.join(path.dirname(NUCLEUS_JSON), 'profiles.json');
         const profilesData = JSON.parse(fs.readFileSync(profilesPath, 'utf8'));
         const profile = (profilesData.profiles || []).find(p => p.id === profileId);
         if (profile?.runtime_state?.status === 'open' && profile?.runtime_state?.handshake_confirmed) {
-          skipPreflight = true;
-          log.info('[IPC] onboarding:launch-discovery — session already open, using --skip-preflight');
+          const profileDir = fs.realpathSync(profile.path);
+          const profilesRoot = fs.realpathSync(path.join(path.dirname(NUCLEUS_JSON), '..', 'profiles'));
+          if (path.dirname(profileDir).toLowerCase() !== profilesRoot.toLowerCase()) {
+            throw new Error('active_profile_path_invalid');
+          }
+          const port = Number.parseInt(fs.readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf8').split(/\r?\n/, 1)[0], 10);
+          if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('active_profile_cdp_port_invalid');
+          await new Promise((resolve, reject) => {
+            const request = http.get(`http://127.0.0.1:${port}/json/version`, { timeout: 2000 }, response => {
+              response.resume();
+              response.statusCode === 200 ? resolve() : reject(new Error('active_profile_cdp_unreachable'));
+            });
+            request.on('timeout', () => request.destroy(new Error('active_profile_cdp_unreachable')));
+            request.on('error', () => reject(new Error('active_profile_cdp_unreachable')));
+          });
+          log.info('[IPC] onboarding:launch-discovery — sesión activa y CDP confirmados; se reutiliza el perfil');
+          return { success: true, profileId, reused: true };
         }
       } catch (e) {
-        log.warn('[IPC] onboarding:launch-discovery — could not read profiles.json:', e.message);
+        const error = safeLaunchError(e.message);
+        log.error('[IPC] onboarding:launch-discovery — sesión activa no verificable:', error);
+        return { success: false, profileId, error };
       }
 
       const args = [
@@ -226,7 +240,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
         '--override-service',   'github',
         '--override-step',      'github_app_auth',
       ];
-      if (skipPreflight) args.push('--skip-preflight');
       if (email) args.push('--override-email', email);
 
       const result = await execNucleus(args, 30000);
@@ -1051,6 +1064,9 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       log.info('[IPC] onboarding:complete — ejecutando nucleus --json authority sync');
       const authoritySync = await execNucleus(['--json', 'authority', 'sync'], 30_000);
       log.info('[IPC] onboarding:complete — authority sync respondió:', JSON.stringify(authoritySync));
+      if (authoritySync?.ok !== true) {
+        throw new Error(`authority_sync_failed:${safeLaunchError(authoritySync?.evidence?.sync_error || authoritySync?.error_code || 'unknown')}`);
+      }
 
       nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       migrateToNestedSchema(nucleusData.onboarding);
