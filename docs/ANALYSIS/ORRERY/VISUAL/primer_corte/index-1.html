@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orrery · corte espacial 01</title>
+<!--
+  Orrery — CORTE ESPACIAL 01 · exploración de renderización espacial
+  Ubicación propuesta: docs/ANALYSIS/ORRERY/VISUAL/corte_espacial_01/index.html
+
+  NO ES DISEÑO APROBADO, NI Visual Architecture, NI Interaction Grammar, NI código de Workspace Core.
+  Parte de la escena gris (VISUAL/escena_gris), que no se modifica (DJ-I3). Datos sintéticos con semilla fija.
+  No usa OrreryTree, data.ts ni código de installer/ (D-4). PlayCanvas 2.22.1 por CDN (versión del prototipo).
+
+  Qué toma de cada fuente
+    NORMA     D-2 (Espacio a escenario completo; Superficie como capa colapsable; modo foco con HUD) ·
+              Vocab §2.10 + DJ-8 (el Foco orienta la cámara) · EM §4.1/§4.4/§4.5 (indicación efímera, contenido
+              exacto, sin actos) · C-6/C-8 (sólo Territorio + Anotaciones adheridas) · DJ-7/DJ-I6 (cobertura) ·
+              EM §4.7 (contención y extensión; nada sólo en 3D → vista plana equivalente) · Gene v3.0 (Gene dentro
+              de un Project; Domain↔Gene N:M; sin cruce de Projects)
+    RESEARCH  CB §7.2 canales C1..C13 y reserva RI-1..RI-5 · CB §8 tope 2 + O-1 · CB §10 modos de cobertura ·
+              DJ-CR1 (contención sólo árboles) · DJ-CR3 (sin movimiento en reposo) · DJ-CR4 (paleta actual) ·
+              DP-c (acento no se usa para interacción) · MR G-1..G-10, NM-11/NM-13, DJ-I9 (m1 / m3)
+    HIPÓTESIS H-1 suelo + horizonte + perspectiva atmosférica como marco de referencia ·
+              H-2 Entidades como volúmenes asentados (huella estable, sombra de contacto) ·
+              H-3 banda de elevación con horizonte visible y contención legible ·
+              H-4 Foco y Anchor como anillos sobre el suelo · H-5 Relación N:M revelada sólo para el Foco
+
+  Parámetros de URL
+    T=T1|T2|T3   el=<elevación inicial°>   minEl=<elevación mínima°> (minEl=30 reproduce CA-2)   cam=m3|m1
+    foc=<id>  anchor=<id>  ind=<id>  view=top (vista plana)  sup=0 (Superficie colapsada)  modo=foco
+    lenses=P-W1,P-G2,P-A1
+-->
+<script src="https://cdn.jsdelivr.net/npm/playcanvas@2.22.1/build/playcanvas.min.js"></script>
+<style>
+  :root{
+    --color-bg:#080A0E; --color-surface:#0D1117; --color-surface-hover:#131820;
+    --color-text-primary:#E8EAF0; --color-text-secondary:rgba(232,234,240,.45); --color-text-dim:rgba(232,234,240,.22);
+    --color-border:rgba(255,255,255,.06); --color-border-active:rgba(255,255,255,.18);
+    --font-display:'Syne',system-ui,sans-serif; --font-mono:'DM Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--color-bg);color:var(--color-text-primary);font:12px/1.45 var(--font-mono)}
+  /* D-2: el Espacio ocupa el escenario completo; nada lo redimensiona */
+  #c{position:fixed;inset:0;width:100vw;height:100vh;display:block;outline:none}
+  #labels,#interact{position:fixed;inset:0;pointer-events:none}
+  /* Capa O: HUD de orientación, siempre presente (también en modo foco) */
+  #hud{position:fixed;left:0;right:0;top:0;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline;padding:8px 14px;
+       background:linear-gradient(var(--color-bg),rgba(8,10,14,.82));border-bottom:1px solid var(--color-border);pointer-events:auto}
+  #hud .k{color:var(--color-text-dim);margin-right:6px}
+  #hud .sim{border:1px solid var(--color-border-active);padding:1px 6px;letter-spacing:.08em;color:var(--color-text-secondary)}
+  #hud .lens{color:var(--color-text-secondary)} #hud .lens b{color:var(--color-text-primary);font-weight:normal}
+  #hud .warn{color:var(--color-text-primary)}
+  /* Superficie: capa persistente y colapsable sobre el escenario */
+  #surf{position:fixed;right:12px;top:64px;bottom:44px;width:320px;overflow:auto;padding:10px 12px;background:rgba(13,17,23,.92);
+        border:1px solid var(--color-border);pointer-events:auto}
+  #surf.collapsed{width:auto;bottom:auto;padding:6px 10px}
+  #surf.collapsed .body{display:none}
+  #surf h3{margin:12px 0 4px;font:normal 11px var(--font-mono);letter-spacing:.1em;color:var(--color-text-dim)}
+  #surf .row{padding:2px 0;border-bottom:1px solid var(--color-border)}
+  #surf .subj{font:600 16px var(--font-display);margin:4px 0 2px}
+  #surf .note{color:var(--color-text-dim)}
+  #surf button,#keys button{background:var(--color-surface);color:var(--color-text-secondary);border:1px solid var(--color-border-active);font:inherit;padding:1px 6px;cursor:pointer}
+  body.modofoco #surf{display:none}
+  #keys{position:fixed;left:14px;bottom:10px;color:var(--color-text-dim);pointer-events:auto}
+  /* etiquetas mínimas en pantalla, ancladas a puntos del mundo (R18) */
+  .lbl{position:absolute;transform:translate(-50%,0);white-space:nowrap;color:var(--color-text-secondary);font-size:11px}
+  .lbl.cont{transform:none;color:var(--color-text-dim);letter-spacing:.06em}
+  .lbl.on{color:var(--color-text-primary)}
+  /* RESERVA DE INTERACCIÓN · indicación: corchetes de esquina + etiqueta EM §4.4 (efímera, sin transición) */
+  .brk{position:absolute;border:0 solid var(--color-text-primary);width:9px;height:9px}
+  .ind-lbl{position:absolute;white-space:nowrap;padding:2px 6px;background:rgba(8,10,14,.9);border:1px solid var(--color-border-active);font-size:11px}
+  #flash{position:fixed;left:50%;top:48px;transform:translateX(-50%);padding:3px 10px;background:var(--color-surface);border:1px solid var(--color-border-active);display:none}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div id="labels"></div>
+<div id="interact"></div>
+<div id="hud"></div>
+<div id="surf"><div><button id="btnSurf" type="button">Superficie ▸</button></div><div class="body" id="surfBody"></div></div>
+<div id="keys">arrastrar: orbitar · ⇧/botón derecho: desplazar · rueda: distancia · clic/Enter: Foco · Tab: mover indicación · C: recorrer candidatos · A: anclar · ⌫: Foco anterior · U: Foco al ancestro · O/H: elevación orientación/horizonte · V: vista plana · S: Superficie · F: modo foco · 1/2/3: Lentes</div>
+<div id="flash"></div>
+<script>
+'use strict';
+// ───────────────────────── paleta (DJ-CR4): sólo tokens de Bloom; los grises se obtienen apilando los alfas de la paleta
+const hex=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
+const BG=hex('#080A0E'), SURF=hex('#0D1117'), HOVER=hex('#131820'), TXT=hex('#E8EAF0');
+const over=(top,a,base)=>base.map((b,i)=>b*(1-a)+top[i]*a);          // composición alfa
+const W1=[1,1,1];
+const css=c=>`rgb(${c.map(v=>Math.round(v*255)).join(',')})`;
+// suelo = surface; regiones anidadas = border (0.06) apilado una vez por nivel (C1: escalón de luminancia, sin bordes de línea: NM-11)
+const REGION=[over(W1,.06,SURF), over(W1,.06,over(W1,.06,SURF)), over(W1,.06,over(W1,.06,over(W1,.06,SURF)))];
+const MARK=over(TXT,.45,SURF);   // text-secondary sobre surface: cuerpo de las Entidades
+const INK=TXT;                   // text-primary: anillos, corchetes, glifos
+
+// ───────────────────────── modelo sintético ─────────────────────────
+const LENSES=[ // orden fijo por clase de Proyección (EM §5.4.3). Nombres = Proyección (A-3 abierto: no se usan "Trabajo"/"Gravity")
+  {id:'P-W1',txt:'Trabajo situado por Entidad'},
+  {id:'P-G2',txt:'Efectos de Gravity sobre Trabajo situado'},
+  {id:'P-A1',txt:'Atención clasificada por Entidad'}];
+const LENS_CAP=2; // CB §8 [HIP]: tope de Lentes con Anotaciones visibles; una Lente sin datos no ocupa lugar (decisión de José, I-5)
+const PROVTXT={verificado:'verificado',declarado:'declarado por un Mandate',propuesto:'propuesto',proyeccion:'proyección',noverif:'no verificable'};
+const SHAPE={Domain:'box',Gene:'cylinder',Repository:'hex'};
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+function buildTerritory(T){
+  const r=rng(T==='T2'?21:T==='T3'?31:11);
+  const spec = T==='T1'? {orgs:[[{dom:1,gen:0,rep:0}]]}
+             : T==='T3'? {orgs:[[{dom:2,gen:3,rep:0}]]}
+             : {orgs:[[{dom:2,gen:5,rep:1},{dom:1,gen:3,rep:0}],[{dom:3,gen:7,rep:1}]]};
+  const ents={}, order=[], nm=[], add=e=>{ents[e.id]=e;order.push(e.id);return e;};
+  const CELL=4.2, PAD=2.2, GAP=2.4;
+  add({id:'ten',tipo:'Tenant',name:'‹tenant›',prov:'verificado',fuente:'autoridad canónica (sintética)'});
+  let ox=0, orgRects=[];
+  spec.orgs.forEach((projs,o)=>{
+    const org=add({id:'org'+o,tipo:'Organization',name:'‹organización '+(o+1)+'›',parent:'ten',prov:'verificado',fuente:'autoridad canónica (sintética)'});
+    let px=ox+PAD, maxD=0, prRects=[];
+    projs.forEach((ps,p)=>{
+      const pid='p'+o+'_'+p, n=ps.dom+ps.gen+ps.rep, cols=Math.max(2,Math.ceil(Math.sqrt(n*1.4))), rows=Math.ceil(n/cols);
+      const w=cols*CELL+2*PAD, d=rows*CELL+2*PAD+1.6; // extensión proporcional al contenido (I-1)
+      const proj=add({id:pid,tipo:'Project',name:T==='T1'?'‹proyecto›':'‹proyecto '+(o+1)+'.'+(p+1)+'›',parent:org.id,prov:'verificado',fuente:'autoridad canónica (sintética)',rect:[px,PAD,px+w,PAD+d]});
+      const leaves=[];
+      for(let i=0;i<ps.dom;i++){const prov=T==='T1'||r()<.5?'declarado':(r()<.5?'verificado':'proyeccion');
+        leaves.push({id:pid+'_d'+i,tipo:'Domain',name:T==='T1'?'Domain «Identidad»':'Domain '+(i+1),parent:pid,prov,fuente:prov==='declarado'?'registro (contrato firmado)':prov==='proyeccion'?'proyección Gravity':'autoridad canónica'});}
+      for(let i=0;i<ps.gen;i++){const u=r(),prov=u<.65?'verificado':u<.8?'proyeccion':u<.9?'propuesto':'noverif';
+        leaves.push({id:pid+'_g'+i,tipo:'Gene',name:'Gene '+(i+1),parent:pid,prov,fuente:prov==='noverif'?'cache':prov==='proyeccion'?'proyección Gravity':'autoridad canónica'});}
+      for(let i=0;i<ps.rep;i++) leaves.push({id:pid+'_r'+i,tipo:'Repository',name:'Repository '+(i+1),parent:pid,prov:'noverif',fuente:'índice'});
+      leaves.forEach((e,i)=>{e.x=px+PAD+CELL*(i%cols+.5); e.z=PAD+1.6+PAD+CELL*(Math.floor(i/cols)+.5); add(e);});
+      // Relaciones Domain↔Gene ratificadas (N:M) — sólo dentro del Project (Gene v3.0 §7.1: no cruza Projects ni Organizations)
+      const doms=leaves.filter(e=>e.tipo==='Domain'), gens=leaves.filter(e=>e.tipo==='Gene');
+      if(T==='T3'){ doms[0].name='Domain «Identidad»'; doms[1].name='Domain «Acceso»'; gens[0].name='Gene «verificación de sesión»';
+        nm.push([gens[0].id,doms[0].id],[gens[0].id,doms[1].id],[gens[1].id,doms[0].id],[gens[2].id,doms[1].id]); }
+      else gens.forEach(g=>{ if(!doms.length) return; const a=doms[Math.floor(r()*doms.length)]; nm.push([g.id,a.id]);
+        if(doms.length>1&&r()<.35){ const b=doms.find(d=>d!==a); nm.push([g.id,b.id]); } });
+      prRects.push(proj.rect); px+=w+GAP; maxD=Math.max(maxD,d);
+    });
+    org.rect=[ox,0,px-GAP+PAD,maxD+2*PAD]; orgRects.push(org.rect); ox=org.rect[2]+GAP;
+  });
+  const t=ents.ten; t.rect=[-PAD,-PAD-1.6,ox-GAP+PAD,Math.max(...orgRects.map(r=>r[3]))+PAD];
+  // centrar en el origen
+  const cx=(t.rect[0]+t.rect[2])/2, cz=(t.rect[1]+t.rect[3])/2;
+  order.forEach(id=>{const e=ents[id]; if(e.rect){e.rect=[e.rect[0]-cx,e.rect[1]-cz,e.rect[2]-cx,e.rect[3]-cz];} if(e.x!==undefined){e.x-=cx;e.z-=cz;}});
+  return {ents,order,nm:dedupe(nm)};
+}
+function dedupe(a){const s=new Set();return a.filter(p=>{const k=p.join('|');return s.has(k)?false:(s.add(k),true);});}
+
+function buildLensData(T,terr){
+  const r=rng(77+T.charCodeAt(1)), L={'P-W1':new Map()}; // P-G2 y P-A1: sin Fuente en T1/T3 (activa sin datos)
+  const scope=terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo!=='Tenant'&&e.tipo!=='Organization');
+  const set=(l,id,state,weak,txt)=>{(L[l]=L[l]||new Map()).set(id,{state,weak:!!weak,txt});};
+  if(T==='T1'){ const d=scope.find(e=>e.tipo==='Domain'), p=scope.find(e=>e.tipo==='Project');
+    set('P-W1',d.id,'afirmado',false,'Mandate Genesis · completado'); set('P-W1',p.id,'ninguno',false,''); return L; }
+  scope.forEach(e=>{
+    if(r()<.85) set('P-W1',e.id,(e.tipo==='Domain'&&r()<.8)||(e.tipo==='Gene'&&r()<.3)?'afirmado':'ninguno',r()<.1,'Mandate');
+    else set('P-W1',e.id,'desconocido',false,'no evaluado');
+  });
+  if(T==='T2'){ // [HIPÓTESIS] cobertura parcial de Gravity sólo para probar legibilidad de los cuatro estados en el Espacio
+    const cyc=[['afirmado','colisión confirmada'],['indecidible','colisión indecidible'],['ninguno','evaluado: sin colisión'],null]; let i=0; // los cuatro estados presentes; null = no evaluado (desconocido)
+    scope.forEach(e=>{ const w=L['P-W1'].get(e.id); if(!(w&&w.state==='afirmado')) return; const c=cyc[i++%cyc.length]; if(c) set('P-G2',e.id,c[0],false,c[1]); });
+    const d=scope.filter(e=>e.tipo==='Domain'); if(d[1]) set('P-A1',d[1].id,'afirmado',false,'espera confirmación de dominio');
+  }
+  return L;
+}
+
+// ───────────────────────── estado ─────────────────────────
+const q=new URLSearchParams(location.search);
+const S={T:q.get('T')||'T1', cam:q.get('cam')==='m1'?'m1':'m3', minEl:+(q.get('minEl')||12), view:q.get('view')==='top'?'top':'persp',
+  active:(q.get('lenses')||'P-W1,P-G2').split(','), focus:null, hist:[], anchors:new Set(), ind:null, cands:[], candIdx:0,
+  surf:q.get('sup')!=='0', modoFoco:q.get('modo')==='foco'};
+let terr, lens;
+
+// ───────────────────────── PlayCanvas ─────────────────────────
+const canvas=document.getElementById('c');
+const app=new pc.Application(canvas,{});
+app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW); app.setCanvasResolution(pc.RESOLUTION_AUTO);
+app.scene.ambientLight=new pc.Color(.32,.33,.36);
+// H-1 · perspectiva atmosférica: lo lejano tiende a surface-hover; el cielo es bg → horizonte perceptible sin dibujarlo
+(function setFog(){ const fc=new pc.Color(...HOVER);
+  if(app.scene.fog && typeof app.scene.fog==='object'){ app.scene.fog.type=pc.FOG_LINEAR; app.scene.fog.color=fc; app.scene.fog.start=50; app.scene.fog.end=220; }
+  else { app.scene.fog=pc.FOG_LINEAR; app.scene.fogColor=fc; app.scene.fogStart=40; app.scene.fogEnd=230; } })();
+const cam=new pc.Entity('cam'); cam.addComponent('camera',{clearColor:new pc.Color(...BG),fov:50,nearClip:.2,farClip:600}); app.root.addChild(cam);
+const sun=new pc.Entity('sun'); sun.addComponent('light',{type:'directional',color:new pc.Color(1,1,1),intensity:.85,castShadows:false});
+sun.setEulerAngles(55,-35,0); app.root.addChild(sun);
+const orbit={yaw:-28,pitch:+(q.get('el')||18),dist:40,target:new pc.Vec3(),tYaw:-28,tPitch:+(q.get('el')||18),tDist:40,tTarget:new pc.Vec3()};
+
+// texturas en canvas
+function cv(size,draw){const c=document.createElement('canvas');c.width=c.height=size;draw(c.getContext('2d'),size);return c;}
+function tex(c,{repeat=false}={}){const t=new pc.Texture(app.graphicsDevice,{width:c.width,height:c.height,format:pc.PIXELFORMAT_RGBA8,mipmaps:true,
+  minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:repeat?pc.ADDRESS_REPEAT:pc.ADDRESS_CLAMP_TO_EDGE,addressV:repeat?pc.ADDRESS_REPEAT:pc.ADDRESS_CLAMP_TO_EDGE});t.setSource(c);return t;}
+const cache=new Map(); const once=(k,f)=>cache.has(k)?cache.get(k):(cache.set(k,f()),cache.get(k));
+function unlit(rgb,{map=null,tiling=null,transparent=false}={}){const m=new pc.StandardMaterial();m.useLighting=false;m.useSkybox=false;
+  m.diffuse=new pc.Color(0,0,0);m.emissive=new pc.Color(...rgb);
+  if(map){m.emissiveMap=map; if(tiling) m.emissiveMapTiling=tiling; if(transparent){m.opacityMap=map;m.opacityMapChannel='a';}}
+  if(transparent){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;} m.cull=pc.CULLFACE_NONE; m.update(); return m;}
+
+// C3 · Procedencia como textura del cuerpo (marcas de prueba, arbitrarias; MR/CB)
+function provTexture(p){ return once('prov'+p,()=>tex(cv(128,(g,s)=>{
+  g.fillStyle=css(MARK); g.fillRect(0,0,s,s); g.strokeStyle=css(SURF); g.fillStyle=css(SURF);
+  if(p==='declarado'){g.lineWidth=9;for(let i=-s;i<2*s;i+=26){g.beginPath();g.moveTo(i,0);g.lineTo(i+s,s);g.stroke();}}
+  if(p==='propuesto'){for(let y=13;y<s;y+=26)for(let x=13;x<s;x+=26){g.beginPath();g.arc(x,y,5,0,7);g.fill();}}
+  if(p==='proyeccion'){g.lineWidth=7;for(let y=8;y<s;y+=20){g.beginPath();g.moveTo(0,y);g.lineTo(s,y);g.stroke();}}
+  if(p==='noverif'){g.fillStyle=css(over(TXT,.22,SURF));g.fillRect(9,9,s-18,s-18);} // baja autoridad = bajo contraste, nunca más saliente (C-2, G-9)
+})));}
+function entityMat(prov){return once('em'+prov,()=>{const m=new pc.StandardMaterial();m.diffuse=new pc.Color(1,1,1);m.diffuseMap=provTexture(prov);
+  m.useSkybox=false;m.gloss=.15;m.metalness=0;m.useMetalness=true;m.update();return m;});}
+// sombra de contacto (H-2): disco con caída radial, en la composición alfa del bg
+const shadowMat=()=>once('shadow',()=>unlit(BG,{map:tex(cv(128,(g,s)=>{const gr=g.createRadialGradient(s/2,s/2,4,s/2,s/2,s/2);
+  gr.addColorStop(0,'rgba(255,255,255,.85)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,s,s);})),transparent:true}));
+// H-4 · anillos sobre el suelo: Foco = anillo grueso; Anchor = doble anillo fino exterior (RI: canales reservados a la interacción)
+const ringMat=kind=>once('ring'+kind,()=>unlit(INK,{map:tex(cv(256,(g,s)=>{g.strokeStyle='#fff';const c=s/2;
+  if(kind==='foco'){g.lineWidth=s*.075;g.beginPath();g.arc(c,c,s*.30,0,7);g.stroke();}
+  else {g.lineWidth=s*.022;g.beginPath();g.arc(c,c,s*.40,0,7);g.stroke();g.beginPath();g.arc(c,c,s*.46,0,7);g.stroke();}})),transparent:true}));
+// C7/C8/C9/C10 · glifo de Anotación (escena gris, drawGlyph)
+function glyphMat(slot,fill,weak){return once(['g',slot,fill,weak].join('|'),()=>unlit(INK,{transparent:true,map:tex(cv(64,(g,s)=>{
+  const k=s*.62; g.translate(s/2,s/2); if(slot==='B') g.rotate(Math.PI/4); g.strokeStyle='#fff'; g.fillStyle='#fff'; g.lineWidth=Math.max(2,k*.14);
+  g.setLineDash(weak?[k*.22,k*.16]:[]); g.beginPath(); g.rect(-k/2,-k/2,k,k);
+  if(fill==='vacio'){g.stroke();g.setLineDash([]);g.fillRect(-k*.5,-k*.1,k,k*.2);return;}
+  if(fill==='afirmado'){g.fill();} else if(fill==='indecidible'){g.stroke();g.beginPath();g.moveTo(-k/2,k/2);g.lineTo(k/2,-k/2);g.lineTo(k/2,k/2);g.closePath();g.setLineDash([]);g.fill();}
+  else g.stroke(); }))}));}
+
+let root=new pc.Entity('root'); app.root.addChild(root);
+function addRender(type,mat,parent=root){const e=new pc.Entity();e.addComponent('render',{type,material:mat,castShadows:false,receiveShadows:false});parent.addChild(e);return e;}
+function hexMesh(){return once('hexmesh',()=>{ try{ return pc.Mesh.fromGeometry(app.graphicsDevice,new pc.CylinderGeometry({radius:.5,height:1,capSegments:6})); }catch(e){ return null; } });}
+
+// ───────────────────────── construcción ─────────────────────────
+const H={Domain:1.7,Gene:1.7,Repository:1.7}, FOOT=1.5; // altura y huella iguales por tipo: el volumen no codifica Masa ni importancia (EM §6.8, AP-2)
+let ground, objs={}, rings={}, relStrips=[], glyphs=[];
+function rebuild(){
+  root.destroy(); root=new pc.Entity('root'); app.root.addChild(root); objs={}; glyphs=[]; relStrips=[];
+  terr=buildTerritory(S.T); lens=buildLensData(S.T,terr);
+  // H-1 · suelo extenso con grilla de referencia (gradiente de textura) que se pierde en la perspectiva atmosférica
+  const gridTex=once('grid',()=>tex(cv(128,(g,s)=>{g.fillStyle=css(SURF);g.fillRect(0,0,s,s);g.strokeStyle=css(over(W1,.06,SURF));g.lineWidth=2;g.strokeRect(0,0,s,s);}),{repeat:true}));
+  ground=addRender('plane',unlit([1,1,1],{map:gridTex,tiling:new pc.Vec2(120,120)})); ground.setLocalScale(1200,1,1200); ground.setLocalPosition(0,-.02,0);
+  // C1 · regiones del árbol con Fuente (Tenant › Organization › Project); sin altura por tipo (W1/AP-4): sólo un desfase mínimo anti z-fighting
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.rect).forEach(e=>{
+    const lvl={Tenant:0,Organization:1,Project:2}[e.tipo], [x0,z0,x1,z1]=e.rect;
+    const q=addRender('plane',unlit(REGION[lvl])); q.setLocalScale(x1-x0,1,z1-z0); q.setLocalPosition((x0+x1)/2,.004*(lvl+1),(z0+z1)/2);
+    e.pos=new pc.Vec3(x0+1.1,0,z0+1.1); e.anchorPt=e.pos; // punto de adherencia de Anotaciones del contenedor (esquina interior)
+  });
+  // H-2 · Entidades hoja como volúmenes asentados sobre el suelo del Project
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.x!==undefined).forEach(e=>{
+    const h=H[e.tipo], mat=entityMat(e.prov); let body;
+    if(SHAPE[e.tipo]==='hex'&&hexMesh()){ body=new pc.Entity(); body.addComponent('render',{meshInstances:[new pc.MeshInstance(hexMesh(),mat)]}); root.addChild(body); }
+    else body=addRender(SHAPE[e.tipo]==='box'?'box':'cylinder',mat);
+    body.setLocalScale(FOOT,h,FOOT); body.setLocalPosition(e.x,h/2+.02,e.z);
+    const sh=addRender('plane',shadowMat()); sh.setLocalScale(FOOT*2.1,1,FOOT*2.1); sh.setLocalPosition(e.x,.016,e.z);
+    e.pos=new pc.Vec3(e.x,0,e.z); e.top=new pc.Vec3(e.x,h+.02,e.z); e.mid=new pc.Vec3(e.x,h/2,e.z); e.anchorPt=e.top; objs[e.id]=body;
+  });
+  rings.foco=addRender('plane',ringMat('foco')); rings.anc=[];
+  if(!S.focus||!terr.ents[S.focus]) S.focus=terr.order.find(id=>terr.ents[id].tipo==='Project'); // EM E2: Foco inicial = Project del Contexto
+  S.anchors=new Set([...S.anchors].filter(id=>terr.ents[id])); S.hist=[];
+  refresh(true);
+}
+
+// ───────────────────────── Lentes, cobertura y Anotaciones ─────────────────────────
+const hasData=l=>!!(lens[l]&&lens[l].size);
+function lensStatus(l){ if(!S.active.includes(l)) return 'inactiva'; if(!hasData(l)) return 'activa · sin datos'; return visibleLenses().includes(l)?'visible':'activa · no visible (tope)'; }
+function visibleLenses(){ return LENSES.map(x=>x.id).filter(l=>S.active.includes(l)&&hasData(l)).slice(0,LENS_CAP); } // O-1, sin promoción por relevancia
+function scopeEnts(){return terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo!=='Tenant'&&e.tipo!=='Organization');}
+function coverage(l){ const m=lens[l], sc=scopeEnts(); let c=0; if(m) sc.forEach(e=>{const v=m.get(e.id); if(v&&v.state!=='desconocido') c++;}); return {covered:c,total:sc.length,mode:c/sc.length>=.5?'a':'b'}; }
+function stateOf(l,e){ const v=lens[l]&&lens[l].get(e.id); return v||{state:'desconocido',weak:false,txt:hasData(l)?'no cubierto por la Proyección':'sin Fuente ni Proyección (DJ-I6)'}; }
+function countFor(l,e){ const s=stateOf(l,e).state; return s==='desconocido'?'desconocido':(s==='afirmado'||s==='indecidible')?'1':'0'; }
+function rebuildGlyphs(){
+  glyphs.forEach(g=>g.ent.destroy()); glyphs=[];
+  const vis=visibleLenses();
+  scopeEnts().forEach(e=>{ vis.forEach((l,i)=>{
+    const st=stateOf(l,e), mode=coverage(l).mode; let fill=null;
+    if(st.state==='afirmado') fill='afirmado'; else if(st.state==='indecidible') fill='indecidible';
+    else if(st.state==='desconocido') fill=mode==='a'?'desconocido':null; else if(st.state==='ninguno') fill=mode==='a'?null:'vacio';
+    if(!fill) return; const slot=i===0?'A':'B';
+    const ent=addRender('plane',glyphMat(slot,fill,st.weak)); glyphs.push({ent,e,slot});
+  });});
+}
+
+// ───────────────────────── cámara · el Foco orienta la cámara (Vocab §2.10, DJ-8) ─────────────────────────
+const tmp=new pc.Vec3();
+function screenOf(p){ const out=new pc.Vec3(); cam.camera.worldToScreen(p,out); return out; } // CSS px; z>0 delante
+function orientToFocus(){
+  const e=terr.ents[S.focus]; if(!e) return;
+  const center = e.rect? new pc.Vec3((e.rect[0]+e.rect[2])/2,0,(e.rect[1]+e.rect[3])/2) : e.pos.clone();
+  const extent = e.rect? Math.max(e.rect[2]-e.rect[0],e.rect[3]-e.rect[1]) : H[e.tipo];
+  if(S.cam==='m3'||S.view==='top'){ // m3 · reencuadre: centra y acerca hasta que el sujeto ocupe una fracción estable de la vista
+    orbit.tTarget.copy(center); orbit.tDist = e.rect? extent*(e.tipo==='Project'?1.25:0.95) : 14;
+  } else { // m1 · movimiento mínimo: sólo si sale del margen seguro (10%) o queda por debajo del tamaño legible
+    const s=screenOf(e.rect?center:e.mid), Wd=innerWidth, Hd=innerHeight, m=.1;
+    const out = s.z<=0 || s.x<Wd*m || s.x>Wd*(1-m) || s.y<Hd*m || s.y>Hd*(1-m);
+    if(out){ orbit.tTarget.copy(center); }
+    const px = e.rect? 999 : (screenOf(e.pos).y - screenOf(e.top).y);
+    if(px<22) orbit.tDist=Math.max(9,orbit.dist*px/22*0.9);
+  }
+}
+
+// ───────────────────────── refresco de marcas de interacción y etiquetas ─────────────────────────
+function placeRing(r,e,scale){ const c=e.rect? e.pos : e.pos; r.enabled=true; r.setLocalPosition(c.x,.03,c.z); r.setLocalScale(scale,1,scale); }
+function refresh(rebuildG){
+  if(rebuildG) rebuildGlyphs();
+  const f=terr.ents[S.focus];
+  if(f) placeRing(rings.foco,f,(f.rect?2.6:FOOT*2.6)); else rings.foco.enabled=false;
+  rings.anc.forEach(r=>r.destroy()); rings.anc=[];
+  S.anchors.forEach(id=>{const e=terr.ents[id]; const r=addRender('plane',ringMat('anc')); placeRing(r,e,(e.rect?3.0:FOOT*3.0)); rings.anc.push(r);});
+  // H-5 · Relación Domain↔Gene: sólo se revela para el Foco (NM-13); trazo continuo sobre el suelo (C13). Nunca contención.
+  relStrips.forEach(s=>s.destroy()); relStrips=[];
+  if(f&&(f.tipo==='Gene'||f.tipo==='Domain')){
+    terr.nm.filter(([g,d])=>g===f.id||d===f.id).forEach(([g,d])=>{ const a=terr.ents[g].pos, b=terr.ents[d].pos;
+      const dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz); const s=addRender('plane',once('rel',()=>unlit(over(TXT,.45,REGION[2]))));
+      s.setLocalScale(len,1,.14); s.setLocalPosition((a.x+b.x)/2,.025,(a.z+b.z)/2); s.setLocalEulerAngles(0,-Math.atan2(dz,dx)*180/Math.PI,0); relStrips.push(s); });
+  }
+  document.body.classList.toggle('modofoco',S.modoFoco);
+  renderHUD(); renderSurf();
+}
+
+// ───────────────────────── picking (Entidad más específica bajo el punto; EM §4.3.1) ─────────────────────────
+function groundAt(x,y){ const n=cam.camera.screenToWorld(x,y,cam.camera.nearClip), fz=cam.camera.screenToWorld(x,y,cam.camera.farClip);
+  const d=fz.clone().sub(n); if(Math.abs(d.y)<1e-6) return null; const t=-n.y/d.y; return t>0? n.add(d.mulScalar(t)) : null; }
+function candidatesAt(x,y){
+  const out=[];
+  scopeEnts().filter(e=>e.x!==undefined).forEach(e=>{ const a=screenOf(e.top), b=screenOf(e.pos); if(a.z<=0) return;
+    const hpx=Math.max(14,b.y-a.y), cx=(a.x+b.x)/2, cy=(a.y+b.y)/2, d=Math.hypot(cx-x,(cy-y)*.8);
+    if(d<Math.max(16,hpx*.75)) out.push({e,d}); });
+  out.sort((p,q)=>p.d-q.d);
+  if(out.length) return out.map(o=>o.e);
+  const g=groundAt(x,y); if(!g) return [];
+  const conts=terr.order.map(id=>terr.ents[id]).filter(e=>e.rect&&g.x>=e.rect[0]&&g.x<=e.rect[2]&&g.z>=e.rect[1]&&g.z<=e.rect[3]);
+  return conts.sort((a,b)=>({Tenant:0,Organization:1,Project:2}[b.tipo])-({Tenant:0,Organization:1,Project:2}[a.tipo]));
+}
+
+// ───────────────────────── capa O y Superficie ─────────────────────────
+function chain(id){const out=[];let e=terr.ents[id];while(e){out.unshift(e.name);e=terr.ents[e.parent];}return out.join(' › ');}
+function renderHUD(){
+  const att=lens['P-A1']?[...lens['P-A1'].values()].filter(v=>v.state==='afirmado').length:0;
+  let ls=LENSES.map(l=>{ const st=lensStatus(l.id); if(st==='inactiva') return `<span class="lens">${l.id} <b>inactiva</b></span>`;
+    let cov=''; if(st==='activa · sin datos') cov=' · desconocido en todas las Entidades';
+    else { const c=coverage(l.id); cov = c.mode==='a'? ` · cubre ${c.covered}/${c.total} · ausencia = ninguno` : ` · no evaluado en ${c.total-c.covered}/${c.total} · ausencia = desconocido`; }
+    const slot=visibleLenses().indexOf(l.id); const sl=slot===0?' ▢A':slot===1?' ◇B':'';
+    return `<span class="lens ${st.includes('tope')?'warn':''}">${l.id}${sl} <b>${st}</b>${cov}</span>`; }).join('');
+  document.getElementById('hud').innerHTML=
+    `<span class="sim">DATOS SIMULADOS · ${S.T}</span>`+
+    `<span><span class="k">Contexto</span>‹organización› › ‹proyecto› · verificado (sintético)</span>`+
+    `<span><span class="k">Foco</span>${S.focus?chain(S.focus):'—'}</span>`+
+    `<span><span class="k">Anchors</span>${S.anchors.size?[...S.anchors].map(id=>terr.ents[id].name).join(', '):'—'}</span>`+
+    `<span><span class="k">Atención</span>${att?att+' convocatoria':'ninguna clasificada'}</span>`+
+    `<span><span class="k">Vista</span>${S.view==='top'?'plana':'perspectiva · '+Math.round(orbit.tPitch)+'°'}${S.modoFoco?' · modo foco':''}</span>`+
+    `<span style="flex-basis:100%;height:0"></span><span class="k">Lentes</span>${ls}`;
+}
+function renderSurf(){
+  const b=document.getElementById('surfBody'), sf=document.getElementById('surf'); sf.classList.toggle('collapsed',!S.surf);
+  document.getElementById('btnSurf').textContent=S.surf?'Superficie ▾':'Superficie ▸';
+  const e=terr.ents[S.focus]; if(!e){b.innerHTML='';return;}
+  let h=`<div class="subj">${e.name}</div><div class="note">${e.tipo}</div>`;
+  h+=`<div class="row">Procedencia: ${PROVTXT[e.prov]} · Fuente: ${e.fuente}</div><div class="row">Ubicación: ${chain(e.id)}</div>`;
+  h+=`<div class="row">Anclable: ${e.prov==='declarado'?'no (unsupported en LocationSnapshot v0.1, D-3.b)':'sí'}</div>`;
+  h+='<h3>ANOTACIONES POR LENTE (todas las activas)</h3>';
+  LENSES.filter(l=>S.active.includes(l.id)).forEach(l=>{ if(e.tipo==='Tenant'||e.tipo==='Organization'){h+=`<div class="row">${l.id} · la Proyección no cubre este nivel</div>`;return;}
+    const st=stateOf(l.id,e); h+=`<div class="row">${l.id} · ${st.state}${st.weak?' · Fuente débil':''}${st.txt?' · '+st.txt:''} <span class="note">(${lensStatus(l.id)})</span></div>`; });
+  if(e.tipo==='Domain'||e.tipo==='Gene'){ const rel=terr.nm.filter(([g,d])=>g===e.id||d===e.id);
+    h+='<h3>PERTENENCIA N:M · Domain ↔ Gene (Relación ratificada)</h3>';
+    h+= rel.length? rel.map(([g,d])=>`<div class="row">${terr.ents[g].name} ∈ ${terr.ents[d].name}</div>`).join('') : '<div class="row note">sin Relaciones Domain↔Gene</div>';
+    h+='<div class="row note">En el Espacio la Relación se revela sólo con el Foco y nunca como contención. Un Gene no cruza Projects (Gene v3.0).</div>'; }
+  h+='<h3>QUÉ NO DEMUESTRA</h3><div class="row note">Diseño aprobado, formas finales, comprensión humana, rendimiento ni picking real de PlayCanvas.</div>';
+  b.innerHTML=h;
+}
+
+// etiquetas mínimas, indicación y anclaje de glifos (cada cuadro)
+function frameOverlays(){
+  const L=document.getElementById('labels'), I=document.getElementById('interact'); let lh='', ih='';
+  const leaves=scopeEnts().filter(e=>e.x!==undefined), few=leaves.length<=6;
+  terr.order.map(id=>terr.ents[id]).forEach(e=>{
+    if(e.rect){ if(!(e.tipo==='Project'||S.focus===e.id||S.ind===e.id)) return; // texto mínimo: Tenant y Organization sólo al indicarlos o enfocarlos (la cadena está en la capa O)
+      const s=screenOf(new pc.Vec3(e.rect[0]+2.3,0,e.rect[1]+.7)); if(S.view==='top'||s.z>0) lh+=`<div class="lbl cont" style="left:${s.x}px;top:${s.y}px">${e.tipo.toUpperCase()} · ${e.name}</div>`; return; }
+    const on=S.focus===e.id||S.anchors.has(e.id)||S.ind===e.id;
+    if(few||on){ const v=cam.getPosition().clone().sub(e.pos); v.y=0; v.normalize(); const s=screenOf(e.pos.clone().add(v.mulScalar(FOOT*1.5)));
+      if(S.view==='top'||s.z>0) lh+=`<div class="lbl ${on?'on':''}" style="left:${s.x}px;top:${s.y+2}px">${e.name}</div>`; }
+  });
+  // indicación: corchetes + contenido exacto de EM §4.4 (recuento por Lente), efímera, sin actos
+  const ie=S.ind&&terr.ents[S.ind];
+  if(ie){ let x0,y0,x1,y1;
+    if(ie.rect){ const pts=[[0,1],[2,1],[2,3],[0,3]].map(([a,c])=>screenOf(new pc.Vec3(ie.rect[a],0,ie.rect[c]))).filter(p=>p.z>0);
+      x0=Math.min(...pts.map(p=>p.x)); x1=Math.max(...pts.map(p=>p.x)); y0=Math.min(...pts.map(p=>p.y)); y1=Math.max(...pts.map(p=>p.y)); }
+    else { const a=screenOf(ie.top), b=screenOf(ie.pos), w=Math.max(10,(b.y-a.y)*.75); x0=a.x-w; x1=a.x+w; y0=a.y-8; y1=b.y+8; }
+    const L9='9px', br=(x,y,t,l)=>`<div class="brk" style="left:${x}px;top:${y}px;border-top-width:${t?2:0}px;border-bottom-width:${t?0:2}px;border-left-width:${l?2:0}px;border-right-width:${l?0:2}px"></div>`;
+    ih+=br(x0-4,y0-4,1,1)+br(x1-5,y0-4,1,0)+br(x0-4,y1-5,0,1)+br(x1-5,y1-5,0,0);
+    const cnt=(ie.tipo==='Tenant'||ie.tipo==='Organization')?'':' · '+LENSES.filter(l=>S.active.includes(l.id)).map(l=>`${l.id}: ${countFor(l.id,ie)}`).join(' · ');
+    const cntTxt=(ie.tipo==='Tenant'||ie.tipo==='Organization')?'':LENSES.filter(l=>S.active.includes(l.id)).map(l=>`${l.id}: ${countFor(l.id,ie)}`).join(' · ');
+    const estW=7.3*(ie.name.length+ie.tipo.length+PROVTXT[ie.prov].length+cntTxt.length+60), maxR=innerWidth-(S.surf&&!S.modoFoco?345:12), leftSide=x1+8+estW>maxR;
+    ih+=`<div class="ind-lbl" style="left:${Math.max(8,Math.min(leftSide?maxR-estW:x1+8,maxR-estW))}px;top:${leftSide?y1+8:y0}px">${ie.name} · ${ie.tipo} · ${PROVTXT[ie.prov]} · Contexto verificado (sintético) · simulado${cnt}${S.cands.length>1?` · candidato ${S.candIdx+1}/${S.cands.length} (C)`:''}</div>`;
+  }
+  L.innerHTML=lh; I.innerHTML=ih;
+}
+function placeGlyphs(){ // adherencia (C-8, CB/F-5): el glifo sigue a su Entidad, en una ranura fija relativa a ella en el espacio de pantalla
+  const rot=cam.getRotation(), x90=new pc.Quat().setFromEulerAngles(90,0,0), qq=new pc.Quat().mul2(rot,x90), right=cam.right, up=cam.up;
+  glyphs.forEach(g=>{ const e=g.e, base=e.anchorPt, k=e.rect?0.8:FOOT*.42;
+    const off= g.slot==='A'? up.clone().mulScalar(k*.55).add(right.clone().mulScalar(k)) : up.clone().mulScalar(k*.55).sub(right.clone().mulScalar(k));
+    g.ent.setPosition(base.clone().add(off)); g.ent.setRotation(qq); const sz=e.rect?.75:FOOT*.36; g.ent.setLocalScale(sz,sz,sz); });
+}
+function placeCamera(dt){
+  const k=1-Math.exp(-dt*5);
+  orbit.target.lerp(orbit.target,orbit.tTarget,k); orbit.dist+=(orbit.tDist-orbit.dist)*k; orbit.pitch+=(orbit.tPitch-orbit.pitch)*k; orbit.yaw+=(orbit.tYaw-orbit.yaw)*k;
+  if(S.view==='top'){ cam.camera.projection=pc.PROJECTION_ORTHOGRAPHIC; cam.camera.orthoHeight=Math.max(4,orbit.dist*.55);
+    cam.setPosition(orbit.target.x,120,orbit.target.z); cam.setEulerAngles(-90,0,0); app.scene.fog && typeof app.scene.fog==='object' && (app.scene.fog.end=10000); return; }
+  cam.camera.projection=pc.PROJECTION_PERSPECTIVE; if(app.scene.fog&&typeof app.scene.fog==='object') app.scene.fog.end=220;
+  const yaw=orbit.yaw*Math.PI/180, pit=orbit.pitch*Math.PI/180;
+  const p=new pc.Vec3(Math.sin(yaw)*Math.cos(pit),Math.sin(pit),Math.cos(yaw)*Math.cos(pit)).mulScalar(orbit.dist).add(orbit.target);
+  cam.setPosition(p); cam.lookAt(orbit.target);
+}
+
+// ───────────────────────── actos de la persona ─────────────────────────
+function flash(m){const f=document.getElementById('flash');f.textContent=m;f.style.display='block';clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.display='none',2200);}
+function setFocus(id,{push=true}={}){ if(!id||!terr.ents[id]||id===S.focus) return; if(push&&S.focus) S.hist.push(S.focus); S.focus=id; orientToFocus(); refresh(false); }
+let drag=null;
+canvas.addEventListener('contextmenu',ev=>ev.preventDefault());
+canvas.addEventListener('pointerdown',ev=>{drag={x:ev.clientX,y:ev.clientY,moved:false,pan:ev.button===2||ev.shiftKey};canvas.setPointerCapture(ev.pointerId);canvas.focus();});
+canvas.addEventListener('pointerup',ev=>{ if(drag&&!drag.moved){ const c=candidatesAt(ev.clientX,ev.clientY); const pick=S.cands.length>1&&S.ind?S.ind:(c[0]&&c[0].id); if(pick) setFocus(pick); } drag=null; });
+canvas.addEventListener('pointermove',ev=>{
+  if(drag){ const dx=ev.clientX-drag.x, dy=ev.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>3) drag.moved=true;
+    if(drag.moved&&S.view!=='top'&&!drag.pan){ orbit.tYaw-=dx*.3; orbit.tPitch=Math.max(S.minEl,Math.min(80,orbit.tPitch+dy*.25)); orbit.yaw=orbit.tYaw; orbit.pitch=orbit.tPitch; }
+    if(drag.moved&&(drag.pan||S.view==='top')){ const sc=orbit.dist*.0016; const r=cam.right.clone(); r.y=0; r.normalize(); const fw=new pc.Vec3(-r.z,0,r.x);
+      orbit.tTarget.add(r.mulScalar(-dx*sc)).add(fw.mulScalar(S.view==='top'?-dy*sc:dy*sc)); orbit.target.copy(orbit.tTarget); }
+    drag.x=ev.clientX; drag.y=ev.clientY; return; }
+  const c=candidatesAt(ev.clientX,ev.clientY); const id=c[0]?c[0].id:null;
+  if(id!==(S.cands[0]&&S.cands[0].id)){ S.cands=c; S.candIdx=0; S.ind=id; }
+});
+canvas.addEventListener('pointerleave',()=>{S.ind=null;S.cands=[];});
+canvas.addEventListener('wheel',ev=>{ev.preventDefault();orbit.tDist=Math.max(5,Math.min(260,orbit.tDist*(ev.deltaY>0?1.1:.9)));},{passive:false});
+function tabOrder(){ return terr.order.map(id=>terr.ents[id]).sort((a,b)=>(a.rect?0:1)-(b.rect?0:1)); } // orden estructural estable, nunca por relevancia
+window.addEventListener('keydown',ev=>{
+  const k=ev.key;
+  if(k==='Tab'){ ev.preventDefault(); const L=tabOrder(); let i=L.findIndex(e=>e.id===S.ind); i=(i+(ev.shiftKey?-1:1)+L.length)%L.length; S.ind=L[i].id; S.cands=[]; }
+  else if(k==='c'||k==='C'){ if(S.cands.length>1){ S.candIdx=(S.candIdx+1)%S.cands.length; S.ind=S.cands[S.candIdx].id; } else flash('No hay candidatos en competencia bajo el puntero'); }
+  else if(k==='Enter'){ if(S.ind) setFocus(S.ind); }
+  else if(k==='Backspace'){ ev.preventDefault(); const p=S.hist.pop(); if(p) setFocus(p,{push:false}); }
+  else if(k==='u'||k==='U'){ const e=terr.ents[S.focus]; if(e&&e.parent) setFocus(e.parent); }
+  else if(k==='a'||k==='A'){ const e=terr.ents[S.focus]; if(!e) return; if(e.prov==='declarado'){flash('No anclable: unsupported en LocationSnapshot v0.1 (D-3.b)');return;}
+    S.anchors.has(e.id)?S.anchors.delete(e.id):S.anchors.add(e.id); refresh(false); }
+  else if(k==='o'||k==='O'){ orbit.tPitch=55; }
+  else if(k==='h'||k==='H'){ orbit.tPitch=Math.max(S.minEl,S.minEl+2); }
+  else if(k==='v'||k==='V'){ S.view=S.view==='top'?'persp':'top'; orientToFocus(); refresh(false); }
+  else if(k==='s'||k==='S'){ S.surf=!S.surf; refresh(false); }
+  else if(k==='f'||k==='F'){ S.modoFoco=!S.modoFoco; refresh(false); }
+  else if('123'.includes(k)){ const id=LENSES[+k-1].id; S.active.includes(id)?S.active=S.active.filter(x=>x!==id):S.active.push(id); refresh(true); }
+  else if(k==='Escape'){ S.ind=null; S.cands=[]; }
+});
+document.getElementById('btnSurf').onclick=()=>{S.surf=!S.surf;refresh(false);};
+
+// ───────────────────────── arranque ─────────────────────────
+rebuild();
+if(q.get('foc')&&terr.ents[q.get('foc')]) S.focus=q.get('foc');
+if(q.get('anchor')&&terr.ents[q.get('anchor')]) S.anchors.add(q.get('anchor'));
+{ const m=S.cam; S.cam='m3'; orientToFocus(); S.cam=m; } orbit.target.copy(orbit.tTarget); orbit.dist=orbit.tDist; refresh(false); // encuadre inicial determinístico (EM E2)
+if(q.get('ind')&&terr.ents[q.get('ind')]) S.ind=q.get('ind');
+app.on('update',dt=>{ placeCamera(dt); placeGlyphs(); frameOverlays(); if(Math.round(orbit.pitch)!==renderHUD.last){renderHUD.last=Math.round(orbit.pitch);renderHUD();} });
+window.addEventListener('resize',()=>app.resizeCanvas());
+app.start();
+window.__ready=true;
+</script>
+</body>
+</html>
