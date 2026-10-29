@@ -64,3 +64,9 @@ Cada gate usa organización, proyecto, identidad, Backend, puertos y datos exclu
 6. ¿Qué acto humano inicia el workflow tras aprobación y activación, y cómo se garantiza idempotencia después de un reinicio o un clic repetido?
 
 Hasta cerrar estas decisiones y pasar los gates de producto, el estado correcto tras W1 es **instalado e inactivo**. El objetivo del roadmap es avanzar de ahí hacia una ejecución autorizada y abastecida, sin hacer que RUNNER supla capacidades que todavía no existen.
+
+## 7. Decisión acotada de Impact para la corrida de desarrollo del 28/10/2026
+
+José Vigil ratificó omitir el análisis de Impact **únicamente** para la corrida de desarrollo de la instancia `94cb7ee2-6377-4fb6-a695-da0566f9093f`. La denominación visible del acto es **“Impact omitido en desarrollo”**. Actor: José Vigil. Entorno: desarrollo. Esta decisión no es una evaluación favorable, no acredita ausencia de colisiones y no constituye una regla para otros Mandates. La autorización consta en el mensaje de José en este Work del 28/10/2026; este registro conserva la decisión, pero no sustituye el futuro recibo de producto de W2-dev.
+
+El contrato local de esa instancia está firmado y preparado con digest `860bf610e1d3cfdc5e82bf33533f07dd1c25cb82d9bb8a25e885e6970cf798f2`. El gate W4 no tiene PASS: la política inmutable referida por el contrato fija `intelligence_supply.budget.mandate_id` en `4e028a82-3f94-48ab-957d-116340dbcc7f`, distinto del ID de la instancia, y el registry marca la salud de los runtimes como `unknown` y su conformidad como `NOT_RUN`. No se debe presentar este registro como una selección de proveedores ni activar o ejecutar la instancia por él.

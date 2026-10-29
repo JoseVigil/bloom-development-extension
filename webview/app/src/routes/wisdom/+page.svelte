@@ -1,14 +1,14 @@
 <!--
   Wisdom — oferta de Mandate.
   Entrar, navegar o recargar sólo lee: catálogo remoto (sin bytes), instalaciones
-  locales y elegibilidad de proyectos, por separado. La única escritura es la
-  instalación, que exige elegir un proyecto elegible y confirmar. Lo instalado
-  queda inactivo: no se prepara, no se aprueba, no se activa y no se ejecuta.
+  locales y elegibilidad de proyectos, por separado. Instalar y preparar son
+  dos gestos explícitos. Ninguna navegación aprueba, activa ni ejecuta.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    readOffers, readInstallations, readProjects, installOffer, rowState, reasonText, preparationText, shortDigest,
+    readOffers, readInstallations, readProjects, readProjectFiles, installOffer, prepareOffer,
+    rowState, reasonText, preparationText, shortDigest,
     type Offer, type InstalledInstance, type ProjectEligibility, type Failure
   } from '$lib/wisdomOffer';
 
@@ -24,6 +24,10 @@
   let pending: { offer: Offer; project: ProjectEligibility } | null = null;
   let installing = false;
   let installError: Failure | null = null;
+  let pendingPrepare: { offer: Offer; project: ProjectEligibility; installation: InstalledInstance; files: string[] } | null = null;
+  let selectedInputs: string[] = [];
+  let preparing = false;
+  let prepareError: Failure | null = null;
 
   async function refreshInstallations() {
     const r = await readInstallations();
@@ -54,6 +58,25 @@
     // Siempre se reconcilia con el estado local que reporta Nucleus.
     await refreshInstallations();
     installing = false;
+  }
+
+  async function choosePreparation(offer: Offer, project: ProjectEligibility, installation: InstalledInstance) {
+    prepareError = null;
+    const r = await readProjectFiles(project.projectId);
+    if (!r.ok) { prepareError = r.error; return; }
+    pendingPrepare = { offer, project, installation, files: r.value };
+    selectedInputs = [];
+  }
+
+  async function confirmPrepare() {
+    if (!pendingPrepare || preparing || selectedInputs.length === 0) return;
+    preparing = true;
+    prepareError = null;
+    const r = await prepareOffer(pendingPrepare.offer, pendingPrepare.installation, selectedInputs);
+    if (!r.ok) prepareError = r.error;
+    else { pendingPrepare = null; selectedInputs = []; }
+    await refreshInstallations();
+    preparing = false;
   }
 
   onMount(load);
@@ -101,9 +124,17 @@
                   <li data-testid="project-row" data-project={project.projectId}>
                     <span class="project-name">{project.name}</span>
                     {#if state.kind === 'installed'}
-                      <span class="state installed" data-testid="installed-state">
-                        Instalado · inactivo · {preparationText(state.installation.instance.definition.preparation)}
-                      </span>
+                      {#if state.installation.instance.status === 'prepared'}
+                        <span class="state installed" data-testid="prepared-state">Preparado · firmado · inactivo</span>
+                      {:else}
+                        <span class="state installed" data-testid="installed-state">Instalado · inactivo</span>
+                        {#if offer.preparation.status === 'defined' && offer.version === '1.1.0' && state.installation.consistent}
+                          <button data-testid="prepare" disabled={!project.eligible} on:click={() => choosePreparation(offer, project, state.installation)}>Preparar para {project.name}</button>
+                          {#if !project.eligible}<span class="warn">{reasonText(project.reason || 'context_unavailable')}</span>{/if}
+                        {:else}
+                          <span class="state disabled">{preparationText(state.installation.instance.definition.preparation)}</span>
+                        {/if}
+                      {/if}
                     {:else if state.kind === 'not_eligible'}
                       <span class="state disabled" data-testid="not-eligible">{reasonText(state.reason)}</span>
                       <button disabled>Instalar para {project.name}</button>
@@ -138,6 +169,25 @@
       </section>
     {/if}
 
+    {#if pendingPrepare}
+      <section class="confirm" data-testid="prepare-confirm">
+        <p>Preparar <strong>{pendingPrepare.offer.label} v{pendingPrepare.offer.version}</strong> para <strong>{pendingPrepare.project.name}</strong>, conservando la instalación {pendingPrepare.installation.instance.mandateId}.</p>
+        <p class="muted">Elegí al menos un archivo del proyecto. Nucleus congelará sólo los seleccionados, firmará y verificará el contrato. El Mandate quedará inactivo; no se ejecutará ningún Intent.</p>
+        {#if pendingPrepare.files.length === 0}<p class="warn">No hay archivos regulares elegibles en este proyecto.</p>{/if}
+        <div class="installations">
+          {#each pendingPrepare.files as file}
+            <label><input type="checkbox" value={file} bind:group={selectedInputs} /> {file}</label>
+          {/each}
+        </div>
+        {#if prepareError}<p class="warn" data-testid="prepare-error">No se preparó: {prepareError.code}</p>{/if}
+        <div class="actions">
+          <button data-testid="confirm-prepare" disabled={preparing || selectedInputs.length === 0} on:click={confirmPrepare}>{preparing ? 'Preparando…' : 'Confirmar preparación'}</button>
+          <button class="secondary" disabled={preparing} on:click={() => (pendingPrepare = null)}>Cancelar</button>
+        </div>
+      </section>
+    {/if}
+    {#if prepareError && !pendingPrepare}<p class="warn" data-testid="prepare-error">No se pudieron leer los archivos del proyecto: {prepareError.code}</p>{/if}
+
     <section>
       <h2>Instaladas en esta máquina</h2>
       {#if installationsError}
@@ -148,10 +198,11 @@
         <ul class="installations">
           {#each installations as item (item.instance.mandateId)}
             <li data-testid="installation">
-              <span>{item.instance.definition.label} v{item.instance.definition.version}</span>
+              <span>{item.instance.definition.label} · instalación v{item.instance.definition.version}{#if item.instance.preparation} · preparación v{item.instance.preparation.definition.version}{/if}</span>
               <span class="muted">proyecto {item.instance.projectId}</span>
-              <span class="state installed">Instalado · inactivo</span>
-              <span class="state disabled">{preparationText(item.instance.definition.preparation)}</span>
+              <span class="state installed">{item.instance.status === 'prepared' ? 'Preparado · inactivo' : 'Instalado · inactivo'}</span>
+              {#if item.instance.preparation}<span class="muted" title={item.instance.preparation.contractDigest}>Contrato {shortDigest(item.instance.preparation.contractDigest)}</span>
+              {:else if item.instance.status !== 'prepared'}<span class="state disabled">{preparationText(item.instance.definition.preparation)}</span>{/if}
               {#if !item.consistent}<span class="warn">Inconsistente: {item.problem}</span>{/if}
             </li>
           {/each}

@@ -2,7 +2,7 @@
 // Mandate offer. The private key never reaches the Backend or Nucleus:
 //
 //	keygen  creates a publisher key file (0600) and prints the public half
-//	sign    builds and signs a definition (preparation not_defined) and prints its digest
+//	sign    builds and signs a definition and prints its digest
 //
 // The Backend receives only the signed definition and the public key.
 package main
@@ -77,6 +77,7 @@ func sign(args []string) error {
 	keyPath := fs.String("key", "", "publisher key file")
 	definitionID := fs.String("definition-id", "", "definition_id (UUID, stable across versions)")
 	version := fs.String("version", "", "semver version")
+	preparable := fs.Bool("preparable", false, "sign schema 1.1 with project-derived domain and project-file inputs")
 	label := fs.String("label", "Genesis", "label shown in Wisdom")
 	purpose := fs.String("purpose", "", "short purpose shown in Wisdom")
 	publisher := fs.String("publisher", "bloom", "publisher_id")
@@ -112,6 +113,14 @@ func sign(args []string) error {
 		PublishedAt: time.Now().UTC().Truncate(time.Second).Format(time.RFC3339), PolicyRaw: policyRaw, RegistryRaw: registryRaw})
 	if err != nil {
 		return err
+	}
+	if *preparable {
+		payload, err = mandatedefinition.BuildPreparableOfferPayload(mandatedefinition.InitialOfferInput{
+			DefinitionID: *definitionID, Version: *version, Label: *label, Purpose: *purpose, PublisherID: *publisher, KeyID: k.KeyID,
+			PublishedAt: payload.PublishedAt, PolicyRaw: policyRaw, RegistryRaw: registryRaw})
+		if err != nil {
+			return err
+		}
 	}
 	signed, err := mandatedefinition.Sign(payload, ed25519.NewKeyFromSeed(seed))
 	if err != nil {

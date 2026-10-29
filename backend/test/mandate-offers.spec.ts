@@ -80,6 +80,18 @@ describe('initial Mandate offer — Backend contract', () => {
     await expect(verifyMandateDefinition(definitionBytes, { ...publisherKey, keyId: 'authority-test-key' })).rejects.toThrow('definition_key_untrusted');
     const defined = await resign(p => { p.preparation = { status: 'defined' }; });
     await expect(verifyMandateDefinition(defined, publisherKey)).rejects.toThrow('definition_preparation_invalid');
+    const preparable = await resign(p => {
+      p.schema_version = '1.1'; p.version = '1.1.0';
+      p.preparation = { status: 'defined', domain_rule: 'project_identity',
+        input_requirements: { source: 'project_files', min_files: 1 } };
+    });
+    expect((await verifyMandateDefinition(preparable, publisherKey)).preparationStatus).toBe('defined');
+    const noFiles = await resign(p => {
+      p.schema_version = '1.1'; p.version = '1.1.0';
+      p.preparation = { status: 'defined', domain_rule: 'project_identity',
+        input_requirements: { source: 'project_files', min_files: 0 } };
+    });
+    await expect(verifyMandateDefinition(noFiles, publisherKey)).rejects.toThrow('definition_preparation_invalid');
   });
 
   it('publishes only through the operator, only in fixture mode, and keeps versions immutable', async () => {

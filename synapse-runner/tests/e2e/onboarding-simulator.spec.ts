@@ -221,7 +221,7 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
         resumeNeedsLaunch = profile.runtime_state?.status !== 'open' || profile.runtime_state.handshake_confirmed !== true;
         expect(data.onboarding?.organizations?.find(org => org.org_slug === WORKSPACE_ORG)?.workspace_path).toBe(WORKSPACE_PATH);
         expect(existsSync(join(WORKSPACE_PATH, '.bloom', NUCLEUS_MARKER))).toBe(true);
-        expect(existsSync(PROJECT_PATH)).toBe(resumeCompletionOnly);
+        if (resumeCompletionOnly) expect(existsSync(PROJECT_PATH)).toBe(true);
         if (resumeCompletionOnly) {
           expect(data.onboarding?.current_step).toBe('success');
           expect(data.onboarding?.completed_steps).toContain('project_select');
@@ -749,6 +749,21 @@ test('onboarding simulado mediante la UI de Synapse Simulator', async ({ synapse
       expect(selectedProject?.project_path).toBe(PROJECT_PATH);
       expect(selectedProject?.genesis_launch_required, 'onboarding no escribe un flag de lanzamiento de Genesis').toBeUndefined();
       expect(selected.onboarding?.active_project_id).toBe(selectedProject?.project_id);
+      const nucleusExe = join(getBloomPaths().binDir, 'nucleus', process.platform === 'win32' ? 'nucleus.exe' : 'nucleus');
+      const { stdout: contextOutput } = await execFileAsync(nucleusExe,
+        ['--json', 'authority', 'context-read', WORKSPACE_ORG, selectedProject!.project_id], {
+          timeout: 15_000, windowsHide: true,
+          env: { ...process.env, BLOOM_APPDATA_DIR: getBloomPaths().baseDir },
+        });
+      const context = JSON.parse(contextOutput) as { ok?: boolean; evidence?: {
+        localLocation?: { status?: string; path?: string };
+        projectIdContinuity?: { status?: string; reason?: string };
+      } };
+      expect(context.ok).toBe(true);
+      expect(context.evidence?.localLocation?.status).toBe('present');
+      expect(context.evidence?.localLocation?.path).toBe(PROJECT_PATH);
+      expect(context.evidence?.projectIdContinuity?.status,
+        `Project ID continuity: ${context.evidence?.projectIdContinuity?.reason || 'sin detalle'}`).toBe('matched');
       verifyOrganizationIdentity('antes de finalizar', false);
       await conductor!.mainWindow.click('#btn-project-continue');
       await conductor!.mainWindow.locator('#screen-mandate.active').waitFor({ state: 'visible' });

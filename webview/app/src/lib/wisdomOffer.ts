@@ -2,8 +2,8 @@
 //
 // Core no decide ni persiste: lee por separado el catálogo remoto, las
 // instalaciones locales y la elegibilidad de los proyectos (todo vía Nucleus) y
-// los une para mostrar. La única acción es instalar, y sólo la dispara el gesto
-// explícito del Paladín. Una instalación queda inactiva: no se prepara ni se ejecuta.
+// los une para mostrar. Instalar y preparar exigen gestos separados del Paladín.
+// Preparar deja la instancia inactiva y no ejecuta ningún Intent.
 
 export interface Offer {
   definition_id: string;
@@ -30,6 +30,7 @@ export interface InstalledInstance {
     definition: { definitionId: string; version: string; digest: string; label: string; publisherKeyId: string; preparation: string };
     authorization: { kind: string; installationId: string };
     installedAt: string;
+    preparation?: { definition: { version: string; digest: string }; contractDigest: string; sourceFiles: string[] };
   };
 }
 
@@ -51,6 +52,8 @@ interface WisdomBridge {
   readInstallations(): Promise<any>;
   readProjects(): Promise<any>;
   install(selection: { definitionId: string; version: string; digest: string; projectId: string }): Promise<any>;
+  readProjectFiles(projectId: string): Promise<any>;
+  prepare(selection: { mandateId: string; definitionId: string; version: string; digest: string; inputs: string[] }): Promise<any>;
 }
 
 function bridge(): WisdomBridge | null {
@@ -96,6 +99,23 @@ export async function installOffer(offer: Offer, projectId: string): Promise<Rea
   return { ok: true, value: r.install };
 }
 
+export async function readProjectFiles(projectId: string): Promise<Read<string[]>> {
+  const b = bridge();
+  if (!b) return unavailable;
+  const r = await b.readProjectFiles(projectId);
+  if (!r?.ok || !Array.isArray(r.files)) return failure(r, 'project_files_unavailable');
+  return { ok: true, value: r.files };
+}
+
+export async function prepareOffer(offer: Offer, installation: InstalledInstance, inputs: string[]): Promise<Read<any>> {
+  const b = bridge();
+  if (!b) return unavailable;
+  const r = await b.prepare({ mandateId: installation.instance.mandateId, definitionId: offer.definition_id,
+    version: offer.version, digest: offer.digest, inputs });
+  if (!r?.ok) return failure(r, 'preparation_failed');
+  return { ok: true, value: r.preparation };
+}
+
 export type RowState =
   | { kind: 'installed'; installation: InstalledInstance }
   | { kind: 'available' }
@@ -104,7 +124,7 @@ export type RowState =
 /** Estado de la oferta para cada proyecto: instalado, disponible o no elegible. */
 export function rowState(offer: Offer, project: ProjectEligibility, installations: InstalledInstance[]): RowState {
   const installed = installations.find(i => i.instance.projectId === project.projectId &&
-    i.instance.definition.definitionId === offer.definition_id && i.instance.definition.version === offer.version);
+    i.instance.definition.definitionId === offer.definition_id);
   if (installed) return { kind: 'installed', installation: installed };
   if (!project.eligible) return { kind: 'not_eligible', reason: project.reason || 'context_unavailable' };
   return { kind: 'available' };
@@ -123,7 +143,9 @@ export function reasonText(reason: string): string {
 }
 
 export function preparationText(status: string): string {
-  return status === 'not_defined' ? 'Preparación no disponible en esta versión' : 'Preparación: ' + status;
+  if (status === 'not_defined') return 'Preparación no disponible en esta versión';
+  if (status === 'defined') return 'Preparación disponible';
+  return 'Preparación: ' + status;
 }
 
 export function shortDigest(digest: string): string {

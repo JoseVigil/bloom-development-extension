@@ -65,16 +65,25 @@ export async function verifyMandateDefinition(bytes: Uint8Array, key: MandateDef
   const publicKey = b64urlToBytes(key.publicKeyB64url);
   if (publicKey.length !== 32 || !await verifyWithDomain(MANDATE_DEFINITION_DOMAIN, canonicalPayload, signature, new Uint8Array(publicKey).buffer))
     throw new OfferError(400, 'definition_signature_invalid');
-  if (!exact(payload, PAYLOAD_KEYS) || payload.schema !== 'bloom.mandate-definition' || payload.schema_version !== '1.0' ||
+  if (!exact(payload, PAYLOAD_KEYS) || payload.schema !== 'bloom.mandate-definition' ||
+      !['1.0', '1.1'].includes(payload.schema_version) ||
       !UUID.test(payload.definition_id ?? '') || !SEMVER.test(payload.version ?? '') ||
       typeof payload.label !== 'string' || !payload.label || typeof payload.purpose !== 'string' || !payload.purpose ||
       !exact(payload.publisher, ['publisher_id', 'key_id']) || !payload.publisher.publisher_id || payload.publisher.key_id !== key.keyId ||
       typeof payload.published_at !== 'string' || !WIRE_TIME.test(payload.published_at) ||
       !exact(payload.requires, ['contract_version', 'project']) || payload.requires.contract_version !== 4 || payload.requires.project !== true)
     throw new OfferError(400, 'definition_payload_invalid');
-  // Schema 1.0: la preparación queda sin definir. No se acepta una versión que diga
-  // estar lista para preparar sin regla de dominio ni requisitos de insumos.
-  if (!exact(payload.preparation, ['status']) || payload.preparation.status !== 'not_defined')
+  // La versión 1.0 permanece inmutable y sin preparación. La 1.1 firma la
+  // derivación del dominio y el mínimo de archivos del proyecto elegido.
+  const legacyPreparation = payload.schema_version === '1.0' &&
+    exact(payload.preparation, ['status']) && payload.preparation.status === 'not_defined';
+  const definedPreparation = payload.schema_version === '1.1' &&
+    exact(payload.preparation, ['status', 'domain_rule', 'input_requirements']) &&
+    payload.preparation.status === 'defined' && payload.preparation.domain_rule === 'project_identity' &&
+    exact(payload.preparation.input_requirements, ['source', 'min_files']) &&
+    payload.preparation.input_requirements.source === 'project_files' &&
+    payload.preparation.input_requirements.min_files === 1;
+  if (!legacyPreparation && !definedPreparation)
     throw new OfferError(400, 'definition_preparation_invalid');
   return {
     definitionId: payload.definition_id, version: payload.version, label: payload.label, purpose: payload.purpose,

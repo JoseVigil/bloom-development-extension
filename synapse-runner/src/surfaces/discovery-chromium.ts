@@ -76,19 +76,32 @@ async function findOrWaitForPage(
   if (existing) return existing;
 
   return new Promise((resolveP, reject) => {
+    // Chromium may publish a target before Playwright has finished creating its
+    // Page, or the Page may still have its initial URL when we subscribe.
+    // Recheck existing pages as well as listening for new ones.
+    const poll = setInterval(() => {
+      const page = context.pages().find((candidate) => urlPattern.test(candidate.url()));
+      if (page) finish(page);
+    }, 250);
     const timer = setTimeout(() => {
+      clearInterval(poll);
       context.off('page', onPage);
       reject(new Error(`[discovery-chromium] Ninguna tab matcheó ${urlPattern} en ${timeoutMs}ms`));
     }, timeoutMs);
+
+    function finish(page: Page) {
+      clearTimeout(timer);
+      clearInterval(poll);
+      context.off('page', onPage);
+      resolveP(page);
+    }
 
     function onPage(page: Page) {
       page
         .waitForLoadState('domcontentloaded')
         .then(() => {
           if (urlPattern.test(page.url())) {
-            clearTimeout(timer);
-            context.off('page', onPage);
-            resolveP(page);
+            finish(page);
           }
         })
         .catch(() => {

@@ -9,6 +9,7 @@
 // explícito del Paladín sobre un proyecto elegible.
 
 const fs = require('fs');
+const path = require('path');
 const { ipcMain } = require('electron');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -101,6 +102,56 @@ function registerWisdomOfferHandlers(execNucleus, nucleusConfigPath, logger = co
     } catch (error) {
       logger.warn('[WISDOM] instalación falló:', error.message);
       return errorResult(error, 'install_failed');
+    }
+  });
+
+  ipcMain.handle('core:wisdom-project-files-read', async (_event, projectId) => {
+    try {
+      const org = activeOrganization(nucleusConfigPath);
+      const project = org.projects.find(p => p.project_id === projectId);
+      if (!project || !path.isAbsolute(project.project_path || '')) throw new Error('project_unavailable');
+      const root = project.project_path;
+      if (!fs.lstatSync(root).isDirectory()) throw new Error('project_unavailable');
+      const files = [];
+      function visit(dir, relative = '') {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isSymbolicLink()) continue;
+          if (entry.isDirectory()) {
+            if (entry.name === '.git' || entry.name === '.bloom' || entry.name === 'node_modules') continue;
+            visit(path.join(dir, entry.name), relative ? `${relative}/${entry.name}` : entry.name);
+          } else if (entry.isFile()) {
+            files.push(relative ? `${relative}/${entry.name}` : entry.name);
+            if (files.length > 5000) throw new Error('project_file_limit_exceeded');
+          }
+        }
+      }
+      visit(root);
+      files.sort();
+      return { ok: true, files };
+    } catch (error) {
+      logger.warn('[WISDOM] archivos del proyecto no disponibles:', error.message);
+      return errorResult(error, 'project_files_unavailable');
+    }
+  });
+
+  ipcMain.handle('core:wisdom-prepare', async (_event, selection) => {
+    const { mandateId, definitionId, version, digest, inputs } = selection || {};
+    if (!UUID.test(mandateId || '') || !UUID.test(definitionId || '') || version !== '1.1.0' ||
+        !HEX64.test(digest || '') || !Array.isArray(inputs) || inputs.length === 0 ||
+        inputs.some(i => typeof i !== 'string' || !i || i.startsWith('/') || i.includes('\\') || i.includes(':') || i.split('/').some(p => !p || p === '.' || p === '..'))) {
+      return { ok: false, error: { code: 'invalid_preparation_selection', message: 'invalid_preparation_selection' } };
+    }
+    try {
+      const args = ['--json', 'mandate', 'offer', 'prepare', '--mandate-id', mandateId,
+        '--definition', definitionId, '--version', version, '--digest', digest];
+      for (const input of inputs) args.push('--input', input);
+      logger.info?.(`[WISDOM] preparación explícita mandate=${mandateId} definition=${definitionId} version=${version} inputs=${inputs.length}`);
+      const result = await execNucleus(args, 120000);
+      if (!result?.ok || result.schema !== 'bloom.mandate-offer-cli/v1') return cliFailure(result, 'preparation_failed');
+      return { ok: true, preparation: result.result };
+    } catch (error) {
+      logger.warn('[WISDOM] preparación falló:', error.message);
+      return errorResult(error, 'preparation_failed');
     }
   });
 }

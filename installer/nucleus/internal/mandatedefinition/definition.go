@@ -25,12 +25,16 @@ import (
 )
 
 const (
-	Schema        = "bloom.mandate-definition"
-	SchemaVersion = "1.0"
+	Schema                  = "bloom.mandate-definition"
+	SchemaVersion           = "1.0"
+	PreparableSchemaVersion = "1.1"
 	// SignatureDomain separates publisher signatures from every Authority domain.
 	SignatureDomain = "BLOOM-MANDATE-DEFINITION-v1"
 
-	PreparationNotDefined = "not_defined"
+	PreparationNotDefined         = "not_defined"
+	PreparationDefined            = "defined"
+	PreparationDomainProject      = "project_identity"
+	PreparationSourceProjectFiles = "project_files"
 
 	maxDefinitionBytes = 1 << 20
 )
@@ -92,7 +96,14 @@ type Requires struct {
 // status is not_defined: the domain rule and input requirements are deferred
 // to a later published version, never filled in locally or by default.
 type Preparation struct {
-	Status string `json:"status"`
+	Status            string             `json:"status"`
+	DomainRule        string             `json:"domain_rule,omitempty"`
+	InputRequirements *InputRequirements `json:"input_requirements,omitempty"`
+}
+
+type InputRequirements struct {
+	Source   string `json:"source"`
+	MinFiles int    `json:"min_files"`
 }
 
 type Payload struct {
@@ -226,7 +237,7 @@ func SigningMessage(canonicalPayload []byte) []byte {
 
 // Validate checks the payload rules of schema 1.0.
 func (p Payload) Validate() error {
-	if p.Schema != Schema || p.SchemaVersion != SchemaVersion {
+	if p.Schema != Schema || (p.SchemaVersion != SchemaVersion && p.SchemaVersion != PreparableSchemaVersion) {
 		return errors.New("unsupported mandate definition schema")
 	}
 	if !uuidPattern.MatchString(p.DefinitionID) || !semverPattern.MatchString(p.Version) {
@@ -272,8 +283,17 @@ func (p Payload) Validate() error {
 	if p.Requires.ContractVersion != 4 || !p.Requires.Project {
 		return errors.New("mandate definition requirements are invalid")
 	}
-	if p.Preparation.Status != PreparationNotDefined {
-		return errors.New("mandate definition schema 1.0 only allows preparation not_defined")
+	switch p.SchemaVersion {
+	case SchemaVersion:
+		if p.Preparation.Status != PreparationNotDefined || p.Preparation.DomainRule != "" || p.Preparation.InputRequirements != nil {
+			return errors.New("mandate definition schema 1.0 only allows preparation not_defined")
+		}
+	case PreparableSchemaVersion:
+		if p.Preparation.Status != PreparationDefined || p.Preparation.DomainRule != PreparationDomainProject ||
+			p.Preparation.InputRequirements == nil || p.Preparation.InputRequirements.Source != PreparationSourceProjectFiles ||
+			p.Preparation.InputRequirements.MinFiles != 1 {
+			return errors.New("mandate definition preparation rule is invalid")
+		}
 	}
 	return nil
 }
@@ -303,11 +323,13 @@ func checkEmbedded(digest, content, identityField, identity string) error {
 // closed for every definition of schema 1.0: there is no default domain rule
 // and no default input requirement.
 func RequirePreparable(d Definition) error {
-	if d.Payload.Preparation.Status != "defined" {
+	if err := d.Payload.Validate(); err != nil {
 		return ErrNotPrepared
 	}
-	// No schema version supports a defined preparation yet. Fail closed.
-	return ErrNotPrepared
+	if d.Payload.SchemaVersion != PreparableSchemaVersion || d.Payload.Preparation.Status != PreparationDefined {
+		return ErrNotPrepared
+	}
+	return nil
 }
 
 // Sign builds the exact signed file for a payload. It is used by the

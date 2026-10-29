@@ -78,10 +78,12 @@ contextBridge.exposeInMainWorld('confirmedContext', {
 });
 
 // Wisdom: lecturas separadas (catálogo remoto, instalaciones locales, proyectos)
-// y una única acción explícita de instalación. Nada de esto prepara ni ejecuta.
+// y gestos separados de instalación y preparación. La navegación sólo lee.
 contextBridge.exposeInMainWorld('wisdom', {
   readOffers: () => ipcRenderer.invoke('core:wisdom-offers-read'),
   readInstallations: () => ipcRenderer.invoke('core:wisdom-installations-read'),
   readProjects: () => ipcRenderer.invoke('core:wisdom-projects-read'),
-  install: (selection) => ipcRenderer.invoke('core:wisdom-install', selection)
+  install: (selection) => ipcRenderer.invoke('core:wisdom-install', selection),
+  readProjectFiles: (projectId) => ipcRenderer.invoke('core:wisdom-project-files-read', projectId),
+  prepare: (selection) => ipcRenderer.invoke('core:wisdom-prepare', selection)
 });

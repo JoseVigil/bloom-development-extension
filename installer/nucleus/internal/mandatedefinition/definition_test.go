@@ -122,6 +122,38 @@ func TestPreparationIsRefusedForEveryInstallableDefinition(t *testing.T) {
 	}
 }
 
+func TestSignedPreparableVersionRequiresProjectFiles(t *testing.T) {
+	priv, keys := testKeys()
+	p, err := BuildPreparableOfferPayload(InitialOfferInput{
+		DefinitionID: "0b8e4b9e-6d0f-4c55-9d8e-2f4b7a1c3e21", Version: "1.1.0", Label: "Genesis",
+		Purpose: "Estructuración semántica inicial de un proyecto", PublisherID: "bloom", KeyID: testKeyID,
+		PublishedAt: "2026-10-27T12:00:00Z",
+		PolicyRaw:   repoFile(t, "installer/aitap/policies/initial-mandate-v1.json"),
+		RegistryRaw: repoFile(t, "installer/aitap/registry/initial-mandate-v1.json"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := Sign(p, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Verify(raw, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RequirePreparable(d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Payload.SchemaVersion != PreparableSchemaVersion || len(d.Payload.Plan.Actions) != 6 {
+		t.Fatal("preparable plan changed")
+	}
+	p.Preparation.InputRequirements.MinFiles = 0
+	if _, err := Sign(p, priv); err == nil {
+		t.Fatal("zero-file preparation was signed")
+	}
+}
+
 // El vector lo consume backend/test/mandate-offers.spec.ts: el Backend verifica
 // la firma del publicador con exactamente los mismos bytes.
 func TestMandateDefinitionInteropVector(t *testing.T) {

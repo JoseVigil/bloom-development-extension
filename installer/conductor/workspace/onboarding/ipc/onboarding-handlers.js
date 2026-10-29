@@ -22,6 +22,7 @@ const {
   getOrCreateProject,
   getActiveProject,
 } = require('../../../shared/onboarding-schema');
+const { registerSelectedProject, reconcileExistingProject } = require('../../../shared/project-registration');
 
 const log = getLogger('onboarding');
 let geminiVaultSession = null;
@@ -822,54 +823,19 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
   // ── HANDLER: Persistir la selección de proyecto en PROJECT ──────────────
   // Se llama para AMBAS ramas de importSelectedProject() (step-project.js):
   // repo de GitHub (projectPath vacío) y carpeta local ya importada
-  // (projectPath = destPath devuelto por onboarding:import-project). Guarda
-  // de forma optimista antes de create-mandate, para que un resume
-  // interrumpido no pierda la selección. create-mandate puede sobrescribir
-  // project_path después con el valor definitivo — no hay conflicto.
+  // (projectPath = destPath devuelto por onboarding:import-project). La
+  // selección local se considera confirmada sólo al registrar la misma
+  // pareja project_id + ruta en nucleus.json y en el catálogo material.
   ipcMain.handle('onboarding:select-project', async (event, { projectName, projectPath }) => {
     log.info('[IPC] onboarding:select-project — projectName:', projectName, '| projectPath:', projectPath || '(none)');
     try {
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      data.onboarding = data.onboarding || {};
-
-      // FIX (auditoría multi-org): antes esto escribía project_name/project_path
-      // como campos planos en la raíz de onboarding — exactamente lo que el
-      // esquema anidado (shared/onboarding-schema.js) reemplaza. Un proyecto no
-      // puede existir fuera de una organización, así que primero migramos
-      // cualquier resto de esquema plano viejo y resolvemos la org activa.
-      migrateToNestedSchema(data.onboarding);
-      const org = getActiveOrg(data.onboarding);
-      if (!org) {
-        throw new Error(
-          'No hay organización activa en nucleus.json — ¿se completó nucleus_create antes de seleccionar el proyecto?'
-        );
-      }
-
-      // getOrCreateProject busca por project_name (todavía no tenemos
-      // project_id en este punto del flujo) y deja active_project_id
-      // apuntando al proyecto resuelto.
-      const project = getOrCreateProject(data.onboarding, org, {
-        projectName,
-        projectPath: projectPath || null,
-      });
-      // Red de seguridad (mismo patrón que nucleus_create en init-nucleus, y
-      // que create-mandate más abajo): pushear el propio stepId a
-      // completed_steps[] acá, no solo depender de que MilestoneReactor lo
-      // haga vía un milestone de Brain. project_select puede completarse sin
-      // que Brain llegue a emitir PROJECT_CREATED (ej. selección de carpeta
-      // local, que no pasa por Discovery/Chrome en absoluto).
-      data.onboarding.completed_steps = data.onboarding.completed_steps || [];
-      if (!data.onboarding.completed_steps.includes('project_select')) {
-        data.onboarding.completed_steps.push('project_select');
-      }
-      data.onboarding.updated_at = new Date().toISOString();
-      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      const project = registerSelectedProject(NUCLEUS_JSON, { projectName, projectPath });
       return {
         success: true,
         project: {
-          projectId: project.project_id,
-          projectName: project.project_name,
-          projectPath: project.project_path,
+          projectId: project.projectId,
+          projectName: project.projectName,
+          projectPath: project.projectPath,
         },
       };
     } catch (err) {
@@ -917,19 +883,6 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       }
 
       const result = await copyProject({ sourcePath, destPath });
-
-      try {
-        // Igual que select-project: el proyecto cuelga de la org activa, no
-        // de un campo plano en la raíz de onboarding.
-        getOrCreateProject(data.onboarding, org, {
-          projectName: project,
-          projectPath: result.destPath,
-        });
-        data.onboarding.updated_at = new Date().toISOString();
-        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
-      } catch (e) {
-        log.warn('[IPC] onboarding:import-project — could not persist project_path:', e.message);
-      }
 
       log.success('[IPC] onboarding:import-project — ok:', result.destPath,
         '| gitExcluded:', result.gitExcluded.length);
@@ -1056,6 +1009,11 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       const activeProjectBeforeSync = getActiveProject(nucleusData.onboarding);
       if (!activeProjectBeforeSync || activeProjectBeforeSync.project_id !== projectId) {
         throw new Error(`project_id_mismatch: ${projectId} no coincide con onboarding.active_project_id`);
+      }
+      // Reanudar tras una interrupción entre los dos writes de Project debe
+      // conservar el ID ya persistido; un conflicto material bloquea el cierre.
+      if (activeProjectBeforeSync.project_path) {
+        reconcileExistingProject(NUCLEUS_JSON, projectId);
       }
 
       // El primer sync es parte de la barrera de cierre: registra la instalación,
@@ -1305,14 +1263,15 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow, getRea
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       nucleusData.onboarding = nucleusData.onboarding || {};
       migrateToNestedSchema(nucleusData.onboarding);
+      const activeWorkspacePath = getActiveOrg(nucleusData.onboarding)?.workspace_path || null;
       const activeProject = getActiveProject(nucleusData.onboarding);
       const activeProjectId = activeProject?.project_id || null;
 
       log.success('[IPC] onboarding:get-resume-state — ok:', JSON.stringify({
-        stepId, produced, activeProjectId,
+        stepId, produced, activeProjectId, activeWorkspacePath,
       }));
 
-      return { success: true, stepId, produced, activeProjectId };
+      return { success: true, stepId, produced, activeProjectId, activeWorkspacePath };
     } catch (err) {
       log.error('[IPC] onboarding:get-resume-state — FAILED:', err.message);
       // Fallback seguro: si el motor falla, arrancar desde el primer step

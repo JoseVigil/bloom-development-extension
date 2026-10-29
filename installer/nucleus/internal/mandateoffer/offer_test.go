@@ -47,6 +47,7 @@ type harness struct {
 	definition        []byte
 	sel               mandatedelivery.OfferSelection
 	publisherKeys     map[string]ed25519.PublicKey
+	publisherKey      ed25519.PrivateKey
 	authorityKey      ed25519.PrivateKey
 	server            *httptest.Server
 	requests          atomic.Int32
@@ -59,6 +60,7 @@ func newHarness(t *testing.T) *harness {
 	h := &harness{t: t, appData: t.TempDir(), mandates: filepath.Join(t.TempDir(), ".mandates"),
 		eligibility: Eligibility{BindingStatus: "bound", BindingRevision: "3", BindingCheckedAt: "2026-10-19T19:00:00Z", LocationStatus: "present", ContinuityStatus: "matched"}}
 	_, publisher, _ := ed25519.GenerateKey(rand.Reader)
+	h.publisherKey = publisher
 	payload, err := mandatedefinition.BuildInitialOfferPayload(mandatedefinition.InitialOfferInput{
 		DefinitionID: "0b8e4b9e-6d0f-4c55-9d8e-2f4b7a1c3e21", Version: "1.0.0", Label: "Genesis", Purpose: "Oferta inicial",
 		PublisherID: "bloom", KeyID: "publisher-key", PublishedAt: "2026-10-19T12:00:00Z",

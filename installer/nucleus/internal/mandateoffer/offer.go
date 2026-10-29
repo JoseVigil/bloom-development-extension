@@ -4,8 +4,8 @@
 // project: a delivery receipt, the immutable definition and a
 // mandate_state.json with status "installed". It never writes mandate.json,
 // inputs, an adoption journal or an act receipt, never starts a workflow and
-// never calls AITAP. Preparation (T2) is refused while the definition does not
-// define it.
+// never calls AITAP. Preparation is a separate, explicit operation requiring
+// a signed definition that declares its inputs.
 package mandateoffer
 
 import (
@@ -21,12 +21,14 @@ import (
 
 	"nucleus/internal/mandatedefinition"
 	"nucleus/internal/mandatedelivery"
+	"nucleus/internal/orchestration/mandatecontract"
 )
 
 const (
 	InstanceSchema        = "bloom.mandate-instance"
 	InstanceSchemaVersion = "1.0"
 	StatusInstalled       = "installed"
+	StatusPrepared        = "prepared"
 	// AuthorizationMasterLocal records that a local Master role and the signed
 	// installation authorized the install. It does NOT claim that Authority
 	// verified the human who acted.
@@ -50,6 +52,17 @@ type Instance struct {
 	ReceiptRef     string                 `json:"receiptRef"`
 	Authorization  InstanceAuthorization  `json:"authorization"`
 	InstalledAt    string                 `json:"installedAt"`
+	Preparation    *InstancePreparation   `json:"preparation,omitempty"`
+}
+
+// InstancePreparation records the new signed definition without replacing the
+// immutable definition and delivery receipt that created the installation.
+type InstancePreparation struct {
+	Definition     InstanceDefinition `json:"definition"`
+	ReceiptRef     string             `json:"receiptRef"`
+	ContractDigest string             `json:"contractDigest"`
+	PreparedAt     string             `json:"preparedAt"`
+	SourceFiles    []string           `json:"sourceFiles"`
 }
 
 type InstanceProjectBinding struct {
@@ -300,12 +313,28 @@ func Installations(appDataDir, mandatesRoot string) ([]InstalledInstance, error)
 		default:
 			list[i].Consistent = true
 		}
+		if list[i].Consistent && list[i].Instance.Status == StatusPrepared {
+			prepared := list[i].Instance.Preparation
+			if prepared == nil || prepared.Definition.Version == "" || prepared.ContractDigest == "" {
+				list[i].Consistent, list[i].Problem = false, "preparation_missing"
+				continue
+			}
+			preparedRaw, readErr := os.ReadFile(DefinitionPath(appDataDir, prepared.Definition.DefinitionID, prepared.Definition.Version))
+			if readErr != nil || mandatedefinition.FileDigest(preparedRaw) != prepared.Definition.Digest {
+				list[i].Consistent, list[i].Problem = false, "preparation_definition_mismatch"
+				continue
+			}
+			envelope, verifyErr := mandatecontract.LoadVerified(filepath.Dir(list[i].StatePath), filepath.Join(appDataDir, "authority", "identity.json"))
+			if verifyErr != nil || envelope.ContractDigest != prepared.ContractDigest {
+				list[i].Consistent, list[i].Problem = false, "prepared_contract_invalid"
+			}
+		}
 	}
 	return list, nil
 }
 
-// RefusePreparation is the only preparation entry point. It loads the
-// instance and its local definition and applies the fail-closed gate.
+// RefusePreparation retains the fail-closed check for legacy installed
+// definitions that do not declare preparation.
 func RefusePreparation(appDataDir, mandatesRoot, mandateID string) error {
 	if !uuidPattern.MatchString(mandateID) {
 		return errors.New("invalid mandate id")

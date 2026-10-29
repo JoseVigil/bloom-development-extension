@@ -65,3 +65,16 @@ func BuildInitialOfferPayload(in InitialOfferInput) (Payload, error) {
 	}
 	return p, p.Validate()
 }
+
+// BuildPreparableOfferPayload keeps the approved six-Action plan and signs the
+// project-derived domain and minimum project-file input rule in schema 1.1.
+func BuildPreparableOfferPayload(in InitialOfferInput) (Payload, error) {
+	p, err := BuildInitialOfferPayload(in)
+	if err != nil {
+		return Payload{}, err
+	}
+	p.SchemaVersion = PreparableSchemaVersion
+	p.Preparation = Preparation{Status: PreparationDefined, DomainRule: PreparationDomainProject,
+		InputRequirements: &InputRequirements{Source: PreparationSourceProjectFiles, MinFiles: 1}}
+	return p, p.Validate()
+}

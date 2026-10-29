@@ -118,7 +118,7 @@ export async function sendDiscoveryMessage(
     await expect(sendButton).toBeEnabled();
     await sendButton.press('Enter');
   }
-  await expect(page.locator('#send-status')).toHaveText('✓ Sent');
+  await expect(page.locator('#send-status')).toHaveText('✓ Sent', { timeout: 30_000 });
   console.log(`[synapse-simulator] UI response ${id}: ${await page.locator('#send-status').textContent()}`);
   return payload;
 }

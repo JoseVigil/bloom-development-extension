@@ -5,7 +5,7 @@
 //	list       catálogo remoto de la organización activa (sin bytes)
 //	installed  instalaciones locales (sin red)
 //	install    instalación explícita de (definición, versión, digest) para un proyecto
-//	prepare    preparación (T2): rechazada mientras la definición no la defina
+//	prepare    preparación explícita con una definición firmada que la habilite
 //
 // Instalar deja una instancia durable e inactiva: recibo, definición inmutable y
 // mandate_state.json con status "installed". No escribe mandate.json, no adopta,
@@ -28,7 +28,6 @@ import (
 	"nucleus/internal/authority"
 	"nucleus/internal/core"
 	"nucleus/internal/governance"
-	"nucleus/internal/mandatedefinition"
 	"nucleus/internal/mandatedelivery"
 	"nucleus/internal/mandateoffer"
 	"nucleus/internal/supervisor"
@@ -66,6 +65,28 @@ func printOfferResult(c *core.Core, r offerCommandResult) {
 	}
 }
 
+func printPrepareOfferResult(c *core.Core, r offerCommandResult) {
+	if c.IsJSON {
+		printOfferResult(c, r)
+		return
+	}
+	if !r.OK {
+		fmt.Fprintln(os.Stderr, "No se pudo preparar el Mandate:", r.Error.Message)
+		os.Exit(1)
+	}
+	result, ok := r.Result.(mandateoffer.PrepareResult)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "No se pudo presentar el resultado de la preparación")
+		os.Exit(1)
+	}
+	message := "preparado"
+	if result.Status == "already_prepared" {
+		message = "ya estaba preparado"
+	}
+	fmt.Printf("Mandate %s %s e inactivo.\nContrato firmado: %s\nArchivos elegidos: %d\n",
+		result.MandateID, message, result.ContractDigest, len(result.SourceFiles))
+}
+
 func createMandateOfferCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "offer",
@@ -75,7 +96,7 @@ func createMandateOfferCommand(c *core.Core) *cobra.Command {
   list       lee el catálogo remoto habilitado (sin descargar bytes)
   installed  lista las instalaciones locales (sin red)
   install    instala exactamente (definición, versión, digest) para un proyecto elegible
-  prepare    preparación (T2): rechazada mientras la definición no la defina
+  prepare    prepara explícitamente una instalación con la definición firmada 1.1.0
 
 Instalar deja una instancia durable e inactiva (status "installed"): no adopta,
 no aprueba, no activa ni inicia workflows. Todos los subcomandos responden JSON
@@ -265,41 +286,98 @@ misma selección devuelve "already_installed". No adopta, no aprueba ni activa.`
 }
 
 func createMandateOfferPrepareCommand(c *core.Core) *cobra.Command {
-	var mandateID string
+	var mandateID, definitionID, version, digest string
+	var inputs []string
 	cmd := &cobra.Command{
 		Use:   "prepare",
-		Short: "Preparación (T2) de una oferta instalada: rechazada mientras la definición no la defina",
-		Long: `Punto de entrada de la preparación (T2) de una instancia instalada. Mientras la
-definición declare preparation "not_defined", responde ok=false con
-preparation_not_defined y no modifica la instancia.`,
-		Example: `  nucleus mandate offer prepare --mandate-id MANDATE_ID
-  nucleus --json mandate offer prepare --mandate-id MANDATE_ID`,
+		Short: "Prepara una instancia instalada con una nueva definición firmada e insumos elegidos",
+		Long: `Recibe y verifica la nueva versión exacta de la definición, revalida el
+proyecto y congela únicamente los archivos elegidos. Firma un v4 local y deja
+la instancia preparada e inactiva. No aprueba, activa ni ejecuta.`,
+		Example: `  nucleus --json mandate offer prepare --mandate-id MANDATE_ID --definition DEFINITION_ID --version 1.1.0 --digest SHA256_HEX --input README.md`,
 		Annotations: map[string]string{
 			"category":      "MANDATES",
-			"json_response": `{"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer prepare","ok":false,"error":{"code":"preparation_not_defined","message":"mandate definition preparation is not defined: this version can be installed but not prepared"}}`,
+			"json_response": `{"schema":"bloom.mandate-offer-cli/v1","command":"mandate offer prepare","ok":true,"result":{"status":"prepared","mandateId":"MANDATE_ID","contractDigest":"SHA256_HEX","sourceFiles":["README.md"]}}`,
 		},
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			const name = "mandate offer prepare"
-			cfg, err := supervisor.LoadNucleusConfig()
-			if err != nil {
-				printOfferResult(c, offerFailure(name, "nucleus_config_unavailable", err, nil))
-				return
-			}
-			err = mandateoffer.RefusePreparation(c.Paths.AppDataDir, cfg.MandatesRoot(), mandateID)
-			if errors.Is(err, mandatedefinition.ErrNotPrepared) {
-				printOfferResult(c, offerFailure(name, "preparation_not_defined", err, nil))
-				return
-			}
-			if err == nil {
-				err = errors.New("preparation is not implemented")
-			}
-			printOfferResult(c, offerFailure(name, "preparation_unavailable", err, nil))
+			printPrepareOfferResult(c, runMandateOfferPrepare(c, mandateID, definitionID, version, digest, inputs))
 		},
 	}
 	cmd.Flags().StringVar(&mandateID, "mandate-id", "", "mandateId de la instancia instalada (requerido)")
-	_ = cmd.MarkFlagRequired("mandate-id")
+	cmd.Flags().StringVar(&definitionID, "definition", "", "definition_id de la nueva versión firmada")
+	cmd.Flags().StringVar(&version, "version", "", "versión exacta ofrecida")
+	cmd.Flags().StringVar(&digest, "digest", "", "digest exacto ofrecido")
+	cmd.Flags().StringArrayVar(&inputs, "input", nil, "archivo relativo al proyecto (repetible)")
+	for _, flag := range []string{"mandate-id", "definition", "version", "digest", "input"} {
+		_ = cmd.MarkFlagRequired(flag)
+	}
 	return cmd
+}
+
+func runMandateOfferPrepare(c *core.Core, mandateID, definitionID, version, digest string, inputs []string) offerCommandResult {
+	const name = "mandate offer prepare"
+	logger, err := core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)
+	if err != nil {
+		return offerFailure(name, "mandate_logging_unavailable", err, nil)
+	}
+	defer logger.Close()
+	logger.Info("offer prepare requested mandate_id=%s definition_id=%s version=%s input_count=%d",
+		mandateID, definitionID, version, len(inputs))
+	fail := func(stage, code string, err error, detail any) offerCommandResult {
+		logger.Error("offer prepare failed stage=%s code=%s mandate_id=%s", stage, code, mandateID)
+		return offerFailure(name, code, err, detail)
+	}
+	if err := requireMandateMaster(c); err != nil {
+		return fail("authorization", "master_required", err, nil)
+	}
+	env, code, err := resolveOfferEnv(c)
+	if err != nil {
+		return fail("environment", code, err, nil)
+	}
+	instances, err := mandateoffer.ListInstances(env.mandatesRoot)
+	if err != nil {
+		return fail("instance", "instance_unavailable", err, nil)
+	}
+	var projectID string
+	for _, item := range instances {
+		if item.Instance.MandateID == mandateID {
+			projectID = item.Instance.ProjectID
+			break
+		}
+	}
+	if projectID == "" {
+		return fail("instance", "instance_unavailable", errors.New("installed instance not found"), nil)
+	}
+	project, err := core.ResolveSelectedProject(env.active, projectID)
+	if err != nil {
+		return fail("project", "project_unavailable", err, nil)
+	}
+	binding := authority.Binding{OrganizationID: env.active.OrganizationID, InstallationID: env.identity.InstallationID}
+	manifest, trust, err := authority.FetchAndVerifyTrustManifest(context.Background(), env.active.AuthorityBaseURL, binding,
+		env.identity.PrivateKey, governance.AuthorityRoots(), &http.Client{Timeout: 30 * time.Second}, time.Now().UTC())
+	if err != nil {
+		return fail("trust", "trust_manifest_invalid", err, nil)
+	}
+	env.client.Context.Issuer, env.client.Context.Trust = manifest.Payload.Issuer, trust
+	preparer := &mandateoffer.Preparer{
+		OrganizationID: env.active.OrganizationID, AppDataDir: c.Paths.AppDataDir, MandatesRoot: env.mandatesRoot,
+		ProjectPath: project.Path, ProjectName: project.Name, Identity: env.identity, Receiver: env.client,
+		PublisherKeys: func() (map[string]ed25519.PublicKey, error) {
+			return manifest.MandateDefinitionKeys(time.Now().UTC()), nil
+		},
+		Eligibility: func(id string) (mandateoffer.Eligibility, error) {
+			return eligibilityFromContext(governance.ConfirmedContextEvidence(c.Paths.AppDataDir, env.active.OrgSlug, id)), nil
+		}, Now: time.Now,
+	}
+	result, err := preparer.Prepare(context.Background(), mandateID,
+		mandatedelivery.OfferSelection{DefinitionID: definitionID, Version: version, Digest: digest}, inputs)
+	if err != nil {
+		return fail("preparation", "preparation_failed", err, nil)
+	}
+	logger.Success("offer prepare result=%s mandate_id=%s definition_id=%s version=%s contract_digest=%s input_count=%d",
+		result.Status, result.MandateID, definitionID, version, result.ContractDigest, len(result.SourceFiles))
+	return offerCommandResult{Schema: "bloom.mandate-offer-cli/v1", Command: name, OK: true, Result: result}
 }
 
 func eligibilityFromContext(evidence map[string]any) mandateoffer.Eligibility {
