@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orrery · corrida C1</title>
+<!--
+  Orrery — CORRIDA C1 · Ficha en capas · Superficie navegable, piso mínimo
+  Ubicación propuesta: docs/ANALYSIS/ORRERY/VISUAL/corridas_fase1/C1_ficha_en_capas.html
+  Base: corte espacial 04 (corrida C0). Esta corrida cambia SOLO cómo se explora el Gene; la ciudad, las tuberías y D-E1..D-E6 son las mismas.
+  Entornos (parámetro env): sim = valores simulados con la forma exacta del store G1 (installer/nucleus/internal/gene/model.go) ·
+    fixture = installer/nucleus/internal/gene/testdata/authorized_first_gene.json (test_only, synthetic, productive_authority=false).
+  Ninguna corrida lee datos productivos: no existe en Darwin un lector de Gene para Orrery (contrato G1 §0: no integra Orrery).
+
+  NO ES DISEÑO APROBADO, NI Visual Architecture, NI Interaction Grammar, NI código de Workspace Core.
+  Datos sintéticos con semilla fija. No usa OrreryTree, data.ts ni código de installer/ (D-4). PlayCanvas 2.22.1 por CDN.
+
+  Rige: docs/ANALYSIS/ORRERY/VISUAL/Orrery_Estructura_Base_Universo_Fase1_Definicion_v0_1.md (aprobada 2026-10-25), §9.
+    Tenant y Organization: bases cuadradas · Project: manzana · Domain: edificio · Gene: piso dentro del edificio.
+    Calles entre edificios, autopistas entre manzanas. Tuberías SOLO entre apariciones de un mismo Gene, solo con Foco.
+    Fuera: cámara de calle, fase 2 (Mandates en ejecución), colisiones, tuberías entre Genes distintos o entre Contextos.
+  Decisiones D-E1..D-E6: opción más segura por defecto; variante alternativa con una tecla.
+    I  D-E1 identificación del Gene   · defecto: «Sin nombre conocido» + id rotulado   · variante: función declarada como rótulo
+    R  D-E2 Repositories y Genes sin Domain · defecto: lote al fondo de la manzana   · variante: lotes al final de la fila de edificios
+    O  D-E3 orden de los pisos         · defecto: por gene_id                          · variante: alfabético por función declarada
+    Z  D-E4 figura de la Organization  · defecto: base escalonada                      · variante: solo perímetro sobre el piso del Tenant
+    K  D-E5 resaltado de la tubería    · defecto: luminosidad (paleta neutra)          · variante: acento de la paleta (#C8F55A; choca con DP-c)
+    T  D-E6 apertura de la pila        · defecto: instantánea (RI-3)                   · variante: animada al cambiar el Foco
+    P  disposición interna de los pisos (apilados / repartidos)
+  Parámetros de URL: env=sim|fixture T=T1|T2|T3 ident=sin|func ubic=fondo|fila orden=id|func org=base|perim res=luz|acento trans=inst|anim apil=pila|div
+                      el minEl foc anchor ind view=top sup=0 doc=1 lenses
+-->
+<script src="https://cdn.jsdelivr.net/npm/playcanvas@2.22.1/build/playcanvas.min.js"></script>
+<style>
+  :root{
+    --color-bg:#080A0E; --color-surface:#0D1117; --color-surface-hover:#131820;
+    --color-text-primary:#E8EAF0; --color-text-secondary:rgba(232,234,240,.45); --color-text-dim:rgba(232,234,240,.22);
+    --color-border:rgba(255,255,255,.06); --color-border-active:rgba(255,255,255,.18);
+    --font-display:'Syne',system-ui,sans-serif; --font-mono:'DM Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--color-bg);color:var(--color-text-primary);font:12px/1.45 var(--font-mono)}
+  #c{position:fixed;inset:0;width:100vw;height:100vh;display:block;outline:none}
+  #labels,#interact{position:fixed;inset:0;pointer-events:none}
+  #hud{position:fixed;left:0;right:0;top:0;display:flex;flex-wrap:wrap;gap:3px 16px;align-items:baseline;padding:7px 14px;
+       background:linear-gradient(var(--color-bg),rgba(8,10,14,.84));border-bottom:1px solid var(--color-border);pointer-events:auto}
+  #hud .k{color:var(--color-text-dim);margin-right:6px}
+  #hud .sim{border:1px solid var(--color-border-active);padding:1px 6px;letter-spacing:.08em;color:var(--color-text-secondary)}
+  #hud .lens{color:var(--color-text-secondary)} #hud .lens b{color:var(--color-text-primary);font-weight:normal}
+  #hud .alt{color:var(--color-text-primary)}
+  #surf{position:fixed;right:12px;top:118px;bottom:44px;width:370px;overflow:auto;padding:10px 12px;background:rgba(13,17,23,.92);
+        border:1px solid var(--color-border);pointer-events:auto}
+  #surf.collapsed{width:auto;bottom:auto;padding:6px 10px}
+  #surf.collapsed .body{display:none}
+  #surf h3,#doc h3{margin:12px 0 4px;font:normal 11px var(--font-mono);letter-spacing:.1em;color:var(--color-text-dim)}
+  #surf .row,#doc .row{padding:2px 0;border-bottom:1px solid var(--color-border)}
+  #surf .subj{font:600 16px var(--font-display);margin:4px 0 2px}
+  .note{color:var(--color-text-dim)}
+  button{background:var(--color-surface);color:var(--color-text-secondary);border:1px solid var(--color-border-active);font:inherit;padding:1px 6px;cursor:pointer}
+  body.modofoco #surf{display:none}
+  #doc{position:fixed;left:24px;top:118px;bottom:44px;right:394px;overflow:auto;padding:16px 22px;background:var(--color-surface);
+       border:1px solid var(--color-border-active);pointer-events:auto;display:none}
+  body.nosurf #doc{right:24px}
+  #doc .subj{font:600 22px var(--font-display);margin:2px 0 4px}
+  #doc .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 28px}
+  #doc code{color:var(--color-text-secondary)}
+  #keys{position:fixed;left:14px;bottom:8px;right:14px;color:var(--color-text-dim);pointer-events:auto}
+  .lbl{position:absolute;transform:translate(-50%,0);white-space:nowrap;color:var(--color-text-secondary);font-size:11px}
+  .lbl.cont{transform:none;color:var(--color-text-dim);letter-spacing:.06em}
+  .lbl.dom{color:var(--color-text-dim);letter-spacing:.04em}
+  .lbl.pl{transform:none;font-size:10px}
+  .lbl.on{color:var(--color-text-primary)}
+  .brk{position:absolute;border:0 solid var(--color-text-primary);width:9px;height:9px}
+  .ind-lbl{position:absolute;white-space:nowrap;padding:2px 6px;background:rgba(8,10,14,.9);border:1px solid var(--color-border-active);font-size:11px}
+  .tag{display:inline-block;font-size:9.5px;letter-spacing:.04em;padding:0 4px;margin-left:4px;border:1px solid var(--color-border-active);color:var(--color-text-secondary);vertical-align:1px}
+  .tag.na{border-style:dashed;color:var(--color-text-dim)} .tag.sim{border-style:dotted} .tag.hip{border-style:dotted;color:var(--color-text-dim)} .tag.calc{color:var(--color-text-dim)}
+  .act{cursor:pointer;color:var(--color-text-primary)} .act:hover{background:var(--color-surface-hover)} .sel{background:var(--color-surface-hover);outline:1px solid var(--color-border-active)}
+  .fn{border:1px dashed var(--color-text-primary);padding:1px 6px}
+  #flash{position:fixed;left:50%;top:84px;transform:translateX(-50%);padding:3px 10px;background:var(--color-surface);border:1px solid var(--color-border-active);display:none}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div id="labels"></div>
+<div id="interact"></div>
+<div id="hud"></div>
+<div id="surf"><div><button id="btnSurf" type="button">Superficie ▸</button></div><div class="body" id="surfBody"></div></div>
+<div id="doc"></div>
+<div id="keys">arrastrar: orbitar · ⇧/botón derecho: desplazar · rueda: distancia · clic/Enter: Foco · Tab: indicación · C: candidatos · A: anclar · ⌫: Foco anterior · U: ancestro · V: vista plana · S: Superficie · F: modo foco · 1/2/3: Lentes · D: desplegar · P: pisos apilados/repartidos ·
+  <b>variantes: I identificación · R lotes · O orden · Z Organization · K tubería · T transición</b> · E/W: elevación alta/baja</div>
+<div id="flash"></div>
+<script>
+'use strict';
+// ───────────────────────── corrida y entorno ─────────────────────────
+const RUN='C1';
+const RUNS={C1:'Ficha en capas · Superficie navegable, piso mínimo',C2:'Gene leído por Lentes · Proyecciones hipotéticas sobre el Gene',C3:'Despiece del Gene en el Espacio · bloque exploratorio [FN]'};
+const QP=new URLSearchParams(location.search);
+const ENV=QP.get('env')==='fixture'?'fixture':'sim';
+// copia literal de installer/nucleus/internal/gene/testdata/authorized_first_gene.json (fixture de prueba, no productivo)
+const FIXTURE={"fixture_classification": "test_only", "synthetic": true, "productive_authority": false, "reuse_policy": "fixtures_only", "project_id": "11111111-1111-4111-8111-111111111111", "repository_id": "22222222-2222-4222-8222-222222222222", "identity": {"schema_version": "gene-canonical-store/0.1", "project_id": "11111111-1111-4111-8111-111111111111", "gene_id": "33333333-3333-4333-8333-333333333333", "declared_function": "Verify the synthetic Gene canonical store fixture.", "origin": {"mandate_id": "55555555-5555-4555-8555-555555555555", "intent_id": "66666666-6666-4666-8666-666666666666", "decision_id": "77777777-7777-4777-8777-777777777777"}}, "contribution": {"schema_version": "gene-canonical-store/0.1", "contribution_id": "44444444-4444-4444-8444-444444444444", "project_id": "11111111-1111-4111-8111-111111111111", "gene_id": "33333333-3333-4333-8333-333333333333", "base_revision_digest": null, "mandate_id": "55555555-5555-4555-8555-555555555555", "intent_id": "66666666-6666-4666-8666-666666666666", "declared_function": "Verify the synthetic Gene canonical store fixture.", "assets": [{"asset_id": "", "project_id": "11111111-1111-4111-8111-111111111111", "repository_id": "22222222-2222-4222-8222-222222222222", "asset_kind": "file", "repository_relative_path": "fixture/file.txt", "observed": {"sha256": "", "size_bytes": 0}}, {"asset_id": "", "project_id": "11111111-1111-4111-8111-111111111111", "repository_id": "22222222-2222-4222-8222-222222222222", "asset_kind": "document", "repository_relative_path": "fixture/document.md", "observed": {"sha256": "", "size_bytes": 0}}, {"asset_id": "", "project_id": "11111111-1111-4111-8111-111111111111", "repository_id": "22222222-2222-4222-8222-222222222222", "asset_kind": "test", "repository_relative_path": "fixture/store_test.txt", "observed": {"sha256": "", "size_bytes": 0}}], "ratification": {"classification": "test_only", "synthetic": true, "productive_authority": false, "decision_id": "77777777-7777-4777-8777-777777777777"}, "stable_provenance": {"classification": "synthetic", "reuse_policy": "fixtures_only"}, "contribution_digest": ""}};
+const TAGTXT={g1:ENV==='fixture'?'FIXTURE test_only':'G1 · valor simulado', sim:'SIMULADO · sin productor', na:'NO DISPONIBLE', calc:'calculado en el cliente', hip:'HIP · Proyección hipotética'};
+const tag=(k,t)=>`<span class="tag ${k}" title="${(t||'').replace(/"/g,'&quot;')}">${TAGTXT[k]}</span>`;
+// ───────────────────────── paleta (DJ-CR4) ─────────────────────────
+const hex=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
+const BG=hex('#080A0E'), SURF=hex('#0D1117'), HOVER=hex('#131820'), TXT=hex('#E8EAF0'), W1=[1,1,1], ACCENT=hex('#C8F55A');
+const over=(top,a,base)=>base.map((b,i)=>b*(1-a)+top[i]*a);
+const css=c=>`rgb(${c.map(v=>Math.round(v*255)).join(',')})`;
+const REGION=[1,2,3,4].map(n=>{let c=SURF;for(let i=0;i<n;i++)c=over(W1,.06,c);return c;});
+const MARK=over(TXT,.45,SURF), INK=TXT, PROP=over(TXT,.4,BG);
+const EDGE={foco:INK, ind:over(TXT,.7,BG), path:over(TXT,.42,BG), base:over(TXT,.2,BG), dim:over(TXT,.1,BG)};
+
+// ───────────────────────── modelo ─────────────────────────
+const LENSES_BASE=[{id:'P-W1',txt:'Trabajo situado por Entidad',tipos:['Project','Domain']},{id:'P-G2',txt:'Efectos de Gravity sobre Trabajo situado',tipos:['Project','Domain']},{id:'P-A1',txt:'Atención clasificada por Entidad',tipos:['Project','Domain']}];
+const LENSES_GENE=[{id:'P-R1',txt:'Revisión por Gene (hipotética)',tipos:['Gene'],hip:true},{id:'P-K1',txt:'Activos document declarados por Gene (hipotética)',tipos:['Gene'],hip:true},{id:'P-D1',txt:'Determinación de conocimiento por Gene (hipotética; sin Fuente)',tipos:['Gene'],hip:true}];
+const LENSES=RUN==='C2'?[...LENSES_GENE,...LENSES_BASE]:LENSES_BASE;
+const LENS_CAP=2;
+const PROVTXT={verificado:'verificado',declarado:'declarado por un Mandate',propuesto:'propuesto',proyeccion:'proyección',noverif:'no verificable'};
+const RELTXT={ratificada:'Relación ratificada',proyeccion:'proyección (GravityGraph)'};
+const RANK={Tenant:0,Organization:1,Project:2,Domain:3,Gene:4,Repository:5};
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+// medidas fijas por tipo (AP-2)
+const PW=3.2, PD=2.0, MG=.5, GAPC=.35;
+const PL0=.45, STEP=.7, TOPH=.45, SPREAD=2.2;
+const ST=1.8, AV=3.6, OM=2.2, TM=2.0;         // calle entre edificios · autopista entre manzanas · márgenes de Organization y Tenant
+const HT=.30, HO=.16, HP=.12;                 // espesor de las bases: Tenant, Organization, Project (manzana)
+const FUNCS=['Verifica que una sesión presentada siga vigente y pertenezca a la identidad que la reclama.','Emite tokens de acceso firmados a partir de una sesión verificada.',
+  'Decide si una identidad puede ejecutar una operación sobre un recurso.','Registra las decisiones de acceso para su revisión posterior.',
+  'Normaliza las direcciones de correo antes de compararlas.','Calcula el saldo disponible de una cuenta.','Agenda los reintentos de un envío fallido.','Valida el formato de los archivos importados.',
+  'Traduce los mensajes de error para la interfaz.','Conserva el historial de cambios de una configuración.','Resuelve la zona horaria de un usuario.','Comprime los adjuntos antes de guardarlos.',
+  'Limita la cantidad de pedidos por minuto.','Genera el resumen diario de actividad.','Firma los paquetes que se publican.','Reconcilia los pagos con el extracto bancario.'];
+
+function buildTerritory(T,opt){
+  const r=rng(T==='T2'?21:T==='T3'?31:11);
+  const spec = ENV==='fixture'? [[{dom:0,gen:1,rep:1}]] : T==='T1'? [[{dom:1,gen:0,rep:1}]] : T==='T3'? [[{dom:2,gen:4,rep:1}]]
+             : [[{dom:3,gen:7,rep:1},{dom:2,gen:4,rep:1}],[{dom:3,gen:8,rep:1}]];
+  const ents={}, order=[], rel=[], props=[], add=e=>{ents[e.id]=e;order.push(e.id);return e;};
+  add({id:'ten',tipo:'Tenant',name:'‹tenant›',prov:'verificado',fuente:'autoridad canónica (sintética)'});
+  const projList=[]; let fi=0;
+  spec.forEach((projs,o)=>{
+    const org=add({id:'org'+o,tipo:'Organization',name:'‹organización '+(o+1)+'›',parent:'ten',prov:'verificado',fuente:'autoridad canónica (sintética)'});
+    projs.forEach((ps,p)=>{
+      const pid='p'+o+'_'+p;
+      const proj=add({id:pid,tipo:'Project',name:T==='T1'?'‹proyecto›':'‹proyecto '+(o+1)+'.'+(p+1)+'›',parent:org.id,prov:'verificado',fuente:'autoridad canónica (sintética)'});
+      const doms=[], gens=[], reps=[];
+      for(let i=0;i<ps.dom;i++){const prov=T==='T1'||r()<.45?'declarado':(r()<.6?'verificado':'proyeccion');
+        doms.push(add({id:pid+'_d'+i,tipo:'Domain',name:T==='T1'?'Domain «Identidad»':'Domain '+(i+1),parent:pid,prov,fuente:prov==='declarado'?'registro (contrato firmado)':prov==='proyeccion'?'proyección Gravity':'autoridad canónica'}));}
+      for(let i=0;i<ps.gen;i++){const u=r(),prov=u<.7?'verificado':u<.85?'proyeccion':'noverif';
+        // D-E1: el Gene NO tiene nombre (Gene v3.0 §2.1–2.2): gene_id + función declarada (simulada)
+        const gid='g-'+(o+1)+(p+1)+'-'+String(((i*3+2)%ps.gen)+1).padStart(2,'0');
+        gens.push(add({id:pid+'_g'+i,tipo:'Gene',gid,func:FUNCS[(fi++)%FUNCS.length],parent:pid,prov,fuente:prov==='noverif'?'cache':prov==='proyeccion'?'proyección Gravity':'autoridad canónica',apps:[]}));}
+      for(let i=0;i<ps.rep;i++) reps.push(add({id:pid+'_r'+i,tipo:'Repository',name:'Repository '+(i+1),parent:pid,prov:'noverif',fuente:'índice'}));
+      if(T==='T3'&&ENV!=='fixture'){ doms[0].name='Domain «Identidad»'; doms[1].name='Domain «Acceso»';
+        rel.push([gens[0].id,doms[0].id,'ratificada'],[gens[0].id,doms[1].id,'ratificada'],[gens[1].id,doms[0].id,'ratificada'],[gens[2].id,doms[1].id,'proyeccion']);
+        props.push([gens[1].id,doms[1].id]);
+      } else if(gens.length){
+        const loose = T==='T2'&&o===0&&p===0 ? gens[gens.length-1] : null;
+        gens.forEach(g=>{ if(g===loose) return; const pick=[...doms].sort(()=>r()-.5); let k=1+(r()<.45?1:0)+(r()<.2?1:0);
+          pick.slice(0,Math.min(k,doms.length)).forEach(d=>rel.push([g.id,d.id,r()<.15?'proyeccion':'ratificada'])); });
+        doms.forEach(d=>{ if(!rel.some(x=>x[1]===d.id)){ const g=gens.find(g=>g!==loose); rel.push([g.id,d.id,'ratificada']); } });
+        const g0=gens[0], free=doms.find(d=>!rel.some(x=>x[0]===g0.id&&x[1]===d.id)); if(free) props.push([g0.id,free.id]);
+      }
+      projList.push({proj,org,doms,gens,reps});
+    });
+  });
+  genGeneData(ents,projList,T); if(ENV==='fixture') applyFixture(ents,projList);
+  gensName(ents,opt);
+  // D-E3: clave de orden neutra y declarada
+  const key = opt.orden==='func' ? (g=>g.func) : (g=>g.gid);
+  // alturas por nivel (D-E4: con la variante «perímetro», la Organization no tiene base propia)
+  const yT=HT, yO=opt.org==='base'?yT+HO:yT, yP=yO+HP;
+  // huella de los edificios
+  projList.forEach(({doms,gens})=>doms.forEach(d=>{
+    d.genes=gens.filter(g=>rel.some(x=>x[0]===g.id&&x[1]===d.id)).sort((a,b)=>key(a).localeCompare(key(b),'es'));
+    const n=d.genes.length;
+    if(opt.apil==='div'&&n){ d.cols=Math.ceil(Math.sqrt(n)); d.rows=Math.ceil(n/d.cols); d.W=d.cols*PW+(d.cols-1)*GAPC+2*MG; d.D=d.rows*PD+(d.rows-1)*GAPC+2*MG; }
+    else { d.cols=1; d.rows=1; d.W=PW+2*MG; d.D=PD+2*MG; }
+    d.sf=1; d.sfT=1; d.y0=yP;
+  }));
+  // manzanas: edificios en grilla con calles alrededor; planta según la cantidad de Domains
+  projList.forEach(m=>{
+    const {doms,gens,reps}=m, nd=Math.max(1,doms.length);
+    m.loose=[...gens.filter(g=>!rel.some(x=>x[0]===g.id)),...reps];
+    m.cols=Math.ceil(Math.sqrt(nd)); m.rows=Math.ceil(nd/m.cols);
+    m.cw=Math.max(PW+2*MG,...doms.map(d=>d.W)); m.ch=Math.max(PD+2*MG,...doms.map(d=>d.D));
+    const nl=m.loose.length;
+    m.lotFondo = opt.ubic==='fondo' && nl ? PD+ST : 0;                  // D-E2 defecto: lote al fondo
+    m.lotCols  = opt.ubic==='fila' && nl ? Math.ceil(nl/ m.rows) : 0;    // D-E2 variante: lotes al final de la fila
+    m.W=m.cols*m.cw+(m.cols+1)*ST + m.lotCols*(PW+ST);
+    m.D=m.rows*m.ch+(m.rows+1)*ST + m.lotFondo;
+  });
+  // Organizations: manzanas en fila con autopistas; Tenant: Organizations en fila
+  let ox=TM; const orgRects=[];
+  spec.forEach((projs,o)=>{
+    const org=ents['org'+o], ms=projList.filter(x=>x.org===org); let px=ox+OM, maxD=0;
+    ms.forEach(m=>{ m.x0=px; m.z0=TM+OM; px+=m.W+AV; maxD=Math.max(maxD,m.D); });
+    org.rect=[ox,TM,px-AV+OM,TM+OM+maxD+OM]; orgRects.push(org.rect); ox=org.rect[2]+AV;
+  });
+  ents.ten.rect=[0,0,ox-AV+TM,Math.max(...orgRects.map(r=>r[3]))+TM];
+  // posiciones dentro de cada manzana
+  projList.forEach(m=>{
+    const {proj,doms}=m; proj.rect=[m.x0,m.z0,m.x0+m.W,m.z0+m.D]; proj.m=m;
+    const zb=m.z0+m.lotFondo;                 // la grilla de edificios empieza después del lote del fondo
+    doms.forEach((d,i)=>{ const c=i%m.cols, rr=Math.floor(i/m.cols);
+      d.x0=m.x0+ST+c*(m.cw+ST)+(m.cw-d.W)/2; d.z0=zb+ST+rr*(m.ch+ST)+(m.ch-d.D)/2; d.cx=d.x0+d.W/2; d.cz=d.z0+d.D/2;
+      d.col=c; d.row=rr; d.m=m;
+      d.xv=m.x0+ST+c*(m.cw+ST)+m.cw+ST/2;                 // calle vertical a la derecha de la columna
+      d.zs=zb+ST+rr*(m.ch+ST)+m.ch+ST/2;                   // calle horizontal frente a la fila
+      d.genes.forEach((g,k)=>{ const cc=opt.apil==='div'?k%d.cols:0, r2=opt.apil==='div'?Math.floor(k/d.cols):0;
+        g.apps.push({dom:d.id, idx:k, x:d.x0+MG+cc*(PW+GAPC)+PW/2, z:d.z0+MG+r2*(PD+GAPC)+PD/2, y:0, relProv:rel.find(x=>x[0]===g.id&&x[1]===d.id)[2]}); }); });
+    m.loose.forEach((e,i)=>{ let x,z;
+      if(opt.ubic==='fondo'){ x=m.x0+ST+PW/2+i*(PW+.6); z=m.z0+ST/2+PD/2; }
+      else { const c=Math.floor(i/m.rows), rr=i%m.rows; x=m.x0+m.cols*(m.cw+ST)+ST+c*(PW+ST)+PW/2; z=zb+ST+rr*(m.ch+ST)+m.ch/2; }
+      if(e.tipo==='Gene') e.apps.push({dom:null,idx:0,x,z,y:yP+.06,relProv:null}); else {e.x=x;e.z=z;} });
+  });
+  const cx=(ents.ten.rect[0]+ents.ten.rect[2])/2, cz=(ents.ten.rect[1]+ents.ten.rect[3])/2;
+  const sh=(o,k)=>{o[k]-=k.startsWith('x')||k==='cx'?cx:cz;};
+  order.forEach(id=>{const e=ents[id];
+    if(e.rect) e.rect=[e.rect[0]-cx,e.rect[1]-cz,e.rect[2]-cx,e.rect[3]-cz];
+    if(e.tipo==='Domain'){ e.x0-=cx;e.z0-=cz;e.cx-=cx;e.cz-=cz;e.xv-=cx;e.zs-=cz; }
+    if(e.x!==undefined&&e.tipo==='Repository'){e.x-=cx;e.z-=cz;}
+    if(e.apps) e.apps.forEach(a=>{a.x-=cx;a.z-=cz;}); });
+  ents.ten.yb=0; ents.ten.yt=yT; order.forEach(id=>{const e=ents[id]; if(e.tipo==='Organization'){e.yb=yT;e.yt=yO;} if(e.tipo==='Project'){e.yb=yO;e.yt=yP;}});
+  return {ents,order,rel,props,yP,yO,yT,opt:{...opt}};
+}
+
+// ───────────────────────── datos con la forma del store G1 ─────────────────────────
+function hexs(r,n){let s='';for(let i=0;i<n;i++)s+='0123456789abcdef'[Math.floor(r()*16)];return s;}
+function uuid(r){const h=hexs(r,32);return h.slice(0,8)+'-'+h.slice(8,12)+'-4'+h.slice(13,16)+'-8'+h.slice(17,20)+'-'+h.slice(20,32);}
+function slugOf(f){return f.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,'').split(' ').filter(w=>w.length>3).slice(0,2).join('_')||'gene';}
+function genGeneData(ents,projList,T){
+  const r=rng(901+T.charCodeAt(1));
+  projList.forEach(({proj,gens,reps})=>{
+    proj.project_id=uuid(r); reps.forEach(rp=>{rp.repository_id=uuid(r);});
+    gens.forEach((g,gi)=>{
+      g.gene_id=uuid(r); g.gid=g.gene_id.slice(0,8); const slug=slugOf(g.func); const repo=()=>reps[Math.floor(r()*reps.length)];
+      const nrev=T==='T3'?([3,1,2,1][gi]||1):1+Math.floor(r()*3);
+      let base=[{k:'file',p:`src/${slug}/index.ts`},{k:'document',p:`docs/${slug}.md`},{k:'file',p:`src/${slug}/policy.ts`},{k:'test',p:`test/${slug}.test.ts`}].slice(0,2+Math.floor(r()*3));
+      if(T==='T3'&&gi===1) base=base.filter(a=>a.k!=='document');           // un Gene sin activo document, para comparar
+      const mk=(k,p)=>{const rp=repo();return {asset_id:hexs(r,64),project_id:proj.project_id,repository_id:rp.repository_id,repoEnt:rp.id,asset_kind:k,repository_relative_path:p,observed:{sha256:hexs(r,64),size_bytes:300+Math.floor(r()*9000)}};};
+      let cur=base.map(a=>mk(a.k,a.p));
+      const origin={mandate_id:uuid(r),intent_id:uuid(r),decision_id:uuid(r)};
+      const revs=[], contribs=[]; let parent=null;
+      for(let k=0;k<nrev;k++){
+        if(k>0){ const i=Math.floor(r()*cur.length); cur=cur.map((a,j)=>j===i?{...a,observed:{sha256:hexs(r,64),size_bytes:a.observed.size_bytes+Math.floor(r()*600)}}:a);
+                 if(r()<.5) cur=[...cur,mk('test',`test/${slug}_${k+1}.test.ts`)]; }
+        const c={contribution_id:uuid(r),mandate_id:k===0?origin.mandate_id:uuid(r),intent_id:k===0?origin.intent_id:uuid(r),base_revision_digest:parent,
+                 ratification:{classification:'simulado',synthetic:true,productive_authority:false,decision_id:k===0?origin.decision_id:uuid(r)}};
+        const rev={revision_digest:hexs(r,64),parent_revision_digest:parent,declared_function:g.func,constitutive_assets:cur,produced_by_contribution_id:c.contribution_id,
+                   verification:{evidence_digest:hexs(r,64),verifier:'gene-canonical-store/0.1'}};
+        revs.push(rev); contribs.push(c); parent=rev.revision_digest;
+      }
+      g.g1={source:'sim',identity:{gene_id:g.gene_id,declared_function:g.func,origin},head:{lifecycle_status:'active',current_revision_digest:parent},revisions:revs.reverse(),contributions:contribs.reverse()};
+    });
+  });
+}
+function applyFixture(ents,projList){   // el fixture describe UNA entrada de materialización: identidad + Contribution; no hay Revision ni head
+  const F=FIXTURE, m=projList[0], g=m.gens[0], rp=m.reps[0];
+  m.proj.project_id=F.project_id; m.proj.name='Project '+F.project_id.slice(0,8); m.proj.fuente='fixture test_only (no productivo)';
+  rp.repository_id=F.repository_id; rp.name='Repository '+F.repository_id.slice(0,8); rp.fuente='fixture test_only (no productivo)';
+  ents.ten.name='‹tenant› (simulado)'; ents.org0.name='‹organización› (simulada)';
+  g.gene_id=F.identity.gene_id; g.gid=g.gene_id.slice(0,8); g.func=F.identity.declared_function; g.prov='noverif'; g.fuente='fixture test_only';
+  const c=F.contribution;
+  g.g1={source:'fixture',identity:F.identity,head:null,revisions:[],
+        contributions:[{...c,assets:c.assets.map(a=>({...a,repoEnt:rp.id}))}]};
+}
+function curAssets(g){ const G=g.g1; return G.revisions.length? G.revisions[0].constitutive_assets : (G.contributions[0]?G.contributions[0].assets:[]); }
+function gensName(ents,opt){ Object.values(ents).forEach(e=>{ if(e.tipo==='Gene') e.name = opt.ident==='func'? e.func : 'Sin nombre conocido'; }); }
+function geneLabel(e){ return S.ident==='func'? e.func : `Sin nombre conocido · id ${e.gid}`; }
+function buildLensData(T,terr){
+  // Lentes P-W1, P-G2, P-A1 refieren SOLO a Domain y Project (EM §5.2) — corrección respecto del corte 03
+  const r=rng(77+T.charCodeAt(1)), L={'P-W1':new Map()};
+  const sc=scopeOf(terr), set=(l,id,state,weak,txt)=>{(L[l]=L[l]||new Map()).set(id,{state,weak:!!weak,txt});};
+  if(RUN==='C2'){ terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo==='Gene').forEach(g=>{ const G=g.g1;
+      if(!G.revisions.length){ set('P-R1',g.id,'desconocido',false,'sin Revision materializada'); }
+      else set('P-R1',g.id,G.revisions.length>1?'afirmado':'ninguno',false,G.revisions.length>1?`${G.revisions.length} revisiones; vigente con historia`:'primera revisión vigente');
+      const docs=curAssets(g).filter(a=>a.asset_kind==='document').length;
+      set('P-K1',g.id,docs?'afirmado':'ninguno',!G.revisions.length,docs?`${docs} document declarado${docs>1?'s':''}`:'sin activo document'); }); }   // P-D1: sin Fuente → activa sin datos
+  if(ENV==='fixture') return L;
+  if(T==='T1'){ const d=sc.find(e=>e.tipo==='Domain'), p=sc.find(e=>e.tipo==='Project'); set('P-W1',d.id,'afirmado',false,'Mandate Genesis · completado'); set('P-W1',p.id,'ninguno',false,''); return L; }
+  sc.forEach(e=>{ if(r()<.85) set('P-W1',e.id,(e.tipo==='Domain'&&r()<.7)?'afirmado':'ninguno',r()<.1,'Mandate'); else set('P-W1',e.id,'desconocido',false,'no evaluado'); });
+  if(T==='T2'){ const cyc=[['afirmado','colisión confirmada'],['indecidible','colisión indecidible'],['ninguno','evaluado: sin colisión'],null]; let i=0;
+    sc.forEach(e=>{ const w=L['P-W1'].get(e.id); if(!(w&&w.state==='afirmado')) return; const c=cyc[i++%cyc.length]; if(c) set('P-G2',e.id,c[0],false,c[1]); });
+    const d=sc.filter(e=>e.tipo==='Domain'); if(d[1]) set('P-A1',d[1].id,'afirmado',false,'espera confirmación de dominio'); }
+  return L;
+}
+function lensTipos(l){const L=LENSES.find(x=>x.id===l);return L?L.tipos:['Project','Domain'];}
+function scopeFor(t,l){return t.order.map(id=>t.ents[id]).filter(e=>lensTipos(l).includes(e.tipo));}
+function scopeOf(t){return scopeFor(t,'P-W1');}
+
+// ───────────────────────── estado ─────────────────────────
+const q=new URLSearchParams(location.search);
+const S={T:q.get('T')||'T3', apil:q.get('apil')==='div'?'div':'pila',
+  ident:q.get('ident')==='func'?'func':'sin', ubic:q.get('ubic')==='fila'?'fila':'fondo', orden:q.get('orden')==='func'?'func':'id',
+  org:q.get('org')==='perim'?'perim':'base', res:q.get('res')==='acento'?'acento':'luz', trans:q.get('trans')==='anim'?'anim':'inst',
+  minEl:+(q.get('minEl')||12), view:q.get('view')==='top'?'top':'persp', active:(q.get('lenses')||(RUN==='C2'?'P-R1,P-K1,P-D1':'P-W1,P-G2')).split(','), selRev:null, selAsset:null, indAsset:null,
+  focus:null, hist:[], anchors:new Set(), ind:null, indApp:0, cands:[], candIdx:0, surf:q.get('sup')!=='0', modoFoco:q.get('modo')==='foco', doc:q.get('doc')==='1'};
+const opts=()=>({ident:S.ident,ubic:S.ubic,orden:S.orden,org:S.org,apil:S.view==='top'?'div':S.apil});
+let terr, lens;
+
+// ───────────────────────── PlayCanvas ─────────────────────────
+const canvas=document.getElementById('c');
+const app=new pc.Application(canvas,{});
+app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW); app.setCanvasResolution(pc.RESOLUTION_AUTO);
+app.scene.ambientLight=new pc.Color(.34,.35,.38);
+(function(){ const fc=new pc.Color(...HOVER);
+  if(app.scene.fog&&typeof app.scene.fog==='object'){app.scene.fog.type=pc.FOG_LINEAR;app.scene.fog.color=fc;app.scene.fog.start=70;app.scene.fog.end=260;}
+  else{app.scene.fog=pc.FOG_LINEAR;app.scene.fogColor=fc;app.scene.fogStart=70;app.scene.fogEnd=260;} })();
+(function(){ const L=app.scene.layers.getLayerById(pc.LAYERID_WORLD??0); if(L) L.transparentSortMode=pc.SORTMODE_MANUAL??1; })();
+const cam=new pc.Entity('cam'); cam.addComponent('camera',{clearColor:new pc.Color(...BG),fov:50,nearClip:.2,farClip:800}); app.root.addChild(cam);
+const sun=new pc.Entity('sun'); sun.addComponent('light',{type:'directional',color:new pc.Color(1,1,1),intensity:.85,castShadows:false}); sun.setEulerAngles(55,-35,0); app.root.addChild(sun);
+const orbit={yaw:-28,pitch:+(q.get('el')||28),dist:30,target:new pc.Vec3(),tYaw:-28,tPitch:+(q.get('el')||28),tDist:30,tTarget:new pc.Vec3()};
+
+function cv(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);return c;}
+function tex(c,{repeat=false}={}){const t=new pc.Texture(app.graphicsDevice,{width:c.width,height:c.height,format:pc.PIXELFORMAT_RGBA8,mipmaps:true,anisotropy:8,
+  minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:repeat?pc.ADDRESS_REPEAT:pc.ADDRESS_CLAMP_TO_EDGE,addressV:repeat?pc.ADDRESS_REPEAT:pc.ADDRESS_CLAMP_TO_EDGE});t.setSource(c);return t;}
+const cache=new Map(); const once=(k,f)=>{ if(cache.has(k)) return cache.get(k); const v=f(); if(v instanceof pc.Mesh) v.incRefCount(); cache.set(k,v); return v; };
+function unlit(rgb,{map=null,tiling=null,transparent=false,opacity=1,depthTest=true}={}){const m=new pc.StandardMaterial();m.useLighting=false;m.useSkybox=false;m.diffuse=new pc.Color(0,0,0);m.emissive=new pc.Color(...rgb);
+  if(map){m.emissiveMap=map;if(tiling)m.emissiveMapTiling=tiling;if(transparent){m.opacityMap=map;m.opacityMapChannel='a';}}
+  if(transparent){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;m.opacity=opacity;} if(!depthTest){m.depthTest=false;m.depthWrite=false;} m.cull=pc.CULLFACE_NONE; m.update(); return m;}
+function lit(rgb,map=null){const m=new pc.StandardMaterial();m.diffuse=new pc.Color(...rgb);if(map)m.diffuseMap=map;m.useSkybox=false;m.gloss=.15;m.metalness=0;m.useMetalness=true;m.cull=pc.CULLFACE_NONE;m.update();return m;}
+function pattern(p,base,ink){return (g,w,h)=>{ g.fillStyle=css(base);g.fillRect(0,0,w,h);g.strokeStyle=css(ink);g.fillStyle=css(ink);
+  if(p==='declarado'){g.lineWidth=9;for(let i=-h;i<2*w;i+=26){g.beginPath();g.moveTo(i,0);g.lineTo(i+h,h);g.stroke();}}
+  if(p==='propuesto'){for(let y=13;y<h;y+=26)for(let x=13;x<w;x+=26){g.beginPath();g.arc(x,y,5,0,7);g.fill();}}
+  if(p==='proyeccion'){g.lineWidth=7;for(let y=8;y<h;y+=20){g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();}}
+  if(p==='noverif'){g.fillStyle=css(over(TXT,.22,SURF));g.fillRect(9,9,w-18,h-18);} };}
+const floorMat=p=>once('fm'+p,()=>unlit([1,1,1],{map:tex(cv(128,128,pattern(p==='verificado'?'x':p,REGION[3],REGION[2])),{repeat:true})}));
+const edgeMat=k=>once('edge'+k,()=>unlit(EDGE[k]));
+const faceMat=k=>once('face'+k,()=>unlit(TXT,{transparent:true,opacity:k==='foco'?.07:.035}));
+const slabMat=()=>once('slab',()=>lit(over(TXT,.12,SURF)));
+const plateMat=l=>once('plate'+l,()=>lit(l===3?over(W1,.04,REGION[3]):REGION[l]));
+const pipeMat=(k,under)=>once('pipe'+k+under,()=>{const c=k==='acento'?ACCENT:INK; if(!under) return unlit(c);
+  const m=unlit(over(c,.6,BG),{transparent:true,opacity:1}); m.depthTest=false; m.update(); return m;});   // bajo la calle: pasada transparente, sin prueba de profundidad (visto a través del piso)   // bajo la calle: visto por transparencia (x-ray)
+const solidMat=k=>once('solid'+k,()=>unlit(k));
+function glyphMat(slot,fill,weak){return once(['g',slot,fill,weak].join('|'),()=>unlit(INK,{transparent:true,map:tex(cv(64,64,(g,s)=>{drawGlyph(g,s/2,s/2,s*.62,slot,fill,weak);}))}));}
+function drawGlyph(g,x,y,k,slot,fill,weak){ g.save(); g.translate(x,y); if(slot==='B')g.rotate(Math.PI/4); g.strokeStyle='#fff';g.fillStyle='#fff';g.lineWidth=Math.max(2,k*.14);
+  g.setLineDash(weak?[k*.22,k*.16]:[]); g.beginPath(); g.rect(-k/2,-k/2,k,k);
+  if(fill==='vacio'){g.stroke();g.setLineDash([]);g.fillRect(-k*.5,-k*.1,k,k*.2);}
+  else if(fill==='afirmado')g.fill(); else if(fill==='indecidible'){g.stroke();g.beginPath();g.moveTo(-k/2,k/2);g.lineTo(k/2,-k/2);g.lineTo(k/2,k/2);g.closePath();g.setLineDash([]);g.fill();} else g.stroke();
+  g.restore(); }
+
+let root=new pc.Entity('root'); app.root.addChild(root); let dyn=null;
+function addRender(type,mat,parent=root,order=0){const e=new pc.Entity();e.addComponent('render',{type,material:mat,castShadows:false,receiveShadows:false});parent.addChild(e);if(order)e.render.meshInstances.forEach(mi=>mi.drawOrder=order);return e;}
+function meshEntity(mesh,mat,parent=root,order=0){const e=new pc.Entity();const mi=new pc.MeshInstance(mesh,mat);if(order)mi.drawOrder=order;e.addComponent('render',{meshInstances:[mi]});parent.addChild(e);return e;}
+function lineMesh(P){const m=new pc.Mesh(app.graphicsDevice);m.setPositions(P);m.setIndices(Array.from({length:P.length/3},(_,i)=>i));m.update(pc.PRIMITIVE_LINES??1);return m;}
+const cubeEdges=()=>once('cubeE',()=>{const v=[[-.5,0,-.5],[.5,0,-.5],[.5,0,.5],[-.5,0,.5]],P=[];for(let i=0;i<4;i++){const a=v[i],b=v[(i+1)%4];P.push(...a,...b,a[0],1,a[2],b[0],1,b[2],...a,a[0],1,a[2]);}return lineMesh(P);});
+const rectEdges=()=>once('rectE',()=>lineMesh([-.5,0,-.5,.5,0,-.5, .5,0,-.5,.5,0,.5, .5,0,.5,-.5,0,.5, -.5,0,.5,-.5,0,-.5]));
+function hexMesh(){return once('hex',()=>{try{return pc.Mesh.fromGeometry(app.graphicsDevice,new pc.CylinderGeometry({radius:.5,height:1,capSegments:6}));}catch(e){return null;}});}
+
+// ─── superficie legible del piso del Gene: identificación (D-E1), recuento de apariciones, Procedencia (C3), procedencia de la Relación (RM-6)
+function planeCanvas(e,a){
+  // C1..C3: el piso conserva identidad y orientación (EM §4.7); la comprensión va a la Superficie (EM §5.7)
+  const W=512,Hh=320, n=e.apps.filter(x=>x.dom).length;
+  return cv(W,Hh,(g)=>{
+    g.fillStyle=css(over(TXT,.13,SURF)); g.fillRect(0,0,W,Hh);
+    pattern(e.prov,over(TXT,.13,SURF),over(TXT,.3,SURF))(g,74,Hh); g.fillStyle=css(over(TXT,.13,SURF)); g.fillRect(70,0,6,Hh);
+    g.strokeStyle=css(over(TXT,.55,SURF)); g.lineWidth=5; g.setLineDash(a.relProv==='proyeccion'?[22,14]:a.dom?[]:[8,10]); g.strokeRect(4,4,W-8,Hh-8); g.setLineDash([]);
+    if(S.ident==='func'){ g.fillStyle=css(TXT); g.font='600 30px system-ui,sans-serif'; const words=e.func.split(' '); let line='', y=72, lines=0;
+      words.forEach(w=>{ const t=line?line+' '+w:w; if(g.measureText(t).width>W-130&&line){ if(lines<2) g.fillText(line,96,y); y+=38; lines++; line=w; } else line=t; }); if(lines<2) g.fillText(lines===1?line:line,96,y); }
+    else { g.fillStyle=css(TXT); g.font='44px ui-monospace,Menlo,monospace'; g.fillText(e.gid,96,110); g.fillStyle=css(over(TXT,.5,SURF)); g.font='22px ui-monospace,Menlo,monospace'; g.fillText('id · sin nombre conocido',96,150); }
+    if(n>1){ g.fillStyle=css(TXT); g.font='600 34px ui-monospace,Menlo,monospace'; g.textAlign='right'; g.fillText('×'+n,W-28,58); g.textAlign='left'; }
+    if(RUN==='C2'){ let gx=96; visibleLenses().forEach((l,i)=>{ if(!lensTipos(l).includes('Gene')) return; const st=stateOf(l,e),mode=coverage(l).mode; let fill=null;
+        if(st.state==='afirmado')fill='afirmado';else if(st.state==='indecidible')fill='indecidible';else if(st.state==='desconocido')fill=mode==='a'?'desconocido':null;else if(st.state==='ninguno')fill=mode==='a'?null:'vacio';
+        if(fill){ drawGlyph(g,gx+22,262,36,i===0?'A':'B',fill,st.weak); g.fillStyle=css(over(TXT,.62,SURF)); g.font='24px ui-monospace,Menlo,monospace'; g.fillText(l,gx+50,270); gx+=170; } }); }
+  });
+}
+
+// ───────────────────────── construcción ─────────────────────────
+let glyphs=[];
+function rebuild(keep){
+  const f=keep?S.focus:null, an=keep?new Set(S.anchors):null;
+  root.destroy(); root=new pc.Entity('root'); app.root.addChild(root); dyn=null; glyphs=[];
+  terr=buildTerritory(S.T,opts()); lens=buildLensData(S.T,terr);
+  const gridTex=once('grid',()=>tex(cv(128,128,(g,s)=>{g.fillStyle=css(BG);g.fillRect(0,0,s,s);g.strokeStyle=css(over(W1,.04,BG));g.lineWidth=2;g.strokeRect(0,0,s,s);}),{repeat:true}));
+  const gr=addRender('plane',unlit([1,1,1],{map:gridTex,tiling:new pc.Vec2(140,140)})); gr.setLocalScale(1400,1,1400); gr.setLocalPosition(0,-.02,0);
+  terr.order.map(id=>terr.ents[id]).forEach(e=>{
+    if(e.rect){ const lvl=RANK[e.tipo],[x0,z0,x1,z1]=e.rect, cx=(x0+x1)/2, cz=(z0+z1)/2, th=e.yt-e.yb;
+      const hasPlate=!(e.tipo==='Organization'&&S.org==='perim');
+      if(hasPlate){ const p=addRender('box',plateMat(lvl)); p.setLocalScale(x1-x0,th,z1-z0); p.setLocalPosition(cx,e.yb+th/2,cz); }
+      e.edge=meshEntity(rectEdges(),edgeMat('base')); e.edge.setLocalScale(x1-x0,1,z1-z0); e.edge.setLocalPosition(cx,(hasPlate?e.yt:e.yb)+.012,cz);
+      e.aabb=[x0,e.yb,z0,x1,Math.max(e.yt,e.yb+.05),z1]; e.pos=new pc.Vec3(cx,e.yt,cz); e.anchorPt=new pc.Vec3(x0+.8,e.yt+.35,z0+.8); e.labelPt=new pc.Vec3(x0+.3,e.yt,z1-.1); }
+    else if(e.tipo==='Domain'){
+      const pl=addRender('box',plateMat(3)); pl.setLocalScale(e.W+.5,.06,e.D+.5); pl.setLocalPosition(e.cx,e.y0+.03,e.cz);   // vereda del edificio: la calle queda como el espacio más oscuro entre veredas
+      const b=addRender('plane',floorMat(e.prov)); b.setLocalScale(e.W,1,e.D); b.setLocalPosition(e.cx,e.y0+.065,e.cz);
+      e.edge=meshEntity(cubeEdges(),edgeMat('base')); e.face=addRender('box',faceMat('path'),root,4); e.face.enabled=false; e.pos=new pc.Vec3(e.cx,e.y0,e.cz); }
+    else if(e.tipo==='Gene'){
+      e.apps.forEach(a=>{ a.slab=addRender('box',slabMat()); a.slab.setLocalScale(PW,.05,PD);
+        a.mat=unlit([1,1,1],{map:tex(planeCanvas(e,a))}); a.top=addRender('plane',a.mat); a.top.setLocalScale(PW*.985,1,PD*.985);
+        a.out=meshEntity(rectEdges(),edgeMat('base')); a.out.setLocalScale(PW+.06,1,PD+.06); a.pos=new pc.Vec3(); });
+    }
+    else if(e.tipo==='Repository'){ const m=hexMesh(); const b=m?meshEntity(m,lit(MARK)):addRender('cylinder',lit(MARK)); const y=terr.yP;
+      b.setLocalScale(1.2,1.3,1.2); b.setLocalPosition(e.x,y+.65,e.z);
+      e.pos=new pc.Vec3(e.x,y,e.z); e.top=new pc.Vec3(e.x,y+1.3,e.z); e.anchorPt=new pc.Vec3(e.x,y+1.6,e.z); e.aabb=[e.x-.6,y,e.z-.6,e.x+.6,y+1.3,e.z+.6]; }
+  });
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo==='Domain').forEach(layoutDomain);
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo==='Gene').forEach(e=>e.apps.filter(a=>!a.dom).forEach(placeApp));
+  S.focus=(f&&terr.ents[f])?f:terr.order.find(id=>terr.ents[id].tipo==='Project');
+  S.anchors=an?new Set([...an].filter(id=>terr.ents[id])):new Set(); S.hist=[];
+  setSpreadTargets(true); refresh(true);
+}
+function placeApp(a){ a.pos.set(a.x,a.y,a.z); a.slab.setLocalPosition(a.x,a.y-.025,a.z); a.top.setLocalPosition(a.x,a.y+.004,a.z); a.out.setLocalPosition(a.x,a.y+.008,a.z); }
+function layoutDomain(d){
+  const n=d.genes.length, div=terr.opt.apil==='div';
+  d.H=div?PL0+TOPH:PL0+Math.max(0,n-1)*STEP*d.sf+TOPH;
+  d.edge.setLocalScale(d.W,d.H,d.D); d.edge.setLocalPosition(d.cx,d.y0,d.cz);
+  d.face.setLocalScale(d.W,d.H,d.D); d.face.setLocalPosition(d.cx,d.y0+d.H/2,d.cz);
+  d.aabb=[d.x0,d.y0,d.z0,d.x0+d.W,d.y0+d.H,d.z0+d.D]; d.anchorPt=new pc.Vec3(d.x0+.35,d.y0+d.H+.35,d.z0+.35);
+  d.genes.forEach((g,i)=>{ const a=g.apps.find(x=>x.dom===d.id); a.y=d.y0+(div?PL0:PL0+(n-1-i)*STEP*d.sf); placeApp(a); });   // apilado: el primero según la clave declarada, arriba
+}
+function setSpreadTargets(snap){ const f=terr.ents[S.focus];
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo==='Domain').forEach(d=>{ const open=S.focus===d.id||(f&&f.tipo==='Gene'&&f.apps.some(a=>a.dom===d.id));
+    d.sfT=(open&&terr.opt.apil==='pila')?SPREAD:1; if(snap||S.trans==='inst'){d.sf=d.sfT;layoutDomain(d);} }); }   // D-E6: instantánea por defecto (RI-3)
+function animateSpread(dt){ if(S.trans!=='anim') return; let moved=false;
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo==='Domain').forEach(d=>{ if(Math.abs(d.sf-d.sfT)>.002){ d.sf+=(d.sfT-d.sf)*(1-Math.exp(-dt*9)); if(Math.abs(d.sf-d.sfT)<.002)d.sf=d.sfT; layoutDomain(d); moved=true; } });
+  if(moved) buildDyn(); }
+
+// ───────────────────────── Lentes y Anotaciones ─────────────────────────
+const hasData=l=>!!(lens[l]&&lens[l].size);
+function visibleLenses(){return LENSES.map(x=>x.id).filter(l=>S.active.includes(l)&&hasData(l)).slice(0,LENS_CAP);}
+function lensStatus(l){if(!S.active.includes(l))return 'inactiva';if(!hasData(l))return 'activa · sin datos';return visibleLenses().includes(l)?'visible':'activa · no visible (tope)';}
+function coverage(l){const m=lens[l],sc=scopeFor(terr,l);let c=0;if(m)sc.forEach(e=>{const v=m.get(e.id);if(v&&v.state!=='desconocido')c++;});return {covered:c,total:sc.length,mode:c/sc.length>=.5?'a':'b'};}
+function stateOf(l,e){const v=lens[l]&&lens[l].get(e.id);return v||{state:'desconocido',weak:false,txt:hasData(l)?'no cubierto por la Proyección':'sin Fuente ni Proyección (DJ-I6)'};}
+function countFor(l,e){if(!lensTipos(l).includes(e.tipo))return 'no refiere a este tipo';const s=stateOf(l,e).state;return s==='desconocido'?'desconocido':(s==='afirmado'||s==='indecidible')?'1':'0';}
+function rebuildGlyphs(){
+  glyphs.forEach(g=>g.ent.destroy()); glyphs=[];
+  terr.order.map(id=>terr.ents[id]).filter(e=>e.tipo==='Gene').forEach(e=>e.apps.forEach(a=>{ const t=a.mat.emissiveMap; a.mat.emissiveMap=tex(planeCanvas(e,a)); a.mat.update(); if(t) t.destroy(); }));
+  const vis=visibleLenses();
+  scopeOf(terr).forEach(e=>vis.forEach((l,i)=>{ if(lensTipos(l).includes('Gene')) return;
+    const st=stateOf(l,e),mode=coverage(l).mode;let fill=null;
+    if(st.state==='afirmado')fill='afirmado';else if(st.state==='indecidible')fill='indecidible';
+    else if(st.state==='desconocido')fill=mode==='a'?'desconocido':null;else if(st.state==='ninguno')fill=mode==='a'?null:'vacio';
+    if(!fill)return; const ent=addRender('plane',glyphMat(i===0?'A':'B',fill,st.weak),root,20); glyphs.push({ent,e,slot:i===0?'A':'B',small:e.tipo!=='Project'});
+  }));
+}
+
+// ───────────────────────── cámara ─────────────────────────
+function screenOf(p){const o=new pc.Vec3();cam.camera.worldToScreen(p,o);return o;}
+function focusFrame(e){
+  if(e.rect) return {c:new pc.Vec3((e.rect[0]+e.rect[2])/2,e.yt,(e.rect[1]+e.rect[3])/2), d:Math.max(16,Math.max(e.rect[2]-e.rect[0],e.rect[3]-e.rect[1])*(e.tipo==='Project'?1.15:1.05))};
+  if(e.tipo==='Domain'){ const h=PL0+STEP*Math.max(0,e.genes.length-1)*(terr.opt.apil==='pila'?SPREAD:1)+TOPH; return {c:new pc.Vec3(e.cx,e.y0+h*.45,e.cz), d:Math.max(11,Math.max(e.W,e.D)*2.6,h*3.2)}; }
+  if(e.tipo==='Gene'){ const P=e.apps.map(a=>new pc.Vec3(a.x,a.y,a.z)), c=new pc.Vec3();P.forEach(p=>c.add(p));c.mulScalar(1/P.length); const spread=Math.max(0,...P.map(p=>p.clone().sub(c).length())); return {c, d:Math.max(12,spread*2.5+8)}; }
+  return {c:e.pos.clone(), d:11};
+}
+function orientToFocus(){ const e=terr.ents[S.focus]; if(!e) return; const f=focusFrame(e); orbit.tTarget.copy(f.c); orbit.tDist=f.d; }
+
+// ───────────────────────── estados visuales ─────────────────────────
+function ancestors(id){const out=[];let e=terr.ents[id];while(e){out.push(e.id);e=terr.ents[e.parent];}return out;}
+function pathSet(){ const f=terr.ents[S.focus]; const s=new Set(); if(!f) return s;
+  if(f.tipo==='Gene'){ f.apps.forEach(a=>{ if(a.dom) ancestors(a.dom).forEach(x=>s.add(x)); }); ancestors(f.parent).forEach(x=>s.add(x)); }
+  else ancestors(f.id).forEach(x=>s.add(x)); return s; }
+function applyStates(){
+  const f=terr.ents[S.focus], path=pathSet(), geneFocus=f&&f.tipo==='Gene';
+  terr.order.map(id=>terr.ents[id]).forEach(e=>{
+    if(e.edge){ let k='base'; if(path.has(e.id)) k='path'; if(geneFocus&&!path.has(e.id)&&e.tipo==='Domain') k='dim'; if(S.ind===e.id) k='ind'; if(S.focus===e.id) k='foco';
+      e.edge.render.meshInstances[0].material=edgeMat(k);
+      if(e.face){ e.face.enabled=path.has(e.id); e.face.render.meshInstances[0].material=faceMat(S.focus===e.id?'foco':'path'); } }
+    if(e.tipo==='Gene') e.apps.forEach(a=>{
+      let t=.78; if(geneFocus) t=(e.id===f.id)?1:.3; else if(f&&f.tipo==='Domain') t=(a.dom===f.id)?.92:.55;
+      a.mat.emissive=new pc.Color(t,t,t); a.mat.update();
+      let k='base'; if(geneFocus&&e.id!==f.id) k='dim'; if(S.ind===e.id) k='ind'; if(S.focus===e.id) k='foco';
+      a.out.render.meshInstances[0].material=edgeMat(k); });
+  });
+}
+
+// ───────────────────────── tuberías (solo entre apariciones de un mismo Gene; solo con Foco: RM-4) ─────────────────────────
+function seg(a,b,mat,parent,th=.09,order=0){const s=addRender('box',mat,parent,order);const mid=new pc.Vec3().lerp(a,b,.5);s.setPosition(mid);if(a.distance(b)>1e-4)s.lookAt(b);s.setLocalScale(th,th,Math.max(.001,a.distance(b)+th*.9));return s;}
+function dashed(a,b,mat,parent){const L=a.distance(b),n=Math.max(2,Math.round(L/.5));for(let i=0;i<n;i+=2){seg(new pc.Vec3().lerp(a,b,i/n),new pc.Vec3().lerp(a,b,Math.min(1,(i+1)/n)),mat,parent,.04);}}
+function pipeGene(g,parent,lane){
+  // Regla de trazado (definición fase 1 §4.1): sale del piso, baja por el edificio, pasa bajo la calle siguiendo su trazado,
+  // entra al otro edificio y sube hasta el piso. Varias apariciones: la tubería sigue bajo la calle hasta cada edificio.
+  const A=g.apps.filter(a=>a.dom).map(a=>({a,d:terr.ents[a.dom]})).sort((p,q)=>(p.d.row-q.d.row)||(p.d.col-q.d.col)); if(A.length<2) return;
+  const yU=terr.yP-.32, off=lane*.16, above=pipeMat(S.res,false), under=pipeMat(S.res,true);
+  const riser=({a,d})=>({x:d.x0+d.W-.22-off*.5, z:a.z});
+  const up=(it)=>{ const r=riser(it); seg(new pc.Vec3(it.a.x+PW/2,it.a.y+.02,it.a.z),new pc.Vec3(r.x,it.a.y+.02,r.z),above,parent);
+    seg(new pc.Vec3(r.x,it.a.y+.02,r.z),new pc.Vec3(r.x,it.d.y0,r.z),above,parent); seg(new pc.Vec3(r.x,it.d.y0,r.z),new pc.Vec3(r.x,yU,r.z),under,parent,.09,30); return r; };
+  const pts=[];
+  for(let i=0;i<A.length;i++){ const r=up(A[i]); if(i===0) continue;
+    const p=A[i-1], q=A[i], rp=riser(p), rq=r, xvp=p.d.xv+off, xvq=q.d.xv+off, zsp=p.d.zs+off, zsq=q.d.zs+off;
+    const P=[[rp.x,rp.z],[xvp,rp.z],[xvp,zsp]];
+    if(Math.abs(zsp-zsq)<1e-3){ P.push([xvq,zsq]); } else { P.push([xvp,zsq],[xvq,zsq]); }
+    P.push([xvq,rq.z],[rq.x,rq.z]);
+    for(let k=0;k+1<P.length;k++){ const a=new pc.Vec3(P[k][0],yU,P[k][1]), b=new pc.Vec3(P[k+1][0],yU,P[k+1][1]); if(a.distance(b)>1e-3) seg(a,b,under,parent,.09,30); }
+  }
+}
+function buildDyn(){
+  if(dyn) dyn.destroy(); dyn=new pc.Entity('dyn'); root.addChild(dyn);
+  const f=terr.ents[S.focus];
+  S.anchors.forEach(id=>{ const e=terr.ents[id]; if(!e) return;
+    const rect=(x,z,w,d,y)=>[0,.28].forEach(o=>{const r=meshEntity(rectEdges(),edgeMat('foco'),dyn);r.setLocalScale(w+.5+o*2,1,d+.5+o*2);r.setLocalPosition(x,y,z);});
+    if(e.rect) rect((e.rect[0]+e.rect[2])/2,(e.rect[1]+e.rect[3])/2,e.rect[2]-e.rect[0],e.rect[3]-e.rect[1],e.yt+.03);
+    else if(e.tipo==='Domain') rect(e.cx,e.cz,e.W,e.D,e.y0+.03);
+    else if(e.tipo==='Gene') e.apps.forEach(a=>rect(a.x,a.z,PW-.3,PD-.3,a.y+.01));
+    else rect(e.x,e.z,1.2,1.2,terr.yP+.03); });
+  const genesToPipe = !f? [] : f.tipo==='Gene'? [f] : f.tipo==='Domain'? f.genes.filter(g=>g.apps.filter(a=>a.dom).length>1) : [];
+  genesToPipe.forEach((g,i)=>pipeGene(g,dyn,i));   // carriles ordenados bajo la calle (haces recuperables)
+  S.ports=[];
+  if(RUN==='C3'&&f&&f.tipo==='Gene'){ const G=f.g1, older=G.revisions.slice(1), assets=curAssets(f);
+    f.apps.forEach(a=>{
+      // revisiones anteriores: abanico de láminas detrás del piso (la vigente es el piso mismo)
+      older.forEach((rv,k)=>{ const dx=.5*(k+1), dz=-.5*(k+1), dy=-.05*(k+1), w=PW-.25*(k+1), d=PD-.18*(k+1);
+        const s=addRender('box',once('revslab',()=>lit(over(TXT,.09,SURF))),dyn); s.setLocalScale(w,.03,d); s.setLocalPosition(a.x+dx,a.y+dy,a.z+dz);
+        const o=meshEntity(rectEdges(),edgeMat(S.selRev===rv.revision_digest?'foco':'path'),dyn); o.setLocalScale(w,1,d); o.setLocalPosition(a.x+dx,a.y+dy+.02,a.z+dz); });
+      // activos de la revisión vigente: puertos al frente del piso, forma por tipo (file cubo · document lámina · test cilindro)
+      assets.forEach((as,i)=>{ const col=i%6, row=Math.floor(i/6), x=a.x-PW/2+.35+col*.52, z=a.z+PD/2+.3+row*.42, y=a.y+.12;
+        const selA=S.selAsset===i, mat=once('port'+(selA?1:0),()=>selA?unlit(INK):lit(over(TXT,.6,SURF))); let p;
+        if(as.asset_kind==='document'){ p=addRender('box',mat,dyn); p.setLocalScale(.38,.06,.3); }
+        else if(as.asset_kind==='test'){ p=addRender('cylinder',mat,dyn); p.setLocalScale(.26,.22,.26); }
+        else { p=addRender('box',mat,dyn); p.setLocalScale(.26,.26,.26); }
+        p.setLocalPosition(x,y,z); S.ports.push({gene:f.id,app:f.apps.indexOf(a),i,aabb:[x-.21,y-.15,z-.18,x+.21,y+.15,z+.18]}); });
+    }); }
+  if(f&&f.tipo==='Gene') terr.props.filter(([g])=>g===f.id).forEach(([g,d])=>{ const D=terr.ents[d]; const a=f.apps.find(x=>x.dom)||f.apps[0];
+    dashed(new pc.Vec3(a.x,a.y+.03,a.z),new pc.Vec3(D.cx,D.y0+D.H,D.cz),solidMat(PROP),dyn); });   // propuesta: discontinua, no navegable, sin piso
+}
+function refresh(rebuildG){
+  if(rebuildG) rebuildGlyphs();
+  buildDyn(); applyStates();
+  document.body.classList.toggle('modofoco',S.modoFoco); document.body.classList.toggle('nosurf',!S.surf||S.modoFoco);
+  renderHUD(); renderSurf(); renderDoc();
+}
+
+// ───────────────────────── picking analítico por rayo ─────────────────────────
+function rayAt(x,y){const n=cam.camera.screenToWorld(x,y,cam.camera.nearClip),fz=cam.camera.screenToWorld(x,y,cam.camera.farClip);const d=fz.clone().sub(n).normalize();return {o:n,d};}
+function rayBox(r,b){let t0=-Infinity,t1=Infinity;for(let i=0;i<3;i++){const o=[r.o.x,r.o.y,r.o.z][i],d=[r.d.x,r.d.y,r.d.z][i],lo=b[i],hi=b[i+3];
+  if(Math.abs(d)<1e-9){if(o<lo||o>hi)return null;continue;}let a=(lo-o)/d,c=(hi-o)/d;if(a>c)[a,c]=[c,a];t0=Math.max(t0,a);t1=Math.min(t1,c);if(t0>t1)return null;}return t1<0?null:Math.max(0,t0);}
+function candidatesAt(x,y){
+  const r=rayAt(x,y), hits=[];
+  (S.ports||[]).forEach(p=>{ const t=rayBox(r,p.aabb); if(t!==null) hits.push({id:p.gene,app:p.app,t:t-.5,asset:p.i}); });
+  terr.order.map(id=>terr.ents[id]).forEach(e=>{
+    if(e.tipo==='Gene') e.apps.forEach((a,i)=>{ if(Math.abs(r.d.y)<1e-6) return; const t=(a.y+.01-r.o.y)/r.d.y; if(t<0) return; const px=r.o.x+r.d.x*t, pz=r.o.z+r.d.z*t;
+      if(Math.abs(px-a.x)<=PW/2&&Math.abs(pz-a.z)<=PD/2) hits.push({id:e.id,app:i,t}); });
+    else if(e.tipo==='Repository'){ const t=rayBox(r,e.aabb); if(t!==null) hits.push({id:e.id,app:0,t}); }
+  });
+  hits.sort((a,b)=>a.t-b.t); const seen=new Set(), leaves=hits.filter(o=>seen.has(o.id)?false:seen.add(o.id));
+  const conts=terr.order.map(id=>terr.ents[id]).filter(e=>e.aabb&&e.tipo!=='Repository').map(e=>({e,t:rayBox(r,e.aabb)})).filter(o=>o.t!==null)
+    .sort((a,b)=>RANK[b.e.tipo]-RANK[a.e.tipo]||a.t-b.t);
+  const out=[...leaves,...conts.map(o=>({id:o.e.id,app:0}))]; const s2=new Set(); return out.filter(o=>s2.has(o.id)?false:s2.add(o.id));
+}
+
+// ───────────────────────── capa O, Superficie y despliegue ─────────────────────────
+const short=t=>t.length>58?t.slice(0,56)+'…':t;
+function dispName(e){ return e.tipo==='Gene'? geneLabel(e) : e.name; }
+function chain(id){const out=[];let e=terr.ents[id];while(e){out.unshift(e.tipo==='Gene'?(S.ident==='func'?'Gene':'Gene sin nombre conocido'):e.name);e=terr.ents[e.parent];}return out.join(' › ');}
+const ALT=(k,on,a,b)=>`<span><span class="k">${k}</span><span class="${on?'alt':''}">${on?b+' (variante)':a}</span></span>`;
+function renderHUD(){
+  const att=lens['P-A1']?[...lens['P-A1'].values()].filter(v=>v.state==='afirmado').length:0;
+  const ls=LENSES.map(l=>{const st=lensStatus(l.id);if(st==='inactiva')return `<span class="lens">${l.id} <b>inactiva</b></span>`;
+    let cov='';if(st==='activa · sin datos')cov=' · desconocido en todas las Entidades a las que refiere';else{const c=coverage(l.id);cov=c.mode==='a'?` · cubre ${c.covered}/${c.total} · ausencia = ninguno`:` · no evaluado en ${c.total-c.covered}/${c.total} · ausencia = desconocido`;}
+    const sl=visibleLenses().indexOf(l.id);return `<span class="lens">${l.id}${sl===0?' ▢A':sl===1?' ◇B':''} <b>${st}</b>${cov}</span>`;}).join('');
+  document.getElementById('hud').innerHTML=
+    `<span class="sim">CORRIDA ${RUN} · ${RUNS[RUN]}</span><span class="sim">ENTORNO ${ENV==='fixture'?'FIXTURE G1 test_only · no productivo':'SIMULADO · forma del store G1 · '+S.T}</span>${RUN==='C3'?'<span class="fn">[FN] dibuja revisiones y activos en el Espacio · C-6, EM §5.7</span>':''}`+
+    `<span><span class="k">Contexto</span>‹organización› › ‹proyecto› · verificado (sintético)</span>`+
+    `<span><span class="k">Foco</span>${S.focus?chain(S.focus):'—'}</span>`+
+    `<span><span class="k">Anchors</span>${S.anchors.size?[...S.anchors].map(id=>dispName(terr.ents[id])).join(', '):'—'}</span>`+
+    `<span><span class="k">Atención</span>${att?att+' convocatoria':'ninguna clasificada'}</span>`+
+    `<span><span class="k">Vista</span>${S.view==='top'?'plana (pisos repartidos)':'perspectiva · '+Math.round(orbit.tPitch)+'°'}${S.modoFoco?' · modo foco':''} · pisos ${S.apil==='pila'?'apilados':'repartidos'}</span>`+
+    `<span style="flex-basis:100%;height:0"></span>`+
+    ALT('I identificación',S.ident==='func','«Sin nombre conocido» + id','función declarada')+
+    ALT('R lotes',S.ubic==='fila','al fondo de la manzana','al final de la fila')+
+    ALT('O orden',S.orden==='func','por gene_id','alfabético por función')+
+    ALT('Z Organization',S.org==='perim','base escalonada','solo perímetro')+
+    ALT('K tubería',S.res==='acento','luminosidad','acento #C8F55A · choca con DP-c')+
+    ALT('T apertura',S.trans==='anim','instantánea','animada · choca con RI-3')+
+    `<span style="flex-basis:100%;height:0"></span><span class="k">Lentes${RUN==='C2'?' (P-R1, P-K1, P-D1 sobre Gene: hipotéticas)':' (Domain y Project)'}</span>${ls}`;
+}
+const short8=s=>s?String(s).slice(0,12)+'…':'—';
+const row=(h,cls='',act='')=>`<div class="row ${cls} ${act?'act':''}" ${act?`data-act="${act}"`:''}>${h}</div>`;
+function fichaGene(e,wide){
+  const G=e.g1, fx=G.source==='fixture', A=e.apps.filter(a=>a.dom), cur=G.revisions[0], c0=G.contributions[G.contributions.length-1];
+  const sel=(S.selRev&&G.revisions.find(r=>r.revision_digest===S.selRev))||cur;
+  let h='';
+  h+=`<h3>A · IDENTIDAD Y ESTADO <span class="note">lo que el piso permite reconocer</span></h3>`;
+  h+=row(`${S.ident==='func'?'Rótulo: función declarada (variante D-E1)':'Rótulo: «Sin nombre conocido» + id (EM §4.4)'} ${tag('g1','el store G1 no tiene campo nombre: Identity = gene_id + declared_function + origin')}`);
+  h+=row(`gene_id <code>${G.identity.gene_id}</code> ${tag('g1','identities/{gene_id}.json')}`);
+  h+=row(`Estado: ${G.head?G.head.lifecycle_status:'—'} ${G.head?tag('g1','head.json · lifecycle_status (el materializador sólo escribe «active»)'):tag('na','el fixture es una entrada de materialización: sin materializar no hay head.json')}`);
+  h+=row(`Ratificación: ${c0.ratification.classification} · synthetic=${c0.ratification.synthetic} · productive_authority=${c0.ratification.productive_authority} ${tag('g1','contribution.ratification')}`);
+  h+=row(`Apariciones: ${A.length?A.length+' Domain'+(A.length>1?'s':''):'ninguna (RM-7)'} ${tag('sim','relations/domain-gene/ existe en el layout del store, pero no hay escritor ni lector (contrato G1 §11.5)')}`);
+  h+=`<h3>B · INDICACIÓN <span class="note">EM §4.4: nombre visible, tipo, Procedencia, verificación, simulación, recuento por Lente</span></h3>`;
+  h+=row(`<span class="note">Pasá el puntero por cualquier piso de este Gene: se marcan todas sus apariciones y no se ofrecen actos.</span>`);
+  h+=`<h3>C · DETALLE</h3>`;
+  h+=row(`Función declarada: ${G.identity.declared_function} ${tag('g1','identity.declared_function / revision.declared_function')}`);
+  h+=row(`Origen: Mandate <code>${short8(G.identity.origin.mandate_id)}</code> · Intent <code>${short8(G.identity.origin.intent_id)}</code> · Decisión <code>${short8(G.identity.origin.decision_id)}</code> ${tag('g1','identity.origin (inmutable)')} <span class="note">Trabajo: no navegable (C-4)</span>`);
+  if(cur){
+    h+=row(`Revisión vigente <code>${short8(cur.revision_digest)}</code> · verificación <code>${short8(cur.verification.evidence_digest)}</code> por ${cur.verification.verifier} ${tag('g1','head.current_revision_digest → revisions/{digest}.json')}`);
+    h+=`<h3>HISTORIA DE REVISIONES (${G.revisions.length}) ${tag('g1','cadena parent_revision_digest')}</h3>`;
+    G.revisions.forEach((rv,k)=>{ const ct=G.contributions[k]; h+=row(`${k===0?'vigente':'anterior'} <code>${short8(rv.revision_digest)}</code> · ${rv.constitutive_assets.length} activos · Contribution <code>${short8(ct.contribution_id)}</code> · Mandate <code>${short8(ct.mandate_id)}</code>`, rv===sel?'sel':'', 'rev:'+rv.revision_digest); });
+  } else h+=row(`Revisión vigente: — ${tag('na','el fixture no contiene Revision; la produciría la materialización en un store')}`);
+  h+=`<h3>APARICIONES ${tag('sim','sin productor de Relación Domain↔Gene')}</h3>`;
+  h+= A.length? A.map(a=>row(`${terr.ents[a.dom].name} · ${RELTXT[a.relProv]} <span class="note">→ ver este piso (mismo Gene)</span>`,'', 'app:'+a.dom)).join('') : row('Sin Relación ratificada · lote del Project (RM-7)');
+  const assets = sel? sel.constitutive_assets : curAssets(e);
+  const curMap=new Map(cur?cur.constitutive_assets.map(a=>[a.repository_relative_path+'|'+a.repository_id,a.observed.sha256]):[]);
+  h+=`<h3>ACTIVOS ${sel&&sel!==cur?'DE LA REVISIÓN SELECCIONADA (capturada)':cur?'DE LA REVISIÓN VIGENTE':'DECLARADOS EN LA CONTRIBUTION (entrada)'} ${tag('g1','revision.constitutive_assets: asset_id, repository_id, asset_kind, ruta relativa, observed.sha256/size_bytes')}</h3>`;
+  const byRepo={}; assets.forEach((as,i)=>{(byRepo[as.repoEnt]=byRepo[as.repoEnt]||[]).push([as,i]);});
+  Object.entries(byRepo).forEach(([rid,list])=>{ const R=terr.ents[rid];
+    h+=row(`${R?R.name:'Repository no resuelto'} <code>${short8(list[0][0].repository_id)}</code> <span class="note">→ Foco en el Repository</span>`,'', 'repo:'+rid);
+    list.forEach(([as,i])=>{ let diff=''; if(sel&&sel!==cur){ const k=as.repository_relative_path+'|'+as.repository_id; diff=!curMap.has(k)?' · ya no está en la vigente':curMap.get(k)!==as.observed.sha256?' · cambió en la vigente':' · igual en la vigente'; }
+      h+=row(`&nbsp;&nbsp;${as.asset_kind} · <code>${as.repository_relative_path}</code> · sha256 <code>${as.observed.sha256?as.observed.sha256.slice(0,10)+'…':'— (vacío en el fixture)'}</code> · ${as.observed.size_bytes} B${diff}`, S.selAsset===i&&sel===cur?'sel':'', sel===cur?'asset:'+i:''); }); });
+  if(sel&&sel!==cur) h+=row(`<span class="note">La comparación con la vigente</span> ${tag('calc','dos Revisions de la Fuente comparadas por ruta y digest; no es una Fuente nueva')}`);
+  const P=terr.props.filter(([g])=>g===e.id); if(P.length) h+='<h3>PROPUESTAS (no generan piso; RM-6)</h3>'+P.map(([g,d])=>row(`semantic_candidate → ${terr.ents[d].name} · propuesta, no navegable ${tag('sim','sin productor conectado')}`)).join('');
+  h+=`<h3>D · CONOCIMIENTO</h3>`;
+  h+=row(`Contenido de los documentos ${tag('na','no existe contrato de lectura de contenido; dueño: fuente canónica de Genes')}`);
+  h+=row(`Determinación de conocimiento (document_remains_valid / document_requires_update) ${tag('na','GENE_DOCUMENT_LIFECYCLE_REQUIREMENTS_v0_1: requerimientos, sin implementación')}`);
+  h+=row(`<span class="note">Resumen o explicación generados: no se producen aquí; no serían Fuente.</span>`);
+  return h;
+}
+function renderSurf(){
+  const b=document.getElementById('surfBody'), sf=document.getElementById('surf'); sf.classList.toggle('collapsed',!S.surf);
+  document.getElementById('btnSurf').textContent=S.surf?'Superficie ▾':'Superficie ▸';
+  const e=terr.ents[S.focus]; if(!e){b.innerHTML='';return;}
+  let h='';
+  if(e.tipo==='Gene') h+= S.ident==='func'? `<div class="subj">${e.func}</div><div class="note">Gene · id ${e.gid}</div>` : `<div class="subj">Sin nombre conocido</div><div class="note">Gene · id ${e.gid}</div>`;
+  else h+=`<div class="subj">${e.name}</div><div class="note">${e.tipo}${e.tipo==='Project'?' · manzana':e.tipo==='Domain'?' · edificio':''}</div>`;
+  h+=row(`Procedencia: ${PROVTXT[e.prov]} · Fuente: ${e.fuente}`)+row(`Ubicación: ${chain(e.id)}`);
+  if(e.tipo==='Gene'||e.tipo==='Domain') h+=row(`<button id="btnDoc" type="button">Desplegar en grande (D)</button>`);
+  if(e.tipo==='Gene') h+=fichaGene(e,false);
+  if(e.tipo==='Domain') h+=`<h3>PISOS (${e.genes.length}) · orden ${S.orden==='func'?'alfabético por función':'por gene_id'}, neutro</h3>`+e.genes.map(g=>{const o=g.apps.filter(a=>a.dom&&a.dom!==e.id).map(a=>terr.ents[a.dom].name);return row(`${geneLabel(g)}${o.length?' · también en '+o.join(', '):''}`,'', 'gene:'+g.id);}).join('');
+  if(e.tipo==='Project'){ const m=e.m; h+=`<h3>MANZANA</h3>`+row(`project_id <code>${e.project_id||'—'}</code> ${tag('g1','project_id del store')}`)+row(`${m.doms.length} edificios (Domains) ${tag('sim','sin lector de Domain canónico')} · ${m.loose.length} en lote`); }
+  if(e.tipo==='Repository'){ h+=row(`repository_id <code>${e.repository_id}</code> ${tag('g1','asset.repository_id; el binding lo resuelve Authority (G2)')}`);
+    h+=`<h3>ACTIVOS DE GENES EN ESTE REPOSITORY ${tag('calc','índice inverso sobre las revisiones vigentes; no es una Relación del Territorio')}</h3>`;
+    terr.order.map(id=>terr.ents[id]).filter(g=>g.tipo==='Gene').forEach(g=>{ const L=curAssets(g).filter(a=>a.repoEnt===e.id); if(L.length) h+=row(`${geneLabel(g)} · ${L.length} activo${L.length>1?'s':''}`,'', 'gene:'+g.id)+L.map(a=>row(`&nbsp;&nbsp;${a.asset_kind} · <code>${a.repository_relative_path}</code>`)).join(''); }); }
+  h+='<h3>ANOTACIONES POR LENTE (todas las activas)</h3>';
+  LENSES.filter(l=>S.active.includes(l.id)).forEach(l=>{ if(!lensTipos(l.id).includes(e.tipo)){h+=row(`${l.id} · no refiere a este tipo`);return;}
+    const st=stateOf(l.id,e);h+=row(`${l.id} · ${st.state}${st.weak?' · Fuente débil':''}${st.txt?' · '+st.txt:''} <span class="note">(${lensStatus(l.id)})</span>${l.hip?' '+tag('hip','Proyección que no existe; se simula para observar el Espacio'):''}`);});
+  h+='<h3>QUÉ NO DEMUESTRA</h3>'+row('<span class="note">Diseño aprobado, formas finales, comprensión humana ni datos productivos. Ningún valor viene de un store real.</span>');
+  b.innerHTML=h; const bd=document.getElementById('btnDoc'); if(bd) bd.onclick=()=>toggleDoc();
+}
+function renderDoc(){
+  const el=document.getElementById('doc'), e=terr.ents[S.focus];
+  if(!S.doc||!e||!(e.tipo==='Gene'||e.tipo==='Domain')){el.style.display='none';return;}
+  let h=`<div class="note">SUPERFICIE DE DETALLE · mismo ${e.tipo} que el seleccionado en el Espacio · <button id="btnDocX" type="button">cerrar (Esc / D)</button></div>`;
+  h+=`<div class="subj">${e.tipo==='Gene'?(S.ident==='func'?e.func:'Sin nombre conocido · '+e.gid):e.name}</div><div class="note">${chain(e.id)}</div>`;
+  h+= e.tipo==='Gene'? `<div class="cols"><div>${fichaGene(e,true)}</div></div>` : `<h3>PISOS</h3>`+e.genes.map(g=>row(geneLabel(g),'', 'gene:'+g.id)).join('');
+  el.innerHTML=h; el.style.display='block'; document.getElementById('btnDocX').onclick=()=>toggleDoc(false);
+}
+function onAct(ev){ const t=ev.target.closest('[data-act]'); if(!t) return; const [k,v]=t.dataset.act.split(/:(.+)/);
+  if(k==='repo'||k==='gene') setFocus(v);
+  else if(k==='app'){ const g=terr.ents[S.focus]; const a=g&&g.apps.find(x=>x.dom===v); if(a){ orbit.tTarget.set(a.x,a.y,a.z); orbit.tDist=10; flash('Mismo Gene, otra aparición: el Foco no cambia'); } }
+  else if(k==='rev'){ S.selRev=v; S.selAsset=null; refresh(false); }
+  else if(k==='asset'){ S.selAsset=+v; refresh(false); } }
+document.getElementById('surfBody').addEventListener('click',onAct); document.getElementById('doc').addEventListener('click',onAct);
+function toggleDoc(v){ const e=terr.ents[S.focus]; const want=v===undefined?!S.doc:v;
+  if(want&&!(e&&(e.tipo==='Gene'||e.tipo==='Domain'))){flash('Desplegar requiere Foco en un Gene o en un Domain');return;} S.doc=want; renderDoc(); }
+
+// ───────────────────────── cada cuadro ─────────────────────────
+function frameOverlays(){
+  const L=document.getElementById('labels'), I=document.getElementById('interact'); let lh='', ih='';
+  const f=terr.ents[S.focus], vis=(s)=>S.view==='top'||s.z>0;
+  terr.order.map(id=>terr.ents[id]).forEach(e=>{
+    if(e.rect){ if(!(e.tipo!=='Tenant'||S.focus===e.id||S.ind===e.id)) return; const s=screenOf(e.labelPt); if(vis(s)) lh+=`<div class="lbl cont ${S.focus===e.id?'on':''}" style="left:${s.x}px;top:${s.y+2}px">${e.tipo==='Project'?'MANZANA · ':''}${e.tipo.toUpperCase()} · ${e.name}</div>`; return; }
+    const on=S.focus===e.id||S.anchors.has(e.id)||S.ind===e.id;
+    if(e.tipo==='Domain'){ const s=screenOf(new pc.Vec3(e.cx,e.y0,e.z0+e.D+.3)); if(vis(s)) lh+=`<div class="lbl dom ${on?'on':''}" style="left:${s.x}px;top:${s.y}px">${e.name}</div>`; return; }
+    if(e.tipo==='Gene'){ e.apps.forEach(a=>{ const domOn=f&&f.tipo==='Domain'&&a.dom===f.id; if(S.view==='top'||!(on||domOn)) return;
+        const s=screenOf(new pc.Vec3(a.x-PW/2,a.y,a.z+PD/2)); if(vis(s)) lh+=`<div class="lbl pl ${on?'on':''}" style="left:${s.x+4}px;top:${s.y-14}px">${short(geneLabel(e))}</div>`; }); return; }
+    if(on){ const s=screenOf(new pc.Vec3(e.x,terr.yP,e.z+1)); if(vis(s)) lh+=`<div class="lbl on" style="left:${s.x}px;top:${s.y+2}px">${e.name}</div>`; }
+  });
+  const ie=S.ind&&terr.ents[S.ind];
+  if(ie){
+    const br=(x,y,t,l)=>`<div class="brk" style="left:${x}px;top:${y}px;border-top-width:${t?2:0}px;border-bottom-width:${t?0:2}px;border-left-width:${l?2:0}px;border-right-width:${l?0:2}px"></div>`;
+    const box=(x0,y0,x1,y1)=>br(x0-4,y0-4,1,1)+br(x1-5,y0-4,1,0)+br(x0-4,y1-5,0,1)+br(x1-5,y1-5,0,0);
+    const bb=pts=>{pts=pts.map(p=>screenOf(p)).filter(vis);return pts.length?[Math.min(...pts.map(p=>p.x)),Math.min(...pts.map(p=>p.y)),Math.max(...pts.map(p=>p.x)),Math.max(...pts.map(p=>p.y))]:null;};
+    const corners=b=>{const P=[];for(const x of [b[0],b[3]])for(const y of [b[1],b[4]])for(const z of [b[2],b[5]])P.push(new pc.Vec3(x,y,z));return P;};
+    let boxes=[];
+    if(ie.tipo==='Gene') ie.apps.forEach(a=>{const b=bb([[-1,-1],[1,-1],[1,1],[-1,1]].map(([u,v])=>new pc.Vec3(a.x+u*PW/2,a.y,a.z+v*PD/2)));if(b)boxes.push(b);});
+    else if(ie.aabb){ const b=bb(corners(ie.aabb)); if(b) boxes.push(b); }
+    boxes.forEach(bx=>ih+=box(...bx));
+    const lead=boxes[Math.min(S.indApp,boxes.length-1)]||boxes[0];
+    if(lead){ const cntTxt=(ie.tipo==='Project'||ie.tipo==='Domain')?LENSES.filter(l=>S.active.includes(l.id)).map(l=>`${l.id}: ${countFor(l.id,ie)}`).join(' · '):'';
+      const nA=ie.tipo==='Gene'?ie.apps.filter(a=>a.dom).length:0;
+      const extra= ie.tipo==='Gene'? (nA? ` · aparece en ${nA} Domain${nA>1?'s':''}`:' · sin Relación ratificada (transitorio)') : '';
+      const asx=(ie.tipo==='Gene'&&S.indAsset!==null&&curAssets(ie)[S.indAsset])?` · activo ${curAssets(ie)[S.indAsset].asset_kind} ${curAssets(ie)[S.indAsset].repository_relative_path} (parte de la revisión; no es Entidad)`:'';
+      const txt=`${dispName(ie)}${asx} · ${ie.tipo} · ${PROVTXT[ie.prov]} · Contexto verificado (sintético) · simulado${extra}${cntTxt?' · '+cntTxt:''}${S.cands.length>1?` · candidato ${S.candIdx+1}/${S.cands.length} (C)`:''}`;
+      const estW=7.2*txt.length+14, maxR=innerWidth-(S.surf&&!S.modoFoco?355:12), left=Math.max(8,Math.min(lead[2]+8,maxR-estW)), top=(lead[2]+8+estW>maxR)?lead[3]+8:lead[1];
+      ih+=`<div class="ind-lbl" style="left:${left}px;top:${Math.max(100,top)}px">${txt}</div>`; }
+  }
+  L.innerHTML=lh; I.innerHTML=ih;
+}
+function placeGlyphs(){ const rot=cam.getRotation(),x90=new pc.Quat().setFromEulerAngles(90,0,0),qq=new pc.Quat().mul2(rot,x90),right=cam.right,up=cam.up;
+  glyphs.forEach(g=>{const k=g.small?.62:.8,off=g.slot==='A'?up.clone().mulScalar(k*.5).add(right.clone().mulScalar(k)):up.clone().mulScalar(k*.5).sub(right.clone().mulScalar(k));
+    g.ent.setPosition(g.e.anchorPt.clone().add(off));g.ent.setRotation(qq);const sz=g.small?.5:.75;g.ent.setLocalScale(sz,sz,sz);}); }
+function placeCamera(dt){
+  const k=1-Math.exp(-dt*5); orbit.target.lerp(orbit.target,orbit.tTarget,k); orbit.dist+=(orbit.tDist-orbit.dist)*k; orbit.pitch+=(orbit.tPitch-orbit.pitch)*k; orbit.yaw+=(orbit.tYaw-orbit.yaw)*k;
+  const fogObj=app.scene.fog&&typeof app.scene.fog==='object';
+  const off=(S.surf&&!S.modoFoco)?orbit.dist*.12:0;
+  if(S.view==='top'){cam.camera.projection=pc.PROJECTION_ORTHOGRAPHIC;cam.camera.orthoHeight=Math.max(4,orbit.dist*.55);cam.setPosition(orbit.target.x+off,180,orbit.target.z);cam.setEulerAngles(-90,0,0);if(fogObj)app.scene.fog.end=10000;return;}
+  cam.camera.projection=pc.PROJECTION_PERSPECTIVE; if(fogObj) app.scene.fog.end=260;
+  const yaw=orbit.yaw*Math.PI/180,pit=orbit.pitch*Math.PI/180;
+  const tg=orbit.target.clone().add(new pc.Vec3(Math.cos(yaw),0,-Math.sin(yaw)).mulScalar(off));
+  cam.setPosition(new pc.Vec3(Math.sin(yaw)*Math.cos(pit),Math.sin(pit),Math.cos(yaw)*Math.cos(pit)).mulScalar(orbit.dist).add(tg)); cam.lookAt(tg);
+}
+
+// ───────────────────────── actos de la persona ─────────────────────────
+function flash(m){const f=document.getElementById('flash');f.textContent=m;f.style.display='block';clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.display='none',2400);}
+function setFocus(id,{push=true}={}){if(!id||!terr.ents[id]||id===S.focus)return;if(push&&S.focus)S.hist.push(S.focus);S.focus=id;S.selRev=null;S.selAsset=null;setSpreadTargets(false);orientToFocus();
+  const e=terr.ents[id]; if(S.doc&&!(e.tipo==='Gene'||e.tipo==='Domain')) S.doc=false; refresh(false);}
+function setInd(id,app){ if(id===S.ind&&app===S.indApp) return; S.ind=id; S.indApp=app||0; applyStates(); }
+let drag=null;
+canvas.addEventListener('contextmenu',ev=>ev.preventDefault());
+canvas.addEventListener('pointerdown',ev=>{drag={x:ev.clientX,y:ev.clientY,moved:false,pan:ev.button===2||ev.shiftKey};canvas.setPointerCapture(ev.pointerId);canvas.focus();});
+canvas.addEventListener('pointerup',ev=>{if(drag&&!drag.moved){const c=candidatesAt(ev.clientX,ev.clientY);const pick=S.cands.length>1&&S.ind?S.ind:(c[0]&&c[0].id);if(pick){ if(c[0]&&c[0].asset!==undefined&&pick===S.focus){S.selAsset=c[0].asset;refresh(false);} else setFocus(pick);} }drag=null;});
+canvas.addEventListener('pointermove',ev=>{
+  if(drag){const dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;
+    if(drag.moved&&S.view!=='top'&&!drag.pan){orbit.tYaw-=dx*.3;orbit.tPitch=Math.max(S.minEl,Math.min(80,orbit.tPitch+dy*.25));orbit.yaw=orbit.tYaw;orbit.pitch=orbit.tPitch;}
+    if(drag.moved&&(drag.pan||S.view==='top')){const sc=orbit.dist*.0016;const r=cam.right.clone();r.y=0;r.normalize();const fw=new pc.Vec3(-r.z,0,r.x);orbit.tTarget.add(r.mulScalar(-dx*sc)).add(fw.mulScalar(S.view==='top'?-dy*sc:dy*sc));orbit.target.copy(orbit.tTarget);}
+    drag.x=ev.clientX;drag.y=ev.clientY;return;}
+  const c=candidatesAt(ev.clientX,ev.clientY);const id=c[0]?c[0].id:null;
+  S.indAsset=c[0]&&c[0].asset!==undefined?c[0].asset:null;
+  if(id!==S.ind||(c[0]&&c[0].app!==S.indApp)){S.cands=c;S.candIdx=0;setInd(id,c[0]?c[0].app:0);}
+});
+canvas.addEventListener('pointerleave',()=>{S.cands=[];setInd(null,0);});
+canvas.addEventListener('wheel',ev=>{ev.preventDefault();orbit.tDist=Math.max(5,Math.min(320,orbit.tDist*(ev.deltaY>0?1.1:.9)));},{passive:false});
+function tabOrder(){return terr.order.map(id=>terr.ents[id]).sort((a,b)=>RANK[a.tipo]-RANK[b.tipo]);}
+function variant(field,a,b,msgA,msgB,rebuildNeeded){ S[field]=S[field]===a?b:a; if(rebuildNeeded){rebuild(true);orientToFocus();} else refresh(true); flash(S[field]===a?msgA:msgB); }
+window.addEventListener('keydown',ev=>{
+  const k=ev.key;
+  if(k==='Tab'){ev.preventDefault();const L=tabOrder();let i=L.findIndex(e=>e.id===S.ind);i=(i+(ev.shiftKey?-1:1)+L.length)%L.length;S.cands=[];setInd(L[i].id,0);}
+  else if(k==='c'||k==='C'){if(S.cands.length>1){S.candIdx=(S.candIdx+1)%S.cands.length;setInd(S.cands[S.candIdx].id,S.cands[S.candIdx].app);}else flash('No hay candidatos en competencia bajo el puntero');}
+  else if(k==='Enter'){if(S.ind)setFocus(S.ind);}
+  else if(k==='Backspace'){ev.preventDefault();const p=S.hist.pop();if(p)setFocus(p,{push:false});}
+  else if(k==='u'||k==='U'){const e=terr.ents[S.focus];if(e&&e.parent)setFocus(e.parent);}
+  else if(k==='a'||k==='A'){const e=terr.ents[S.focus];if(!e)return;if(e.prov==='declarado'){flash('No anclable: unsupported en LocationSnapshot v0.1 (D-3.b)');return;}S.anchors.has(e.id)?S.anchors.delete(e.id):S.anchors.add(e.id);refresh(false);}
+  else if(k==='e'||k==='E'){orbit.tPitch=55;}
+  else if(k==='w'||k==='W'){orbit.tPitch=Math.max(S.minEl,S.minEl+2);}
+  else if(k==='v'||k==='V'){S.view=S.view==='top'?'persp':'top';rebuild(true);orientToFocus();}
+  else if(k==='s'||k==='S'){S.surf=!S.surf;refresh(false);}
+  else if(k==='f'||k==='F'){S.modoFoco=!S.modoFoco;refresh(false);}
+  else if(k==='p'||k==='P'){if(S.view==='top'){flash('En la vista plana los pisos siempre se reparten');return;}variant('apil','pila','div','Pisos apilados','Pisos repartidos',true);}
+  else if(k==='i'||k==='I'){variant('ident','sin','func','D-E1 · «Sin nombre conocido» + id rotulado (defecto)','D-E1 · función declarada como rótulo (variante)',true);}
+  else if(k==='r'||k==='R'){variant('ubic','fondo','fila','D-E2 · lote al fondo de la manzana (defecto)','D-E2 · lotes al final de la fila (variante)',true);}
+  else if(k==='o'||k==='O'){variant('orden','id','func','D-E3 · orden por gene_id (defecto)','D-E3 · alfabético por función (variante)',true);}
+  else if(k==='z'||k==='Z'){variant('org','base','perim','D-E4 · Organization con base escalonada (defecto)','D-E4 · Organization solo perímetro (variante)',true);}
+  else if(k==='k'||k==='K'){variant('res','luz','acento','D-E5 · tubería por luminosidad (defecto)','D-E5 · tubería con acento #C8F55A (variante; choca con DP-c)',false);}
+  else if(k==='t'||k==='T'){variant('trans','inst','anim','D-E6 · apertura instantánea (defecto, RI-3)','D-E6 · apertura animada (variante; choca con RI-3)',false);}
+  else if(k==='d'||k==='D'){toggleDoc();}
+  else if('123456'.slice(0,LENSES.length).includes(k)&&k!==''){const id=LENSES[+k-1].id;S.active.includes(id)?S.active=S.active.filter(x=>x!==id):S.active.push(id);refresh(true);}
+  else if(k==='Escape'){if(S.doc){toggleDoc(false);return;}S.cands=[];setInd(null,0);}
+});
+document.getElementById('btnSurf').onclick=()=>{S.surf=!S.surf;refresh(false);};
+
+// ───────────────────────── arranque ─────────────────────────
+rebuild(false);
+if(q.get('foc')&&terr.ents[q.get('foc')]) { S.focus=q.get('foc'); setSpreadTargets(true); }
+if(q.get('anchor')&&terr.ents[q.get('anchor')]) S.anchors.add(q.get('anchor'));
+orientToFocus(); orbit.target.copy(orbit.tTarget); orbit.dist=orbit.tDist; refresh(false);
+if(q.get('ind')&&terr.ents[q.get('ind')]) setInd(q.get('ind'),0);
+app.on('update',dt=>{animateSpread(dt);placeCamera(dt);placeGlyphs();frameOverlays();if(Math.round(orbit.pitch)!==renderHUD.last){renderHUD.last=Math.round(orbit.pitch);renderHUD();}});
+window.addEventListener('resize',()=>app.resizeCanvas());
+app.start();
+window.__ready=true;
+</script>
+</body>
+</html>
