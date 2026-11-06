@@ -94,6 +94,17 @@
             "aitap --json route policy",
             "aitap --json route policy --consumer brain --intent-type gen --policy-version mandate-gen-local/v1 --model functiongemma-270m"
           ]
+        },
+        {
+          "name": "assignments",
+          "category": "route",
+          "description": "Lista destinos elegibles o valida asignaciones manuales de Intelligence Supply por action_id. Solo lectura: observa health sin inferencia, no consume tokens y no escribe Accounting",
+          "requires_vault": true,
+          "aliases": [],
+          "examples": [
+            "aitap --json route assignments --mode list --request request.json",
+            "aitap --json route assignments --mode validate --request request.json"
+          ]
         }
       ]
     },

@@ -55,6 +55,49 @@ func ResolveIntelligenceSupplyGrant(store *Store, checkpoint *CheckpointStore, o
 	if err != nil || state == nil || state.Emission == nil || state.Emission.SchemaVersion != "1.1" || state.Projection.IntelligenceSupplyGrants == nil {
 		return deny(IntelligenceSupplyGrantEvidence{})
 	}
+	return resolveIntelligenceSupplyGrantFromState(state, organizationID, installationID, grantID, at)
+}
+
+// ResolveIntelligenceSupplyGrantForActor resolves the single active Grant
+// already bound by Authority to an independently verified principal. It does
+// not accept a caller-selected Grant ID and fails closed when the accepted
+// projection contains zero or multiple applicable Grants.
+func ResolveIntelligenceSupplyGrantForActor(store *Store, checkpoint *CheckpointStore, organizationID, installationID, actorPrincipalID string, at time.Time) (IntelligenceSupplyGrantEvidence, error) {
+	deny := func() (IntelligenceSupplyGrantEvidence, error) {
+		return IntelligenceSupplyGrantEvidence{}, ErrIntelligenceSupplyGrantDenied
+	}
+	if store == nil || checkpoint == nil || organizationID == "" || installationID == "" || actorPrincipalID == "" || at.IsZero() {
+		return deny()
+	}
+	state, err := (DecisionEvaluator{Store: store, Checkpoint: checkpoint}).load()
+	if err != nil || state == nil || state.Emission == nil || state.Emission.SchemaVersion != "1.1" || state.Projection.IntelligenceSupplyGrants == nil {
+		return deny()
+	}
+	var matched *IntelligenceSupplyGrantEvidence
+	for _, candidate := range *state.Projection.IntelligenceSupplyGrants {
+		if candidate.ActorPrincipalID != actorPrincipalID {
+			continue
+		}
+		evidence, resolveErr := resolveIntelligenceSupplyGrantFromState(state, organizationID, installationID, candidate.GrantID, at)
+		if resolveErr != nil || evidence.Status != IntelligenceSupplyGrantActive {
+			continue
+		}
+		if matched != nil {
+			return deny()
+		}
+		copy := evidence
+		matched = &copy
+	}
+	if matched == nil {
+		return deny()
+	}
+	return *matched, nil
+}
+
+func resolveIntelligenceSupplyGrantFromState(state *DurableState, organizationID, installationID, grantID string, at time.Time) (IntelligenceSupplyGrantEvidence, error) {
+	deny := func(e IntelligenceSupplyGrantEvidence) (IntelligenceSupplyGrantEvidence, error) {
+		return e, ErrIntelligenceSupplyGrantDenied
+	}
 	if state.Binding.OrganizationID != organizationID || state.Binding.InstallationID != installationID || state.Emission.OrganizationID != organizationID || at.Before(state.Emission.NotBefore) || !at.Before(state.Emission.ExpiresAt) {
 		return deny(IntelligenceSupplyGrantEvidence{})
 	}

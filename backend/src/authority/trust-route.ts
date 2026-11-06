@@ -1,12 +1,12 @@
 import {base64ToBase64url,canonicalizeJson,digestWire,signWithDomain,verifyWithDomain} from './canonical';
 import {normalizeWireTime} from './emission';
-import {githubAppProvider,hashSecret,randomSecret,HumanIdentityError} from './human-identity';
+import {githubAppProvider,testFixtureProvider,hashSecret,randomSecret,HumanIdentityError} from './human-identity';
 import {checkSessionCsrf,resolveHumanSession,issueMandateConsentToken,consumeMandateConsentToken,type HumanServices} from './human-session-store';
 import {ACTOR_DOMAIN,loadTrustManifest,TrustError,type SignedArtifact} from './trust-manifest';
 export const ATTESTATION_DOMAIN='BLOOM-AUTHORITY-ACTOR-ATTESTATION-v1';
 export interface VerifiedInstallation {organizationId:string;installationId:string;}
 export interface TrustRouteServices extends HumanServices {origin:string;issuer:string;attestationKeyId:string;attestationPrivateKeyPkcs8:ArrayBuffer;}
-export interface TrustRouteEnv {DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;AUTHORITY_ISSUER?:string;AUTHORITY_SIGNING_KEY_ID?:string;AUTHORITY_SIGNING_KEY_PKCS8_B64?:string;}
+export interface TrustRouteEnv {DB:D1Database;AUTHORITY_HUMAN_ORIGIN?:string;AUTHORITY_GITHUB_APP_CLIENT_ID?:string;AUTHORITY_GITHUB_APP_CLIENT_SECRET?:string;AUTHORITY_HUMAN_SESSION_KEY_B64?:string;AUTHORITY_ISSUER?:string;AUTHORITY_SIGNING_KEY_ID?:string;AUTHORITY_SIGNING_KEY_PKCS8_B64?:string;AUTHORITY_ALLOW_TEST_FIXTURES?:string;}
 export interface ActorAttestation {schema:'bloom.authority.actor-attestation';schema_version:'1.0'|'1.2';attestation_id:string;issuer:string;organization_id:string;installation_id:string;principal_id:string;actor_public_key:string;audience:string;challenge_digest:string;issued_at:string;expires_at:string;operation?:'approve'|'activate';mandate_id?:string;contract_digest?:string;}
 async function trustManifestResponse(db:D1Database,request:Request,origin:string,installation:VerifiedInstallation|null):Promise<Response>{
  const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};const reply=(body:unknown,status:number)=>new Response(JSON.stringify(body),{status,headers});
@@ -22,12 +22,23 @@ const cookie=(request:Request,name:string)=>{const values=(request.headers.get('
 const escapeHTML=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 type MandatePacket={organizationId:string;installationId:string;actorPublicKey:string;audience:string;challenge:string;signature:string};
 function mandatePacket(value:unknown):MandatePacket{if(!exact(value,['organizationId','installationId','actorPublicKey','audience','challenge','signature']))throw new TrustError('invalid_request');const p=value as MandatePacket;if(Object.values(p).some(v=>typeof v!=='string'||!v)||p.audience!=='bloom.authority.mandate-consent')throw new TrustError('binding_invalid');return p;}
+function localActorPacket(value:unknown):MandatePacket{if(!exact(value,['organizationId','installationId','actorPublicKey','audience','challenge','signature']))throw new TrustError('invalid_request');const p=value as MandatePacket;if(Object.values(p).some(v=>typeof v!=='string'||!v)||p.audience!=='bloom.authority.local-actor')throw new TrustError('binding_invalid');return p;}
 async function mandateChallenge(db:D1Database,p:MandatePacket,s:TrustRouteServices){
  const digest=await hashSecret(p.challenge);
  const row=await db.prepare("SELECT * FROM authority_actor_challenges WHERE challenge_hash=? AND organization_id=? AND installation_id=? AND status='pending'")
   .bind(digest,p.organizationId,p.installationId).first<{actor_public_key_raw:string;audience:string;expires_at:string;mandate_operation:string;mandate_id:string;contract_digest:string}>();
  if(!row||row.actor_public_key_raw!==p.actorPublicKey||row.audience!==p.audience||Date.parse(row.expires_at)<=Date.parse(s.now())||
   !['approve','activate'].includes(row.mandate_operation)||!row.mandate_id||!row.contract_digest)throw new TrustError('challenge_invalid');
+ const possession={challenge:p.challenge,organization_id:p.organizationId,installation_id:p.installationId,audience:p.audience};
+ if(!await verifyWithDomain(ACTOR_DOMAIN,canonicalizeJson(possession),p.signature.replace(/-/g,'+').replace(/_/g,'/'),new Uint8Array(decode(p.actorPublicKey,32)).buffer))throw new TrustError('possession_invalid');
+ return {digest,row};
+}
+async function intentSupplyChallenge(db:D1Database,p:MandatePacket,s:TrustRouteServices){
+ const digest=await hashSecret(p.challenge);
+ const row=await db.prepare("SELECT * FROM authority_actor_challenges WHERE challenge_hash=? AND organization_id=? AND installation_id=? AND status='pending'")
+  .bind(digest,p.organizationId,p.installationId).first<{actor_public_key_raw:string;audience:string;expires_at:string;mandate_operation:string;mandate_id:string;contract_digest:string}>();
+ if(!row||row.actor_public_key_raw!==p.actorPublicKey||row.audience!==p.audience||Date.parse(row.expires_at)<=Date.parse(s.now())||
+  !['list','validate'].includes(row.mandate_operation)||!row.mandate_id||!/^sha256:[a-f0-9]{64}$/.test(row.contract_digest))throw new TrustError('challenge_invalid');
  const possession={challenge:p.challenge,organization_id:p.organizationId,installation_id:p.installationId,audience:p.audience};
  if(!await verifyWithDomain(ACTOR_DOMAIN,canonicalizeJson(possession),p.signature.replace(/-/g,'+').replace(/_/g,'/'),new Uint8Array(decode(p.actorPublicKey,32)).buffer))throw new TrustError('possession_invalid');
  return {digest,row};
@@ -39,6 +50,55 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
   const url=new URL(request.url),path=url.pathname;if(url.origin!==s.origin)throw new TrustError('origin_invalid');
   if(path==='/v1/authority/trust-manifest'&&request.method==='GET'){
    return trustManifestResponse(db,request,s.origin,installation);
+  }
+  if(path==='/v1/authority/actor/attestation'&&request.method==='GET'){
+   const org=url.searchParams.get('org'),digest=url.searchParams.get('challenge_digest');
+   if(!installation||!org||org!==installation.organizationId||!digest||!/^[A-Za-z0-9_-]{43}$/.test(digest))throw new TrustError('binding_invalid');
+   const consumed=await db.prepare(`UPDATE authority_actor_attestation_deliveries SET consumed_at=?
+    WHERE challenge_hash=? AND organization_id=? AND installation_id=? AND consumed_at IS NULL RETURNING attestation_json`)
+    .bind(normalizeWireTime(s.now()),digest,org,installation.installationId).first<{attestation_json:string}>();
+   if(consumed)return new Response(consumed.attestation_json,{status:200,headers});
+   const state=await db.prepare(`SELECT c.status,d.consumed_at FROM authority_actor_challenges c
+    LEFT JOIN authority_actor_attestation_deliveries d ON d.challenge_hash=c.challenge_hash
+    WHERE c.challenge_hash=? AND c.organization_id=? AND c.installation_id=?`)
+    .bind(digest,org,installation.installationId).first<{status:string;consumed_at:string|null}>();
+   if(!state)return reply({error:'authority_actor_challenge_not_found'},404);
+   if(state.consumed_at)return reply({error:'authority_actor_attestation_consumed'},410);
+   return reply({status:'pending'},202);
+  }
+  if(path==='/v1/authority/actor/intent-supply-consent'&&request.method==='GET'){
+   const encoded=url.searchParams.get('packet');if(!encoded||encoded.length>8192)throw new TrustError('invalid_request');
+   let p:MandatePacket;try{p=localActorPacket(JSON.parse(atob(encoded.replace(/-/g,'+').replace(/_/g,'/'))));}catch{throw new TrustError('invalid_request');}
+   const {digest,row}=await intentSupplyChallenge(db,p,s);
+   const actor=await resolveHumanSession(db,cookie(request,'__Host-authority-session'),p.organizationId,s);
+   if(!actor)throw new HumanIdentityError('session_invalid');
+   const consentToken=await issueMandateConsentToken(db,actor,digest,s);
+   const act=row.mandate_operation==='list'?'Habilitar listado de opciones de suministro':'Validar selección de suministro';
+   const html=`<!doctype html><html lang="es"><meta charset="utf-8"><title>Confirmar Intent Supply</title><main><h1>${escapeHTML(act)}</h1><p>Mandate: <code>${escapeHTML(row.mandate_id)}</code></p><p>Digest preparado: <code>${escapeHTML(row.contract_digest)}</code></p><p>Este acto no inicia el Mandate ni llama proveedores.</p><form method="post" action="/v1/authority/actor/intent-supply-consent"><input type="hidden" name="packet" value="${escapeHTML(encoded)}"><input type="hidden" name="consentToken" value="${escapeHTML(consentToken)}"><button type="submit">Confirmo este acto exacto</button></form></main></html>`;
+   return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'"}});
+  }
+  if(path==='/v1/authority/actor/intent-supply-consent'&&request.method==='POST'){
+   if(request.headers.get('Origin')!==s.origin)throw new TrustError('origin_invalid');
+   if(request.headers.get('Content-Type')?.split(';')[0]!=='application/x-www-form-urlencoded')throw new TrustError('invalid_request');
+   const form=await request.formData(),encoded=form.get('packet'),consentToken=form.get('consentToken');
+   if(typeof encoded!=='string'||typeof consentToken!=='string'||encoded.length>8192)throw new TrustError('invalid_request');
+   let p:MandatePacket;try{p=localActorPacket(JSON.parse(atob(encoded.replace(/-/g,'+').replace(/_/g,'/'))));}catch{throw new TrustError('invalid_request');}
+   const {digest}=await intentSupplyChallenge(db,p,s);
+   const actor=await resolveHumanSession(db,cookie(request,'__Host-authority-session'),p.organizationId,s);
+   if(!actor)throw new HumanIdentityError('session_invalid');
+   await consumeMandateConsentToken(db,actor,digest,consentToken,s);
+   const manifestRaw=await loadTrustManifest(db,p.organizationId);if(!manifestRaw)throw new TrustError('manifest_unavailable');
+   let manifest:any;try{manifest=JSON.parse(manifestRaw).payload;}catch{throw new TrustError('recovery_required');}
+   const currentKey=manifest?.issuer===s.issuer&&Array.isArray(manifest.keys)?manifest.keys.find((k:any)=>k?.key_id===s.attestationKeyId&&(k.purpose===undefined||k.purpose==='authority')&&k.status==='active'&&Date.parse(k.valid_from)<=Date.parse(s.now())&&(k.valid_until===null||Date.parse(s.now())<Date.parse(k.valid_until))):undefined;
+   if(!currentKey)throw new TrustError('signing_key_unavailable');
+   const now=normalizeWireTime(s.now()),payload:ActorAttestation={schema:'bloom.authority.actor-attestation',schema_version:'1.0',attestation_id:crypto.randomUUID(),issuer:s.issuer,organization_id:p.organizationId,installation_id:p.installationId,principal_id:actor.principalId,actor_public_key:p.actorPublicKey,audience:p.audience,challenge_digest:digest,issued_at:now,expires_at:new Date(Date.parse(now)+120000).toISOString()};
+   const envelope=await signAttestation(payload,s),raw=canonicalizeJson(envelope);
+   const results=await db.batch([
+    db.prepare("UPDATE authority_actor_challenges SET status='approved',approved_principal_id=?,approved_at=?,attestation_json=? WHERE challenge_hash=? AND status='pending'").bind(actor.principalId,now,raw,digest),
+    db.prepare("INSERT INTO authority_actor_attestation_deliveries(challenge_hash,organization_id,installation_id,attestation_json,created_at,consumed_at) VALUES(?,?,?,?,?,NULL)").bind(digest,p.organizationId,p.installationId,raw,now),
+   ]);
+   if(results.some(result=>!result.success||Number(result.meta.changes)!==1))throw new TrustError('challenge_invalid');
+   return new Response('<!doctype html><html lang="es"><meta charset="utf-8"><title>Aprobación registrada</title><main><h1>Aprobación registrada</h1><p>Puede volver a Core.</p></main></html>',{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; base-uri 'none'"}});
   }
   if(path==='/v1/authority/actor/mandate-consent'&&request.method==='GET'){
    const encoded=url.searchParams.get('packet');if(!encoded||encoded.length>8192)throw new TrustError('invalid_request');
@@ -74,12 +134,15 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
   if(path!=='/v1/authority/actor/challenge'&&request.headers.get('Origin')!==s.origin)throw new TrustError('origin_invalid');let body:any;try{body=await request.json();}catch{throw new TrustError('invalid_request');}
   if(path==='/v1/authority/actor/challenge'){
    const mandate=exact(body,['organizationId','actorPublicKey','audience','operation','mandateId','contractDigest']);
-   if(!installation||!(mandate||exact(body,['organizationId','actorPublicKey','audience']))||body.organizationId!==installation.organizationId||
-    (mandate?body.audience!=='bloom.authority.mandate-consent'||!['approve','activate'].includes(body.operation)||typeof body.mandateId!=='string'||!body.mandateId||typeof body.contractDigest!=='string'||!/^[a-f0-9]{64}$/.test(body.contractDigest):body.audience!=='bloom.authority.local-actor'))throw new TrustError('binding_invalid');decode(body.actorPublicKey,32);
+   const intentSupply=exact(body,['organizationId','actorPublicKey','audience','mode','mandateId','preparedContractDigest']);
+   const plain=exact(body,['organizationId','actorPublicKey','audience']);
+   if(!installation||!(mandate||intentSupply||plain)||body.organizationId!==installation.organizationId||
+    (mandate?body.audience!=='bloom.authority.mandate-consent'||!['approve','activate'].includes(body.operation)||typeof body.mandateId!=='string'||!body.mandateId||typeof body.contractDigest!=='string'||!/^[a-f0-9]{64}$/.test(body.contractDigest):
+     intentSupply?body.audience!=='bloom.authority.local-actor'||!['list','validate'].includes(body.mode)||typeof body.mandateId!=='string'||!body.mandateId||typeof body.preparedContractDigest!=='string'||!/^sha256:[a-f0-9]{64}$/.test(body.preparedContractDigest):body.audience!=='bloom.authority.local-actor'))throw new TrustError('binding_invalid');decode(body.actorPublicKey,32);
    const challenge=randomSecret(),expires=new Date(Date.parse(s.now())+120000).toISOString();
    await db.prepare("INSERT INTO authority_actor_challenges(challenge_hash,organization_id,installation_id,actor_public_key_raw,audience,expires_at,status,mandate_operation,mandate_id,contract_digest) VALUES(?,?,?,?,?,?,'pending',?,?,?)")
-    .bind(await hashSecret(challenge),installation.organizationId,installation.installationId,body.actorPublicKey,body.audience,expires,mandate?body.operation:null,mandate?body.mandateId:null,mandate?body.contractDigest:null).run();
-   return reply({challenge,organizationId:installation.organizationId,installationId:installation.installationId,actorPublicKey:body.actorPublicKey,audience:body.audience,expiresAt:expires,...(mandate?{operation:body.operation,mandateId:body.mandateId,contractDigest:body.contractDigest}:{})},201);
+    .bind(await hashSecret(challenge),installation.organizationId,installation.installationId,body.actorPublicKey,body.audience,expires,mandate?body.operation:intentSupply?body.mode:null,(mandate||intentSupply)?body.mandateId:null,mandate?body.contractDigest:intentSupply?body.preparedContractDigest:null).run();
+   return reply({challenge,organizationId:installation.organizationId,installationId:installation.installationId,actorPublicKey:body.actorPublicKey,audience:body.audience,expiresAt:expires,...(mandate?{operation:body.operation,mandateId:body.mandateId,contractDigest:body.contractDigest}:intentSupply?{mode:body.mode,mandateId:body.mandateId,preparedContractDigest:body.preparedContractDigest}:{})},201);
   }
   if(path!=='/v1/authority/actor/approve'||!exact(body,['organizationId','installationId','actorPublicKey','audience','challenge','signature']))throw new TrustError('invalid_request');
   const token=cookie(request,'__Host-authority-session');await checkSessionCsrf(db,token,request.headers.get('X-Authority-CSRF')??'');
@@ -105,7 +168,8 @@ export async function configuredAuthorityTrustResponse(env:TrustRouteEnv,request
    return trustManifestResponse(env.DB,request,env.AUTHORITY_HUMAN_ORIGIN,installation);
   }
   if(!env.AUTHORITY_HUMAN_ORIGIN||!env.AUTHORITY_ISSUER||!env.AUTHORITY_SIGNING_KEY_ID||!env.AUTHORITY_SIGNING_KEY_PKCS8_B64||!env.AUTHORITY_HUMAN_SESSION_KEY_B64)throw new TrustError('configuration_missing');
-  const provider=githubAppProvider({clientId:env.AUTHORITY_GITHUB_APP_CLIENT_ID??'',clientSecret:env.AUTHORITY_GITHUB_APP_CLIENT_SECRET??'',callbackUrl:env.AUTHORITY_HUMAN_ORIGIN+'/v1/authority/human/callback'});
-  return authorityTrustResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,attestationKeyId:env.AUTHORITY_SIGNING_KEY_ID,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),attestationPrivateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer},installation);
+  const fixtureMode=env.AUTHORITY_ALLOW_TEST_FIXTURES==='true';
+  const provider=fixtureMode?testFixtureProvider():githubAppProvider({clientId:env.AUTHORITY_GITHUB_APP_CLIENT_ID??'',clientSecret:env.AUTHORITY_GITHUB_APP_CLIENT_SECRET??'',callbackUrl:env.AUTHORITY_HUMAN_ORIGIN+'/v1/authority/human/callback'});
+  return authorityTrustResponse(env.DB,request,{provider,origin:env.AUTHORITY_HUMAN_ORIGIN,issuer:env.AUTHORITY_ISSUER,attestationKeyId:env.AUTHORITY_SIGNING_KEY_ID,encryptionKey:env.AUTHORITY_HUMAN_SESSION_KEY_B64,now:()=>new Date().toISOString(),allowTestFixtures:fixtureMode,attestationPrivateKeyPkcs8:Uint8Array.from(atob(env.AUTHORITY_SIGNING_KEY_PKCS8_B64),c=>c.charCodeAt(0)).buffer},installation);
  }catch{return new Response(JSON.stringify({error:'authority_trust_configuration_unavailable'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});}
 }

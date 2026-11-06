@@ -62,16 +62,21 @@ Contrato preparado identifica Intents cognitivos
 
 ## 6. Contrato neutral mínimo
 
-El nombre definitivo y la versión pública requieren aprobación de José. Hasta entonces, los Works deben usar el concepto `Intent Supply Assignments` y evitar schemas incompatibles.
+José aprobó `bloom.intent-supply-assignments/v1` como nombre y versión pública. Cada asignación se vincula por `action_id` del contrato preparado; `intent_type` no es una clave porque puede repetirse. Sólo las acciones marcadas explícitamente `requiresIntelligence` en la definición firmada y el contrato preparado requieren asignación. Si falta la marca, la proyección falla cerrada.
+
+La definición Genesis 1.0.0 instalada y la 1.1.0 preparada permanecen intactas. La versión firmada que incorporará la marca para este circuito será Genesis 1.2.0; su publicación, instalación y prueba son pasos posteriores y no se infieren de este cambio de source.
+
+En Genesis 1.2.0, José clasificó `ing-1` y `dis-2` con `requiresIntelligence=true`; `doc-3`, `exp-4`, `dev-5` y `exp-6` llevan `false`. Esto refleja los consumos identificados en la implementación actual. Un consumo futuro en cualquiera de las otras cuatro acciones exige revisar la marca antes de firmar otra definición, sin inferirla de `run_intent` en runtime.
+
+La capacidad requerida firmada de `ing-1` y `dis-2` es `requiredCapabilities: ["text.generate"]`; en las otras cuatro acciones la lista es vacía. El selector usa esta declaración firmada para filtrar destinos por capacidad, sin deducirla del `intent_type`.
 
 ```json
 {
-  "schema_version": "PROPOSED.intent-supply-assignments/v1",
+  "schema_version": "bloom.intent-supply-assignments/v1",
   "mandate_id": "UUID",
   "prepared_contract_digest": "sha256:HEX64",
   "assignments": [
     {
-      "intent_id": "UUID",
       "action_id": "ing-1",
       "destination": {
         "backend_id": "gemini_api",
@@ -101,6 +106,7 @@ Reglas:
 - El digest impide aplicar la elección a otro contrato preparado.
 - AITAP revalida antes del contacto con el provider.
 - El fingerprint no es autorización ni sustituye al Grant.
+- Para listar y validar, Nucleus verifica la identidad con el audience existente `bloom.authority.local-actor`, el Grant Intelligence Supply y el binding del proyecto. La aprobación y activación del Mandate conservan `bloom.authority.mandate-consent`.
 
 ## 7. Elegibilidad
 

@@ -7,6 +7,35 @@ import (
 	"fmt"
 )
 
+var genesisIntelligenceByAction = map[string]bool{
+	"ing-1": true, "dis-2": true,
+	"doc-3": false, "exp-4": false, "dev-5": false, "exp-6": false,
+}
+
+// HasApprovedGenesisIntelligenceRequirements binds the reviewed 1.2.0
+// classification to exact Action IDs. Future versions require a new review.
+func HasApprovedGenesisIntelligenceRequirements(p Payload) bool {
+	if p.Version != "1.2.0" || len(p.Plan.Actions) != len(genesisIntelligenceByAction) {
+		return false
+	}
+	seen := make(map[string]bool, len(p.Plan.Actions))
+	for _, action := range p.Plan.Actions {
+		want, known := genesisIntelligenceByAction[action.ActionID]
+		if !known || seen[action.ActionID] || action.RequiresIntelligence == nil || *action.RequiresIntelligence != want {
+			return false
+		}
+		if want {
+			if len(action.RequiredCapabilities) != 1 || action.RequiredCapabilities[0] != "text.generate" {
+				return false
+			}
+		} else if len(action.RequiredCapabilities) != 0 {
+			return false
+		}
+		seen[action.ActionID] = true
+	}
+	return true
+}
+
 // InitialOfferInput are the publisher-chosen values of the initial offer.
 // Everything else in the payload is the fixed initial-Mandate plan.
 type InitialOfferInput struct {
@@ -69,11 +98,26 @@ func BuildInitialOfferPayload(in InitialOfferInput) (Payload, error) {
 // BuildPreparableOfferPayload keeps the approved six-Action plan and signs the
 // project-derived domain and minimum project-file input rule in schema 1.1.
 func BuildPreparableOfferPayload(in InitialOfferInput) (Payload, error) {
+	if in.Version != "1.2.0" {
+		return Payload{}, errors.New("Genesis Intelligence Supply classification is reviewed only for version 1.2.0")
+	}
 	p, err := BuildInitialOfferPayload(in)
 	if err != nil {
 		return Payload{}, err
 	}
 	p.SchemaVersion = PreparableSchemaVersion
+	// Genesis 1.2.0 classifies only the Intelligence Supply calls observed today.
+	// A run_intent action is not, by itself, evidence of provider consumption.
+	for i := range p.Plan.Actions {
+		required, known := genesisIntelligenceByAction[p.Plan.Actions[i].ActionID]
+		if !known {
+			return Payload{}, errors.New("Genesis Intelligence Supply classification missing for Action")
+		}
+		p.Plan.Actions[i].RequiresIntelligence = &required
+		if required {
+			p.Plan.Actions[i].RequiredCapabilities = []string{"text.generate"}
+		}
+	}
 	p.Preparation = Preparation{Status: PreparationDefined, DomainRule: PreparationDomainProject,
 		InputRequirements: &InputRequirements{Source: PreparationSourceProjectFiles, MinFiles: 1}}
 	return p, p.Validate()

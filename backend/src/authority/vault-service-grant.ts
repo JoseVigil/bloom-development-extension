@@ -8,7 +8,7 @@ export class VaultServiceGrantError extends Error {
   constructor(readonly code: string) { super(`authority_vault_service_grant_${code}`); }
 }
 const deny = (code: string): never => { throw new VaultServiceGrantError(code); };
-export type GrantCommand = { kind: 'issue'; installationId: string; servicePublicKey: string; keyId: 'anthropic-key:default' | 'gemini-key:default'; purpose?: 'mandate_intelligence' | 'mandate_gen_intelligence' | 'onboarding_gemini'; validUntil: string }
+export type GrantCommand = { kind: 'issue'; installationId: string; servicePublicKey: string; keyId: 'anthropic-key:default' | 'gemini-key:default'; purpose?: 'mandate_intelligence' | 'mandate_gen_intelligence' | 'onboarding_gemini' | 'models_api_health_probe:anthropic_api' | 'models_api_health_probe:gemini_api'; validUntil: string }
   | { kind: 'revoke'; grantId: string };
 export interface GrantRequest { organizationId: string; requestId: string; expectedVersion: string; command: GrantCommand }
 export interface GrantServices { now: () => string; issuer: string; signer: EmissionSigner; commitGuard: (actor: VerifiedHumanActor, requestId: string, at: string) => D1PreparedStatement }
@@ -59,7 +59,10 @@ export async function administerVaultServiceGrant(db: D1Database, request: Grant
     const geminiWrite = command.keyId === 'gemini-key:default' && command.purpose === 'onboarding_gemini';
     const aitapRead = (command.keyId === 'anthropic-key:default' || command.keyId === 'gemini-key:default')
       && (command.purpose === 'mandate_intelligence' || command.purpose === 'mandate_gen_intelligence');
-    if ((!geminiWrite && !aitapRead) || !/^[A-Za-z0-9_-]{43}$/.test(command.servicePublicKey)
+    const modelsApiHealthProbe =
+      (command.keyId === 'anthropic-key:default' && command.purpose === 'models_api_health_probe:anthropic_api')
+      || (command.keyId === 'gemini-key:default' && command.purpose === 'models_api_health_probe:gemini_api');
+    if ((!geminiWrite && !aitapRead && !modelsApiHealthProbe) || !/^[A-Za-z0-9_-]{43}$/.test(command.servicePublicKey)
       || !command.installationId) deny('invalid_request');
     const key = Uint8Array.from(atob(command.servicePublicKey.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
     const canonicalKey=btoa(String.fromCharCode(...key)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');

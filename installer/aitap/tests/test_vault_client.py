@@ -24,11 +24,13 @@ def fixture(tmp_path, monkeypatch):
     (authority / "identity.json").write_text(json.dumps({"installation_id": "installation-1"}))
     (tmp_path / "config" / "nucleus.json").write_text(json.dumps({"onboarding":{"active_org_slug":"org",
         "organizations":[{"org_slug":"org","organization_id":"canonical-org"}]}}))
-    monkeypatch.setenv("AITAP_VAULT_GRANT_ID", "grant-1")
+    monkeypatch.setenv("AITAP_VAULT_GRANT_ID", "grant-supply")
+    monkeypatch.setenv("AITAP_MODELS_API_HEALTH_PROBE_ANTHROPIC_GRANT_ID", "grant-probe-anthropic")
+    monkeypatch.setenv("AITAP_MODELS_API_HEALTH_PROBE_GEMINI_GRANT_ID", "grant-probe-gemini")
     return private
 
 
-def test_signed_request_uses_local_channel_and_sanitized_stdout(tmp_path, monkeypatch):
+def test_signed_health_probe_request_uses_local_channel_and_sanitized_stdout(tmp_path, monkeypatch):
     private = fixture(tmp_path, monkeypatch)
     secret = "fixture-secret-never-in-stdout"
     captured = {}
@@ -47,8 +49,11 @@ def test_signed_request_uses_local_channel_and_sanitized_stdout(tmp_path, monkey
             channel.sendall(json.dumps({"token":request["channel_token"],"key":secret}).encode() + b"\n")
         return SimpleNamespace(returncode=0, stdout='{"status":"delivered"}\n', stderr="")
 
-    assert VaultClient("nucleus", runner, tmp_path).resolve("credential-ref://anthropic/default",purpose="mandate_gen_intelligence") == secret
-    assert captured["purpose"] == "mandate_gen_intelligence"
+    purpose = "models_api_health_probe:anthropic_api"
+    assert VaultClient("nucleus", runner, tmp_path).resolve(
+        "credential-ref://anthropic/default", purpose=purpose) == secret
+    assert captured["purpose"] == purpose
+    assert captured["grant_id"] == "grant-probe-anthropic"
     assert secret not in json.dumps(captured)
 
 
@@ -60,8 +65,90 @@ def test_gemini_reference_requests_exact_gemini_key(tmp_path, monkeypatch):
         with socket.create_connection(("127.0.0.1", request["channel_port"])) as channel:
             channel.sendall(json.dumps({"token": request["channel_token"], "key": "gemini-secret"}).encode() + b"\n")
         return SimpleNamespace(returncode=0, stdout='{"status":"delivered"}', stderr="")
-    assert VaultClient("nucleus", runner, tmp_path).resolve("credential-ref://gemini/default", purpose="mandate_gen_intelligence") == "gemini-secret"
+    assert VaultClient("nucleus", runner, tmp_path).resolve(
+        "credential-ref://gemini/default", purpose="models_api_health_probe:gemini_api") == "gemini-secret"
     assert captured["key_id"] == "gemini-key:default"
+    assert captured["grant_id"] == "grant-probe-gemini"
+
+
+@pytest.mark.parametrize("variable,reference,purpose", [
+    ("AITAP_MODELS_API_HEALTH_PROBE_ANTHROPIC_GRANT_ID", "credential-ref://anthropic/default",
+     "models_api_health_probe:anthropic_api"),
+    ("AITAP_MODELS_API_HEALTH_PROBE_GEMINI_GRANT_ID", "credential-ref://gemini/default",
+     "models_api_health_probe:gemini_api"),
+])
+def test_probe_grants_are_separate_and_never_fall_back_to_supply(
+        tmp_path, monkeypatch, variable, reference, purpose):
+    fixture(tmp_path, monkeypatch)
+    called = False
+
+    def runner(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("Vault must not be called without the purpose-specific Grant ID")
+
+    monkeypatch.delenv(variable)
+    with pytest.raises(SupplyError) as error:
+        VaultClient("nucleus", runner, tmp_path).resolve(reference, purpose=purpose)
+    assert error.value.code == "VAULT_ACCESS_DENIED"
+    assert str(error.value) == "VAULT_ACCESS_DENIED [stage=grant_configuration]"
+    assert called is False
+
+
+def test_supply_uses_only_legacy_supply_grant(tmp_path, monkeypatch):
+    private = fixture(tmp_path, monkeypatch)
+    captured = {}
+
+    def runner(_command, **kwargs):
+        request = json.loads(kwargs["input"]); captured.update(request)
+        message = "\n".join(["BLOOM-AITAP-VAULT-REQUEST-v1", request["grant_id"], request["organization_id"],
+                             request["installation_id"], request["key_id"], request["purpose"],
+                             request["timestamp"], request["nonce"], str(request["channel_port"]),
+                             request["channel_token"]]).encode()
+        private.public_key().verify(base64.urlsafe_b64decode(request["signature"] + "=="), message)
+        with socket.create_connection(("127.0.0.1", request["channel_port"])) as channel:
+            channel.sendall(json.dumps({"token": request["channel_token"], "key": "supply-secret"}).encode() + b"\n")
+        return SimpleNamespace(returncode=0, stdout='{"status":"delivered"}', stderr="")
+
+    assert VaultClient("nucleus", runner, tmp_path).resolve(
+        "credential-ref://anthropic/default", purpose="mandate_intelligence") == "supply-secret"
+    assert captured["grant_id"] == "grant-supply"
+
+
+@pytest.mark.parametrize("variable,reference,purpose,wrong_grant", [
+    ("AITAP_MODELS_API_HEALTH_PROBE_ANTHROPIC_GRANT_ID", "credential-ref://anthropic/default",
+     "models_api_health_probe:anthropic_api", "grant-probe-gemini"),
+    ("AITAP_MODELS_API_HEALTH_PROBE_GEMINI_GRANT_ID", "credential-ref://gemini/default",
+     "models_api_health_probe:gemini_api", "grant-probe-anthropic"),
+])
+def test_crossed_probe_grant_is_rejected_by_nucleus_without_secret_leak(
+        tmp_path, monkeypatch, variable, reference, purpose, wrong_grant):
+    fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv(variable, wrong_grant)
+
+    def runner(_command, **kwargs):
+        request = json.loads(kwargs["input"])
+        assert request["purpose"] == purpose
+        assert request["grant_id"] == wrong_grant
+        return SimpleNamespace(returncode=1, stdout='{"key":"must-not-leak"}',
+                               stderr=f"{wrong_grant} VAULT_DENIAL_STAGE=grant must-not-leak")
+
+    with pytest.raises(SupplyError) as error:
+        VaultClient("nucleus", runner, tmp_path).resolve(reference, purpose=purpose)
+    assert str(error.value) == "VAULT_ACCESS_DENIED [stage=grant]"
+    assert wrong_grant not in str(error.value)
+    assert "must-not-leak" not in str(error.value)
+
+
+def test_health_probe_purposes_are_bound_to_their_exact_reference(tmp_path):
+    client = VaultClient(app_data=tmp_path)
+    for reference, purpose in (
+        ("credential-ref://gemini/default", "models_api_health_probe:anthropic_api"),
+        ("credential-ref://anthropic/default", "models_api_health_probe:gemini_api"),
+    ):
+        with pytest.raises(SupplyError) as error:
+            client.resolve(reference, purpose=purpose)
+        assert error.value.code == "VAULT_ACCESS_DENIED"
 
 
 def test_denial_never_reads_stdout_as_secret(tmp_path, monkeypatch):

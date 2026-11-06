@@ -14,11 +14,15 @@ ing -> dis -> doc -> exp -> [dev condicional] -> exp
 
 Solo los nodos que el contrato preparado declare consumidores de inteligencia requieren asignación.
 
+## Resolución W4 para este vertical
+
+José ratificó que la selección manual de Intelligence Supply permanece únicamente en la sesión de Core hasta el acto explícito de inicio. Para este vertical, esta regla reemplaza la propuesta anterior de un recibo W4 durable previo al inicio: no se crea ni se exige ese recibo para conservar las asignaciones. Al iniciar, Nucleus verifica el paquete validado y su vínculo con el Mandate y el digest preparado; el paquete pasa a ser input técnico durable del workflow iniciado. Cerrar Core antes de iniciar descarta la selección; cerrarlo después no elimina el input del workflow. Los workflows ya iniciados conservan su historia. Esta resolución no autoriza por sí misma a iniciar un Mandate existente ni a migrar su estado.
+
 ## Responsabilidades
 
 - Recibir el paquete al iniciar.
 - Verificar `mandate_id` y `prepared_contract_digest`.
-- Correlacionar `intent_id` y `action_id` sin tabla rígida de tipos.
+- Vincular cada consumo al `action_id` del contrato preparado; `intent_type` puede repetirse y no identifica una asignación.
 - Conservar el paquete como input técnico del workflow iniciado.
 - Construir el request de Supply con la asignación correcta.
 - Permitir que AITAP revalide antes del provider.

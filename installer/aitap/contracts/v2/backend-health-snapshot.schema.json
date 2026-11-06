@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bloom.aitap.backend-health/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "generated_at", "backends"],
+  "properties": {
+    "schema_version": {"const": "bloom.aitap.backend-health/v1"},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "backends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["backend_id", "provider", "model", "status", "observed_at"],
+        "properties": {
+          "backend_id": {"type": "string", "minLength": 1},
+          "provider": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "status": {"enum": ["healthy", "degraded", "unavailable", "unknown"]},
+          "observed_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}

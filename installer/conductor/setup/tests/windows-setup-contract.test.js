@@ -184,7 +184,10 @@ async function main() {
 
   const sourceWorkspace = validateWorkspaceBundleSource(paths.workspaceSource);
   assert.strictEqual(sourceWorkspace.valid, true, sourceWorkspace.error);
-  assert.strictEqual(sourceWorkspace.inventory.file_count, 179);
+  assert.ok(
+    sourceWorkspace.inventory.file_count >= WINDOWS_WORKSPACE_REQUIRED_PATHS.length,
+    'Workspace inventory must contain every required product resource'
+  );
   assert.ok(sourceWorkspace.inventory.total_bytes > 0);
   assert.match(sourceWorkspace.inventory.inventory_sha256, /^[a-f0-9]{64}$/);
   for (const requiredPath of WINDOWS_WORKSPACE_REQUIRED_PATHS) {

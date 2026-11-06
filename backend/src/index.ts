@@ -70,6 +70,8 @@ app.post('/v1/authority/tenant/invitations/revoke', c => configuredAuthorityHuma
 app.post('/v1/authority/actor/approve', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 app.get('/v1/authority/actor/mandate-consent', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 app.post('/v1/authority/actor/mandate-consent', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
+app.get('/v1/authority/actor/intent-supply-consent', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
+app.post('/v1/authority/actor/intent-supply-consent', c => configuredAuthorityTrustResponse(c.env,c.req.raw,null));
 
 app.get("/", (context) => context.json({ service: "bloom-backend", status: "ok" }));
 
@@ -152,6 +154,8 @@ const verifyInstallationAuth = async (context: any, next: () => Promise<void>) =
 
   await next();
 };
+
+app.get('/v1/authority/actor/attestation',verifyInstallationAuth,c=>configuredAuthorityTrustResponse(c.env,c.req.raw,{organizationId:c.req.query('org')!,installationId:c.req.header('X-Bloom-Installation-Id')!}));
 
 app.get('/v1/mandate/bootstrap', verifyInstallationAuth, async (context) => {
   const installationId = context.req.query('installation_id');

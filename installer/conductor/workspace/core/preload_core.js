@@ -73,6 +73,14 @@ contextBridge.exposeInMainWorld('intelligenceSupply', {
   read: () => ipcRenderer.invoke('core:intelligence-supply-read')
 });
 
+// Sesión efímera de selección manual. Nucleus conserva la prueba del actor;
+// el renderer sólo envía Mandate, digest y asignaciones por Action ID.
+contextBridge.exposeInMainWorld('intentSupplySession', {
+  list: (selection) => ipcRenderer.invoke('core:intent-supply-session-list', selection),
+  validate: (selection) => ipcRenderer.invoke('core:intent-supply-session-validate', selection),
+  close: (selection) => ipcRenderer.invoke('core:intent-supply-session-close', selection)
+});
+
 contextBridge.exposeInMainWorld('confirmedContext', {
   read: () => ipcRenderer.invoke('core:confirmed-context-read')
 });

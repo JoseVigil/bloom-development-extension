@@ -53,11 +53,14 @@ type Publisher struct {
 }
 
 type PlanAction struct {
-	ActionID   string   `json:"action_id"`
-	Type       string   `json:"type"`
-	IntentType string   `json:"intent_type"`
-	DependsOn  []string `json:"depends_on"`
-	WhenResult string   `json:"when_result"`
+	ActionID   string `json:"action_id"`
+	Type       string `json:"type"`
+	IntentType string `json:"intent_type"`
+	// Nil preserves older signed definitions; selection must fail closed when absent.
+	RequiresIntelligence *bool    `json:"requires_intelligence,omitempty"`
+	RequiredCapabilities []string `json:"required_capabilities,omitempty"`
+	DependsOn            []string `json:"depends_on"`
+	WhenResult           string   `json:"when_result"`
 }
 
 type Plan struct {
@@ -258,7 +261,7 @@ func (p Payload) Validate() error {
 			return errors.New("mandate definition depends_on must be an array")
 		}
 		actions[i] = mandatecontract.Action{ActionID: a.ActionID, Type: a.Type, IntentType: a.IntentType,
-			IdempotencyKey: a.ActionID, DependsOn: a.DependsOn, WhenResult: a.WhenResult}
+			RequiresIntelligence: a.RequiresIntelligence, RequiredCapabilities: a.RequiredCapabilities, IdempotencyKey: a.ActionID, DependsOn: a.DependsOn, WhenResult: a.WhenResult}
 	}
 	if err := mandatecontract.ValidateMandateActions(actions); err != nil {
 		return fmt.Errorf("mandate definition plan: %w", err)

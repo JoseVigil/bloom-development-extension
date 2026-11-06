@@ -54,7 +54,8 @@
     { href: '/home', label: 'Home' },
     { href: '/nucleus', label: 'Nucleus' },
     { href: '/profiles', label: 'Profiles' },
-    { href: '/wisdom', label: 'Wisdom' }
+    { href: '/wisdom', label: 'Wisdom' },
+    { href: '/aitap', label: 'iTap' }
     // El parche temporal "/genesis" (nav item provisorio, sin redirect ni
     // tab que lo alojara) se retira acá: la consolidación Genesis-como-
     // Mandate ya provee el camino real — botón "Nuevo Mandate" en TabBar
@@ -141,6 +142,8 @@
           {:else if item.href === '/wisdom'}
             <path d="M10 4.5c-2-1.4-4.5-1.4-6 0v10.5c1.5-1.4 4-1.4 6 0c2-1.4 4.5-1.4 6 0V4.5c-1.5-1.4-4-1.4-6 0z" />
             <path d="M10 4.5v10.5" />
+          {:else if item.href === '/aitap'}
+            <path d="M10 2.5L5.5 10h4L8.5 17.5 14.5 9h-4L10 2.5z" />
           {/if}
         </svg>
         <span class="nav-tooltip">{item.label}</span>

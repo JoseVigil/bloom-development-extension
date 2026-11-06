@@ -11,8 +11,14 @@ from aitap.providers.base import SupplyError
 from aitap.service_identity import ServiceIdentityError, app_data_dir, b64url, load_binding, load_signer
 
 
-_DENIAL_STAGES = {"service_identity", "installation_binding", "request", "binding", "timestamp", "nonce", "channel", "active_context", "grant",
+_DENIAL_STAGES = {"service_identity", "installation_binding", "grant_configuration", "request", "binding", "timestamp", "nonce", "channel", "active_context", "grant",
                   "signature", "replay", "vault_status", "credential", "channel_connect", "channel_write"}
+
+_SUPPLY_GRANT_ENV = "AITAP_VAULT_GRANT_ID"
+_PROBE_GRANT_ENVS = {
+    "models_api_health_probe:anthropic_api": "AITAP_MODELS_API_HEALTH_PROBE_ANTHROPIC_GRANT_ID",
+    "models_api_health_probe:gemini_api": "AITAP_MODELS_API_HEALTH_PROBE_GEMINI_GRANT_ID",
+}
 
 
 def _denial_message(stderr):
@@ -29,14 +35,24 @@ def _identity(app_data):
                           "VAULT_ACCESS_DENIED [stage=service_identity]") from None
 
 
+def _grant_id(purpose):
+    variable = _PROBE_GRANT_ENVS.get(purpose, _SUPPLY_GRANT_ENV)
+    try:
+        grant_id = os.environ[variable]
+        if not (isinstance(grant_id, str) and grant_id and "\n" not in grant_id and "\r" not in grant_id):
+            raise ValueError()
+        return grant_id
+    except (ValueError, KeyError):
+        stage = "grant_configuration" if purpose in _PROBE_GRANT_ENVS else "installation_binding"
+        raise SupplyError("VAULT_ACCESS_DENIED", "vault",
+                          f"VAULT_ACCESS_DENIED [stage={stage}]") from None
+
+
 def _binding(app_data):
     try:
         binding = load_binding(app_data)
-        grant_id = os.environ["AITAP_VAULT_GRANT_ID"]
-        if not (isinstance(grant_id, str) and grant_id and "\n" not in grant_id and "\r" not in grant_id):
-            raise ValueError()
-        return binding.organization_id, binding.installation_id, grant_id
-    except (ServiceIdentityError, ValueError, KeyError):
+        return binding.organization_id, binding.installation_id
+    except ServiceIdentityError:
         raise SupplyError("VAULT_ACCESS_DENIED", "vault",
                           "VAULT_ACCESS_DENIED [stage=installation_binding]") from None
 
@@ -52,11 +68,28 @@ class VaultClient:
                       "credential-ref://gemini/default": "gemini-key:default"}
         if reference not in references:
             raise SupplyError("CREDENTIAL_NOT_FOUND", "vault")
-        if purpose not in ("mandate_intelligence", "mandate_genesis_intelligence", "mandate_gen_intelligence"):
+        allowed = {"mandate_intelligence", "mandate_genesis_intelligence", "mandate_gen_intelligence",
+                   "models_api_health_probe:anthropic_api", "models_api_health_probe:gemini_api"}
+        if purpose not in allowed:
+            raise SupplyError("VAULT_ACCESS_DENIED", "vault")
+        probe_binding = {
+            "models_api_health_probe:anthropic_api": "credential-ref://anthropic/default",
+            "models_api_health_probe:gemini_api": "credential-ref://gemini/default",
+        }
+        if purpose in probe_binding and reference != probe_binding[purpose]:
             raise SupplyError("VAULT_ACCESS_DENIED", "vault")
         key_id = references[reference]
-        signer = _identity(self.app_data)
-        organization_id, installation_id, grant_id = _binding(self.app_data)
+        if purpose in _PROBE_GRANT_ENVS:
+            # A probe without its own Grant fails before identity/Vault/network
+            # work. Grant selection is service configuration, never Core input.
+            grant_id = _grant_id(purpose)
+            signer = _identity(self.app_data)
+            organization_id, installation_id = _binding(self.app_data)
+        else:
+            # Preserve the established Supply resolution order and variable.
+            signer = _identity(self.app_data)
+            organization_id, installation_id = _binding(self.app_data)
+            grant_id = _grant_id(purpose)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
             listener.bind(("127.0.0.1", 0))
             listener.listen(1)

@@ -18,7 +18,7 @@ EXPECTED = {
     "system": {"version", "info", "status"},
     "health": {"check"},
     "keys": {"list"},
-    "route": {"decide", "supply", "policy"},
+    "route": {"decide", "supply", "policy", "assignments"},
     "accounting": {"usage"},
     "local": {"preflight", "ensure"},
 }
@@ -48,6 +48,7 @@ def test_metadata_is_truthful_and_examples_are_real():
         assert meta.aliases == []
     by_name = {(c.metadata().category.name, c.metadata().name): c.metadata() for c in discover_commands().get_all_commands()}
     assert by_name[("route", "supply")].requires_vault is True
+    assert by_name[("route", "assignments")].requires_vault is True
     assert by_name[("keys", "list")].requires_vault is False
 
 

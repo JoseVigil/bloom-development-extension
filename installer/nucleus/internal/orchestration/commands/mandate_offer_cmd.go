@@ -288,6 +288,7 @@ misma selección devuelve "already_installed". No adopta, no aprueba ni activa.`
 func createMandateOfferPrepareCommand(c *core.Core) *cobra.Command {
 	var mandateID, definitionID, version, digest string
 	var inputs []string
+	var upgrade bool
 	cmd := &cobra.Command{
 		Use:   "prepare",
 		Short: "Prepara una instancia instalada con una nueva definición firmada e insumos elegidos",
@@ -301,7 +302,7 @@ la instancia preparada e inactiva. No aprueba, activa ni ejecuta.`,
 		},
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			printPrepareOfferResult(c, runMandateOfferPrepare(c, mandateID, definitionID, version, digest, inputs))
+			printPrepareOfferResult(c, runMandateOfferPrepare(c, mandateID, definitionID, version, digest, inputs, upgrade))
 		},
 	}
 	cmd.Flags().StringVar(&mandateID, "mandate-id", "", "mandateId de la instancia instalada (requerido)")
@@ -309,13 +310,14 @@ la instancia preparada e inactiva. No aprueba, activa ni ejecuta.`,
 	cmd.Flags().StringVar(&version, "version", "", "versión exacta ofrecida")
 	cmd.Flags().StringVar(&digest, "digest", "", "digest exacto ofrecido")
 	cmd.Flags().StringArrayVar(&inputs, "input", nil, "archivo relativo al proyecto (repetible)")
+	cmd.Flags().BoolVar(&upgrade, "upgrade-prepared", false, "transiciona explícitamente la instancia preparada 1.1.0 a 1.2.0 conservando ambos contratos")
 	for _, flag := range []string{"mandate-id", "definition", "version", "digest", "input"} {
 		_ = cmd.MarkFlagRequired(flag)
 	}
 	return cmd
 }
 
-func runMandateOfferPrepare(c *core.Core, mandateID, definitionID, version, digest string, inputs []string) offerCommandResult {
+func runMandateOfferPrepare(c *core.Core, mandateID, definitionID, version, digest string, inputs []string, upgrade bool) offerCommandResult {
 	const name = "mandate offer prepare"
 	logger, err := core.InitLogger(&c.Paths, "MANDATE", c.IsJSON)
 	if err != nil {
@@ -360,7 +362,7 @@ func runMandateOfferPrepare(c *core.Core, mandateID, definitionID, version, dige
 		return fail("trust", "trust_manifest_invalid", err, nil)
 	}
 	env.client.Context.Issuer, env.client.Context.Trust = manifest.Payload.Issuer, trust
-	preparer := &mandateoffer.Preparer{
+	preparer := &mandateoffer.Preparer{Upgrade: upgrade,
 		OrganizationID: env.active.OrganizationID, AppDataDir: c.Paths.AppDataDir, MandatesRoot: env.mandatesRoot,
 		ProjectPath: project.Path, ProjectName: project.Name, Identity: env.identity, Receiver: env.client,
 		PublisherKeys: func() (map[string]ed25519.PublicKey, error) {

@@ -21,12 +21,14 @@ type ActorProof struct {
 	private        ed25519.PrivateKey
 }
 type ActorChallengeRequest struct {
-	OrganizationID string `json:"organizationId"`
-	ActorPublicKey string `json:"actorPublicKey"`
-	Audience       string `json:"audience"`
-	Operation      string `json:"operation,omitempty"`
-	MandateID      string `json:"mandateId,omitempty"`
-	ContractDigest string `json:"contractDigest,omitempty"`
+	OrganizationID         string `json:"organizationId"`
+	ActorPublicKey         string `json:"actorPublicKey"`
+	Audience               string `json:"audience"`
+	Operation              string `json:"operation,omitempty"`
+	MandateID              string `json:"mandateId,omitempty"`
+	ContractDigest         string `json:"contractDigest,omitempty"`
+	Mode                   string `json:"mode,omitempty"`
+	PreparedContractDigest string `json:"preparedContractDigest,omitempty"`
 }
 type ActorChallengeApproval struct {
 	OrganizationID string `json:"organizationId"`

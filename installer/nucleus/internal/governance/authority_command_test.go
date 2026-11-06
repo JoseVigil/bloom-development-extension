@@ -784,6 +784,13 @@ func TestAuthorityCLIHasOnlyReadAndExplicitSyncCommands(t *testing.T) {
 		if err := json.Unmarshal([]byte(sub.Annotations["json_response"]), &example); err != nil {
 			t.Fatalf("%s json_response invalid: %v", sub.Name(), err)
 		}
+		if sub.Name() == "intent-supply-session" {
+			var sessionExample intentSupplySessionResponse
+			if err := json.Unmarshal([]byte(sub.Annotations["json_response"]), &sessionExample); err != nil || sessionExample.Schema != "bloom.intent-supply-session/v1" {
+				t.Fatalf("intent-supply-session json_response is not representative: %+v err=%v", sessionExample, err)
+			}
+			continue
+		}
 		if example.Command != sub.Name() || example.Schema != "bloom.authority.cli-evidence/v1" {
 			t.Fatalf("%s json_response is not representative: %+v", sub.Name(), example)
 		}

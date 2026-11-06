@@ -2,8 +2,7 @@
 // CRITICAL SERVICE - 24/7 Operational Hub
 // Nucleus Service: Sistema nervioso central del ecosistema Bloom
 
-const os = require('os');
-const { exec, execSync } = require('child_process');
+const { exec, execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
 const { paths } = require('../config/paths');
@@ -14,6 +13,36 @@ const { paths } = require('../config/paths');
 const NUCLEUS_SERVICE_NAME = 'BloomNucleusService';
 const NUCLEUS_DISPLAY_NAME = 'Bloom Nucleus Service';
 const NUCLEUS_DESCRIPTION = 'Bloom Nucleus Service - Central orchestration hub, workflow engine, and system governance (24/7 critical operational service)';
+const NUCLEUS_REGISTRY_SUBKEY = `SYSTEM\\CurrentControlSet\\Services\\${NUCLEUS_SERVICE_NAME}\\Parameters`;
+const NUCLEUS_ENVIRONMENT_VALUE_NAME = 'AppEnvironmentExtra';
+const MANAGED_AITAP_PROBE_ENVIRONMENT_NAMES = Object.freeze([
+  'AITAP_MODELS_API_HEALTH_PROBE_ANTHROPIC_GRANT_ID',
+  'AITAP_MODELS_API_HEALTH_PROBE_GEMINI_GRANT_ID',
+]);
+
+const READ_NUCLEUS_ENVIRONMENT_SCRIPT = [
+  "$key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('" + NUCLEUS_REGISTRY_SUBKEY + "', $false)",
+  'if ($null -eq $key) { exit 0 }',
+  'try {',
+  "  if (-not ($key.GetValueNames() -contains '" + NUCLEUS_ENVIRONMENT_VALUE_NAME + "')) { exit 0 }",
+  "  if ($key.GetValueKind('" + NUCLEUS_ENVIRONMENT_VALUE_NAME + "') -ne [Microsoft.Win32.RegistryValueKind]::MultiString) { exit 0 }",
+  "  [string[]]$entries = $key.GetValue('" + NUCLEUS_ENVIRONMENT_VALUE_NAME + "', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)",
+  '  if ($null -eq $entries) { exit 0 }',
+  '  foreach ($entry in $entries) {',
+  '    [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($entry))',
+  '  }',
+  '} finally { $key.Dispose() }',
+].join('\n');
+
+const WRITE_NUCLEUS_ENVIRONMENT_SCRIPT = [
+  '$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json',
+  '[string[]]$entries = @($payload.entries)',
+  "$key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('" + NUCLEUS_REGISTRY_SUBKEY + "', $true)",
+  "if ($null -eq $key) { throw 'Nucleus service Parameters registry key not found' }",
+  'try {',
+  "  $key.SetValue('" + NUCLEUS_ENVIRONMENT_VALUE_NAME + "', $entries, [Microsoft.Win32.RegistryValueKind]::MultiString)",
+  '} finally { $key.Dispose() }',
+].join('\n');
 
 // Configuración de reintentos y recuperación
 const SERVICE_CONFIG = {
@@ -58,7 +87,69 @@ function serviceExists(serviceName) {
   }
 }
 
-function buildNucleusServiceEnvironment(userLocalAppData = process.env.LOCALAPPDATA, inheritedPath = process.env.PATH || '') {
+function isValidManagedProbeValue(value) {
+  return typeof value === 'string' && value.length > 0 && !/[\x00-\x1f\x7f]/.test(value);
+}
+
+function selectManagedAitapProbeEnvironment(existingEntries = []) {
+  const managedNames = new Map(
+    MANAGED_AITAP_PROBE_ENVIRONMENT_NAMES.map(name => [name.toUpperCase(), name])
+  );
+  const selected = new Map();
+
+  for (const rawEntry of Array.isArray(existingEntries) ? existingEntries : []) {
+    if (typeof rawEntry !== 'string') continue;
+    const separatorIndex = rawEntry.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const rawName = rawEntry.slice(0, separatorIndex);
+    const value = rawEntry.slice(separatorIndex + 1);
+    const canonicalName = managedNames.get(rawName.toUpperCase());
+    if (!canonicalName || !isValidManagedProbeValue(value)) continue;
+
+    // Windows environment names are case-insensitive. Last valid entry wins,
+    // matching the effective value of a duplicated environment assignment.
+    selected.set(canonicalName, `${canonicalName}=${value}`);
+  }
+
+  return MANAGED_AITAP_PROBE_ENVIRONMENT_NAMES
+    .filter(name => selected.has(name))
+    .map(name => selected.get(name));
+}
+
+function readExistingNucleusServiceEnvironment(execFileSyncImpl = execFileSync) {
+  const output = execFileSyncImpl(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', READ_NUCLEUS_ENVIRONMENT_SCRIPT],
+    { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }
+  );
+
+  return String(output || '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => Buffer.from(line, 'base64').toString('utf8'));
+}
+
+function writeNucleusServiceEnvironment(envEntries, execFileSyncImpl = execFileSync) {
+  const entries = Array.isArray(envEntries) ? envEntries : [];
+  execFileSyncImpl(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', WRITE_NUCLEUS_ENVIRONMENT_SCRIPT],
+    {
+      input: JSON.stringify({ entries }),
+      encoding: 'utf8',
+      windowsHide: true,
+      stdio: ['pipe', 'ignore', 'pipe'],
+    }
+  );
+}
+
+function buildNucleusServiceEnvironment(
+  userLocalAppData = process.env.LOCALAPPDATA,
+  inheritedPath = process.env.PATH || '',
+  existingEntries = []
+) {
   if (!userLocalAppData) {
     throw new Error('LOCALAPPDATA is required to configure the Nucleus service environment');
   }
@@ -68,7 +159,7 @@ function buildNucleusServiceEnvironment(userLocalAppData = process.env.LOCALAPPD
   const bloomLogsDir = path.join(bloomRoot, 'logs');
   const bloomRuntimeDir = path.join(bloomBinDir, 'engine', 'runtime');
   const bloomPythonExe = path.join(bloomRuntimeDir, 'python.exe');
-  const envContent = [
+  const envEntries = [
     'PYTHONUNBUFFERED=1',
     'PYTHONIOENCODING=utf-8',
     'BLOOM_ENVIRONMENT=production',
@@ -80,7 +171,9 @@ function buildNucleusServiceEnvironment(userLocalAppData = process.env.LOCALAPPD
     `BLOOM_DIR=${bloomRoot}`,
     `BLOOM_PYTHON_PATH=${bloomPythonExe}`,
     `PATH=${bloomRuntimeDir};${bloomBinDir}\\nucleus;${bloomBinDir}\\sentinel;${inheritedPath}`,
-  ].join('\0') + '\0';
+    ...selectManagedAitapProbeEnvironment(existingEntries),
+  ];
+  const envContent = envEntries.join('\0') + '\0';
 
   return {
     bloomRoot,
@@ -88,6 +181,7 @@ function buildNucleusServiceEnvironment(userLocalAppData = process.env.LOCALAPPD
     bloomLogsDir,
     bloomRuntimeDir,
     bloomPythonExe,
+    envEntries,
     envContent,
   };
 }
@@ -154,6 +248,12 @@ async function rotateLogIfNeeded(logPath) {
 
 async function installNucleusService() {
   console.log('\n🧠 INSTALANDO SERVICIO CRÍTICO: Bloom Nucleus Service\n');
+
+  // Read the only two Setup-managed values before NSSM removes the existing
+  // service registry key during a repair. Values remain in memory and are never
+  // logged, written to a temporary file, or placed on a process command line.
+  const existingEnvironment = readExistingNucleusServiceEnvironment();
+  const managedProbeEnvironment = selectManagedAitapProbeEnvironment(existingEnvironment);
   
   const nssmPath = paths.nssmExe;
   // FORZAR path correcto sin depender de paths.nucleusExe
@@ -210,15 +310,16 @@ async function installNucleusService() {
     bloomBinDir,
     bloomLogsDir,
     bloomPythonExe,
-    envContent,
-  } = buildNucleusServiceEnvironment();
+    envEntries,
+  } = buildNucleusServiceEnvironment(
+    process.env.LOCALAPPDATA,
+    process.env.PATH || '',
+    managedProbeEnvironment
+  );
 
-  const tempEnvFile = path.join(os.tmpdir(), 'nucleus_env.txt');
-  fs.writeFileSync(tempEnvFile, envContent, { encoding: 'utf16le' });
-
-  // Usar reg add para escribir directamente al registro
-  const regKey = `HKLM\\SYSTEM\\CurrentControlSet\\Services\\${NUCLEUS_SERVICE_NAME}\\Parameters`;
-  execSync(`reg add "${regKey}" /v AppEnvironmentExtra /t REG_MULTI_SZ /d "${envContent.replace(/\0/g, '\\0')}" /f`, { stdio: 'inherit' });
+  // Write a native REG_MULTI_SZ. The JSON payload travels over stdin so no
+  // environment values or Grant IDs are exposed in command arguments or logs.
+  writeNucleusServiceEnvironment(envEntries);
 
   console.log('   ✓ Environment variables set via registry');
   console.log(`     BLOOM_ROOT: ${bloomRoot}`);
@@ -353,6 +454,10 @@ module.exports = {
   removeNucleusService,
   checkNucleusHealth,
   buildNucleusServiceEnvironment,
+  selectManagedAitapProbeEnvironment,
+  readExistingNucleusServiceEnvironment,
+  writeNucleusServiceEnvironment,
+  MANAGED_AITAP_PROBE_ENVIRONMENT_NAMES,
   NUCLEUS_SERVICE_NAME,
   NUCLEUS_DISPLAY_NAME
 };

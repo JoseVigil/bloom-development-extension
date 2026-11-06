@@ -218,6 +218,12 @@ func Verify(envelope Envelope, installationID string, publicKey ed25519.PublicKe
 // installation identity. Verification never creates an identity or trusts a
 // public key supplied by a workflow signal.
 func LoadVerified(mandateDir, identityPath string) (Envelope, error) {
+	return LoadVerifiedFile(filepath.Join(mandateDir, "mandate.json"), identityPath, filepath.Base(mandateDir))
+}
+
+// LoadVerifiedFile verifies an immutable historical contract with the same
+// installation identity used for the active contract.
+func LoadVerifiedFile(contractPath, identityPath, mandateID string) (Envelope, error) {
 	identityRaw, err := os.ReadFile(identityPath)
 	if err != nil {
 		return Envelope{}, fmt.Errorf("read installation identity: %w", err)
@@ -233,7 +239,7 @@ func LoadVerified(mandateDir, identityPath string) (Envelope, error) {
 	if err != nil || len(publicKey) != ed25519.PublicKeySize {
 		return Envelope{}, errors.New("invalid installation public key")
 	}
-	raw, err := os.ReadFile(filepath.Join(mandateDir, "mandate.json"))
+	raw, err := os.ReadFile(contractPath)
 	if err != nil {
 		return Envelope{}, fmt.Errorf("read signed Mandate: %w", err)
 	}
@@ -244,8 +250,70 @@ func LoadVerified(mandateDir, identityPath string) (Envelope, error) {
 	if err := Verify(envelope, identity.InstallationID, publicKey); err != nil {
 		return Envelope{}, err
 	}
-	if envelope.Contract.MandateID != filepath.Base(mandateDir) {
+	if envelope.Contract.MandateID != mandateID {
 		return Envelope{}, errors.New("Mandate directory and signed identity mismatch")
 	}
 	return envelope, nil
+}
+
+// PreparationTransition binds two verified, immutable preparation contracts.
+// It is separate from Authority approval and does not authorize execution.
+type PreparationTransition struct {
+	Schema               string `json:"schema"`
+	MandateID            string `json:"mandateId"`
+	FromDigest           string `json:"fromDigest"`
+	ToDigest             string `json:"toDigest"`
+	FromDefinitionDigest string `json:"fromDefinitionDigest"`
+	ToDefinitionDigest   string `json:"toDefinitionDigest"`
+	FromReceiptRef       string `json:"fromReceiptRef"`
+	ToReceiptRef         string `json:"toReceiptRef"`
+	SignedAt             string `json:"signedAt"`
+	SignatureKeyID       string `json:"signatureKeyId"`
+	Signature            string `json:"signature"`
+}
+
+func SignPreparationTransition(t PreparationTransition, identity *authority.LocalIdentity) (PreparationTransition, error) {
+	if identity == nil || len(identity.PrivateKey) != ed25519.PrivateKeySize || t.Schema != "bloom.preparation-transition/v1" ||
+		t.MandateID == "" || t.FromDigest == "" || t.ToDigest == "" || t.FromDigest == t.ToDigest ||
+		t.FromDefinitionDigest == "" || t.ToDefinitionDigest == "" || t.FromReceiptRef == "" || t.ToReceiptRef == "" || t.SignedAt == "" {
+		return PreparationTransition{}, errors.New("invalid preparation transition")
+	}
+	t.SignatureKeyID = identity.InstallationID
+	t.Signature = ""
+	message, err := transitionMessage(t)
+	if err != nil {
+		return PreparationTransition{}, err
+	}
+	t.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(identity.PrivateKey, message))
+	return t, nil
+}
+
+func VerifyPreparationTransition(t PreparationTransition, installationID string, publicKey ed25519.PublicKey) error {
+	if t.Schema != "bloom.preparation-transition/v1" || t.SignatureKeyID != installationID || t.MandateID == "" ||
+		t.FromDigest == "" || t.ToDigest == "" || t.FromDigest == t.ToDigest || t.FromDefinitionDigest == "" ||
+		t.ToDefinitionDigest == "" || t.FromReceiptRef == "" || t.ToReceiptRef == "" || t.SignedAt == "" {
+		return errors.New("invalid preparation transition")
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(t.Signature)
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return errors.New("invalid preparation transition signature")
+	}
+	t.Signature = ""
+	message, err := transitionMessage(t)
+	if err != nil || !ed25519.Verify(publicKey, message, sig) {
+		return errors.New("invalid preparation transition signature")
+	}
+	return nil
+}
+
+func transitionMessage(t PreparationTransition) ([]byte, error) {
+	raw, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+	canonical, err := authority.Canonicalize(raw)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte("BLOOM-PREPARATION-TRANSITION-v1\x00"), canonical...), nil
 }

@@ -74,14 +74,38 @@ type GravityRef struct {
 }
 
 type Action struct {
-	ActionID       string   `json:"actionId"`
-	Type           string   `json:"type"`
-	IntentType     string   `json:"intentType"`
-	DomainID       string   `json:"domainId"`
-	ArtifactRef    string   `json:"artifactRef"`
-	IdempotencyKey string   `json:"idempotencyKey"`
-	DependsOn      []string `json:"dependsOn,omitempty"`
-	WhenResult     string   `json:"whenResult,omitempty"`
+	ActionID             string   `json:"actionId"`
+	Type                 string   `json:"type"`
+	IntentType           string   `json:"intentType"`
+	RequiresIntelligence *bool    `json:"requiresIntelligence,omitempty"`
+	RequiredCapabilities []string `json:"requiredCapabilities,omitempty"`
+	DomainID             string   `json:"domainId"`
+	ArtifactRef          string   `json:"artifactRef"`
+	IdempotencyKey       string   `json:"idempotencyKey"`
+	DependsOn            []string `json:"dependsOn,omitempty"`
+	WhenResult           string   `json:"whenResult,omitempty"`
+}
+
+// IntelligenceActionIDs projects only signed per-action requirements. An
+// older contract without the marker cannot be used to infer assignments.
+func (c Contract) IntelligenceActionIDs() ([]string, error) {
+	if c.ContractVersion != 4 {
+		return nil, errors.New("intelligence assignments require a v4 prepared contract")
+	}
+	ids := make([]string, 0, len(c.Actions))
+	for _, action := range c.Actions {
+		if action.ActionID == "" || action.RequiresIntelligence == nil {
+			return nil, errors.New("prepared action lacks explicit intelligence requirement")
+		}
+		if (*action.RequiresIntelligence && len(action.RequiredCapabilities) == 0) ||
+			(!*action.RequiresIntelligence && len(action.RequiredCapabilities) != 0) {
+			return nil, errors.New("prepared action has invalid intelligence capabilities")
+		}
+		if *action.RequiresIntelligence {
+			ids = append(ids, action.ActionID)
+		}
+	}
+	return ids, nil
 }
 
 // ValidateMandateActions pins the executable v4 plan to the approved vertical.

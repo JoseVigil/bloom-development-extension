@@ -8,6 +8,27 @@ import (
 	"testing"
 )
 
+func TestIntelligenceActionIDsRequiresSignedMarker(t *testing.T) {
+	yes, no := true, false
+	contract := Contract{ContractVersion: 4, Actions: []Action{
+		{ActionID: "exp-4", IntentType: "exp", RequiresIntelligence: &yes, RequiredCapabilities: []string{"text.generate"}},
+		{ActionID: "exp-6", IntentType: "exp", RequiresIntelligence: &no},
+	}}
+	ids, err := contract.IntelligenceActionIDs()
+	if err != nil || len(ids) != 1 || ids[0] != "exp-4" {
+		t.Fatalf("unexpected intelligence projection: %v, %v", ids, err)
+	}
+	contract.Actions[0].RequiredCapabilities = nil
+	if _, err := contract.IntelligenceActionIDs(); err == nil {
+		t.Fatal("missing signed capability must fail closed")
+	}
+	contract.Actions[0].RequiredCapabilities = []string{"text.generate"}
+	contract.Actions[1].RequiresIntelligence = nil
+	if _, err := contract.IntelligenceActionIDs(); err == nil {
+		t.Fatal("missing signed marker must fail closed")
+	}
+}
+
 func TestMandateActionsRejectDuplicateIdempotencyKey(t *testing.T) {
 	types := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
 	actions := make([]Action, len(types))

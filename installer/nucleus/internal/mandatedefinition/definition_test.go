@@ -125,7 +125,7 @@ func TestPreparationIsRefusedForEveryInstallableDefinition(t *testing.T) {
 func TestSignedPreparableVersionRequiresProjectFiles(t *testing.T) {
 	priv, keys := testKeys()
 	p, err := BuildPreparableOfferPayload(InitialOfferInput{
-		DefinitionID: "0b8e4b9e-6d0f-4c55-9d8e-2f4b7a1c3e21", Version: "1.1.0", Label: "Genesis",
+		DefinitionID: "0b8e4b9e-6d0f-4c55-9d8e-2f4b7a1c3e21", Version: "1.2.0", Label: "Genesis",
 		Purpose: "Estructuración semántica inicial de un proyecto", PublisherID: "bloom", KeyID: testKeyID,
 		PublishedAt: "2026-10-27T12:00:00Z",
 		PolicyRaw:   repoFile(t, "installer/aitap/policies/initial-mandate-v1.json"),
@@ -147,6 +147,41 @@ func TestSignedPreparableVersionRequiresProjectFiles(t *testing.T) {
 	}
 	if d.Payload.SchemaVersion != PreparableSchemaVersion || len(d.Payload.Plan.Actions) != 6 {
 		t.Fatal("preparable plan changed")
+	}
+	wantIntelligence := map[string]bool{
+		"ing-1": true, "dis-2": true,
+		"doc-3": false, "exp-4": false, "dev-5": false, "exp-6": false,
+	}
+	for _, action := range d.Payload.Plan.Actions {
+		want, known := wantIntelligence[action.ActionID]
+		if !known || action.RequiresIntelligence == nil || *action.RequiresIntelligence != want {
+			t.Fatalf("signed Intelligence Supply classification invalid for %s: %v", action.ActionID, action.RequiresIntelligence)
+		}
+		if want && (len(action.RequiredCapabilities) != 1 || action.RequiredCapabilities[0] != "text.generate") {
+			t.Fatalf("signed capabilities invalid for %s: %v", action.ActionID, action.RequiredCapabilities)
+		}
+		if !want && len(action.RequiredCapabilities) != 0 {
+			t.Fatalf("unexpected signed capabilities for %s: %v", action.ActionID, action.RequiredCapabilities)
+		}
+	}
+	if !HasApprovedGenesisIntelligenceRequirements(d.Payload) {
+		t.Fatal("signed Genesis 1.2.0 classification was not accepted")
+	}
+	tamperedClassification := d.Payload
+	tamperedClassification.Plan.Actions = append([]PlanAction(nil), d.Payload.Plan.Actions...)
+	wrong := true
+	tamperedClassification.Plan.Actions[3].RequiresIntelligence = &wrong
+	if HasApprovedGenesisIntelligenceRequirements(tamperedClassification) {
+		t.Fatal("unapproved Intelligence Supply Action was accepted")
+	}
+	future := InitialOfferInput{
+		DefinitionID: p.DefinitionID, Version: "1.3.0", Label: p.Label, Purpose: p.Purpose,
+		PublisherID: p.Publisher.PublisherID, KeyID: p.Publisher.KeyID, PublishedAt: p.PublishedAt,
+		PolicyRaw:   repoFile(t, "installer/aitap/policies/initial-mandate-v1.json"),
+		RegistryRaw: repoFile(t, "installer/aitap/registry/initial-mandate-v1.json"),
+	}
+	if _, err := BuildPreparableOfferPayload(future); err == nil {
+		t.Fatal("a future version reused Genesis 1.2.0 Intelligence Supply classification")
 	}
 	p.Preparation.InputRequirements.MinFiles = 0
 	if _, err := Sign(p, priv); err == nil {

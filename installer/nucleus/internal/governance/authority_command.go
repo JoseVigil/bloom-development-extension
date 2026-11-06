@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,7 +31,8 @@ type AuthorityEvidenceReport struct {
 	ErrorCode string         `json:"error_code,omitempty"`
 }
 type AuthorityCommandServices struct {
-	Run func(command string, args []string) (AuthorityEvidenceReport, error)
+	Run                 func(command string, args []string) (AuthorityEvidenceReport, error)
+	IntentSupplySession func(io.Reader, io.Writer) error
 }
 type AuthorityCommandError struct{ Code string }
 
@@ -127,6 +129,12 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 			example:      "  nucleus --json authority supply-read <selected-org-slug> <selected-project-id-or-dash>",
 			jsonResponse: `{"schema":"bloom.authority.cli-evidence/v1","command":"supply-read","ok":true,"evidence":{"context":{"status":"verified"},"authority":{"status":"not_evaluable","reason":"session_subject_grant_link_unavailable"}}}`,
 		},
+		"intent-supply-session": {
+			short:        "Serve the authenticated read-only Intelligence Supply session",
+			long:         "Reads JSON Lines requests from stdin and returns sanitized per-action Intelligence Supply evidence on stdout. It keeps ephemeral actor proof only in memory, never starts a Mandate and fails closed until Authority human approval is available.",
+			example:      "  nucleus --json authority intent-supply-session",
+			jsonResponse: `{"schema":"bloom.intent-supply-session/v1","request_id":"request-123","ok":false,"error_code":"actor_human_approval_unavailable"}`,
+		},
 		"context-read": {
 			short:        "Read confirmed context evidence for an explicit selection",
 			long:         "Read-only identity, ProjectBinding, local folder and project ID continuity evidence for an explicit selection. Does not sync, claim or modify projects.",
@@ -147,9 +155,19 @@ func NewAuthorityCommand(services AuthorityCommandServices, jsonMode func() bool
 	}
 	root.SilenceUsage = true
 	root.SilenceErrors = true
-	for _, name := range []string{"status", "register", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants", "supply-read", "context-read"} {
+	for _, name := range []string{"status", "register", "sync", "decision", "checkpoint", "observation", "service-identity", "service-grants", "supply-read", "intent-supply-session", "context-read"} {
 		n := name
 		commandHelp := help[n]
+		if n == "intent-supply-session" {
+			sub := &cobra.Command{Use: n, Short: commandHelp.short, Long: commandHelp.long, Example: commandHelp.example, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+				if !jsonMode() || services.IntentSupplySession == nil {
+					return AuthorityCommandError{"intent_supply_session_unavailable"}
+				}
+				return services.IntentSupplySession(cmd.InOrStdin(), cmd.OutOrStdout())
+			}, Annotations: map[string]string{"category": "GOVERNANCE", "json_response": commandHelp.jsonResponse}}
+			root.AddCommand(sub)
+			continue
+		}
 		sub := &cobra.Command{Use: n + " [arguments]", Short: commandHelp.short, Long: commandHelp.long, Example: commandHelp.example, Args: cobra.ArbitraryArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := services.Run(n, args)
 			if err != nil {
@@ -217,7 +235,9 @@ func authorityHTTPClientWithTelemetry(logger *core.Logger) *http.Client {
 }
 
 func defaultAuthorityServices(c *core.Core) AuthorityCommandServices {
-	return AuthorityCommandServices{Run: func(command string, args []string) (AuthorityEvidenceReport, error) {
+	return AuthorityCommandServices{IntentSupplySession: func(input io.Reader, output io.Writer) error {
+		return runIntentSupplySessionWithCore(context.Background(), c, input, output)
+	}, Run: func(command string, args []string) (AuthorityEvidenceReport, error) {
 		report := AuthorityEvidenceReport{Schema: "bloom.authority.cli-evidence/v1", Command: command, OK: true, Evidence: map[string]any{"effective_mode": string(ModeLocalLegacy), "cutover": false}}
 		dir := filepath.Join(c.Paths.AppDataDir, "authority")
 		state := filepath.Join(dir, "state.json")

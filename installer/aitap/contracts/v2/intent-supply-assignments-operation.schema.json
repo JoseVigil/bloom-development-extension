@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bloom.intent-supply-assignments/v1/operation-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "mandate_id", "prepared_contract_digest", "policy_version", "policy_sha256", "registry_snapshot_id", "registry_sha256", "actions", "authority", "credentials"],
+  "properties": {
+    "schema_version": {"const": "bloom.intent-supply-assignments/v1"},
+    "request_id": {"type": "string", "minLength": 1},
+    "mandate_id": {"type": "string", "minLength": 1},
+    "prepared_contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy_version": {"type": "string", "minLength": 1},
+    "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "registry_snapshot_id": {"type": "string", "minLength": 1},
+    "registry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "actions": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["action_id", "requiredCapabilities"],
+        "properties": {
+          "action_id": {"type": "string", "minLength": 1},
+          "requiredCapabilities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["organization_id", "project_id", "mandate_id", "prepared_contract_digest", "allowed_capabilities", "allowed_privacy", "allowed_destinations", "limits", "valid_until", "authority_version", "authority_state_digest"],
+      "properties": {
+        "organization_id": {"type": "string", "minLength": 1},
+        "project_id": {"type": "string", "minLength": 1},
+        "mandate_id": {"type": "string", "minLength": 1},
+        "prepared_contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "allowed_capabilities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "allowed_privacy": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["local", "approved_cloud"]}},
+        "allowed_destinations": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["provider", "backend_id", "models"], "properties": {"provider": {"type": "string", "minLength": 1}, "backend_id": {"type": "string", "minLength": 1}, "models": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}}},
+        "limits": {"type": "object", "additionalProperties": false, "required": ["max_total_tokens", "max_output_tokens_per_inference", "max_inferences", "max_usd"], "properties": {"max_total_tokens": {"type": "integer", "minimum": 1}, "max_output_tokens_per_inference": {"type": "integer", "minimum": 1}, "max_inferences": {"type": "integer", "minimum": 1}, "max_usd": {"type": "string", "pattern": "^(0|0\\.[0-9]{6}|[1-9][0-9]*\\.[0-9]{6})$"}}},
+        "valid_until": {"type": "string", "format": "date-time"},
+        "authority_version": {"type": "string", "minLength": 1},
+        "authority_state_digest": {"type": "string", "minLength": 1}
+      }
+    },
+    "credentials": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["credential_ref", "usable", "fingerprint", "valid_until"], "properties": {"credential_ref": {"type": "string", "pattern": "^credential-ref://"}, "usable": {"type": "boolean"}, "fingerprint": {"type": "string", "minLength": 1}, "valid_until": {"type": "string", "format": "date-time"}}}},
+    "assignments": {"type": "array", "items": {"$ref": "#/$defs/assignment"}}
+  },
+  "$defs": {
+    "assignment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["action_id", "destination", "limits"],
+      "properties": {
+        "action_id": {"type": "string", "minLength": 1},
+        "destination": {"type": "object", "additionalProperties": false, "required": ["backend_id", "provider", "model"], "properties": {"backend_id": {"type": "string", "minLength": 1}, "provider": {"type": "string", "minLength": 1}, "model": {"type": "string", "minLength": 1}}},
+        "limits": {"type": "object", "additionalProperties": false, "required": ["max_inferences", "max_output_tokens", "max_total_tokens"], "properties": {"max_inferences": {"type": "integer", "minimum": 1}, "max_output_tokens": {"type": "integer", "minimum": 1}, "max_total_tokens": {"type": "integer", "minimum": 1}, "max_usd": {"type": "string", "pattern": "^(0|0\\.[0-9]{1,6}|[1-9][0-9]*\\.[0-9]{1,6})$"}}}
+      }
+    }
+  }
+}

@@ -114,3 +114,32 @@ func TestResolveIntelligenceSupplyGrantRequiresAcceptedCheckpoint(t *testing.T) 
 		t.Fatalf("missing checkpoint accepted: %v", err)
 	}
 }
+
+func TestResolveIntelligenceSupplyGrantForActorUsesAuthorityBinding(t *testing.T) {
+	store, checkpoint, now := acceptedIntelligenceGrant(t, nil)
+	evidence, err := ResolveIntelligenceSupplyGrantForActor(store, checkpoint, "org", "installation", "actor", now)
+	if err != nil || evidence.GrantID != "grant" || evidence.ActorPrincipalID != "actor" {
+		t.Fatalf("authority-bound grant was not resolved: %+v err=%v", evidence, err)
+	}
+	if _, err = ResolveIntelligenceSupplyGrantForActor(store, checkpoint, "org", "installation", "caller-supplied-principal", now); !errors.Is(err, ErrIntelligenceSupplyGrantDenied) {
+		t.Fatalf("unbound principal selected a Grant: %v", err)
+	}
+}
+
+func TestResolveIntelligenceSupplyGrantForActorRejectsAmbiguityAndExpiry(t *testing.T) {
+	store, checkpoint, now := acceptedIntelligenceGrant(t, func(content *FullContent) {
+		second := (*content.IntelligenceSupplyGrants)[0]
+		second.GrantID = "second"
+		*content.IntelligenceSupplyGrants = append(*content.IntelligenceSupplyGrants, second)
+	})
+	if _, err := ResolveIntelligenceSupplyGrantForActor(store, checkpoint, "org", "installation", "actor", now); !errors.Is(err, ErrIntelligenceSupplyGrantDenied) {
+		t.Fatalf("ambiguous actor Grants accepted: %v", err)
+	}
+
+	store, checkpoint, now = acceptedIntelligenceGrant(t, func(content *FullContent) {
+		(*content.IntelligenceSupplyGrants)[0].ValidUntil = nowFromContent(content)
+	})
+	if _, err := ResolveIntelligenceSupplyGrantForActor(store, checkpoint, "org", "installation", "actor", now); !errors.Is(err, ErrIntelligenceSupplyGrantDenied) {
+		t.Fatalf("expired actor Grant accepted: %v", err)
+	}
+}

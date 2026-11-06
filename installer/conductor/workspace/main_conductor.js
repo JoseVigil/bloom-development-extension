@@ -666,7 +666,7 @@ app.whenReady().then(async () => {
   setupNucleusHandlers();
   registerHealthHandlers(execNucleus, coreLog);
   registerProfilesHandlers(execNucleus, NUCLEUS_JSON, coreLog);
-  registerIntelligenceSupplyHandlers(execNucleus, NUCLEUS_JSON, paths.aitapExe, coreLog);
+  registerIntelligenceSupplyHandlers(execNucleus, NUCLEUS_JSON, paths.aitapExe, NUCLEUS_EXE, () => mainWindow, coreLog);
   registerConfirmedContextHandlers(execNucleus, NUCLEUS_JSON, coreLog);
   registerWisdomOfferHandlers(execNucleus, NUCLEUS_JSON, coreLog);
 

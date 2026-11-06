@@ -133,8 +133,10 @@ export function normalizeState(input: WireFullContent, organizationId: string, s
     for (const v of [g.grant_id, g.installation_id, g.key_id, g.issued_by_principal_id]) text(v, "grant identity");
     if (g.organization_id !== organizationId || !(
       (g.consumer === "aitap" && g.permission === "vault.key.read"
-        && ["anthropic-key:default", "gemini-key:default"].includes(g.key_id)
-        && ["mandate_intelligence", "mandate_genesis_intelligence", "mandate_gen_intelligence"].includes(g.purpose))
+        && ((["anthropic-key:default", "gemini-key:default"].includes(g.key_id)
+          && ["mandate_intelligence", "mandate_genesis_intelligence", "mandate_gen_intelligence"].includes(g.purpose))
+          || (g.key_id === "anthropic-key:default" && g.purpose === "models_api_health_probe:anthropic_api")
+          || (g.key_id === "gemini-key:default" && g.purpose === "models_api_health_probe:gemini_api")))
       || (g.consumer === "onboarding" && g.permission === "vault.key.write"
         && g.key_id === "gemini-key:default" && g.purpose === "onboarding_gemini")
     )) fail("grant binding");

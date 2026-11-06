@@ -24,6 +24,8 @@ import (
 const servicePurpose = "mandate_intelligence"
 const legacyServicePurpose = "mandate_genesis_intelligence"
 const mandateGenPurpose = "mandate_gen_intelligence"
+const anthropicModelsAPIHealthProbePurpose = "models_api_health_probe:anthropic_api"
+const geminiModelsAPIHealthProbePurpose = "models_api_health_probe:gemini_api"
 
 var errServiceDenied = errors.New("VAULT_ACCESS_DENIED")
 
@@ -150,6 +152,19 @@ func serviceMessage(r ServiceRequest) []byte {
 	return []byte(strings.Join([]string{"BLOOM-AITAP-VAULT-REQUEST-v1", r.GrantID, r.OrganizationID, r.InstallationID, r.KeyID, r.Purpose, r.Timestamp, r.Nonce, strconv.Itoa(r.ChannelPort), r.ChannelToken}, "\n"))
 }
 
+func validServiceCredentialBinding(keyID, purpose string) bool {
+	switch purpose {
+	case servicePurpose, legacyServicePurpose, mandateGenPurpose:
+		return keyID == "anthropic-key:default" || keyID == "gemini-key:default"
+	case anthropicModelsAPIHealthProbePurpose:
+		return keyID == "anthropic-key:default"
+	case geminiModelsAPIHealthProbePurpose:
+		return keyID == "gemini-key:default"
+	default:
+		return false
+	}
+}
+
 func remoteEnforcedAt(nucleusRoot string) bool {
 	raw, err := os.ReadFile(filepath.Join(nucleusRoot, ".ownership.json"))
 	if err != nil {
@@ -206,7 +221,7 @@ func RunServiceRequest(input io.Reader, appDataDir string) error {
 			return deny("binding")
 		}
 	}
-	if (r.KeyID != "anthropic-key:default" && r.KeyID != "gemini-key:default") || (r.Purpose != servicePurpose && r.Purpose != legacyServicePurpose && r.Purpose != mandateGenPurpose) || r.ChannelPort < 1 || r.ChannelPort > 65535 {
+	if !validServiceCredentialBinding(r.KeyID, r.Purpose) || r.ChannelPort < 1 || r.ChannelPort > 65535 {
 		return deny("binding")
 	}
 	now := time.Now().UTC()

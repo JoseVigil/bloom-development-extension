@@ -136,7 +136,7 @@ function registerWisdomOfferHandlers(execNucleus, nucleusConfigPath, logger = co
 
   ipcMain.handle('core:wisdom-prepare', async (_event, selection) => {
     const { mandateId, definitionId, version, digest, inputs } = selection || {};
-    if (!UUID.test(mandateId || '') || !UUID.test(definitionId || '') || version !== '1.1.0' ||
+    if (!UUID.test(mandateId || '') || !UUID.test(definitionId || '') || !['1.1.0', '1.2.0'].includes(version) ||
         !HEX64.test(digest || '') || !Array.isArray(inputs) || inputs.length === 0 ||
         inputs.some(i => typeof i !== 'string' || !i || i.startsWith('/') || i.includes('\\') || i.includes(':') || i.split('/').some(p => !p || p === '.' || p === '..'))) {
       return { ok: false, error: { code: 'invalid_preparation_selection', message: 'invalid_preparation_selection' } };

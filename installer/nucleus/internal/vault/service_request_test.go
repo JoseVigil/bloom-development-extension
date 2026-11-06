@@ -72,7 +72,7 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	state := authority.FullContent{Principals: []authority.Principal{{PrincipalID: "human", PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{}}},
 		Memberships: []authority.Membership{}, RoleDefinitions: []authority.RoleDefinition{}, RoleAssignments: []authority.RoleAssignment{}, Revocations: []authority.Revocation{},
 		VaultServiceGrants: []authority.VaultServiceGrant{{GrantID: "grant", OrganizationID: org, InstallationID: installation, Consumer: "aitap", Permission: "vault.key.read",
-			KeyID: "gemini-key:default", Purpose: mandateGenPurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
+			KeyID: "gemini-key:default", Purpose: geminiModelsAPIHealthProbePurpose, ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
 			ValidFrom: now.Add(-time.Minute), ValidUntil: now.Add(time.Hour)},
 			{GrantID: "gemini-write", OrganizationID: org, InstallationID: installation, Consumer: "onboarding", Permission: "vault.key.write",
 				KeyID: "gemini-key:default", Purpose: "onboarding_gemini", ServicePublicKey: base64.RawURLEncoding.EncodeToString(servicePublic), IssuedByPrincipalID: "human",
@@ -113,7 +113,7 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	defer listener.Close()
 	nonce := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32))
 	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{4}, 32))
-	request := ServiceRequest{GrantID: "grant", OrganizationID: org, InstallationID: installation, KeyID: "gemini-key:default", Purpose: mandateGenPurpose,
+	request := ServiceRequest{GrantID: "grant", OrganizationID: org, InstallationID: installation, KeyID: "gemini-key:default", Purpose: geminiModelsAPIHealthProbePurpose,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano), Nonce: nonce, ChannelPort: listener.Addr().(*net.TCPAddr).Port, ChannelToken: token}
 	request.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(servicePrivate, serviceMessage(request)))
 	encoded, _ := json.Marshal(request)
@@ -129,6 +129,10 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 		received <- string(body)
 	}()
 	if err = RunServiceRequest(bytes.NewReader(encoded), app); err != nil {
+		var denied *serviceDeniedError
+		if errors.As(err, &denied) {
+			t.Fatalf("probe delivery denied at %s", denied.stage)
+		}
 		t.Fatal(err)
 	}
 	body := <-received
@@ -149,6 +153,22 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	var denied *serviceDeniedError
 	if !errors.Is(err, errServiceDenied) || !errors.As(err, &denied) || denied.stage != "signature" || strings.Contains(err.Error(), request.Signature) {
 		t.Fatal("signature denial stage was not safely attributed")
+	}
+	if err = saveVaultStatusAt(filepath.Join(root, "vault.json"), &VaultStatus{Locked: true}); err != nil {
+		t.Fatal(err)
+	}
+	request.Nonce = base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32))
+	request.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(servicePrivate, serviceMessage(request)))
+	encoded, _ = json.Marshal(request)
+	if err = RunServiceRequest(bytes.NewReader(encoded), app); err == nil || !errors.As(err, &denied) || denied.stage != "vault_status" || len(fake.calls) != calls {
+		stage := "none"
+		if denied != nil {
+			stage = denied.stage
+		}
+		t.Fatalf("locked Vault did not fail closed before reading the credential: stage=%s calls=%d want=%d err=%v", stage, len(fake.calls), calls, err)
+	}
+	if err = saveVaultStatusAt(filepath.Join(root, "vault.json"), &VaultStatus{Locked: false}); err != nil {
+		t.Fatal(err)
 	}
 	command := createVaultServiceRequestCommand(&core.Core{Paths: core.Paths{AppDataDir: app}})
 	var commandOut, commandErr bytes.Buffer
@@ -193,6 +213,31 @@ func TestServiceRequestDeliversOnlyThroughLocalChannelAndRejectsReplay(t *testin
 	encoded, _ = json.Marshal(store)
 	if _, err = RunServiceStore(bytes.NewReader(encoded), app); err == nil || len(fake.calls) != previousCalls {
 		t.Fatal("tampered Gemini value reached keyring")
+	}
+}
+
+func TestModelsAPIHealthProbeBindingsAreClosed(t *testing.T) {
+	allowed := [][2]string{
+		{"anthropic-key:default", anthropicModelsAPIHealthProbePurpose},
+		{"gemini-key:default", geminiModelsAPIHealthProbePurpose},
+	}
+	for _, binding := range allowed {
+		if !validServiceCredentialBinding(binding[0], binding[1]) {
+			t.Fatalf("rejected approved probe binding: %v", binding)
+		}
+	}
+	rejected := [][2]string{
+		{"gemini-key:default", anthropicModelsAPIHealthProbePurpose},
+		{"anthropic-key:default", geminiModelsAPIHealthProbePurpose},
+		{"other-key", geminiModelsAPIHealthProbePurpose},
+		{"gemini-key:default", "models_api_health_probe:other"},
+		{"gemini-key:default", "models_api_health_probe"},
+		{"", geminiModelsAPIHealthProbePurpose},
+	}
+	for _, binding := range rejected {
+		if validServiceCredentialBinding(binding[0], binding[1]) {
+			t.Fatalf("accepted unapproved probe binding: %v", binding)
+		}
 	}
 }
 

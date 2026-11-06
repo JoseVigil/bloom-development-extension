@@ -1,5 +1,5 @@
 # Bloom Version Snapshot — windows
-# Generated: 2026-10-27 23:39:56
+# Generated: 2026-11-05 21:31:07
 
 ---
 brain\__build__.py
@@ -43,11 +43,11 @@ installer\conductor\setup\build_info.json
   "name": "bloom-setup",
   "product_name": "Bloom Conductor Setup",
   "version": "1.0.0",
-  "build": 119,
-  "full_version": "1.0.0+build.119",
+  "build": 120,
+  "full_version": "1.0.0+build.120",
   "channel": "stable",
-  "built_at": "2026-10-24T03:45:43.263Z",
-  "git_commit": "c31ab0af",
+  "built_at": "2026-11-03T02:54:42.774Z",
+  "git_commit": "cd5164de",
   "platform": "win32",
   "arch": "win64",
   "node_version": "v24.19.0",
@@ -84,7 +84,8 @@ installer\conductor\setup\package.json
     "dev:linux": "electron . --no-sandbox",
     "dev:no-admin": "electron .",
     "test:aitap-bundle-contract": "node tests/aitap-bundle-contract.test.js",
-    "test:setup-contract": "npm run test:aitap-bundle-contract && npm run test:windows-contract && npm run test:workspace-electron-contract",
+    "test:setup-contract": "npm run test:aitap-bundle-contract && npm run test:nucleus-service-environment && npm run test:windows-contract && npm run test:workspace-electron-contract",
+    "test:nucleus-service-environment": "node tests/nucleus-service-environment.test.js",
     "test:windows-contract": "node tests/windows-setup-contract.test.js",
     "test:workspace-electron-contract": "electron --no-sandbox tests/workspace-electron-fs-contract.test.js",
     "validate:uninstall:win32": "node scripts/validate-uninstall-artifact.js win32",
@@ -480,7 +481,7 @@ installer\conductor\setup\version.json
   "major": 1,
   "minor": 0,
   "patch": 0,
-  "build": 119,
+  "build": 120,
   "semver": "1.0.0",
   "channel": "stable"
 }
@@ -522,7 +523,7 @@ installer\metamorph\scripts\build_number.txt
 
 ---
 installer\nucleus\scripts\build_number.effective.txt
-665
+668
 
 ---
 installer\sensor\scripts\build_number.effective.txt

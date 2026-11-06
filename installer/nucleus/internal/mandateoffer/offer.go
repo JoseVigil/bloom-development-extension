@@ -11,6 +11,7 @@ package mandateoffer
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,18 +42,20 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 // It deliberately has no mandateType, adoption, signature, phases or source
 // properties: the mandate watcher ignores it, live and after a restart.
 type Instance struct {
-	Schema         string                 `json:"schema"`
-	SchemaVersion  string                 `json:"schemaVersion"`
-	MandateID      string                 `json:"mandateId"`
-	Status         string                 `json:"status"`
-	OrganizationID string                 `json:"organizationId"`
-	ProjectID      string                 `json:"projectId"`
-	ProjectBinding InstanceProjectBinding `json:"projectBinding"`
-	Definition     InstanceDefinition     `json:"definition"`
-	ReceiptRef     string                 `json:"receiptRef"`
-	Authorization  InstanceAuthorization  `json:"authorization"`
-	InstalledAt    string                 `json:"installedAt"`
-	Preparation    *InstancePreparation   `json:"preparation,omitempty"`
+	Schema               string                 `json:"schema"`
+	SchemaVersion        string                 `json:"schemaVersion"`
+	MandateID            string                 `json:"mandateId"`
+	Status               string                 `json:"status"`
+	OrganizationID       string                 `json:"organizationId"`
+	ProjectID            string                 `json:"projectId"`
+	ProjectBinding       InstanceProjectBinding `json:"projectBinding"`
+	Definition           InstanceDefinition     `json:"definition"`
+	ReceiptRef           string                 `json:"receiptRef"`
+	Authorization        InstanceAuthorization  `json:"authorization"`
+	InstalledAt          string                 `json:"installedAt"`
+	Preparation          *InstancePreparation   `json:"preparation,omitempty"`
+	PreparationHistory   []InstancePreparation  `json:"preparationHistory,omitempty"`
+	TransitionReceiptRef string                 `json:"transitionReceiptRef,omitempty"`
 }
 
 // InstancePreparation records the new signed definition without replacing the
@@ -327,10 +330,44 @@ func Installations(appDataDir, mandatesRoot string) ([]InstalledInstance, error)
 			envelope, verifyErr := mandatecontract.LoadVerified(filepath.Dir(list[i].StatePath), filepath.Join(appDataDir, "authority", "identity.json"))
 			if verifyErr != nil || envelope.ContractDigest != prepared.ContractDigest {
 				list[i].Consistent, list[i].Problem = false, "prepared_contract_invalid"
+				continue
+			}
+			if len(list[i].Instance.PreparationHistory) != 0 {
+				previous := list[i].Instance.PreparationHistory[len(list[i].Instance.PreparationHistory)-1]
+				dir := filepath.Dir(list[i].StatePath)
+				historical, historyErr := mandatecontract.LoadVerifiedFile(filepath.Join(dir, "preparations", previous.ContractDigest, "mandate.json"), filepath.Join(appDataDir, "authority", "identity.json"), list[i].Instance.MandateID)
+				receiptRaw, receiptErr := os.ReadFile(filepath.Join(dir, "preparations", prepared.ContractDigest, "transition.json"))
+				var transition mandatecontract.PreparationTransition
+				if list[i].Instance.TransitionReceiptRef != filepath.ToSlash(filepath.Join("preparations", prepared.ContractDigest, "transition.json")) ||
+					historyErr != nil || historical.ContractDigest != previous.ContractDigest || receiptErr != nil || json.Unmarshal(receiptRaw, &transition) != nil ||
+					mandatecontract.VerifyPreparationTransition(transition, list[i].Instance.Authorization.InstallationID, envelopePublicKey(appDataDir)) != nil ||
+					transition.FromDigest != previous.ContractDigest || transition.ToDigest != prepared.ContractDigest ||
+					transition.FromDefinitionDigest != previous.Definition.Digest || transition.ToDefinitionDigest != prepared.Definition.Digest ||
+					transition.FromReceiptRef != previous.ReceiptRef || transition.ToReceiptRef != prepared.ReceiptRef {
+					list[i].Consistent, list[i].Problem = false, "preparation_transition_invalid"
+				}
 			}
 		}
 	}
 	return list, nil
+}
+
+func envelopePublicKey(appDataDir string) ed25519.PublicKey {
+	raw, err := os.ReadFile(filepath.Join(appDataDir, "authority", "identity.json"))
+	if err != nil {
+		return nil
+	}
+	var identity struct {
+		PublicKey string `json:"public_key"`
+	}
+	if json.Unmarshal(raw, &identity) != nil {
+		return nil
+	}
+	key, err := base64.StdEncoding.Strict().DecodeString(identity.PublicKey)
+	if err != nil || len(key) != ed25519.PublicKeySize {
+		return nil
+	}
+	return ed25519.PublicKey(key)
 }
 
 // RefusePreparation retains the fail-closed check for legacy installed

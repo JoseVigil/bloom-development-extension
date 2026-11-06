@@ -113,6 +113,32 @@ describe('Vault service grant',()=>{
     await expect(administerVaultServiceGrant(db,{organizationId:org,requestId:'gemini-read-wrong-purpose',expectedVersion:'5',
       command:{...command,purpose:undefined}},actor,services())).rejects.toThrow('invalid_request');
   });
+  it('issues only the exact Models API health probe key-purpose bindings',async()=>{
+    const base={kind:'issue' as const,installationId:installation,
+      servicePublicKey:'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',validUntil:'2026-09-25T12:30:00Z'};
+    const anthropic:GrantCommand={...base,keyId:'anthropic-key:default',purpose:'models_api_health_probe:anthropic_api'};
+    const anthropicIssued=await administerVaultServiceGrant(db,{organizationId:org,requestId:'anthropic-models-api-probe',
+      expectedVersion:'5',command:anthropic},actor,services());
+    expect(anthropicIssued).toMatchObject({status:'issued',authorityVersion:'6'});
+    const gemini:GrantCommand={...base,keyId:'gemini-key:default',purpose:'models_api_health_probe:gemini_api'};
+    const geminiIssued=await administerVaultServiceGrant(db,{organizationId:org,requestId:'gemini-models-api-probe',
+      expectedVersion:'6',command:gemini},actor,services());
+    expect(geminiIssued).toMatchObject({status:'issued',authorityVersion:'7'});
+    const grants=(await loadCurrentEmission(db,org))!.state.vault_service_grants!;
+    expect(grants.find(grant=>grant.grant_id===anthropicIssued.grantId)).toMatchObject({consumer:'aitap',permission:'vault.key.read',
+      key_id:'anthropic-key:default',purpose:'models_api_health_probe:anthropic_api'});
+    expect(grants.find(grant=>grant.grant_id===geminiIssued.grantId)).toMatchObject({consumer:'aitap',permission:'vault.key.read',
+      key_id:'gemini-key:default',purpose:'models_api_health_probe:gemini_api'});
+    for(const [requestId,command] of [
+      ['cross-anthropic-key',{...anthropic,purpose:'models_api_health_probe:gemini_api'}],
+      ['cross-gemini-key',{...gemini,purpose:'models_api_health_probe:anthropic_api'}],
+      ['other-probe-purpose',{...gemini,purpose:'models_api_health_probe:other'}],
+    ] as const){
+      await expect(administerVaultServiceGrant(db,{organizationId:org,requestId,expectedVersion:'7',
+        command:command as GrantCommand},actor,services())).rejects.toThrow('invalid_request');
+    }
+    expect((await loadCurrentEmission(db,org))?.metadata.authority_version).toBe('7');
+  });
   it('requires the human session and CSRF on the HTTP route',async()=>{
     await db.prepare("INSERT INTO authority_human_identities VALUES(?,?,'123','canonical:github','canonical','1','active',NULL,'')")
       .bind(org,actor.principalId).run();
@@ -121,7 +147,7 @@ describe('Vault service grant',()=>{
     const flow=await beginHumanLogin(db,org,human);
     const login=await finishHumanLogin(db,{...flow,code:'code'},human);
     const origin='https://authority.test';
-    const body=JSON.stringify({organizationId:org,requestId:'http-issue',expectedVersion:'5',command:issue});
+    const body=JSON.stringify({organizationId:org,requestId:'http-issue',expectedVersion:'7',command:issue});
     const make=(csrf:string)=>new Request(origin+'/v1/authority/vault-service-grant',{method:'POST',headers:{Origin:origin,
       'Content-Type':'application/json','X-Authority-CSRF':csrf,Cookie:`__Host-authority-session=${login.token}`},body});
     const routeServices={...human,origin,issuer:'issuer',signer:{privateKeyPkcs8:privateKey,keyId:'key'}};
@@ -135,16 +161,16 @@ describe('Vault service grant',()=>{
     expect((await authorityHumanResponse(db,forged,routeServices)).status).toBe(400);
     const response=await authorityHumanResponse(db,make(login.csrf),routeServices);
     expect(response.status).toBe(201);
-    expect(await response.json()).toMatchObject({status:'issued',authorityVersion:'6'});
+    expect(await response.json()).toMatchObject({status:'issued',authorityVersion:'8'});
   });
   it('rejects issuance after the Master assignment is revoked',async()=>{
     const current=(await loadCurrentEmission(db,org))!;
     const state=structuredClone(current.state);
     state.revocations.push({revocation_id:'revoke-master',target_type:'role_assignment',target_id:'assignment',
-      effective_at:now,recorded_in_authority_version:'7',reason_code:'master_revocation'});
-    await persistEmission(db,{requestId:'revoke-master',expectedVersion:'6',metadata:{...current.metadata,authority_version:'7',
+      effective_at:now,recorded_in_authority_version:'9',reason_code:'master_revocation'});
+    await persistEmission(db,{requestId:'revoke-master',expectedVersion:'8',metadata:{...current.metadata,authority_version:'9',
       snapshot_id:'revoke-master',issued_at:now,not_before:now,expires_at:'2026-09-25T12:04:00Z'},state},services().signer);
-    await expect(administerVaultServiceGrant(db,{organizationId:org,requestId:'after-master-revoked',expectedVersion:'7',command:issue},
+    await expect(administerVaultServiceGrant(db,{organizationId:org,requestId:'after-master-revoked',expectedVersion:'9',command:issue},
       actor,services())).rejects.toThrow('master_required');
   });
 });

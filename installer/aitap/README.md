@@ -275,7 +275,22 @@ Configurar `AITAP_BIN` si el CLI no está en PATH, `NUCLEUS_BIN` para Nucleus y
 `AITAP_STATE_DIR` para un directorio externo a repositorios/proyectos. AITAP no
 usa variables de entorno como fallback de credenciales. La única referencia
 del piloto es `credential-ref://anthropic/default` → `anthropic-key:default`,
-resuelta mediante `nucleus --json vault request`.
+resuelta mediante `nucleus --json vault service-request`.
+
+Los Grant IDs son configuración del proceso de AITAP y nunca forman parte de un
+request de Core. `AITAP_VAULT_GRANT_ID` continúa reservado para los usos de
+Intelligence Supply existentes. Las sondas sin inferencia de Models API usan
+exclusivamente estas variables, sin fallback al Grant de Supply:
+
+- `AITAP_MODELS_API_HEALTH_PROBE_ANTHROPIC_GRANT_ID` para
+  `models_api_health_probe:anthropic_api`.
+- `AITAP_MODELS_API_HEALTH_PROBE_GEMINI_GRANT_ID` para
+  `models_api_health_probe:gemini_api`.
+
+Si falta la variable correspondiente, `route assignments` considera la sonda
+no disponible antes de pedir una credencial o contactar al proveedor. Los
+valores de estas variables son opacos: no se muestran en ayuda, logs ni
+respuestas administrativas.
 
 En ejecución productiva, el worker de Nucleus fija por defecto
 `AITAP_STATE_DIR` en `<BloomNucleus>/aitap`: `%LOCALAPPDATA%/BloomNucleus/aitap`

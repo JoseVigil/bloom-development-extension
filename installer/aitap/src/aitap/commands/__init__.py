@@ -12,6 +12,7 @@ from aitap.commands.keys.keys_list import KeysListCommand
 from aitap.commands.local.ensure import LocalEnsureCommand
 from aitap.commands.local.preflight import LocalPreflightCommand
 from aitap.commands.route.intelligence_supply import IntelligenceSupplyCommand
+from aitap.commands.route.assignments import IntentSupplyAssignmentsCommand
 from aitap.commands.route.policy import RoutePolicyCommand
 from aitap.commands.route.route_decide import RouteDecideCommand
 from aitap.commands.system.info import InfoCommand
@@ -26,7 +27,7 @@ COMMAND_CLASSES = (
     # KEYS
     KeysListCommand,
     # ROUTE
-    RouteDecideCommand, IntelligenceSupplyCommand, RoutePolicyCommand,
+    RouteDecideCommand, IntelligenceSupplyCommand, RoutePolicyCommand, IntentSupplyAssignmentsCommand,
     # ACCOUNTING
     AccountingUsageCommand,
     # LOCAL
