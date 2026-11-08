@@ -11,15 +11,14 @@ const { sanitizeAssignments, canonicalContractDigest, authorizedConsentURL, sani
 
 const valid = {
   action_id: 'ing-1',
-  destination: { backend_id: 'gemini_api', provider: 'google', model: 'gemini-2.5-pro' },
-  limits: { max_inferences: 2, max_output_tokens: 1024, max_total_tokens: 4096 }
+  destination: { backend_id: 'gemini_api', provider: 'google', model: 'gemini-2.5-pro' }
 };
 
-test('only canonical Action, destination and limit fields cross into Nucleus', () => {
+test('only canonical Action and destination fields cross into Nucleus', () => {
   assert.deepEqual(sanitizeAssignments([valid]), [valid]);
   assert.equal(sanitizeAssignments([{ ...valid, actor_token: 'secret' }]), null);
   assert.equal(sanitizeAssignments([{ ...valid, destination: { ...valid.destination, cookie: 'secret' } }]), null);
-  assert.equal(sanitizeAssignments([{ ...valid, limits: { ...valid.limits, max_total_tokens: 0 } }]), null);
+  assert.equal(sanitizeAssignments([{ ...valid, limits: { max_total_tokens: 1 } }]), null);
   assert.equal(sanitizeAssignments([valid, valid]), null);
 });
 
@@ -48,12 +47,11 @@ test('only per-Action eligibility crosses into Core from a verified list result'
     request_id: 'req', mandate_id: 'mandate', prepared_contract_digest: digest,
     status: 'eligible', actor_token: 'must-not-cross', actions: [
       { action_id: 'ing-1', requiredCapabilities: ['text.generate'], eligibility: 'eligible', errors: [],
-        limit_ceiling: { max_inferences: 3, max_total_tokens: 10000, max_output_tokens: 2048, max_usd: '1' },
         destinations: [{ backend_id: 'gemini_api', provider: 'google', model: 'gemini-pro', credential_ref: 'must-not-cross' }] }
     ] };
   const value = sanitizeSessionData(data, 'list', 'mandate', digest, 'req');
   assert.equal(value.actions[0].destinations[0].model, 'gemini-pro');
-  assert.equal(value.actions[0].limitCeiling.maxUsd, '1');
+  assert.equal(value.actions[0].limitCeiling, undefined);
   assert.equal(JSON.stringify(value).includes('must-not-cross'), false);
   assert.equal(sanitizeSessionData({ ...data, prepared_contract_digest: 'sha256:' + 'b'.repeat(64) }, 'list', 'mandate', digest, 'req'), null);
   assert.equal(sanitizeSessionData({ ...data, actions: [{ ...data.actions[0], eligibility: 'eligible', destinations: [] }] }, 'list', 'mandate', digest, 'req'), null);

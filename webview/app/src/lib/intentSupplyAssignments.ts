@@ -2,7 +2,7 @@
 // actionId identifica la acción cognitiva del contrato preparado; no se infiere del intentType.
 export type LimitCeiling = { maxInferences: number; maxTotalTokens: number; maxOutputTokens: number; maxUsd?: string };
 export type ChosenLimits = { maxInferences?: number; maxTotalTokens?: number; maxOutputTokens?: number; maxUsd?: string };
-export type Consumer = { actionId: string; label: string; purpose: string; limits: string; eligibleDestinationKeys: string[]; limitCeiling: LimitCeiling };
+export type Consumer = { actionId: string; label: string; purpose: string; limits: string; eligibleDestinationKeys: string[]; limitCeiling?: LimitCeiling };
 export type Destination = { key: string; label: string; detail: string; backendId?: string; provider?: string; model?: string };
 export type RowError = { actionId: string; message: string };
 export type Validation = { fingerprint: string; validatedAt: string; validUntil: string; rowErrors: RowError[] };
@@ -33,17 +33,11 @@ export function projectionWellFormed(consumers: Consumer[] | undefined, destinat
   if (!destinations.every(item => item && safeKey(item.key))) return false;
   const destinationKeys = new Set(destinations.map(item => item.key));
   return consumers.length > 0 && consumers.every(item => item && safeKey(item.actionId) &&
-    item.limitCeiling &&
-    (['maxInferences', 'maxTotalTokens', 'maxOutputTokens'] as const).every(field =>
-      Number.isSafeInteger(item.limitCeiling[field]) && item.limitCeiling[field] > 0) &&
-    (item.limitCeiling.maxUsd === undefined ||
-      (typeof item.limitCeiling.maxUsd === 'string' && /^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(item.limitCeiling.maxUsd))) &&
     Array.isArray(item.eligibleDestinationKeys) &&
     item.eligibleDestinationKeys.every(key => safeKey(key) && destinationKeys.has(key)) &&
     new Set(item.eligibleDestinationKeys).size === item.eligibleDestinationKeys.length) &&
     new Set(consumers.map(item => item.actionId)).size === consumers.length &&
-    destinationKeys.size === destinations.length &&
-    consumers.every(item => JSON.stringify(item.limitCeiling) === JSON.stringify(consumers[0].limitCeiling));
+    destinationKeys.size === destinations.length;
 }
 
 export function chooseDestination(state: SelectionState, actionId: string, destinationKey: string): SelectionState {
@@ -97,7 +91,7 @@ export function allAssigned(state: SelectionState): boolean {
   return projectionWellFormed(state.consumers, state.destinations) && consumerKeys.length > 0 && new Set(consumerKeys).size === consumerKeys.length &&
     new Set(destinationKeys).size === destinationKeys.length &&
     Object.keys(state.choices).length === consumerKeys.length && state.consumers.every(item =>
-    !!state.choices[item.actionId] && item.eligibleDestinationKeys.includes(state.choices[item.actionId])) && limitsWellFormed(state);
+    !!state.choices[item.actionId] && item.eligibleDestinationKeys.includes(state.choices[item.actionId]));
 }
 
 export function withValidation(state: SelectionState, validation: Validation): SelectionState {

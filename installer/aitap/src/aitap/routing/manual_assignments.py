@@ -35,31 +35,25 @@ class ManualAssignmentError(ValueError):
 
 
 def eligible_manual_destinations(
-    registry: Mapping[str, Any], policy: Mapping[str, Any], grant: Mapping[str, Any],
+    registry: Mapping[str, Any], policy: Mapping[str, Any], authority: Mapping[str, Any],
     credential_evidence: Mapping[str, Mapping[str, Any]],
     health_evidence: Mapping[str, Mapping[str, Any]],
     *, required_capabilities: Sequence[str], privacy: str, now: datetime,
 ) -> list[dict[str, str]]:
-    """Read-only intersection of signed policy/registry, Authority and fresh observations.
+    """Read-only intersection of signed policy/registry and fresh observations.
 
     Unknown evidence never makes a destination eligible. The returned rows
     contain only backend/provider/model, never credential references.
     """
-    if now.tzinfo is None or grant.get("status") != "active" or not privacy:
+    if now.tzinfo is None or not privacy:
         raise ManualAssignmentError("AUTHORITY_EVIDENCE_INVALID")
-    if _timestamp(grant.get("valid_until")) <= now:
+    if _timestamp(authority.get("valid_until")) <= now:
         raise ManualAssignmentError("EVIDENCE_EXPIRED")
-    allowed_privacy = grant.get("allowed_privacy")
-    allowed_capabilities = grant.get("allowed_capabilities")
-    allowed_destinations = grant.get("allowed_destinations")
     backends = registry.get("intelligence_backends")
     rule = policy.get("intelligence_supply")
-    if (not isinstance(allowed_privacy, list) or not isinstance(allowed_capabilities, list)
-            or not isinstance(allowed_destinations, list) or not isinstance(backends, list)
-            or not isinstance(rule, dict) or not isinstance(rule.get("fallback"), list)):
+    if (not isinstance(backends, list) or not isinstance(rule, dict)
+            or not isinstance(rule.get("fallback"), list)):
         raise ManualAssignmentError("ELIGIBILITY_EVIDENCE_INVALID")
-    if privacy not in allowed_privacy or set(required_capabilities) - set(allowed_capabilities):
-        return []
     permitted_by_policy = {rule.get("backend_id"), *rule["fallback"]}
     result: list[dict[str, str]] = []
     for backend in backends:
@@ -70,10 +64,6 @@ def eligible_manual_destinations(
             continue
         if (backend.get("supply_enabled") is not True or backend.get("privacy") != privacy
                 or set(required_capabilities) - set(backend.get("capabilities") or [])):
-            continue
-        if sum(1 for item in allowed_destinations if isinstance(item, dict)
-               and item.get("backend_id") == backend_id and item.get("provider") == provider
-               and isinstance(item.get("models"), list) and model in item["models"]) != 1:
             continue
         health = health_evidence.get(backend_id)
         if (not isinstance(health, dict) or health.get("status") != "healthy"
@@ -108,15 +98,14 @@ def evaluate_manual_assignments(
     health = dict(health_evidence)
     if len(credentials) != len(request["credentials"]):
         raise ManualAssignmentError("DUPLICATE_EVIDENCE")
-    grant = {**authority, "status": "active"}
-    effective_limits = _effective_limits(policy, authority)
     action_destinations: dict[str, list[dict[str, str]]] = {}
     action_rows: list[dict[str, Any]] = []
     for action in request["actions"]:
         destinations: list[dict[str, str]] = []
-        for privacy in authority["allowed_privacy"]:
+        for privacy in sorted({backend.get("privacy") for backend in registry["intelligence_backends"]
+                               if isinstance(backend, dict) and isinstance(backend.get("privacy"), str)}):
             destinations.extend(eligible_manual_destinations(
-                registry, policy, grant, credentials, health,
+                registry, policy, authority, credentials, health,
                 required_capabilities=action["requiredCapabilities"], privacy=privacy, now=now,
             ))
         destinations = _unique_destinations(destinations)
@@ -137,8 +126,6 @@ def evaluate_manual_assignments(
             "destinations": destinations,
             "errors": [] if destinations else (missing or ["NO_ELIGIBLE_DESTINATION"]),
         }
-        if mode == "list":
-            action_row["limit_ceiling"] = dict(effective_limits)
         action_rows.append(action_row)
 
     common = {
@@ -175,12 +162,11 @@ def evaluate_manual_assignments(
             continue
         try:
             destination = dict(exact_destination(assignment.get("destination") or {}, candidates))
-            limits = _validate_assignment_limits(assignment.get("limits"), effective_limits)
         except ManualAssignmentError as exc:
             row["errors"] = [exc.code]
             continue
         normalized.append({"action_id": action_id, "destination": {
-            field: destination[field] for field in DESTINATION_FIELDS}, "limits": limits})
+            field: destination[field] for field in DESTINATION_FIELDS}})
         backend = next(item for item in registry["intelligence_backends"]
                        if all(item.get(field) == destination[field] for field in DESTINATION_FIELDS))
         used_evidence.append(health[destination["backend_id"]])
@@ -189,11 +175,6 @@ def evaluate_manual_assignments(
         row["errors"] = []
 
     global_errors = ["UNKNOWN_ACTION"] if unknown_ids else []
-    if not global_errors and not any(row["errors"] for row in action_rows):
-        try:
-            _validate_aggregate_limits(normalized, effective_limits)
-        except ManualAssignmentError as exc:
-            global_errors.append(exc.code)
     if global_errors or any(row["errors"] for row in action_rows):
         return {**common, "status": "invalid", "errors": global_errors,
                 "fingerprint": None, "validated_at": _timestamp_text(now), "valid_until": None}
@@ -228,18 +209,12 @@ def _missing_evidence_reasons(
     reasons: set[str] = set()
     rule = policy.get("intelligence_supply") or {}
     permitted = {rule.get("backend_id"), *(rule.get("fallback") or [])}
-    allowed = authority.get("allowed_destinations") or []
     for backend in registry.get("intelligence_backends") or []:
         if not isinstance(backend, Mapping) or backend.get("backend_id") not in permitted:
             continue
         backend_id = backend.get("backend_id")
         if (backend.get("supply_enabled") is not True
-                or backend.get("privacy") not in (authority.get("allowed_privacy") or [])
                 or set(required_capabilities) - set(backend.get("capabilities") or [])):
-            continue
-        if not any(isinstance(item, Mapping) and item.get("backend_id") == backend_id
-                   and item.get("provider") == backend.get("provider")
-                   and backend.get("model") in (item.get("models") or []) for item in allowed):
             continue
         observation = health.get(str(backend_id))
         if not isinstance(observation, Mapping):

@@ -5,6 +5,8 @@ export class AdministrationError extends Error {
   constructor(readonly code: string) { super(`authority_admin_${code}`); }
 }
 const deny = (code: string): never => { throw new AdministrationError(code); };
+const resourceConfirm = "mandate.resources.confirm";
+const w4MandateId = "94cb7ee2-6377-4fb6-a695-da0566f9093f";
 export interface VerifiedHumanActor {
   organizationId: string; principalId: string; sessionId: string; expiresAt: string;
   source: "backend-session" | "test-fixture";
@@ -118,6 +120,7 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
   const projectChecks: ProjectEvidence[] = [];
   const scopeVerified = (scope: WireRoleAssignment["scope"]) => {
     if (scope.type === "organization" && scope.id === org) return;
+    if (scope.type === "mandate" && scope.id === w4MandateId) return;
     if (scope.type !== "project") deny("scope_unverifiable");
     const evidence = context.projects.find(e => e.organization_id === org && e.project_id === scope.id);
     if (!evidence || evidence.status !== "active" || !evidence.revision || !evidence.source_ref
@@ -126,9 +129,12 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
       || authorityInstant(evidence.valid_until) <= now) return deny("scope_unverifiable");
     if (!projectChecks.some(e => e.project_id === evidence.project_id)) projectChecks.push(structuredClone(evidence));
   };
-  const grantable = (grantorId: string, role: WireRoleDefinition) => {
+  const resourceRole = (role: WireRoleDefinition) => role.role_origin === "organization" && role.permissions.length === 1 && role.permissions[0] === resourceConfirm;
+  const grantable = (grantorId: string, role: WireRoleDefinition, scope: WireRoleAssignment["scope"]) => {
     requirePermission(grantorId,"authority.assignment.manage");
     const cap = masterPermissions(), held = permissions(grantorId,orgScope);
+    if (scope.type === "mandate" && !resourceRole(role)) deny("grant_exceeds_authority");
+    if (resourceRole(role) && scope.type === "mandate" && scope.id === w4MandateId && held.has("authority.role_definition.manage")) return;
     if (role.permissions.some(p => !cap.has(p) || !held.has(p))) deny("grant_exceeds_authority");
   };
   const window = (v: Window) => {
@@ -142,6 +148,12 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
     && (until === null || (target.validUntil !== null && authorityInstant(until) >= authorityInstant(target.validUntil)));
   const selfGrant = (grantorId: string, recipientId: string, role: WireRoleDefinition, scope: WireRoleAssignment["scope"], target: Window) => {
     if (grantorId !== recipientId) return;
+    if (resourceRole(role) && scope.type === "mandate" && scope.id === w4MandateId) {
+      const membership = state.memberships.find(m => m.principal_id === grantorId && memberActive(m) && covers(m.valid_from,m.valid_until,target));
+      if (!membership) deny("self_elevation");
+      requirePermission(grantorId,"authority.role_definition.manage");
+      return;
+    }
     const available = activeAssignments(grantorId,scope).filter(a => {
       const m = state.memberships.find(m => m.membership_id === a.membership_id)!;
       return covers(a.valid_from,a.valid_until,target) && covers(m.valid_from,m.valid_until,target);
@@ -174,7 +186,7 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
     if (!covers(m.valid_from,m.valid_until,body)) deny("invalid_validity");
     if (state.role_assignments.some(a => a.assignment_id === body.assignmentId) || historicalRevocation("role_assignment",body.assignmentId)) deny("relationship_exists");
     const role = roleFor(body.roleId,body.roleVersion);if (!role) return deny("role_unavailable");
-    grantable(grantorId,role);scopeVerified(body.scope);selfGrant(grantorId,m.principal_id,role,body.scope,body);
+    grantable(grantorId,role,body.scope);scopeVerified(body.scope);selfGrant(grantorId,m.principal_id,role,body.scope,body);
     return m.principal_id;
   };
   const plan: AdministrationPlan = { state, projectChecks };
@@ -212,7 +224,7 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
     const r = command.role;
     if (!r || r.role_origin !== "organization") deny("role_unavailable");
     const cap = masterPermissions();
-    if (!Array.isArray(r.permissions) || r.permissions.some(p => !cap.has(p))) deny("grant_exceeds_authority");
+    if (!Array.isArray(r.permissions) || r.permissions.some(p => !cap.has(p)) && !resourceRole(r)) deny("grant_exceeds_authority");
     const previous = state.role_definitions.filter(v => v.role_id === r.role_id);
     const maximum = previous.reduce((n,v) => wireVersion(v.role_version)>n?wireVersion(v.role_version):n,0n);
     if (wireVersion(r.role_version) !== maximum+1n) deny("role_version_conflict");
@@ -234,7 +246,7 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
         const role = roleFor(a.role_id,a.role_version);
         if (!m || !role || revoked("role_assignment",a.assignment_id)) deny("relationship_unavailable");
         if (!membershipOperation && !memberActive(m!)) deny("membership_unavailable");
-        human(m!.principal_id);grantable(actor.principalId,role!);scopeVerified(a.scope);
+        human(m!.principal_id);grantable(actor.principalId,role!,a.scope);scopeVerified(a.scope);
         selfGrant(actor.principalId,m!.principal_id,role!,a.scope,{validFrom:a.valid_from,validUntil:a.valid_until});
       }
       // Resume cannot extend an expired relationship or resurrect a revoked one.

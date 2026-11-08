@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { allAssigned, canStart, chooseDestination, chooseLimit, emptySelection, projectionWellFormed, validationWellFormed, withProjection, withValidation, type ChosenLimits, type SelectionState } from '$lib/intentSupplyAssignments';
+  import { allAssigned, canStart, chooseDestination, emptySelection, projectionWellFormed, validationWellFormed, withProjection, withValidation, type SelectionState } from '$lib/intentSupplyAssignments';
   import { productIntentSupplyOperations, type IntentSupplyOperations, type OperationError } from '$lib/intentSupplyAssignmentsBridge';
 
   export let mandateId: string;
@@ -42,11 +42,6 @@
     error = null;
   }
 
-  function selectLimit(actionId: string, field: keyof ChosenLimits, event: Event) {
-    state = chooseLimit(state, actionId, field, (event.currentTarget as HTMLInputElement).value);
-    error = null;
-  }
-
   function next() {
     if (!busy && allAssigned(state)) step = 'review';
   }
@@ -77,7 +72,7 @@
 
 <section class="supply" aria-label="Asignaciones de suministro por Intent" data-testid="intent-supply">
   <h4>Asignaciones por Intent</h4>
-  <p class="muted">Elegí un destino y un presupuesto para cada Intent cognitivo al configurar la ejecución. La elección permanece sólo en esta sesión hasta el inicio explícito.</p>
+  <p class="muted">Elegí un recurso habilitado para cada Intent cognitivo. La confirmación no inicia el Mandate ni consume tokens.</p>
   {#if loading}
     <p class="muted" role="status">Consultando Intents y destinos…</p>
   {:else if error && state.consumers.length === 0}
@@ -98,46 +93,27 @@
               <option value={destination.key}>{destination.label} · {destination.detail}</option>
             {/each}
           </select>
-          {#if consumer.limitCeiling}
-            <div class="limit-grid">
-              <label>Inferencias <small>máximo compartido {consumer.limitCeiling.maxInferences}</small>
-                <input type="number" min="1" max={consumer.limitCeiling.maxInferences} step="1" value={state.chosenLimits[consumer.actionId]?.maxInferences ?? ''} on:input={(event) => selectLimit(consumer.actionId, 'maxInferences', event)} disabled={busy} />
-              </label>
-              <label>Tokens totales <small>máximo compartido {consumer.limitCeiling.maxTotalTokens}</small>
-                <input type="number" min="1" max={consumer.limitCeiling.maxTotalTokens} step="1" value={state.chosenLimits[consumer.actionId]?.maxTotalTokens ?? ''} on:input={(event) => selectLimit(consumer.actionId, 'maxTotalTokens', event)} disabled={busy} />
-              </label>
-              <label>Tokens de salida por inferencia <small>máximo {consumer.limitCeiling.maxOutputTokens}</small>
-                <input type="number" min="1" max={consumer.limitCeiling.maxOutputTokens} step="1" value={state.chosenLimits[consumer.actionId]?.maxOutputTokens ?? ''} on:input={(event) => selectLimit(consumer.actionId, 'maxOutputTokens', event)} disabled={busy} />
-              </label>
-              {#if consumer.limitCeiling.maxUsd !== undefined}
-                <label>Costo USD <small>máximo compartido {consumer.limitCeiling.maxUsd}</small>
-                  <input type="text" inputmode="decimal" value={state.chosenLimits[consumer.actionId]?.maxUsd ?? ''} on:input={(event) => selectLimit(consumer.actionId, 'maxUsd', event)} disabled={busy} />
-                </label>
-              {/if}
-            </div>
-          {/if}
           {#if consumer.eligibleDestinationKeys.length === 0}<p class="warn">No hay destinos elegibles para esta acción.</p>{/if}
           {#if rowError}<p id={'supply-error-' + consumer.actionId} class="warn" role="alert">{rowError.message}</p>{/if}
         </div>
       {/each}
       {#if state.destinations.length === 0}<p class="warn">Nucleus no informó destinos elegibles.</p>{/if}
-      {#if state.consumers.some(item => item.limitCeiling)}<p class="muted">Los máximos de inferencias, tokens totales y costo se comparten entre todas las acciones. Distribuilos antes de continuar.</p>{/if}
       <button type="button" disabled={busy || !allAssigned(state)} on:click={next} data-testid="next-supply">Siguiente</button>
     {:else}
       <div class="summary" data-testid="supply-summary">
         <strong>Revisar suministro antes de iniciar</strong>
         <ul>
           {#each state.consumers as consumer (consumer.actionId)}
-            <li>{consumer.label} → {state.destinations.find(item => item.key === state.choices[consumer.actionId])?.label || 'Sin destino'} · {state.chosenLimits[consumer.actionId]?.maxInferences} inferencias · {state.chosenLimits[consumer.actionId]?.maxTotalTokens} tokens totales · {state.chosenLimits[consumer.actionId]?.maxOutputTokens} tokens de salida</li>
+            <li>{consumer.label} → {state.destinations.find(item => item.key === state.choices[consumer.actionId])?.label || 'Sin destino'}</li>
           {/each}
         </ul>
-        <p class="muted">Validar no consume tokens ni inicia el Mandate. Al cerrar esta pantalla, las elecciones se descartan.</p>
+        <p class="muted">Confirmar no consume tokens ni inicia el Mandate.</p>
         {#if state.validation}<p class="muted">La validación vence: {state.validation.validUntil}.</p>{/if}
         {#if state.validation && !canStart(state, now)}<p class="warn" role="status">La validación venció o no coincide con las elecciones. Corregí las filas o volvé a validar.</p>{/if}
-        {#if canStart(state, now)}<p role="status">Asignaciones validadas para esta preparación. El inicio del Mandate queda para el siguiente gate.</p>{/if}
+        {#if canStart(state, now)}<p role="status">Selección confirmada y conservada por Nucleus para esta preparación. El inicio del Mandate queda para el siguiente gate.</p>{/if}
       </div>
       <button type="button" class="secondary" disabled={busy} on:click={back}>Volver a elegir</button>
-      <button type="button" disabled={busy || !allAssigned(state)} on:click={validate} data-testid="validate-supply">{busy ? 'Verificando…' : 'Validar asignaciones'}</button>
+      <button type="button" disabled={busy || !allAssigned(state)} on:click={validate} data-testid="validate-supply">{busy ? 'Verificando…' : 'Confirmar selección'}</button>
     {/if}
     {#if error}<p class="warn" role="alert">{error.message}</p>{/if}
   {/if}

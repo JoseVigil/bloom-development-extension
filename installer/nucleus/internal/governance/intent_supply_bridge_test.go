@@ -36,9 +36,7 @@ func TestIntentSupplyBridgeRejectsFreeOrMismatchedActor(t *testing.T) {
 func TestIntentSupplyAuthorityEvidenceCannotCarrySecretsOrIdentity(t *testing.T) {
 	evidence := intentSupplyAuthorityEvidence{
 		OrganizationID: "org", ProjectID: "project", MandateID: "mandate", PreparedContractDigest: "digest",
-		AllowedCapabilities: []string{"text.generate"}, AllowedPrivacy: []string{"approved_cloud"},
-		AllowedDestinations: []authority.IntelligenceSupplyDestination{{BackendID: "backend", Provider: "provider", Models: []string{"model"}}},
-		Limits:              authority.IntelligenceSupplyLimits{MaxInferences: 1}, ValidUntil: time.Date(2026, 10, 29, 12, 5, 0, 0, time.UTC),
+		ValidUntil:       time.Date(2026, 10, 29, 12, 5, 0, 0, time.UTC),
 		AuthorityVersion: "42", AuthorityStateDigest: "state-digest",
 	}
 	raw, err := json.Marshal(evidence)

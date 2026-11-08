@@ -12,6 +12,7 @@ import (
 
 	"nucleus/internal/authority"
 	"nucleus/internal/intelligencesupply"
+	"nucleus/internal/mandateoffer"
 	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/vault"
 )
@@ -97,6 +98,22 @@ func (b IntentSupplyBridge) Assignments(ctx context.Context, request IntentSuppl
 		envelope.Contract.MandateID != request.MandateID || envelope.Contract.Intelligence == nil {
 		return deny()
 	}
+	instances, err := mandateoffer.Installations(filepath.Dir(filepath.Dir(b.IdentityPath)), b.MandatesRoot)
+	if err != nil {
+		return deny()
+	}
+	prepared := false
+	for _, item := range instances {
+		if item.Instance.MandateID == request.MandateID && item.Consistent && item.Instance.Status == mandateoffer.StatusPrepared &&
+			item.Instance.Preparation != nil && item.Instance.Preparation.ContractDigest == envelope.ContractDigest &&
+			item.Instance.OrganizationID == request.OrganizationID && item.Instance.ProjectID == request.ProjectID &&
+			item.Instance.Authorization.InstallationID == request.InstallationID {
+			prepared = true
+		}
+	}
+	if !prepared {
+		return deny()
+	}
 	authorityEvidence, err := evaluateIntentSupplyContext(b.Store, b.Checkpoint, b.ProjectBindings, actor, intentSupplyContext{
 		OrganizationID: request.OrganizationID, InstallationID: request.InstallationID, ProjectID: request.ProjectID,
 		MandateID: request.MandateID, PreparedContractDigest: "sha256:" + envelope.ContractDigest, EvaluatedAt: now,
@@ -115,6 +132,20 @@ func (b IntentSupplyBridge) Assignments(ctx context.Context, request IntentSuppl
 	result, err := b.AITAP.Assignments(ctx, request.Mode, raw, policyPath, registryPath)
 	if err != nil {
 		return nil, intelligencesupply.ErrAssignmentsUnavailable
+	}
+	if request.Mode == "validate" {
+		var status struct {
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(result, &status) != nil {
+			return deny()
+		}
+		if status.Status == "valid" {
+			if err := saveIntentSupplyReceipt(filepath.Join(b.MandatesRoot, request.MandateID), b.IdentityPath,
+				request.MandateID, envelope.ContractDigest, authorityEvidence, actor, request.Assignments, result, now); err != nil {
+				return deny()
+			}
+		}
 	}
 	return result, nil
 }
@@ -212,17 +243,13 @@ type intentSupplyContext struct {
 // administrative bridge may hand to AITAP. It omits Grant IDs, actor and
 // membership identifiers, issuer data, replacements and credential material.
 type intentSupplyAuthorityEvidence struct {
-	OrganizationID         string                                    `json:"organization_id"`
-	ProjectID              string                                    `json:"project_id"`
-	MandateID              string                                    `json:"mandate_id"`
-	PreparedContractDigest string                                    `json:"prepared_contract_digest"`
-	AllowedCapabilities    []string                                  `json:"allowed_capabilities"`
-	AllowedPrivacy         []string                                  `json:"allowed_privacy"`
-	AllowedDestinations    []authority.IntelligenceSupplyDestination `json:"allowed_destinations"`
-	Limits                 authority.IntelligenceSupplyLimits        `json:"limits"`
-	ValidUntil             time.Time                                 `json:"valid_until"`
-	AuthorityVersion       string                                    `json:"authority_version"`
-	AuthorityStateDigest   string                                    `json:"authority_state_digest"`
+	OrganizationID         string    `json:"organization_id"`
+	ProjectID              string    `json:"project_id"`
+	MandateID              string    `json:"mandate_id"`
+	PreparedContractDigest string    `json:"prepared_contract_digest"`
+	ValidUntil             time.Time `json:"valid_until"`
+	AuthorityVersion       string    `json:"authority_version"`
+	AuthorityStateDigest   string    `json:"authority_state_digest"`
 }
 
 func verifyIntentSupplyActor(raw []byte, manifest *authority.VerifiedTrustManifest, proof *authority.ActorProof, challenge string, now time.Time) (verifiedIntentSupplyActor, error) {
@@ -266,29 +293,21 @@ func evaluateIntentSupplyContext(store *authority.Store, checkpoint *authority.C
 	if !matchedBinding {
 		return deny()
 	}
-	grant, err := authority.ResolveIntelligenceSupplyGrantForActor(store, checkpoint, input.OrganizationID, input.InstallationID, actor.principalID, input.EvaluatedAt)
-	if err != nil || grant.Status != authority.IntelligenceSupplyGrantActive {
+	decision := (authority.DecisionEvaluator{Store: store, Checkpoint: checkpoint}).Evaluate(authority.DecisionRequest{
+		Operation: authority.PermissionMandateResourcesConfirm, PrincipalID: actor.principalID,
+		Scope: authority.Scope{Type: "mandate", ID: input.MandateID}, At: input.EvaluatedAt,
+	})
+	if decision.Outcome != authority.DecisionAllow || decision.AuthorityVersion == "" || decision.StateDigest == "" {
 		return deny()
 	}
-	validUntil := grant.ValidUntil
-	if actor.expiresAt.Before(validUntil) {
-		validUntil = actor.expiresAt
+	accepted, err := store.Load()
+	if err != nil || accepted == nil || accepted.Binding.OrganizationID != input.OrganizationID || accepted.Binding.InstallationID != input.InstallationID ||
+		accepted.Monotonic.HighWaterMark != decision.AuthorityVersion || accepted.Monotonic.StateDigest != decision.StateDigest {
+		return deny()
 	}
 	return intentSupplyAuthorityEvidence{
 		OrganizationID: input.OrganizationID, ProjectID: input.ProjectID, MandateID: input.MandateID,
 		PreparedContractDigest: input.PreparedContractDigest,
-		AllowedCapabilities:    append([]string(nil), grant.AllowedCapabilities...),
-		AllowedPrivacy:         append([]string(nil), grant.AllowedPrivacy...),
-		AllowedDestinations:    cloneSupplyDestinations(grant.AllowedDestinations), Limits: grant.Limits,
-		ValidUntil: validUntil, AuthorityVersion: grant.AuthorityVersion, AuthorityStateDigest: grant.AuthorityStateDigest,
+		ValidUntil:             actor.expiresAt, AuthorityVersion: decision.AuthorityVersion, AuthorityStateDigest: decision.StateDigest,
 	}, nil
-}
-
-func cloneSupplyDestinations(values []authority.IntelligenceSupplyDestination) []authority.IntelligenceSupplyDestination {
-	out := make([]authority.IntelligenceSupplyDestination, len(values))
-	for i, value := range values {
-		out[i] = value
-		out[i].Models = append([]string(nil), value.Models...)
-	}
-	return out
 }

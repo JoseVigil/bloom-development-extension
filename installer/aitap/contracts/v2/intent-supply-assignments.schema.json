@@ -14,7 +14,7 @@
   "$defs": {
     "assignment": {
       "type": "object", "additionalProperties": false,
-      "required": ["action_id", "destination", "limits"],
+      "required": ["action_id", "destination"],
       "properties": {
         "action_id": {"type": "string", "minLength": 1},
         "destination": {"type": "object", "additionalProperties": false, "required": ["backend_id", "provider", "model"], "properties": {"backend_id": {"type": "string", "minLength": 1}, "provider": {"type": "string", "minLength": 1}, "model": {"type": "string", "minLength": 1}}},

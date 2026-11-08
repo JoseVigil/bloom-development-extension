@@ -26,7 +26,7 @@
     },
     "authority": {
       "type": "object", "additionalProperties": false,
-      "required": ["organization_id", "project_id", "mandate_id", "prepared_contract_digest", "allowed_capabilities", "allowed_privacy", "allowed_destinations", "limits", "valid_until", "authority_version", "authority_state_digest"],
+      "required": ["organization_id", "project_id", "mandate_id", "prepared_contract_digest", "valid_until", "authority_version", "authority_state_digest"],
       "properties": {
         "organization_id": {"type": "string", "minLength": 1},
         "project_id": {"type": "string", "minLength": 1},
@@ -47,7 +47,7 @@
   "$defs": {
     "assignment": {
       "type": "object", "additionalProperties": false,
-      "required": ["action_id", "destination", "limits"],
+      "required": ["action_id", "destination"],
       "properties": {
         "action_id": {"type": "string", "minLength": 1},
         "destination": {"type": "object", "additionalProperties": false, "required": ["backend_id", "provider", "model"], "properties": {"backend_id": {"type": "string", "minLength": 1}, "provider": {"type": "string", "minLength": 1}, "model": {"type": "string", "minLength": 1}}},

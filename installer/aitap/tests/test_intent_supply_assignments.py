@@ -61,14 +61,7 @@ def request(engine, *, include_assignments=False):
         ],
         "authority": {
             "organization_id": "org-1", "project_id": "project-1", "mandate_id": "mandate-1",
-            "prepared_contract_digest": CONTRACT_DIGEST, "allowed_capabilities": ["text.generate"],
-            "allowed_privacy": ["approved_cloud"],
-            "allowed_destinations": [
-                {"provider": "anthropic", "backend_id": "anthropic_api", "models": ["claude-test"]},
-                {"provider": "google", "backend_id": "gemini_api", "models": ["gemini-test"]},
-            ],
-            "limits": {"max_total_tokens": 20000, "max_output_tokens_per_inference": 4096,
-                       "max_inferences": 2, "max_usd": "1.000000"},
+            "prepared_contract_digest": CONTRACT_DIGEST,
             "valid_until": "2099-01-01T00:00:00Z", "authority_version": "42",
             "authority_state_digest": "authority-state-42",
         },
@@ -82,8 +75,7 @@ def request(engine, *, include_assignments=False):
     if include_assignments:
         value["assignments"] = [
             {"action_id": action_id,
-             "destination": {"backend_id": "anthropic_api", "provider": "anthropic", "model": "claude-test"},
-             "limits": {"max_inferences": 1, "max_output_tokens": 2048, "max_total_tokens": 8000}}
+             "destination": {"backend_id": "anthropic_api", "provider": "anthropic", "model": "claude-test"}}
             for action_id in ("ing-1", "dis-2")
         ]
     return value
@@ -116,11 +108,7 @@ def test_list_returns_only_sanitized_eligible_destinations_for_each_genesis_acti
         {"backend_id": "anthropic_api", "provider": "anthropic", "model": "claude-test"},
         {"backend_id": "gemini_api", "provider": "google", "model": "gemini-test"},
     ]
-    assert result["actions"][0]["limit_ceiling"] == {
-        "max_inferences": 2, "max_total_tokens": 20000,
-        "max_output_tokens": 4096, "max_usd": "1",
-    }
-    assert result["actions"][1]["limit_ceiling"] == result["actions"][0]["limit_ceiling"]
+    assert all("limit_ceiling" not in row for row in result["actions"])
     assert "credential_ref" not in json.dumps(result)
 
 
@@ -131,6 +119,7 @@ def test_validate_allows_shared_destination_and_emits_valid_package(tmp_path):
     assert result["fingerprint"].startswith("sha256:")
     assert result["valid_until"] == "2099-01-01T00:00:00Z"
     package = result["assignment_package"]
+    assert all("limits" not in item for item in package["assignments"])
     assert [item["destination"]["backend_id"] for item in package["assignments"]] == [
         "anthropic_api", "anthropic_api"]
     schema = json.loads((ROOT / "contracts/v2/intent-supply-assignments.schema.json").read_text())
@@ -234,7 +223,8 @@ def test_cli_fails_closed_without_probe_grant_and_has_no_accounting_side_effects
     list_payload = json.loads(listed.stdout)
     assert list_payload["operation"] == "route.assignments"
     assert list_payload["data"]["status"] == "not_ready"
-    assert all(row["eligibility"] == "not_eligible" for row in list_payload["data"]["actions"])
+    assert all(row["eligibility"] == "evidence_missing" and row["destinations"] == []
+               for row in list_payload["data"]["actions"])
     validated = run("validate", request(engine, include_assignments=True))
     assert validated.returncode == 0, validated.stderr
     assert json.loads(validated.stdout)["data"]["status"] == "invalid"

@@ -59,7 +59,7 @@ def test_v1_contract_requires_action_id_even_when_intent_type_repeats():
         ["exp-4"], [{"intent_id": "exp-4"}])) == "ASSIGNMENT_SUBJECT_MISSING"
 
 
-def test_eligible_manual_destinations_require_grant_credential_and_fresh_health():
+def test_eligible_manual_destinations_require_credential_and_fresh_health_without_supply_grant():
     now = datetime(2026, 10, 29, 13, 0, tzinfo=timezone.utc)
     registry = {"intelligence_backends": [
         {"backend_id": "gemini_api", "provider": "google", "model": "gemini-test",
@@ -69,9 +69,7 @@ def test_eligible_manual_destinations_require_grant_credential_and_fresh_health(
          "privacy": "approved_cloud", "capabilities": ["text.generate"], "supply_enabled": False},
     ]}
     policy = {"intelligence_supply": {"backend_id": "gemini_api", "fallback": ["disabled"]}}
-    grant = {"status": "active", "valid_until": "2026-10-29T14:00:00Z",
-             "allowed_privacy": ["approved_cloud"], "allowed_capabilities": ["text.generate"],
-             "allowed_destinations": [{"backend_id": "gemini_api", "provider": "google", "models": ["gemini-test"]}]}
+    grant = {"valid_until": "2026-10-29T14:00:00Z"}
     credential = {"credential-ref://gemini/default": {"usable": True, "fingerprint": "vault:1", "valid_until": "2026-10-29T14:00:00Z"}}
     health = {"gemini_api": {"status": "healthy", "fingerprint": "health:1", "valid_until": "2026-10-29T14:00:00Z"}}
     call = lambda g=grant, c=credential, h=health: eligible_manual_destinations(
@@ -81,7 +79,7 @@ def test_eligible_manual_destinations_require_grant_credential_and_fresh_health(
     assert call(c={}) == []
     assert call(h={}) == []
     assert call(h={"gemini_api": {**health["gemini_api"], "valid_until": "2026-10-29T12:00:00Z"}}) == []
-    assert error_code(lambda: call(g={**grant, "status": "revoked"})) == "AUTHORITY_EVIDENCE_INVALID"
+    assert error_code(lambda: call(g={**grant, "valid_until": "2026-10-29T12:00:00Z"})) == "EVIDENCE_EXPIRED"
 
 
 def test_destination_match_is_exact_and_has_no_fallback():

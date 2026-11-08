@@ -6,7 +6,7 @@ export type Projection = { consumers: Consumer[]; destinations: Destination[] };
 type ListValue = { mandateId: string; digest: string; status: string; actions: Array<{
   actionId: string; requiredCapabilities: string[]; eligibility: string;
   destinations: Array<{ backendId: string; provider: string; model: string }>;
-  limitCeiling: LimitCeiling;
+  limitCeiling?: LimitCeiling;
   errors: string[];
 }> };
 export type IntentSupplyOperations = {
@@ -40,10 +40,7 @@ function projectionFromList(value: ListValue, mandateId: string, digest: string)
   const consumers: Consumer[] = [];
   for (const action of value.actions) {
     if (typeof action.actionId !== 'string' || !Array.isArray(action.requiredCapabilities) ||
-        !Array.isArray(action.destinations) || !Array.isArray(action.errors) ||
-        !action.limitCeiling || !Number.isSafeInteger(action.limitCeiling.maxInferences) ||
-        !Number.isSafeInteger(action.limitCeiling.maxTotalTokens) ||
-        !Number.isSafeInteger(action.limitCeiling.maxOutputTokens)) return null;
+        !Array.isArray(action.destinations) || !Array.isArray(action.errors)) return null;
     const eligibleDestinationKeys: string[] = [];
     for (const destination of action.destinations) {
       if (!destination || ['backendId', 'provider', 'model'].some(key =>
@@ -87,13 +84,9 @@ export const productIntentSupplyOperations: IntentSupplyOperations = {
     if (!bridge || typeof bridge.validate !== 'function' || !allAssigned(state)) return unavailable<Validation>();
     const assignments = state.consumers.map(consumer => {
       const destination = state.destinations.find(item => item.key === state.choices[consumer.actionId]);
-      const limits = state.chosenLimits[consumer.actionId];
-      if (!destination || !limits) return null;
+      if (!destination) return null;
       return { action_id: consumer.actionId,
-        destination: { backend_id: destination.backendId, provider: destination.provider, model: destination.model },
-        limits: { max_inferences: limits.maxInferences, max_total_tokens: limits.maxTotalTokens,
-          max_output_tokens: limits.maxOutputTokens,
-          ...(limits.maxUsd ? { max_usd: limits.maxUsd.includes('.') ? limits.maxUsd : limits.maxUsd + '.0' } : {}) } };
+        destination: { backend_id: destination.backendId, provider: destination.provider, model: destination.model } };
     });
     if (assignments.some(item => !item)) return unavailable<Validation>();
     try {

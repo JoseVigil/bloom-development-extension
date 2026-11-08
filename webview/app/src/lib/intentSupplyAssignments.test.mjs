@@ -27,7 +27,7 @@ test('cada consumidor requiere una selección; se puede compartir destino', () =
   state = chooseDestination(state, 'a', 'x');
   assert.equal(allAssigned(state), false);
   state = chooseDestination(state, 'b', 'x');
-  assert.equal(allAssigned(state), false);
+  assert.equal(allAssigned(state), true);
   state = chooseTestLimits(state);
   assert.equal(allAssigned(state), true);
   assert.deepEqual(state.choices, { a: 'x', b: 'x' });
@@ -147,28 +147,14 @@ test('un listado autenticado conserva destinos distintos por Action ID', async (
   } finally { delete globalThis.window; }
 });
 
-test('el presupuesto se elige por acción y respeta el techo compartido', () => {
-  const ceiling = { maxInferences: 2, maxTotalTokens: 10000, maxOutputTokens: 4096 };
+test('la selección de recursos no exige presupuesto por acción', () => {
   let state = withProjection(emptySelection('mandate', 'digest'),
-    consumers.map(item => ({ ...item, limitCeiling: ceiling })), destinations);
-  for (const actionId of ['a', 'b']) {
-    state = chooseDestination(state, actionId, 'x');
-    state = chooseLimit(state, actionId, 'maxInferences', { a: '1', b: '2' }[actionId]);
-    state = chooseLimit(state, actionId, 'maxTotalTokens', '5000');
-    state = chooseLimit(state, actionId, 'maxOutputTokens', '2048');
-  }
-  assert.equal(allAssigned(state), false);
-  state = chooseLimit(state, 'b', 'maxInferences', '1');
+    consumers.map(({ limitCeiling, ...item }) => item), destinations);
+  state = chooseDestination(chooseDestination(state, 'a', 'x'), 'b', 'y');
   assert.equal(allAssigned(state), true);
-  state = chooseLimit(state, 'b', 'maxTotalTokens', '1000');
-  assert.equal(allAssigned(state), false);
-  state = chooseLimit(state, 'b', 'maxTotalTokens', '5000');
-  assert.equal(allAssigned(state), true);
-  state = chooseLimit(state, 'b', 'maxTotalTokens', '6000');
-  assert.equal(allAssigned(state), false);
 });
 
-test('validate envía sólo el destino y los límites elegidos, con costo decimal canónico', async () => {
+test('validate envía sólo el destino elegido', async () => {
   const ceiling = { maxInferences: 1, maxTotalTokens: 5000, maxOutputTokens: 2048, maxUsd: '1' };
   let state = withProjection(emptySelection('mandate', 'sha256:' + 'a'.repeat(64)),
     [{ ...consumers[0], eligibleDestinationKeys: ['x'], limitCeiling: ceiling }],
@@ -187,8 +173,7 @@ test('validate envía sólo el destino y los límites elegidos, con costo decima
     const result = await productIntentSupplyOperations.validate(state);
     assert.equal(result.ok, false);
     assert.deepEqual(sent.assignments, [{ action_id: 'a',
-      destination: { backend_id: 'gemini_api', provider: 'google', model: 'gemini-pro' },
-      limits: { max_inferences: 1, max_total_tokens: 3000, max_output_tokens: 1024, max_usd: '1.0' } }]);
+      destination: { backend_id: 'gemini_api', provider: 'google', model: 'gemini-pro' } }]);
   } finally { delete globalThis.window; }
 });
 
@@ -201,16 +186,14 @@ test('proyección duplicada o con claves no seguras se rechaza', () => {
   assert.equal(projectionWellFormed([{ ...consumers[0], eligibleDestinationKeys: ['missing'] }], destinations), false);
   assert.equal(projectionWellFormed([{ ...consumers[0], eligibleDestinationKeys: ['x', 'x'] }], destinations), false);
   assert.equal(projectionWellFormed([], destinations), false);
-  assert.equal(projectionWellFormed([{ ...consumers[0], limitCeiling: undefined }], destinations), false);
-  assert.equal(projectionWellFormed([{ ...consumers[0], limitCeiling: { ...ceiling, maxInferences: 0 } }], destinations), false);
-  assert.equal(projectionWellFormed([{ ...consumers[0] }, { ...consumers[1], limitCeiling: { ...ceiling, maxTotalTokens: 9000 } }], destinations), false);
+  assert.equal(projectionWellFormed([{ ...consumers[0], limitCeiling: undefined }], destinations), true);
 });
 
-test('sin techo firmado o sin límites explícitos no se valida', async () => {
+test('sin límites explícitos se valida sólo después de elegir destinos', async () => {
   let state = withProjection(emptySelection('mandate', 'digest'), consumers, destinations);
   state = chooseDestination(chooseDestination(state, 'a', 'x'), 'b', 'y');
-  assert.equal(allAssigned(state), false);
-  assert.equal(allAssigned({ ...state, consumers: consumers.map(({ limitCeiling, ...item }) => item) }), false);
+  assert.equal(allAssigned(state), true);
+  assert.equal(allAssigned({ ...state, consumers: consumers.map(({ limitCeiling, ...item }) => item) }), true);
   let called = false;
   globalThis.window = { intentSupplySession: {
     list: async () => ({}), close: async () => ({}),
@@ -219,6 +202,6 @@ test('sin techo firmado o sin límites explícitos no se valida', async () => {
   try {
     const result = await productIntentSupplyOperations.validate(state);
     assert.equal(result.ok, false);
-    assert.equal(called, false);
+    assert.equal(called, true);
   } finally { delete globalThis.window; }
 });

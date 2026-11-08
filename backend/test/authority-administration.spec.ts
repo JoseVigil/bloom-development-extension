@@ -25,6 +25,17 @@ const grant=():AdministrationCommand=>({kind:"propose_assignment",proposalId:"pr
 const run=(command:AdministrationCommand,s=fixture(),a=actor(),c=context())=>evaluateAdministration(s,a,command,c);
 
 describe("bounded organizational administration",()=>{
+  it("defines W4 for one Mandate without changing builtin roles, then requires an exact assignment",()=>{
+    const mandate="94cb7ee2-6377-4fb6-a695-da0566f9093f";
+    const role={role_id:"w4-confirm",role_version:"1",role_origin:"organization" as const,display_name:"W4 confirm",status:"active" as const,permissions:["mandate.resources.confirm"]};
+    const defined=run({kind:"define_role",role}).state;
+    expect(defined.role_definitions.find(r=>r.role_id==="master")?.permissions).not.toContain("mandate.resources.confirm");
+    const command:AdministrationCommand={kind:"propose_assignment",proposalId:"w4-proposal",assignmentId:"w4-assignment",membershipId:"m-target",roleId:role.role_id,roleVersion:"1",scope:{type:"mandate",id:mandate},validFrom:now,validUntil:"2026-09-08T13:00:00Z"};
+    const proposal=run(command,defined).proposal!;
+    expect(run({kind:"accept",proposalId:"w4-proposal"},defined,actor(recipient),{...context(),proposal}).state.role_assignments.find(a=>a.assignment_id==="w4-assignment")).toMatchObject({scope:{type:"mandate",id:mandate},valid_until:"2026-09-08T13:00:00Z"});
+    expect(()=>run({...command,scope:{type:"mandate",id:"another-mandate"}},defined)).toThrow("grant_exceeds_authority");
+    expect(()=>run({...command,scope:{type:"project",id:"project-fixture"}},defined)).toThrow("grant_exceeds_authority");
+  });
   it("limits the initial Gene ratifier concession to the verified initial human and one Project",()=>{
     const command:AdministrationCommand={kind:"concede_initial_gene_ratifier",projectId:"project-fixture",roleId:"gene-ratifier-fixture",assignmentId:"gene-ratifier-assignment"};
     const c={...context(),initialPrincipalId:owner};

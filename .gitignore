@@ -211,3 +211,6 @@ installer/sensor/scripts/build_number.txt
 installer/sentinel/internal/core/build_info.go
 installer/sentinel/scripts/build_number.effective.txt
 installer/sentinel/scripts/build_number.txt
+
+.runner-isolation/
+.pytest_cache/

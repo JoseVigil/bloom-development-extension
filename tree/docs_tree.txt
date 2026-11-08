@@ -14,7 +14,16 @@ bloom-development-extension/
     │   ├── AITAP_ROUTING_RECONCILIATION_REPORT_2026-08-20.md
     │   ├── AITAP_Runtime_Intelligence_Routing_v2.md
     │   ├── Alfred_Integracion_AITAP_Disparo2_v1_0.md
-    │   └── BSIP_Response_Spec_PoC_Disparo1_v1_0.md
+    │   ├── BSIP_Response_Spec_PoC_Disparo1_v1_0.md
+    │   ├── Guia_Maestra_de_Implementación_Comandos_ITAP.md
+    │   └── INTENT_SUPPLY_SELECTION/
+    │       ├── 00_DOCUMENTO_MAESTRO.md
+    │       ├── 01_AITAP.md
+    │       ├── 02_NUCLEUS.md
+    │       ├── 03_DIAGNOSTICA_WORKSPACE_CORE.md
+    │       ├── 04_RUNNER_CORE.md
+    │       ├── 05_MANDATE_GENESIS.md
+    │       └── 06_INTEGRACION_E2E.md
     ├── ALFRED/
     │   ├── AGENTIC_HARNESS_OVERVIEW.md
     │   └── ALFRED_STATUS_2026-08-14.md
@@ -34,16 +43,20 @@ bloom-development-extension/
     │   │       ├── Cierre_Diagnostico_Correccion_Bloqueo_E2E_Mandate_Genesis_AITAP_Vault_v1_0.md
     │   │       ├── Cierre_Implementacion_Correccion_ScopeID_CreateProject_InstallShadow_v1_0.md
     │   │       ├── Cierre_Implementacion_D27_UnificacionCreacionMandates_v1_0.md
+    │   │       ├── Cierre_Implementacion_ReconciliacionCatalogoBuiltin_Pasos1a5_v1_0.md
     │   │       ├── Cierre_Investigacion_Roles_Organizacionales_y_Nomenclatura_Agente_v0_1.md
     │   │       ├── Contexto_Decision_Autoridad_Organizacional_Roles_v0_1.md
     │   │       ├── Encargo_Diseno_Contratos_Nacimiento_Agente_Orbital_v0_2.md
     │   │       ├── Encargo_Implementacion_Correccion_ScopeID_CreateProject_InstallShadow_v1_0.md
     │   │       ├── Encargo_Implementacion_Fisica_Fase2_Backend_v0_1.md
     │   │       ├── Investigacion_Catalogo_Completo_Roles_Organizacionales_v0_1.md
+    │   │       ├── Investigacion_Estructura_Tenant_Organizacion_Roles_v0_1.md
     │   │       ├── Investigacion_Reapertura_CreateOrganization_Post_Reconciliacion_v0_1.md
     │   │       ├── Nota_Tecnica_Analisis_Fase4_Escrituras_y_Onboarding_Primer_Principal_v0_2.md
     │   │       ├── Nota_Tecnica_Riesgos_Ejecucion_Encargo_Fase2_Backend_v0_1.md
     │   │       ├── Propuesta_Diseno_Correccion_ScopeID_CreateProject_InstallShadow_v0_1.md
+    │   │       ├── Propuesta_Diseno_Resolucion_AsignacionRolesBuiltin_v0_1.md
+    │   │       ├── Propuesta_Resolucion_Inconsistencias_Investigacion_TenantOrganizacionRoles_v0_1.md
     │   │       ├── Verificacion_Tecnica_Archivos_Go_Reverificacion_v0_1.md
     │   │       └── _to_delete/
     │   │           └── Nota_Tecnica_Analisis_Fase4_Escrituras_y_Bootstrap_v0_1_superseded_1788924659.md
@@ -52,6 +65,10 @@ bloom-development-extension/
     │   │       ├── ASM_Location_Research_v0_2.md
     │   │       ├── ASM_PRE_MANDATE_EXECUTION_ADR_v0_1.md
     │   │       └── ASM_PRE_MANDATE_EXECUTION_ROADMAP_I3_I7_v0_1.md
+    │   ├── CONDUCTOR/
+    │   │   └── ONBOARDING/
+    │   │       ├── Devolucion_RUNNER_ResolucionRolesBuiltin_y_ParidadCatalogo_v1_0.md
+    │   │       └── Propuesta_Diseno_Invitaciones_Organizacion_v0_2.md
     │   ├── GRAVITY/
     │   │   ├── API/
     │   │   │   ├── NUCLEUS_API_Contracts_Auditoria_vs_Truth_v0_1.md
@@ -89,23 +106,104 @@ bloom-development-extension/
     │   │       └── Investigacion_Gravity_SessionNode_MandateGenesis_v0_1.md
     │   ├── INTEGRATION_HUMAN_TECHNICAL_REALITY_v0_1.md
     │   ├── ORRERY/
+    │   │   ├── ENCARGOS/
+    │   │   │   ├── Encargo_Orrery_Channel_Budget_Interaction_Reservation_v0_1.md
+    │   │   │   ├── Encargo_Orrery_Guia_Investigacion_Interaccion_Lente_Foco_Hover_v0_1.md
+    │   │   │   └── Encargo_Orrery_Morphological_Spatial_Language_Research_v0_1.md
+    │   │   ├── EXPERIENCE/
+    │   │   │   ├── Orrery_Experience_Model_Escenarios_Trabajo_Activo_v0_1.md
+    │   │   │   ├── Orrery_Experience_Model_v0_1.md
+    │   │   │   └── Orrery_Experience_Model_v1_0.md
+    │   │   ├── INTERACTION/
+    │   │   │   ├── Orrery_Correccion_Continuidad_Protocolo_2026-10-18.md
+    │   │   │   ├── Orrery_Interaction_Experiment_Protocol_v0_1.md
+    │   │   │   └── Orrery_Interaction_Research_Lente_Seleccion_Indicacion_v0_2.md
     │   │   ├── LOCATION/
     │   │   │   ├── ORRERY_LOCATION_MATERIAL_CLOSURE_v1_1.md
     │   │   │   └── Orrery_LocationSnapshot_v0.md
-    │   │   └── UI/
-    │   │       ├── Investigacion_Orrery_Integracion_UI_Entrada_Salida_v0_3.md
-    │   │       ├── Investigacion_Orrery_LocationFirst_Reorientacion_v0_2.md
-    │   │       ├── Investigacion_Orrery_Verificacion_UIContenedora_PuntosEntrada_LocationFirst_v0_1.md
-    │   │       ├── Investigacion_Orrery_VisorMandatos_Postulates_GatewayUX_v0_1.md
-    │   │       ├── Propuesta_Diseno_LedgerPanel_CapaAuditoriaTrazabilidad_v0_1.md
-    │   │       ├── Propuesta_Diseno_Orrery_GatewayUX_Onboarding_TransicionEspacial_v0_1.md
-    │   │       ├── Propuesta_Diseno_Orrery_UIContenedora_ModeloInteraccion_IntegracionFormal_v0_1.md
-    │   │       └── Propuesta_Diseno_Orrery_UIContenedora_ModeloInteraccion_IntegracionFormal_v0_2.md
+    │   │   ├── Orrery_Cierre_Exploracion_Codex_y_Verificacion_Cloud_2026-10-24.md
+    │   │   ├── Orrery_Constitucion_v1_0.md
+    │   │   ├── Orrery_Constitucion_v1_1.md
+    │   │   ├── Orrery_Continuidad_Local_2026-10-18.md
+    │   │   ├── Orrery_Decisiones_Arquitectonicas_D1_D2_D3_v1_0.md
+    │   │   ├── Orrery_Decisiones_Arquitectonicas_v1_1.md
+    │   │   ├── Orrery_Estado_Base_v1_0.md
+    │   │   ├── Orrery_Experience_Model_Assignment_v0_1.md
+    │   │   ├── Orrery_Traspaso_Cloud_Darwin_Estado_Recoleccion_y_Genes_2026-10-30.md
+    │   │   ├── Orrery_Traspaso_Codex_Estado_y_Orden_de_Lectura_v1_0.md
+    │   │   ├── Orrery_Traspaso_Codex_Windows_v1_0.md
+    │   │   ├── Orrery_Vocabulario_Normativo_v1_0.md
+    │   │   ├── Orrery_Vocabulario_Normativo_v1_1.md
+    │   │   ├── UI/
+    │   │   │   ├── Investigacion_Orrery_Integracion_UI_Entrada_Salida_v0_3.md
+    │   │   │   ├── Investigacion_Orrery_LocationFirst_Reorientacion_v0_2.md
+    │   │   │   ├── Investigacion_Orrery_Verificacion_UIContenedora_PuntosEntrada_LocationFirst_v0_1.md
+    │   │   │   ├── Investigacion_Orrery_VisorMandatos_Postulates_GatewayUX_v0_1.md
+    │   │   │   ├── Investigacion_Propuesta_Arquitectura_UIUX_Orrery_WorkspaceCore_v0_1.md
+    │   │   │   ├── Propuesta_Diseno_LedgerPanel_CapaAuditoriaTrazabilidad_v0_1.md
+    │   │   │   ├── Propuesta_Diseno_Orrery_GatewayUX_Onboarding_TransicionEspacial_v0_1.md
+    │   │   │   ├── Propuesta_Diseno_Orrery_UIContenedora_ModeloInteraccion_IntegracionFormal_v0_1.md
+    │   │   │   └── Propuesta_Diseno_Orrery_UIContenedora_ModeloInteraccion_IntegracionFormal_v0_2.md
+    │   │   └── VISUAL/
+    │   │       ├── IMAGES/
+    │   │       │   ├── V_01/
+    │   │       │   │   ├── 01_T3_foco_gene_tuberia_defecto.png
+    │   │       │   │   ├── 02_T2_foco_gene_tres_edificios_defecto.png
+    │   │       │   │   ├── 03_T2_foco_gene_todas_las_variantes.png
+    │   │       │   │   ├── 04_T2_foco_domain_pila_abierta.png
+    │   │       │   │   ├── 05_T2_tenant.png
+    │   │       │   │   ├── 06_T2_manzana_lote_al_fondo.png
+    │   │       │   │   ├── 07_T2_vista_plana.png
+    │   │       │   │   ├── 08_T3_despliegue_documentos_declarados.png
+    │   │       │   │   ├── 09_T2_manzana_lotes_en_fila_variante.png
+    │   │       │   │   └── 10_T1.png
+    │   │       │   └── V_02/
+    │   │       │       ├── C0_T3_foco_gene.png
+    │   │       │       ├── C0_linea_base.html
+    │   │       │       ├── C1_T3_foco_gene.png
+    │   │       │       ├── C1_T3_foco_repository.png
+    │   │       │       ├── C1_T3_revision_capturada.png
+    │   │       │       ├── C1_ficha_en_capas.html
+    │   │       │       ├── C1_fixture_G1.png
+    │   │       │       ├── C2_T2_foco_gene.png
+    │   │       │       ├── C2_T3_foco_gene.png
+    │   │       │       ├── C2_gene_por_lentes.html
+    │   │       │       ├── C3_T3_activo_y_detalle.png
+    │   │       │       ├── C3_T3_foco_gene_despiece.png
+    │   │       │       ├── C3_despiece_FN.html
+    │   │       │       └── C3_fixture_G1.png
+    │   │       ├── Orrery_Channel_Budget_Interaction_Reservation_v0_1.md
+    │   │       ├── Orrery_Estructura_Base_Universo_Fase1_Definicion_v0_1.md
+    │   │       ├── Orrery_Morphological_Spatial_Language_Research_v0_1.md
+    │   │       ├── corte_espacial_04/
+    │   │       │   └── capturas/
+    │   │       │       ├── 01_T3_foco_gene_tuberia_defecto.png
+    │   │       │       ├── 02_T2_foco_gene_tres_edificios_defecto.png
+    │   │       │       ├── 03_T2_foco_gene_todas_las_variantes.png
+    │   │       │       ├── 04_T2_foco_domain_pila_abierta.png
+    │   │       │       ├── 05_T2_tenant.png
+    │   │       │       ├── 06_T2_manzana_lote_al_fondo.png
+    │   │       │       ├── 07_T2_vista_plana.png
+    │   │       │       ├── 08_T3_despliegue_documentos_declarados.png
+    │   │       │       ├── 09_T2_manzana_lotes_en_fila_variante.png
+    │   │       │       └── 10_T1.png
+    │   │       ├── escena_gris/
+    │   │       │   └── index_1.html
+    │   │       └── primer_corte/
+    │   │           ├── index-1.html
+    │   │           └── index.html
     │   ├── UI/
     │   │   ├── Cierre_Investigacion_Auditoria_Estado_UI_Puente_CoreUIRedesign_v1_0.md
     │   │   ├── Encargo_Investigacion_Auditoria_Estado_UI_Puente_CoreUIRedesign_v0_1.md
     │   │   └── Investigacion_Auditoria_Estado_UI_Consolidada_v0_1.md
     │   └── WISDOM/
+    │       ├── Diseno_Recepcion_Instalacion_y_Retiro_Automatizaciones_Genesis_v0_1.md
+    │       ├── Diseno_Recepcion_Instalacion_y_Retiro_Automatizaciones_Genesis_v0_2.md
+    │       ├── Estado_Gate_Wisdom_Darwin_Traspaso_Codex_v1_0.md
+    │       ├── Investigacion_Recorrido_Paladin_Wisdom_Instalacion_Genesis_v0_1.md
+    │       ├── Investigacion_Recorrido_Paladin_Wisdom_Instalacion_Genesis_v0_2.md
+    │       ├── Plan_Gate_G_Wisdom_Darwin_Separada_v0_1.md
+    │       ├── Roadmap_Wisdom_Impacto_AITAP_Ejecucion_Mandate_v0_1.md
     │       └── WISDOM_DEVELOPMENT_SCOPE_v0_1.md
     ├── BACKEND/
     │   ├── Alcance_Infraestructura_Web_Comercial_v0_1.md
@@ -123,9 +221,9 @@ bloom-development-extension/
     │   ├── BTIP_home_webview_documentacion.md
     │   └── PROCEDIMIENTO_ACTUALIZAR_BOOTSTRAP.md
     ├── BRAIN/
+    │   ├── Guia_Maestra_de_Implementación_Comandos_Brain.md
     │   ├── brain-troubleshooting.md
     │   ├── logger_best_practices.md
-    │   ├── unified_command_prompt.md
     │   └── version_readme.md
     ├── BSIP/
     │   ├── BLOOM_BISP_Documento_Unico_v2_0.md
@@ -256,7 +354,10 @@ bloom-development-extension/
     │   ├── BLOOM_INTENT_SEMANTIC_PACKAGE_v1_0.md
     │   └── brain_intent_state.md
     ├── INTERVIEWS/
-    │   └── COGNITUUM_PALADIN_RESEARCH_SNAPSHOT.md
+    │   ├── COGNITUUM_PALADIN_RESEARCH_SNAPSHOT.md
+    │   └── ROBERT_BYE_CLAUDE_DESKTOP_APP_TWITTER_FEEDBACK/
+    │       ├── ROBERT_BYE_CLAUDE_DESKTOP_APP_TWITTER_FEEDBACK.md
+    │       └── Robert_Summary_Feedback_Claude_Desktop_App.md
     ├── IONPUMP/
     │   ├── BACKUP/
     │   │   ├── ION SDK Developer Guide.md
@@ -279,6 +380,7 @@ bloom-development-extension/
     │   │   └── Mandate_Genesis_Synapse_Simulator_Etapa_A_Design_v1.md
     │   ├── GENESIS_COUPLING_AUDIT.md
     │   ├── GENESIS_RENAME_INDEX.md
+    │   ├── MANDATE_PROGRAM_CANONICAL_SOURCE_v0_1.md
     │   ├── Mandate_Domain_Spec_v1.0.0.md
     │   ├── Mandate_Event_Mechanism_Auditoria_v1.md
     │   ├── Mandate_Genesis_Completion_Plan_v1.md
@@ -335,7 +437,8 @@ bloom-development-extension/
     │   ├── BLOOM_ROLES_DISCOVERY_BASE_v0_1.md
     │   ├── BLOOM_ROLES_ORGANIZATIONAL_AUTHORITY_CONSOLIDATION_v0_1.md
     │   └── fixtures/
-    │       └── authority_interop_v1.json
+    │       ├── authority_interop_v1.json
+    │       └── authority_interop_v1_1.json
     ├── SENSOR/
     │   ├── BACKUP/
     │   │   ├── PROMPT_MAESTRO_BLOOM_SENSOR_v1.md
@@ -362,6 +465,9 @@ bloom-development-extension/
     │   ├── SYNAPSE-RUNNER/
     │   │   ├── Encargo_Investigacion_Fase0_Onboarding_ServerSide_Cowork_Linux.md
     │   │   ├── Fase0_Server_Side_Onboarding_Seccion.md
+    │   │   ├── RUNNER_CORE_Darwin_Estado_Arranque_Core_v1.md
+    │   │   ├── RUNNER_CORE_Migracion_Darwin_v1.md
+    │   │   ├── RUNNER_Migracion_Darwin_v1.md
     │   │   ├── Synapse_Runner_E2E_Architecture_Dossier.md
     │   │   └── Synapse_Runner_Requerimiento_Integrado_v1_0.md
     │   ├── SYNAPSE_BRIDGE_ELECTRON_IMPLEMENTATION.md

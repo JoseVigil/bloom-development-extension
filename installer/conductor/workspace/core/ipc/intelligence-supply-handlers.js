@@ -56,16 +56,6 @@ function sanitizeSessionData(data, mode, mandateId, digest, requestID) {
     const action = { actionId: row.action_id, requiredCapabilities: [...row.requiredCapabilities], errors: [...row.errors],
     };
     if (mode === 'list') {
-      const ceiling = row.limit_ceiling;
-      if (!ceiling || typeof ceiling !== 'object' || Array.isArray(ceiling) ||
-          ['max_inferences', 'max_total_tokens', 'max_output_tokens'].some(key =>
-            !Number.isSafeInteger(ceiling[key]) || ceiling[key] <= 0) ||
-          (ceiling.max_usd !== undefined &&
-            (typeof ceiling.max_usd !== 'string' ||
-             !/^(0|[1-9][0-9]*|(?:0|[1-9][0-9]*)\.[0-9]{1,6})$/.test(ceiling.max_usd)))) return null;
-      action.limitCeiling = { maxInferences: ceiling.max_inferences, maxTotalTokens: ceiling.max_total_tokens,
-        maxOutputTokens: ceiling.max_output_tokens,
-        ...(ceiling.max_usd === undefined ? {} : { maxUsd: ceiling.max_usd }) };
       if (!['eligible', 'evidence_missing', 'not_eligible'].includes(row.eligibility) ||
           !Array.isArray(row.destinations) || row.destinations.length > 128) return null;
       const destinations = [];
@@ -89,8 +79,7 @@ function sanitizeSessionData(data, mode, mandateId, digest, requestID) {
   if (mode === 'list') {
     if (!['eligible', 'not_ready'].includes(data.status) ||
         (data.status === 'eligible' && actions.some(action => action.eligibility !== 'eligible')) ||
-        (data.status === 'not_ready' && actions.every(action => action.eligibility === 'eligible')) ||
-        actions.some(action => JSON.stringify(action.limitCeiling) !== JSON.stringify(actions[0].limitCeiling))) return null;
+        (data.status === 'not_ready' && actions.every(action => action.eligibility === 'eligible'))) return null;
     return { mandateId, digest, status: data.status, actions };
   }
   if (!['valid', 'invalid'].includes(data.status) || !Array.isArray(data.errors) ||
@@ -148,25 +137,16 @@ function sanitizeAssignments(assignments) {
   const result = [];
   for (const item of assignments) {
     if (!item || typeof item !== 'object' || Array.isArray(item) ||
-        Object.keys(item).sort().join(',') !== 'action_id,destination,limits' ||
+        Object.keys(item).sort().join(',') !== 'action_id,destination' ||
         typeof item.action_id !== 'string' || !/^[a-zA-Z0-9-]{1,128}$/.test(item.action_id) ||
         seen.has(item.action_id) || !item.destination || typeof item.destination !== 'object' ||
         Array.isArray(item.destination) || Object.keys(item.destination).sort().join(',') !== 'backend_id,model,provider' ||
         ['backend_id', 'provider', 'model'].some(key =>
-          typeof item.destination[key] !== 'string' || !/^[a-zA-Z0-9._/-]{1,128}$/.test(item.destination[key])) ||
-        !item.limits || typeof item.limits !== 'object' || Array.isArray(item.limits) ||
-        Object.keys(item.limits).some(key => !['max_inferences', 'max_output_tokens', 'max_total_tokens', 'max_usd'].includes(key)) ||
-        ['max_inferences', 'max_output_tokens', 'max_total_tokens'].some(key =>
-          !Number.isSafeInteger(item.limits[key]) || item.limits[key] <= 0) ||
-        (item.limits.max_usd !== undefined &&
-          (typeof item.limits.max_usd !== 'string' || !/^(0|0\.[0-9]{1,6}|[1-9][0-9]*\.[0-9]{1,6})$/.test(item.limits.max_usd)))) return null;
+          typeof item.destination[key] !== 'string' || !/^[a-zA-Z0-9._/-]{1,128}$/.test(item.destination[key]))) return null;
     seen.add(item.action_id);
     result.push({
       action_id: item.action_id,
-      destination: { backend_id: item.destination.backend_id, provider: item.destination.provider, model: item.destination.model },
-      limits: { max_inferences: item.limits.max_inferences,
-        max_output_tokens: item.limits.max_output_tokens, max_total_tokens: item.limits.max_total_tokens,
-        ...(item.limits.max_usd === undefined ? {} : { max_usd: item.limits.max_usd }) }
+      destination: { backend_id: item.destination.backend_id, provider: item.destination.provider, model: item.destination.model }
     });
   }
   return result;

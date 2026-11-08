@@ -6,12 +6,13 @@ import (
 )
 
 const (
-	RoleMaster                       = "master"
-	RoleSpecialist                   = "specialist"
-	RoleOperator                     = "operator" // Working name (ex-delegate); scope-project admin. See Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md §1, §2.1.
-	PermissionIntentCorMerge         = "intent.cor.merge"
-	PermissionAgentIssuerDesignate   = "agent.issuer.designate"
-	PermissionGeneContributionRatify = "gene.contribution.ratify"
+	RoleMaster                        = "master"
+	RoleSpecialist                    = "specialist"
+	RoleOperator                      = "operator" // Working name (ex-delegate); scope-project admin. See Encargo_Implementacion_Nacimiento_Agente_Orbital_v1_0.md §1, §2.1.
+	PermissionIntentCorMerge          = "intent.cor.merge"
+	PermissionAgentIssuerDesignate    = "agent.issuer.designate"
+	PermissionGeneContributionRatify  = "gene.contribution.ratify"
+	PermissionMandateResourcesConfirm = "mandate.resources.confirm"
 )
 
 // NOTA — límite permanente de diseño, confirmado 2026-09-17
@@ -38,7 +39,8 @@ var PermissionsV1 = map[string]struct{}{
 	"authority.membership.manage": {}, "authority.role_definition.manage": {}, "authority.assignment.manage": {},
 	"authority.binding.approve": {}, "authority.cutover.approve": {},
 	"mandate.create": {}, "mandate.sign": {}, "mandate.promote": {}, "mandate.install": {},
-	"intent.create": {}, PermissionIntentCorMerge: {}, PermissionAgentIssuerDesignate: {},
+	PermissionMandateResourcesConfirm: {},
+	"intent.create":                   {}, PermissionIntentCorMerge: {}, PermissionAgentIssuerDesignate: {},
 	PermissionGeneContributionRatify: {},
 	"vault.key.read":                 {}, "vault.key.write": {}, "vault.key.delete": {},
 	"executor.command.execute": {}, "executor.filesystem.write": {}, "executor.network.access": {}, "executor.change.promote": {},

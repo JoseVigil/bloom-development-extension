@@ -1,6 +1,33 @@
 package authority
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestMandateResourcesConfirmRequiresExactAssignedScope(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	state := decisionState(now)
+	request := DecisionRequest{Operation: PermissionMandateResourcesConfirm, PrincipalID: "p", Scope: Scope{Type: "mandate", ID: "mandate-a"}, At: now}
+	if (DecisionEvaluator{state: state}).Evaluate(request).Outcome != DecisionDeny {
+		t.Fatal("builtin role acquired W4")
+	}
+	state.Projection.RoleDefinitions = []RoleDefinition{{RoleID: "test-w4", RoleVersion: "1", RoleOrigin: "organization", Status: "active", Permissions: []string{PermissionMandateResourcesConfirm}}}
+	state.Projection.RoleAssignments[0].RoleID = "test-w4"
+	state.Projection.RoleAssignments[0].Scope = request.Scope
+	if (DecisionEvaluator{state: state}).Evaluate(request).Outcome != DecisionAllow {
+		t.Fatal("exact assignment denied")
+	}
+	request.Scope.ID = "mandate-b"
+	if (DecisionEvaluator{state: state}).Evaluate(request).Outcome != DecisionDeny {
+		t.Fatal("other mandate accepted")
+	}
+	request.Scope.ID = "mandate-a"
+	state.Projection.RoleAssignments[0].ValidUntil = &now
+	if (DecisionEvaluator{state: state}).Evaluate(request).Outcome != DecisionDeny {
+		t.Fatal("expired assignment accepted")
+	}
+}
 
 func TestBuiltinCatalogExact(t *testing.T) {
 	expected := map[string][]string{
