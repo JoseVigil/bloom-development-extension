@@ -1,0 +1,36 @@
+?   	impact	[no test files]
+ok  	impact/adapters	(cached)
+?   	impact/adapters/local	[no test files]
+?   	impact/adapters/server	[no test files]
+?   	impact/internal/assessment	[no test files]
+--- FAIL: TestGeneratedHelpMatchesTree (0.00s)
+    cli_test.go:109: generated txt help is stale
+FAIL
+FAIL	impact/internal/cli	0.019s
+?   	impact/internal/contracts	[no test files]
+--- FAIL: TestRealNucleusRegistrationAndHistoricalRotation (1.84s)
+    telemetry_test.go:24: build real Nucleus: exit status 1
+        go: downloading go.temporal.io/sdk v1.40.0
+        go: downloading go.temporal.io/api v1.62.1
+        go: downloading google.golang.org/grpc v1.78.0
+        go: downloading golang.org/x/sys v0.38.0
+        go: downloading golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842
+        /root/go/pkg/mod/github.com/gofrs/flock@v0.13.0/flock_unix.go:14:2: unrecognized import path "golang.org/x/sys": https fetch: Get "https://golang.org/x/sys?go-get=1": Forbidden
+        /root/go/pkg/mod/github.com/antlr4-go/antlr/v4@v4.13.1/lexer_action_executor.go:7:8: unrecognized import path "golang.org/x/exp": https fetch: Get "https://golang.org/x/exp?go-get=1": Forbidden
+        internal/orchestration/temporal/temporal_client.go:12:2: unrecognized import path "go.temporal.io/api": https fetch: Get "https://go.temporal.io/api?go-get=1": Forbidden
+        internal/orchestration/temporal/temporal_client.go:13:2: unrecognized import path "go.temporal.io/api": https fetch: Get "https://go.temporal.io/api?go-get=1": Forbidden
+        internal/orchestration/temporal/worker.go:17:2: unrecognized import path "go.temporal.io/sdk": https fetch: Get "https://go.temporal.io/sdk?go-get=1": Forbidden
+        internal/orchestration/temporal/temporal_client.go:14:2: unrecognized import path "go.temporal.io/sdk": https fetch: Get "https://go.temporal.io/sdk?go-get=1": Forbidden
+        internal/orchestration/temporal/worker.go:19:2: unrecognized import path "go.temporal.io/sdk": https fetch: Get "https://go.temporal.io/sdk?go-get=1": Forbidden
+        internal/orchestration/temporal/bootstrap/schedule_bootstrap.go:9:2: unrecognized import path "go.temporal.io/sdk": https fetch: Get "https://go.temporal.io/sdk?go-get=1": Forbidden
+        internal/orchestration/temporal/bootstrap/schedule_bootstrap.go:10:2: unrecognized import path "google.golang.org/grpc": https fetch: Get "https://google.golang.org/grpc?go-get=1": Forbidden
+        internal/orchestration/temporal/bootstrap/schedule_bootstrap.go:11:2: unrecognized import path "google.golang.org/grpc": https fetch: Get "https://google.golang.org/grpc?go-get=1": Forbidden
+        internal/orchestration/temporal/workflows/mandate_build_workflow.go:10:2: unrecognized import path "go.temporal.io/sdk": https fetch: Get "https://go.temporal.io/sdk?go-get=1": Forbidden
+        internal/supervisor/service.go:26:2: unrecognized import path "google.golang.org/grpc": https fetch: Get "https://google.golang.org/grpc?go-get=1": Forbidden
+        internal/supervisor/service.go:27:2: unrecognized import path "google.golang.org/grpc": https fetch: Get "https://google.golang.org/grpc?go-get=1": Forbidden
+        internal/supervisor/service.go:28:2: unrecognized import path "google.golang.org/grpc": https fetch: Get "https://google.golang.org/grpc?go-get=1": Forbidden
+FAIL
+FAIL	impact/internal/core	1.851s
+ok  	impact/internal/evaluation	(cached)
+?   	impact/internal/system	[no test files]
+FAIL

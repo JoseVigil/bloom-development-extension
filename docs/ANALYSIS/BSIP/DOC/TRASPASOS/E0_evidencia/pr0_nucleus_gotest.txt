@@ -1,0 +1,86 @@
+go: downloading github.com/golang/text v0.31.0
+go: downloading github.com/temporalio/sdk-go v1.40.0
+go: downloading github.com/temporalio/api-go v1.62.1
+go: downloading github.com/grpc/grpc-go v1.78.0
+go: downloading github.com/stretchr/testify v1.11.1
+go: downloading github.com/nexus-rpc/sdk-go v0.5.1
+go: downloading github.com/protocolbuffers/protobuf-go v1.36.10
+go: downloading github.com/googleapis/go-genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda
+go: downloading github.com/davecgh/go-spew v1.1.1
+go: downloading github.com/pmezard/go-difflib v1.0.0
+go: downloading github.com/stretchr/objx v0.5.2
+go: downloading github.com/golang/net v0.47.0
+go: downloading github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
+go: downloading github.com/golang/mock v1.6.0
+go: downloading github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
+go: downloading github.com/robfig/cron v1.2.0
+go: downloading github.com/golang/sync v0.18.0
+go: downloading github.com/golang/time v0.3.0
+go: downloading github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
+go: downloading github.com/googleapis/go-genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda
+go: downloading github.com/gogo/protobuf v1.3.2
+# nucleus/internal/mandatedelivery
+package nucleus/internal/mandatedelivery
+	imports nucleus/internal/mandateinstall from integration_test.go
+	imports nucleus/internal/mandatedelivery from install.go: import cycle not allowed in test
+FAIL	nucleus/internal/mandatedelivery [setup failed]
+?   	nucleus	[no test files]
+ok  	nucleus/gravity	0.003s
+?   	nucleus/internal/analytics	[no test files]
+ok  	nucleus/internal/authority	0.636s
+ok  	nucleus/internal/cli	0.004s
+?   	nucleus/internal/client	[no test files]
+ok  	nucleus/internal/core	0.020s
+ok  	nucleus/internal/etapa2test	0.007s
+ok  	nucleus/internal/gene	0.098s
+ok  	nucleus/internal/governance	0.168s
+ok  	nucleus/internal/governance/decision	0.013s
+ok  	nucleus/internal/governance/ownershipcontract	0.002s
+ok  	nucleus/internal/gravity	0.054s
+--- FAIL: TestAssignmentsInvokesExactAITAPCLIAndReturnsSanitizedData (0.00s)
+    client_test.go:26: INTENT_SUPPLY_ASSIGNMENTS_UNAVAILABLE
+FAIL
+FAIL	nucleus/internal/intelligencesupply	0.003s
+ok  	nucleus/internal/mandatedefinition	0.024s
+ok  	nucleus/internal/mandateinstall	0.008s
+ok  	nucleus/internal/mandateoffer	0.137s
+?   	nucleus/internal/mandates	[no test files]
+# nucleus/internal/orchestration/acceptance [nucleus/internal/orchestration/acceptance.test]
+internal/orchestration/acceptance/runner_core_gate2_test.go:42:32: undefined: syscall.OpenCurrentProcessToken
+FAIL	nucleus/internal/orchestration/acceptance [build failed]
+# nucleus/internal/orchestration/activities
+# [nucleus/internal/orchestration/activities]
+internal/orchestration/activities/sentinel_activities.go:195:17: non-constant format string in call to fmt.Errorf
+internal/orchestration/activities/sentinel_activities.go:219:17: non-constant format string in call to fmt.Errorf
+internal/orchestration/activities/sentinel_activities.go:280:17: non-constant format string in call to fmt.Errorf
+internal/orchestration/activities/sentinel_activities.go:289:17: non-constant format string in call to fmt.Errorf
+internal/orchestration/activities/sentinel_activities.go:458:17: non-constant format string in call to fmt.Errorf
+internal/orchestration/activities/sentinel_activities.go:466:17: non-constant format string in call to fmt.Errorf
+internal/orchestration/activities/sentinel_activities.go:491:17: non-constant format string in call to fmt.Errorf
+FAIL	nucleus/internal/orchestration/activities [build failed]
+ok  	nucleus/internal/orchestration/commands	0.065s
+ok  	nucleus/internal/orchestration/genesisrecovery	0.009s
+ok  	nucleus/internal/orchestration/mandatecontract	0.017s
+ok  	nucleus/internal/orchestration/mandateintelligence	0.002s
+ok  	nucleus/internal/orchestration/mandatestate	0.012s
+?   	nucleus/internal/orchestration/queries	[no test files]
+?   	nucleus/internal/orchestration/signals	[no test files]
+ok  	nucleus/internal/orchestration/temporal	0.010s
+?   	nucleus/internal/orchestration/temporal/bootstrap	[no test files]
+ok  	nucleus/internal/orchestration/temporal/workflows	0.056s
+?   	nucleus/internal/orchestration/types	[no test files]
+# nucleus/internal/orchestration/workflows [nucleus/internal/orchestration/workflows.test]
+internal/orchestration/workflows/recovery_flow.go:27:26: undefined: workflow.RetryPolicy
+internal/orchestration/workflows/recovery_flow.go:49:73: invalid method expression activities.SentinelActivities.StopSentinel (needs pointer receiver (*activities.SentinelActivities).StopSentinel)
+internal/orchestration/workflows/recovery_flow.go:67:73: invalid method expression activities.SentinelActivities.LaunchSentinel (needs pointer receiver (*activities.SentinelActivities).LaunchSentinel)
+internal/orchestration/workflows/recovery_flow.go:86:29: undefined: activities.SentinelIntentInput
+internal/orchestration/workflows/recovery_flow.go:92:31: undefined: activities.SentinelIntentResult
+internal/orchestration/workflows/recovery_flow.go:93:73: activities.SentinelActivities.ExecuteSentinelIntent undefined (type activities.SentinelActivities has no field or method ExecuteSentinelIntent)
+ok  	nucleus/internal/orchestration/watchers	3.328s
+FAIL	nucleus/internal/orchestration/workflows [build failed]
+ok  	nucleus/internal/supervisor	0.010s
+?   	nucleus/internal/system	[no test files]
+ok  	nucleus/internal/vault	0.022s
+?   	nucleus/tools/mandate-definition-sign	[no test files]
+?   	nucleus/tools/mandate-v4-sign	[no test files]
+FAIL

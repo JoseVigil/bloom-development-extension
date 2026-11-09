@@ -322,8 +322,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
 ]
 
 datas.extend(

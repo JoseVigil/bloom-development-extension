@@ -26,19 +26,6 @@
   {
     "name": "alfred",
     "path": "nucleus alfred",
-    "use": "alfred start",
-    "short": "Inicia el custodio administrativo y los servidores de autoridad",
-    "category": "GOVERNANCE",
-    "args": [
-      {
-        "name": "start",
-        "required": true
-      }
-    ]
-  },
-  {
-    "name": "alfred",
-    "path": "nucleus alfred",
     "use": "alfred audit",
     "short": "Ejecuta una verificación de integridad manual sobre el sistema de archivos",
     "category": "GOVERNANCE",
@@ -66,6 +53,19 @@
         "name": "json",
         "usage": "Salida en formato JSON (para Conductor u otras herramientas)",
         "default": "false"
+      }
+    ]
+  },
+  {
+    "name": "alfred",
+    "path": "nucleus alfred",
+    "use": "alfred start",
+    "short": "Inicia el custodio administrativo y los servidores de autoridad",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "start",
+        "required": true
       }
     ]
   },
@@ -135,6 +135,15 @@
     ],
     "example": "  nucleus authority decision\n  nucleus --json authority decision",
     "json_response": "{\"schema\":\"bloom.authority.cli-evidence/v1\",\"command\":\"decision\",\"ok\":true,\"evidence\":{\"effective_mode\":\"local_legacy\",\"cutover\":false,\"outcome\":\"not_evaluable\"}}"
+  },
+  {
+    "name": "intent-supply-session",
+    "path": "nucleus authority intent-supply-session",
+    "use": "intent-supply-session",
+    "short": "Serve the authenticated read-only Intelligence Supply session",
+    "category": "GOVERNANCE",
+    "example": "  nucleus --json authority intent-supply-session",
+    "json_response": "{\"schema\":\"bloom.intent-supply-session/v1\",\"request_id\":\"request-123\",\"ok\":false,\"error_code\":\"actor_human_approval_unavailable\"}"
   },
   {
     "name": "observation",
@@ -867,16 +876,38 @@
     "name": "prepare",
     "path": "nucleus mandate offer prepare",
     "use": "prepare",
-    "short": "Preparación (T2) de una oferta instalada: rechazada mientras la definición no la defina",
+    "short": "Prepara una instancia instalada con una nueva definición firmada e insumos elegidos",
     "category": "MANDATES",
     "options": [
       {
+        "name": "definition",
+        "usage": "definition_id de la nueva versión firmada"
+      },
+      {
+        "name": "digest",
+        "usage": "digest exacto ofrecido"
+      },
+      {
+        "name": "input",
+        "usage": "archivo relativo al proyecto (repetible)",
+        "default": "[]"
+      },
+      {
         "name": "mandate-id",
         "usage": "mandateId de la instancia instalada (requerido)"
+      },
+      {
+        "name": "upgrade-prepared",
+        "usage": "transiciona explícitamente la instancia preparada 1.1.0 a 1.2.0 conservando ambos contratos",
+        "default": "false"
+      },
+      {
+        "name": "version",
+        "usage": "versión exacta ofrecida"
       }
     ],
-    "example": "  nucleus mandate offer prepare --mandate-id MANDATE_ID\n  nucleus --json mandate offer prepare --mandate-id MANDATE_ID",
-    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer prepare\",\"ok\":false,\"error\":{\"code\":\"preparation_not_defined\",\"message\":\"mandate definition preparation is not defined: this version can be installed but not prepared\"}}"
+    "example": "  nucleus --json mandate offer prepare --mandate-id MANDATE_ID --definition DEFINITION_ID --version 1.1.0 --digest SHA256_HEX --input README.md",
+    "json_response": "{\"schema\":\"bloom.mandate-offer-cli/v1\",\"command\":\"mandate offer prepare\",\"ok\":true,\"result\":{\"status\":\"prepared\",\"mandateId\":\"MANDATE_ID\",\"contractDigest\":\"SHA256_HEX\",\"sourceFiles\":[\"README.md\"]}}"
   },
   {
     "name": "publish",

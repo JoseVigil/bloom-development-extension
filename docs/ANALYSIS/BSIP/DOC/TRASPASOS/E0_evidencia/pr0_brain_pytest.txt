@@ -1,0 +1,147 @@
+F.................F..........................                            [100%]
+=================================== FAILURES ===================================
+_________________ test_suite_commands_follow_unified_template __________________
+
+    def test_suite_commands_follow_unified_template():
+        failures = []
+        present_names = {path.name for path in COMMAND_FILES}
+        missing_commands = REQUIRED_EFFECT_COMMANDS - present_names
+        if missing_commands:
+            failures.append(f"missing contracted effect commands: {sorted(missing_commands)}")
+        for path in COMMAND_FILES:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            classes = [node for node in tree.body if isinstance(node, ast.ClassDef)]
+            command_classes = [
+                node for node in classes
+                if any(isinstance(base, ast.Name) and base.id == "BaseCommand" for base in node.bases)
+            ]
+            if not command_classes:
+                failures.append(f"{path.name}: no BaseCommand subclass")
+                continue
+            top_core_imports = [
+                node for node in tree.body
+                if isinstance(node, (ast.Import, ast.ImportFrom))
+                and (
+                    (isinstance(node, ast.ImportFrom) and (node.module or "").startswith("brain.core"))
+                    or (isinstance(node, ast.Import) and any(alias.name.startswith("brain.core") for alias in node.names))
+                )
+            ]
+            if top_core_imports:
+                failures.append(f"{path.name}: top-level brain.core import")
+            for cls in command_classes:
+                method_names = {node.name for node in cls.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+                for required in {"metadata", "register", "_handle_error"}:
+                    if required not in method_names:
+                        failures.append(f"{path.name}:{cls.name}: missing {required}")
+            for option in _calls(tree, "Option"):
+                if not any(keyword.arg == "help" for keyword in option.keywords):
+                    failures.append(f"{path.name}:{option.lineno}: typer.Option without help")
+            required_fragments = {
+                "GlobalContext": "GlobalContext fallback",
+                "gc.output(": "dual output",
+                "gc.verbose": "verbose logging",
+                "examples=": "metadata examples",
+            }
+            for fragment, label in required_fragments.items():
+                if fragment not in source:
+                    failures.append(f"{path.name}: missing {label}")
+            if not any(name.startswith("_render") for cls in command_classes for name in {
+                node.name for node in cls.body if isinstance(node, ast.FunctionDef)
+            }):
+                failures.append(f"{path.name}: missing human renderer")
+    
+>       assert not failures, "\n".join(failures)
+E       AssertionError: gen_domain.py:GenDomainCommand: missing _handle_error
+E         gen_domain.py: missing verbose logging
+E       assert not ['gen_domain.py:GenDomainCommand: missing _handle_error', 'gen_domain.py: missing verbose logging']
+
+brain/tests/intent/test_cli_v2_suite.py:87: AssertionError
+________________ test_ing_dis_subprocess_http_crash_and_replay _________________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_ing_dis_subprocess_http_c0')
+
+    def test_ing_dis_subprocess_http_crash_and_replay(tmp_path):
+        lifecycle, _, _ = setup_lifecycle(tmp_path)
+        calls = []
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+    
+            def do_POST(self):
+                assert self.headers['x-api-key'] == 'controlled-test-secret'
+                request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                payload = json.loads(request['messages'][0]['content'])
+                calls.append(payload)
+                if 'inventory' in payload['context']:
+                    response = {'clusters': [cluster()]}
+                else:
+                    domain_id = next(iter(payload['context']['graph_snapshot']['domains']))
+                    response = {'operations': [{'type':'rename_domain',
+                        'proposal':{'domain_id':domain_id,'new_name':'Reviewed knowledge'},
+                        'evidence':{'reason':'Controlled source evidence'},'human_decision':None,'override':None}]}
+                body = json.dumps({'model':request['model'],'stop_reason':'end_turn',
+                    'content':[{'type':'text','text':json.dumps(response)}],
+                    'usage':{'input_tokens':30,'output_tokens':60}}).encode()
+                self.send_response(200)
+                self.send_header('Content-Type','application/json')
+                self.send_header('Content-Length',str(len(body)))
+                self.send_header('request-id','controlled-' + str(len(calls)))
+                self.end_headers()
+                self.wfile.write(body)
+        server = ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        thread = threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        env = {**os.environ, 'CONTROLLED_PROVIDER_URL':f'http://127.0.0.1:{server.server_port}/v1/messages',
+               'AITAP_BOOTSTRAP':AITAP_BOOTSTRAP, 'AITAP_STATE_DIR':str(tmp_path/'aitap-state'),
+               'PYTHONDONTWRITEBYTECODE':'1'}
+        def run(root, operation, crash=False):
+            child = subprocess.run([sys.executable,'-B','-c',BRAIN_WORKER,str(root),str(lifecycle.index),operation],
+                capture_output=True,text=True,encoding='utf-8',env={**env,'CRASH_AFTER_RAW':'1' if crash else '0'},timeout=45)
+            if crash:
+                assert child.returncode == 71, child.stderr
+                return
+            assert child.returncode == 0, child.stderr + child.stdout
+            return json.loads(child.stdout)
+        try:
+>           run(lifecycle.root,'classify',crash=True)
+
+brain/tests/intent/test_ing_dis_supply_e2e.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/tmp/pytest-of-root/pytest-0/test_ing_dis_subprocess_http_c0/ing')
+operation = 'classify', crash = True
+
+    def run(root, operation, crash=False):
+        child = subprocess.run([sys.executable,'-B','-c',BRAIN_WORKER,str(root),str(lifecycle.index),operation],
+            capture_output=True,text=True,encoding='utf-8',env={**env,'CRASH_AFTER_RAW':'1' if crash else '0'},timeout=45)
+        if crash:
+>           assert child.returncode == 71, child.stderr
+E           AssertionError: Traceback (most recent call last):
+E               File "<string>", line 21, in <module>
+E                 value = flow.run()
+E               File "/home/claude/josevigil/bloom-development-extension/brain/core/intent/genesis_intelligence.py", line 128, in run
+E                 self._classify(manager, graph)
+E                 ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+E               File "/home/claude/josevigil/bloom-development-extension/brain/core/intent/genesis_intelligence.py", line 184, in _classify
+E                 request, parsed = self._infer(manager, "classification", directory, turn, context, body)
+E                                   ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               File "/home/claude/josevigil/bloom-development-extension/brain/core/intent/genesis_intelligence.py", line 164, in _infer
+E                 raise error from None
+E               File "/home/claude/josevigil/bloom-development-extension/brain/core/intent/genesis_intelligence.py", line 156, in _infer
+E                 result = self.client.obtain(directory, request)
+E               File "<string>", line 9, in obtain
+E                 result = original(directory, request)
+E               File "/home/claude/josevigil/bloom-development-extension/brain/core/intelligence_supply.py", line 166, in obtain
+E                 raise SupplyError(error.get("code", "INVALID_REQUEST"), error.get("stage", "aitap"),
+E                                   safe_aitap_error_message(error))
+E             brain.core.intelligence_supply.SupplyError: VAULT_ACCESS_DENIED [stage=service_identity]
+E             
+E           assert 1 == 71
+E            +  where 1 = CompletedProcess(args=['/tmp/claude-0/-home-claude/6a245cf8-963f-585f-a80b-69510e8d72a5/scratchpad/e0/venv/bin/python'...tap_error_message(error))\nbrain.core.intelligence_supply.SupplyError: VAULT_ACCESS_DENIED [stage=service_identity]\n').returncode
+
+brain/tests/intent/test_ing_dis_supply_e2e.py:95: AssertionError
+=========================== short test summary info ============================
+FAILED brain/tests/intent/test_cli_v2_suite.py::test_suite_commands_follow_unified_template
+FAILED brain/tests/intent/test_ing_dis_supply_e2e.py::test_ing_dis_subprocess_http_crash_and_replay
+2 failed, 43 passed in 1.10s
