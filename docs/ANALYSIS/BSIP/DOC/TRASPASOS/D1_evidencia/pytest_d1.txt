@@ -1,0 +1,59 @@
+Commit base: 520445022f089b1f506e95c9e340add0e124841e
+Fecha UTC: 2026-11-10T13:18:29Z
+Python: Python 3.13.18
+PYTHONPATH=<repo>:<repo>/installer/aitap/src
+
+$ python -m pytest brain/tests/intent/test_doc_d1.py -v -p no:warnings
+============================= test session starts ==============================
+platform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0 -- /tmp/claude-0/-home-claude/6894b6a9-cb14-5023-bb96-bae4fd887272/scratchpad/venv/bin/python
+cachedir: .pytest_cache
+rootdir: <repo>/brain
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5
+collecting ... collected 16 items
+
+brain/tests/intent/test_doc_d1.py::test_gate_a_manual_run_leaves_draft_with_contract PASSED [  6%]
+brain/tests/intent/test_doc_d1.py::test_gate_b_second_run_without_changes_is_empty PASSED [ 12%]
+brain/tests/intent/test_doc_d1.py::test_gate_c_change_attributed_to_trigger_is_detected_and_written PASSED [ 18%]
+brain/tests/intent/test_doc_d1.py::test_external_change_is_anomaly_not_sanitized PASSED [ 25%]
+brain/tests/intent/test_doc_d1.py::test_document_edited_outside_system_is_anomaly PASSED [ 31%]
+brain/tests/intent/test_doc_d1.py::test_gate_d_domain_and_gene_are_declared_not_verified[domain] PASSED [ 37%]
+brain/tests/intent/test_doc_d1.py::test_gate_d_domain_and_gene_are_declared_not_verified[gene] PASSED [ 43%]
+brain/tests/intent/test_doc_d1.py::test_domain_scope_requires_declared_ref PASSED [ 50%]
+brain/tests/intent/test_doc_d1.py::test_response_outside_pending_documents_is_rejected PASSED [ 56%]
+brain/tests/intent/test_doc_d1.py::test_inputs_changed_after_comparison_block_contract PASSED [ 62%]
+brain/tests/intent/test_doc_d1.py::test_tampered_draft_blocks_finalize PASSED [ 68%]
+brain/tests/intent/test_doc_d1.py::test_doc_cannot_trigger_doc_and_unfinished_dev_cannot_trigger PASSED [ 75%]
+brain/tests/intent/test_doc_d1.py::test_download_rejects_dev_stages_for_doc PASSED [ 81%]
+brain/tests/intent/test_doc_d1.py::test_download_command_imports_its_manager PASSED [ 87%]
+brain/tests/intent/test_doc_d1.py::test_plan_refuses_doc PASSED          [ 93%]
+brain/tests/intent/test_doc_d1.py::test_dev_finalize_is_unchanged PASSED [100%]
+
+============================== 16 passed in 0.29s ==============================
+
+$ python -m pytest brain/tests -q -p no:warnings
+        child = subprocess.run([sys.executable,'-B','-c',BRAIN_WORKER,str(root),str(lifecycle.index),operation],
+            capture_output=True,text=True,encoding='utf-8',env={**env,'CRASH_AFTER_RAW':'1' if crash else '0'},timeout=45)
+        if crash:
+>           assert child.returncode == 71, child.stderr
+E           AssertionError: Traceback (most recent call last):
+E               File "<string>", line 21, in <module>
+E                 value = flow.run()
+E               File "<repo>/brain/core/intent/genesis_intelligence.py", line 140, in run
+E                 self._classify(manager, graph)
+E                 ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+E               File "<repo>/brain/core/intent/genesis_intelligence.py", line 197, in _classify
+E                 request, parsed = self._infer(manager, "classification", directory, turn, context, body)
+E                                   ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               File "<repo>/brain/core/intent/genesis_intelligence.py", line 177, in _infer
+E                 raise error from None
+E             brain.core.intelligence_supply.SupplyError: SEMANTIC_PARSE_FAILED
+E             
+E           assert 1 == 71
+E            +  where 1 = CompletedProcess(args=['<venv>/bin/python', '..., line 177, in _infer\n    raise error from None\nbrain.core.intelligence_supply.SupplyError: SEMANTIC_PARSE_FAILED\n').returncode
+
+brain/tests/intent/test_ing_dis_supply_e2e.py:95: AssertionError
+=========================== short test summary info ============================
+FAILED brain/tests/intent/test_cli_v2_suite.py::test_suite_commands_follow_unified_template
+FAILED brain/tests/intent/test_ing_dis_supply_e2e.py::test_ing_dis_subprocess_http_crash_and_replay
+2 failed, 60 passed in 1.43s

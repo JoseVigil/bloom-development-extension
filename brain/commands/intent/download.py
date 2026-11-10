@@ -123,7 +123,7 @@ class DownloadCommand(BaseCommand):
             
             try:
                 # 3. Lazy Import of Core
-                from brain.core.intent.download_manager import DownloadManager
+                from brain.core.download_manager import DownloadManager
                 
                 # 4. Verbose logging
                 if gc.verbose:

@@ -29,6 +29,7 @@ class CreateCommand(BaseCommand):
                 "brain intent create --type dev --name 'Implement dark mode toggle'",
                 "brain intent create --type dev --name 'Fix login auth' --files src/auth.py --files src/login.js",
                 "brain intent create --type doc --name 'Generate API docs' --files docs/raw/endpoints.md",
+                "brain intent create --type doc --name 'Gravity docs' --files src/gravity.go --doc-document docs/gravity.md --trigger-file src/gravity.go",
                 "brain intent create --type dev --name 'Add feature' --nucleus-path /path/to/project --json",
                 "brain intent create --type ing --name 'Ingest legacy docs' --files raw/notes.md --domain-baseline empty",
                 "brain intent create --type dis --name 'Map domain boundaries' --mandate-id MND-042"
@@ -87,6 +88,35 @@ class CreateCommand(BaseCommand):
                     "baseline) or 'existing' (extends an existing one). Ignored "
                     "for other intent types."
                 )
+            ),
+            doc_level: Optional[str] = typer.Option(
+                None,
+                "--doc-level",
+                help=(
+                    "Only --type doc. Scope level: project (default), domain, gene, "
+                    "organization or tenant. Domain and gene are marked "
+                    "'declarado, no verificado'."
+                )
+            ),
+            doc_ref: Optional[str] = typer.Option(
+                None,
+                "--doc-ref",
+                help="Only --type doc. Declared id of the domain or gene in scope."
+            ),
+            doc_documents: Optional[List[str]] = typer.Option(
+                None,
+                "--doc-document",
+                help="Only --type doc. Project-relative document registered in the scope (repeatable)."
+            ),
+            trigger_intent: Optional[str] = typer.Option(
+                None,
+                "--trigger-intent",
+                help="Only --type doc. Intent that triggers this run (in D1, a finalized dev intent)."
+            ),
+            trigger_files: Optional[List[str]] = typer.Option(
+                None,
+                "--trigger-file",
+                help="Only --type doc. Path declared as changed by the triggering intent (repeatable)."
             )
         ):
             """
@@ -161,7 +191,12 @@ class CreateCommand(BaseCommand):
                     initial_files=processed_files if processed_files else None,
                     nucleus_path=nucleus_path,
                     mandate_id=mandate_id,
-                    domain_baseline=domain_baseline
+                    domain_baseline=domain_baseline,
+                    doc_level=doc_level,
+                    doc_ref=doc_ref,
+                    doc_documents=doc_documents,
+                    trigger_intent=trigger_intent,
+                    trigger_files=trigger_files
                 )
                 
                 # 7. Empaquetar resultado

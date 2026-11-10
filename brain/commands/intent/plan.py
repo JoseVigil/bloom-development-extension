@@ -27,7 +27,6 @@ class PlanCommand(BaseCommand):
             description="Generate AI context plan with intelligent file prioritization",
             examples=[
                 "brain intent plan --intent-dir .bloom/.intents/.dev/.uuid/ --description 'Fix compression bug'",
-                "brain intent plan --intent-dir .bloom/.intents/.doc/.uuid/ --description 'Document API' --type doc",
                 "brain intent plan --intent-dir .bloom/.intents/.dev/.uuid/ --description 'Add auth' --json"
             ]
         )
@@ -65,6 +64,15 @@ class PlanCommand(BaseCommand):
             # Validate intent type
             if intent_type not in ["dev", "doc", "seed"]:
                 self._handle_error(gc, f"Invalid intent type: {intent_type}. Use: dev, doc, or seed")
+            if intent_type == "doc":
+                # D1 (P1, form 3): the doc path never calls Gemini directly.
+                # Comparison is mechanical (intent hydrate) and content
+                # arrives by response file (intent download --input-file).
+                self._handle_error(
+                    gc,
+                    "doc does not use plan: run 'brain intent hydrate' (mechanical "
+                    "comparison) and answer the request by file with 'brain intent download --input-file'"
+                )
             
             # Validate intent directory
             intent_path = Path(intent_dir)

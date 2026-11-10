@@ -13,6 +13,8 @@ import socket
 import shutil
 import hashlib
 from brain.core.filesystem.code_compressor import CodeCompressor
+from brain.core.filesystem.files_compressor import FilesCompressor
+from brain.core.intent import doc_run
 from brain.core.intent_state_manager import (
     IntentStateManager,
     IntentStateError,
@@ -76,6 +78,11 @@ class IntentManager:
         mandate_id: Optional[str] = None,
         domain_baseline: Optional[str] = None,
         scope: Optional[Dict[str, Any]] = None,
+        doc_level: Optional[str] = None,
+        doc_ref: Optional[str] = None,
+        doc_documents: Optional[List[str]] = None,
+        trigger_intent: Optional[str] = None,
+        trigger_files: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Create a new intent with complete directory structure.
@@ -99,6 +106,12 @@ class IntentManager:
                 queda None hasta que .classification/ lo determine.
             scope: Solo 'dis'. Override de scope.mode/scope.mandate_ids (DIS §1).
                 Si se omite, usa el default del registro ("nucleus_wide", []).
+            doc_level, doc_ref, doc_documents: Solo 'doc'. Alcance declarado
+                (DJ-1): nivel (project, domain, gene, organization, tenant),
+                id declarado y documentos registrados en el alcance.
+            trigger_intent, trigger_files: Solo 'doc'. Intent que dispara la
+                corrida (en D1, un 'dev' finalizado) y rutas declaradas como
+                cambiadas por él. Sin trigger_intent, la corrida es manual.
             
         Returns:
             Dictionary containing:
@@ -236,6 +249,14 @@ class IntentManager:
             state_data = self._create_initial_state(
                 intent_id, intent_type, name, timestamp, validated_files
             )
+            if intent_type == "doc":
+                # D1: scope and trigger are fields of doc's input (DJ-1, DJ-29).
+                state_data["doc_scope"] = doc_run.build_scope(
+                    doc_level or "project", doc_ref, doc_documents or []
+                )
+                state_data["doc_trigger"] = doc_run.resolve_trigger(
+                    self._intents_base(project_root), trigger_intent, trigger_files or []
+                )
             state_filename = ".dev_state.json" if intent_type == "dev" else ".doc_state.json"
             state_file = intent_path / state_filename
             with open(state_file, "w", encoding="utf-8") as f:
@@ -369,9 +390,14 @@ class IntentManager:
         state_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         if "steps" in state_data:
             state_data["steps"]["hydrate"] = True
+        doc_summary = None
+        if intent_type == "doc" and state_data.get("doc_scope"):
+            doc_summary = self._run_doc_comparison(
+                project_root, intent_path, state_data, files_dir
+            )
         with open(state_file, 'w', encoding="utf-8") as f:
             json.dump(state_data, f, indent=2)
-        return {
+        result = {
             "intent_id": state_data.get("uuid"),
             "status": state_data["status"],
             "briefing_updated": briefing_updated,
@@ -379,6 +405,79 @@ class IntentManager:
                 "total_files": stats["total_files"],
                 "total_size_kb": round(stats["total_size_kb"], 2)
             }
+        }
+        if doc_summary is not None:
+            result["doc_run"] = doc_summary
+        return result
+
+    def _run_doc_comparison(
+        self,
+        project_root: Path,
+        intent_path: Path,
+        state_data: Dict[str, Any],
+        files_dir: Path,
+    ) -> Dict[str, Any]:
+        """
+        D1: docbase plus mechanical comparison. Never calls an intelligence
+        (DJ-34). Writes .doc_run.json and, when content is needed, the request
+        .pipeline/.context/.payload.json for the person who answers by file.
+        """
+        intents_base = self._intents_base(project_root)
+        run = doc_run.compare(project_root, intents_base, intent_path, state_data)
+
+        # Docbase (P3): existing FilesCompressor docbase over the registered
+        # documentation that exists: the baseline draft, else the file in the
+        # Project.
+        doc_sources = []
+        base_docs = {d["path"]: d for d in run["baseline_documents"]}
+        for doc in run["registered_documents"]:
+            candidates = []
+            if doc in base_docs:
+                candidates.append(project_root / base_docs[doc]["draft_ref"])
+            candidates.append(project_root / doc)
+            for candidate in candidates:
+                if candidate.is_file():
+                    doc_sources.append(str(candidate))
+                    break
+        docbase = None
+        if doc_sources:
+            try:
+                compressor = FilesCompressor(mode="docbase")
+                json_path, index_path = compressor.compress_paths(
+                    input_paths=doc_sources, output_dir=str(files_dir)
+                )
+                docbase = {
+                    "docbase": Path(json_path).relative_to(intent_path).as_posix(),
+                    "docbase_index": Path(index_path).relative_to(intent_path).as_posix(),
+                }
+            except ValueError:
+                docbase = None
+        run["docbase"] = docbase
+
+        run_sha = doc_run.write_json(intent_path / doc_run.RUN_FILE, run)
+        state_data["doc_run"] = {"sha256": run_sha, "result": run["result"]}
+        state_data.pop("doc_contract", None)
+
+        request_ref = None
+        if run["result"] == doc_run.RESULT_PENDING:
+            request_path = intent_path / ".pipeline" / f".{doc_run.DOC_STAGE}" / doc_run.REQUEST_FILE
+            doc_run.write_json(request_path, doc_run.request_payload(run))
+            request_ref = request_path.relative_to(intent_path).as_posix()
+            state_data["status"] = doc_run.STATUS_PENDING
+        elif run["result"] == doc_run.RESULT_EMPTY:
+            state_data["status"] = doc_run.STATUS_EMPTY
+        else:
+            state_data["status"] = doc_run.STATUS_ANOMALIES
+
+        return {
+            "result": run["result"],
+            "run_ref": doc_run.RUN_FILE,
+            "run_sha256": run_sha,
+            "to_sanitize": [d["path"] for d in run["to_sanitize"]],
+            "anomalies": len(run["anomalies"]),
+            "verification": run["scope"]["verification"],
+            "request_ref": request_ref,
+            "intelligence_calls": 0,
         }
     
     def _hydrate_bsip_phaseless_act(
@@ -1914,9 +2013,30 @@ class IntentManager:
             raise ValueError(
                 f"Cannot finalize: Intent is locked by {state_data.get('locked_by', 'unknown')}"
             )
+
+        doc_finalize = None
+        if intent_type == "doc":
+            # P5: a verifiable empty-run record, or a draft whose contract
+            # validates with matching files and digests and nothing pending.
+            check = doc_run.verify(project_root, intent_path, state_data)
+            if not check["ok"]:
+                raise ValueError("doc no puede finalizar: " + "; ".join(check["problems"]))
+            run_data = doc_run.read_json(intent_path / doc_run.RUN_FILE)
+            doc_finalize = {
+                "basis": check["basis"],
+                "finalized_at": timestamp,
+                "run_ref": doc_run.RUN_FILE,
+                "run_sha256": state_data["doc_run"]["sha256"],
+                "baseline": run_data.get("baseline"),
+            }
+            if check["basis"] == "contract":
+                doc_finalize["contract_ref"] = doc_run.contract_path(intent_path).relative_to(intent_path).as_posix()
+                doc_finalize["contract_sha256"] = state_data["doc_contract"]["sha256"]
        
         # Marcar como completado
         state_data["status"] = "completed"
+        if doc_finalize is not None:
+            state_data["doc_finalize"] = doc_finalize
         state_data["finalized_at"] = timestamp
         state_data["locked"] = False
 
@@ -1940,6 +2060,7 @@ class IntentManager:
             "name": state_data.get("name", ""),
             "finalized_at": timestamp,
             "files_modified": files_modified,
+            "doc_finalize": doc_finalize,
             "message": f"Intent '{state_data.get('name', 'unknown')}' finalized successfully"
         }
 

@@ -83,6 +83,11 @@ class ValidationManager:
         intent_path, state_data = self._locate_intent()
         intent_uuid = state_data.get("uuid", "")
         intent_name = state_data.get("name", "unknown")
+
+        if state_data.get("type") == "doc":
+            # D1 (P1, form 3): doc is validated mechanically against its
+            # contract. No Gemini call in this path (GAP #5 avoided).
+            return self._validate_doc(intent_path, state_data, verbose)
         
         # 2. Determine stage if not provided
         if not stage_name:
@@ -184,6 +189,34 @@ class ValidationManager:
         
         return report
     
+    def _validate_doc(self, intent_path: Path, state_data: Dict[str, Any], verbose: bool) -> Dict[str, Any]:
+        """Mechanical validation of a doc run: empty-run record or draft contract."""
+        from brain.core.intent import doc_run
+        project_root = self._find_bloom_project()
+        check = doc_run.verify(project_root, intent_path, state_data)
+        report = {
+            "validated_at": datetime.now(timezone.utc).isoformat(),
+            "intent_id": state_data.get("uuid", ""),
+            "intent_name": state_data.get("name", "unknown"),
+            "stage": doc_run.DOC_STAGE,
+            "mode": "doc_mechanical",
+            "basic_validation": {"passed": check["ok"], "problems": check["problems"]},
+            "doc_verification": check,
+            "gemini_analysis": {"skipped": True, "reason": "doc: validación mecánica, sin inteligencia (P1 forma 3)"},
+            "approved": check["ok"],
+            "ready_for_merge": False,
+            "ready_for_finalize": check["ok"],
+        }
+        response_dir = intent_path / ".pipeline" / f".{doc_run.DOC_STAGE}" / ".response"
+        response_dir.mkdir(parents=True, exist_ok=True)
+        report_path = response_dir / ".report.json"
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+        if verbose:
+            print(f"✅ Doc validation report saved: {report_path}")
+        report["report_path"] = str(report_path)
+        return report
+
     def _basic_validation(
         self,
         files: List[Dict[str, Any]],

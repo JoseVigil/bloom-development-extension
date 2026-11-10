@@ -1,0 +1,126 @@
+P0 — Verificación de anclas de código (solo lectura)
+Fecha UTC: 2026-11-10T03:32:14Z
+Máquina: contenedor en la nube (Linux), clon público github.com/JoseVigil/bloom-development-extension
+Commit del clon (git rev-parse HEAD): 520445022f089b1f506e95c9e340add0e124841e
+Mac .git/HEAD: ref: refs/heads/main
+Mac .git/refs/heads/main: 520445022f089b1f506e95c9e340add0e124841e
+Condición previa: IGUALES
+
+=== A1
+$ grep -n '_BSIP_ENGINE_TYPES = \|_BSIP_ENGINE_TYPES and clean_mandate_id' brain/core/intent_manager.py
+32:_BSIP_ENGINE_TYPES = ("ing", "dis")
+137:        if intent_type in _BSIP_ENGINE_TYPES and clean_mandate_id:
+rc=0
+
+=== A2
+$ grep -n 'uuid.uuid3(self.INTENT_NAMESPACE' brain/core/intent_manager.py
+139:        intent_id = str(uuid.uuid3(self.INTENT_NAMESPACE, identity))
+998:            new_intent_id = str(uuid.uuid3(self.INTENT_NAMESPACE, new_name.strip()))
+rc=0
+
+=== A3
+$ grep -n 'def finalize_intent\|_finalize_bsip_intent(intent_path\|state_data\["status"\] = "completed"' brain/core/intent_manager.py
+1865:    def finalize_intent(
+1910:            return self._finalize_bsip_intent(intent_path, state_data, timestamp)
+1919:        state_data["status"] = "completed"
+rc=0
+
+=== A4
+$ grep -n 'pipeline_dir = intent_path / ".pipeline" / ".briefing"' brain/core/intent_manager.py
+2315:        pipeline_dir = intent_path / ".pipeline" / ".briefing"
+rc=0
+
+=== A5
+$ grep -c 'curation' brain/core/intent/staging_manager.py brain/core/intent/merge_manager.py brain/core/intent/validation_manager.py brain/core/intent/response_parser.py
+brain/core/intent/staging_manager.py:0
+brain/core/intent/merge_manager.py:0
+brain/core/intent/validation_manager.py:0
+brain/core/intent/response_parser.py:0
+rc=1
+
+=== A6
+$ grep -n 'analyzing changes for a development intent' brain/core/intent/validation_manager.py
+316:        return f"""You are analyzing changes for a development intent.
+rc=0
+
+=== A7
+$ grep -n 'CodeCompressor(\|def hydrate_intent' brain/core/intent_manager.py
+260:    def hydrate_intent(
+320:            compressor = CodeCompressor(preserve_comments=False)
+rc=0
+
+=== A8
+$ grep -rn 'INTENT_COMPLETE\|INTENT_FAILED' brain/
+brain/core/server/server_event_bus.py:54:            'INTENT_COMPLETE',
+brain/core/server/server_event_bus.py:55:            'INTENT_FAILED',
+rc=0
+
+=== A9
+$ grep -n 'exactly six signed Actions\|"ing", "dis", "doc", "exp", "dev", "exp"\|"ing", "dis", "doc", "exp"}' installer/nucleus/internal/orchestration/mandatecontract/contract.go
+115:		return errors.New("Mandate requires exactly six signed Actions")
+117:	types := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
+208:			!reflect.DeepEqual(c.Fulfillment.RequiredFields, []string{"ing", "dis", "doc", "exp"}) {
+rc=0
+
+=== A10
+$ grep -n 'ExecuteActivity(ctx, "Mandate\|Fulfilled: false' installer/nucleus/internal/orchestration/temporal/workflows/mandate_execution_workflow.go
+193:		if err := workflow.ExecuteActivity(ctx, "MandateIntentActivity", activities.MandateIntentInput{
+212:		if err := workflow.ExecuteActivity(ctx, "MandateINGCompletionActivity", activities.MandateIntentInput{
+225:		if err := workflow.ExecuteActivity(ctx, "MandateDISActivity", activities.MandateIntentInput{
+239:		return MandateExecutionResult{Success: true, Fulfilled: false}, nil
+242:	if err := workflow.ExecuteActivity(ctx, "MandateGenActivity", activities.MandateGenInput{
+rc=0
+
+=== A11
+$ sed -n '1,30p' brain/commands/intent/supply.py
+"""Machine-readable ING and DIS Intelligence Supply boundary."""
+from pathlib import Path
+import json
+
+import typer
+
+from brain.cli.base import BaseCommand, CommandMetadata
+from brain.cli.categories import CommandCategory
+
+
+class SupplyCommand(BaseCommand):
+    def metadata(self):
+        return CommandMetadata(name="supply", category=CommandCategory.INTENT, version="1.0.0",
+            description="Generate ING classification, consolidate human decisions, or propose DIS mapping",
+            examples=["brain --json intent supply --intent-root PATH --semantic-index PATH",
+                      "brain --json intent supply --intent-root PATH --semantic-index PATH --decisions decisions.json"])
+
+    def register(self, app):
+        @app.command(name=self.metadata().name)
+        def execute(ctx: typer.Context,
+                    intent_root: Path = typer.Option(..., "--intent-root", help="Existing ING/DIS intent directory"),
+                    semantic_index: Path = typer.Option(..., "--semantic-index", help="Explicit Nucleus transient index"),
+                    decisions: Path = typer.Option(None, "--decisions", help="Human decisions JSON array, ING only"),
+                    ing_result: Path = typer.Option(None, "--ing-result", help="Completed ING result for DIS"),
+                    policy_version: str = typer.Option("mandate-gen/v1", "--policy-version", help="Approved policy version"),
+                    policy: Path = typer.Option(None, "--policy", help="Signed Mandate routing policy"),
+                    registry: Path = typer.Option(None, "--registry", help="Signed Mandate registry"),
+                    destination: str = typer.Option(None, "--destination", help="Verified W4 destination JSON")):
+            gc = ctx.obj
+            if gc is None:
+rc=0
+
+=== A12
+$ grep -rniw 'mrg' brain/ installer/nucleus/ src/ --include=*.py --include=*.go --include=*.ts
+installer/nucleus/internal/gravity/resolver_test.go:36:		nodes[i].GravityPostures = []GravityPosture{{PostureID: key, AppliesTo: []string{"mrg"}, Status: "active", Origin: []PostureOrigin{OriginNucleus, OriginOrganization, OriginProject, OriginMandateOwn, OriginSession}[i]}}
+installer/nucleus/internal/gravity/resolver_test.go:50:	first, err := store.ResolveActive(ResolveInput{MandateID: "mandate", SessionID: "session", IntentType: "mrg", Turn: 7})
+installer/nucleus/internal/gravity/resolver_test.go:61:	second, err := store.ResolveActive(ResolveInput{MandateID: "mandate", SessionID: "session", IntentType: "mrg", Turn: 8, Cache: first.Cache})
+installer/nucleus/internal/gravity/resolver_test.go:96:	_, err = store.ResolveActive(ResolveInput{MandateID: "mandate", SessionID: "session", IntentType: "mrg", Turn: 1})
+rc=0
+
+=== A13
+$ grep -rn '\.Materialize(' installer/ --include=*.go | grep -v '_test.go'
+rc=1
+
+=== A14
+$ ls brain/core/context_planning/
+enriched_tree_generator.py
+gemini_router.py
+payload_builder.py
+rc=0
+

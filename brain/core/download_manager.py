@@ -373,6 +373,10 @@ class DownloadManager:
         
         # Validate stage value
         valid_stages = ["briefing", "analysis", "implementation", "review"]
+        if self.state_data.get("type") == "doc":
+            # D1 (P1, form 3): a doc intent receives its content response
+            # by file in its own context stage only.
+            valid_stages = ["context"]
         if protocol["pipeline_stage"] not in valid_stages:
             raise ValueError(
                 f"Invalid pipeline_stage: {protocol['pipeline_stage']}. "

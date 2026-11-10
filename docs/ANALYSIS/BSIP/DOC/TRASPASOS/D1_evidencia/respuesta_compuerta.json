@@ -1,0 +1,14 @@
+{
+  "bloom_protocol": {"version": "1.0", "pipeline_stage": "context", "completion_status": "complete"},
+  "metadata": {"model": "persona"},
+  "content": {
+    "files": [
+      {
+        "file_ref": "001_structural_projection.md",
+        "path": "docs/gravity/structural_projection.md",
+        "action": "update",
+        "_bloom_content": "# Proyección estructural de Gravity\n\nBorrador de la compuerta D1.\n"
+      }
+    ]
+  }
+}

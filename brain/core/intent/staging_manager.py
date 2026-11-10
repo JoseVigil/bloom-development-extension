@@ -125,6 +125,13 @@ class StagingManager:
                 f"No files metadata found in .raw_output.json. "
                 f"The AI response may not contain file operations."
             )
+
+        is_doc = self.state_data.get("type") == "doc"
+        if is_doc:
+            # D1: a doc response may only write documents pending sanitation
+            # in this run (P48/P34). Checked before copying anything.
+            from brain.core.intent import doc_run
+            doc_run.check_response_targets(self.intent_path, self.state_data, files_meta)
         
         if verbose or dry_run:
             print(f"📦 Staging {len(files_meta)} file(s)...")
@@ -208,6 +215,10 @@ class StagingManager:
         if verbose and not dry_run:
             print(f"\n✅ Staged {len(staged_files)} file(s)")
             print(f"✅ Manifest: {manifest_path}")
+
+        doc_contract = None
+        if is_doc and not dry_run:
+            doc_contract = self._write_doc_contract(response_dir, staging_dir, response_data)
         
         # 8. Return structured result
         return {
@@ -220,7 +231,31 @@ class StagingManager:
             "manifest_path": str(manifest_path) if manifest_path else None,
             "total_size_bytes": manifest["total_size_bytes"],
             "dry_run": dry_run,
-            "overwrite": overwrite
+            "overwrite": overwrite,
+            "doc_contract": doc_contract
+        }
+
+    def _write_doc_contract(self, response_dir: Path, staging_dir: Path, response_data: dict) -> Dict[str, Any]:
+        """D1: build .doc_contract.json next to the staged draft (P4, P5)."""
+        from brain.core.intent import doc_run
+        contract = doc_run.build_contract(
+            self.nucleus_path, self.intent_path, self.state_data,
+            response_dir, staging_dir, response_data,
+        )
+        contract_sha = doc_run.write_json(staging_dir / doc_run.CONTRACT_FILE, contract)
+        self.state_data["doc_contract"] = {"sha256": contract_sha, "pending": contract["pending"]}
+        self.state_data["status"] = (
+            doc_run.STATUS_PENDING if contract["pending"] else doc_run.STATUS_DRAFT
+        )
+        self.state_data["updated_at"] = doc_run.now_iso()
+        state_file = self.intent_path / ".doc_state.json"
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(self.state_data, f, indent=2, ensure_ascii=False)
+        return {
+            "contract_ref": (staging_dir / doc_run.CONTRACT_FILE).relative_to(self.intent_path).as_posix(),
+            "contract_sha256": contract_sha,
+            "pending": contract["pending"],
+            "status": self.state_data["status"],
         }
     
     def _find_bloom_project(self, start_path: Optional[Path] = None) -> Path:
@@ -351,6 +386,17 @@ class StagingManager:
                 f"Pipeline directory not found: {pipeline_dir}"
             )
         
+        if self.state_data and self.state_data.get("type") == "doc":
+            # doc phases are context -> curation (DOC spec §2, GAP #4).
+            # D1 receives the content response in the context stage only.
+            response_dir = pipeline_dir / ".context" / ".response"
+            if response_dir.is_dir():
+                return "context"
+            raise FileNotFoundError(
+                f"No .context/.response/ found in {pipeline_dir}. "
+                f"Run 'brain intent download' first."
+            )
+
         # Check stages in order: briefing -> execution -> refinement_X
         stages_to_check = [".briefing", ".execution"]
         
