@@ -1,6 +1,6 @@
 # Encargo — Intent `doc` de actualización viva sobre Project, Domain y Gene
 
-**Estado:** encargo guardado con las respuestas de José del 2026-11-09. **No autoriza implementación:** quedan abiertas P1 (forma), P48, P34 y P49.
+**Estado:** encargo guardado con las respuestas de José del 2026-11-09, más la corrección de DJ-36 y DJ-37 del mismo día. **No autoriza implementación:** quedan abiertas P1 (forma), P48, P34, P49 y P50.
 **Fecha:** 2026-11-09 (borrador del 2026-11-08)
 **Autoridad:** José Vigil
 **Reemplaza, como documento activo:** `Programa_Documentacion_Plan_Ejecucion_v0_1.md` y `v0_2.md`, y `Programa_Documentacion_Encargo_Brain_Tramo1_v0_1.md` y `v0_2.md`. Esos cuatro pasan a `docs/ANALYSIS/BSIP/DOC/HISTORICO/` y a `ANALYSIS/BSIP/DOC/HISTORICO/` en el Project. No se borra nada.
@@ -67,6 +67,16 @@ Este texto dice "cada intent". La regla operativa es DJ-29: disparan `dev`, `ing
 
 **DJ-35. No se toca el contrato firmado ni se vuelve a probar** hasta que esté fijado el recorrido esperado de `doc` (§12) (José, 2026-11-09).
 
+**DJ-36. Fallo del `doc`** (José, 2026-11-09). Corrige el texto de §1 y completa DJ-19:
+- Si el intent mutador terminó bien y falla su `doc`, el `doc` se reanuda.
+- El intent mutador no se repite automáticamente, porque eso podría duplicar sus efectos.
+- El intent siguiente espera hasta que el `doc` termine.
+- Si el mutador falla o se cancela, no se dispara `doc`.
+
+**DJ-37. Contrato firmado** (José, 2026-11-09):
+- Este encargo cambia el contrato funcional respecto del 1.2.0 firmado, que contiene un solo `doc`, después de `dis`.
+- José no va a editar el 1.2.0 ni a iniciar otra corrida con el grafo viejo.
+
 ### 2.2 Anteriores que siguen vigentes
 
 | # | Decisión |
@@ -79,7 +89,7 @@ Este texto dice "cada intent". La regla operativa es DJ-29: disparan `dev`, `ing
 | DJ-13 | La identidad de cada documento la da un registro gobernado aparte. El digest es evidencia de integridad, no identidad |
 | DJ-16 | Los movimientos de documentos los hace el sistema. Un movimiento hecho fuera del sistema es una anomalía pendiente de declaración y nunca se resuelve por parecido |
 | DJ-18, DJ-24 | Un `doc` no dispara otro |
-| DJ-19 | Si un intent falla o se cancela, no corre su `doc` |
+| DJ-19 | Si un intent falla o se cancela, no corre su `doc`. Lo completa DJ-36 para el caso en que falla el `doc` |
 | DJ-20 | Dentro de un Mandate, el intent siguiente espera a que termine el `doc` |
 | DJ-22 | Si algún día los intents corren en paralelo, Impact verifica las colisiones entre documentaciones |
 | DJ-26 | La forma del `doc` en el contrato del Mandate (P35) la responde MANDATE |
@@ -127,6 +137,16 @@ Se muestran las dos versiones. Las que necesitan respuesta de José están marca
    - DJ-30: una corrida vacía es barata.
    - Código: el pipeline de hoy llama a Gemini en `plan` antes de saber si hay algo que hacer (`context_planning/gemini_router.py`).
    - Para que la corrida vacía sea barata, la comparación tiene que ocurrir antes de cualquier llamada de inteligencia. Es una consecuencia de DJ-30; **José confirma.**
+
+8. **El fallo del `doc` en el texto de §1.**
+   - §1 dice: "si un intent falla o se cancela, no corre su doc y el intent se vuelve a correr hasta que termina".
+   - DJ-36 lo corrige: si el que falla es el `doc`, se reanuda el `doc` y no se repite el mutador.
+   - Las dos reglas se complementan: la de §1 vale para el fallo del mutador y DJ-36 para el fallo del `doc`.
+
+9. **Nombre del contrato firmado.**
+   - José: "el 1.2.0 firmado".
+   - Los documentos del programa lo llaman "v4", por el validador `mandatecontract` (`contract.go:90-99`: seis Actions `ing, dis, doc, exp, dev, exp`).
+   - Se toma que nombran el mismo contrato: uno es la versión de la definición firmada y el otro, la del esquema que la valida. No se verificó en la definición publicada (estado operativo, no leído). **José confirma.**
 
 7. **`mrg` y GAP #M1.**
    - José: "mrg está especificado y no implementado (GAP #M1)".
@@ -236,7 +256,7 @@ Ninguna etapa arranca si la compuerta anterior no pasó. Las compuertas corren e
 - **Compuerta:** `merged` y `aborted` producen cada uno exactamente un `doc`.
 
 **D6. `doc` dentro del Mandate (MANDATE).**
-- **Entrada:** D3 pasada; respuesta a R-M1; P35, P36, P39 y P40.
+- **Entrada:** D3 pasada; respuesta a R-M1; P35, P36, P39, P40 y P50. Por DJ-37, la prueba no usa el contrato 1.2.0 ni su grafo: necesita la versión nueva que surja de R-M1.
 - **Compuerta:**
   - (a) En Windows, un Mandate de prueba espera el `doc` antes del intent siguiente (DJ-20).
   - (b) Los Mandates v4 ya firmados siguen validando.
@@ -257,6 +277,7 @@ D4 y D5 dependen de otros dueños. Pueden avanzar en cualquier orden después de
 | PD-D | Cómo llega un cambio de código a una Gene Revision, si `dev` no toca `.genes/` | Genes |
 | P41 | Cambios que no vienen de un intent (DJ-32) | José |
 | P48 | Qué es "el stack", y si P34/DJ-23 sigue vigente (§3.2). Bloquea D1 | José |
+| P50 | "Reanudar" el `doc` (DJ-36). ¿Desde el paso donde falló, o volviendo a correrlo entero? Por DJ-30 una corrida entera no duplica efectos. ¿Lo reanuda el sistema o una persona? Bloquea el paso 11' del recorrido | José |
 | P1-forma | Cuál de las cuatro formas de §3.5 resuelve el choque entre P1 y el disparo automático. Bloquea D1 | José |
 | P49 | Cómo se entera Nucleus del estado terminal de un intent que corre en Brain (§3.3). Bloquea D3 | José; dueños de la pieza: Nucleus y Brain |
 | P1, P3, P4, P5, P10 | Canal de inteligencia, formato del insumo, nombres de archivo, precondición de `finalize`, motor de estado | José |
@@ -316,8 +337,8 @@ Es el recorrido que tiene que cumplir cada corrida. Se fija antes de tocar el co
 | 9 | Salida | Borrador con contrato: ruta portable, digest, intent que lo disparó, nivel y marca de verificación ("declarado, no verificado" en Domain y Gene), insumos con digests, modelo si se conoce | DJ-2, DJ-33, §5.8 |
 | 10 | Cierre | `finalize` exige su precondición | **Abierto: P5** |
 | 11 | Dentro de un Mandate | El intent siguiente arranca recién cuando el `doc` terminó | DJ-20. Forma en el contrato: P35 (MANDATE) |
-| 11' | El `doc` falla | **LAGUNA.** La política dice qué pasa si falla el intent, no si falla su `doc`. Dueño: José; dentro del Mandate, también MANDATE (pedido R-M1, pregunta 4) | — |
+| 11' | El `doc` falla | El `doc` se reanuda; el intent mutador no se repite. El intent siguiente espera hasta que el `doc` termine. **Abierto (P50):** qué significa "reanudar" y quién lo hace | DJ-36 |
 | 12 | Otro `doc` | No se lanza ninguno como consecuencia de este | DJ-18, DJ-24 |
 
-**Pasos abiertos que impiden dar el recorrido por fijado:** 2 (P49), 4 (P48 y P34), 7 y 8 (P1 y P1-forma), 10 (P5) y 11' (el fallo de `doc`). Mientras sigan abiertos, rige DJ-35: no se toca el contrato firmado ni se vuelve a probar.
+**Pasos abiertos que impiden dar el recorrido por fijado:** 2 (P49), 4 (P48 y P34), 7 y 8 (P1 y P1-forma), 10 (P5) y 11' (P50). Mientras sigan abiertos, rige DJ-35: no se toca el contrato firmado ni se vuelve a probar.
 
