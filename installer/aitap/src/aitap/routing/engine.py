@@ -90,6 +90,10 @@ class RoutingEngine:
         routes = []
         for backend_id in dict.fromkeys([rule.get("backend_id"), *rule.get("fallback", [])]):
             backend = backends.get(backend_id)
+            selected = request["routing"].get("destination")
+            if selected and (backend is None or any(backend.get(field) != selected[field]
+                                                    for field in ("backend_id", "provider", "model"))):
+                continue
             if not backend or backend.get("supply_enabled") is not True:
                 continue
             if backend["health"] == "unavailable":

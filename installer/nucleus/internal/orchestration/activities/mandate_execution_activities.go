@@ -169,6 +169,74 @@ func PersistAdoptedINGCompletionActivity(ctx context.Context, input MandateINGCo
 	return PersistExecutionResultResult{StateVersion: version}, nil
 }
 
+// PersistAdoptedDISProposalActivity records the mapping proposal while keeping
+// DIS open for human ratification. A replay cannot replace its evidence.
+func PersistAdoptedDISProposalActivity(ctx context.Context, input MandateDISResult, mandatesRoot string) (PersistExecutionResultResult, error) {
+	if ctx == nil || ctx.Err() != nil || mandatesRoot == "" || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID ||
+		input.ActionID == "" || input.ContractDigest == "" || input.IntentID == "" || input.INGIntentID == "" ||
+		input.INGResultRef == "" || input.INGResultDigest == "" || input.ProposalRef == "" || input.ProposalDigest == "" ||
+		input.Status != "awaiting_human_decision" {
+		return PersistExecutionResultResult{}, fmt.Errorf("DIS proposal evidence incomplete")
+	}
+	nucleusRoot := filepath.Dir(filepath.Clean(mandatesRoot))
+	if !pathWithin(filepath.Join(nucleusRoot, ".intents", ".dis"), input.ProposalRef) ||
+		!pathWithin(filepath.Join(nucleusRoot, ".intents", ".ing"), input.INGResultRef) {
+		return PersistExecutionResultResult{}, fmt.Errorf("DIS or ING evidence outside Intent storage")
+	}
+	for _, evidence := range []struct{ ref, digest string }{{input.ProposalRef, input.ProposalDigest}, {input.INGResultRef, input.INGResultDigest}} {
+		content, err := os.ReadFile(evidence.ref)
+		if err != nil {
+			return PersistExecutionResultResult{}, err
+		}
+		sum := sha256.Sum256(content)
+		if hex.EncodeToString(sum[:]) != evidence.digest {
+			return PersistExecutionResultResult{}, fmt.Errorf("DIS evidence changed")
+		}
+	}
+	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		adoption, _ := state["adoption"].(map[string]interface{})
+		actions, _ := state["actions"].(map[string]interface{})
+		if state["mandateId"] != input.MandateID || adoption == nil || adoption["contractDigest"] != input.ContractDigest ||
+			actions == nil || state["currentAction"] != input.ActionID {
+			return false, fmt.Errorf("DIS journal identity or action mismatch")
+		}
+		var ing map[string]interface{}
+		for _, value := range actions {
+			candidate, _ := value.(map[string]interface{})
+			if candidate != nil && candidate["intentId"] == input.INGIntentID && candidate["status"] == "completed" {
+				ing = candidate
+			}
+		}
+		if ing == nil || ing["resultRef"] != input.INGResultRef || ing["resultSha256"] != input.INGResultDigest {
+			return false, fmt.Errorf("DIS predecessor ING mismatch")
+		}
+		prior, _ := actions[input.ActionID].(map[string]interface{})
+		if prior == nil {
+			return false, fmt.Errorf("DIS Action missing")
+		}
+		record := map[string]interface{}{"intentId": input.IntentID, "status": input.Status,
+			"proposalRef": input.ProposalRef, "proposalSha256": input.ProposalDigest,
+			"ingIntentId": input.INGIntentID, "ingResultRef": input.INGResultRef, "ingResultSha256": input.INGResultDigest}
+		if prior["status"] == input.Status {
+			if reflect.DeepEqual(prior, record) {
+				return false, nil
+			}
+			return false, fmt.Errorf("DIS proposal conflicts with prior evidence")
+		}
+		if prior["status"] != "pending" {
+			return false, fmt.Errorf("DIS is not pending")
+		}
+		actions[input.ActionID] = record
+		state["status"] = "waiting_human"
+		return true, nil
+	})
+	if err != nil {
+		return PersistExecutionResultResult{}, err
+	}
+	return PersistExecutionResultResult{StateVersion: version}, nil
+}
+
 func executionResultKey(input PersistExecutionResultInput) string {
 	if input.ActionID != "" {
 		return input.ActionID

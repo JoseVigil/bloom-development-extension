@@ -157,6 +157,14 @@ func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIn
 	if err := verifySignedINGResources(envelope.Contract); err != nil {
 		return result, err
 	}
+	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID, envelope.ContractDigest, envelope.Contract.Actions[0].ActionID)
+	if err != nil {
+		return result, fmt.Errorf("confirmed W4 selection required: %w", err)
+	}
+	selectionRaw, err := json.Marshal(selection)
+	if err != nil {
+		return result, err
+	}
 	decisionsFile, err := os.CreateTemp(intentRoot, ".mandate-decisions-*.json")
 	if err != nil {
 		return result, err
@@ -174,7 +182,9 @@ func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIn
 		return result, err
 	}
 	brain, err := runBrainIntentJSONWithRunner(a.BrainPath, []string{"--json", "intent", "supply", "--intent-root", intentRoot,
-		"--semantic-index", filepath.Join(nucleusRoot, ".cache", ".semantic-index.json"), "--policy-version", envelope.Contract.Intelligence.PolicyVersion, "--decisions", decisionsFile.Name()},
+		"--semantic-index", filepath.Join(nucleusRoot, ".cache", ".semantic-index.json"), "--policy-version", envelope.Contract.Intelligence.PolicyVersion,
+		"--policy", envelope.Contract.Intelligence.PolicyRef, "--registry", envelope.Contract.Intelligence.RegistryRef,
+		"--destination", string(selectionRaw), "--decisions", decisionsFile.Name()},
 		func(path string, argv []string) ([]byte, []byte, int, error) {
 			cmd := exec.CommandContext(ctx, path, argv...)
 			var stdout, stderr bytes.Buffer
@@ -331,6 +341,14 @@ func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInpu
 	if err := verifySignedINGResources(envelope.Contract); err != nil {
 		return MandateIntentResult{}, err
 	}
+	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID, envelope.ContractDigest, envelope.Contract.Actions[0].ActionID)
+	if err != nil {
+		return MandateIntentResult{}, fmt.Errorf("confirmed W4 selection required: %w", err)
+	}
+	selectionRaw, err := json.Marshal(selection)
+	if err != nil {
+		return MandateIntentResult{}, err
+	}
 	var journal struct {
 		Adoption struct {
 			ContractDigest string `json:"contractDigest"`
@@ -394,7 +412,9 @@ func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInpu
 		}
 	}
 	supply, err := runBrain([]string{"--json", "intent", "supply", "--intent-root", intentRoot,
-		"--semantic-index", filepath.Join(nucleusRoot, ".cache", ".semantic-index.json"), "--policy-version", envelope.Contract.Intelligence.PolicyVersion})
+		"--semantic-index", filepath.Join(nucleusRoot, ".cache", ".semantic-index.json"), "--policy-version", envelope.Contract.Intelligence.PolicyVersion,
+		"--policy", envelope.Contract.Intelligence.PolicyRef, "--registry", envelope.Contract.Intelligence.RegistryRef,
+		"--destination", string(selectionRaw)})
 	if err != nil {
 		return MandateIntentResult{}, err
 	}

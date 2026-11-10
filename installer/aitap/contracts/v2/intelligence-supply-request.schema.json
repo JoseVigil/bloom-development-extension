@@ -86,6 +86,15 @@
             "approved_cloud",
             "local"
           ]
+        },
+        "destination": {
+          "type": "object", "additionalProperties": false,
+          "required": ["backend_id", "provider", "model"],
+          "properties": {
+            "backend_id": {"type": "string", "minLength": 1},
+            "provider": {"type": "string", "minLength": 1},
+            "model": {"type": "string", "minLength": 1}
+          }
         }
       },
       "required": [

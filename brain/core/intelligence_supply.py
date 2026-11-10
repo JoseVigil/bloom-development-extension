@@ -121,18 +121,21 @@ def locked(path):
                 fcntl.flock(stream, fcntl.LOCK_UN)
 
 
-def make_request(state, phase, turn, payload, policy_version, *, privacy="approved_cloud"):
+def make_request(state, phase, turn, payload, policy_version, *, privacy="approved_cloud", destination=None):
     if privacy not in ("approved_cloud", "local"):
         raise SupplyError("INVALID_REQUEST", "routing", "Unsupported privacy ceiling")
     input_digest = digest(payload)
     logical = digest([state["intent_id"], phase, str(turn), input_digest, policy_version])
-    return {"schema_version": "cognituum.intelligence-supply/v1",
+    request = {"schema_version": "cognituum.intelligence-supply/v1",
         "request_id": "isr-" + logical[7:39], "logical_inference_id": logical, "consumer_id": "brain",
         "intent": {"intent_id": state["intent_id"], "intent_type": state["intent_type"],
                    "mandate_id": state["mandate_id"], "phase": phase, "turn_id": str(turn)},
         "input_digest": input_digest, "payload": payload,
         "routing": {"mode": "policy", "policy_version": policy_version,
                     "required_capabilities": ["text.generate", "structured_output"], "privacy": privacy}}
+    if destination is not None:
+        request["routing"]["destination"] = destination
+    return request
 
 
 class IntelligenceSupplyClient:
@@ -142,6 +145,9 @@ class IntelligenceSupplyClient:
 
     def obtain(self, directory, request, *, policy=None, registry=None):
         directory = Path(directory)
+        existing_request = directory / ".request.json"
+        if existing_request.exists() and read_json(existing_request) != request:
+            raise SupplyError("STATE_CONFLICT", "persist", "Existing turn uses a different intelligence selection")
         persist(directory / ".request.json", request)
         result_path = directory / ".supply_result.json"
         if result_path.exists():
@@ -182,6 +188,9 @@ class IntelligenceSupplyClient:
                     or result["routing_decision"]["policy_version"] != request["routing"]["policy_version"]
                     or result["provider"] != result["routing_decision"]["effective_intelligence"]["provider"]
                     or result["model"] != result["routing_decision"]["effective_intelligence"]["model"]
+                    or (request["routing"].get("destination") is not None and any(
+                        result["routing_decision"]["effective_intelligence"].get(key) != value
+                        for key, value in request["routing"]["destination"].items()))
                     or type(result["latency_ms"]) is not int or result["latency_ms"] < 0):
                 raise ValueError()
             for key in ("input_tokens", "output_tokens"):

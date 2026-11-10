@@ -27,6 +27,20 @@ def test_local_gen_request_preserves_privacy_and_identity():
         make_request(state, "generation", "1", {}, "mandate-gen-local/v1", privacy="any")
 
 
+def test_w4_destination_is_in_request_and_cannot_change_on_replay(tmp_path):
+    state = {"intent_id": "i", "intent_type": "ing", "mandate_id": "m"}
+    destination = {"backend_id": "b", "provider": "p", "model": "x"}
+    request = make_request(state, "classification", 1, {}, "v", destination=destination)
+    assert request["routing"]["destination"] == destination
+    directory = tmp_path / "turn"
+    directory.mkdir()
+    (directory / ".request.json").write_text(json.dumps(request), encoding="utf-8")
+    changed = make_request(state, "classification", 1, {}, "v",
+                           destination={**destination, "model": "y"})
+    with pytest.raises(SupplyError, match="different intelligence selection"):
+        IntelligenceSupplyClient().obtain(directory, changed)
+
+
 def test_genesis_classification_defaults_to_mandate_gemini_policy(tmp_path):
     lifecycle = GenesisIntelligence(tmp_path / "intent", tmp_path / ".semantic-index.json")
     assert lifecycle.policy_version == "mandate-gen/v1"

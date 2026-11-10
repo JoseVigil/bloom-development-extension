@@ -56,6 +56,66 @@ func TestAdoptedINGCompletionIsIdempotentAndLeavesDISPending(t *testing.T) {
 	}
 }
 
+func TestAdoptedDISProposalIsDurableAndDoesNotCompleteDIS(t *testing.T) {
+	base := t.TempDir()
+	mandates := filepath.Join(base, ".mandates")
+	mandateDir := filepath.Join(mandates, "mandate-1")
+	ingDir := filepath.Join(base, ".intents", ".ing", "ing-1")
+	disDir := filepath.Join(base, ".intents", ".dis", "dis-1")
+	for _, dir := range []string{mandateDir, ingDir, disDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ingRef := filepath.Join(ingDir, "ing_result.json")
+	proposalRef := filepath.Join(disDir, "mapping_proposal.json")
+	ingBytes := []byte(`{"status":"done"}`)
+	proposalBytes := []byte(`{"schema_version":"bloom.dis-mapping/v1"}`)
+	if err := os.WriteFile(ingRef, ingBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(proposalRef, proposalBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	ingHash, proposalHash := sha256.Sum256(ingBytes), sha256.Sum256(proposalBytes)
+	ingDigest, proposalDigest := hex.EncodeToString(ingHash[:]), hex.EncodeToString(proposalHash[:])
+	state := map[string]any{"mandateId": "mandate-1", "stateVersion": 1, "currentAction": "dis-2",
+		"adoption": map[string]any{"contractDigest": "contract-1"},
+		"actions": map[string]any{"ing-1": map[string]any{"intentId": "ing-intent", "status": "completed", "resultRef": ingRef, "resultSha256": ingDigest},
+			"dis-2": map[string]any{"status": "pending", "dependsOn": "ing-1"}}}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(mandateDir, "mandate_state.json")
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := MandateDISResult{MandateID: "mandate-1", ActionID: "dis-2", ContractDigest: "contract-1", IntentID: "dis-intent",
+		INGIntentID: "ing-intent", INGResultRef: ingRef, INGResultDigest: ingDigest,
+		ProposalRef: proposalRef, ProposalDigest: proposalDigest, Status: "awaiting_human_decision"}
+	for range 2 {
+		if _, err := PersistAdoptedDISProposalActivity(context.Background(), input, mandates); err != nil {
+			t.Fatal(err)
+		}
+	}
+	finalRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var final map[string]any
+	if json.Unmarshal(finalRaw, &final) != nil {
+		t.Fatal("invalid journal")
+	}
+	if final["stateVersion"] != float64(2) || final["status"] != "waiting_human" || final["currentAction"] != "dis-2" {
+		t.Fatalf("DIS journal advanced incorrectly: %s", finalRaw)
+	}
+	actions := final["actions"].(map[string]any)
+	if actions["dis-2"].(map[string]any)["status"] != "awaiting_human_decision" {
+		t.Fatalf("DIS proposal was marked completed: %s", finalRaw)
+	}
+}
+
 func TestAdoptedINGRejectsInvalidEvidenceWithoutUpdatingJournal(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "mandate-1")
@@ -109,6 +169,34 @@ func TestAdoptedINGReconcilesExistingIntentWithoutCreatingAnother(t *testing.T) 
 	}
 	if _, _, err := findAdoptedING(root, "mandate-1"); err == nil {
 		t.Fatal("duplicate Intent accepted")
+	}
+}
+
+func TestAdoptedDISReconcilesOneIntentAndRejectsDuplicates(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".intents", ".dis", ".project-existing")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	state := []byte(`{"mandate_id":"mandate-1","intent_id":"dis-intent"}`)
+	if err := os.WriteFile(filepath.Join(dir, ".dis_state.json"), state, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		foundRoot, foundID, err := findAdoptedDIS(root, "mandate-1")
+		if err != nil || foundRoot != dir || foundID != "dis-intent" {
+			t.Fatalf("DIS retry: %s %s %v", foundRoot, foundID, err)
+		}
+	}
+	other := filepath.Join(root, ".intents", ".dis", ".project-duplicate")
+	if err := os.MkdirAll(other, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, ".dis_state.json"), state, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := findAdoptedDIS(root, "mandate-1"); err == nil {
+		t.Fatal("duplicate DIS Intent accepted")
 	}
 }
 

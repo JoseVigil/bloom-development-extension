@@ -221,6 +221,21 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGCompletionActivity, completed, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
+		var dis activities.MandateDISResult
+		if err := workflow.ExecuteActivity(ctx, "MandateDISActivity", activities.MandateIntentInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+		}).Get(ctx, &dis); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		if dis.MandateID != input.MandateID || dis.ActionID != completed.NextActionID ||
+			dis.ContractDigest != completed.ContractDigest || dis.INGIntentID != completed.IntentID ||
+			dis.INGResultRef != completed.ResultRef || dis.INGResultDigest != completed.ResultDigest ||
+			dis.IntentID == "" || dis.ProposalRef == "" || dis.ProposalDigest == "" || dis.Status != "awaiting_human_decision" {
+			return MandateExecutionResult{Success: false, Error: "DIS returned incomplete or unbound proposal"}, nil
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedDISProposalActivity, dis, input.MandatesRoot).Get(ctx, nil); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
 		return MandateExecutionResult{Success: true, Fulfilled: false}, nil
 	}
 	var genResult activities.MandateGenResult

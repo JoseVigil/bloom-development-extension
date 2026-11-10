@@ -1,5 +1,6 @@
 """Machine-readable ING and DIS Intelligence Supply boundary."""
 from pathlib import Path
+import json
 
 import typer
 
@@ -21,7 +22,10 @@ class SupplyCommand(BaseCommand):
                     semantic_index: Path = typer.Option(..., "--semantic-index", help="Explicit Nucleus transient index"),
                     decisions: Path = typer.Option(None, "--decisions", help="Human decisions JSON array, ING only"),
                     ing_result: Path = typer.Option(None, "--ing-result", help="Completed ING result for DIS"),
-                    policy_version: str = typer.Option("mandate-gen/v1", "--policy-version", help="Approved policy version")):
+                    policy_version: str = typer.Option("mandate-gen/v1", "--policy-version", help="Approved policy version"),
+                    policy: Path = typer.Option(None, "--policy", help="Signed Mandate routing policy"),
+                    registry: Path = typer.Option(None, "--registry", help="Signed Mandate registry"),
+                    destination: str = typer.Option(None, "--destination", help="Verified W4 destination JSON")):
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
@@ -33,7 +37,8 @@ class SupplyCommand(BaseCommand):
                     typer.echo("Resuming durable Intelligence Supply", err=True)
                 result = IntentManager().supply_intent(intent_root=intent_root, semantic_index=semantic_index,
                     decisions=read_json(decisions) if decisions else None, ing_result=ing_result,
-                    policy_version=policy_version)
+                    policy_version=policy_version, policy=policy, registry=registry,
+                    destination=json.loads(destination) if destination else None)
                 gc.output({"status": "success", "operation": "intent_supply", "data": result},
                           self._render_success)
             except Exception as exc:

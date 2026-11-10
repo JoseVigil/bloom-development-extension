@@ -37,13 +37,14 @@ func TestSignedActionGraphRejectsChangedOrderAndBranch(t *testing.T) {
 	}
 }
 
-func TestAdoptedExecutionDispatchesOnlyING(t *testing.T) {
+func TestAdoptedExecutionDispatchesINGThenDISProposal(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(MandateExecutionWorkflow)
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
-	ingCalls, persistCalls, completionCalls := 0, 0, 0
+	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).RunDIS, activity.RegisterOptions{Name: "MandateDISActivity"})
+	ingCalls, persistCalls, completionCalls, disCalls := 0, 0, 0, 0
 	env.OnActivity("MandateIntentActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateIntentResult, error) {
 		ingCalls++
 		if input.MandateID != "mandate-1" {
@@ -61,6 +62,13 @@ func TestAdoptedExecutionDispatchesOnlyING(t *testing.T) {
 		return activities.MandateINGCompletionResult{MandateID: "mandate-1", ActionID: "a", NextActionID: "b", ContractDigest: "digest", IntentID: "ing-1", DecisionDigest: "decision", ResultRef: "ing_result.json", ResultDigest: "hash", LedgerRef: "ledger.json", LedgerDigest: "hash"}, nil
 	})
 	env.OnActivity(activities.PersistAdoptedINGCompletionActivity, mock.Anything, mock.Anything, mock.Anything).Return(activities.PersistExecutionResultResult{StateVersion: 3}, nil)
+	env.OnActivity("MandateDISActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateDISResult, error) {
+		disCalls++
+		return activities.MandateDISResult{MandateID: input.MandateID, ActionID: "b", ContractDigest: "digest", IntentID: "dis-1",
+			INGIntentID: "ing-1", INGResultRef: "ing_result.json", INGResultDigest: "hash",
+			ProposalRef: "mapping.json", ProposalDigest: "hash", Status: "awaiting_human_decision"}, nil
+	})
+	env.OnActivity(activities.PersistAdoptedDISProposalActivity, mock.Anything, mock.Anything, mock.Anything).Return(activities.PersistExecutionResultResult{StateVersion: 4}, nil)
 	env.RegisterDelayedCallback(func() { env.SignalWorkflow("mandate:ing:decision", "decision") }, time.Millisecond)
 	env.ExecuteWorkflow(MandateExecutionWorkflow, MandateExecutionInput{MandateID: "mandate-1", MandatesRoot: "isolated", Adopted: true})
 	if err := env.GetWorkflowError(); err != nil {
@@ -70,8 +78,8 @@ func TestAdoptedExecutionDispatchesOnlyING(t *testing.T) {
 	if err := env.GetWorkflowResult(&result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 {
-		t.Fatalf("result=%#v ing=%d persist=%d complete=%d", result, ingCalls, persistCalls, completionCalls)
+	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || disCalls != 1 {
+		t.Fatalf("result=%#v ing=%d persist=%d complete=%d dis=%d", result, ingCalls, persistCalls, completionCalls, disCalls)
 	}
 }
 

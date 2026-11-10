@@ -1854,10 +1854,12 @@ class IntentManager:
         }
 
     def supply_intent(self, *, intent_root: Path, semantic_index: Path,
-                      decisions=None, ing_result=None, policy_version="genesis-runtime-intelligence/v2"):
+                      decisions=None, ing_result=None, policy_version="genesis-runtime-intelligence/v2",
+                      policy=None, registry=None, destination=None):
         """Explicit local intelligence boundary; no Mandate workflow transition."""
         from brain.core.intent.genesis_intelligence import GenesisIntelligence
-        return GenesisIntelligence(intent_root, semantic_index, policy_version=policy_version).run(
+        return GenesisIntelligence(intent_root, semantic_index, policy_version=policy_version,
+                                   policy=policy, registry=registry, destination=destination).run(
             decisions=decisions, ing_result=ing_result)
 
     def finalize_intent(

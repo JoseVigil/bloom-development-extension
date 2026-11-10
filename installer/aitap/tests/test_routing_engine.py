@@ -28,6 +28,18 @@ def request(**changes):
 
 
 class RoutingEngineTest(unittest.TestCase):
+    def test_w4_destination_filters_supply_routes_and_fails_closed(self):
+        from test_intelligence_service import request as supply_request
+        baseline = self.engine.supply_routes(supply_request())
+        destination = {key: baseline[0]["effective_intelligence"][key]
+                       for key in ("backend_id", "provider", "model")}
+        selected = supply_request()
+        selected["routing"]["destination"] = destination
+        self.assertTrue(self.engine.supply_routes(selected))
+        selected["routing"]["destination"] = {**destination, "model": "other"}
+        with self.assertRaises(RoutingError):
+            self.engine.supply_routes(selected)
+
     def test_approved_cloud_can_route_google_backend_selected_by_policy(self):
         from test_intelligence_service import request as supply_request
         policy = copy.deepcopy(self.engine.policy)
