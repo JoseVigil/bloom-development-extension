@@ -333,3 +333,29 @@ def test_dev_finalize_is_unchanged(project):
     fin = IntentManager().finalize_intent(folder_name=dev["folder_name"], nucleus_path=project)
     assert fin["status"] == "completed"
     assert fin["doc_finalize"] is None
+
+
+def test_doc_launched_with_only_dev_trigger_uses_baseline(project, tmp_path):
+    """What a launcher (Nucleus) needs: create doc with just the finalized dev id."""
+    _first_cycle(project, tmp_path)
+    changed = VERTICAL[0]
+    dev = IntentManager().create_intent(intent_type="dev", name="dev que cambia gravity",
+                                        initial_files=[changed], nucleus_path=project)
+    manifest = (Path(dev["intent_path"]) / ".pipeline" / ".briefing" / ".response"
+                / ".staging" / ".staging_manifest.json")
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({"files": [{"target_path": changed}]}))
+    with open(project / changed, "a", encoding="utf-8") as fh:
+        fh.write("\n// aplicado por el dev\n")
+    IntentManager().finalize_intent(folder_name=dev["folder_name"], nucleus_path=project)
+
+    created = IntentManager().create_intent(
+        intent_type="doc", name="doc del dev", nucleus_path=project,
+        trigger_intent=dev["intent_id"])
+    assert created["initial_files"] == VERTICAL
+    hyd = _hydrate(project, created)
+    assert hyd["doc_run"]["result"] == "pending_response"
+    assert hyd["doc_run"]["to_sanitize"] == [DOC]
+    run = json.loads((Path(created["intent_path"]) / doc_run.RUN_FILE).read_text())
+    assert run["trigger"]["intent_id"] == dev["intent_id"]
+    assert run["changes"][0]["attribution"] == "trigger"

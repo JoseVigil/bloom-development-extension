@@ -257,6 +257,16 @@ class IntentManager:
                 state_data["doc_trigger"] = doc_run.resolve_trigger(
                     self._intents_base(project_root), trigger_intent, trigger_files or []
                 )
+                if not validated_files:
+                    # Launched with only a trigger (e.g. by Nucleus): reuse the
+                    # inputs registered in the last contract for this scope.
+                    baseline = doc_run.find_baseline(
+                        project_root, self._intents_base(project_root),
+                        state_data["doc_scope"], exclude=None,
+                    )
+                    if baseline:
+                        validated_files = [i["path"] for i in baseline["contract"].get("inputs", [])]
+                        state_data["initial_files"] = validated_files
             state_filename = ".dev_state.json" if intent_type == "dev" else ".doc_state.json"
             state_file = intent_path / state_filename
             with open(state_file, "w", encoding="utf-8") as f:
