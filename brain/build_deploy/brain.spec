@@ -207,6 +207,7 @@ hiddenimports = [
     'brain.core.health.onboarding_status_manager',
     'brain.core.health.websocket_status_manager',
     'brain.core.intelligence_supply',
+    'brain.core.intent.doc_run',
     'brain.core.intent.effect_ledger',
     'brain.core.intent.experiment',
     'brain.core.intent.fs_contracts',
@@ -322,8 +323,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
 datas.extend(

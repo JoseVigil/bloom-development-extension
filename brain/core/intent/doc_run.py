@@ -34,6 +34,11 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional
 
+from brain.shared.logger import get_logger
+
+# Writes to the already registered brain_core stream (BLOOM_NUCLEUS_LOGGING_SPEC).
+logger = get_logger(__name__)
+
 RUN_FILE = ".doc_run.json"
 CONTRACT_FILE = ".doc_contract.json"
 REQUEST_FILE = ".payload.json"  # existing name: .pipeline/.context/.payload.json
@@ -392,6 +397,11 @@ def compare(
     else:
         result = RESULT_EMPTY
 
+    logger.info(
+        "doc compare intent=%s scope=%s result=%s to_sanitize=%d anomalies=%d baseline=%s intelligence_calls=0",
+        state.get("uuid"), scope_key(scope), result, len(to_sanitize), len(anomalies),
+        baseline["contract_ref"] if baseline else None,
+    )
     return {
         "schema": RUN_SCHEMA,
         "intent_id": state.get("uuid"),
@@ -520,6 +530,10 @@ def build_contract(
     if isinstance(meta, dict):
         model = meta.get("model") or meta.get("model_used")
 
+    logger.info(
+        "doc contract intent=%s documents=%d pending=%d",
+        state.get("uuid"), len(documents), len(pending),
+    )
     return {
         "schema": CONTRACT_SCHEMA,
         "intent_id": state.get("uuid"),
@@ -602,6 +616,10 @@ def verify(project_root: Path, intent_path: Path, state: Dict[str, Any]) -> Dict
             if contract.get("inputs") != run["observed_inputs"]:
                 problems.append("los insumos del contrato no coinciden con la comparación")
 
+    if problems:
+        logger.warning("doc verify intent=%s blocked: %s", state.get("uuid"), "; ".join(problems))
+    else:
+        logger.info("doc verify intent=%s ok basis=%s", state.get("uuid"), basis)
     return {
         "ok": not problems,
         "basis": basis,
