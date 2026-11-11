@@ -238,6 +238,31 @@ class IntentManager:
             # esta llamada solo agrega lo que falta.
             self._create_directory_structure(project_root, intent_type, folder_name)
         else:
+            existing_state = (
+                self._intents_base(project_root) / f".{intent_type}" / folder_name / ".doc_state.json"
+            )
+            if intent_type == "doc" and existing_state.is_file():
+                # DJ-36: a doc that failed is resumed, never recreated. Same
+                # name -> same intent: return it untouched; the caller resumes
+                # with hydrate (a full re-run is idempotent, DJ-30) or
+                # continues from its current status.
+                with open(existing_state, "r", encoding="utf-8") as f:
+                    current = json.load(f)
+                return {
+                    "intent_id": current.get("uuid", intent_id),
+                    "intent_path": str(existing_state.parent),
+                    "folder_name": folder_name,
+                    "name": current.get("name", name),
+                    "type": intent_type,
+                    "initial_files": current.get("initial_files", []),
+                    "project_path": str(project_root),
+                    "created_at": current.get("created_at"),
+                    "mandate_id": clean_mandate_id,
+                    "phase_active": None,
+                    "status": current.get("status"),
+                    "resumed": True,
+                    "message": f"Intent '{name}' (doc) already exists; resume it from status '{current.get('status')}'",
+                }
             # Create directory structure (skeleton completo, incluido
             # .pipeline/ espejo) — dev/doc no pasan por IntentStateManager,
             # así que no hay conflicto de "directorio no vacío" acá.
@@ -1975,7 +2000,8 @@ class IntentManager:
         self,
         intent_id: Optional[str] = None,
         folder_name: Optional[str] = None,
-        nucleus_path: Optional[Path] = None
+        nucleus_path: Optional[Path] = None,
+        declare_anomalies: bool = False,
     ) -> Dict[str, Any]:
         """
         Finalize an intent, marking it as completed.
@@ -2028,6 +2054,11 @@ class IntentManager:
         if intent_type == "doc":
             # P5: a verifiable empty-run record, or a draft whose contract
             # validates with matching files and digests and nothing pending.
+            if declare_anomalies:
+                # DJ-16: a person declares the external changes found by the
+                # run; they become the new baseline without being sanitized.
+                declared = doc_run.declare_anomalies(project_root, intent_path, state_data)
+                state_data["doc_contract"] = {"sha256": declared["contract_sha256"], "pending": []}
             check = doc_run.verify(project_root, intent_path, state_data)
             if not check["ok"]:
                 raise ValueError("doc no puede finalizar: " + "; ".join(check["problems"]))

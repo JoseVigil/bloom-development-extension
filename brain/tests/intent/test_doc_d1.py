@@ -359,3 +359,48 @@ def test_doc_launched_with_only_dev_trigger_uses_baseline(project, tmp_path):
     run = json.loads((Path(created["intent_path"]) / doc_run.RUN_FILE).read_text())
     assert run["trigger"]["intent_id"] == dev["intent_id"]
     assert run["changes"][0]["attribution"] == "trigger"
+
+
+def test_declared_anomalies_close_the_run_and_become_baseline(project, tmp_path):
+    _first_cycle(project, tmp_path)
+    with open(project / VERTICAL[1], "a", encoding="utf-8") as fh:
+        fh.write("\n// cambio externo declarado\n")
+    (project / DOC).parent.mkdir(parents=True, exist_ok=True)
+    (project / DOC).write_text("editado a mano y aceptado\n")
+
+    run_intent = _create(project, "doc declarar")
+    assert _hydrate(project, run_intent)["doc_run"]["result"] == "anomalies"
+    fin = IntentManager().finalize_intent(folder_name=run_intent["folder_name"],
+                                          nucleus_path=project, declare_anomalies=True)
+    assert fin["doc_finalize"]["basis"] == "contract"
+    contract = json.loads(doc_run.contract_path(Path(run_intent["intent_path"])).read_text())
+    assert contract["declared_anomalies"]["count"] == 2
+    assert contract["documents"][0]["origin"] == "declared_external"
+    assert contract["pending"] == []
+
+    # The declared state is the new baseline: the next run is empty.
+    after = _create(project, "doc despues de declarar")
+    assert _hydrate(project, after)["doc_run"]["result"] == "empty"
+
+
+def test_declare_is_refused_without_anomalies(project, tmp_path):
+    created = _create(project, "doc sin anomalias")
+    _hydrate(project, created)
+    with pytest.raises(ValueError, match="no hay anomalías"):
+        IntentManager().finalize_intent(folder_name=created["folder_name"],
+                                        nucleus_path=project, declare_anomalies=True)
+
+
+def test_failed_doc_is_resumed_not_recreated(project, tmp_path):
+    created = _create(project, "doc reanudable")
+    _hydrate(project, created)
+    with pytest.raises(ValueError, match="no está pendiente"):
+        _answer(project, created, tmp_path, path="README.md")
+
+    again = _create(project, "doc reanudable")
+    assert again["resumed"] is True
+    assert again["status"] == "pending_response"
+    assert _state(created)["doc_run"]["result"] == "pending_response"
+
+    _answer(project, again, tmp_path)
+    assert _finalize(project, again)["doc_finalize"]["basis"] == "contract"

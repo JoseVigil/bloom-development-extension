@@ -21,7 +21,8 @@ class FinalizeCommand(BaseCommand):
             examples=[
                 "brain intent finalize --id abc123",
                 "brain intent finalize --folder .fix-login-a1b2c3d4",
-                "brain intent finalize --id abc123 --json"
+                "brain intent finalize --id abc123 --json",
+                "brain intent finalize --folder .doc-run-a1b2c3d4 --declare-anomalies"
             ]
         )
     
@@ -47,6 +48,14 @@ class FinalizeCommand(BaseCommand):
                 "--nucleus-path",
                 "-p",
                 help="Path to Bloom project"
+            ),
+            declare_anomalies: bool = typer.Option(
+                False,
+                "--declare-anomalies",
+                help=(
+                    "Only doc: declare the external changes found by the run "
+                    "(DJ-16) so they become the new baseline, without sanitizing them"
+                )
             )
         ):
             """
@@ -78,7 +87,8 @@ class FinalizeCommand(BaseCommand):
                 data = manager.finalize_intent(
                     intent_id=intent_id,
                     folder_name=folder_name,
-                    nucleus_path=nucleus_path
+                    nucleus_path=nucleus_path,
+                    declare_anomalies=declare_anomalies
                 )
                 
                 # 6. Empaquetar resultado

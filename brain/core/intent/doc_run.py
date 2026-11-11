@@ -559,6 +559,76 @@ def build_contract(
 # Validation and finalize precondition (P5)
 # ---------------------------------------------------------------------------
 
+def declare_anomalies(
+    project_root: Path,
+    intent_path: Path,
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    DJ-16: an anomaly stays pending until it is declared. Declaring accepts
+    the external state as the new baseline without sanitizing anything
+    (P48/P34): inputs take their observed digests and a document edited
+    outside the system is registered with its on-disk content.
+
+    Allowed only for a run whose result is ``anomalies``. A baseline draft
+    that no longer matches its digest cannot be declared.
+    """
+    run = _load_run(intent_path, state)
+    if run["result"] != RESULT_ANOMALIES:
+        raise DocRunError(f"no hay anomalías que declarar (resultado: {run['result']})")
+    moved = _current_inputs_match(project_root, run["observed_inputs"])
+    if moved:
+        raise DocRunError(f"los insumos cambiaron desde la comparación: {moved}; volvé a hidratar")
+
+    edited = {}
+    for anomaly in run["anomalies"]:
+        if anomaly.get("change") == "borrador_alterado":
+            raise DocRunError(
+                f"el borrador de la línea base de {anomaly['path']} está alterado; "
+                "no se puede declarar, hay que volver a escribir ese documento"
+            )
+        if anomaly.get("kind") == "document" and anomaly.get("change") == "modificado_fuera_del_sistema":
+            edited[anomaly["path"]] = anomaly["after"]
+
+    documents = []
+    for base in run.get("baseline_documents", []):
+        doc = base["path"]
+        if doc in edited:
+            if sha256_file(project_root / doc) != edited[doc]:
+                raise DocRunError(f"{doc} cambió desde la comparación; volvé a hidratar")
+            documents.append({"path": doc, "origin": "declared_external",
+                              "draft_ref": doc, "sha256": edited[doc]})
+        else:
+            documents.append({"path": doc, "origin": "baseline",
+                              "draft_ref": base["draft_ref"], "sha256": base["sha256"]})
+
+    declared_at = now_iso()
+    contract = {
+        "schema": CONTRACT_SCHEMA,
+        "intent_id": state.get("uuid"),
+        "intent_name": state.get("name"),
+        "created_at": declared_at,
+        "trigger": run["trigger"],
+        "scope": run["scope"],
+        "level": run["scope"]["level"],
+        "verification": run["scope"]["verification"],
+        "run_ref": (intent_path / RUN_FILE).relative_to(project_root).as_posix(),
+        "run_sha256": state["doc_run"]["sha256"],
+        "baseline": run["baseline"],
+        "documents": documents,
+        "inputs": run["observed_inputs"],
+        "anomalies": run["anomalies"],
+        "declared_anomalies": {"declared_at": declared_at, "count": len(run["anomalies"])},
+        "pending": [],
+        "model": None,
+        "content_channel": "declaration",
+    }
+    path = contract_path(intent_path)
+    sha = write_json(path, contract)
+    logger.info("doc declare intent=%s anomalies=%d", state.get("uuid"), len(run["anomalies"]))
+    return {"contract_sha256": sha, "pending": [], "declared": len(run["anomalies"])}
+
+
 def contract_path(intent_path: Path) -> Path:
     return intent_path / ".pipeline" / f".{DOC_STAGE}" / ".response" / ".staging" / CONTRACT_FILE
 
@@ -587,10 +657,11 @@ def verify(project_root: Path, intent_path: Path, state: Dict[str, Any]) -> Dict
 
     if run["result"] == RESULT_EMPTY:
         basis = "empty_run"
-    elif run["result"] == RESULT_ANOMALIES:
+    elif run["result"] == RESULT_ANOMALIES and not contract_path(intent_path).is_file():
         problems.append(
             "la corrida solo encontró anomalías externas: no es una corrida vacía ni dejó borrador "
-            "(P5); quedan registradas en .doc_run.json"
+            "(P5); quedan registradas en .doc_run.json y se cierran declarándolas "
+            "(brain intent finalize --declare-anomalies)"
         )
     else:
         basis = "contract"
