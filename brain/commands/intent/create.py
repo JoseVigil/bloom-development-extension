@@ -30,6 +30,7 @@ class CreateCommand(BaseCommand):
                 "brain intent create --type dev --name 'Fix login auth' --files src/auth.py --files src/login.js",
                 "brain intent create --type doc --name 'Generate API docs' --files docs/raw/endpoints.md",
                 "brain intent create --type doc --name 'Gravity docs' --files src/gravity.go --doc-document docs/gravity.md --trigger-file src/gravity.go",
+                "brain intent create --type doc --name 'doc of dis' --trigger-intent <dis-id> --trigger-nucleus ../org/.bloom/.nucleus-org",
                 "brain intent create --type dev --name 'Add feature' --nucleus-path /path/to/project --json",
                 "brain intent create --type ing --name 'Ingest legacy docs' --files raw/notes.md --domain-baseline empty",
                 "brain intent create --type dis --name 'Map domain boundaries' --mandate-id MND-042"
@@ -117,6 +118,14 @@ class CreateCommand(BaseCommand):
                 None,
                 "--trigger-file",
                 help="Only --type doc. Path declared as changed by the triggering intent (repeatable)."
+            ),
+            trigger_nucleus: Optional[Path] = typer.Option(
+                None,
+                "--trigger-nucleus",
+                help=(
+                    "Only --type doc. Nucleus root (.bloom/.nucleus-<org>) where a dis "
+                    "trigger lives; the Project must be linked in its catalog."
+                )
             )
         ):
             """
@@ -196,7 +205,8 @@ class CreateCommand(BaseCommand):
                     doc_ref=doc_ref,
                     doc_documents=doc_documents,
                     trigger_intent=trigger_intent,
-                    trigger_files=trigger_files
+                    trigger_files=trigger_files,
+                    trigger_nucleus=trigger_nucleus
                 )
                 
                 # 7. Empaquetar resultado
@@ -211,7 +221,7 @@ class CreateCommand(BaseCommand):
                 
             except ValueError as e:
                 self._handle_error(
-                    gc, f"Validation error: {e}", code="INVALID_ARGUMENT",
+                    gc, f"Validation error: {e}", code=getattr(e, "code", "INVALID_ARGUMENT"),
                     exit_code=2, retryable=False)
             except FileNotFoundError as e:
                 self._handle_error(

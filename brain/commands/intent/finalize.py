@@ -102,7 +102,7 @@ class FinalizeCommand(BaseCommand):
                 gc.output(result, self._render_success)
                 
             except ValueError as e:
-                self._handle_error(gc, f"Cannot finalize: {e}")
+                self._handle_error(gc, f"Cannot finalize: {e}", code=getattr(e, "code", None))
             except Exception as e:
                 self._handle_error(gc, f"Error finalizing intent: {e}")
     
@@ -119,11 +119,14 @@ class FinalizeCommand(BaseCommand):
         typer.echo(f"\n💡 Changes have been applied to the codebase")
         typer.echo(f"🔓 Intent has been unlocked")
     
-    def _handle_error(self, gc, message: str):
+    def _handle_error(self, gc, message: str, code: Optional[str] = None):
         """Unified error handling."""
         if gc.json_mode:
             import json
-            typer.echo(json.dumps({"status": "error", "message": message}))
+            payload = {"status": "error", "message": message}
+            if code:
+                payload["error"] = {"code": code, "message": message}
+            typer.echo(json.dumps(payload, ensure_ascii=False))
         else:
             typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)

@@ -59,9 +59,10 @@ LEVELS = {
 }
 CONTRASTED_LEVELS = {"project", "domain", "gene"}
 
-# DJ-29: intents whose terminal state triggers doc. In D1 only a finalized
-# `dev` can be resolved as triggering intent; the rest arrive in D3-D5.
-D1_TRIGGER_TYPES = {"dev"}
+# DJ-29: intents whose terminal state triggers doc. Brain resolves `dev` (in
+# the Project) and `dis` (in its Nucleus); `ing` waits for the canonical Gene
+# publication and `mrg` has no code.
+TRIGGER_TYPES = {"dev", "dis"}
 
 RESULT_EMPTY = "empty"
 RESULT_PENDING = "pending_response"
@@ -74,7 +75,15 @@ STATUS_ANOMALIES = "anomalies"
 
 
 class DocRunError(ValueError):
-    """Raised when a mechanical doc precondition is not met."""
+    """Raised when a mechanical doc precondition is not met.
+
+    ``code`` is stable and machine readable; it is persisted in
+    ``.doc_state.json`` (``doc_error.code``) and returned by the CLI.
+    """
+
+    def __init__(self, message: str, code: str = "DOC_INVALID"):
+        super().__init__(message)
+        self.code = code
 
 
 # ---------------------------------------------------------------------------
@@ -117,14 +126,14 @@ def read_json(path: Path) -> Dict[str, Any]:
 def portable_path(value: str) -> str:
     """Normalize a project-relative path; reject absolute paths and escapes."""
     if not value or not str(value).strip():
-        raise DocRunError("ruta vacía en el alcance de doc")
+        raise DocRunError("ruta vacía en el alcance de doc", "DOC_SCOPE_INVALID")
     raw = str(value).strip().replace("\\", "/")
     pure = PurePosixPath(raw)
     if pure.is_absolute() or (len(raw) > 1 and raw[1] == ":"):
-        raise DocRunError(f"la ruta tiene que ser relativa al Project: {value}")
+        raise DocRunError(f"la ruta tiene que ser relativa al Project: {value}", "DOC_SCOPE_INVALID")
     parts = [p for p in pure.parts if p not in ("", ".")]
     if not parts or any(p == ".." for p in parts):
-        raise DocRunError(f"ruta fuera del Project: {value}")
+        raise DocRunError(f"ruta fuera del Project: {value}", "DOC_SCOPE_INVALID")
     return "/".join(parts)
 
 
@@ -142,10 +151,10 @@ def _unique(values: Iterable[str]) -> List[str]:
 def build_scope(level: str, ref: Optional[str], documents: Iterable[str]) -> Dict[str, Any]:
     level = (level or "project").strip().lower()
     if level not in LEVELS:
-        raise DocRunError(f"nivel de alcance inválido: {level}. Válidos: {sorted(LEVELS)}")
+        raise DocRunError(f"nivel de alcance inválido: {level}. Válidos: {sorted(LEVELS)}", "DOC_SCOPE_INVALID")
     clean_ref = ref.strip() if ref and ref.strip() else None
     if level in {"domain", "gene"} and not clean_ref:
-        raise DocRunError(f"el alcance '{level}' necesita --doc-ref (id declarado)")
+        raise DocRunError(f"el alcance '{level}' necesita --doc-ref (id declarado)", "DOC_SCOPE_INVALID")
     docs = _unique(portable_path(d) for d in (documents or []))
     return {
         "level": level,
@@ -173,31 +182,9 @@ def _dev_manifest_paths(intent_dir: Path) -> List[str]:
     return paths
 
 
-def resolve_trigger(
-    intents_base: Path,
-    trigger_intent: Optional[str],
-    declared_files: Iterable[str],
-) -> Dict[str, Any]:
-    """
-    Build the trigger record.
-
-    - Without ``trigger_intent``: a manual CLI run (encargo §5.1); the changed
-      paths are the ones a person declares.
-    - With ``trigger_intent``: in D1 it must be a finalized ``dev`` intent
-      (DJ-29, DJ-19). Its changed paths come from its staging manifests,
-      plus any declared paths.
-    """
-    declared = _unique(portable_path(f) for f in (declared_files or []))
-    if not trigger_intent:
-        return {
-            "kind": "manual",
-            "intent_id": None,
-            "intent_type": None,
-            "changed_paths": declared,
-            "source": "declared",
-        }
-
-    wanted = trigger_intent.strip()
+def _find_state(intents_base: Path, wanted: str):
+    if not intents_base.is_dir():
+        return None
     for type_dir in sorted(intents_base.glob(".*")):
         if not type_dir.is_dir():
             continue
@@ -210,32 +197,183 @@ def resolve_trigger(
                 except (OSError, json.JSONDecodeError):
                     continue
                 uid = state.get("uuid") or state.get("intent_id")
-                if uid != wanted and intent_dir.name != wanted:
-                    continue
-                itype = state.get("type") or state.get("intent_type")
-                if itype == "doc":
-                    raise DocRunError("un doc no dispara otro doc (DJ-18, DJ-24)")
-                if itype in {"tst", "exp", "asm"}:
-                    raise DocRunError(f"'{itype}' no dispara doc (DJ-29)")
-                if itype not in D1_TRIGGER_TYPES:
-                    raise DocRunError(
-                        f"el disparo desde '{itype}' no está en D1 "
-                        "(ing: D4, dis: D3, mrg: D5)"
-                    )
-                if state.get("status") != "completed":
-                    raise DocRunError(
-                        "el intent disparador no llegó a su estado terminal "
-                        "(finalize); un intent sin terminar no dispara doc (DJ-19)"
-                    )
-                paths = _unique(_dev_manifest_paths(intent_dir) + declared)
-                return {
-                    "kind": "intent",
-                    "intent_id": uid,
-                    "intent_type": itype,
-                    "changed_paths": paths,
-                    "source": "dev_staging_manifest" + ("+declared" if declared else ""),
-                }
-    raise DocRunError(f"intent disparador no encontrado: {trigger_intent}")
+                if uid == wanted or intent_dir.name == wanted:
+                    return intent_dir, state_file, state
+    return None
+
+
+def _check_trigger_type(itype: Optional[str]) -> None:
+    if itype == "doc":
+        raise DocRunError("un doc no dispara otro doc (DJ-18, DJ-24)", "DOC_TRIGGER_NOT_ALLOWED")
+    if itype in {"tst", "exp", "asm"}:
+        raise DocRunError(f"'{itype}' no dispara doc (DJ-29)", "DOC_TRIGGER_NOT_ALLOWED")
+    if itype not in TRIGGER_TYPES:
+        raise DocRunError(
+            f"Brain todavía no acepta '{itype}' como disparador (ing: publicación del Gene; mrg: sin código)",
+            "DOC_TRIGGER_UNSUPPORTED",
+        )
+
+
+def _canonical(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path.absolute()
+
+
+def verify_project_link(nucleus_root: Path, project_root: Path) -> Dict[str, Any]:
+    """
+    Link between a Nucleus and a Project, resolved as Nucleus does it
+    (``installer/nucleus/internal/core/project_catalog.go``): the entry's
+    ``absolutePath``, or ``localPath`` joined to the Nucleus root, in
+    ``<nucleus>/.core/.nucleus-config.json``. Exactly one entry must match.
+    """
+    config_path = nucleus_root / ".core" / ".nucleus-config.json"
+    try:
+        config = read_json(config_path)
+    except (OSError, json.JSONDecodeError):
+        raise DocRunError(f"no se pudo leer el catálogo de Projects del Nucleus: {config_path}",
+                          "DOC_PROJECT_NOT_LINKED")
+    target = _canonical(project_root)
+    matches = []
+    for entry in config.get("projects") or []:
+        raw = entry.get("absolutePath") or ""
+        if not raw and entry.get("localPath"):
+            raw = str(nucleus_root / entry["localPath"])
+        if raw and Path(raw).is_absolute() and _canonical(Path(raw)) == target:
+            matches.append(entry)
+    if len(matches) != 1:
+        raise DocRunError(
+            f"el Project {project_root} no figura exactamente una vez en el catálogo del Nucleus "
+            f"{nucleus_root} ({len(matches)} coincidencias)",
+            "DOC_PROJECT_NOT_LINKED",
+        )
+    sha = sha256_file(config_path)
+    return {"nucleus_root": str(nucleus_root), "catalog_ref": ".core/.nucleus-config.json",
+            "catalog_sha256": sha, "project_id": matches[0].get("id")}
+
+
+def _verify_dis_terminal(intent_dir: Path, state: Dict[str, Any]) -> Dict[str, Any]:
+    """DJ-29: dis triggers doc at ``phase_active: done`` with ``committed: true``."""
+    if state.get("phase_active") != "done":
+        raise DocRunError(
+            f"el dis no llegó a su estado terminal (phase_active: {state.get('phase_active')}); "
+            "un intent sin terminar no dispara doc (DJ-19)",
+            "DOC_TRIGGER_NOT_TERMINAL",
+        )
+    controls = sorted(
+        intent_dir.glob(".ratification/.turn_*/.ratification.json"),
+        key=lambda p: int(p.parent.name.split("_")[-1]) if p.parent.name.split("_")[-1].isdigit() else -1,
+    )
+    committed = None
+    for control in reversed(controls):
+        try:
+            data = read_json(control)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("committed") is True:
+            committed = control
+            break
+    if committed is None:
+        raise DocRunError("el dis está en done pero no tiene un control de ratification con committed: true",
+                          "DOC_TRIGGER_NOT_TERMINAL")
+    evidence = {
+        "control_ref": committed.relative_to(intent_dir).as_posix(),
+        "control_sha256": sha256_file(committed),
+    }
+    ledger = committed.parent / ".effect_ledger.json"
+    if ledger.is_file():
+        try:
+            data = read_json(ledger)
+            evidence["ledger_ref"] = ledger.relative_to(intent_dir).as_posix()
+            evidence["ledger_sha256"] = sha256_file(ledger)
+            evidence["ledger_state"] = data.get("state")
+        except (OSError, json.JSONDecodeError):
+            pass
+    return evidence
+
+
+def resolve_trigger(
+    intents_base: Path,
+    trigger_intent: Optional[str],
+    declared_files: Iterable[str],
+    project_root: Optional[Path] = None,
+    trigger_nucleus: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """
+    Build the trigger record.
+
+    - Without ``trigger_intent``: a manual CLI run; the changed paths are the
+      ones a person declares.
+    - ``dev``: found in the Project's intents; must be ``completed``
+      (finalize). Changed paths come from its staging manifests.
+    - ``dis``: found in ``<trigger_nucleus>/.intents``; must be ``done`` with a
+      committed ratification, and the Project must be linked to that Nucleus.
+      dis changes the Nucleus domain graph, not Project files, so its changed
+      Project paths are only the declared ones.
+    """
+    declared = _unique(portable_path(f) for f in (declared_files or []))
+    if not trigger_intent:
+        return {
+            "kind": "manual",
+            "intent_id": None,
+            "intent_type": None,
+            "changed_paths": declared,
+            "source": "declared",
+        }
+
+    wanted = trigger_intent.strip()
+    found = _find_state(intents_base, wanted)
+    nucleus_link = None
+    if found is None and trigger_nucleus is not None:
+        nucleus_root = Path(trigger_nucleus)
+        found = _find_state(nucleus_root / ".intents", wanted)
+        if found is not None:
+            if project_root is None:
+                raise DocRunError("falta el Project para verificar el vínculo con el Nucleus",
+                                  "DOC_PROJECT_NOT_LINKED")
+            nucleus_link = verify_project_link(nucleus_root, project_root)
+    if found is None:
+        raise DocRunError(f"intent disparador no encontrado: {trigger_intent}", "DOC_TRIGGER_NOT_FOUND")
+
+    intent_dir, state_file, state = found
+    itype = state.get("type") or state.get("intent_type")
+    _check_trigger_type(itype)
+    uid = state.get("uuid") or state.get("intent_id")
+
+    if itype == "dev":
+        if state.get("status") != "completed":
+            raise DocRunError(
+                "el intent disparador no llegó a su estado terminal "
+                "(finalize); un intent sin terminar no dispara doc (DJ-19)",
+                "DOC_TRIGGER_NOT_TERMINAL",
+            )
+        paths = _unique(_dev_manifest_paths(intent_dir) + declared)
+        return {
+            "kind": "intent",
+            "intent_id": uid,
+            "intent_type": itype,
+            "changed_paths": paths,
+            "source": "dev_staging_manifest" + ("+declared" if declared else ""),
+            "state_sha256": sha256_file(state_file),
+        }
+
+    # dis
+    if nucleus_link is None:
+        raise DocRunError("un dis se resuelve en su Nucleus: pasá --trigger-nucleus",
+                          "DOC_PROJECT_NOT_LINKED")
+    terminal = _verify_dis_terminal(intent_dir, state)
+    return {
+        "kind": "intent",
+        "intent_id": uid,
+        "intent_type": itype,
+        "mandate_id": state.get("mandate_id"),
+        "changed_paths": declared,
+        "source": "declared" if declared else "none",
+        "state_sha256": sha256_file(state_file),
+        "terminal": terminal,
+        "nucleus": nucleus_link,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +434,8 @@ def find_baseline(project_root: Path, intents_base: Path, scope: Dict[str, Any],
         if actual is None or actual != expected:
             raise DocRunError(
                 f"la línea base {contract_path} no coincide con su digest registrado; "
-                "no se compara contra una línea base alterada"
+                "no se compara contra una línea base alterada",
+                "DOC_BASELINE_TAMPERED",
             )
         contract = read_json(contract_path)
         return {
@@ -321,7 +460,7 @@ def compare(
     scope = state.get("doc_scope")
     trigger = state.get("doc_trigger")
     if not scope or not trigger:
-        raise DocRunError("el intent doc no tiene alcance ni disparador; crealo con --doc-level")
+        raise DocRunError("el intent doc no tiene alcance ni disparador; crealo con --doc-level", "DOC_SCOPE_MISSING")
 
     baseline = find_baseline(project_root, intents_base, scope, exclude=intent_path)
     base_contract = baseline["contract"] if baseline else None
@@ -330,7 +469,7 @@ def compare(
 
     registered = _unique(list(base_docs) + list(scope.get("documents", [])))
     if not registered:
-        raise DocRunError("el alcance no tiene documentación registrada ni declarada (--doc-document)")
+        raise DocRunError("el alcance no tiene documentación registrada ni declarada (--doc-document)", "DOC_BASELINE_MISSING")
 
     sources = [portable_path(p) for p in state.get("initial_files", [])]
     contrasted = scope["level"] in CONTRASTED_LEVELS
@@ -458,9 +597,9 @@ def _load_run(intent_path: Path, state: Dict[str, Any]) -> Dict[str, Any]:
     recorded = (state.get("doc_run") or {}).get("sha256")
     actual = sha256_file(run_path)
     if actual is None:
-        raise DocRunError("no hay .doc_run.json: corré 'brain intent hydrate' primero")
+        raise DocRunError("no hay .doc_run.json: corré 'brain intent hydrate' primero", "DOC_RUN_MISSING")
     if actual != recorded:
-        raise DocRunError(".doc_run.json no coincide con el digest registrado en el estado")
+        raise DocRunError(".doc_run.json no coincide con el digest registrado en el estado", "DOC_EVIDENCE_TAMPERED")
     return read_json(run_path)
 
 
@@ -475,13 +614,14 @@ def _current_inputs_match(project_root: Path, observed: List[Dict[str, Any]]) ->
 def check_response_targets(intent_path: Path, state: Dict[str, Any], files_meta: List[Dict[str, Any]]) -> None:
     run = _load_run(intent_path, state)
     if run["result"] != RESULT_PENDING:
-        raise DocRunError(f"la corrida no espera respuesta (resultado: {run['result']})")
+        raise DocRunError(f"la corrida no espera respuesta (resultado: {run['result']})", "DOC_NOT_PENDING")
     allowed = {d["path"] for d in run["to_sanitize"]}
     for meta in files_meta:
         target = portable_path(meta.get("path", ""))
         if target not in allowed:
             raise DocRunError(
-                f"la respuesta escribe '{target}', que no está pendiente de saneo en esta corrida"
+                f"la respuesta escribe '{target}', que no está pendiente de saneo en esta corrida",
+                "DOC_RESPONSE_OUT_OF_SCOPE",
             )
 
 
@@ -495,10 +635,10 @@ def build_contract(
 ) -> Dict[str, Any]:
     run = _load_run(intent_path, state)
     if run["result"] != RESULT_PENDING:
-        raise DocRunError(f"la corrida no espera respuesta (resultado: {run['result']})")
+        raise DocRunError(f"la corrida no espera respuesta (resultado: {run['result']})", "DOC_NOT_PENDING")
     moved = _current_inputs_match(project_root, run["observed_inputs"])
     if moved:
-        raise DocRunError(f"los insumos cambiaron desde la comparación: {moved}; volvé a hidratar")
+        raise DocRunError(f"los insumos cambiaron desde la comparación: {moved}; volvé a hidratar", "DOC_INPUTS_CHANGED")
 
     pending_paths = {d["path"] for d in run["to_sanitize"]}
     base_docs = {d["path"]: d for d in run.get("baseline_documents", [])}
@@ -575,17 +715,18 @@ def declare_anomalies(
     """
     run = _load_run(intent_path, state)
     if run["result"] != RESULT_ANOMALIES:
-        raise DocRunError(f"no hay anomalías que declarar (resultado: {run['result']})")
+        raise DocRunError(f"no hay anomalías que declarar (resultado: {run['result']})", "DOC_NO_ANOMALIES")
     moved = _current_inputs_match(project_root, run["observed_inputs"])
     if moved:
-        raise DocRunError(f"los insumos cambiaron desde la comparación: {moved}; volvé a hidratar")
+        raise DocRunError(f"los insumos cambiaron desde la comparación: {moved}; volvé a hidratar", "DOC_INPUTS_CHANGED")
 
     edited = {}
     for anomaly in run["anomalies"]:
         if anomaly.get("change") == "borrador_alterado":
             raise DocRunError(
                 f"el borrador de la línea base de {anomaly['path']} está alterado; "
-                "no se puede declarar, hay que volver a escribir ese documento"
+                "no se puede declarar, hay que volver a escribir ese documento",
+                "DOC_EVIDENCE_TAMPERED",
             )
         if anomaly.get("kind") == "document" and anomaly.get("change") == "modificado_fuera_del_sistema":
             edited[anomaly["path"]] = anomaly["after"]
@@ -595,7 +736,7 @@ def declare_anomalies(
         doc = base["path"]
         if doc in edited:
             if sha256_file(project_root / doc) != edited[doc]:
-                raise DocRunError(f"{doc} cambió desde la comparación; volvé a hidratar")
+                raise DocRunError(f"{doc} cambió desde la comparación; volvé a hidratar", "DOC_INPUTS_CHANGED")
             documents.append({"path": doc, "origin": "declared_external",
                               "draft_ref": doc, "sha256": edited[doc]})
         else:
@@ -699,3 +840,67 @@ def verify(project_root: Path, intent_path: Path, state: Dict[str, Any]) -> Dict
         "intelligence_calls": 0,
         "verification": run["scope"]["verification"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Machine-readable status for a launcher (Nucleus)
+# ---------------------------------------------------------------------------
+
+# status in .doc_state.json -> (doc_status, next_action)
+_STATUS_VIEW = {
+    "created": ("created", "hydrate"),
+    STATUS_EMPTY: ("empty", "finalize"),
+    STATUS_PENDING: ("pending_response", "respond"),
+    STATUS_DRAFT: ("draft_ready", "finalize"),
+    STATUS_ANOMALIES: ("anomalies", "declare_anomalies"),
+    "completed": ("completed", "none"),
+}
+
+
+def status_view(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Stable view of a doc intent for a launcher.
+
+    ``doc_status``: created | empty | pending_response | draft_ready |
+    anomalies | completed | error. ``next_action``: hydrate | respond |
+    finalize | declare_anomalies | resume | none.
+    """
+    status = state.get("status")
+    doc_status, next_action = _STATUS_VIEW.get(status, ("created", "hydrate"))
+    view = {
+        "doc_status": doc_status,
+        "next_action": next_action,
+        "status": status,
+        "intent_id": state.get("uuid"),
+        "run_sha256": (state.get("doc_run") or {}).get("sha256"),
+        "contract_sha256": (state.get("doc_contract") or {}).get("sha256"),
+        "error": state.get("doc_error"),
+    }
+    if state.get("doc_error"):
+        view["doc_status"] = "error"
+        view["next_action"] = "resume"
+    return view
+
+
+def record_error(state_file: Path, operation: str, exc: Exception) -> None:
+    """Persist a doc failure in .doc_state.json; ``status`` is left as it was."""
+    try:
+        state = read_json(state_file)
+    except (OSError, json.JSONDecodeError):
+        return
+    state["doc_error"] = {
+        "operation": operation,
+        "code": getattr(exc, "code", type(exc).__name__),
+        "message": str(exc),
+        "at": now_iso(),
+        "status_before": state.get("status"),
+    }
+    state["updated_at"] = now_iso()
+    with open(state_file, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, indent=2, ensure_ascii=False)
+    logger.warning("doc %s failed intent=%s code=%s: %s", operation, state.get("uuid"),
+                   state["doc_error"]["code"], exc)
+
+
+def clear_error(state: Dict[str, Any]) -> None:
+    state.pop("doc_error", None)

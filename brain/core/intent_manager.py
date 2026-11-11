@@ -83,6 +83,7 @@ class IntentManager:
         doc_documents: Optional[List[str]] = None,
         trigger_intent: Optional[str] = None,
         trigger_files: Optional[List[str]] = None,
+        trigger_nucleus: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """
         Create a new intent with complete directory structure.
@@ -261,6 +262,7 @@ class IntentManager:
                     "phase_active": None,
                     "status": current.get("status"),
                     "resumed": True,
+                    "doc": doc_run.status_view(current),
                     "message": f"Intent '{name}' (doc) already exists; resume it from status '{current.get('status')}'",
                 }
             # Create directory structure (skeleton completo, incluido
@@ -280,18 +282,31 @@ class IntentManager:
                     doc_level or "project", doc_ref, doc_documents or []
                 )
                 state_data["doc_trigger"] = doc_run.resolve_trigger(
-                    self._intents_base(project_root), trigger_intent, trigger_files or []
+                    self._intents_base(project_root), trigger_intent, trigger_files or [],
+                    project_root=project_root, trigger_nucleus=trigger_nucleus,
                 )
-                if not validated_files:
+                baseline = doc_run.find_baseline(
+                    project_root, self._intents_base(project_root),
+                    state_data["doc_scope"], exclude=None,
+                )
+                if baseline is None:
+                    # First doc of this scope: inputs and documents must be
+                    # explicit, there is no registered contract to reuse.
+                    if not validated_files or not state_data["doc_scope"]["documents"]:
+                        raise doc_run.DocRunError(
+                            "primer doc de este alcance (sin línea base): pasá los insumos con -f "
+                            "y los documentos con --doc-document",
+                            "DOC_BASELINE_MISSING",
+                        )
+                elif not validated_files:
                     # Launched with only a trigger (e.g. by Nucleus): reuse the
                     # inputs registered in the last contract for this scope.
-                    baseline = doc_run.find_baseline(
-                        project_root, self._intents_base(project_root),
-                        state_data["doc_scope"], exclude=None,
-                    )
-                    if baseline:
-                        validated_files = [i["path"] for i in baseline["contract"].get("inputs", [])]
-                        state_data["initial_files"] = validated_files
+                    validated_files = [i["path"] for i in baseline["contract"].get("inputs", [])]
+                    state_data["initial_files"] = validated_files
+                state_data["doc_baseline"] = (
+                    {"contract_ref": baseline["contract_ref"], "contract_sha256": baseline["contract_sha256"]}
+                    if baseline else None
+                )
             state_filename = ".dev_state.json" if intent_type == "dev" else ".doc_state.json"
             state_file = intent_path / state_filename
             with open(state_file, "w", encoding="utf-8") as f:
@@ -310,7 +325,8 @@ class IntentManager:
             "created_at": state_data.get("created_at", timestamp),
             "mandate_id": clean_mandate_id,
             "phase_active": phase_active,
-            "message": f"Intent '{name}' ({intent_type}) created successfully"
+            "message": f"Intent '{name}' ({intent_type}) created successfully",
+            "doc": doc_run.status_view(state_data) if intent_type == "doc" else None,
         }
     
     def hydrate_intent(
@@ -427,9 +443,14 @@ class IntentManager:
             state_data["steps"]["hydrate"] = True
         doc_summary = None
         if intent_type == "doc" and state_data.get("doc_scope"):
-            doc_summary = self._run_doc_comparison(
-                project_root, intent_path, state_data, files_dir
-            )
+            try:
+                doc_summary = self._run_doc_comparison(
+                    project_root, intent_path, state_data, files_dir
+                )
+            except Exception as exc:
+                doc_run.record_error(state_file, "hydrate", exc)
+                raise
+            doc_run.clear_error(state_data)
         with open(state_file, 'w', encoding="utf-8") as f:
             json.dump(state_data, f, indent=2)
         result = {
@@ -443,6 +464,7 @@ class IntentManager:
         }
         if doc_summary is not None:
             result["doc_run"] = doc_summary
+            result["doc"] = doc_run.status_view(state_data)
         return result
 
     def _run_doc_comparison(
@@ -2054,14 +2076,19 @@ class IntentManager:
         if intent_type == "doc":
             # P5: a verifiable empty-run record, or a draft whose contract
             # validates with matching files and digests and nothing pending.
-            if declare_anomalies:
-                # DJ-16: a person declares the external changes found by the
-                # run; they become the new baseline without being sanitized.
-                declared = doc_run.declare_anomalies(project_root, intent_path, state_data)
-                state_data["doc_contract"] = {"sha256": declared["contract_sha256"], "pending": []}
-            check = doc_run.verify(project_root, intent_path, state_data)
-            if not check["ok"]:
-                raise ValueError("doc no puede finalizar: " + "; ".join(check["problems"]))
+            try:
+                if declare_anomalies:
+                    # DJ-16: a person declares the external changes found by the
+                    # run; they become the new baseline without being sanitized.
+                    declared = doc_run.declare_anomalies(project_root, intent_path, state_data)
+                    state_data["doc_contract"] = {"sha256": declared["contract_sha256"], "pending": []}
+                check = doc_run.verify(project_root, intent_path, state_data)
+                if not check["ok"]:
+                    raise doc_run.DocRunError("doc no puede finalizar: " + "; ".join(check["problems"]), "DOC_FINALIZE_BLOCKED")
+            except Exception as exc:
+                doc_run.record_error(state_file, "finalize", exc)
+                raise
+            doc_run.clear_error(state_data)
             run_data = doc_run.read_json(intent_path / doc_run.RUN_FILE)
             doc_finalize = {
                 "basis": check["basis"],
@@ -2102,6 +2129,7 @@ class IntentManager:
             "finalized_at": timestamp,
             "files_modified": files_modified,
             "doc_finalize": doc_finalize,
+            "doc": doc_run.status_view(state_data) if doc_finalize is not None else None,
             "message": f"Intent '{state_data.get('name', 'unknown')}' finalized successfully"
         }
 

@@ -131,7 +131,11 @@ class StagingManager:
             # D1: a doc response may only write documents pending sanitation
             # in this run (P48/P34). Checked before copying anything.
             from brain.core.intent import doc_run
-            doc_run.check_response_targets(self.intent_path, self.state_data, files_meta)
+            try:
+                doc_run.check_response_targets(self.intent_path, self.state_data, files_meta)
+            except Exception as exc:
+                doc_run.record_error(self.intent_path / ".doc_state.json", "stage", exc)
+                raise
         
         if verbose or dry_run:
             print(f"📦 Staging {len(files_meta)} file(s)...")
@@ -238,10 +242,15 @@ class StagingManager:
     def _write_doc_contract(self, response_dir: Path, staging_dir: Path, response_data: dict) -> Dict[str, Any]:
         """D1: build .doc_contract.json next to the staged draft (P4, P5)."""
         from brain.core.intent import doc_run
-        contract = doc_run.build_contract(
-            self.nucleus_path, self.intent_path, self.state_data,
-            response_dir, staging_dir, response_data,
-        )
+        try:
+            contract = doc_run.build_contract(
+                self.nucleus_path, self.intent_path, self.state_data,
+                response_dir, staging_dir, response_data,
+            )
+        except Exception as exc:
+            doc_run.record_error(self.intent_path / ".doc_state.json", "stage", exc)
+            raise
+        doc_run.clear_error(self.state_data)
         contract_sha = doc_run.write_json(staging_dir / doc_run.CONTRACT_FILE, contract)
         self.state_data["doc_contract"] = {"sha256": contract_sha, "pending": contract["pending"]}
         self.state_data["status"] = (
@@ -256,6 +265,7 @@ class StagingManager:
             "contract_sha256": contract_sha,
             "pending": contract["pending"],
             "status": self.state_data["status"],
+            "doc": doc_run.status_view(self.state_data),
         }
     
     def _find_bloom_project(self, start_path: Optional[Path] = None) -> Path:

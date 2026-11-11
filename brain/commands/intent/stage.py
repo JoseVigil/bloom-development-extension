@@ -138,7 +138,7 @@ class StageCommand(BaseCommand):
             except FileNotFoundError as e:
                 self._handle_error(gc, f"File not found: {e}")
             except ValueError as e:
-                self._handle_error(gc, f"Validation error: {e}")
+                self._handle_error(gc, f"Validation error: {e}", code=getattr(e, "code", None))
             except Exception as e:
                 self._handle_error(gc, f"Staging failed: {e}")
     
@@ -179,11 +179,14 @@ class StageCommand(BaseCommand):
         if not dry_run:
             typer.echo(f"\n💡 Next: brain intent validate --intent-id {intent_id[:8]}")
     
-    def _handle_error(self, gc, message: str):
+    def _handle_error(self, gc, message: str, code: Optional[str] = None):
         """Manejo unificado de errores."""
         if gc.json_mode:
             import json
-            typer.echo(json.dumps({"status": "error", "message": message}))
+            payload = {"status": "error", "message": message}
+            if code:
+                payload["error"] = {"code": code, "message": message}
+            typer.echo(json.dumps(payload, ensure_ascii=False))
         else:
             typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
