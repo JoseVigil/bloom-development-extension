@@ -467,7 +467,11 @@ def compare(
     base_docs = {d["path"]: d for d in (base_contract or {}).get("documents", [])}
     base_inputs = {i["path"]: i["sha256"] for i in (base_contract or {}).get("inputs", [])}
 
-    registered = _unique(list(base_docs) + list(scope.get("documents", [])))
+    from brain.core.intent import doc_registry  # D2: governed identity (DJ-13)
+    registry = doc_registry.load(project_root)
+    reg_scope = doc_registry.active_by_path(registry, scope_key(scope))
+
+    registered = _unique(list(base_docs) + list(reg_scope) + list(scope.get("documents", [])))
     if not registered:
         raise DocRunError("el alcance no tiene documentación registrada ni declarada (--doc-document)", "DOC_BASELINE_MISSING")
 
@@ -529,6 +533,17 @@ def compare(
         if doc in changed:
             flag(doc, "documento declarado como cambiado por el intent disparador")
 
+    # D2: a registered document that was present in the Project and is gone
+    # was moved or deleted outside the system (P27, P31). Its identity is never
+    # transferred to another file by similarity (DJ-16).
+    for doc, (doc_id, entry) in sorted(reg_scope.items()):
+        if entry.get("project_sha256") and sha256_file(project_root / doc) is None:
+            anomalies.append({"kind": "document", "path": doc, "doc_id": doc_id,
+                              "change": "faltante_fuera_del_sistema",
+                              "before": entry["project_sha256"], "after": None, "attribution": "external",
+                              "reason": "movido o borrado fuera del sistema (DJ-16); la identidad no se "
+                                        "transfiere por parecido"})
+
     if to_sanitize:
         result = RESULT_PENDING
     elif anomalies:
@@ -551,6 +566,9 @@ def compare(
         "baseline": ({"contract_ref": baseline["contract_ref"],
                       "contract_sha256": baseline["contract_sha256"]} if baseline else None),
         "registered_documents": registered,
+        "registry": {"ref": f".bloom/{doc_registry.REGISTRY_FILE}", "generation": registry["generation"],
+                     "sha256": sha256_file(doc_registry.registry_path(project_root))},
+        "document_ids": doc_registry.ids_for(registry, registered),
         "observed_inputs": [{"path": p, "sha256": observed_inputs[p]} for p in sorted(observed_inputs)],
         "baseline_documents": [{"path": d, "sha256": base_docs[d]["sha256"],
                                 "draft_ref": base_docs[d]["draft_ref"]} for d in sorted(base_docs)],
@@ -583,6 +601,9 @@ def request_payload(run: Dict[str, Any]) -> Dict[str, Any]:
                                    "path": "ruta del documento a escribir",
                                    "action": "update",
                                    "_bloom_content": "contenido completo"}]},
+            "move": {"action": "move", "from": "ruta registrada actual",
+                     "path": "ruta nueva", "file_ref": "002_nombre.md",
+                     "_bloom_content": "contenido completo en la ruta nueva"},
             "apply_with": "brain intent download --folder <intent> --input-file <respuesta.json>",
         },
     }
@@ -611,13 +632,38 @@ def _current_inputs_match(project_root: Path, observed: List[Dict[str, Any]]) ->
     return mismatched
 
 
+def _response_moves(files_meta: List[Dict[str, Any]]) -> Dict[str, str]:
+    """Moves requested by doc's response (P27: only doc moves documents)."""
+    moves: Dict[str, str] = {}
+    for meta in files_meta or []:
+        if (meta.get("action") or "").lower() != "move":
+            continue
+        if not meta.get("from"):
+            raise DocRunError("un movimiento necesita 'from'", "DOC_MOVE_INVALID")
+        moves[portable_path(meta.get("path", ""))] = portable_path(meta["from"])
+    if len(set(moves.values())) != len(moves):
+        raise DocRunError("un documento no puede moverse a dos rutas", "DOC_MOVE_INVALID")
+    return moves
+
+
 def check_response_targets(intent_path: Path, state: Dict[str, Any], files_meta: List[Dict[str, Any]]) -> None:
     run = _load_run(intent_path, state)
     if run["result"] != RESULT_PENDING:
         raise DocRunError(f"la corrida no espera respuesta (resultado: {run['result']})", "DOC_NOT_PENDING")
     allowed = {d["path"] for d in run["to_sanitize"]}
+    registered = set(run["registered_documents"])
+    moves = _response_moves(files_meta)
+    for new_path, old_path in moves.items():
+        if old_path not in registered:
+            raise DocRunError(f"el movimiento parte de '{old_path}', que no es un documento registrado del alcance",
+                              "DOC_MOVE_INVALID")
+        if new_path in registered:
+            raise DocRunError(f"el movimiento llega a '{new_path}', que ya es un documento registrado",
+                              "DOC_MOVE_INVALID")
     for meta in files_meta:
         target = portable_path(meta.get("path", ""))
+        if target in moves:
+            continue
         if target not in allowed:
             raise DocRunError(
                 f"la respuesta escribe '{target}', que no está pendiente de saneo en esta corrida",
@@ -642,13 +688,35 @@ def build_contract(
 
     pending_paths = {d["path"] for d in run["to_sanitize"]}
     base_docs = {d["path"]: d for d in run.get("baseline_documents", [])}
+    files_meta = ((response_meta or {}).get("content") or {}).get("files") or []
+    moves = _response_moves(files_meta)
+    moved_from = {old: new for new, old in moves.items()}
+    from brain.core.intent import doc_registry
+    ids = dict(run.get("document_ids") or {})
     documents = []
     pending = []
     for doc in run["registered_documents"]:
+        if doc in moved_from:
+            new_path = moved_from[doc]
+            staged = staging_dir / new_path
+            if not staged.is_file():
+                pending.append(doc)
+                continue
+            documents.append({
+                "path": new_path,
+                "moved_from": doc,
+                "doc_id": ids.get(doc) or doc_registry.new_doc_id(),
+                "origin": "this_run",
+                "draft_ref": staged.relative_to(project_root).as_posix(),
+                "sha256": sha256_file(staged),
+                "size": staged.stat().st_size,
+            })
+            continue
         staged = staging_dir / doc
         if staged.is_file():
             documents.append({
                 "path": doc,
+                "doc_id": ids.get(doc) or doc_registry.new_doc_id(),
                 "origin": "this_run",
                 "draft_ref": staged.relative_to(project_root).as_posix(),
                 "sha256": sha256_file(staged),
@@ -660,6 +728,7 @@ def build_contract(
             base = base_docs[doc]
             documents.append({
                 "path": doc,
+                "doc_id": ids.get(doc) or doc_registry.new_doc_id(),
                 "origin": "baseline",
                 "draft_ref": base["draft_ref"],
                 "sha256": base["sha256"],
@@ -692,6 +761,7 @@ def build_contract(
         "pending": pending,
         "model": model,
         "content_channel": "response_file",
+        "registry": run.get("registry"),
     }
 
 
@@ -721,7 +791,10 @@ def declare_anomalies(
         raise DocRunError(f"los insumos cambiaron desde la comparación: {moved}; volvé a hidratar", "DOC_INPUTS_CHANGED")
 
     edited = {}
+    missing = {}
     for anomaly in run["anomalies"]:
+        if anomaly.get("change") == "faltante_fuera_del_sistema":
+            missing[anomaly["path"]] = anomaly.get("doc_id")
         if anomaly.get("change") == "borrador_alterado":
             raise DocRunError(
                 f"el borrador de la línea base de {anomaly['path']} está alterado; "
@@ -731,16 +804,26 @@ def declare_anomalies(
         if anomaly.get("kind") == "document" and anomaly.get("change") == "modificado_fuera_del_sistema":
             edited[anomaly["path"]] = anomaly["after"]
 
+    from brain.core.intent import doc_registry
+    ids = dict(run.get("document_ids") or {})
     documents = []
+    retired = []
     for base in run.get("baseline_documents", []):
         doc = base["path"]
+        doc_id = ids.get(doc) or doc_registry.new_doc_id()
+        if doc in missing:
+            # Declared as moved or deleted outside the system: the identity is
+            # retired, never handed to another file (DJ-16).
+            retired.append({"doc_id": missing[doc] or doc_id, "path": doc,
+                            "reason": "faltante declarado"})
+            continue
         if doc in edited:
             if sha256_file(project_root / doc) != edited[doc]:
                 raise DocRunError(f"{doc} cambió desde la comparación; volvé a hidratar", "DOC_INPUTS_CHANGED")
-            documents.append({"path": doc, "origin": "declared_external",
+            documents.append({"path": doc, "doc_id": doc_id, "origin": "declared_external",
                               "draft_ref": doc, "sha256": edited[doc]})
         else:
-            documents.append({"path": doc, "origin": "baseline",
+            documents.append({"path": doc, "doc_id": doc_id, "origin": "baseline",
                               "draft_ref": base["draft_ref"], "sha256": base["sha256"]})
 
     declared_at = now_iso()
@@ -760,9 +843,11 @@ def declare_anomalies(
         "inputs": run["observed_inputs"],
         "anomalies": run["anomalies"],
         "declared_anomalies": {"declared_at": declared_at, "count": len(run["anomalies"])},
+        "retired": retired,
         "pending": [],
         "model": None,
         "content_channel": "declaration",
+        "registry": run.get("registry"),
     }
     path = contract_path(intent_path)
     sha = write_json(path, contract)

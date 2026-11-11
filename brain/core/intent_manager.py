@@ -2085,6 +2085,21 @@ class IntentManager:
                 check = doc_run.verify(project_root, intent_path, state_data)
                 if not check["ok"]:
                     raise doc_run.DocRunError("doc no puede finalizar: " + "; ".join(check["problems"]), "DOC_FINALIZE_BLOCKED")
+                # D2: apply the result to the governed document registry.
+                from brain.core.intent import doc_registry
+                if check["basis"] == "contract":
+                    registry_result = doc_registry.commit_contract(
+                        project_root,
+                        doc_run.read_json(doc_run.contract_path(intent_path)),
+                        state_data["doc_contract"]["sha256"],
+                        state_data.get("uuid"),
+                    )
+                else:
+                    registry_result = doc_registry.observe_presence(
+                        project_root,
+                        doc_run.read_json(intent_path / doc_run.RUN_FILE),
+                        state_data.get("uuid"),
+                    )
             except Exception as exc:
                 doc_run.record_error(state_file, "finalize", exc)
                 raise
@@ -2096,6 +2111,7 @@ class IntentManager:
                 "run_ref": doc_run.RUN_FILE,
                 "run_sha256": state_data["doc_run"]["sha256"],
                 "baseline": run_data.get("baseline"),
+                "registry": registry_result,
             }
             if check["basis"] == "contract":
                 doc_finalize["contract_ref"] = doc_run.contract_path(intent_path).relative_to(intent_path).as_posix()
