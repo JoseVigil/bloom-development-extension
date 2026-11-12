@@ -25,6 +25,7 @@ from brain.core.intent_state_manager import (
 )
 from brain.core.intent_types import get_intent_type_spec
 from brain.core.intent.effect_ledger import EffectLedgerManager
+from brain.shared.logger import get_logger
 
 
 # Tipos que corren sobre el motor genérico BSIP (IntentStateManager +
@@ -32,6 +33,7 @@ from brain.core.intent.effect_ledger import EffectLedgerManager
 # Agregar un octavo tipo acá es, en principio, solo esto + una entrada
 # en intent_types.INTENT_TYPE_REGISTRY — ver intent_types.py.
 _BSIP_ENGINE_TYPES = ("ing", "dis")
+_DIS_RATIFICATION_LOG = get_logger("brain.intent.ratify_dis")
 
 
 def _uid(state_data: Dict[str, Any]) -> str:
@@ -1896,13 +1898,15 @@ class IntentManager:
         phase_name: str,
         turn_number: int,
         nucleus_path: Optional[Path] = None,
+        allow_supply_owned: bool = False,
     ) -> Dict[str, Any]:
         """Persist committed=true after every ledger obligation is verified."""
         project_root = self._find_bloom_project(nucleus_path)
         intent_path, state_data, _ = self._locate_intent(project_root, intent_id, folder_name)
         mgr = IntentStateManager.load(intent_path)
 
-        if (intent_path / ".classification/.turn_1/.request.json").exists() or (intent_path / ".mapping/.turn_1/.request.json").exists():
+        if (not allow_supply_owned and ((intent_path / ".classification/.turn_1/.request.json").exists()
+                                        or (intent_path / ".mapping/.turn_1/.request.json").exists())):
             raise ValueError("Supply-owned turns require intent supply with explicit human decisions")
         turn_dir = intent_path / f".{phase_name}" / f".turn_{turn_number}"
         ledger = EffectLedgerManager(turn_dir)
@@ -2034,6 +2038,144 @@ class IntentManager:
         return GenesisIntelligence(intent_root, semantic_index, policy_version=policy_version,
                                    policy=policy, registry=registry, destination=destination).run(
             decisions=decisions, ing_result=ing_result)
+
+    def ratify_dis(self, *, nucleus_path: Path, intent_id: str, mapping_turn_number: int,
+                   decision: Dict[str, Any], semantic_index: Path) -> Dict[str, Any]:
+        """Materialize, verify, commit and advance an existing DIS proposal."""
+        from brain.core.intelligence_supply import digest, persist, read_json
+        from brain.core.intent.dis_ratification import (DisRatificationError, apply_operations,
+                                                        build_delta, materialize_and_verify)
+        from brain.core.intent.genesis_intelligence import validate_mapping
+
+        _DIS_RATIFICATION_LOG.info("ratification_started intent_id=%s mapping_turn_id=%s", intent_id, mapping_turn_number)
+        root = self._find_bloom_project(nucleus_path)
+        intent_path, state, _ = self._locate_intent(root, intent_id, None)
+        mgr = IntentStateManager.load(intent_path)
+        if mgr.spec.intent_type.value != "dis":
+            raise DisRatificationError("STATE_CONFLICT", "intent is not DIS")
+        if mgr.phase_active not in {"mapping", "ratification", "done"}:
+            raise DisRatificationError("PHASE_CONFLICT", f"DIS cannot be ratified from phase '{mgr.phase_active}'")
+        semantic_index = Path(semantic_index).resolve()
+        if semantic_index not in {(root / ".cache/.semantic-index.json").resolve(),
+                                  (root / ".bloom/.cache/.semantic-index.json").resolve()}:
+            raise DisRatificationError("INVALID_ARGUMENT", "--semantic-index must be the explicit index under the supplied root")
+
+        mapping_ref = intent_path / ".mapping" / f".turn_{mapping_turn_number}" / ".files/.mapping_proposal.json"
+        snapshot = read_json(intent_path / ".discovery/.domain_graph_snapshot.json")
+        mapping = read_json(mapping_ref)
+        try:
+            validate_mapping(mapping, snapshot)
+        except Exception as exc:
+            raise DisRatificationError("PROPOSAL_CONFLICT", f"mapping proposal is invalid: {exc}") from exc
+        if mapping.get("intent_id") != mgr.intent_id or mapping.get("mandate_id") != state.get("mandate_id"):
+            raise DisRatificationError("PROPOSAL_CONFLICT", "mapping proposal identity does not match DIS state")
+        if mapping.get("graph_snapshot_digest") != digest(snapshot):
+            raise DisRatificationError("PROPOSAL_CONFLICT", "mapping proposal snapshot digest mismatch")
+        if not isinstance(decision, dict) or decision.get("schema_version") != "bloom.dis-ratification-decision/v1":
+            raise DisRatificationError("INVALID_HUMAN_DECISION", "unsupported decision schema")
+        if decision.get("mapping_proposal_digest") != digest(mapping):
+            raise DisRatificationError("PROPOSAL_CONFLICT", "decision does not bind the selected mapping proposal")
+        items = decision.get("operations")
+        originals = {item["operation_id"]: item for item in mapping["operations"]}
+        if not isinstance(items, list) or len(items) != len(originals) or {x.get("operation_id") for x in items} != set(originals):
+            raise DisRatificationError("INVALID_HUMAN_DECISION", "decision must cover every operation exactly once")
+        normalized = []
+        for item in items:
+            original, choice = originals[item["operation_id"]], item.get("human_decision")
+            if choice not in {"approved", "overridden", "rejected"}:
+                raise DisRatificationError("INVALID_HUMAN_DECISION", "invalid human_decision")
+            if item.get("type") != original["type"]:
+                raise DisRatificationError("PROPOSAL_CONFLICT", "decision changes operation type")
+            if choice in {"approved", "rejected"} and item.get("proposal") != original["proposal"]:
+                raise DisRatificationError("PROPOSAL_CONFLICT", "decision changes adopted proposal")
+            normalized.append({"operation_id": original["operation_id"], "type": original["type"],
+                               "proposal": item.get("proposal"), "evidence": original["evidence"],
+                               "human_decision": choice, "override": item.get("override")})
+
+        validation = []
+        for item in normalized:
+            candidate = {**item, "human_decision": None, "override": None}
+            if item["human_decision"] == "overridden":
+                candidate["operation_id"] = digest([item["type"], item["proposal"], digest(snapshot), mgr.intent_id])
+            validation.append(candidate)
+        try:
+            validate_mapping({**mapping, "operations": validation}, snapshot)
+        except Exception as exc:
+            raise DisRatificationError("INVALID_HUMAN_DECISION", f"decided proposal is invalid: {exc}") from exc
+
+        request_path = intent_path / ".ratification/.ratification_request.json"
+        identity = {"schema_version": "bloom.dis-ratification-request/v1", "intent_id": mgr.intent_id,
+                    "mandate_id": state["mandate_id"], "mapping_turn_id": str(mapping_turn_number),
+                    "mapping_ref": str(mapping_ref.resolve()), "mapping_digest": digest(mapping),
+                    "decision": {**decision, "operations": normalized},
+                    "decision_digest": digest({**decision, "operations": normalized})}
+        if request_path.exists():
+            request = read_json(request_path)
+            if {key: request.get(key) for key in identity} != identity:
+                raise DisRatificationError("EVIDENCE_CONFLICT", "persisted ratification request differs")
+        else:
+            request = {**identity, "ratified_at": datetime.now(timezone.utc).isoformat()}
+            persist(request_path, request)
+        if mgr.phase_active == "mapping":
+            self.add_turn(intent_id=mgr.intent_id, actor="user", content="Human DIS mapping decision fixed",
+                          nucleus_path=root, close_phase=True, proposal=normalized)
+            mgr = IntentStateManager.load(intent_path)
+        matches = [(p.parent, EffectLedgerManager(p.parent).load())
+                   for p in (intent_path / ".ratification").glob(".turn_*/.effect_ledger.json")
+                   if EffectLedgerManager(p.parent).load().get("effects_payload") == normalized]
+        if len(matches) > 1:
+            raise DisRatificationError("EVIDENCE_CONFLICT", "multiple ratification turns match")
+        if matches:
+            turn_dir, ledger_data = matches[0]
+            turn_number = int(turn_dir.name.split("_")[1])
+        else:
+            if mgr.phase_active != "ratification":
+                raise DisRatificationError("ADVANCE_INCOMPLETE", "ratification turn is absent", retryable=True)
+            turn = self.add_turn(intent_id=mgr.intent_id, actor="user", content="Apply fixed DIS decision",
+                                 nucleus_path=root, close_phase=True, proposal=normalized)
+            turn_number, turn_dir = int(turn["turn_number"]), Path(turn["turn_path"])
+            ledger_data = EffectLedgerManager(turn_dir).load()
+        final_graph = apply_operations(snapshot, normalized, mandate_id=state["mandate_id"],
+                                       intent_id=mgr.intent_id, timestamp=request["ratified_at"])
+        delta = build_delta(snapshot, final_graph, normalized, intent_id=mgr.intent_id,
+                            mandate_id=state["mandate_id"], mapping_ref=str(mapping_ref.resolve()),
+                            mapping_digest=digest(mapping), decision_digest=request["decision_digest"])
+        result = materialize_and_verify(semantic_index=semantic_index,
+                                        delta_path=turn_dir / ".files/.domain_graph_delta.json",
+                                        snapshot=snapshot, final_graph=final_graph, delta=delta)
+        _DIS_RATIFICATION_LOG.info("graph_materialized intent_id=%s turn_id=%s delta_digest=%s",
+                                   mgr.intent_id, turn_number, result.delta_digest)
+        evidence = {
+            "domain_graph_operation_applied": {"semantic_index_ref": result.semantic_index_ref,
+                "graph_before_digest": result.graph_before_digest, "graph_after_digest": result.graph_after_digest,
+                "mapping_digest": digest(mapping), "decision_digest": request["decision_digest"]},
+            "domain_graph_delta_materialized": {"delta_ref": result.delta_ref, "delta_digest": result.delta_digest,
+                "graph_before_digest": result.graph_before_digest, "graph_after_digest": result.graph_after_digest}}
+        for effect in ledger_data["effects"]:
+            if effect["obligation"] not in evidence:
+                raise DisRatificationError("EFFECT_VERIFICATION_MISSING", "unknown DIS ledger obligation")
+            self.mark_bsip_effect_applied(intent_id=mgr.intent_id, phase_name="ratification", turn_number=turn_number,
+                                          effect_id=effect["effect_id"], evidence=evidence[effect["obligation"]], nucleus_path=root)
+        committed = self.commit_bsip_turn(intent_id=mgr.intent_id, phase_name="ratification", turn_number=turn_number,
+                                          nucleus_path=root, allow_supply_owned=True)
+        _DIS_RATIFICATION_LOG.info("turn_committed intent_id=%s turn_id=%s effects_digest=%s",
+                                   mgr.intent_id, turn_number, committed["effects_digest"])
+        advanced = self.advance_bsip_turn(intent_id=mgr.intent_id, phase_name="ratification",
+                                          turn_number=turn_number, nucleus_path=root)
+        final_ledger, final_state = EffectLedgerManager(turn_dir).load(), IntentStateManager.load(intent_path)
+        control_path = turn_dir / ".ratification.json"
+        control = read_json(control_path)
+        if final_state.phase_active != "done" or not control.get("committed") or not final_ledger.get("state_advanced"):
+            raise DisRatificationError("ADVANCE_INCOMPLETE", "DIS terminal invariants were not persisted", retryable=True)
+        if control.get("effects_digest") != final_ledger.get("effects_digest"):
+            raise DisRatificationError("EFFECT_VERIFICATION_MISSING", "control and ledger digests diverge")
+        _DIS_RATIFICATION_LOG.info("ratification_completed intent_id=%s turn_id=%s phase_active=%s",
+                                   mgr.intent_id, turn_number, final_state.phase_active)
+        return {"intent_id": mgr.intent_id, "phase_active": final_state.phase_active, "turn_id": str(turn_number),
+                "committed": True, "ratification_ref": str(control_path),
+                "ledger_ref": str(EffectLedgerManager(turn_dir).path), "effects_digest": final_ledger["effects_digest"],
+                "state_advanced": final_ledger["state_advanced"], "already_committed": committed["already_committed"],
+                "already_advanced": advanced["already_advanced"], "already_applied": result.already_applied}
 
     def finalize_intent(
         self,

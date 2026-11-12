@@ -37,14 +37,17 @@ func TestSignedActionGraphRejectsChangedOrderAndBranch(t *testing.T) {
 	}
 }
 
-func TestAdoptedExecutionDispatchesINGThenDISProposal(t *testing.T) {
+func TestAdoptedExecutionWaitsForDISTerminalEvidence(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(MandateExecutionWorkflow)
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).RunDIS, activity.RegisterOptions{Name: "MandateDISActivity"})
-	ingCalls, persistCalls, completionCalls, disCalls := 0, 0, 0, 0
+	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).ObserveDISTerminal, activity.RegisterOptions{Name: "MandateDISTerminalObservationActivity"})
+	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
+	ingCalls, persistCalls, completionCalls, disCalls, observeCalls, terminalPersistCalls, docCalls := 0, 0, 0, 0, 0, 0, 0
+	disPersisted := false
 	env.OnActivity("MandateIntentActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateIntentResult, error) {
 		ingCalls++
 		if input.MandateID != "mandate-1" {
@@ -69,6 +72,33 @@ func TestAdoptedExecutionDispatchesINGThenDISProposal(t *testing.T) {
 			ProposalRef: "mapping.json", ProposalDigest: "hash", Status: "awaiting_human_decision"}, nil
 	})
 	env.OnActivity(activities.PersistAdoptedDISProposalActivity, mock.Anything, mock.Anything, mock.Anything).Return(activities.PersistExecutionResultResult{StateVersion: 4}, nil)
+	env.OnActivity("MandateDISTerminalObservationActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateDISCompletionResult, error) {
+		observeCalls++
+		if observeCalls == 1 {
+			return activities.MandateDISCompletionResult{MandateID: input.MandateID, Status: "pending"}, nil
+		}
+		return activities.MandateDISCompletionResult{
+			Ready: true, MandateID: input.MandateID, ActionID: "b", ContractDigest: "digest", IntentID: "dis-1",
+			ProposalRef: "mapping.json", ProposalDigest: "hash", TurnID: "1", RatificationRef: "ratification.json",
+			RatificationDigest: "ratification-hash", LedgerRef: "ledger.json", LedgerDigest: "ledger-hash",
+			EffectsDigest: "effects-hash", Status: "completed",
+		}, nil
+	})
+	env.OnActivity(activities.PersistAdoptedDISCompletionActivity, mock.Anything, mock.Anything, mock.Anything).Return(func(_ context.Context, _ activities.MandateDISCompletionResult, _ string) (activities.PersistExecutionResultResult, error) {
+		terminalPersistCalls++
+		disPersisted = true
+		return activities.PersistExecutionResultResult{StateVersion: 5}, nil
+	})
+	env.OnActivity("MandateDOCAfterDISActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateDOCResult, error) {
+		docCalls++
+		if !disPersisted {
+			t.Error("DOC was dispatched before terminal DIS persistence")
+		}
+		if docCalls == 1 {
+			return activities.MandateDOCResult{MandateID: input.MandateID, DocStatus: "pending_response", NextAction: "respond"}, nil
+		}
+		return activities.MandateDOCResult{Ready: true, MandateID: input.MandateID, DocStatus: "completed", NextAction: "none"}, nil
+	})
 	env.RegisterDelayedCallback(func() { env.SignalWorkflow("mandate:ing:decision", "decision") }, time.Millisecond)
 	env.ExecuteWorkflow(MandateExecutionWorkflow, MandateExecutionInput{MandateID: "mandate-1", MandatesRoot: "isolated", Adopted: true})
 	if err := env.GetWorkflowError(); err != nil {
@@ -78,8 +108,8 @@ func TestAdoptedExecutionDispatchesINGThenDISProposal(t *testing.T) {
 	if err := env.GetWorkflowResult(&result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || disCalls != 1 {
-		t.Fatalf("result=%#v ing=%d persist=%d complete=%d dis=%d", result, ingCalls, persistCalls, completionCalls, disCalls)
+	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || disCalls != 1 || observeCalls != 2 || terminalPersistCalls != 1 || docCalls != 2 {
+		t.Fatalf("result=%#v ing=%d persist=%d complete=%d dis=%d observe=%d terminalPersist=%d doc=%d", result, ingCalls, persistCalls, completionCalls, disCalls, observeCalls, terminalPersistCalls, docCalls)
 	}
 }
 

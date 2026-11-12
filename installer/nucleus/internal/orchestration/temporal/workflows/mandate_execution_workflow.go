@@ -236,6 +236,46 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedDISProposalActivity, dis, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
+		// The proposal is not terminal. Nucleus waits for the DIS owner to
+		// durably ratify and apply its effects, then independently observes the
+		// same Intent. No signal or CLI success can substitute done + committed.
+		var disCompleted activities.MandateDISCompletionResult
+		for {
+			if err := workflow.ExecuteActivity(ctx, "MandateDISTerminalObservationActivity", activities.MandateIntentInput{
+				MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+			}).Get(ctx, &disCompleted); err != nil {
+				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+			}
+			if disCompleted.Ready {
+				break
+			}
+			if err := workflow.Sleep(ctx, 5*time.Second); err != nil {
+				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+			}
+		}
+		if disCompleted.MandateID != input.MandateID || disCompleted.ActionID != dis.ActionID || disCompleted.ContractDigest != dis.ContractDigest || disCompleted.IntentID != dis.IntentID || disCompleted.ProposalRef != dis.ProposalRef || disCompleted.ProposalDigest != dis.ProposalDigest || disCompleted.Status != "completed" {
+			return MandateExecutionResult{Success: false, Error: "DIS terminal evidence mismatched proposal"}, nil
+		}
+		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedDISCompletionActivity, disCompleted, input.MandatesRoot).Get(ctx, nil); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		// DOC is an independent DJ-29 dispatch, not execution of the legacy DOC
+		// Action embedded in the signed 1.2.0 graph. It is unreachable until the
+		// terminal DIS gate above has been verified and persisted.
+		for {
+			var doc activities.MandateDOCResult
+			if err := workflow.ExecuteActivity(ctx, "MandateDOCAfterDISActivity", activities.MandateIntentInput{
+				MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+			}).Get(ctx, &doc); err != nil {
+				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+			}
+			if doc.Ready {
+				break
+			}
+			if err := workflow.Sleep(ctx, 5*time.Second); err != nil {
+				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+			}
+		}
 		return MandateExecutionResult{Success: true, Fulfilled: false}, nil
 	}
 	var genResult activities.MandateGenResult

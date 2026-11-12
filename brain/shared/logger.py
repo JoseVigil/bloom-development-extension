@@ -60,6 +60,14 @@ class BrainLogger:
             'category': 'brain',
             'description': 'Brain event bus log — captures event routing and subscription activity',
         },
+        'brain.intent.ratify_dis': {
+            'file_prefix': 'brain_intent_ratify_dis',
+            'level': logging.DEBUG,
+            'propagate': True,
+            'label': '🧠 DIS RATIFICATION',
+            'category': 'brain',
+            'description': 'Brain DIS ratification log — tracks durable graph materialization, ledger commit and lifecycle advance',
+        },
     }
 
     def __new__(cls):
@@ -98,7 +106,7 @@ class BrainLogger:
             self.log_dir.mkdir(parents=True, exist_ok=True)
 
             # Archivo por día en subcarpeta según log_name
-            timestamp = datetime.now().strftime("%Y%m%d")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
 
             # Extraer categoría (ej: "brain_core" → "core")
             category = log_name.replace("brain_", "") if log_name.startswith("brain_") else "general"
@@ -258,6 +266,7 @@ class BrainLogger:
                 "--path",        str(log_path).replace("\\", "/"),
                 "--priority",    str(priority),
                 "--category",    category,
+                "--source",      "brain",
                 "--description", description,
             ]
 

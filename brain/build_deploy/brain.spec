@@ -104,6 +104,7 @@ hiddenimports = [
     'brain.commands.intent.parse',
     'brain.commands.intent.plan',
     'brain.commands.intent.recover',
+    'brain.commands.intent.ratify_dis',
     'brain.commands.intent.stage',
     'brain.commands.intent.submit',
     'brain.commands.intent.supply',

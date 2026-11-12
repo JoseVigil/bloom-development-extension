@@ -23,6 +23,7 @@ REQUIRED_EFFECT_COMMANDS = {
     "mark_effect_applied.py",
     "commit_turn.py",
     "advance_turn.py",
+    "ratify_dis.py",
 }
 
 
@@ -113,3 +114,33 @@ def test_intent_create_emits_canonical_json_error_envelope(capsys):
         },
         "exit_code": 4,
     }
+
+
+def test_ratify_dis_command_follows_unified_template():
+    path = REPO_ROOT / "brain" / "commands" / "intent" / "ratify_dis.py"
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    command = next(node for node in tree.body if isinstance(node, ast.ClassDef))
+    methods = {node.name for node in command.body if isinstance(node, ast.FunctionDef)}
+    assert {"metadata", "register", "_handle_error", "_render_success"} <= methods
+    assert not [
+        node for node in tree.body
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("brain.core")
+    ]
+    assert "GlobalContext" in source
+    assert "gc.output(" in source
+    assert "gc.verbose" in source
+    assert "examples=" in source
+    assert all(any(keyword.arg == "help" for keyword in option.keywords)
+               for option in _calls(tree, "Option"))
+
+
+def test_ratify_dis_has_nucleus_registered_telemetry_stream():
+    logger_path = REPO_ROOT / "brain" / "shared" / "logger.py"
+    logger_source = logger_path.read_text(encoding="utf-8")
+    manager_source = (REPO_ROOT / "brain" / "core" / "intent_manager.py").read_text(encoding="utf-8")
+    assert "'brain.intent.ratify_dis'" in logger_source
+    assert "'file_prefix': 'brain_intent_ratify_dis'" in logger_source
+    assert '"--source",      "brain"' in logger_source
+    assert 'get_logger("brain.intent.ratify_dis")' in manager_source
+    assert "ratification_completed" in manager_source

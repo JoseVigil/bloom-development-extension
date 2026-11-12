@@ -512,6 +512,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			mandateWorker.RegisterActivity(activities.PersistAdoptedINGResultActivity)
 			mandateWorker.RegisterActivity(activities.PersistAdoptedINGCompletionActivity)
 			mandateWorker.RegisterActivity(activities.PersistAdoptedDISProposalActivity)
+			mandateWorker.RegisterActivity(activities.PersistAdoptedDISCompletionActivity)
 			mandateWorker.RegisterActivityWithOptions((&activities.MandateIntentActivity{
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,
@@ -524,6 +525,14 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,
 			}).RunDIS, activity.RegisterOptions{Name: "MandateDISActivity"})
+			mandateWorker.RegisterActivityWithOptions((&activities.MandateIntentActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    genBrainPath,
+			}).ObserveDISTerminal, activity.RegisterOptions{Name: "MandateDISTerminalObservationActivity"})
+			mandateWorker.RegisterActivityWithOptions((&activities.MandateDOCActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    genBrainPath,
+			}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
 			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
 			// fase: mandate_genesis_phase_activities.go). MandateBuildWorkflow
 			// ahora la invoca después de ingest/cluster/validate y, condicional a

@@ -429,6 +429,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         registry.register(RecoverCommand())
     except (ImportError, AttributeError) as e:
         print(f"Warning: Could not load RecoverCommand: {e}")
+
+    try:
+        from brain.commands.intent.ratify_dis import RatifyDisCommand
+        registry.register(RatifyDisCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load RatifyDisCommand: {e}")
     
     try:
         from brain.commands.intent.stage import StageCommand
@@ -907,6 +913,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.parse',
         'brain.commands.intent.plan',
         'brain.commands.intent.recover',
+        'brain.commands.intent.ratify_dis',
         'brain.commands.intent.stage',
         'brain.commands.intent.submit',
         'brain.commands.intent.supply',

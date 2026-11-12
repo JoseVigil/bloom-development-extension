@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"nucleus/internal/authority"
@@ -27,6 +29,197 @@ type MandateDISResult struct {
 	ProposalRef     string
 	ProposalDigest  string
 	Status          string
+}
+
+// MandateDISCompletionResult is detached evidence observed from Brain's
+// durable DIS tree. Nucleus never turns a proposal or a CLI success response
+// into terminal state; Ready is true only after the committed ratification and
+// its effect ledger independently reconcile.
+type MandateDISCompletionResult struct {
+	Ready              bool
+	MandateID          string
+	ActionID           string
+	ContractDigest     string
+	IntentID           string
+	ProposalRef        string
+	ProposalDigest     string
+	TurnID             string
+	RatificationRef    string
+	RatificationDigest string
+	LedgerRef          string
+	LedgerDigest       string
+	EffectsDigest      string
+	Status             string
+}
+
+// ObserveDISTerminal waits without performing ratification. The DIS owner must
+// apply and verify effects through Brain; this observer only accepts the
+// resulting durable done + committed:true evidence.
+func (a *MandateIntentActivity) ObserveDISTerminal(ctx context.Context, input MandateIntentInput) (MandateDISCompletionResult, error) {
+	var result MandateDISCompletionResult
+	if ctx == nil || ctx.Err() != nil || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID || input.MandatesRoot == "" || a.IdentityPath == "" {
+		return result, fmt.Errorf("invalid DIS terminal observation")
+	}
+	dir := filepath.Join(input.MandatesRoot, input.MandateID)
+	envelope, err := mandatecontract.LoadVerified(dir, a.IdentityPath)
+	if err != nil || envelope.Contract.ContractVersion != 4 || len(envelope.Contract.Actions) < 2 || envelope.Contract.Actions[1].IntentType != "dis" {
+		return result, fmt.Errorf("signed DIS Action invalid")
+	}
+	actionID := envelope.Contract.Actions[1].ActionID
+	var journal struct {
+		MandateID string `json:"mandateId"`
+		Adoption  struct {
+			ContractDigest string `json:"contractDigest"`
+		} `json:"adoption"`
+		Actions map[string]struct {
+			IntentID       string `json:"intentId"`
+			Status         string `json:"status"`
+			ProposalRef    string `json:"proposalRef"`
+			ProposalSHA256 string `json:"proposalSha256"`
+		} `json:"actions"`
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
+	if err != nil || json.Unmarshal(raw, &journal) != nil || journal.MandateID != input.MandateID || journal.Adoption.ContractDigest != envelope.ContractDigest {
+		return result, fmt.Errorf("DIS journal identity mismatch")
+	}
+	entry := journal.Actions[actionID]
+	if entry.IntentID == "" || entry.Status != "awaiting_human_decision" || entry.ProposalRef == "" || entry.ProposalSHA256 == "" {
+		return result, fmt.Errorf("DIS proposal is not awaiting ratification")
+	}
+	proposal, err := os.ReadFile(entry.ProposalRef)
+	proposalSum := sha256.Sum256(proposal)
+	if err != nil || hex.EncodeToString(proposalSum[:]) != entry.ProposalSHA256 {
+		return result, fmt.Errorf("DIS proposal evidence changed")
+	}
+	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
+	if !pathWithin(filepath.Join(nucleusRoot, ".intents", ".dis"), entry.ProposalRef) {
+		return result, fmt.Errorf("DIS proposal evidence is outside Intent storage")
+	}
+	intentRoot, intentID, err := findAdoptedDIS(nucleusRoot, input.MandateID)
+	if err != nil || intentID != entry.IntentID {
+		return result, fmt.Errorf("DIS Intent identity mismatch")
+	}
+	var state struct {
+		IntentID    string `json:"intent_id"`
+		MandateID   string `json:"mandate_id"`
+		IntentType  string `json:"intent_type"`
+		PhaseActive string `json:"phase_active"`
+	}
+	stateRaw, err := os.ReadFile(filepath.Join(intentRoot, ".dis_state.json"))
+	if err != nil || json.Unmarshal(stateRaw, &state) != nil || state.IntentID != intentID || state.MandateID != input.MandateID || state.IntentType != "dis" {
+		return result, fmt.Errorf("DIS state identity invalid")
+	}
+	result = MandateDISCompletionResult{
+		MandateID: input.MandateID, ActionID: actionID, ContractDigest: envelope.ContractDigest,
+		IntentID: intentID, ProposalRef: entry.ProposalRef, ProposalDigest: entry.ProposalSHA256, Status: "pending",
+	}
+	if state.PhaseActive != "done" {
+		return result, nil
+	}
+	turns, err := os.ReadDir(filepath.Join(intentRoot, ".ratification"))
+	if err != nil {
+		return MandateDISCompletionResult{}, err
+	}
+	type terminalTurn struct {
+		number int
+		dir    string
+	}
+	var candidates []terminalTurn
+	for _, item := range turns {
+		if !item.IsDir() || !strings.HasPrefix(item.Name(), ".turn_") {
+			continue
+		}
+		n, parseErr := strconv.Atoi(strings.TrimPrefix(item.Name(), ".turn_"))
+		if parseErr == nil && n > 0 {
+			candidates = append(candidates, terminalTurn{n, filepath.Join(intentRoot, ".ratification", item.Name())})
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].number > candidates[j].number })
+	if len(candidates) == 0 {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS done without ratification turn")
+	}
+	turn := candidates[0]
+	controlRef := filepath.Join(turn.dir, ".ratification.json")
+	controlRaw, err := os.ReadFile(controlRef)
+	var control struct {
+		Turn          string `json:"turn"`
+		Committed     bool   `json:"committed"`
+		LedgerRef     string `json:"ledger_ref"`
+		EffectsDigest string `json:"effects_digest"`
+	}
+	if err != nil || json.Unmarshal(controlRaw, &control) != nil || !control.Committed || control.Turn != strconv.Itoa(turn.number) || control.LedgerRef != ".effect_ledger.json" || control.EffectsDigest == "" {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS terminal ratification control invalid")
+	}
+	ledgerRef := filepath.Join(turn.dir, control.LedgerRef)
+	ledgerRaw, err := os.ReadFile(ledgerRef)
+	var ledger struct {
+		Schema         string                   `json:"schema_version"`
+		LedgerID       string                   `json:"ledger_id"`
+		Identity       map[string]interface{}   `json:"identity"`
+		State          string                   `json:"state"`
+		StateAdvanced  bool                     `json:"state_advanced"`
+		EffectsPayload interface{}              `json:"effects_payload"`
+		EffectsDigest  string                   `json:"effects_digest"`
+		Effects        []map[string]interface{} `json:"effects"`
+	}
+	if err != nil || json.Unmarshal(ledgerRaw, &ledger) != nil || ledger.Schema != "1.0" || ledger.Identity["intent_id"] != intentID || ledger.Identity["intent_type"] != "dis" || ledger.Identity["stage"] != "ratification" || ledger.Identity["turn_id"] != control.Turn || ledger.State != "state_advanced" || !ledger.StateAdvanced || len(ledger.Effects) == 0 || ledger.EffectsDigest != control.EffectsDigest {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS terminal effect ledger invalid")
+	}
+	identityDigest, digestErr := pythonJSONDigest(ledger.Identity)
+	if digestErr != nil || len(identityDigest) < 32 || ledger.LedgerID != identityDigest[:32] {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS effect ledger identity digest mismatch")
+	}
+	payloadDigest, digestErr := pythonJSONDigest(ledger.EffectsPayload)
+	if digestErr != nil {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS effect payload is not canonicalizable")
+	}
+	expectedObligations := []string{"domain_graph_operation_applied", "domain_graph_delta_materialized"}
+	for i, effect := range ledger.Effects {
+		verification, _ := effect["verification"].(map[string]interface{})
+		evidenceDigest, _ := verification["evidence_digest"].(string)
+		obligation, _ := effect["obligation"].(string)
+		effectIdentity := make(map[string]interface{}, len(ledger.Identity)+1)
+		for key, value := range ledger.Identity {
+			effectIdentity[key] = value
+		}
+		effectIdentity["obligation"] = obligation
+		effectIdentityDigest, effectDigestErr := pythonJSONDigest(effectIdentity)
+		if i >= len(expectedObligations) || obligation != expectedObligations[i] || effectDigestErr != nil || effect["effect_id"] != effectIdentityDigest[:24] || effect["payload_digest"] != payloadDigest || effect["status"] != "applied" || verification["verified"] != true || verification["evidence"] == nil || evidenceDigest == "" {
+			return MandateDISCompletionResult{}, fmt.Errorf("DIS effect lacks verified evidence")
+		}
+		actualEvidenceDigest, canonicalErr := pythonJSONDigest(verification["evidence"])
+		if canonicalErr != nil {
+			return MandateDISCompletionResult{}, fmt.Errorf("DIS effect evidence is not canonicalizable")
+		}
+		if actualEvidenceDigest != evidenceDigest {
+			return MandateDISCompletionResult{}, fmt.Errorf("DIS effect evidence digest mismatch")
+		}
+	}
+	if len(ledger.Effects) != len(expectedObligations) {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS effect obligation set mismatch")
+	}
+	canonicalEffects, canonicalErr := pythonCanonicalJSON(ledger.Effects)
+	if canonicalErr != nil {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS effects are not canonicalizable")
+	}
+	effectsSum := sha256.Sum256(canonicalEffects)
+	if hex.EncodeToString(effectsSum[:]) != ledger.EffectsDigest {
+		return MandateDISCompletionResult{}, fmt.Errorf("DIS effects digest mismatch")
+	}
+	controlSum, ledgerSum := sha256.Sum256(controlRaw), sha256.Sum256(ledgerRaw)
+	result.Ready, result.Status, result.TurnID = true, "completed", control.Turn
+	result.RatificationRef, result.RatificationDigest = controlRef, hex.EncodeToString(controlSum[:])
+	result.LedgerRef, result.LedgerDigest, result.EffectsDigest = ledgerRef, hex.EncodeToString(ledgerSum[:]), ledger.EffectsDigest
+	return result, nil
+}
+
+func pythonJSONDigest(value interface{}) (string, error) {
+	canonical, err := pythonCanonicalJSON(value)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // RunDIS starts or resumes only the signed DIS mapping Action. Ratification

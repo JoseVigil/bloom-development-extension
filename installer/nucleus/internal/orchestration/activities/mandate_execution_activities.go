@@ -237,6 +237,65 @@ func PersistAdoptedDISProposalActivity(ctx context.Context, input MandateDISResu
 	return PersistExecutionResultResult{StateVersion: version}, nil
 }
 
+// PersistAdoptedDISCompletionActivity closes only the DIS gate. It deliberately
+// does not advance to the signed 1.2.0 DOC Action; independent DOC dispatch is
+// connected in a later cut.
+func PersistAdoptedDISCompletionActivity(ctx context.Context, input MandateDISCompletionResult, mandatesRoot string) (PersistExecutionResultResult, error) {
+	if ctx == nil || ctx.Err() != nil || !input.Ready || input.Status != "completed" || mandatesRoot == "" || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID ||
+		input.ActionID == "" || input.ContractDigest == "" || input.IntentID == "" || input.ProposalRef == "" || input.ProposalDigest == "" || input.TurnID == "" || input.RatificationRef == "" || input.RatificationDigest == "" || input.LedgerRef == "" || input.LedgerDigest == "" || input.EffectsDigest == "" {
+		return PersistExecutionResultResult{}, fmt.Errorf("DIS terminal evidence incomplete")
+	}
+	intentBase := filepath.Join(filepath.Dir(filepath.Clean(mandatesRoot)), ".intents", ".dis")
+	for _, evidence := range []struct{ ref, digest string }{{input.ProposalRef, input.ProposalDigest}, {input.RatificationRef, input.RatificationDigest}, {input.LedgerRef, input.LedgerDigest}} {
+		rel, relErr := filepath.Rel(intentBase, evidence.ref)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return PersistExecutionResultResult{}, fmt.Errorf("DIS terminal evidence outside Intent storage")
+		}
+		raw, err := os.ReadFile(evidence.ref)
+		if err != nil {
+			return PersistExecutionResultResult{}, err
+		}
+		sum := sha256.Sum256(raw)
+		if hex.EncodeToString(sum[:]) != evidence.digest {
+			return PersistExecutionResultResult{}, fmt.Errorf("DIS terminal evidence changed")
+		}
+	}
+	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		adoption, _ := state["adoption"].(map[string]interface{})
+		actions, _ := state["actions"].(map[string]interface{})
+		prior, _ := actions[input.ActionID].(map[string]interface{})
+		if state["mandateId"] != input.MandateID || adoption == nil || adoption["contractDigest"] != input.ContractDigest || actions == nil || prior == nil || state["currentAction"] != input.ActionID {
+			return false, fmt.Errorf("DIS terminal journal identity mismatch")
+		}
+		if prior["ingIntentId"] == nil || prior["ingResultRef"] == nil || prior["ingResultSha256"] == nil {
+			return false, fmt.Errorf("DIS antecedent evidence missing")
+		}
+		terminal := map[string]interface{}{
+			"intentId": input.IntentID, "status": "completed", "proposalRef": input.ProposalRef, "proposalSha256": input.ProposalDigest,
+			"ingIntentId": prior["ingIntentId"], "ingResultRef": prior["ingResultRef"], "ingResultSha256": prior["ingResultSha256"],
+			"ratificationTurn": input.TurnID, "ratificationRef": input.RatificationRef, "ratificationSha256": input.RatificationDigest,
+			"ledgerRef": input.LedgerRef, "ledgerSha256": input.LedgerDigest, "effectsDigest": input.EffectsDigest,
+		}
+		if prior["status"] == "completed" {
+			if reflect.DeepEqual(prior, terminal) {
+				return false, nil
+			}
+			return false, fmt.Errorf("DIS terminal evidence conflicts with journal")
+		}
+		if prior["status"] != "awaiting_human_decision" || prior["intentId"] != input.IntentID || prior["proposalRef"] != input.ProposalRef || prior["proposalSha256"] != input.ProposalDigest {
+			return false, fmt.Errorf("DIS proposal changed before terminal persistence")
+		}
+		actions[input.ActionID] = terminal
+		state["status"] = "in_progress"
+		return true, nil
+	})
+	if err != nil {
+		return PersistExecutionResultResult{}, err
+	}
+	return PersistExecutionResultResult{StateVersion: version}, nil
+}
+
 func executionResultKey(input PersistExecutionResultInput) string {
 	if input.ActionID != "" {
 		return input.ActionID
