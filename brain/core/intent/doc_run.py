@@ -371,9 +371,47 @@ def resolve_trigger(
         "changed_paths": declared,
         "source": "declared" if declared else "none",
         "state_sha256": sha256_file(state_file),
+        "intent_ref": intent_dir.relative_to(Path(trigger_nucleus)).as_posix(),
         "terminal": terminal,
         "nucleus": nucleus_link,
     }
+
+
+def verify_trigger_evidence(project_root: Path, state: Dict[str, Any]) -> None:
+    """
+    Re-check, when a doc is hydrated (also on resume), that its trigger still
+    holds: a dev stays completed; a dis stays done with the same committed
+    ratification control, and the Project is still linked to its Nucleus.
+    Nothing is re-derived: the evidence recorded at create is compared.
+    """
+    trigger = state.get("doc_trigger") or {}
+    if trigger.get("kind") != "intent":
+        return
+    if trigger.get("intent_type") == "dev":
+        found = _find_state(project_root / ".bloom" / ".intents", trigger["intent_id"])
+        if found is None or found[2].get("status") != "completed":
+            raise DocRunError("el dev disparador ya no está en su estado terminal",
+                              "DOC_TRIGGER_EVIDENCE_CHANGED")
+        return
+    nucleus = trigger.get("nucleus") or {}
+    nucleus_root = Path(nucleus.get("nucleus_root", ""))
+    verify_project_link(nucleus_root, project_root)
+    intent_ref = trigger.get("intent_ref")
+    if not intent_ref:
+        return  # doc created before intent_ref was recorded: link checked only
+    intent_dir = nucleus_root / intent_ref
+    state_file = intent_dir / ".dis_state.json"
+    try:
+        dis_state = read_json(state_file)
+    except (OSError, json.JSONDecodeError):
+        raise DocRunError(f"no se encuentra el dis disparador en {intent_dir}", "DOC_TRIGGER_EVIDENCE_CHANGED")
+    if dis_state.get("phase_active") != "done":
+        raise DocRunError("el dis disparador ya no está en done", "DOC_TRIGGER_EVIDENCE_CHANGED")
+    terminal = trigger.get("terminal") or {}
+    control = intent_dir / terminal.get("control_ref", "")
+    if sha256_file(control) != terminal.get("control_sha256"):
+        raise DocRunError("el control de ratification del dis cambió desde que se creó el doc",
+                          "DOC_TRIGGER_EVIDENCE_CHANGED")
 
 
 # ---------------------------------------------------------------------------

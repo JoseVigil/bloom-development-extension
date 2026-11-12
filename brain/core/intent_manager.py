@@ -249,6 +249,13 @@ class IntentManager:
                 # continues from its current status.
                 with open(existing_state, "r", encoding="utf-8") as f:
                     current = json.load(f)
+                stored = (current.get("doc_trigger") or {}).get("intent_id")
+                if trigger_intent and trigger_intent.strip() != stored:
+                    raise doc_run.DocRunError(
+                        f"ya existe un doc '{name}' para otro disparador ({stored}); "
+                        "usá otro nombre o reanudá con el mismo disparador",
+                        "DOC_RESUME_MISMATCH",
+                    )
                 return {
                     "intent_id": current.get("uuid", intent_id),
                     "intent_path": str(existing_state.parent),
@@ -348,6 +355,15 @@ class IntentManager:
         )
        
         intent_type = _itype(state_data)
+        if intent_type == "doc":
+            if state_data.get("status") == "completed":
+                # A completed doc is never reopened (resume is idempotent).
+                raise doc_run.DocRunError("el doc ya está completado; no se reabre", "DOC_ALREADY_COMPLETED")
+            try:
+                doc_run.verify_trigger_evidence(project_root, state_data)
+            except Exception as exc:
+                doc_run.record_error(state_file, "hydrate", exc)
+                raise
 
         if intent_type in _BSIP_ENGINE_TYPES:
             # .reception/ (ing) y .discovery/ (dis) tienen un contrato
@@ -1511,6 +1527,7 @@ class IntentManager:
             "consolidation_turns_count": consolidation_turns_count,
             "phase_active": state_data.get("phase_active") if intent_type in _BSIP_ENGINE_TYPES else None,
             "project_path": str(project_root),
+            "doc": doc_run.status_view(state_data) if intent_type == "doc" else None,
             "full_state": state_data
         }
     def lock_intent(
@@ -2065,6 +2082,20 @@ class IntentManager:
             # cuyo último turno de consolidation/ratification sigue con
             # committed: false (ING §5 / DIS §5).
             return self._finalize_bsip_intent(intent_path, state_data, timestamp)
+
+        if intent_type == "doc" and state_data.get("status") == "completed" and state_data.get("doc_finalize"):
+            # Resume after a cut: finalizing a completed doc again is a no-op.
+            return {
+                "intent_id": state_data.get("uuid"),
+                "name": state_data.get("name"),
+                "status": "completed",
+                "finalized_at": state_data.get("finalized_at"),
+                "files_modified": 0,
+                "already_finalized": True,
+                "doc_finalize": state_data["doc_finalize"],
+                "doc": doc_run.status_view(state_data),
+                "message": f"Intent '{state_data.get('name', 'unknown')}' was already finalized",
+            }
 
         # Verificar que no esté locked por otro
         if state_data.get("locked", False):

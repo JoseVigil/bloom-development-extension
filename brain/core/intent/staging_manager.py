@@ -131,6 +131,8 @@ class StagingManager:
             # D1: a doc response may only write documents pending sanitation
             # in this run (P48/P34). Checked before copying anything.
             from brain.core.intent import doc_run
+            if self.state_data.get("status") == "completed":
+                raise doc_run.DocRunError("el doc ya está completado; no se reabre", "DOC_ALREADY_COMPLETED")
             try:
                 doc_run.check_response_targets(self.intent_path, self.state_data, files_meta)
             except Exception as exc:
@@ -236,7 +238,8 @@ class StagingManager:
             "total_size_bytes": manifest["total_size_bytes"],
             "dry_run": dry_run,
             "overwrite": overwrite,
-            "doc_contract": doc_contract
+            "doc_contract": doc_contract,
+            "doc": doc_contract["doc"] if doc_contract else None
         }
 
     def _write_doc_contract(self, response_dir: Path, staging_dir: Path, response_data: dict) -> Dict[str, Any]:

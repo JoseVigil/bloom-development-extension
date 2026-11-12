@@ -377,6 +377,9 @@ class DownloadManager:
             # D1 (P1, form 3): a doc intent receives its content response
             # by file in its own context stage only.
             valid_stages = ["context"]
+            if self.state_data.get("status") == "completed":
+                from brain.core.intent.doc_run import DocRunError
+                raise DocRunError("el doc ya está completado; no se reabre", "DOC_ALREADY_COMPLETED")
         if protocol["pipeline_stage"] not in valid_stages:
             raise ValueError(
                 f"Invalid pipeline_stage: {protocol['pipeline_stage']}. "
