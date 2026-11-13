@@ -111,10 +111,13 @@ func (c Contract) IntelligenceActionIDs() ([]string, error) {
 // ValidateMandateActions pins the executable v4 plan to the approved vertical.
 // Branch conditions are part of the signed contract, never a workflow signal.
 func ValidateMandateActions(actions []Action) error {
-	if len(actions) != 6 {
-		return errors.New("Mandate requires exactly six signed Actions")
-	}
 	types := []string{"ing", "dis", "doc", "exp", "dev", "exp"}
+	if len(actions) == 8 {
+		types = []string{"ing", "doc", "dis", "doc", "exp", "dev", "doc", "exp"}
+	}
+	if len(actions) != len(types) {
+		return errors.New("unsupported signed Mandate Action graph")
+	}
 	seen := make(map[string]bool, len(actions))
 	keys := make(map[string]bool, len(actions))
 	for i, action := range actions {
@@ -134,7 +137,7 @@ func ValidateMandateActions(actions []Action) error {
 			return fmt.Errorf("Mandate Action %d has an invalid dependency", i)
 		}
 		expectedCondition := ""
-		if i == 4 {
+		if types[i] == "dev" {
 			expectedCondition = "remediation_required"
 		}
 		if action.WhenResult != expectedCondition {

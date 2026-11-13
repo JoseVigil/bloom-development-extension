@@ -94,10 +94,19 @@ func TestAdoptedExecutionWaitsForDISTerminalEvidence(t *testing.T) {
 		if !disPersisted {
 			t.Error("DOC was dispatched before terminal DIS persistence")
 		}
-		if docCalls == 1 {
-			return activities.MandateDOCResult{MandateID: input.MandateID, DocStatus: "pending_response", NextAction: "respond"}, nil
+		if input.DISActionID != "b" {
+			t.Errorf("DOC dispatch lost terminal DIS Action identity: %#v", input)
 		}
-		return activities.MandateDOCResult{Ready: true, MandateID: input.MandateID, DocStatus: "completed", NextAction: "none"}, nil
+		if docCalls == 1 {
+			if input.ActionID != "" {
+				t.Errorf("first DOC dispatch was unexpectedly pre-bound: %#v", input)
+			}
+			return activities.MandateDOCResult{MandateID: input.MandateID, ActionID: "c", DISActionID: "b", DocStatus: "pending_response", NextAction: "respond"}, nil
+		}
+		if input.ActionID != "c" {
+			t.Errorf("DOC resume lost signed Action identity: %#v", input)
+		}
+		return activities.MandateDOCResult{Ready: true, MandateID: input.MandateID, ActionID: "c", DISActionID: "b", IntentID: "doc-1", DocStatus: "completed", NextAction: "none", RunDigest: "run-hash"}, nil
 	})
 	env.RegisterDelayedCallback(func() { env.SignalWorkflow("mandate:ing:decision", "decision") }, time.Millisecond)
 	env.ExecuteWorkflow(MandateExecutionWorkflow, MandateExecutionInput{MandateID: "mandate-1", MandatesRoot: "isolated", Adopted: true})

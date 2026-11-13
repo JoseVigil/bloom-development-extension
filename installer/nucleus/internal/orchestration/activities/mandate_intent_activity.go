@@ -23,7 +23,7 @@ type MandateIntentActivity struct {
 	TrustRoots   map[string]ed25519.PublicKey
 }
 
-type MandateIntentInput struct{ MandatesRoot, MandateID string }
+type MandateIntentInput struct{ MandatesRoot, MandateID, ActionID, DISActionID string }
 type MandateIntentResult struct {
 	MandateID, ActionID, ContractDigest, IntentID, EvidenceRef, EvidenceDigest, Status string
 }

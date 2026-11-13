@@ -254,6 +254,18 @@ func TestIndependentDOCAfterDISUsesPreparedSourcesAndCompletes(t *testing.T) {
 	var calls [][]string
 	fake := func(_ string, args []string) ([]byte, []byte, int, error) {
 		calls = append(calls, append([]string(nil), args...))
+		if len(calls) == 1 {
+			boundRaw, readErr := os.ReadFile(statePath)
+			var bound map[string]interface{}
+			if readErr != nil || json.Unmarshal(boundRaw, &bound) != nil {
+				t.Fatalf("DOC Action binding was not durable before Brain dispatch: %v", readErr)
+			}
+			doc := bound["docAfterDIS"].(map[string]interface{})
+			action := bound["actions"].(map[string]interface{})["c"].(map[string]interface{})
+			if doc["actionId"] != "c" || doc["dependsOnActionId"] != "b" || action["status"] != "in_progress" || action["dependsOn"] != "b" {
+				t.Fatalf("signed DOC Action was not bound before dispatch: %s", boundRaw)
+			}
+		}
 		operation := args[2]
 		data := map[string]interface{}{"intent_id": "doc-id", "folder_name": ".doc-after-dis", "doc": map[string]interface{}{"doc_status": "created", "next_action": "hydrate"}}
 		if operation == "hydrate" {
@@ -270,7 +282,7 @@ func TestIndependentDOCAfterDISUsesPreparedSourcesAndCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Ready || result.DocStatus != "completed" || len(calls) != 3 {
+	if !result.Ready || result.ActionID != "c" || result.DocStatus != "completed" || len(calls) != 3 {
 		t.Fatalf("unexpected DOC result=%#v calls=%#v", result, calls)
 	}
 	create := strings.Join(calls[0], " ")
@@ -285,8 +297,33 @@ func TestIndependentDOCAfterDISUsesPreparedSourcesAndCompletes(t *testing.T) {
 		t.Fatal("invalid final state")
 	}
 	doc := final["docAfterDIS"].(map[string]interface{})
-	if doc["completed"] != true || doc["intentId"] != "doc-id" || doc["triggerIntentId"] != "dis-intent" {
+	docAction := final["actions"].(map[string]interface{})["c"].(map[string]interface{})
+	if doc["completed"] != true || doc["actionId"] != "c" || doc["intentId"] != "doc-id" || doc["triggerIntentId"] != "dis-intent" ||
+		docAction["status"] != "completed" || final["currentAction"] != "c" {
 		t.Fatalf("DOC evidence missing: %s", finalRaw)
+	}
+	second, err := docActivity.RunAfterDIS(context.Background(), MandateIntentInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, ActionID: "c"})
+	if err != nil || !second.Ready || second.ActionID != "c" || second.IntentID != "doc-id" {
+		t.Fatalf("idempotent DOC resume failed: result=%#v err=%v", second, err)
+	}
+}
+
+func TestSignedDOCAfterDISUsesActionIdentityWhenEarlierDOCMovesDIS(t *testing.T) {
+	actions := []mandatecontract.Action{
+		{ActionID: "ing-1", IntentType: "ing"},
+		{ActionID: "doc-after-ing", IntentType: "doc", DependsOn: []string{"ing-1"}},
+		{ActionID: "dis-1", IntentType: "dis", DependsOn: []string{"doc-after-ing"}},
+		{ActionID: "doc-after-dis", IntentType: "doc", DependsOn: []string{"dis-1"}},
+	}
+	dis, doc, err := signedDOCFollowingDIS(actions, "dis-1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dis.ActionID != "dis-1" || doc.ActionID != "doc-after-dis" {
+		t.Fatalf("wrong signed DOC identity: dis=%#v doc=%#v", dis, doc)
+	}
+	if _, _, err := signedDOCFollowingDIS(actions, "dis-1", "doc-after-ing"); err == nil {
+		t.Fatal("a DOC Action bound to another antecedent was accepted")
 	}
 }
 

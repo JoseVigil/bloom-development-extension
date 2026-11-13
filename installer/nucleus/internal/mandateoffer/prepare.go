@@ -26,7 +26,7 @@ import (
 // Preparer turns one installed offer into a signed, verified but inactive v4.
 // It never authorizes an act or starts a workflow.
 type Preparer struct {
-	Upgrade        bool // explicit 1.1.0 -> 1.2.0 transition; never inferred
+	Upgrade        bool // explicit consecutive version transition; never inferred
 	OrganizationID string
 	AppDataDir     string
 	MandatesRoot   string
@@ -54,7 +54,7 @@ func (p *Preparer) Prepare(ctx context.Context, mandateID string, sel mandatedel
 		p.ProjectPath == "" || p.ProjectName == "" {
 		return PrepareResult{}, errors.New("preparation dependencies required")
 	}
-	if !uuidPattern.MatchString(mandateID) || !uuidPattern.MatchString(sel.DefinitionID) || (sel.Version != "1.1.0" && sel.Version != "1.2.0") ||
+	if !uuidPattern.MatchString(mandateID) || !uuidPattern.MatchString(sel.DefinitionID) || (sel.Version != "1.1.0" && sel.Version != "1.2.0" && sel.Version != "1.3.0") ||
 		len(sel.Digest) != 64 || len(sourceFiles) == 0 {
 		return PrepareResult{}, errors.New("invalid preparation selection")
 	}
@@ -219,6 +219,19 @@ func (p *Preparer) Prepare(ctx context.Context, mandateID string, sel mandatedel
 }
 
 func sameOfferPlan(a, b mandatedefinition.Payload) bool {
+	if b.Version == "1.3.0" {
+		policy, policyErr := base64.StdEncoding.Strict().DecodeString(a.Policy.ContentBase64)
+		registry, registryErr := base64.StdEncoding.Strict().DecodeString(a.Registry.ContentBase64)
+		if policyErr != nil || registryErr != nil {
+			return false
+		}
+		expected, err := mandatedefinition.BuildPreparableOfferPayload(mandatedefinition.InitialOfferInput{
+			DefinitionID: a.DefinitionID, Version: b.Version, Label: a.Label, Purpose: a.Purpose,
+			PublisherID: a.Publisher.PublisherID, KeyID: a.Publisher.KeyID, PublishedAt: b.PublishedAt,
+			PolicyRaw: policy, RegistryRaw: registry,
+		})
+		return err == nil && reflect.DeepEqual(expected, b)
+	}
 	bPlan := b.Plan
 	if b.Version == "1.2.0" {
 		if !mandatedefinition.HasApprovedGenesisIntelligenceRequirements(b) {
@@ -237,20 +250,24 @@ func sameOfferPlan(a, b mandatedefinition.Payload) bool {
 		reflect.DeepEqual(a.Registry, b.Registry) && reflect.DeepEqual(a.Requires, b.Requires)
 }
 
-// upgradePrepared transitions only the already prepared, inactive 1.1.0
-// instance. Both signed contracts and the transition receipt remain immutable.
+// upgradePrepared transitions only an already prepared, inactive instance
+// Both signed contracts and the transition receipt remain immutable.
 // The state is advanced before the active contract: readers fail closed during
 // that brief window, and a retry completes the second write.
 func (p *Preparer) upgradePrepared(ctx context.Context, inst Instance, dir, statePath string, sel mandatedelivery.OfferSelection, files []string) (PrepareResult, error) {
-	if sel.Version != "1.2.0" || inst.Status != StatusPrepared || inst.Preparation == nil ||
+	fromVersion, historyLength := "1.1.0", 0
+	if sel.Version == "1.3.0" {
+		fromVersion, historyLength = "1.2.0", 1
+	}
+	if (sel.Version != "1.2.0" && sel.Version != "1.3.0") || inst.Status != StatusPrepared || inst.Preparation == nil ||
 		!reflect.DeepEqual(inst.Preparation.SourceFiles, files) {
-		return PrepareResult{}, errors.New("upgrade requires the existing prepared inputs and version 1.2.0")
+		return PrepareResult{}, errors.New("upgrade requires the existing prepared inputs and a supported version")
 	}
 	activePath := filepath.Join(dir, "mandate.json")
 	identityPath := filepath.Join(p.AppDataDir, "authority", "identity.json")
 	newPath := filepath.Join(dir, "preparations", inst.Preparation.ContractDigest, "mandate.json")
-	if inst.Preparation.Definition.Version == "1.2.0" {
-		if inst.Preparation.Definition.Digest != sel.Digest || len(inst.PreparationHistory) != 1 {
+	if inst.Preparation.Definition.Version == sel.Version {
+		if inst.Preparation.Definition.Digest != sel.Digest || len(inst.PreparationHistory) != historyLength+1 {
 			return PrepareResult{}, errors.New("upgrade selection differs from recorded transition")
 		}
 		newPath = filepath.Join(dir, "preparations", inst.Preparation.ContractDigest, "mandate.json")
@@ -266,7 +283,7 @@ func (p *Preparer) upgradePrepared(ctx context.Context, inst Instance, dir, stat
 			return PrepareResult{Status: "already_prepared", MandateID: inst.MandateID, ContractDigest: candidate.ContractDigest,
 				StatePath: statePath, ContractPath: activePath, SourceFiles: files}, nil
 		}
-		previous := inst.PreparationHistory[0]
+		previous := inst.PreparationHistory[len(inst.PreparationHistory)-1]
 		if err != nil || active.ContractDigest != previous.ContractDigest {
 			return PrepareResult{}, errors.New("active contract conflicts with pending transition")
 		}
@@ -280,8 +297,13 @@ func (p *Preparer) upgradePrepared(ctx context.Context, inst Instance, dir, stat
 		return PrepareResult{Status: StatusPrepared, MandateID: inst.MandateID, ContractDigest: candidate.ContractDigest,
 			StatePath: statePath, ContractPath: activePath, SourceFiles: files}, nil
 	}
-	if inst.Preparation.Definition.Version != "1.1.0" || len(inst.PreparationHistory) != 0 || inst.TransitionReceiptRef != "" {
+	if inst.Preparation.Definition.Version != fromVersion || len(inst.PreparationHistory) != historyLength || (historyLength == 0 && inst.TransitionReceiptRef != "") {
 		return PrepareResult{}, errors.New("instance is not at the approved upgrade boundary")
+	}
+	if historyLength != 0 {
+		if err := verifyTransitionArtifacts(p, inst, dir, identityPath); err != nil {
+			return PrepareResult{}, err
+		}
 	}
 	old, err := mandatecontract.LoadVerified(dir, identityPath)
 	if err != nil || old.ContractDigest != inst.Preparation.ContractDigest || old.Contract.MandateID != inst.MandateID ||
@@ -323,7 +345,7 @@ func (p *Preparer) upgradePrepared(ctx context.Context, inst Instance, dir, stat
 	if err != nil {
 		return PrepareResult{}, err
 	}
-	previousRaw, err := os.ReadFile(DefinitionPath(p.AppDataDir, inst.Preparation.Definition.DefinitionID, "1.1.0"))
+	previousRaw, err := os.ReadFile(DefinitionPath(p.AppDataDir, inst.Preparation.Definition.DefinitionID, fromVersion))
 	if err != nil || mandatedefinition.FileDigest(previousRaw) != inst.Preparation.Definition.Digest {
 		return PrepareResult{}, errors.New("previous definition missing or digest mismatch")
 	}
@@ -423,7 +445,7 @@ func (p *Preparer) upgradePrepared(ctx context.Context, inst Instance, dir, stat
 		return PrepareResult{}, errors.New("existing transition receipt conflicts with upgrade")
 	}
 	previous := *inst.Preparation
-	inst.PreparationHistory = []InstancePreparation{previous}
+	inst.PreparationHistory = append(inst.PreparationHistory, previous)
 	inst.Preparation = &InstancePreparation{Definition: InstanceDefinition{DefinitionID: sel.DefinitionID, Version: sel.Version, Digest: sel.Digest,
 		Label: candidate.Payload.Label, PublisherKeyID: candidate.Payload.Publisher.KeyID, Preparation: candidate.Payload.Preparation.Status},
 		ReceiptRef: receiptRef, ContractDigest: signed.ContractDigest, PreparedAt: p.Now().UTC().Format(time.RFC3339Nano), SourceFiles: files}
@@ -446,10 +468,10 @@ func (p *Preparer) upgradePrepared(ctx context.Context, inst Instance, dir, stat
 }
 
 func verifyTransitionArtifacts(p *Preparer, inst Instance, dir, identityPath string) error {
-	if inst.Preparation == nil || len(inst.PreparationHistory) != 1 {
+	if inst.Preparation == nil || len(inst.PreparationHistory) == 0 {
 		return errors.New("preparation transition history missing")
 	}
-	previous := inst.PreparationHistory[0]
+	previous := inst.PreparationHistory[len(inst.PreparationHistory)-1]
 	old, err := mandatecontract.LoadVerifiedFile(filepath.Join(dir, "preparations", previous.ContractDigest, "mandate.json"), identityPath, inst.MandateID)
 	if err != nil || old.ContractDigest != previous.ContractDigest {
 		return errors.New("historical contract invalid")

@@ -20,6 +20,8 @@ import (
 type MandateDOCResult struct {
 	Ready          bool
 	MandateID      string
+	ActionID       string
+	DISActionID    string
 	ContractDigest string
 	TriggerIntent  string
 	IntentID       string
@@ -78,7 +80,10 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		state.Adoption.ContractDigest != envelope.ContractDigest || state.Preparation == nil || state.Preparation.ContractDigest != envelope.ContractDigest || len(state.Preparation.SourceFiles) == 0 {
 		return result, fmt.Errorf("prepared DOC source binding invalid")
 	}
-	disAction := envelope.Contract.Actions[1]
+	disAction, docAction, err := signedDOCFollowingDIS(envelope.Contract.Actions, input.DISActionID, input.ActionID)
+	if err != nil {
+		return result, err
+	}
 	dis := state.Actions[disAction.ActionID]
 	if dis.Status != "completed" || dis.IntentID == "" || dis.RatificationRef == "" || dis.RatificationSHA == "" || dis.LedgerRef == "" || dis.LedgerSHA == "" || dis.EffectsDigest == "" {
 		return result, fmt.Errorf("DIS terminal gate has not been persisted")
@@ -96,6 +101,11 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		return result, err
 	}
 	name := "doc-after-dis-" + dis.IntentID
+	result = MandateDOCResult{MandateID: input.MandateID, ActionID: docAction.ActionID, DISActionID: disAction.ActionID, ContractDigest: envelope.ContractDigest,
+		TriggerIntent: dis.IntentID, Name: name, ProjectID: state.ProjectID, ProjectPath: projectPath}
+	if err := persistIndependentDOC(input.MandatesRoot, result); err != nil {
+		return MandateDOCResult{}, err
+	}
 	runner := a.RunBrain
 	if runner == nil {
 		runner = func(path string, args []string) ([]byte, []byte, int, error) {
@@ -125,9 +135,7 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 	if err != nil {
 		return result, err
 	}
-	result = MandateDOCResult{MandateID: input.MandateID, ContractDigest: envelope.ContractDigest, TriggerIntent: dis.IntentID,
-		IntentID: stringField(created.Data, "intent_id"), FolderName: stringField(created.Data, "folder_name"), Name: name,
-		ProjectID: state.ProjectID, ProjectPath: projectPath}
+	result.IntentID, result.FolderName = stringField(created.Data, "intent_id"), stringField(created.Data, "folder_name")
 	if result.IntentID == "" || result.FolderName == "" {
 		return MandateDOCResult{}, fmt.Errorf("Brain DOC identity response invalid")
 	}
@@ -166,6 +174,27 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		return MandateDOCResult{}, err
 	}
 	return result, nil
+}
+
+func signedDOCFollowingDIS(actions []mandatecontract.Action, disActionID, docActionID string) (mandatecontract.Action, mandatecontract.Action, error) {
+	var disIndex = -1
+	for index, action := range actions {
+		if action.IntentType == "dis" && (disActionID == "" || disActionID == action.ActionID) {
+			if disIndex >= 0 {
+				return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DIS Action binding is ambiguous")
+			}
+			disIndex = index
+		}
+	}
+	if disIndex < 0 || disIndex+1 >= len(actions) {
+		return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DOC Action missing after DIS")
+	}
+	disAction, docAction := actions[disIndex], actions[disIndex+1]
+	if docAction.ActionID == "" || docAction.IntentType != "doc" || len(docAction.DependsOn) != 1 || docAction.DependsOn[0] != disAction.ActionID ||
+		(docActionID != "" && docActionID != docAction.ActionID) {
+		return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DOC Action binding invalid")
+	}
+	return disAction, docAction, nil
 }
 
 type docStatusView struct {
@@ -261,24 +290,53 @@ func persistIndependentDOC(mandatesRoot string, result MandateDOCResult) error {
 		if state["mandateId"] != result.MandateID {
 			return false, fmt.Errorf("DOC journal Mandate mismatch")
 		}
-		record := map[string]interface{}{"name": result.Name, "intentId": result.IntentID, "folderName": result.FolderName,
+		record := map[string]interface{}{"actionId": result.ActionID, "dependsOnActionId": result.DISActionID, "name": result.Name, "intentId": result.IntentID, "folderName": result.FolderName,
 			"triggerIntentId": result.TriggerIntent, "projectId": result.ProjectID, "projectPath": result.ProjectPath,
 			"status": result.DocStatus, "nextAction": result.NextAction, "runSha256": result.RunDigest,
 			"contractSha256": result.ContractSHA256, "completed": result.Ready}
+		if result.ActionID == "" {
+			return false, fmt.Errorf("signed DOC Action identity missing")
+		}
+		actions, _ := state["actions"].(map[string]interface{})
+		if actions == nil {
+			return false, fmt.Errorf("DOC journal Actions missing")
+		}
 		prior, _ := state["docAfterDIS"].(map[string]interface{})
 		if prior != nil {
-			for _, key := range []string{"name", "intentId", "folderName", "triggerIntentId", "projectId", "projectPath"} {
+			for _, key := range []string{"actionId", "dependsOnActionId", "name", "triggerIntentId", "projectId", "projectPath"} {
 				if prior[key] != record[key] {
 					return false, fmt.Errorf("independent DOC identity conflict")
 				}
 			}
+			for _, key := range []string{"intentId", "folderName"} {
+				if prior[key] != nil && prior[key] != "" && record[key] != "" && prior[key] != record[key] {
+					return false, fmt.Errorf("independent DOC identity conflict")
+				}
+				if record[key] == "" {
+					record[key] = prior[key]
+				}
+			}
 			if prior["completed"] == true && prior["status"] == "completed" {
+				if !result.Ready {
+					return false, nil
+				}
 				if result.Ready && prior["runSha256"] == record["runSha256"] && prior["contractSha256"] == record["contractSha256"] {
 					return false, nil
 				}
 				return false, fmt.Errorf("completed DOC evidence changed")
 			}
 		}
+		action, _ := actions[result.ActionID].(map[string]interface{})
+		if result.DISActionID == "" {
+			return false, fmt.Errorf("signed DOC antecedent Action identity missing")
+		}
+		if action != nil && action["dependsOn"] != result.DISActionID {
+			return false, fmt.Errorf("signed DOC Action journal conflict")
+		}
+		actions[result.ActionID] = map[string]interface{}{"status": map[bool]string{true: "completed", false: "in_progress"}[result.Ready],
+			"dependsOn": result.DISActionID, "intentId": record["intentId"], "folderName": record["folderName"],
+			"runSha256": result.RunDigest, "contractSha256": result.ContractSHA256}
+		state["currentAction"] = result.ActionID
 		state["docAfterDIS"] = record
 		return true, nil
 	})

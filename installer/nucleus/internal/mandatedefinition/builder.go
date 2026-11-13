@@ -98,8 +98,8 @@ func BuildInitialOfferPayload(in InitialOfferInput) (Payload, error) {
 // BuildPreparableOfferPayload keeps the approved six-Action plan and signs the
 // project-derived domain and minimum project-file input rule in schema 1.1.
 func BuildPreparableOfferPayload(in InitialOfferInput) (Payload, error) {
-	if in.Version != "1.2.0" {
-		return Payload{}, errors.New("Genesis Intelligence Supply classification is reviewed only for version 1.2.0")
+	if in.Version != "1.2.0" && in.Version != "1.3.0" {
+		return Payload{}, errors.New("unsupported preparable Genesis version")
 	}
 	p, err := BuildInitialOfferPayload(in)
 	if err != nil {
@@ -117,6 +117,28 @@ func BuildPreparableOfferPayload(in InitialOfferInput) (Payload, error) {
 		if required {
 			p.Plan.Actions[i].RequiredCapabilities = []string{"text.generate"}
 		}
+	}
+	if in.Version == "1.3.0" {
+		actions := make([]PlanAction, 0, 8)
+		for _, action := range p.Plan.Actions {
+			if action.ActionID == "doc-3" {
+				continue
+			}
+			if len(actions) > 0 {
+				action.DependsOn = []string{actions[len(actions)-1].ActionID}
+			}
+			actions = append(actions, action)
+			switch action.IntentType {
+			case "ing", "dis", "dev":
+				required := false
+				actions = append(actions, PlanAction{
+					ActionID: "doc-after-" + action.ActionID, Type: "run_intent",
+					IntentType: "doc", DependsOn: []string{action.ActionID},
+					RequiresIntelligence: &required,
+				})
+			}
+		}
+		p.Plan.Actions = actions
 	}
 	p.Preparation = Preparation{Status: PreparationDefined, DomainRule: PreparationDomainProject,
 		InputRequirements: &InputRequirements{Source: PreparationSourceProjectFiles, MinFiles: 1}}

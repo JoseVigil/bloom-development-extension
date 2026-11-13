@@ -290,4 +290,53 @@ func TestUpgradePreparedPreservesSignedHistoryAndRetries(t *testing.T) {
 	if err != nil || recovered.ContractDigest != result.ContractDigest {
 		t.Fatalf("precommit retry failed: %+v %v", recovered, err)
 	}
+	input.Version = "1.3.0"
+	payload, err = mandatedefinition.BuildPreparableOfferPayload(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sequence []string
+	for _, action := range payload.Plan.Actions {
+		sequence = append(sequence, action.IntentType)
+	}
+	if !reflect.DeepEqual(sequence, []string{"ing", "doc", "dis", "doc", "exp", "dev", "doc", "exp"}) {
+		t.Fatalf("unexpected signed plan: %v", sequence)
+	}
+	bad := payload
+	bad.Plan.Actions = append([]mandatedefinition.PlanAction(nil), payload.Plan.Actions...)
+	bad.Plan.Actions[6].DependsOn = []string{"exp-4"}
+	if bad.Validate() == nil {
+		t.Fatal("DOC after DEV accepted without its remediation dependency")
+	}
+	nextRaw, err := mandatedefinition.Sign(payload, h.publisherKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextSel := mandatedelivery.OfferSelection{DefinitionID: input.DefinitionID, Version: input.Version, Digest: mandatedefinition.FileDigest(nextRaw)}
+	receiver.raw, receiver.receiptPath = nextRaw, filepath.Join(h.appData, "authority", "doc-upgrade-receipt.json")
+	next, err := preparer.Prepare(context.Background(), testMandateID, nextSel, []string{"README.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.MandateID != testMandateID || next.ContractDigest == result.ContractDigest {
+		t.Fatalf("unexpected DOC transition: %+v", next)
+	}
+	stateRaw, err = os.ReadFile(next.StatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(stateRaw, &inst); err != nil {
+		t.Fatal(err)
+	}
+	if len(inst.PreparationHistory) != 2 || inst.PreparationHistory[0].ContractDigest != old.ContractDigest ||
+		inst.PreparationHistory[1].ContractDigest != result.ContractDigest ||
+		!reflect.DeepEqual(inst.Preparation.SourceFiles, []string{"README.md"}) {
+		t.Fatalf("DOC transition lost history or frozen inputs: %+v", inst)
+	}
+
+	replay, err := preparer.Prepare(context.Background(), testMandateID, nextSel, []string{"README.md"})
+	if err != nil || replay.Status != "already_prepared" || replay.ContractDigest != next.ContractDigest {
+		t.Fatalf("DOC transition replay: %+v %v", replay, err)
+	}
+
 }

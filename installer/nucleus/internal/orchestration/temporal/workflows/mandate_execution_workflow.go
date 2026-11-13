@@ -259,17 +259,25 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedDISCompletionActivity, disCompleted, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
-		// DOC is an independent DJ-29 dispatch, not execution of the legacy DOC
-		// Action embedded in the signed 1.2.0 graph. It is unreachable until the
-		// terminal DIS gate above has been verified and persisted.
+		// DOC is dispatched exactly once for the signed DOC Action following DIS.
+		// It is unreachable until the terminal DIS gate has been verified and
+		// persisted, and its durable completion gates every following Action.
+		var docActionID string
 		for {
 			var doc activities.MandateDOCResult
 			if err := workflow.ExecuteActivity(ctx, "MandateDOCAfterDISActivity", activities.MandateIntentInput{
-				MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+				MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, ActionID: docActionID, DISActionID: disCompleted.ActionID,
 			}).Get(ctx, &doc); err != nil {
 				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 			}
+			if doc.ActionID == "" || doc.DISActionID != disCompleted.ActionID || (docActionID != "" && doc.ActionID != docActionID) {
+				return MandateExecutionResult{Success: false, Error: "DOC Action identity changed"}, nil
+			}
+			docActionID = doc.ActionID
 			if doc.Ready {
+				if doc.IntentID == "" || doc.RunDigest == "" {
+					return MandateExecutionResult{Success: false, Error: "DOC completion evidence incomplete"}, nil
+				}
 				break
 			}
 			if err := workflow.Sleep(ctx, 5*time.Second); err != nil {

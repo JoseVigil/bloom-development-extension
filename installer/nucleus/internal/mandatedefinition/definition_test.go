@@ -175,7 +175,7 @@ func TestSignedPreparableVersionRequiresProjectFiles(t *testing.T) {
 		t.Fatal("unapproved Intelligence Supply Action was accepted")
 	}
 	future := InitialOfferInput{
-		DefinitionID: p.DefinitionID, Version: "1.3.0", Label: p.Label, Purpose: p.Purpose,
+		DefinitionID: p.DefinitionID, Version: "1.4.0", Label: p.Label, Purpose: p.Purpose,
 		PublisherID: p.Publisher.PublisherID, KeyID: p.Publisher.KeyID, PublishedAt: p.PublishedAt,
 		PolicyRaw:   repoFile(t, "installer/aitap/policies/initial-mandate-v1.json"),
 		RegistryRaw: repoFile(t, "installer/aitap/registry/initial-mandate-v1.json"),
@@ -186,6 +186,40 @@ func TestSignedPreparableVersionRequiresProjectFiles(t *testing.T) {
 	p.Preparation.InputRequirements.MinFiles = 0
 	if _, err := Sign(p, priv); err == nil {
 		t.Fatal("zero-file preparation was signed")
+	}
+}
+
+func TestSignedPreparableVersion13IncludesDocumentActions(t *testing.T) {
+	priv, keys := testKeys()
+	p, err := BuildPreparableOfferPayload(InitialOfferInput{
+		DefinitionID: "0b8e4b9e-6d0f-4c55-9d8e-2f4b7a1c3e21", Version: "1.3.0", Label: "Genesis",
+		Purpose: "Estructuración semántica inicial de un proyecto", PublisherID: "bloom", KeyID: testKeyID,
+		PublishedAt: "2026-10-27T12:00:00Z",
+		PolicyRaw:   repoFile(t, "installer/aitap/policies/initial-mandate-v1.json"),
+		RegistryRaw: repoFile(t, "installer/aitap/registry/initial-mandate-v1.json"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Plan.Actions) != 8 {
+		t.Fatalf("got %d actions, want 8", len(p.Plan.Actions))
+	}
+	want := []string{"ing-1", "doc-after-ing-1", "dis-2", "doc-after-dis-2", "exp-4", "dev-5", "doc-after-dev-5", "exp-6"}
+	for i, action := range p.Plan.Actions {
+		if action.ActionID != want[i] {
+			t.Fatalf("action %d is %s, want %s", i, action.ActionID, want[i])
+		}
+	}
+	raw, err := Sign(p, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := Verify(raw, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RequirePreparable(verified); err != nil {
+		t.Fatal(err)
 	}
 }
 

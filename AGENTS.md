@@ -11,6 +11,15 @@ contradice el codigo, el codigo gana — actualizá este archivo, no al revés.
 
 ## Autoridad, alcance y cambios
 
+**Regla de ejecución prioritaria:** Ejecutá el objetivo solicitado hasta
+completarlo. No abras investigaciones, auditorías, refactorizaciones ni tareas
+secundarias no solicitadas. No crees subagentes sin autorización explícita.
+Resolvé autónomamente las inconsistencias menores. No interrumpas por dudas
+que no impidan avanzar. Si aparece un problema no bloqueante, registralo
+brevemente y continuá. Detenete únicamente ante un bloqueo real, una operación
+riesgosa que requiera autorización o una decisión arquitectónica indispensable.
+Verificá el resultado y entregá.
+
 José Vigil decide los objetivos, las decisiones de diseño y el alcance del
 trabajo en este repo. Los agentes pueden resolver los detalles de
 implementación necesarios para cumplir una tarea que José haya pedido, sin
