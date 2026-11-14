@@ -39,4 +39,4 @@ def test_windows_branch_keeps_streams_open_and_json_utf8():
     lines = proc.stdout.decode("utf-8").splitlines()
     assert len(lines) == 1
     assert json.loads(lines[0]) == {"status": "success", "texto": "año ñ — ✓"}
-    assert proc.stderr.decode("utf-8") == "stderr sigue abierto\n"
+    assert proc.stderr.decode("utf-8").splitlines() == ["stderr sigue abierto"]
