@@ -62,10 +62,14 @@ func (a *MandateIntentActivity) ObserveDISTerminal(ctx context.Context, input Ma
 	}
 	dir := filepath.Join(input.MandatesRoot, input.MandateID)
 	envelope, err := mandatecontract.LoadVerified(dir, a.IdentityPath)
-	if err != nil || envelope.Contract.ContractVersion != 4 || len(envelope.Contract.Actions) < 2 || envelope.Contract.Actions[1].IntentType != "dis" {
+	if err != nil || envelope.Contract.ContractVersion != 4 {
 		return result, fmt.Errorf("signed DIS Action invalid")
 	}
-	actionID := envelope.Contract.Actions[1].ActionID
+	disAction, _, actionErr := uniqueSignedAction(envelope.Contract.Actions, "dis")
+	if actionErr != nil || (input.ActionID != "" && input.ActionID != disAction.ActionID) {
+		return result, fmt.Errorf("signed DIS Action invalid")
+	}
+	actionID := disAction.ActionID
 	var journal struct {
 		MandateID string `json:"mandateId"`
 		Adoption  struct {
@@ -235,10 +239,19 @@ func (a *MandateIntentActivity) RunDIS(ctx context.Context, input MandateIntentI
 	if err != nil {
 		return result, err
 	}
-	if envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != input.MandateID || len(envelope.Contract.Actions) != 6 ||
-		envelope.Contract.Actions[0].IntentType != "ing" || envelope.Contract.Actions[1].IntentType != "dis" || envelope.Contract.Intelligence == nil {
+	if envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != input.MandateID || envelope.Contract.Intelligence == nil {
 		return result, fmt.Errorf("signed DIS Action invalid")
 	}
+	ingAction, _, err := uniqueSignedAction(envelope.Contract.Actions, "ing")
+	if err != nil {
+		return result, fmt.Errorf("signed DIS Action invalid")
+	}
+	disAction, disIndex, err := uniqueSignedAction(envelope.Contract.Actions, "dis")
+	if err != nil || disIndex == 0 || len(disAction.DependsOn) != 1 || disAction.DependsOn[0] != envelope.Contract.Actions[disIndex-1].ActionID ||
+		(input.ActionID != "" && input.ActionID != disAction.ActionID) {
+		return result, fmt.Errorf("signed DIS Action invalid")
+	}
+	predecessorID := disAction.DependsOn[0]
 	identity, err := authority.LoadExistingLocalIdentity(a.IdentityPath)
 	if err != nil {
 		return result, err
@@ -261,7 +274,7 @@ func (a *MandateIntentActivity) RunDIS(ctx context.Context, input MandateIntentI
 		return result, err
 	}
 	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID,
-		envelope.ContractDigest, envelope.Contract.Actions[1].ActionID)
+		envelope.ContractDigest, disAction.ActionID)
 	if err != nil {
 		return result, fmt.Errorf("confirmed DIS W4 selection required: %w", err)
 	}
@@ -286,13 +299,12 @@ func (a *MandateIntentActivity) RunDIS(ctx context.Context, input MandateIntentI
 	}
 	stateRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
 	if err != nil || json.Unmarshal(stateRaw, &state) != nil || state.MandateID != input.MandateID ||
-		state.Adoption.ContractDigest != envelope.ContractDigest || state.CurrentAction != envelope.Contract.Actions[1].ActionID ||
-		state.Actions[envelope.Contract.Actions[0].ActionID].Status != "completed" ||
-		(state.Actions[envelope.Contract.Actions[1].ActionID].Status != "pending" &&
-			state.Actions[envelope.Contract.Actions[1].ActionID].Status != "awaiting_human_decision") {
-		return result, fmt.Errorf("DIS journal is not ready after completed ING")
+		state.Adoption.ContractDigest != envelope.ContractDigest || state.CurrentAction != disAction.ActionID ||
+		state.Actions[predecessorID].Status != "completed" || state.Actions[ingAction.ActionID].Status != "completed" ||
+		(state.Actions[disAction.ActionID].Status != "pending" && state.Actions[disAction.ActionID].Status != "awaiting_human_decision") {
+		return result, fmt.Errorf("DIS journal is not ready after its signed predecessor")
 	}
-	ing := state.Actions[envelope.Contract.Actions[0].ActionID]
+	ing := state.Actions[ingAction.ActionID]
 	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
 	ingBase := filepath.Join(nucleusRoot, ".intents", ".ing")
 	if !pathWithin(ingBase, ing.ResultRef) || ing.IntentID == "" {
@@ -337,7 +349,7 @@ func (a *MandateIntentActivity) RunDIS(ctx context.Context, input MandateIntentI
 		})
 	}
 	if intentID == "" {
-		if state.Actions[envelope.Contract.Actions[1].ActionID].Status != "pending" {
+		if state.Actions[disAction.ActionID].Status != "pending" {
 			return result, fmt.Errorf("recorded DIS Intent missing")
 		}
 		created, createErr := runBrain([]string{"--json", "intent", "create", "--type", "dis",
@@ -436,11 +448,11 @@ func (a *MandateIntentActivity) RunDIS(ctx context.Context, input MandateIntentI
 		return result, fmt.Errorf("DIS proposal ING binding mismatch")
 	}
 	proposalSum := sha256.Sum256(proposalBytes)
-	if prior := state.Actions[envelope.Contract.Actions[1].ActionID]; prior.Status == "awaiting_human_decision" &&
+	if prior := state.Actions[disAction.ActionID]; prior.Status == "awaiting_human_decision" &&
 		(prior.IntentID != intentID || prior.ProposalRef != proposalRef || prior.ProposalSHA256 != hex.EncodeToString(proposalSum[:])) {
 		return result, fmt.Errorf("recorded DIS proposal changed")
 	}
-	return MandateDISResult{MandateID: input.MandateID, ActionID: envelope.Contract.Actions[1].ActionID,
+	return MandateDISResult{MandateID: input.MandateID, ActionID: disAction.ActionID,
 		ContractDigest: envelope.ContractDigest, IntentID: intentID, INGIntentID: ing.IntentID,
 		INGResultRef: ing.ResultRef, INGResultDigest: ing.ResultSHA256, ProposalRef: proposalRef,
 		ProposalDigest: hex.EncodeToString(proposalSum[:]), Status: "awaiting_human_decision"}, nil

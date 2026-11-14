@@ -132,12 +132,21 @@
                 ],
                 "minimum": 0,
                 "maximum": 1
+              },
+              "declared_function": {
+                "type": "string",
+                "minLength": 1
+              },
+              "base_revision_digest": {
+                "type": ["string", "null"],
+                "pattern": "^sha256:[0-9a-f]{64}$"
               }
             },
             "required": [
               "status",
               "gene_id",
-              "score"
+              "score",
+              "declared_function"
             ],
             "allOf": [
               {

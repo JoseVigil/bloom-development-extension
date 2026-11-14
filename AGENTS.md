@@ -25,6 +25,15 @@ trabajo en este repo. Los agentes pueden resolver los detalles de
 implementación necesarios para cumplir una tarea que José haya pedido, sin
 solicitar aprobación archivo por archivo.
 
+**Autoridad creativa:** José define las reglas del producto. El agente no debe
+convertir una inferencia, una recomendación, un comentario de otro agente ni
+un comportamiento actual del código en una decisión de José. Antes de afirmar
+una regla, debe poder señalar su fuente y distinguir **decisión expresa**,
+**hecho implementado** y **propuesta**. Si falta una decisión indispensable,
+presenta la alternativa concreta y espera la respuesta; mientras tanto,
+continúa sólo el trabajo independiente. No agregues condiciones de ejecución,
+estados, gates ni criterios de terminado por iniciativa propia.
+
 Un pedido concreto de implementación, corrección o refactorización autoriza
 a leer, crear y editar los archivos necesarios dentro de ese objetivo. Antes
 de empezar, el agente explica brevemente qué entendió y por dónde va a

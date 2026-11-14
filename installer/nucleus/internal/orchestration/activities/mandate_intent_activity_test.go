@@ -306,6 +306,9 @@ func TestIndependentDOCAfterDISUsesPreparedSourcesAndCompletes(t *testing.T) {
 	if err != nil || !second.Ready || second.ActionID != "c" || second.IntentID != "doc-id" {
 		t.Fatalf("idempotent DOC resume failed: result=%#v err=%v", second, err)
 	}
+	if len(calls) != 3 {
+		t.Fatalf("completed DOC invoked Brain again: calls=%#v", calls)
+	}
 }
 
 func TestSignedDOCAfterDISUsesActionIdentityWhenEarlierDOCMovesDIS(t *testing.T) {
@@ -324,6 +327,14 @@ func TestSignedDOCAfterDISUsesActionIdentityWhenEarlierDOCMovesDIS(t *testing.T)
 	}
 	if _, _, err := signedDOCFollowingDIS(actions, "dis-1", "doc-after-ing"); err == nil {
 		t.Fatal("a DOC Action bound to another antecedent was accepted")
+	}
+}
+
+func TestUniqueSignedActionFindsDISWithoutPositionDependency(t *testing.T) {
+	actions := []mandatecontract.Action{{ActionID: "ing", IntentType: "ing"}, {ActionID: "doc-ing", IntentType: "doc"}, {ActionID: "dis", IntentType: "dis"}}
+	action, index, err := uniqueSignedAction(actions, "dis")
+	if err != nil || action.ActionID != "dis" || index != 2 {
+		t.Fatalf("moved DIS was not resolved: action=%#v index=%d err=%v", action, index, err)
 	}
 }
 

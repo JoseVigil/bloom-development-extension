@@ -29,7 +29,7 @@ type MandateIntentResult struct {
 }
 
 type MandateINGCompletionResult struct {
-	MandateID, ActionID, NextActionID, ContractDigest, IntentID, ResultRef, ResultDigest, LedgerRef, LedgerDigest, DecisionDigest string
+	MandateID, ActionID, NextActionID, NextIntentType, ContractDigest, IntentID, ResultRef, ResultDigest, LedgerRef, LedgerDigest, DecisionDigest string
 }
 
 // CompleteING consumes the decision already committed by Nucleus. The signal
@@ -101,7 +101,14 @@ func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIn
 	if json.Unmarshal(raw, &journal) != nil || journal.Adoption.ContractDigest != envelope.ContractDigest || journal.Adoption.Digest != hex.EncodeToString(deliverySum[:]) || journal.Adoption.Version == "" || journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID {
 		return result, fmt.Errorf("adopted journal invalid")
 	}
-	action := envelope.Contract.Actions[0]
+	action, actionIndex, err := uniqueSignedAction(envelope.Contract.Actions, "ing")
+	if err != nil || actionIndex+1 >= len(envelope.Contract.Actions) {
+		return result, fmt.Errorf("signed ING Action or dependent Action invalid")
+	}
+	nextAction := envelope.Contract.Actions[actionIndex+1]
+	if len(nextAction.DependsOn) != 1 || nextAction.DependsOn[0] != action.ActionID {
+		return result, fmt.Errorf("signed ING dependent Action invalid")
+	}
 	entry, ok := journal.Actions[action.ActionID]
 	decision := journal.INGDecision
 	classificationRef, classificationDigest := entry.EvidenceRef, entry.EvidenceSHA256
@@ -157,7 +164,7 @@ func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIn
 	if err := verifySignedINGResources(envelope.Contract); err != nil {
 		return result, err
 	}
-	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID, envelope.ContractDigest, envelope.Contract.Actions[0].ActionID)
+	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID, envelope.ContractDigest, action.ActionID)
 	if err != nil {
 		return result, fmt.Errorf("confirmed W4 selection required: %w", err)
 	}
@@ -243,8 +250,25 @@ func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIn
 	}
 	ledgerSum := sha256.Sum256(ledgerBytes)
 	resultSum := sha256.Sum256(resultBytes)
-	return MandateINGCompletionResult{MandateID: input.MandateID, ActionID: action.ActionID, NextActionID: envelope.Contract.Actions[1].ActionID, ContractDigest: envelope.ContractDigest, IntentID: entry.IntentID,
+	return MandateINGCompletionResult{MandateID: input.MandateID, ActionID: action.ActionID, NextActionID: nextAction.ActionID, NextIntentType: nextAction.IntentType, ContractDigest: envelope.ContractDigest, IntentID: entry.IntentID,
 		ResultRef: resultRef, ResultDigest: hex.EncodeToString(resultSum[:]), LedgerRef: ledgerRef, LedgerDigest: hex.EncodeToString(ledgerSum[:]), DecisionDigest: decision.DecisionDigest}, nil
+}
+
+func uniqueSignedAction(actions []mandatecontract.Action, intentType string) (mandatecontract.Action, int, error) {
+	found := -1
+	for index, action := range actions {
+		if action.IntentType != intentType {
+			continue
+		}
+		if found >= 0 || action.ActionID == "" {
+			return mandatecontract.Action{}, -1, fmt.Errorf("signed %s Action is ambiguous", intentType)
+		}
+		found = index
+	}
+	if found < 0 {
+		return mandatecontract.Action{}, -1, fmt.Errorf("signed %s Action missing", intentType)
+	}
+	return actions[found], found, nil
 }
 
 func verifyINGEffectLedger(ledgerBytes []byte, checked map[string]any, intentID string) error {
@@ -317,7 +341,11 @@ func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInpu
 	if err != nil {
 		return MandateIntentResult{}, err
 	}
-	if envelope.Contract.ContractVersion != 4 || len(envelope.Contract.Actions) != 6 || envelope.Contract.Actions[0].IntentType != "ing" {
+	if envelope.Contract.ContractVersion != 4 {
+		return MandateIntentResult{}, fmt.Errorf("signed first Action is not ING")
+	}
+	ingAction, ingIndex, err := uniqueSignedAction(envelope.Contract.Actions, "ing")
+	if err != nil || ingIndex != 0 {
 		return MandateIntentResult{}, fmt.Errorf("signed first Action is not ING")
 	}
 	identity, err := authority.LoadExistingLocalIdentity(a.IdentityPath)
@@ -341,7 +369,7 @@ func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInpu
 	if err := verifySignedINGResources(envelope.Contract); err != nil {
 		return MandateIntentResult{}, err
 	}
-	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID, envelope.ContractDigest, envelope.Contract.Actions[0].ActionID)
+	selection, err := mandatecontract.LoadConfirmedDestination(dir, a.IdentityPath, input.MandateID, envelope.ContractDigest, ingAction.ActionID)
 	if err != nil {
 		return MandateIntentResult{}, fmt.Errorf("confirmed W4 selection required: %w", err)
 	}
@@ -434,7 +462,7 @@ func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInpu
 		return MandateIntentResult{}, err
 	}
 	sum := sha256.Sum256(evidence)
-	return MandateIntentResult{MandateID: input.MandateID, ActionID: envelope.Contract.Actions[0].ActionID,
+	return MandateIntentResult{MandateID: input.MandateID, ActionID: ingAction.ActionID,
 		ContractDigest: envelope.ContractDigest, IntentID: intentID, EvidenceRef: ref,
 		EvidenceDigest: hex.EncodeToString(sum[:]), Status: "awaiting_human_decision"}, nil
 }

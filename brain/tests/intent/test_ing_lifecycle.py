@@ -1,5 +1,6 @@
 import hashlib
 import json
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,7 +20,9 @@ from aitap.routing.engine import RoutingEngine
 def cluster(name="c1", path="input.txt"):
     return {"cluster_id": name, "files": [path],
             "domain": {"status": "new", "domain_id": None, "name": "Knowledge", "score": None},
-            "gene": {"status": "new", "gene_id": None, "score": None}, "evidence": {"source": path}}
+            "gene": {"status": "new", "gene_id": None, "score": None,
+                     "declared_function": "Govern the received knowledge asset."},
+            "evidence": {"source": path}}
 
 
 class ControlledProvider:
@@ -38,7 +41,10 @@ class ControlledProvider:
 def setup_lifecycle(tmp_path):
     root = tmp_path / "ing"
     manager = IntentStateManager.create(root, "ing", "MND-CONTROLLED")
-    persist(root / ".reception/.rawbase.json", {"files": [{"path": "input.txt", "hash": hashlib.md5(b"input").hexdigest()}]})
+    persist(root / ".reception/.rawbase.json", {
+        "project_id": "11111111-1111-4111-8111-111111111111",
+        "files": [{"path": "input.txt", "hash": hashlib.md5(b"input").hexdigest(),
+                   "repository_id": "22222222-2222-4222-8222-222222222222", "asset_kind": "document"}]})
     persist(root / ".reception/.rawbase_index.json", {"index": [{"path": "input.txt", "extracted_text": "input"}]})
     manager.close_phaseless_act()
     index = tmp_path / "nucleus/.cache/.semantic-index.json"
@@ -104,7 +110,20 @@ def test_ing_waits_for_human_then_done_and_replays(tmp_path):
     assert read_json(lifecycle.index) == {"domains": {}}
     result = lifecycle.run(decisions=approve())
     assert result["status"] == "done"
-    assert result["accepted_contributions"][0]["materialization_status"] == "pending"
+    contribution = result["accepted_contributions"][0]
+    assert contribution["materialization_status"] == "pending_authority"
+    assert uuid.UUID(contribution["gene_id"])
+    assert uuid.UUID(contribution["contribution_id"])
+    assert uuid.UUID(contribution["decision_id"])
+    assert contribution["identity"]["declared_function"] == "Govern the received knowledge asset."
+    assert contribution["contribution"]["contribution_id"] == contribution["contribution_id"]
+    assert contribution["contribution"]["ratification"] == {
+        "classification": "pending_authority", "synthetic": False,
+        "productive_authority": False, "decision_id": contribution["decision_id"]}
+    assert contribution["contribution"]["contribution_digest"] == ""
+    assert contribution["assets"][0]["repository_id"] == "22222222-2222-4222-8222-222222222222"
+    assert contribution["authority_required"] == [
+        "productive_ratification", "ratification_envelope", "repository_binding"]
     ledger = read_json(lifecycle.root / ".consolidation/.turn_1/.effect_ledger.json")
     assert all(e["obligation"] != "gene_lineage_materialized" for e in ledger["effects"])
     restarted = GenesisIntelligence(lifecycle.root, lifecycle.index, lifecycle.client)
@@ -121,6 +140,20 @@ def test_rejected_cluster_has_no_effect(tmp_path):
     result = lifecycle.run(decisions=[{"cluster_id": "c1", "human_decision": "rejected"}])
     assert result["accepted_contributions"] == []
     assert result["rejected_clusters"] == ["c1"]
+    assert read_json(lifecycle.index) == {"domains": {}}
+
+
+def test_ing_fails_closed_without_canonical_repository_binding_source(tmp_path):
+    lifecycle, _, _ = setup_lifecycle(tmp_path)
+    raw = read_json(lifecycle.root / ".reception/.rawbase.json")
+    raw["files"][0].pop("repository_id")
+    (lifecycle.root / ".reception/.rawbase.json").write_text(
+        json.dumps(raw), encoding="utf-8")
+    lifecycle.run()
+    with pytest.raises(SupplyError) as failure:
+        lifecycle.run(decisions=approve())
+    assert failure.value.code == "MATERIALIZATION_SOURCE_MISSING"
+    assert IntentStateManager.load(lifecycle.root).phase_active == "consolidation"
     assert read_json(lifecycle.index) == {"domains": {}}
 
 

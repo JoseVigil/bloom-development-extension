@@ -3,6 +3,7 @@ import copy
 import hashlib
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,19 @@ from brain.core.intent_state_manager import IntentStateManager
 
 
 SCHEMAS = Path(__file__).parent / "schema"
+GENE_ID_NAMESPACE = uuid.UUID("7ee75c38-f838-4f43-96ef-13d99cc0eaae")
+CONTRIBUTION_ID_NAMESPACE = uuid.UUID("4d5dc5b5-a5db-47c0-b027-9ace7e6e9b75")
+DECISION_ID_NAMESPACE = uuid.UUID("8adf9760-a4ea-4388-9e46-5e44504df9bb")
+
+
+def _canonical_uuid(value, field):
+    try:
+        parsed = uuid.UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        raise SupplyError("MATERIALIZATION_SOURCE_MISSING", "effects", f"{field} must be a canonical UUID") from None
+    if str(parsed) != str(value).lower():
+        raise SupplyError("MATERIALIZATION_SOURCE_MISSING", "effects", f"{field} must use canonical UUID form")
+    return str(parsed)
 
 
 def validate(name, value):
@@ -308,7 +322,9 @@ class GenesisIntelligence:
         else:
             if digest(graph) != digest(baseline):
                 raise SupplyError("STALE_GRAPH_SNAPSHOT", "consolidation")
-            updated, accepted = self._effects(manager, graph, control["proposal"])
+            inventory = read_json(self.root / ".reception/.rawbase.json")
+            extracted = read_json(self.root / ".reception/.rawbase_index.json")
+            updated, accepted = self._effects(manager, graph, control["proposal"], inventory, extracted)
             plan = {"decisions_digest": digest(control["proposal"]), "before_digest": digest(graph),
                     "after_digest": digest(updated), "index": updated, "accepted_contributions": accepted,
                     "completed_at": datetime.now(timezone.utc).isoformat()}
@@ -336,16 +352,22 @@ class GenesisIntelligence:
         ledger.mark_state_advanced()
         return self._finish(manager, value, control, turn_dir, read_json(self.index))
 
-    def _effects(self, manager, baseline, decisions):
+    def _effects(self, manager, baseline, decisions, inventory, extracted):
         graph = copy.deepcopy(baseline)
         accepted = []
         mandate = manager.snapshot()["mandate_id"]
+        project_id = _canonical_uuid(inventory.get("project_id"), "project_id")
+        inventory_by_path = {item.get("path"): item for item in inventory.get("files", [])}
+        content_by_path = {item.get("path"): item.get("extracted_text") for item in extracted.get("index", [])}
         retired = set(graph.get("retired_domain_ids", []))
         for decision in decisions:
             if decision["human_decision"] == "rejected":
                 continue
             cluster = decision["cluster"]
             identity = digest([manager.intent_id, cluster])[7:]
+            decision_id = str(uuid.uuid5(DECISION_ID_NAMESPACE, canonical({
+                "intent_id": manager.intent_id, "cluster": cluster,
+                "human_decision": decision["human_decision"]})))
             domain_id = cluster["domain"]["domain_id"]
             if cluster["domain"]["status"] == "new":
                 slug = re.sub(r"[^a-z0-9]+", "_", cluster["domain"]["name"].lower()).strip("_") or "domain"
@@ -354,7 +376,9 @@ class GenesisIntelligence:
                     raise SupplyError("STATE_CONFLICT", "effects", "Domain identity collision")
                 graph["domains"][domain_id] = {"name": cluster["domain"]["name"], "genes": [],
                     "origin_mandate_id": mandate, "mandates": [], "first_created_by": manager.intent_id}
-            gene_id = cluster["gene"]["gene_id"] or "gene-" + identity[4:36]
+            gene_id = cluster["gene"]["gene_id"] or str(uuid.uuid5(
+                GENE_ID_NAMESPACE, canonical({"intent_id": manager.intent_id, "cluster_id": cluster["cluster_id"]})))
+            gene_id = _canonical_uuid(gene_id, "gene_id")
             if cluster["gene"]["status"] == "new" and gene_id in graph_genes(graph):
                 raise SupplyError("STATE_CONFLICT", "effects", "Gene identity collision")
             domain = graph["domains"][domain_id]
@@ -362,10 +386,46 @@ class GenesisIntelligence:
                 domain["genes"].append(gene_id)
             if mandate not in domain.setdefault("mandates", []):
                 domain["mandates"].append(mandate)
-            accepted.append({"contribution_id": "contribution-" + identity[:32], "cluster_id": cluster["cluster_id"],
-                "domain_id": domain_id, "gene_id": gene_id, "files": cluster["files"],
-                "human_decision": decision["human_decision"], "materialization_status": "pending",
-                "materialization_obligation": "A governed materializer must create a Gene Revision; none exists here"})
+            declared_function = cluster["gene"].get("declared_function", "").strip()
+            if not declared_function:
+                raise SupplyError("MATERIALIZATION_SOURCE_MISSING", "effects", "declared_function is absent from the adopted proposal")
+            assets = []
+            for path in cluster["files"]:
+                source, content = inventory_by_path.get(path), content_by_path.get(path)
+                if not isinstance(source, dict) or not isinstance(content, str):
+                    raise SupplyError("MATERIALIZATION_SOURCE_MISSING", "effects", f"reception evidence missing for asset '{path}'")
+                repository_id = _canonical_uuid(source.get("repository_id"), f"repository_id[{path}]")
+                assets.append({"asset_id": "", "project_id": project_id, "repository_id": repository_id,
+                    "asset_kind": source.get("asset_kind") or "file", "repository_relative_path": path,
+                    "observed": {"sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                                 "size_bytes": len(content.encode("utf-8"))}})
+            base_revision = None
+            if cluster["gene"]["status"] == "extend":
+                base_revision = cluster["gene"].get("base_revision_digest")
+                if not isinstance(base_revision, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", base_revision):
+                    raise SupplyError("MATERIALIZATION_SOURCE_MISSING", "effects", "extend requires canonical base_revision_digest")
+            contribution_id = str(uuid.uuid5(CONTRIBUTION_ID_NAMESPACE, canonical({
+                "intent_id": manager.intent_id, "decision_id": decision_id, "gene_id": gene_id})))
+            accepted.append({"contribution_id": contribution_id, "cluster_id": cluster["cluster_id"],
+                "project_id": project_id, "domain_id": domain_id, "gene_id": gene_id,
+                "declared_function": declared_function, "base_revision_digest": base_revision,
+                "files": cluster["files"], "assets": assets, "decision_id": decision_id,
+                "human_decision": decision["human_decision"], "proposal": cluster,
+                "identity": {"schema_version": "gene-canonical-store/0.1", "project_id": project_id,
+                    "gene_id": gene_id, "declared_function": declared_function,
+                    "origin": {"mandate_id": mandate, "intent_id": manager.intent_id, "decision_id": decision_id}},
+                "contribution": {"schema_version": "gene-canonical-store/0.1",
+                    "contribution_id": contribution_id, "project_id": project_id, "gene_id": gene_id,
+                    "base_revision_digest": base_revision, "mandate_id": mandate, "intent_id": manager.intent_id,
+                    "declared_function": declared_function, "assets": assets,
+                    "ratification": {"classification": "pending_authority", "synthetic": False,
+                                     "productive_authority": False, "decision_id": decision_id},
+                    "stable_provenance": {"cluster_id": cluster["cluster_id"],
+                                          "human_decision": decision["human_decision"]},
+                    "contribution_digest": ""},
+                "materialization_status": "pending_authority",
+                "authority_required": ["productive_ratification", "ratification_envelope", "repository_binding"],
+                "materialization_obligation": "Nucleus must bind Authority evidence and materialize the canonical Gene Revision"})
         return graph, accepted
 
     def _finish(self, manager, classification, control, turn_dir, graph):

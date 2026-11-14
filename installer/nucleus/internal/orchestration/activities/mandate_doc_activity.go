@@ -103,6 +103,11 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 	name := "doc-after-dis-" + dis.IntentID
 	result = MandateDOCResult{MandateID: input.MandateID, ActionID: docAction.ActionID, DISActionID: disAction.ActionID, ContractDigest: envelope.ContractDigest,
 		TriggerIntent: dis.IntentID, Name: name, ProjectID: state.ProjectID, ProjectPath: projectPath}
+	if completed, ok, loadErr := loadCompletedIndependentDOC(input.MandatesRoot, result); loadErr != nil {
+		return MandateDOCResult{}, loadErr
+	} else if ok {
+		return completed, nil
+	}
 	if err := persistIndependentDOC(input.MandatesRoot, result); err != nil {
 		return MandateDOCResult{}, err
 	}
@@ -174,6 +179,49 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		return MandateDOCResult{}, err
 	}
 	return result, nil
+}
+
+func loadCompletedIndependentDOC(mandatesRoot string, expected MandateDOCResult) (MandateDOCResult, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(mandatesRoot, expected.MandateID, "mandate_state.json"))
+	if err != nil {
+		return MandateDOCResult{}, false, err
+	}
+	var state struct {
+		MandateID string                            `json:"mandateId"`
+		Actions   map[string]map[string]interface{} `json:"actions"`
+		DOC       map[string]interface{}            `json:"docAfterDIS"`
+	}
+	if json.Unmarshal(raw, &state) != nil || state.MandateID != expected.MandateID {
+		return MandateDOCResult{}, false, fmt.Errorf("DOC journal Mandate mismatch")
+	}
+	if state.DOC == nil {
+		return MandateDOCResult{}, false, nil
+	}
+	for key, value := range map[string]string{
+		"actionId": expected.ActionID, "dependsOnActionId": expected.DISActionID, "name": expected.Name,
+		"triggerIntentId": expected.TriggerIntent, "projectId": expected.ProjectID, "projectPath": expected.ProjectPath,
+	} {
+		if state.DOC[key] != value {
+			return MandateDOCResult{}, false, fmt.Errorf("independent DOC identity conflict")
+		}
+	}
+	if state.DOC["completed"] != true {
+		return MandateDOCResult{}, false, nil
+	}
+	action := state.Actions[expected.ActionID]
+	intentID, _ := state.DOC["intentId"].(string)
+	folderName, _ := state.DOC["folderName"].(string)
+	runDigest, _ := state.DOC["runSha256"].(string)
+	contractDigest, _ := state.DOC["contractSha256"].(string)
+	if state.DOC["status"] != "completed" || state.DOC["nextAction"] != "none" || intentID == "" || folderName == "" || runDigest == "" ||
+		action == nil || action["status"] != "completed" || action["dependsOn"] != expected.DISActionID || action["intentId"] != intentID ||
+		action["folderName"] != folderName || action["runSha256"] != runDigest || action["contractSha256"] != contractDigest {
+		return MandateDOCResult{}, false, fmt.Errorf("completed DOC evidence is incomplete or inconsistent")
+	}
+	expected.Ready, expected.IntentID, expected.FolderName = true, intentID, folderName
+	expected.DocStatus, expected.NextAction = "completed", "none"
+	expected.RunDigest, expected.ContractSHA256 = runDigest, contractDigest
+	return expected, true, nil
 }
 
 func signedDOCFollowingDIS(actions []mandatecontract.Action, disActionID, docActionID string) (mandatecontract.Action, mandatecontract.Action, error) {

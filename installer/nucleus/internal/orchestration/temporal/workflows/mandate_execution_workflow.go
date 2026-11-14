@@ -218,6 +218,12 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 			completed.IntentID != ing.IntentID || completed.DecisionDigest != decisionDigest || completed.ResultRef == "" || completed.ResultDigest == "" || completed.LedgerRef == "" || completed.LedgerDigest == "" {
 			return MandateExecutionResult{Success: false, Error: "ING completion evidence or decision mismatched"}, nil
 		}
+		if completed.NextIntentType == "doc" {
+			return MandateExecutionResult{Success: false, Error: "ING canonical Gene materialization receipt required before DOC"}, nil
+		}
+		if completed.NextIntentType != "" && completed.NextIntentType != "dis" {
+			return MandateExecutionResult{Success: false, Error: "ING dependent Action type is unsupported"}, nil
+		}
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGCompletionActivity, completed, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}

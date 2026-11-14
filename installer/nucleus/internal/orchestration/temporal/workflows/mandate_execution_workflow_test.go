@@ -62,7 +62,7 @@ func TestAdoptedExecutionWaitsForDISTerminalEvidence(t *testing.T) {
 	})
 	env.OnActivity("MandateINGCompletionActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, _ activities.MandateIntentInput) (activities.MandateINGCompletionResult, error) {
 		completionCalls++
-		return activities.MandateINGCompletionResult{MandateID: "mandate-1", ActionID: "a", NextActionID: "b", ContractDigest: "digest", IntentID: "ing-1", DecisionDigest: "decision", ResultRef: "ing_result.json", ResultDigest: "hash", LedgerRef: "ledger.json", LedgerDigest: "hash"}, nil
+		return activities.MandateINGCompletionResult{MandateID: "mandate-1", ActionID: "a", NextActionID: "b", NextIntentType: "dis", ContractDigest: "digest", IntentID: "ing-1", DecisionDigest: "decision", ResultRef: "ing_result.json", ResultDigest: "hash", LedgerRef: "ledger.json", LedgerDigest: "hash"}, nil
 	})
 	env.OnActivity(activities.PersistAdoptedINGCompletionActivity, mock.Anything, mock.Anything, mock.Anything).Return(activities.PersistExecutionResultResult{StateVersion: 3}, nil)
 	env.OnActivity("MandateDISActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateDISResult, error) {
@@ -119,6 +119,48 @@ func TestAdoptedExecutionWaitsForDISTerminalEvidence(t *testing.T) {
 	}
 	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || disCalls != 1 || observeCalls != 2 || terminalPersistCalls != 1 || docCalls != 2 {
 		t.Fatalf("result=%#v ing=%d persist=%d complete=%d dis=%d observe=%d terminalPersist=%d doc=%d", result, ingCalls, persistCalls, completionCalls, disCalls, observeCalls, terminalPersistCalls, docCalls)
+	}
+}
+
+func TestINGDoesNotDispatchDOCWithoutCanonicalGeneReceipt(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(MandateExecutionWorkflow)
+	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
+	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
+	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).RunDIS, activity.RegisterOptions{Name: "MandateDISActivity"})
+	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
+	persistCompletionCalls, disCalls, docCalls := 0, 0, 0
+	env.OnActivity("MandateIntentActivity", mock.Anything, mock.Anything).Return(activities.MandateIntentResult{
+		MandateID: "mandate-1", ActionID: "ing-1", ContractDigest: "digest", IntentID: "ing-intent",
+		EvidenceRef: "classification.json", EvidenceDigest: "classification-hash", Status: "awaiting_human_decision",
+	}, nil)
+	env.OnActivity(activities.PersistAdoptedINGResultActivity, mock.Anything, mock.Anything, mock.Anything).Return(activities.PersistExecutionResultResult{StateVersion: 2}, nil)
+	env.OnActivity("MandateINGCompletionActivity", mock.Anything, mock.Anything).Return(activities.MandateINGCompletionResult{
+		MandateID: "mandate-1", ActionID: "ing-1", NextActionID: "doc-after-ing", NextIntentType: "doc",
+		ContractDigest: "digest", IntentID: "ing-intent", DecisionDigest: "decision", ResultRef: "ing-result.json",
+		ResultDigest: "result-hash", LedgerRef: "ledger.json", LedgerDigest: "ledger-hash",
+	}, nil)
+	env.OnActivity(activities.PersistAdoptedINGCompletionActivity, mock.Anything, mock.Anything, mock.Anything).Return(func(context.Context, activities.MandateINGCompletionResult, string) (activities.PersistExecutionResultResult, error) {
+		persistCompletionCalls++
+		return activities.PersistExecutionResultResult{}, nil
+	})
+	env.OnActivity("MandateDISActivity", mock.Anything, mock.Anything).Return(func(context.Context, activities.MandateIntentInput) (activities.MandateDISResult, error) {
+		disCalls++
+		return activities.MandateDISResult{}, nil
+	})
+	env.OnActivity("MandateDOCAfterDISActivity", mock.Anything, mock.Anything).Return(func(context.Context, activities.MandateIntentInput) (activities.MandateDOCResult, error) {
+		docCalls++
+		return activities.MandateDOCResult{}, nil
+	})
+	env.RegisterDelayedCallback(func() { env.SignalWorkflow("mandate:ing:decision", "decision") }, time.Millisecond)
+	env.ExecuteWorkflow(MandateExecutionWorkflow, MandateExecutionInput{MandateID: "mandate-1", MandatesRoot: "isolated", Adopted: true})
+	var result MandateExecutionResult
+	if err := env.GetWorkflowResult(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Success || result.Error != "ING canonical Gene materialization receipt required before DOC" || persistCompletionCalls != 0 || disCalls != 0 || docCalls != 0 {
+		t.Fatalf("ING did not fail closed: result=%#v persist=%d dis=%d doc=%d", result, persistCompletionCalls, disCalls, docCalls)
 	}
 }
 
