@@ -9,13 +9,24 @@ import json
 import sys
 import io
 
-# FIX: UTF-8 wrapper para Windows Service
+# FIX: UTF-8 para Windows Service.
+# Se reconfiguran los streams existentes en lugar de crear un TextIOWrapper
+# nuevo sobre el mismo buffer: brain/__main__.py ya envuelve stdout/stderr, y
+# un segundo wrapper deja al primero sin referencias; al recolectarse cierra
+# el buffer compartido y la salida JSON falla con "I/O operation on closed file".
+def _force_utf8_streams() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+        except (ValueError, OSError, io.UnsupportedOperation):
+            pass
+
+
 if sys.platform == 'win32' and not sys.stdout.isatty():
-    try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-    except:
-        pass
+    _force_utf8_streams()
 
 
 @dataclass
