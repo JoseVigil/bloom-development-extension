@@ -25,6 +25,7 @@ type CredentialReferenceEvidence struct {
 const credentialEvidenceTTL = 30 * time.Second
 
 var credentialReferenceKeys = map[string]string{
+	"credential-ref://openai/default":    "openai-key:default",
 	"credential-ref://anthropic/default": "anthropic-key:default",
 	"credential-ref://gemini/default":    "gemini-key:default",
 }

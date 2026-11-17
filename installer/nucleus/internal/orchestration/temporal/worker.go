@@ -532,6 +532,10 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			mandateWorker.RegisterActivityWithOptions((&activities.MandateDOCActivity{
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,
+			}).RunAfterING, activity.RegisterOptions{Name: "MandateDOCAfterINGActivity"})
+			mandateWorker.RegisterActivityWithOptions((&activities.MandateDOCActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    genBrainPath,
 			}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
 			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
 			// fase: mandate_genesis_phase_activities.go). MandateBuildWorkflow

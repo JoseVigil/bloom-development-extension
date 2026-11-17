@@ -218,22 +218,48 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 			completed.IntentID != ing.IntentID || completed.DecisionDigest != decisionDigest || completed.ResultRef == "" || completed.ResultDigest == "" || completed.LedgerRef == "" || completed.LedgerDigest == "" {
 			return MandateExecutionResult{Success: false, Error: "ING completion evidence or decision mismatched"}, nil
 		}
-		if completed.NextIntentType == "doc" {
-			return MandateExecutionResult{Success: false, Error: "ING canonical Gene materialization receipt required before DOC"}, nil
-		}
 		if completed.NextIntentType != "" && completed.NextIntentType != "dis" {
-			return MandateExecutionResult{Success: false, Error: "ING dependent Action type is unsupported"}, nil
+			if completed.NextIntentType != "doc" {
+				return MandateExecutionResult{Success: false, Error: "ING dependent Action type is unsupported"}, nil
+			}
 		}
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGCompletionActivity, completed, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
+		expectedDISActionID := completed.NextActionID
+		if completed.NextIntentType == "doc" {
+			var docActionID, followingDISActionID string
+			for {
+				var doc activities.MandateDOCResult
+				if err := workflow.ExecuteActivity(ctx, "MandateDOCAfterINGActivity", activities.MandateIntentInput{
+					MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, ActionID: docActionID, INGActionID: completed.ActionID,
+				}).Get(ctx, &doc); err != nil {
+					return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+				}
+				if doc.ActionID != completed.NextActionID || doc.INGActionID != completed.ActionID || (docActionID != "" && doc.ActionID != docActionID) {
+					return MandateExecutionResult{Success: false, Error: "ING DOC Action identity changed"}, nil
+				}
+				docActionID = doc.ActionID
+				if doc.Ready {
+					if doc.IntentID == "" || doc.RunDigest == "" || doc.FollowingActionID == "" {
+						return MandateExecutionResult{Success: false, Error: "ING DOC completion evidence incomplete"}, nil
+					}
+					followingDISActionID = doc.FollowingActionID
+					break
+				}
+				if err := workflow.Sleep(ctx, 5*time.Second); err != nil {
+					return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+				}
+			}
+			expectedDISActionID = followingDISActionID
+		}
 		var dis activities.MandateDISResult
 		if err := workflow.ExecuteActivity(ctx, "MandateDISActivity", activities.MandateIntentInput{
-			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, ActionID: expectedDISActionID,
 		}).Get(ctx, &dis); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
-		if dis.MandateID != input.MandateID || dis.ActionID != completed.NextActionID ||
+		if dis.MandateID != input.MandateID || (expectedDISActionID != "" && dis.ActionID != expectedDISActionID) || dis.ActionID == "" ||
 			dis.ContractDigest != completed.ContractDigest || dis.INGIntentID != completed.IntentID ||
 			dis.INGResultRef != completed.ResultRef || dis.INGResultDigest != completed.ResultDigest ||
 			dis.IntentID == "" || dis.ProposalRef == "" || dis.ProposalDigest == "" || dis.Status != "awaiting_human_decision" {

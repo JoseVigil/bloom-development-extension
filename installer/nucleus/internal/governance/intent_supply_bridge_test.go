@@ -81,7 +81,7 @@ func TestIntentSupplyBridgeRejectsCallerControlledMandatePath(t *testing.T) {
 func TestBuildIntentSupplyOperationUsesOnlySignedActionsAndBoundFiles(t *testing.T) {
 	dir := t.TempDir()
 	policy := []byte(`{"policy_version":"policy-v1"}`)
-	registry := []byte(`{"snapshot_id":"registry-v1","intelligence_backends":[{"backend_id":"local","credential_ref":null}]}`)
+	registry := []byte(`{"snapshot_id":"registry-v1","intelligence_backends":[{"backend_id":"openai_api","credential_ref":"credential-ref://openai/default","supply_enabled":false},{"backend_id":"local","credential_ref":null,"supply_enabled":true}]}`)
 	policyPath, registryPath := filepath.Join(dir, "policy.json"), filepath.Join(dir, "registry.json")
 	if err := os.WriteFile(policyPath, policy, 0600); err != nil {
 		t.Fatal(err)

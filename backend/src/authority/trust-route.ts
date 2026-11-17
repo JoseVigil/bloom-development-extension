@@ -44,10 +44,17 @@ async function intentSupplyChallenge(db:D1Database,p:MandatePacket,s:TrustRouteS
  return {digest,row};
 }
 async function signAttestation(payload:ActorAttestation,s:TrustRouteServices):Promise<SignedArtifact<ActorAttestation>>{return {payload,integrity:{canonicalization:'JCS-RFC8785',digest_algorithm:'SHA-256',digest:await digestWire(payload),signature_algorithm:'Ed25519',key_id:s.attestationKeyId,signature:base64ToBase64url(await signWithDomain(ATTESTATION_DOMAIN,canonicalizeJson(payload),s.attestationPrivateKeyPkcs8))}};}
+function nativeFormOriginAllowed(origin:string|null,expected:string):boolean{
+ if(origin===null||origin==='null'||origin===expected)return true;
+ try{
+  const actual=new URL(origin),configured=new URL(expected),loopback=(host:string)=>host==='localhost'||host==='127.0.0.1';
+  return actual.protocol==='http:'&&configured.protocol==='http:'&&actual.port===configured.port&&loopback(actual.hostname)&&loopback(configured.hostname);
+ }catch{return false;}
+}
 export async function authorityTrustResponse(db:D1Database,request:Request,s:TrustRouteServices,installation:VerifiedInstallation|null):Promise<Response>{
  const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
  try{
-  const url=new URL(request.url),path=url.pathname;if(url.origin!==s.origin)throw new TrustError('origin_invalid');
+  const url=new URL(request.url),path=url.pathname;if(!nativeFormOriginAllowed(url.origin,s.origin))throw new TrustError('origin_invalid');
   if(path==='/v1/authority/trust-manifest'&&request.method==='GET'){
    return trustManifestResponse(db,request,s.origin,installation);
   }
@@ -78,7 +85,7 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
    return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'"}});
   }
   if(path==='/v1/authority/actor/intent-supply-consent'&&request.method==='POST'){
-   if(request.headers.get('Origin')!==s.origin)throw new TrustError('origin_invalid');
+   if(!nativeFormOriginAllowed(request.headers.get('Origin'),s.origin))throw new TrustError('origin_invalid');
    if(request.headers.get('Content-Type')?.split(';')[0]!=='application/x-www-form-urlencoded')throw new TrustError('invalid_request');
    const form=await request.formData(),encoded=form.get('packet'),consentToken=form.get('consentToken');
    if(typeof encoded!=='string'||typeof consentToken!=='string'||encoded.length>8192)throw new TrustError('invalid_request');
@@ -111,7 +118,7 @@ export async function authorityTrustResponse(db:D1Database,request:Request,s:Tru
    return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'"}});
   }
   if(path==='/v1/authority/actor/mandate-consent'&&request.method==='POST'){
-   if(request.headers.get('Origin')!==s.origin)throw new TrustError('origin_invalid');
+   if(!nativeFormOriginAllowed(request.headers.get('Origin'),s.origin))throw new TrustError('origin_invalid');
    if(request.headers.get('Content-Type')?.split(';')[0]!=='application/x-www-form-urlencoded')throw new TrustError('invalid_request');
    const form=await request.formData(),encoded=form.get('packet'),consentToken=form.get('consentToken');
    if(typeof encoded!=='string'||typeof consentToken!=='string'||encoded.length>8192)throw new TrustError('invalid_request');

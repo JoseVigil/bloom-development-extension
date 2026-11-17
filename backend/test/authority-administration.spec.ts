@@ -126,6 +126,20 @@ describe("bounded organizational administration",()=>{
     const c=context();c.projects[0].project_id="new-project";
     expect(()=>run(command,fixture(),actor(),c)).toThrow("self_elevation");
   });
+  it("allows organizational Master to self-assign Master only on a verified project",()=>{
+    const command=grant();if(command.kind!=="propose_assignment")throw Error();
+    command.membershipId="m-1";command.roleId="master";command.scope={type:"project",id:"project-fixture"};
+    const proposal=run(command).proposal!;
+    expect(proposal).toMatchObject({grantorId:owner,recipientId:owner,status:"pending"});
+    expect(run({kind:"accept",proposalId:command.proposalId},fixture(),actor(),{...context(),proposal}).state.role_assignments)
+      .toContainEqual(expect.objectContaining({assignment_id:command.assignmentId,membership_id:"m-1",role_id:"master",role_version:"1",scope:{type:"project",id:"project-fixture"},status:"active"}));
+    expect(()=>run(command,fixture(),actor(),{...context(),projects:[]})).toThrow("scope_unverifiable");
+    const nonMasterState=fixture();
+    nonMasterState.role_assignments=nonMasterState.role_assignments.filter(a=>a.assignment_id!=="owner-master");
+    nonMasterState.role_definitions.push({role_id:"equivalent-admin",role_version:"1",role_origin:"organization",display_name:"Equivalent admin",status:"active",permissions:master});
+    nonMasterState.role_assignments.push({...nonMasterState.role_assignments[0],assignment_id:"owner-equivalent-admin",role_id:"equivalent-admin",role_version:"1",scope:{type:"organization",id:org}});
+    expect(()=>run(command,nonMasterState)).toThrow("self_elevation");
+  });
   it("rejects self extension of an assignment or membership",()=>{
     const s=fixture();s.role_assignments.find(a=>a.assignment_id==="owner-master")!.valid_until="2026-09-08T13:00:00Z";
     const command=grant();if(command.kind!=="propose_assignment")throw Error();command.membershipId="m-1";

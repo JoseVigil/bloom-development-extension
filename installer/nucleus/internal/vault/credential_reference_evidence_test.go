@@ -9,6 +9,9 @@ import (
 )
 
 func TestObserveCredentialReferenceIsSanitized(t *testing.T) {
+	if credentialReferenceKeys["credential-ref://openai/default"] != "openai-key:default" {
+		t.Fatal("OpenAI credential reference is not bound to its Vault key")
+	}
 	original := osKeyring
 	fake := &fakeKeyring{store: map[string]string{}}
 	osKeyring = fake

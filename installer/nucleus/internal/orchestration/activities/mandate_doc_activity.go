@@ -12,33 +12,37 @@ import (
 	"path/filepath"
 	"strings"
 
+	"nucleus/internal/gene"
 	"nucleus/internal/mandateoffer"
 	"nucleus/internal/orchestration/mandatecontract"
 	"nucleus/internal/orchestration/mandatestate"
 )
 
 type MandateDOCResult struct {
-	Ready          bool
-	MandateID      string
-	ActionID       string
-	DISActionID    string
-	ContractDigest string
-	TriggerIntent  string
-	IntentID       string
-	FolderName     string
-	Name           string
-	ProjectID      string
-	ProjectPath    string
-	DocStatus      string
-	NextAction     string
-	RunDigest      string
-	ContractSHA256 string
+	Ready             bool
+	MandateID         string
+	ActionID          string
+	DISActionID       string
+	INGActionID       string
+	FollowingActionID string
+	ContractDigest    string
+	TriggerIntent     string
+	IntentID          string
+	FolderName        string
+	Name              string
+	ProjectID         string
+	ProjectPath       string
+	DocStatus         string
+	NextAction        string
+	RunDigest         string
+	ContractSHA256    string
 }
 
 type MandateDOCActivity struct {
-	IdentityPath string
-	BrainPath    string
-	RunBrain     brainCommandRunner
+	IdentityPath             string
+	BrainPath                string
+	RunBrain                 brainCommandRunner
+	VerifyINGMaterialization func(root, evidencePath string, expected gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error)
 }
 
 // RunAfterDIS creates or resumes one independent DOC only after the durable
@@ -103,6 +107,98 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 	name := "doc-after-dis-" + dis.IntentID
 	result = MandateDOCResult{MandateID: input.MandateID, ActionID: docAction.ActionID, DISActionID: disAction.ActionID, ContractDigest: envelope.ContractDigest,
 		TriggerIntent: dis.IntentID, Name: name, ProjectID: state.ProjectID, ProjectPath: projectPath}
+	return a.runDOC(ctx, input, result, nucleusRoot, state.Preparation.SourceFiles)
+}
+
+// RunAfterING dispatches the signed DOC immediately following ING only when
+// the journal carries a G2 receipt that still verifies against the canonical
+// Gene store. A logical ing_result.json alone never opens this gate.
+func (a *MandateDOCActivity) RunAfterING(ctx context.Context, input MandateIntentInput) (MandateDOCResult, error) {
+	var result MandateDOCResult
+	if ctx == nil || ctx.Err() != nil || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID ||
+		input.MandatesRoot == "" || a.IdentityPath == "" || a.BrainPath == "" {
+		return result, fmt.Errorf("invalid DOC dispatch request")
+	}
+	mandateDir := filepath.Join(input.MandatesRoot, input.MandateID)
+	envelope, err := mandatecontract.LoadVerified(mandateDir, a.IdentityPath)
+	if err != nil || envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != input.MandateID {
+		return result, fmt.Errorf("signed DOC antecedent contract invalid")
+	}
+	ingAction, docAction, err := signedDOCFollowingTrigger(envelope.Contract.Actions, "ing", input.INGActionID, input.ActionID)
+	if err != nil {
+		return result, err
+	}
+	stateRaw, err := os.ReadFile(filepath.Join(mandateDir, "mandate_state.json"))
+	if err != nil {
+		return result, err
+	}
+	var rawState struct {
+		MandateID   string                            `json:"mandateId"`
+		ProjectID   string                            `json:"projectId"`
+		Preparation *mandateoffer.InstancePreparation `json:"preparation"`
+		Adoption    struct {
+			ContractDigest string `json:"contractDigest"`
+		} `json:"adoption"`
+		Actions map[string]struct {
+			IntentID              string `json:"intentId"`
+			Status                string `json:"status"`
+			ResultRef             string `json:"resultRef"`
+			ResultSHA             string `json:"resultSha256"`
+			LedgerRef             string `json:"ledgerRef"`
+			LedgerSHA             string `json:"ledgerSha256"`
+			DecisionDigest        string `json:"decisionDigest"`
+			MaterializationRef    string `json:"geneMaterializationReceiptRef"`
+			MaterializationDigest string `json:"geneMaterializationReceiptDigest"`
+		} `json:"actions"`
+	}
+	if json.Unmarshal(stateRaw, &rawState) != nil || rawState.MandateID != input.MandateID || rawState.ProjectID != envelope.Contract.ProjectID ||
+		rawState.Adoption.ContractDigest != envelope.ContractDigest || rawState.Preparation == nil || rawState.Preparation.ContractDigest != envelope.ContractDigest || len(rawState.Preparation.SourceFiles) == 0 {
+		return result, fmt.Errorf("prepared DOC source binding invalid")
+	}
+	ing := rawState.Actions[ingAction.ActionID]
+	if ing.Status != "completed" || ing.IntentID == "" || ing.ResultSHA == "" || ing.LedgerSHA == "" || ing.DecisionDigest == "" || ing.MaterializationRef == "" || ing.MaterializationDigest == "" ||
+		!pathWithin(filepath.Join(mandateDir, "evidence"), ing.MaterializationRef) {
+		return result, fmt.Errorf("ING canonical Gene materialization receipt missing")
+	}
+	receiptRaw, err := os.ReadFile(ing.MaterializationRef)
+	if err != nil {
+		return result, fmt.Errorf("ING canonical Gene materialization receipt missing: %w", err)
+	}
+	var receipt gene.INGMaterializationReceipt
+	if json.Unmarshal(receiptRaw, &receipt) != nil || receipt.ReceiptDigest != ing.MaterializationDigest {
+		return result, fmt.Errorf("ING canonical Gene materialization receipt digest mismatch")
+	}
+	expected := receipt.Binding
+	if expected.ProjectID != rawState.ProjectID || expected.MandateID != input.MandateID || expected.ContractDigest != envelope.ContractDigest ||
+		expected.INGActionID != ingAction.ActionID || expected.IntentID != ing.IntentID || expected.DecisionDigest != ing.DecisionDigest ||
+		expected.INGResultDigest != ing.ResultSHA || expected.INGLedgerDigest != ing.LedgerSHA {
+		return result, fmt.Errorf("ING canonical Gene materialization binding mismatch")
+	}
+	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
+	verify := a.VerifyINGMaterialization
+	if verify == nil {
+		verify = func(root, evidencePath string, binding gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error) {
+			return (&gene.Store{Root: root}).VerifyINGMaterializationReceipt(evidencePath, binding)
+		}
+	}
+	verified, err := verify(nucleusRoot, ing.MaterializationRef, expected)
+	if err != nil || verified.ReceiptDigest != ing.MaterializationDigest {
+		return result, fmt.Errorf("ING canonical Gene materialization receipt invalid")
+	}
+	projectPath, err := resolvePreparedProject(nucleusRoot, rawState.ProjectID, rawState.Preparation.SourceFiles, envelope.Contract.Inputs)
+	if err != nil {
+		return result, err
+	}
+	following, err := signedActionFollowing(envelope.Contract.Actions, docAction.ActionID)
+	if err != nil || following.IntentType != "dis" {
+		return result, fmt.Errorf("signed DIS Action missing after ING DOC")
+	}
+	result = MandateDOCResult{MandateID: input.MandateID, ActionID: docAction.ActionID, INGActionID: ingAction.ActionID, FollowingActionID: following.ActionID, ContractDigest: envelope.ContractDigest,
+		TriggerIntent: ing.IntentID, Name: "doc-after-ing-" + ing.IntentID, ProjectID: rawState.ProjectID, ProjectPath: projectPath}
+	return a.runDOC(ctx, input, result, nucleusRoot, rawState.Preparation.SourceFiles)
+}
+
+func (a *MandateDOCActivity) runDOC(ctx context.Context, input MandateIntentInput, result MandateDOCResult, nucleusRoot string, sourceFiles []string) (MandateDOCResult, error) {
 	if completed, ok, loadErr := loadCompletedIndependentDOC(input.MandatesRoot, result); loadErr != nil {
 		return MandateDOCResult{}, loadErr
 	} else if ok {
@@ -131,9 +227,9 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 	run := func(args []string) (*brainCLIResult, error) {
 		return runBrainIntentJSONWithRunner(a.BrainPath, args, runner)
 	}
-	createArgs := []string{"--json", "intent", "create", "-t", "doc", "-n", name, "-p", projectPath,
-		"--trigger-intent", dis.IntentID, "--trigger-nucleus", nucleusRoot}
-	for _, source := range state.Preparation.SourceFiles {
+	createArgs := []string{"--json", "intent", "create", "-t", "doc", "-n", result.Name, "-p", result.ProjectPath,
+		"--trigger-intent", result.TriggerIntent, "--trigger-nucleus", nucleusRoot}
+	for _, source := range sourceFiles {
 		createArgs = append(createArgs, "-f", source, "--doc-document", source)
 	}
 	created, err := run(createArgs)
@@ -149,7 +245,7 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		return MandateDOCResult{}, err
 	}
 	if view.NextAction == "hydrate" || view.NextAction == "resume" {
-		hydrated, runErr := run([]string{"--json", "intent", "hydrate", "--folder", result.FolderName, "-p", projectPath})
+		hydrated, runErr := run([]string{"--json", "intent", "hydrate", "--folder", result.FolderName, "-p", result.ProjectPath})
 		if runErr != nil {
 			return MandateDOCResult{}, runErr
 		}
@@ -159,7 +255,7 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		}
 	}
 	if view.NextAction == "finalize" {
-		finalized, runErr := run([]string{"--json", "intent", "finalize", "--folder", result.FolderName, "-p", projectPath})
+		finalized, runErr := run([]string{"--json", "intent", "finalize", "--folder", result.FolderName, "-p", result.ProjectPath})
 		if runErr != nil {
 			return MandateDOCResult{}, runErr
 		}
@@ -187,34 +283,40 @@ func loadCompletedIndependentDOC(mandatesRoot string, expected MandateDOCResult)
 		return MandateDOCResult{}, false, err
 	}
 	var state struct {
-		MandateID string                            `json:"mandateId"`
-		Actions   map[string]map[string]interface{} `json:"actions"`
-		DOC       map[string]interface{}            `json:"docAfterDIS"`
+		MandateID   string                            `json:"mandateId"`
+		Actions     map[string]map[string]interface{} `json:"actions"`
+		DOCAfterDIS map[string]interface{}            `json:"docAfterDIS"`
+		DOCAfterING map[string]interface{}            `json:"docAfterING"`
 	}
 	if json.Unmarshal(raw, &state) != nil || state.MandateID != expected.MandateID {
 		return MandateDOCResult{}, false, fmt.Errorf("DOC journal Mandate mismatch")
 	}
-	if state.DOC == nil {
+	doc := state.DOCAfterDIS
+	if expected.INGActionID != "" {
+		doc = state.DOCAfterING
+	}
+	if doc == nil {
 		return MandateDOCResult{}, false, nil
 	}
+	antecedentID := docAntecedentActionID(expected)
 	for key, value := range map[string]string{
-		"actionId": expected.ActionID, "dependsOnActionId": expected.DISActionID, "name": expected.Name,
+		"actionId": expected.ActionID, "dependsOnActionId": antecedentID, "name": expected.Name,
 		"triggerIntentId": expected.TriggerIntent, "projectId": expected.ProjectID, "projectPath": expected.ProjectPath,
 	} {
-		if state.DOC[key] != value {
+		if doc[key] != value {
 			return MandateDOCResult{}, false, fmt.Errorf("independent DOC identity conflict")
 		}
 	}
-	if state.DOC["completed"] != true {
+	if doc["completed"] != true {
 		return MandateDOCResult{}, false, nil
 	}
 	action := state.Actions[expected.ActionID]
-	intentID, _ := state.DOC["intentId"].(string)
-	folderName, _ := state.DOC["folderName"].(string)
-	runDigest, _ := state.DOC["runSha256"].(string)
-	contractDigest, _ := state.DOC["contractSha256"].(string)
-	if state.DOC["status"] != "completed" || state.DOC["nextAction"] != "none" || intentID == "" || folderName == "" || runDigest == "" ||
-		action == nil || action["status"] != "completed" || action["dependsOn"] != expected.DISActionID || action["intentId"] != intentID ||
+	intentID, _ := doc["intentId"].(string)
+	folderName, _ := doc["folderName"].(string)
+	runDigest, _ := doc["runSha256"].(string)
+	contractDigest, _ := doc["contractSha256"].(string)
+	if doc["status"] != "completed" || doc["nextAction"] != "none" || intentID == "" || folderName == "" || runDigest == "" ||
+		action == nil || action["status"] != "completed" || action["dependsOn"] != antecedentID || action["intentId"] != intentID ||
 		action["folderName"] != folderName || action["runSha256"] != runDigest || action["contractSha256"] != contractDigest {
 		return MandateDOCResult{}, false, fmt.Errorf("completed DOC evidence is incomplete or inconsistent")
 	}
@@ -225,17 +327,21 @@ func loadCompletedIndependentDOC(mandatesRoot string, expected MandateDOCResult)
 }
 
 func signedDOCFollowingDIS(actions []mandatecontract.Action, disActionID, docActionID string) (mandatecontract.Action, mandatecontract.Action, error) {
+	return signedDOCFollowingTrigger(actions, "dis", disActionID, docActionID)
+}
+
+func signedDOCFollowingTrigger(actions []mandatecontract.Action, triggerType, triggerActionID, docActionID string) (mandatecontract.Action, mandatecontract.Action, error) {
 	var disIndex = -1
 	for index, action := range actions {
-		if action.IntentType == "dis" && (disActionID == "" || disActionID == action.ActionID) {
+		if action.IntentType == triggerType && (triggerActionID == "" || triggerActionID == action.ActionID) {
 			if disIndex >= 0 {
-				return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DIS Action binding is ambiguous")
+				return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed %s Action binding is ambiguous", triggerType)
 			}
 			disIndex = index
 		}
 	}
 	if disIndex < 0 || disIndex+1 >= len(actions) {
-		return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DOC Action missing after DIS")
+		return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DOC Action missing after %s", triggerType)
 	}
 	disAction, docAction := actions[disIndex], actions[disIndex+1]
 	if docAction.ActionID == "" || docAction.IntentType != "doc" || len(docAction.DependsOn) != 1 || docAction.DependsOn[0] != disAction.ActionID ||
@@ -243,6 +349,23 @@ func signedDOCFollowingDIS(actions []mandatecontract.Action, disActionID, docAct
 		return mandatecontract.Action{}, mandatecontract.Action{}, fmt.Errorf("signed DOC Action binding invalid")
 	}
 	return disAction, docAction, nil
+}
+
+func signedActionFollowing(actions []mandatecontract.Action, actionID string) (mandatecontract.Action, error) {
+	for index, action := range actions {
+		if action.ActionID != actionID {
+			continue
+		}
+		if index+1 >= len(actions) {
+			return mandatecontract.Action{}, fmt.Errorf("signed Action has no successor")
+		}
+		next := actions[index+1]
+		if len(next.DependsOn) != 1 || next.DependsOn[0] != actionID {
+			return mandatecontract.Action{}, fmt.Errorf("signed Action successor binding invalid")
+		}
+		return next, nil
+	}
+	return mandatecontract.Action{}, fmt.Errorf("signed Action not found")
 }
 
 type docStatusView struct {
@@ -338,7 +461,8 @@ func persistIndependentDOC(mandatesRoot string, result MandateDOCResult) error {
 		if state["mandateId"] != result.MandateID {
 			return false, fmt.Errorf("DOC journal Mandate mismatch")
 		}
-		record := map[string]interface{}{"actionId": result.ActionID, "dependsOnActionId": result.DISActionID, "name": result.Name, "intentId": result.IntentID, "folderName": result.FolderName,
+		antecedentID := docAntecedentActionID(result)
+		record := map[string]interface{}{"actionId": result.ActionID, "dependsOnActionId": antecedentID, "name": result.Name, "intentId": result.IntentID, "folderName": result.FolderName,
 			"triggerIntentId": result.TriggerIntent, "projectId": result.ProjectID, "projectPath": result.ProjectPath,
 			"status": result.DocStatus, "nextAction": result.NextAction, "runSha256": result.RunDigest,
 			"contractSha256": result.ContractSHA256, "completed": result.Ready}
@@ -349,7 +473,11 @@ func persistIndependentDOC(mandatesRoot string, result MandateDOCResult) error {
 		if actions == nil {
 			return false, fmt.Errorf("DOC journal Actions missing")
 		}
-		prior, _ := state["docAfterDIS"].(map[string]interface{})
+		journalKey := "docAfterDIS"
+		if result.INGActionID != "" {
+			journalKey = "docAfterING"
+		}
+		prior, _ := state[journalKey].(map[string]interface{})
 		if prior != nil {
 			for _, key := range []string{"actionId", "dependsOnActionId", "name", "triggerIntentId", "projectId", "projectPath"} {
 				if prior[key] != record[key] {
@@ -375,18 +503,38 @@ func persistIndependentDOC(mandatesRoot string, result MandateDOCResult) error {
 			}
 		}
 		action, _ := actions[result.ActionID].(map[string]interface{})
-		if result.DISActionID == "" {
+		if antecedentID == "" {
 			return false, fmt.Errorf("signed DOC antecedent Action identity missing")
 		}
-		if action != nil && action["dependsOn"] != result.DISActionID {
+		if action != nil && action["dependsOn"] != antecedentID {
 			return false, fmt.Errorf("signed DOC Action journal conflict")
 		}
 		actions[result.ActionID] = map[string]interface{}{"status": map[bool]string{true: "completed", false: "in_progress"}[result.Ready],
-			"dependsOn": result.DISActionID, "intentId": record["intentId"], "folderName": record["folderName"],
+			"dependsOn": antecedentID, "intentId": record["intentId"], "folderName": record["folderName"],
 			"runSha256": result.RunDigest, "contractSha256": result.ContractSHA256}
 		state["currentAction"] = result.ActionID
-		state["docAfterDIS"] = record
+		if result.Ready && result.INGActionID != "" {
+			if result.FollowingActionID == "" {
+				return false, fmt.Errorf("signed Action following ING DOC missing")
+			}
+			next, _ := actions[result.FollowingActionID].(map[string]interface{})
+			if next != nil && (next["status"] != "pending" || next["dependsOn"] != result.ActionID) {
+				return false, fmt.Errorf("signed Action following ING DOC conflicts with journal")
+			}
+			if next == nil {
+				actions[result.FollowingActionID] = map[string]interface{}{"status": "pending", "dependsOn": result.ActionID}
+			}
+			state["currentAction"] = result.FollowingActionID
+		}
+		state[journalKey] = record
 		return true, nil
 	})
 	return err
+}
+
+func docAntecedentActionID(result MandateDOCResult) string {
+	if result.INGActionID != "" {
+		return result.INGActionID
+	}
+	return result.DISActionID
 }

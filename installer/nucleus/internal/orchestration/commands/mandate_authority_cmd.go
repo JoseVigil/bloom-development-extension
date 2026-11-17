@@ -371,9 +371,12 @@ func loadAdoptedV4Contract(dir, id, organizationID, identityPath string) (mandat
 		return mandatecontract.Envelope{}, err
 	}
 	var journal struct {
-		MandateID string `json:"mandateId"`
-		Status    string `json:"status"`
-		Adoption  struct {
+		MandateID   string `json:"mandateId"`
+		Status      string `json:"status"`
+		Preparation *struct {
+			ContractDigest string `json:"contractDigest"`
+		} `json:"preparation"`
+		Adoption struct {
 			Digest         string `json:"digest"`
 			ContractDigest string `json:"contractDigest"`
 			OrganizationID string `json:"organizationId"`
@@ -384,7 +387,13 @@ func loadAdoptedV4Contract(dir, id, organizationID, identityPath string) (mandat
 		return mandatecontract.Envelope{}, err
 	}
 	sum := sha256.Sum256(raw)
-	if journal.MandateID != id || journal.Status != "adopted" || journal.Adoption.Digest != hex.EncodeToString(sum[:]) ||
+	if journal.MandateID != id {
+		return mandatecontract.Envelope{}, errors.New("adopted Mandate journal does not match signed delivery")
+	}
+	if journal.Status == "prepared" && journal.Preparation != nil && journal.Preparation.ContractDigest == envelope.ContractDigest {
+		return envelope, nil
+	}
+	if journal.Status != "adopted" || journal.Adoption.Digest != hex.EncodeToString(sum[:]) ||
 		journal.Adoption.ContractDigest != envelope.ContractDigest || journal.Adoption.OrganizationID != organizationID ||
 		journal.Adoption.InstallationID != envelope.SignatureKeyID {
 		return mandatecontract.Envelope{}, errors.New("adopted Mandate journal does not match signed delivery")
@@ -429,12 +438,17 @@ func persistSignedState(dir, digest string) error {
 func persistActivationState(dir, digest string) error {
 	_, err := mandatestate.Mutate(filepath.Join(dir, "mandate_state.json"), func(state map[string]interface{}) (bool, error) {
 		if active, ok := state["activation"].(map[string]interface{}); ok && active["status"] == "active" && active["contractDigest"] == digest {
-			return false, nil
+			if state["status"] == "activated" {
+				return false, nil
+			}
+			state["status"] = "activated"
+			return true, nil
 		}
 		if _, exists := state["activation"]; exists {
 			return false, errors.New("conflicting activation state")
 		}
 		state["activation"] = map[string]interface{}{"status": "active", "contractDigest": digest}
+		state["status"] = "activated"
 		return true, nil
 	})
 	return err

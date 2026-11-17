@@ -146,13 +146,29 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
   };
   const covers = (from: string, until: string|null, target: Window) => authorityInstant(from) <= authorityInstant(target.validFrom)
     && (until === null || (target.validUntil !== null && authorityInstant(until) >= authorityInstant(target.validUntil)));
-  const selfGrant = (grantorId: string, recipientId: string, role: WireRoleDefinition, scope: WireRoleAssignment["scope"], target: Window) => {
+  const selfGrant = (grantorId: string, recipientId: string, membershipId: string, role: WireRoleDefinition, scope: WireRoleAssignment["scope"], target: Window) => {
     if (grantorId !== recipientId) return;
     if (resourceRole(role) && scope.type === "mandate" && scope.id === w4MandateId) {
       const membership = state.memberships.find(m => m.principal_id === grantorId && memberActive(m) && covers(m.valid_from,m.valid_until,target));
       if (!membership) deny("self_elevation");
       requirePermission(grantorId,"authority.role_definition.manage");
       return;
+    }
+    if (scope.type === "project" && role.role_id === "master" && role.role_origin === "builtin") {
+      const cap = masterPermissions();
+      const sameMasterPermissions = role.permissions.length === cap.size && role.permissions.every(p => cap.has(p));
+      const membership = state.memberships.find(m => m.membership_id === membershipId && m.principal_id === grantorId
+        && memberActive(m) && covers(m.valid_from,m.valid_until,target));
+      const organizationMaster = activeAssignments(grantorId,orgScope).some(a => {
+        if (a.membership_id !== membershipId || a.role_id !== "master" || a.role_version !== "1" || !covers(a.valid_from,a.valid_until,target)) return false;
+        const assignedRole = roleFor(a.role_id,a.role_version);
+        return assignedRole?.role_origin === "builtin" && assignedRole.permissions.length === cap.size
+          && assignedRole.permissions.every(p => cap.has(p));
+      });
+      // scopeVerified(scope) is called immediately before selfGrant at both proposal
+      // and acceptance, so this exception cannot create project authority from an
+      // unverified project reference.
+      if (sameMasterPermissions && membership && organizationMaster) return;
     }
     const available = activeAssignments(grantorId,scope).filter(a => {
       const m = state.memberships.find(m => m.membership_id === a.membership_id)!;
@@ -186,7 +202,7 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
     if (!covers(m.valid_from,m.valid_until,body)) deny("invalid_validity");
     if (state.role_assignments.some(a => a.assignment_id === body.assignmentId) || historicalRevocation("role_assignment",body.assignmentId)) deny("relationship_exists");
     const role = roleFor(body.roleId,body.roleVersion);if (!role) return deny("role_unavailable");
-    grantable(grantorId,role,body.scope);scopeVerified(body.scope);selfGrant(grantorId,m.principal_id,role,body.scope,body);
+    grantable(grantorId,role,body.scope);scopeVerified(body.scope);selfGrant(grantorId,m.principal_id,m.membership_id,role,body.scope,body);
     return m.principal_id;
   };
   const plan: AdministrationPlan = { state, projectChecks };
@@ -247,7 +263,7 @@ export function evaluateAdministration(input: WireFullContent, actor: VerifiedHu
         if (!m || !role || revoked("role_assignment",a.assignment_id)) deny("relationship_unavailable");
         if (!membershipOperation && !memberActive(m!)) deny("membership_unavailable");
         human(m!.principal_id);grantable(actor.principalId,role!,a.scope);scopeVerified(a.scope);
-        selfGrant(actor.principalId,m!.principal_id,role!,a.scope,{validFrom:a.valid_from,validUntil:a.valid_until});
+        selfGrant(actor.principalId,m!.principal_id,m!.membership_id,role!,a.scope,{validFrom:a.valid_from,validUntil:a.valid_until});
       }
       // Resume cannot extend an expired relationship or resurrect a revoked one.
       if (entity.valid_until !== null && authorityInstant(entity.valid_until) <= now) deny("invalid_validity");

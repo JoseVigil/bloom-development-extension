@@ -201,7 +201,7 @@ def test_policy_and_registry_exact_bytes_are_bound(tmp_path):
         evaluate("list", value, engine)
 
 
-def test_cli_fails_closed_without_probe_grant_and_has_no_accounting_side_effects(tmp_path):
+def test_cli_uses_credential_evidence_without_probe_grant_and_has_no_accounting_side_effects(tmp_path):
     engine, policy_path, registry_path = write_routing(tmp_path)
     environment = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONIOENCODING": "utf-8"}
     state = tmp_path / "state-that-must-remain-absent"
@@ -222,12 +222,12 @@ def test_cli_fails_closed_without_probe_grant_and_has_no_accounting_side_effects
     assert listed.returncode == 0, listed.stderr
     list_payload = json.loads(listed.stdout)
     assert list_payload["operation"] == "route.assignments"
-    assert list_payload["data"]["status"] == "not_ready"
-    assert all(row["eligibility"] == "evidence_missing" and row["destinations"] == []
+    assert list_payload["data"]["status"] == "eligible"
+    assert all(row["eligibility"] == "eligible" and row["destinations"]
                for row in list_payload["data"]["actions"])
     validated = run("validate", request(engine, include_assignments=True))
     assert validated.returncode == 0, validated.stderr
-    assert json.loads(validated.stdout)["data"]["status"] == "invalid"
+    assert json.loads(validated.stdout)["data"]["status"] == "valid"
     assert not (state / "accounting").exists()
 
 

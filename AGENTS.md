@@ -20,6 +20,8 @@ brevemente y continuá. Detenete únicamente ante un bloqueo real, una operació
 riesgosa que requiera autorización o una decisión arquitectónica indispensable.
 Verificá el resultado y entregá.
 
+**Economía de ejecución:** El agente debe minimizar el consumo de recursos, tokens y llamadas a herramientas. No debe iniciar exploraciones extensivas, reintentos reiterados ni ejecuciones paralelas innecesarias. Ante una tarea que requiera un consumo extraordinario, debe informar la situación antes de continuar.
+
 José Vigil decide los objetivos, las decisiones de diseño y el alcance del
 trabajo en este repo. Los agentes pueden resolver los detalles de
 implementación necesarios para cumplir una tarea que José haya pedido, sin

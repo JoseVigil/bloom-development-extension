@@ -297,6 +297,14 @@ func TestConfirmedContractAndLocalActStateRecoverWithoutChangingDigest(t *testin
 	if err := persistActivationState(dir, digest); err != nil {
 		t.Fatal(err)
 	}
+	var activatedState map[string]any
+	activatedRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
+	if err != nil || json.Unmarshal(activatedRaw, &activatedState) != nil {
+		t.Fatalf("read activated state: %v", err)
+	}
+	if activatedState["status"] != "activated" {
+		t.Fatalf("root status after activation = %v, want activated", activatedState["status"])
+	}
 	if err := persistActivationState(dir, digest); err != nil {
 		t.Fatal(err)
 	}
@@ -363,6 +371,28 @@ func TestAdoptedV4ContractKeepsSignedDeliveryAndRejectsMismatchedDigest(t *testi
 	if string(unchanged) != string(raw) {
 		t.Fatal("adopted contract changed")
 	}
+	journal["status"] = "prepared"
+	delete(journal, "adoption")
+	journal["preparation"] = map[string]string{"contractDigest": envelope.ContractDigest}
+	journalRaw, _ = json.Marshal(journal)
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := loadAdoptedV4Contract(dir, "mandate-1", "org-1", identityPath)
+	if err != nil || prepared.ContractDigest != envelope.ContractDigest {
+		t.Fatalf("prepared contract rejected: %v", err)
+	}
+	journal["preparation"].(map[string]string)["contractDigest"] = strings.Repeat("f", 64)
+	journalRaw, _ = json.Marshal(journal)
+	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadAdoptedV4Contract(dir, "mandate-1", "org-1", identityPath); err == nil {
+		t.Fatal("prepared contract with mismatched digest accepted")
+	}
+	journal["status"] = "adopted"
+	delete(journal, "preparation")
+	journal["adoption"] = map[string]string{"digest": hex.EncodeToString(sum[:]), "contractDigest": envelope.ContractDigest, "organizationId": "org-1", "installationId": identity.InstallationID}
 	journal["adoption"].(map[string]string)["digest"] = strings.Repeat("f", 64)
 	journalRaw, _ = json.Marshal(journal)
 	if err := os.WriteFile(filepath.Join(dir, "mandate_state.json"), journalRaw, 0600); err != nil {

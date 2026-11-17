@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"nucleus/internal/authority"
+	"nucleus/internal/gene"
 	"nucleus/internal/orchestration/mandatecontract"
 )
 
@@ -330,6 +331,71 @@ func TestSignedDOCAfterDISUsesActionIdentityWhenEarlierDOCMovesDIS(t *testing.T)
 	}
 }
 
+func TestIndependentDOCAfterINGRequiresCanonicalGeneReceiptAndIsIdempotent(t *testing.T) {
+	docActivity, input, statePath, receipt := prepareINGDOCFixture(t)
+	var calls [][]string
+	docActivity.VerifyINGMaterialization = func(_ string, _ string, expected gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error) {
+		if expected != receipt.Binding {
+			t.Fatalf("unexpected G2 binding: %#v", expected)
+		}
+		return receipt, nil
+	}
+	docActivity.RunBrain = func(_ string, args []string) ([]byte, []byte, int, error) {
+		calls = append(calls, append([]string(nil), args...))
+		operation := args[2]
+		data := map[string]interface{}{"intent_id": "doc-ing-id", "folder_name": ".doc-after-ing", "doc": map[string]interface{}{"doc_status": "created", "next_action": "hydrate"}}
+		if operation == "hydrate" {
+			data = map[string]interface{}{"doc": map[string]interface{}{"doc_status": "empty", "next_action": "finalize", "run_sha256": "sha256:run-ing"}}
+		}
+		if operation == "finalize" {
+			data = map[string]interface{}{"doc": map[string]interface{}{"doc_status": "completed", "next_action": "none", "run_sha256": "sha256:run-ing"}}
+		}
+		out, _ := json.Marshal(map[string]interface{}{"status": "success", "operation": "intent_" + operation, "data": data})
+		return out, nil, 0, nil
+	}
+	result, err := docActivity.RunAfterING(context.Background(), input)
+	if err != nil || !result.Ready || result.ActionID != "doc-after-ing-1" || result.INGActionID != "ing-1" || result.FollowingActionID != "dis-2" || len(calls) != 3 {
+		t.Fatalf("ING DOC failed: result=%#v calls=%#v err=%v", result, calls, err)
+	}
+	raw, _ := os.ReadFile(statePath)
+	var state map[string]interface{}
+	_ = json.Unmarshal(raw, &state)
+	actions := state["actions"].(map[string]interface{})
+	if state["currentAction"] != "dis-2" || actions["doc-after-ing-1"].(map[string]interface{})["status"] != "completed" || actions["dis-2"].(map[string]interface{})["status"] != "pending" {
+		t.Fatalf("ING DOC transition not durable: %s", raw)
+	}
+	second, err := docActivity.RunAfterING(context.Background(), MandateIntentInput{MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, ActionID: result.ActionID, INGActionID: result.INGActionID})
+	if err != nil || !second.Ready || second.IntentID != result.IntentID || len(calls) != 3 {
+		t.Fatalf("completed ING DOC reopened: result=%#v calls=%d err=%v", second, len(calls), err)
+	}
+}
+
+func TestIndependentDOCAfterINGFailsClosedWithoutOrWithAlteredReceipt(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(string)
+	}{
+		{name: "missing", mutate: func(path string) { _ = os.Remove(path) }},
+		{name: "altered", mutate: func(path string) { _ = os.WriteFile(path, []byte(`{"altered":true}`), 0600) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			docActivity, input, _, receipt := prepareINGDOCFixture(t)
+			tc.mutate(filepath.Join(input.MandatesRoot, input.MandateID, "evidence", "gene-materialization.json"))
+			calls := 0
+			docActivity.VerifyINGMaterialization = func(_ string, _ string, _ gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error) {
+				return receipt, nil
+			}
+			docActivity.RunBrain = func(string, []string) ([]byte, []byte, int, error) { calls++; return nil, nil, 0, nil }
+			if _, err := docActivity.RunAfterING(context.Background(), input); err == nil {
+				t.Fatal("invalid or missing G2 receipt opened ING DOC gate")
+			}
+			if calls != 0 {
+				t.Fatalf("Brain called %d times with invalid G2 receipt", calls)
+			}
+		})
+	}
+}
+
 func TestUniqueSignedActionFindsDISWithoutPositionDependency(t *testing.T) {
 	actions := []mandatecontract.Action{{ActionID: "ing", IntentType: "ing"}, {ActionID: "doc-ing", IntentType: "doc"}, {ActionID: "dis", IntentType: "dis"}}
 	action, index, err := uniqueSignedAction(actions, "dis")
@@ -399,6 +465,89 @@ func TestPreparedDOCSourceMustStillMatchSignedInput(t *testing.T) {
 	if calls != 0 {
 		t.Fatalf("Brain was called %d times with changed prepared source", calls)
 	}
+}
+
+func prepareINGDOCFixture(t *testing.T) (*MandateDOCActivity, MandateIntentInput, string, gene.INGMaterializationReceipt) {
+	t.Helper()
+	activity, input, _, _ := prepareDISTerminalFixture(t)
+	mandateDir := filepath.Join(input.MandatesRoot, input.MandateID)
+	envelope, err := mandatecontract.LoadVerified(mandateDir, activity.IdentityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	no := false
+	actions := make([]mandatecontract.Action, 8)
+	for i, intentType := range []string{"ing", "doc", "dis", "doc", "exp", "dev", "doc", "exp"} {
+		ids := []string{"ing-1", "doc-after-ing-1", "dis-2", "doc-after-dis-2", "exp-4", "dev-5", "doc-after-dev-5", "exp-6"}
+		actions[i] = mandatecontract.Action{ActionID: ids[i], Type: "run_intent", IntentType: intentType, IdempotencyKey: "key-" + ids[i], RequiresIntelligence: &no}
+		if i > 0 {
+			actions[i].DependsOn = []string{actions[i-1].ActionID}
+		}
+	}
+	actions[5].WhenResult = "remediation_required"
+	projectID := "11111111-1111-4111-8111-111111111111"
+	envelope.Contract.ProjectID, envelope.Contract.Actions = projectID, actions
+	identityRaw, err := os.ReadFile(activity.IdentityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encodedIdentity map[string]string
+	if json.Unmarshal(identityRaw, &encodedIdentity) != nil {
+		t.Fatal("invalid fixture identity")
+	}
+	publicKey, _ := base64.StdEncoding.DecodeString(encodedIdentity["public_key"])
+	privateKey, _ := base64.StdEncoding.DecodeString(encodedIdentity["private_key"])
+	identity := &authority.LocalIdentity{InstallationID: encodedIdentity["installation_id"], PublicKey: ed25519.PublicKey(publicKey), PrivateKey: ed25519.PrivateKey(privateKey)}
+	signed, err := mandatecontract.Sign(envelope.Contract, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signedRaw, _ := json.Marshal(signed)
+	if err = os.WriteFile(filepath.Join(mandateDir, "mandate.json"), signedRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	nucleusRoot := filepath.Dir(input.MandatesRoot)
+	projectRoot := filepath.Join(nucleusRoot, "project-ing")
+	if err = os.MkdirAll(filepath.Join(nucleusRoot, ".core"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(projectRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(projectRoot, "input.md"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog, _ := json.Marshal(map[string]interface{}{"projects": []map[string]interface{}{{"id": projectID, "absolutePath": projectRoot}}})
+	if err = os.WriteFile(filepath.Join(nucleusRoot, ".core", ".nucleus-config.json"), catalog, 0600); err != nil {
+		t.Fatal(err)
+	}
+	digest := strings.Repeat("a", 64)
+	binding := gene.INGMaterializationBinding{ProjectID: projectID, GeneID: "33333333-3333-4333-8333-333333333333", ContributionID: "44444444-4444-4444-8444-444444444444",
+		MandateID: input.MandateID, ContractDigest: signed.ContractDigest, INGActionID: "ing-1", IntentID: "ing-intent", DecisionID: "decision-1",
+		DecisionDigest: strings.Repeat("b", 64), HumanDecision: "approved", INGResultDigest: strings.Repeat("c", 64), INGLedgerDigest: strings.Repeat("d", 64)}
+	receipt := gene.INGMaterializationReceipt{SchemaVersion: gene.INGMaterializationReceiptSchema, Binding: binding, ReceiptDigest: "sha256:" + digest}
+	evidenceDir := filepath.Join(mandateDir, "evidence")
+	if err = os.MkdirAll(evidenceDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	receiptPath := filepath.Join(evidenceDir, "gene-materialization.json")
+	receiptRaw, _ := json.Marshal(receipt)
+	if err = os.WriteFile(receiptPath, receiptRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	state := map[string]interface{}{"mandateId": input.MandateID, "projectId": projectID, "stateVersion": 1, "status": "in_progress", "currentAction": "doc-after-ing-1",
+		"adoption":    map[string]interface{}{"contractDigest": signed.ContractDigest},
+		"preparation": map[string]interface{}{"contractDigest": signed.ContractDigest, "sourceFiles": []string{"input.md"}},
+		"actions": map[string]interface{}{"ing-1": map[string]interface{}{"intentId": "ing-intent", "status": "completed", "resultRef": "ing-result.json", "resultSha256": binding.INGResultDigest,
+			"ledgerRef": "ledger.json", "ledgerSha256": binding.INGLedgerDigest, "decisionDigest": binding.DecisionDigest,
+			"geneMaterializationReceiptRef": receiptPath, "geneMaterializationReceiptDigest": receipt.ReceiptDigest},
+			"doc-after-ing-1": map[string]interface{}{"status": "pending", "dependsOn": "ing-1"}}}
+	stateRaw, _ := json.Marshal(state)
+	statePath := filepath.Join(mandateDir, "mandate_state.json")
+	if err = os.WriteFile(statePath, stateRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return &MandateDOCActivity{IdentityPath: activity.IdentityPath, BrainPath: "brain"}, input, statePath, receipt
 }
 
 func prepareDISTerminalFixture(t *testing.T) (*MandateIntentActivity, MandateIntentInput, string, func(bool)) {

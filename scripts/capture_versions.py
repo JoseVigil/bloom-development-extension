@@ -125,8 +125,9 @@ def capture_versions() -> None:
         except ValueError:
             rel = path
 
-        if not path.exists():
-            missing += 1
+        if not path.exists() or not path.is_file():
+            if not path.exists():
+                missing += 1
             continue
 
         content = path.read_text(encoding="utf-8", errors="replace").rstrip()

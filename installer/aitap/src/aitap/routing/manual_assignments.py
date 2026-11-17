@@ -54,7 +54,11 @@ def eligible_manual_destinations(
     if (not isinstance(backends, list) or not isinstance(rule, dict)
             or not isinstance(rule.get("fallback"), list)):
         raise ManualAssignmentError("ELIGIBILITY_EVIDENCE_INVALID")
-    permitted_by_policy = {rule.get("backend_id"), *rule["fallback"]}
+    permitted_by_policy = {
+        rule.get("backend_id"),
+        *(rule.get("fallback") or []),
+        *(b.get("backend_id") for b in backends if isinstance(b, dict) and b.get("supply_enabled") is True),
+    }
     result: list[dict[str, str]] = []
     for backend in backends:
         if not isinstance(backend, dict) or backend.get("backend_id") not in permitted_by_policy:
@@ -66,15 +70,23 @@ def eligible_manual_destinations(
                 or set(required_capabilities) - set(backend.get("capabilities") or [])):
             continue
         health = health_evidence.get(backend_id)
-        if (not isinstance(health, dict) or health.get("status") != "healthy"
-                or not health.get("fingerprint") or _timestamp(health.get("valid_until")) <= now):
+        if (not isinstance(health, dict) or not health.get("fingerprint")
+                or _timestamp(health.get("valid_until")) <= now):
             continue
         credential_ref = backend.get("credential_ref")
-        if credential_ref is not None:
-            credential = credential_evidence.get(credential_ref)
-            if (not isinstance(credential, dict) or credential.get("usable") is not True
-                    or not credential.get("fingerprint") or _timestamp(credential.get("valid_until")) <= now):
-                continue
+        credential = credential_evidence.get(credential_ref) if credential_ref is not None else None
+        has_usable_credential = (
+            isinstance(credential, dict) and credential.get("usable") is True
+            and bool(credential.get("fingerprint")) and _timestamp(credential.get("valid_until")) > now
+        )
+        health_ok = (
+            health.get("status") == "healthy"
+            or (health.get("origin") == "nucleus.vault.service_request" and has_usable_credential)
+        )
+        if not health_ok:
+            continue
+        if credential_ref is not None and not has_usable_credential:
+            continue
         result.append({"backend_id": backend_id, "provider": provider, "model": model})
     return result
 
@@ -208,7 +220,12 @@ def _missing_evidence_reasons(
     """Explain unknown evidence without treating a known rejection as unknown."""
     reasons: set[str] = set()
     rule = policy.get("intelligence_supply") or {}
-    permitted = {rule.get("backend_id"), *(rule.get("fallback") or [])}
+    permitted = {
+        rule.get("backend_id"),
+        *(rule.get("fallback") or []),
+        *(b.get("backend_id") for b in (registry.get("intelligence_backends") or [])
+          if isinstance(b, Mapping) and b.get("supply_enabled") is True),
+    }
     for backend in registry.get("intelligence_backends") or []:
         if not isinstance(backend, Mapping) or backend.get("backend_id") not in permitted:
             continue

@@ -166,6 +166,7 @@ func buildIntentSupplyOperation(request IntentSupplyRequest, envelope mandatecon
 		SnapshotID string `json:"snapshot_id"`
 		Backends   []struct {
 			CredentialRef *string `json:"credential_ref"`
+			SupplyEnabled bool    `json:"supply_enabled"`
 		} `json:"intelligence_backends"`
 	}
 	if json.Unmarshal(registryRaw, &registry) != nil || registry.SnapshotID != i.RegistrySnapshotID {
@@ -186,7 +187,7 @@ func buildIntentSupplyOperation(request IntentSupplyRequest, envelope mandatecon
 	seen := map[string]bool{}
 	credentials := make([]vault.CredentialReferenceEvidence, 0)
 	for _, backend := range registry.Backends {
-		if backend.CredentialRef == nil || seen[*backend.CredentialRef] {
+		if !backend.SupplyEnabled || backend.CredentialRef == nil || seen[*backend.CredentialRef] {
 			continue
 		}
 		seen[*backend.CredentialRef] = true

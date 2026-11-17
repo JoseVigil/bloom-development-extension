@@ -6,7 +6,7 @@ import {beginHumanLogin,finishHumanLogin,type HumanServices} from '../src/author
 import {hashSecret} from '../src/authority/human-identity';
 import {base64ToBase64url,canonicalizeJson,signWithDomain} from '../src/authority/canonical';
 let db:D1Database,mf:Miniflare,temp:string,rootPrivate:ArrayBuffer,rootPublic:string,issuerPrivate:ArrayBuffer,issuerPublic:string,n=0,actorAttestation='',actorChallenge='',actorPublic='',actorOrg='',mandateAttestation='',mandateChallenge='',mandatePublic='',mandateOrg='';
-const now='2026-09-09T12:00:00Z',origin='https://authority.test',rootID='root-test';
+const now='2026-09-09T12:00:00Z',origin='http://localhost:8787',rootID='root-test';
 async function keys():Promise<{privateKey:ArrayBuffer;publicKey:string}>{const pair=await crypto.subtle.generateKey('Ed25519',true,['sign','verify']) as CryptoKeyPair;return {privateKey:await crypto.subtle.exportKey('pkcs8',pair.privateKey) as ArrayBuffer,publicKey:base64ToBase64url(Buffer.from(await crypto.subtle.exportKey('raw',pair.publicKey) as ArrayBuffer).toString('base64'))};}
 const provider={source:'test-fixture' as const,authorize:()=> 'https://fixture.test',exchange:async()=>({token:'owner-provider',expiresIn:28800}),identify:async()=>({subject:'123',handle:'owner'})};
 function payload(org:string,version='1',keysOverride?:TrustPayload['keys']):TrustPayload{return {schema:'bloom.authority.trust-manifest',schema_version:'1.0',manifest_id:`manifest-${org}-${version}`,issuer:'issuer-test',organization_id:org,manifest_version:version,issued_at:now,not_before:now,expires_at:'2026-09-10T12:00:00Z',root_key_id:rootID,keys:keysOverride??[{key_id:'issuer-key',public_key:issuerPublic,status:'active',valid_from:now,valid_until:null}]};}
@@ -32,7 +32,11 @@ describe('rooted Authority trust on temporary D1',()=>{
   const wrong=await keys(),bad=await authorityTrustResponse(db,new Request(origin+`/v1/authority/actor/challenge?org=${id}`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({organizationId:id,actorPublicKey:wrong.publicKey,audience:'other'})}),s,{organizationId:id,installationId:'installation-a'});expect(bad.status).toBe(403);
   });
   it('binds Intent Supply list and validate approval to context and delivers each attestation once',async()=>{
-  for(const mode of ['list','validate'] as const){
+  for(const {mode,postOrigin,urlBase} of [
+   {mode:'list' as const,postOrigin:undefined,urlBase:origin},
+   {mode:'list' as const,postOrigin:'null',urlBase:origin},
+   {mode:'validate' as const,postOrigin:'http://127.0.0.1:8787',urlBase:'http://127.0.0.1:8787'},
+  ]){
    const id=await org(),digest='sha256:'+(mode==='list'?'a':'b').repeat(64);
    await persistTrustManifest(db,await signTrustManifest(payload(id),rootPrivate),{allowTestFixtures:true});
    await db.prepare("INSERT INTO authority_human_identities VALUES(?,?,'123','fixture:explicit','test-fixture','1','active',NULL,'')").bind(id,'owner').run();
@@ -49,7 +53,9 @@ describe('rooted Authority trust on temporary D1',()=>{
    const cookie=`__Host-authority-session=${login.token}`,page=await authorityTrustResponse(db,new Request(origin+`/v1/authority/actor/intent-supply-consent?packet=${encoded}`,{headers:{Cookie:cookie}}),s,null);
    expect(page.status).toBe(200);const html=await page.text();expect(html).toContain(mode==='list'?'Habilitar listado':'Validar selección');expect(html).toContain('mandate-1');expect(html).toContain(digest);expect(html).toContain('no inicia el Mandate');
    const token=html.match(/name="consentToken" value="([^"]+)"/)?.[1];expect(token).toBeTruthy();
-   const approval=await authorityTrustResponse(db,new Request(origin+'/v1/authority/actor/intent-supply-consent',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:encoded,consentToken:token!})}),s,null);
+   const hostile=await authorityTrustResponse(db,new Request(origin+'/v1/authority/actor/intent-supply-consent',{method:'POST',headers:{Origin:'https://other.test',Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:encoded,consentToken:token!})}),s,null);expect(hostile.status).toBe(403);
+   const approvalHeaders:Record<string,string>={Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'};if(postOrigin!==undefined)approvalHeaders.Origin=postOrigin;
+   const approval=await authorityTrustResponse(db,new Request(urlBase+'/v1/authority/actor/intent-supply-consent',{method:'POST',headers:approvalHeaders,body:new URLSearchParams({packet:encoded,consentToken:token!})}),s,null);
    expect(approval.status).toBe(200);expect(await approval.text()).not.toContain('actor-attestation');
    const delivered=await poll();expect(delivered.status).toBe(200);const envelope=await delivered.json() as any;expect(envelope.payload).toMatchObject({schema_version:'1.0',organization_id:id,installation_id:'installation-a',principal_id:'owner',audience:'bloom.authority.local-actor',actor_public_key:actor.publicKey});
    expect((await poll()).status).toBe(410);
@@ -89,7 +95,7 @@ describe('rooted Authority trust on temporary D1',()=>{
    const wrongOrigin=await authorityTrustResponse(db,new Request(origin+'/v1/authority/actor/mandate-consent',{method:'POST',headers:{Origin:'https://other.test',Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:encoded,consentToken:token!})}),s,null);expect(wrongOrigin.status).toBe(403);
    const changedPacket=Buffer.from(JSON.stringify({...packet,challenge:'changed'})).toString('base64url');const altered=await authorityTrustResponse(db,new Request(origin+'/v1/authority/actor/mandate-consent',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:changedPacket,consentToken:token!})}),s,null);expect(altered.status).toBe(403);
    const expired=await authorityTrustResponse(db,new Request(origin+'/v1/authority/actor/mandate-consent',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:encoded,consentToken:token!})}),{...s,now:()=> '2026-09-09T12:03:00Z'},null);expect(expired.status).toBe(403);
-   const post=()=>authorityTrustResponse(db,new Request(origin+'/v1/authority/actor/mandate-consent',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:encoded,consentToken:token!})}),s,null);
+   const post=()=>authorityTrustResponse(db,new Request((operation==='activate'?'http://127.0.0.1:8787':origin)+'/v1/authority/actor/mandate-consent',{method:'POST',headers:{Origin:operation==='activate'?'http://127.0.0.1:8787':'null',Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({packet:encoded,consentToken:token!})}),s,null);
    const response=await post();expect(response.status).toBe(200);const text=await response.text(),raw=text.match(/<pre>(.*)<\/pre>/)?.[1]?.replace(/&quot;/g,'"').replace(/&amp;/g,'&');expect(raw).toBeTruthy();expect(JSON.parse(raw!).payload).toMatchObject({schema_version:'1.2',operation,mandate_id:'m-1',contract_digest:digest,principal_id:'owner'});expect((await post()).status).toBe(403);
    if(operation==='approve'){mandateAttestation=raw!;mandateChallenge=challenge.challenge;mandatePublic=actor.publicKey;mandateOrg=id;}
    return JSON.parse(raw!).payload;
