@@ -15,7 +15,7 @@ def response(value, request_id="r1"):
 
 def test_generate_uses_gemini_endpoint_json_and_usage():
     def opener(request, timeout):
-        assert request.full_url.endswith("/gemini-3.8-flash:generateContent")
+        assert request.full_url.endswith("/gemini-3-flash-preview:generateContent")
         assert request.headers["X-goog-api-key"] == "fixture"
         body = json.loads(request.data)
         assert body["generationConfig"] == {"maxOutputTokens": 4096, "responseMimeType": "application/json"}
@@ -24,14 +24,36 @@ def test_generate_uses_gemini_endpoint_json_and_usage():
     result = GeminiProvider(opener).generate(payload={"task": "gen"}, model="gemini-3.8-flash",
                                               secret="fixture", max_tokens=4096, timeout=1)
     assert result.raw_response == '{"ok":true}' and result.input_tokens == 12 and result.output_tokens == 3
+    assert result.model == "gemini-3.8-flash"
 
 
 def test_count_tokens_uses_dedicated_endpoint():
     def opener(request, timeout):
-        assert request.full_url.endswith("/gemini-3.8-flash:countTokens")
+        assert request.full_url.endswith("/gemini-3-flash-preview:countTokens")
         return response({"totalTokens": 321})
     assert GeminiProvider(opener).count_input_tokens(payload={"a": 1}, model="gemini-3.8-flash",
                                                       secret="fixture", timeout=1) == 321
+
+
+def test_generate_strips_surrounding_bom_and_line_endings_from_vault_key():
+    def opener(request, timeout):
+        assert request.headers["X-goog-api-key"] == "fixture"
+        return response({"candidates": [{"content": {"parts": [{"text": "{}"}]}}],
+                         "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}})
+    result = GeminiProvider(opener).generate(payload={}, model="m", secret="\ufeff \tfixture\r\n",
+                                              max_tokens=1, timeout=1)
+    assert result.raw_response == "{}"
+
+
+def test_invalid_non_ascii_key_fails_before_transport():
+    calls = []
+    with pytest.raises(SupplyError) as error:
+        GeminiProvider(lambda *_a, **_k: calls.append(True)).generate(
+            payload={}, model="m", secret="key\ufeffinside", max_tokens=1, timeout=1)
+    assert error.value.code == "PROVIDER_AUTH_FAILED"
+    assert error.value.stage == "provider"
+    assert error.value.uncertain is False
+    assert calls == []
 
 
 @pytest.mark.parametrize("status,code", [(401, "PROVIDER_AUTH_FAILED"), (429, "PROVIDER_RATE_LIMITED"),

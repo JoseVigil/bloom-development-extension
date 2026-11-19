@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,6 +60,29 @@ type PersistExecutionResultResult struct {
 	StateVersion uint64
 }
 
+func localBinding(state map[string]any, digest string) bool {
+	adopted, _ := state["adoption"].(map[string]any)
+	prep, _ := state["preparation"].(map[string]any)
+	act, _ := state["activation"].(map[string]any)
+	return digest != "" && len(adopted) == 0 && prep["contractDigest"] == digest &&
+		act["contractDigest"] == digest && act["status"] == "active"
+}
+
+func journalBinding(state map[string]any, digest string) bool {
+	adopted, _ := state["adoption"].(map[string]any)
+	return (digest != "" && adopted["contractDigest"] == digest) || localBinding(state, digest)
+}
+
+func boundJournal(raw []byte, digest string) bool {
+	var state map[string]any
+	return json.Unmarshal(raw, &state) == nil && journalBinding(state, digest)
+}
+
+func localJournal(raw []byte, digest string) bool {
+	var state map[string]any
+	return json.Unmarshal(raw, &state) == nil && localBinding(state, digest)
+}
+
 // PersistAdoptedINGResultActivity records the first Action without claiming
 // fulfillment. A replay with different evidence is a conflict, not a rewrite.
 func PersistAdoptedINGResultActivity(ctx context.Context, input MandateIntentResult, mandatesRoot string) (PersistExecutionResultResult, error) {
@@ -83,11 +107,16 @@ func PersistAdoptedINGResultActivity(ctx context.Context, input MandateIntentRes
 	record := map[string]interface{}{"intentId": input.IntentID, "status": input.Status,
 		"evidenceRef": input.EvidenceRef, "evidenceSha256": input.EvidenceDigest}
 	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
-		adoption, ok := state["adoption"].(map[string]interface{})
-		if !ok || adoption["contractDigest"] != input.ContractDigest || state["mandateId"] != input.MandateID {
+		if !journalBinding(state, input.ContractDigest) || state["mandateId"] != input.MandateID {
 			return false, fmt.Errorf("adopted journal identity or digest mismatch")
 		}
 		actions, ok := state["actions"].(map[string]interface{})
+		if !ok && state["actions"] == nil && state["status"] == "activated" && localBinding(state, input.ContractDigest) {
+			actions = make(map[string]interface{})
+			state["actions"] = actions
+			state["currentAction"] = input.ActionID
+			ok = true
+		}
 		if !ok {
 			return false, fmt.Errorf("adopted action journal missing")
 		}
@@ -133,10 +162,9 @@ func PersistAdoptedINGCompletionActivity(ctx context.Context, input MandateINGCo
 	}
 	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
 	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
-		adoption, _ := state["adoption"].(map[string]interface{})
 		actions, _ := state["actions"].(map[string]interface{})
 		decision, _ := state["ingDecision"].(map[string]interface{})
-		if adoption == nil || adoption["contractDigest"] != input.ContractDigest || state["mandateId"] != input.MandateID || actions == nil || decision == nil || decision["decisionDigest"] != input.DecisionDigest || decision["actionId"] != input.ActionID {
+		if !journalBinding(state, input.ContractDigest) || state["mandateId"] != input.MandateID || actions == nil || decision == nil || decision["decisionDigest"] != input.DecisionDigest || decision["actionId"] != input.ActionID {
 			return false, fmt.Errorf("ING completion does not match adopted decision")
 		}
 		prior, _ := actions[input.ActionID].(map[string]interface{})
@@ -195,9 +223,8 @@ func PersistAdoptedDISProposalActivity(ctx context.Context, input MandateDISResu
 	}
 	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
 	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
-		adoption, _ := state["adoption"].(map[string]interface{})
 		actions, _ := state["actions"].(map[string]interface{})
-		if state["mandateId"] != input.MandateID || adoption == nil || adoption["contractDigest"] != input.ContractDigest ||
+		if state["mandateId"] != input.MandateID || !journalBinding(state, input.ContractDigest) ||
 			actions == nil || state["currentAction"] != input.ActionID {
 			return false, fmt.Errorf("DIS journal identity or action mismatch")
 		}
@@ -262,10 +289,9 @@ func PersistAdoptedDISCompletionActivity(ctx context.Context, input MandateDISCo
 	}
 	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
 	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
-		adoption, _ := state["adoption"].(map[string]interface{})
 		actions, _ := state["actions"].(map[string]interface{})
 		prior, _ := actions[input.ActionID].(map[string]interface{})
-		if state["mandateId"] != input.MandateID || adoption == nil || adoption["contractDigest"] != input.ContractDigest || actions == nil || prior == nil || state["currentAction"] != input.ActionID {
+		if state["mandateId"] != input.MandateID || !journalBinding(state, input.ContractDigest) || actions == nil || prior == nil || state["currentAction"] != input.ActionID {
 			return false, fmt.Errorf("DIS terminal journal identity mismatch")
 		}
 		if prior["ingIntentId"] == nil || prior["ingResultRef"] == nil || prior["ingResultSha256"] == nil {

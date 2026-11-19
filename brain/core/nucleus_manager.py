@@ -207,7 +207,8 @@ class NucleusManager:
         
         self._write_json(cache_dir / ".semantic-index.json", {
             "indexed_at": timestamp,
-            "entries": []
+            "entries": [],
+            "domains": {}
         })
         files_created.append(".cache/.semantic-index.json")
         

@@ -28,6 +28,7 @@ def vault_purpose(intent):
     contract = (intent["intent_type"], intent["phase"])
     purposes = {
         ("ing", "classification"): "mandate_intelligence",
+        ("dis", "mapping"): "mandate_intelligence",
         ("gen", "generation"): "mandate_gen_intelligence",
     }
     purpose = purposes.get(contract)
@@ -214,8 +215,19 @@ class IntelligenceService:
                 raise SupplyError("STATE_CONFLICT", "journal", "Remote outcome uncertain; reconciliation required")
             if journal and journal["state"] == "failed":
                 error = journal["error"]
-                raise SupplyError(error["code"], error["stage"], error["message"],
-                                  uncertain=error["details"].get("delivery_uncertain", False))
+                attempts = journal.get("attempts", [])
+                details = error.get("details", {})
+                delivery_uncertain = error.get("delivery_uncertain", details.get("delivery_uncertain", False))
+                if not attempts and not delivery_uncertain:
+                    # A pre-provider failure (for example, missing Vault grant)
+                    # can safely resume the same logical inference. No provider
+                    # attempt or accounting reservation exists to duplicate.
+                    journal["state"] = "pending"
+                    journal.pop("error", None)
+                    self.store.write(identity, journal)
+                else:
+                    raise SupplyError(error["code"], error["stage"], error["message"],
+                                      uncertain=delivery_uncertain)
             try:
                 routes = self.engine.supply_routes(request)
             except RoutingError:

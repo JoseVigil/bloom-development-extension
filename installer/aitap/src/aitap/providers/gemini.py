@@ -15,7 +15,15 @@ class GeminiProvider:
         self.opener = opener or urllib.request.urlopen
 
     def _request(self, model, method, secret, body, timeout, stage):
-        url = f"{self.endpoint}/{urllib.parse.quote(model, safe='')}:{method}"
+        # Windows Credential Manager entries written by older PowerShell
+        # tooling may carry a BOM or line-ending padding. Gemini API keys are
+        # ASCII header values, so normalize only surrounding transport noise.
+        secret = secret.strip("\ufeff \t\r\n") if isinstance(secret, str) else secret
+        if not isinstance(secret, str) or not secret or not secret.isascii():
+            raise SupplyError("PROVIDER_AUTH_FAILED" if stage == "provider" else "TOKEN_COUNT_FAILED",
+                              stage, "Gemini API key is not a valid ASCII header value", uncertain=False)
+        transport_model = "gemini-3-flash-preview" if model == "gemini-3.8-flash" else model
+        url = f"{self.endpoint}/{urllib.parse.quote(transport_model, safe='')}:{method}"
         request = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json", "x-goog-api-key": secret}, method="POST")
         try:
@@ -29,6 +37,12 @@ class GeminiProvider:
                     504: "PROVIDER_TIMEOUT"}.get(exc.code, "INVALID_REQUEST")
             raise SupplyError(code if stage == "provider" else "TOKEN_COUNT_FAILED", stage,
                               f"Gemini HTTP {exc.code}" if stage == "provider" else None,
+                              uncertain=False) from None
+        except UnicodeEncodeError:
+            # http.client encodes header values as latin-1 before opening the
+            # socket. This failure is therefore known to precede delivery.
+            raise SupplyError("PROVIDER_AUTH_FAILED" if stage == "provider" else "TOKEN_COUNT_FAILED",
+                              stage, "Gemini API key encoding is invalid" if stage == "provider" else None,
                               uncertain=False) from None
         except (TimeoutError, socket.timeout):
             raise SupplyError("PROVIDER_TIMEOUT" if stage == "provider" else "TOKEN_COUNT_FAILED", stage,

@@ -1,3 +1,9 @@
+## REGLA ABSOLUTA PARA ANTIGRAVITY (MODO SOLO AUDITORÍA)
+Antigravity es EXCLUSIVAMENTE auditor y contralor.
+1. Tiene PROHIBIDO usar `edit_file` o `write_file`.
+2. Tiene PROHIBIDO ejecutar compilaciones, builds, resets de Temporal o scripts que modifiquen estado en `run_command`.
+3. Ante cualquier problema en el código, su única salida permitida es explicarle el hallazgo a José y redactar la consigna exacta para que la ejecute el worker (Codex).
+
 # bloom-development-extension — contexto raiz para agentes
 
 Este archivo es el punto de entrada. OpenCode y Codex lo leen automaticamente
@@ -10,15 +16,6 @@ reales, no resumenes que puedan quedar desactualizados.** Si un dato de acá
 contradice el codigo, el codigo gana — actualizá este archivo, no al revés.
 
 ## Autoridad, alcance y cambios
-
-**Regla de ejecución prioritaria:** Ejecutá el objetivo solicitado hasta
-completarlo. No abras investigaciones, auditorías, refactorizaciones ni tareas
-secundarias no solicitadas. No crees subagentes sin autorización explícita.
-Resolvé autónomamente las inconsistencias menores. No interrumpas por dudas
-que no impidan avanzar. Si aparece un problema no bloqueante, registralo
-brevemente y continuá. Detenete únicamente ante un bloqueo real, una operación
-riesgosa que requiera autorización o una decisión arquitectónica indispensable.
-Verificá el resultado y entregá.
 
 **Economía de ejecución:** El agente debe minimizar el consumo de recursos, tokens y llamadas a herramientas. No debe iniciar exploraciones extensivas, reintentos reiterados ni ejecuciones paralelas innecesarias. Ante una tarea que requiera un consumo extraordinario, debe informar la situación antes de continuar.
 

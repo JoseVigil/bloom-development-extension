@@ -60,9 +60,8 @@ LEVELS = {
 CONTRASTED_LEVELS = {"project", "domain", "gene"}
 
 # DJ-29: intents whose terminal state triggers doc. Brain resolves `dev` (in
-# the Project) and `dis` (in its Nucleus); `ing` waits for the canonical Gene
-# publication and `mrg` has no code.
-TRIGGER_TYPES = {"dev", "dis"}
+# the Project) and `dis` / `ing` (in their Nucleus); `mrg` has no code.
+TRIGGER_TYPES = {"dev", "dis", "ing"}
 
 RESULT_EMPTY = "empty"
 RESULT_PENDING = "pending_response"
@@ -293,6 +292,101 @@ def _verify_dis_terminal(intent_dir: Path, state: Dict[str, Any]) -> Dict[str, A
     return evidence
 
 
+def _verify_ing_terminal(
+    intent_dir: Path,
+    state: Dict[str, Any],
+    nucleus_root: Path,
+    project_id: str,
+) -> Dict[str, Any]:
+    """Verify the terminal ING result and its canonical Gene publication."""
+    if not isinstance(project_id, str) or not project_id:
+        raise DocRunError("el vínculo con Nucleus no declara project_id",
+                          "DOC_PROJECT_NOT_LINKED")
+    result_path = intent_dir / "ing_result.json"
+    ledger_path = intent_dir / ".consolidation" / ".turn_1" / ".effect_ledger.json"
+    try:
+        result = read_json(result_path)
+        ledger = read_json(ledger_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DocRunError(
+            f"el ing no tiene evidencia terminal legible: {exc}",
+            "DOC_TRIGGER_NOT_TERMINAL",
+        )
+
+    intent_id = state.get("uuid") or state.get("intent_id")
+    accepted = result.get("accepted_contributions")
+    if (
+        result.get("schema_version") != "bloom.ing-result/v1"
+        or result.get("status") != "done"
+        or result.get("intent_id") != intent_id
+        or result.get("mandate_id") != state.get("mandate_id")
+        or not isinstance(accepted, list)
+        or not accepted
+        or result.get("rejected_clusters") != []
+        or ledger.get("state_advanced") is not True
+    ):
+        raise DocRunError(
+            "el ing no satisface el resultado terminal, ledger avanzado y aceptación total requeridos",
+            "DOC_TRIGGER_NOT_TERMINAL",
+        )
+
+    genes_root = nucleus_root / ".genes" / "projects" / project_id
+    head_path = genes_root / "head.json"
+    try:
+        head = read_json(head_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DocRunError(
+            f"no se pudo verificar la publicación canónica del ing: {exc}",
+            "DOC_TRIGGER_NOT_TERMINAL",
+        )
+    if head.get("project_id") != project_id or not isinstance(head.get("genes"), dict):
+        raise DocRunError("el head canónico de Genes no corresponde al Project",
+                          "DOC_TRIGGER_NOT_TERMINAL")
+
+    identities = []
+    seen = set()
+    for contribution in accepted:
+        gene_id = contribution.get("gene_id") if isinstance(contribution, dict) else None
+        gene_head = head["genes"].get(gene_id) if gene_id else None
+        identity_ref = f"identities/{gene_id}.json" if gene_id else None
+        if (
+            not gene_id
+            or not isinstance(gene_head, dict)
+            or gene_head.get("identity_ref") != identity_ref
+        ):
+            raise DocRunError("una contribución aceptada no está publicada en el head de Genes",
+                              "DOC_TRIGGER_NOT_TERMINAL")
+        if gene_id in seen:
+            continue
+        identity_path = genes_root / identity_ref
+        try:
+            identity = read_json(identity_path)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise DocRunError(
+                f"no se pudo verificar la identidad canónica {gene_id}: {exc}",
+                "DOC_TRIGGER_NOT_TERMINAL",
+            )
+        if identity.get("project_id") != project_id or identity.get("gene_id") != gene_id:
+            raise DocRunError(f"la identidad canónica de {gene_id} no coincide con el Project/Gene",
+                              "DOC_TRIGGER_NOT_TERMINAL")
+        seen.add(gene_id)
+        identities.append({
+            "gene_id": gene_id,
+            "identity_ref": (Path(".genes") / "projects" / project_id / identity_ref).as_posix(),
+            "identity_sha256": sha256_file(identity_path),
+        })
+
+    return {
+        "result_ref": "ing_result.json",
+        "result_sha256": sha256_file(result_path),
+        "ledger_ref": ".consolidation/.turn_1/.effect_ledger.json",
+        "ledger_sha256": sha256_file(ledger_path),
+        "head_ref": (Path(".genes") / "projects" / project_id / "head.json").as_posix(),
+        "head_sha256": sha256_file(head_path),
+        "identities": identities,
+    }
+
+
 def resolve_trigger(
     intents_base: Path,
     trigger_intent: Optional[str],
@@ -307,10 +401,9 @@ def resolve_trigger(
       ones a person declares.
     - ``dev``: found in the Project's intents; must be ``completed``
       (finalize). Changed paths come from its staging manifests.
-    - ``dis``: found in ``<trigger_nucleus>/.intents``; must be ``done`` with a
-      committed ratification, and the Project must be linked to that Nucleus.
-      dis changes the Nucleus domain graph, not Project files, so its changed
-      Project paths are only the declared ones.
+    - ``dis`` / ``ing``: found in ``<trigger_nucleus>/.intents`` and the
+      Project must be linked to that Nucleus. Their changed Project paths are
+      only the declared ones.
     """
     declared = _unique(portable_path(f) for f in (declared_files or []))
     if not trigger_intent:
@@ -358,11 +451,13 @@ def resolve_trigger(
             "state_sha256": sha256_file(state_file),
         }
 
-    # dis
+    # dis / ing
     if nucleus_link is None:
-        raise DocRunError("un dis se resuelve en su Nucleus: pasá --trigger-nucleus",
+        raise DocRunError(f"un {itype} se resuelve en su Nucleus: pasá --trigger-nucleus",
                           "DOC_PROJECT_NOT_LINKED")
-    terminal = _verify_dis_terminal(intent_dir, state)
+    terminal = (_verify_dis_terminal(intent_dir, state) if itype == "dis" else
+                _verify_ing_terminal(intent_dir, state, Path(trigger_nucleus),
+                                     nucleus_link.get("project_id")))
     return {
         "kind": "intent",
         "intent_id": uid,
@@ -380,8 +475,8 @@ def resolve_trigger(
 def verify_trigger_evidence(project_root: Path, state: Dict[str, Any]) -> None:
     """
     Re-check, when a doc is hydrated (also on resume), that its trigger still
-    holds: a dev stays completed; a dis stays done with the same committed
-    ratification control, and the Project is still linked to its Nucleus.
+    holds: a dev stays completed; a dis keeps the same committed ratification;
+    and an ing keeps the same terminal result, ledger and Gene publication.
     Nothing is re-derived: the evidence recorded at create is compared.
     """
     trigger = state.get("doc_trigger") or {}
@@ -400,18 +495,35 @@ def verify_trigger_evidence(project_root: Path, state: Dict[str, Any]) -> None:
     if not intent_ref:
         return  # doc created before intent_ref was recorded: link checked only
     intent_dir = nucleus_root / intent_ref
-    state_file = intent_dir / ".dis_state.json"
+    intent_type = trigger.get("intent_type")
+    state_file = intent_dir / f".{intent_type}_state.json"
     try:
-        dis_state = read_json(state_file)
+        trigger_state = read_json(state_file)
     except (OSError, json.JSONDecodeError):
-        raise DocRunError(f"no se encuentra el dis disparador en {intent_dir}", "DOC_TRIGGER_EVIDENCE_CHANGED")
-    if dis_state.get("phase_active") != "done":
+        raise DocRunError(f"no se encuentra el {intent_type} disparador en {intent_dir}",
+                          "DOC_TRIGGER_EVIDENCE_CHANGED")
+    if intent_type == "dis" and trigger_state.get("phase_active") != "done":
         raise DocRunError("el dis disparador ya no está en done", "DOC_TRIGGER_EVIDENCE_CHANGED")
     terminal = trigger.get("terminal") or {}
-    control = intent_dir / terminal.get("control_ref", "")
-    if sha256_file(control) != terminal.get("control_sha256"):
-        raise DocRunError("el control de ratification del dis cambió desde que se creó el doc",
-                          "DOC_TRIGGER_EVIDENCE_CHANGED")
+    if intent_type == "dis":
+        control = intent_dir / terminal.get("control_ref", "")
+        if sha256_file(control) != terminal.get("control_sha256"):
+            raise DocRunError("el control de ratification del dis cambió desde que se creó el doc",
+                              "DOC_TRIGGER_EVIDENCE_CHANGED")
+        return
+    if intent_type == "ing":
+        checks = [
+            (intent_dir / terminal.get("result_ref", ""), terminal.get("result_sha256")),
+            (intent_dir / terminal.get("ledger_ref", ""), terminal.get("ledger_sha256")),
+            (nucleus_root / terminal.get("head_ref", ""), terminal.get("head_sha256")),
+        ]
+        checks.extend(
+            (nucleus_root / item.get("identity_ref", ""), item.get("identity_sha256"))
+            for item in terminal.get("identities", []) if isinstance(item, dict)
+        )
+        if not terminal.get("identities") or any(sha256_file(path) != expected for path, expected in checks):
+            raise DocRunError("la evidencia terminal publicada del ing cambió desde que se creó el doc",
+                              "DOC_TRIGGER_EVIDENCE_CHANGED")
 
 
 # ---------------------------------------------------------------------------

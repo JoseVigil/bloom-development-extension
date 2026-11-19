@@ -83,7 +83,7 @@ func (a *MandateIntentActivity) ObserveDISTerminal(ctx context.Context, input Ma
 		} `json:"actions"`
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
-	if err != nil || json.Unmarshal(raw, &journal) != nil || journal.MandateID != input.MandateID || journal.Adoption.ContractDigest != envelope.ContractDigest {
+	if err != nil || json.Unmarshal(raw, &journal) != nil || journal.MandateID != input.MandateID || !boundJournal(raw, envelope.ContractDigest) {
 		return result, fmt.Errorf("DIS journal identity mismatch")
 	}
 	entry := journal.Actions[actionID]
@@ -299,7 +299,7 @@ func (a *MandateIntentActivity) RunDIS(ctx context.Context, input MandateIntentI
 	}
 	stateRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
 	if err != nil || json.Unmarshal(stateRaw, &state) != nil || state.MandateID != input.MandateID ||
-		state.Adoption.ContractDigest != envelope.ContractDigest || state.CurrentAction != disAction.ActionID ||
+		!boundJournal(stateRaw, envelope.ContractDigest) || state.CurrentAction != disAction.ActionID ||
 		state.Actions[predecessorID].Status != "completed" || state.Actions[ingAction.ActionID].Status != "completed" ||
 		(state.Actions[disAction.ActionID].Status != "pending" && state.Actions[disAction.ActionID].Status != "awaiting_human_decision") {
 		return result, fmt.Errorf("DIS journal is not ready after its signed predecessor")

@@ -2,6 +2,7 @@ package gene
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -108,5 +109,81 @@ func TestMaterializeRatifiedINGDoesNotAcceptLogicalBrainContribution(t *testing.
 	input.Request.Contribution.ContributionID = "contribution-logical-id"
 	if _, err := store.MaterializeRatifiedING(input, path); !errors.Is(err, ErrINGMaterializationBinding) {
 		t.Fatalf("legacy logical contribution accepted: %v", err)
+	}
+}
+
+func ingMaterializationBatchFixture(t *testing.T) (*Store, []INGMaterializationInput, INGMaterializationBatchBinding, string) {
+	t.Helper()
+	store, base, _ := ingMaterializationFixture(t)
+	inputs := make([]INGMaterializationInput, 4)
+	for i := range inputs {
+		input := base
+		input.Binding.GeneID = fmt.Sprintf("33333333-3333-4333-8333-%012d", i+1)
+		input.Binding.ContributionID = fmt.Sprintf("44444444-4444-4444-8444-%012d", i+1)
+		input.Binding.DecisionID = fmt.Sprintf("decision-%d", i+1)
+		input.Request.Identity.GeneID = input.Binding.GeneID
+		input.Request.Identity.Origin.DecisionID = input.Binding.DecisionID
+		input.Request.Contribution.GeneID = input.Binding.GeneID
+		input.Request.Contribution.ContributionID = input.Binding.ContributionID
+		input.Request.Contribution.Ratification.DecisionID = input.Binding.DecisionID
+		input.Request.ExpectedGeneration = 99
+		input.Request.ExpectedHeadDigest = "sha256:" + strings.Repeat("9", 64)
+		inputs[i] = input
+	}
+	binding, err := batchBindingFromInputs(inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(store.Root, "mandates", base.Binding.MandateID, "evidence", "gene-materialization-batch.json")
+	return store, inputs, binding, path
+}
+
+func TestMaterializeRatifiedINGBatchFourContributionsAndReplay(t *testing.T) {
+	store, inputs, binding, path := ingMaterializationBatchFixture(t)
+	first, err := store.MaterializeRatifiedINGBatch(inputs, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.SchemaVersion != INGMaterializationBatchReceiptSchema || len(first.Binding.Items) != 4 || len(first.Materializations) != 4 || first.ReceiptDigest == "" {
+		t.Fatalf("invalid batch receipt: %+v", first)
+	}
+	for i, receipt := range first.Materializations {
+		if receipt.PublishedGeneration != uint64(i+1) || receipt.ContributionID != inputs[i].Binding.ContributionID || receipt.Replay {
+			t.Fatalf("materialization %d not ordered: %+v", i, receipt)
+		}
+	}
+	head, _, err := store.loadHead(binding.ProjectID)
+	if err != nil || head.Generation != 4 {
+		t.Fatalf("head generation=%d err=%v", head.Generation, err)
+	}
+	again, err := store.MaterializeRatifiedINGBatch(inputs, path)
+	if err != nil || !reflect.DeepEqual(again, first) {
+		t.Fatalf("batch replay changed durable evidence: %+v %v", again, err)
+	}
+	head, _, err = store.loadHead(binding.ProjectID)
+	if err != nil || head.Generation != 4 {
+		t.Fatalf("replay advanced head generation=%d err=%v", head.Generation, err)
+	}
+	verified, err := store.VerifyINGMaterializationBatchReceipt(path, binding)
+	if err != nil || !reflect.DeepEqual(verified, first) {
+		t.Fatalf("batch verification: %+v %v", verified, err)
+	}
+}
+
+func TestVerifyINGMaterializationBatchReceiptRejectsTampering(t *testing.T) {
+	store, inputs, binding, path := ingMaterializationBatchFixture(t)
+	if _, err := store.MaterializeRatifiedINGBatch(inputs, path); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[len(raw)-1] ^= 1
+	if err = os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.VerifyINGMaterializationBatchReceipt(path, binding); !errors.Is(err, ErrINGMaterializationBinding) {
+		t.Fatalf("tampered batch evidence accepted: %v", err)
 	}
 }

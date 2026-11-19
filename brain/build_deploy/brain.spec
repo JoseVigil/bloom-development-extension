@@ -103,8 +103,8 @@ hiddenimports = [
     'brain.commands.intent.merge',
     'brain.commands.intent.parse',
     'brain.commands.intent.plan',
-    'brain.commands.intent.recover',
     'brain.commands.intent.ratify_dis',
+    'brain.commands.intent.recover',
     'brain.commands.intent.stage',
     'brain.commands.intent.submit',
     'brain.commands.intent.supply',
@@ -208,6 +208,7 @@ hiddenimports = [
     'brain.core.health.onboarding_status_manager',
     'brain.core.health.websocket_status_manager',
     'brain.core.intelligence_supply',
+    'brain.core.intent.dis_ratification',
     'brain.core.intent.doc_registry',
     'brain.core.intent.doc_run',
     'brain.core.intent.effect_ledger',
@@ -325,8 +326,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
 datas.extend(

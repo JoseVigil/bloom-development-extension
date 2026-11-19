@@ -344,16 +344,7 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 		w.logger.Error("[mandate_watcher] mandate_state.json inválido en %s: %v", path, err)
 		return
 	}
-	var adopted struct {
-		Adoption struct {
-			Version        string `json:"version"`
-			Digest         string `json:"digest"`
-			ContractDigest string `json:"contractDigest"`
-		} `json:"adoption"`
-		Status string `json:"status"`
-	}
-	if json.Unmarshal(raw, &adopted) == nil && adopted.Adoption.Digest != "" {
-		w.onAdoptedMandate(ctx, filepath.Dir(path), ms.MandateID, adopted.Adoption.Version, adopted.Adoption.Digest, adopted.Adoption.ContractDigest, adopted.Status)
+	if w.routeSignedMandate(ctx, filepath.Dir(path), ms.MandateID, raw) {
 		return
 	}
 
@@ -428,11 +419,39 @@ func (w *MandateWatcher) onMandateStateWritten(ctx context.Context, path string)
 	}
 }
 
+func (w *MandateWatcher) routeSignedMandate(ctx context.Context, dir, mandateID string, raw []byte) bool {
+	var state struct {
+		Status   string `json:"status"`
+		Adoption struct {
+			Version        string `json:"version"`
+			Digest         string `json:"digest"`
+			ContractDigest string `json:"contractDigest"`
+		} `json:"adoption"`
+		Preparation struct {
+			ContractDigest string `json:"contractDigest"`
+		} `json:"preparation"`
+	}
+	if json.Unmarshal(raw, &state) != nil {
+		return false
+	}
+	if state.Adoption.Digest != "" {
+		w.onAdoptedMandate(ctx, dir, mandateID, state.Adoption.Version, state.Adoption.Digest, state.Adoption.ContractDigest, state.Status)
+		return true
+	}
+	if state.Status == "activated" {
+		w.onAdoptedMandate(ctx, dir, mandateID, "", "", state.Preparation.ContractDigest, state.Status)
+		return true
+	}
+	return false
+}
+
 func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, version, deliveryDigest, contractDigest, status string) {
 	if mandateID == "" {
 		mandateID = filepath.Base(dir)
 	}
-	if mandateID != filepath.Base(dir) || version == "" || status == "completed" {
+	local := deliveryDigest == ""
+	if mandateID != filepath.Base(dir) || contractDigest == "" || status == "completed" ||
+		(local && status != "activated") || (!local && version == "") {
 		return
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "mandate.json"))
@@ -441,12 +460,12 @@ func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, v
 		return
 	}
 	sum := sha256.Sum256(raw)
-	if hex.EncodeToString(sum[:]) != deliveryDigest {
+	if !local && hex.EncodeToString(sum[:]) != deliveryDigest {
 		w.logger.Error("[mandate_watcher] adopted delivery digest mismatch for %s", mandateID)
 		return
 	}
 	envelope, err := mandatecontract.LoadVerified(dir, w.identityPath)
-	if err != nil || envelope.Contract.ContractVersion != 4 || envelope.ContractDigest != contractDigest {
+	if err != nil || envelope.Contract.ContractVersion != 4 || envelope.Contract.MandateID != mandateID || envelope.ContractDigest != contractDigest {
 		w.logger.Error("[mandate_watcher] adopted contract invalid for %s: %v", mandateID, err)
 		return
 	}
@@ -460,8 +479,16 @@ func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, v
 	}
 	journalRaw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
 	var journal struct {
-		MandateID string `json:"mandateId"`
-		Adoption  struct {
+		MandateID   string `json:"mandateId"`
+		Status      string `json:"status"`
+		Preparation struct {
+			ContractDigest string `json:"contractDigest"`
+		} `json:"preparation"`
+		Activation struct {
+			Status         string `json:"status"`
+			ContractDigest string `json:"contractDigest"`
+		} `json:"activation"`
+		Adoption struct {
 			Version        string `json:"version"`
 			Digest         string `json:"digest"`
 			ContractDigest string `json:"contractDigest"`
@@ -478,8 +505,9 @@ func (w *MandateWatcher) onAdoptedMandate(ctx context.Context, dir, mandateID, v
 		} `json:"actions"`
 	}
 	if err != nil || json.Unmarshal(journalRaw, &journal) != nil || journal.MandateID != mandateID ||
-		journal.Adoption.Version != version || journal.Adoption.Digest != deliveryDigest || journal.Adoption.ContractDigest != contractDigest ||
-		journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID {
+		(local && (journal.Status != "activated" || journal.Preparation.ContractDigest != contractDigest || journal.Activation.Status != "active" || journal.Activation.ContractDigest != contractDigest)) ||
+		(!local && (journal.Adoption.Version != version || journal.Adoption.Digest != deliveryDigest || journal.Adoption.ContractDigest != contractDigest ||
+			journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID)) {
 		w.logger.Error("[mandate_watcher] adopted authority identity mismatch for %s", mandateID)
 		return
 	}
@@ -579,17 +607,7 @@ func (w *MandateWatcher) reconcileUnsignedMandates(ctx context.Context, now time
 		if ms.MandateID == "" {
 			ms.MandateID = entry.Name()
 		}
-		var adopted struct {
-			Adoption struct {
-				Version        string `json:"version"`
-				Digest         string `json:"digest"`
-				ContractDigest string `json:"contractDigest"`
-			} `json:"adoption"`
-			Status string `json:"status"`
-		}
-		if json.Unmarshal(raw, &adopted) == nil && adopted.Adoption.Digest != "" {
-			w.onAdoptedMandate(ctx, filepath.Join(w.mandatesRoot, entry.Name()), ms.MandateID,
-				adopted.Adoption.Version, adopted.Adoption.Digest, adopted.Adoption.ContractDigest, adopted.Status)
+		if w.routeSignedMandate(ctx, filepath.Join(w.mandatesRoot, entry.Name()), ms.MandateID, raw) {
 			continue
 		}
 		if err := w.reconcileUnsignedMandate(ctx, path, ms, now); err != nil {

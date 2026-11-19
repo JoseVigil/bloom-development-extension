@@ -226,6 +226,18 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 		if err := workflow.ExecuteActivity(ctx, activities.PersistAdoptedINGCompletionActivity, completed, input.MandatesRoot).Get(ctx, nil); err != nil {
 			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 		}
+		if completed.NextIntentType == "doc" {
+			var materialized activities.MandateINGGeneMaterializationResult
+			if err := workflow.ExecuteActivity(ctx, "MandateINGGeneMaterializationActivity", activities.MandateIntentInput{
+				MandatesRoot: input.MandatesRoot, MandateID: input.MandateID, ActionID: completed.NextActionID, INGActionID: completed.ActionID,
+			}).Get(ctx, &materialized); err != nil {
+				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+			}
+			if materialized.MandateID != input.MandateID || materialized.ActionID != completed.ActionID || materialized.IntentID != completed.IntentID ||
+				materialized.ContractDigest != completed.ContractDigest || materialized.ReceiptRef == "" || materialized.ReceiptDigest == "" || len(materialized.GeneIDs) == 0 {
+				return MandateExecutionResult{Success: false, Error: "ING Gene materialization returned incomplete batch evidence"}, nil
+			}
+		}
 		expectedDISActionID := completed.NextActionID
 		if completed.NextIntentType == "doc" {
 			var docActionID, followingDISActionID string

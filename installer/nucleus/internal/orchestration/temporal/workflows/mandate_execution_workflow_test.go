@@ -44,12 +44,13 @@ func TestAdoptedExecutionRunsSignedDOCAfterINGBeforeDIS(t *testing.T) {
 	env.RegisterWorkflow(MandateExecutionWorkflow)
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
+	env.RegisterActivityWithOptions((&activities.MandateINGGeneMaterializationActivity{}).Run, activity.RegisterOptions{Name: "MandateINGGeneMaterializationActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).RunDIS, activity.RegisterOptions{Name: "MandateDISActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).ObserveDISTerminal, activity.RegisterOptions{Name: "MandateDISTerminalObservationActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterING, activity.RegisterOptions{Name: "MandateDOCAfterINGActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
-	ingCalls, persistCalls, completionCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls := 0, 0, 0, 0, 0, 0, 0, 0
-	ingCompletionPersisted := false
+	ingCalls, persistCalls, completionCalls, geneMaterializationCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls := 0, 0, 0, 0, 0, 0, 0, 0, 0
+	ingCompletionPersisted, ingGenesMaterialized := false, false
 	disPersisted := false
 	env.OnActivity("MandateIntentActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateIntentResult, error) {
 		ingCalls++
@@ -71,10 +72,19 @@ func TestAdoptedExecutionRunsSignedDOCAfterINGBeforeDIS(t *testing.T) {
 		ingCompletionPersisted = true
 		return activities.PersistExecutionResultResult{StateVersion: 3}, nil
 	})
+	env.OnActivity("MandateINGGeneMaterializationActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateINGGeneMaterializationResult, error) {
+		geneMaterializationCalls++
+		if !ingCompletionPersisted || input.INGActionID != "a" || input.ActionID != "doc-after-ing" {
+			t.Errorf("ING materialization was dispatched before completion or lost Action binding: %#v", input)
+		}
+		ingGenesMaterialized = true
+		return activities.MandateINGGeneMaterializationResult{MandateID: "mandate-1", ActionID: "a", IntentID: "ing-1", ContractDigest: "digest",
+			ReceiptRef: "gene-materialization.json", ReceiptDigest: "receipt-digest", GeneIDs: []string{"gene-a", "gene-b", "gene-c", "gene-d"}}, nil
+	})
 	env.OnActivity("MandateDOCAfterINGActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateDOCResult, error) {
 		ingDocCalls++
-		if !ingCompletionPersisted {
-			t.Error("DOC was dispatched before ING terminal persistence")
+		if !ingCompletionPersisted || !ingGenesMaterialized {
+			t.Error("DOC was dispatched before ING terminal persistence and Gene materialization")
 		}
 		if input.INGActionID != "a" || input.ActionID != "" {
 			t.Errorf("ING DOC dispatch lost signed Action identity: %#v", input)
@@ -136,8 +146,8 @@ func TestAdoptedExecutionRunsSignedDOCAfterINGBeforeDIS(t *testing.T) {
 	if err := env.GetWorkflowResult(&result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || ingDocCalls != 1 || disCalls != 1 || observeCalls != 2 || terminalPersistCalls != 1 || disDocCalls != 2 {
-		t.Fatalf("result=%#v ing=%d persist=%d complete=%d ingDoc=%d dis=%d observe=%d terminalPersist=%d disDoc=%d", result, ingCalls, persistCalls, completionCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls)
+	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || geneMaterializationCalls != 1 || ingDocCalls != 1 || disCalls != 1 || observeCalls != 2 || terminalPersistCalls != 1 || disDocCalls != 2 {
+		t.Fatalf("result=%#v ing=%d persist=%d complete=%d materialize=%d ingDoc=%d dis=%d observe=%d terminalPersist=%d disDoc=%d", result, ingCalls, persistCalls, completionCalls, geneMaterializationCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls)
 	}
 }
 
@@ -147,6 +157,7 @@ func TestINGDoesNotDispatchDOCWithoutCanonicalGeneReceipt(t *testing.T) {
 	env.RegisterWorkflow(MandateExecutionWorkflow)
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).Run, activity.RegisterOptions{Name: "MandateIntentActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
+	env.RegisterActivityWithOptions((&activities.MandateINGGeneMaterializationActivity{}).Run, activity.RegisterOptions{Name: "MandateINGGeneMaterializationActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).RunDIS, activity.RegisterOptions{Name: "MandateDISActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterING, activity.RegisterOptions{Name: "MandateDOCAfterINGActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
@@ -165,6 +176,10 @@ func TestINGDoesNotDispatchDOCWithoutCanonicalGeneReceipt(t *testing.T) {
 		persistCompletionCalls++
 		return activities.PersistExecutionResultResult{}, nil
 	})
+	env.OnActivity("MandateINGGeneMaterializationActivity", mock.Anything, mock.Anything).Return(activities.MandateINGGeneMaterializationResult{
+		MandateID: "mandate-1", ActionID: "ing-1", IntentID: "ing-intent", ContractDigest: "digest", ReceiptRef: "gene-materialization.json",
+		ReceiptDigest: "receipt-digest", GeneIDs: []string{"gene-a", "gene-b", "gene-c", "gene-d"},
+	}, nil)
 	env.OnActivity("MandateDISActivity", mock.Anything, mock.Anything).Return(func(context.Context, activities.MandateIntentInput) (activities.MandateDISResult, error) {
 		disCalls++
 		return activities.MandateDISResult{}, nil

@@ -35,9 +35,25 @@ type ingDecisionBinding struct {
 	MandateID, ActionID, ContractDigest, DeliveryDigest, OrganizationID, InstallationID, IntentID, ClassificationDigest string
 }
 
+func ingDecisionJournalBindingMatches(state map[string]any, binding ingDecisionBinding) bool {
+	if state["mandateId"] != binding.MandateID {
+		return false
+	}
+	adopted, _ := state["adoption"].(map[string]any)
+	if len(adopted) > 0 {
+		return adopted["contractDigest"] == binding.ContractDigest && adopted["digest"] == binding.DeliveryDigest &&
+			adopted["version"] != "" && adopted["organizationId"] == binding.OrganizationID &&
+			adopted["installationId"] == binding.InstallationID
+	}
+	preparation, _ := state["preparation"].(map[string]any)
+	activation, _ := state["activation"].(map[string]any)
+	return state["organizationId"] == binding.OrganizationID &&
+		preparation["contractDigest"] == binding.ContractDigest &&
+		activation["contractDigest"] == binding.ContractDigest && activation["status"] == "active"
+}
+
 func persistINGDecision(path string, binding ingDecisionBinding, record map[string]any) error {
 	_, err := mandatestate.Mutate(path, func(current map[string]any) (bool, error) {
-		adopted, _ := current["adoption"].(map[string]any)
 		currentActions, _ := current["actions"].(map[string]any)
 		currentEntry, _ := currentActions[binding.ActionID].(map[string]any)
 		if currentEntry == nil {
@@ -47,7 +63,7 @@ func persistINGDecision(path string, binding ingDecisionBinding, record map[stri
 		if currentEntry["status"] == "completed" {
 			currentDigest = currentEntry["classificationSha256"]
 		}
-		if current["mandateId"] != binding.MandateID || adopted == nil || adopted["contractDigest"] != binding.ContractDigest || adopted["digest"] != binding.DeliveryDigest || adopted["version"] == "" || adopted["organizationId"] != binding.OrganizationID || adopted["installationId"] != binding.InstallationID || currentDigest != binding.ClassificationDigest || currentEntry["intentId"] != binding.IntentID {
+		if !ingDecisionJournalBindingMatches(current, binding) || currentDigest != binding.ClassificationDigest || currentEntry["intentId"] != binding.IntentID {
 			return false, errors.New("journal ING cambió")
 		}
 		if prior, ok := current["ingDecision"]; ok {
@@ -157,11 +173,12 @@ func runMandateINGDecision(ctx context.Context, c *core.Core, id, decisionsPath 
 	if json.Unmarshal(journalRaw, &state) != nil {
 		return result, errors.New("journal inválido")
 	}
-	adoption, _ := state["adoption"].(map[string]any)
 	actions, _ := state["actions"].(map[string]any)
 	action := envelope.Contract.Actions[0]
 	entry, _ := actions[action.ActionID].(map[string]any)
-	if state["mandateId"] != id || adoption == nil || adoption["contractDigest"] != envelope.ContractDigest || adoption["digest"] != deliveryDigest || adoption["version"] == "" || adoption["organizationId"] != active.OrganizationID || adoption["installationId"] != envelope.SignatureKeyID || entry == nil || (entry["status"] != "awaiting_human_decision" && entry["status"] != "completed") {
+	binding := ingDecisionBinding{MandateID: id, ActionID: action.ActionID, ContractDigest: envelope.ContractDigest,
+		DeliveryDigest: deliveryDigest, OrganizationID: active.OrganizationID, InstallationID: envelope.SignatureKeyID}
+	if !ingDecisionJournalBindingMatches(state, binding) || entry == nil || (entry["status"] != "awaiting_human_decision" && entry["status"] != "completed") {
 		return result, errors.New("ING no espera decisiones en el contrato adoptado")
 	}
 	ref, _ := entry["evidenceRef"].(string)

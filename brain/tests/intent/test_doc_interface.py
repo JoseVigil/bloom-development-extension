@@ -58,6 +58,36 @@ def _dis(nucleus, name="dis-1", done=True, committed=True):
     return mgr.intent_id
 
 
+def _ing(nucleus, name="ing-1", publish=True):
+    root = nucleus / ".intents" / ".ing" / f".{name}"
+    mgr = IntentStateManager.create(root, "ing", "MND-ING-1")
+    state_file = root / ".ing_state.json"
+    state = json.loads(state_file.read_text())
+    state.update({"status": "hydrated", "phase_active": "done"})
+    state_file.write_text(json.dumps(state))
+    gene_id = "11111111-1111-4111-8111-111111111111"
+    (root / "ing_result.json").write_text(json.dumps({
+        "schema_version": "bloom.ing-result/v1", "intent_id": mgr.intent_id,
+        "mandate_id": "MND-ING-1", "status": "done",
+        "accepted_contributions": [{"gene_id": gene_id}], "rejected_clusters": [],
+    }))
+    ledger = root / ".consolidation" / ".turn_1" / ".effect_ledger.json"
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text(json.dumps({"state_advanced": True}))
+    if publish:
+        genes = nucleus / ".genes" / "projects" / "proj-1"
+        (genes / "identities").mkdir(parents=True)
+        (genes / "head.json").write_text(json.dumps({
+            "schema_version": "gene-canonical-store/0.1", "project_id": "proj-1",
+            "genes": {gene_id: {"identity_ref": f"identities/{gene_id}.json"}},
+        }))
+        (genes / "identities" / f"{gene_id}.json").write_text(json.dumps({
+            "schema_version": "gene-canonical-store/0.1", "project_id": "proj-1",
+            "gene_id": gene_id,
+        }))
+    return mgr.intent_id, root, gene_id
+
+
 def _create(project, name, **kw):
     return IntentManager().create_intent(intent_type="doc", name=name,
                                          nucleus_path=project, **kw)
@@ -98,6 +128,40 @@ def test_dis_terminal_with_linked_project_is_a_valid_trigger(org):
     assert trigger["changed_paths"] == []
     assert created["doc"]["doc_status"] == "created"
     assert created["doc"]["next_action"] == "hydrate"
+
+
+def test_ing_terminal_with_published_genes_is_a_valid_trigger(org):
+    ing_id, _, gene_id = _ing(org["nucleus"])
+    created = _create(org["project"], "doc del ing", initial_files=VERTICAL, doc_documents=[DOC],
+                      trigger_intent=ing_id, trigger_nucleus=org["nucleus"])
+    state = json.loads((Path(created["intent_path"]) / ".doc_state.json").read_text())
+    terminal = state["doc_trigger"]["terminal"]
+    assert state["doc_trigger"]["intent_type"] == "ing"
+    assert terminal["result_sha256"].startswith("sha256:")
+    assert terminal["ledger_sha256"].startswith("sha256:")
+    assert terminal["head_sha256"].startswith("sha256:")
+    assert terminal["identities"][0]["gene_id"] == gene_id
+
+
+def test_ing_without_canonical_gene_publication_is_rejected(org):
+    ing_id, _, _ = _ing(org["nucleus"], publish=False)
+    with pytest.raises(doc_run.DocRunError) as exc:
+        _create(org["project"], "doc ing sin genes", initial_files=VERTICAL, doc_documents=[DOC],
+                trigger_intent=ing_id, trigger_nucleus=org["nucleus"])
+    assert exc.value.code == "DOC_TRIGGER_NOT_TERMINAL"
+
+
+def test_changed_ing_publication_blocks_hydrate(org):
+    ing_id, _, gene_id = _ing(org["nucleus"])
+    created = _create(org["project"], "doc ing alterado", initial_files=VERTICAL, doc_documents=[DOC],
+                      trigger_intent=ing_id, trigger_nucleus=org["nucleus"])
+    identity = org["nucleus"] / ".genes" / "projects" / "proj-1" / "identities" / f"{gene_id}.json"
+    value = json.loads(identity.read_text())
+    value["edited"] = True
+    identity.write_text(json.dumps(value))
+    with pytest.raises(doc_run.DocRunError) as exc:
+        _hydrate(org["project"], created)
+    assert exc.value.code == "DOC_TRIGGER_EVIDENCE_CHANGED"
 
 
 def test_dis_after_baseline_with_unchanged_project_is_empty(org):

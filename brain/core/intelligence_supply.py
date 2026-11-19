@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -138,9 +139,40 @@ def make_request(state, phase, turn, payload, policy_version, *, privacy="approv
     return request
 
 
+def _default_aitap_command():
+    configured = os.environ.get("AITAP_BIN")
+    if configured:
+        return [configured]
+
+    appdata = os.environ.get("BLOOM_APPDATA_DIR")
+    if not appdata and os.name == "nt":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            appdata = str(Path(local_appdata) / "BloomNucleus")
+    if appdata:
+        binary = "aitap.exe" if os.name == "nt" else "aitap"
+        installed = Path(appdata) / "bin" / "aitap" / binary
+        if installed.is_file():
+            return [str(installed)]
+
+    return [shutil.which("aitap") or "aitap"]
+
+
+def _default_aitap_state_dir():
+    configured = os.environ.get("AITAP_STATE_DIR")
+    if configured:
+        return Path(configured)
+    appdata = os.environ.get("BLOOM_APPDATA_DIR")
+    if not appdata and os.name == "nt":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            appdata = str(Path(local_appdata) / "BloomNucleus")
+    return Path(appdata) / "aitap" if appdata else None
+
+
 class IntelligenceSupplyClient:
     def __init__(self, command=None, runner=None):
-        self.command = command or [os.environ.get("AITAP_BIN", "aitap")]
+        self.command = command or _default_aitap_command()
         self.runner = runner or subprocess.run
 
     def obtain(self, directory, request, *, policy=None, registry=None):
@@ -154,8 +186,11 @@ class IntelligenceSupplyClient:
             result = read_json(result_path)
         else:
             try:
-                arguments = [*self.command, "--json", "route", "supply", "--request",
-                             str(directory / ".request.json")]
+                arguments = [*self.command, "--json", "route", "supply"]
+                state_dir = _default_aitap_state_dir()
+                if state_dir is not None:
+                    arguments.extend(["--state-dir", str(state_dir)])
+                arguments.extend(["--request", str(directory / ".request.json")])
                 if policy is not None:
                     arguments.extend(["--policy", str(policy)])
                 if registry is not None:

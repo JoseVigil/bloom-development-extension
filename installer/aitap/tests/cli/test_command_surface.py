@@ -10,6 +10,7 @@ import pytest
 from aitap.cli.categories import CommandCategory
 from aitap.cli.registry import CommandRegistry
 from aitap.commands import COMMAND_CLASSES, discover_commands
+from aitap.commands.route.intelligence_supply import _default_routing_files
 
 SRC = Path(__file__).resolve().parents[2] / "src"
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
@@ -22,6 +23,18 @@ EXPECTED = {
     "accounting": {"usage"},
     "local": {"preflight", "ensure"},
 }
+
+
+@pytest.mark.parametrize(("version", "policy", "registry"), [
+    ("initial-mandate/v1", "initial-mandate-v1.json", "initial-mandate-v1.json"),
+    ("mandate-gen/v1", "mandate-gen-v1.json", "genesis-pilot-v2.json"),
+    ("genesis-runtime-intelligence/v2", "genesis-runtime-intelligence-v2.json", "genesis-pilot-v2.json"),
+])
+def test_default_supply_resources_match_policy_version(version, policy, registry):
+    root = Path("/resources")
+    selected_policy, selected_registry = _default_routing_files(root, version)
+    assert selected_policy == root / "policies" / policy
+    assert selected_registry == root / "registry" / registry
 
 
 def _cli(*args, env=None):

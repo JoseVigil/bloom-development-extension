@@ -345,6 +345,8 @@ class IntentManager:
         briefing: str = "",
         files: Optional[List[str]] = None,
         nucleus_path: Optional[Path] = None,
+        project_id: Optional[str] = None,
+        repository_id: Optional[str] = None,
         verbose: bool = False
     ) -> Dict[str, Any]:
         """
@@ -375,7 +377,8 @@ class IntentManager:
             # Ambas son fases sin turnos (acto único), por eso comparten un
             # solo helper genérico en vez de uno por tipo.
             return self._hydrate_bsip_phaseless_act(
-                project_root, intent_path, state_data, state_file, files, verbose
+                project_root, intent_path, state_data, state_file, files, verbose,
+                project_id=project_id, repository_id=repository_id,
             )
 
         if intent_type == "dev":
@@ -562,7 +565,9 @@ class IntentManager:
         state_data: Dict[str, Any],
         state_file: Path,
         files: Optional[List[str]],
-        verbose: bool
+        verbose: bool,
+        project_id: Optional[str] = None,
+        repository_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Fase sin turnos de 'ing'/'dis': .reception/ (ING §3) o .discovery/
@@ -582,7 +587,8 @@ class IntentManager:
 
         if intent_type == "ing":
             content_payload = self._write_ing_reception_content(
-                project_root, intent_path, state_data, files, verbose
+                project_root, intent_path, state_data, files, verbose,
+                project_id=project_id, repository_id=repository_id,
             )
         else:  # "dis"
             content_payload = self._write_dis_discovery_content(
@@ -611,6 +617,8 @@ class IntentManager:
         state_data: Dict[str, Any],
         files: Optional[List[str]],
         verbose: bool,
+        project_id: Optional[str] = None,
+        repository_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Escribe el contenido de .reception/ (ING §3):
@@ -625,6 +633,17 @@ class IntentManager:
 
         files_to_process = set(files) if files else set()
         files_to_process.update(state_data.get("initial_files", []))
+
+        if (project_id is None) != (repository_id is None):
+            raise ValueError("ING reception requires --project-id and --repository-id together")
+        if project_id is not None:
+            for field, value in (("project_id", project_id), ("repository_id", repository_id)):
+                try:
+                    parsed = uuid.UUID(value)
+                except (ValueError, TypeError, AttributeError):
+                    raise ValueError(f"{field} must be a canonical UUID") from None
+                if str(parsed) != value.lower():
+                    raise ValueError(f"{field} must use canonical UUID form")
 
         rawbase_entries = []
         rawbase_index_entries = []
@@ -645,6 +664,10 @@ class IntentManager:
             rawbase_entries.append({
                 "path": file_path_str,
                 "type": file_type,
+                **({"repository_id": repository_id,
+                    "asset_kind": "document" if ext in {"md", "rst", "txt"}
+                    else "test" if full_path.name.lower().startswith("test_")
+                    else "file"} if repository_id is not None else {}),
                 "hash": file_hash,
                 "size": file_size,
                 "status": "received"
@@ -658,7 +681,10 @@ class IntentManager:
             stats["total_files"] += 1
             stats["total_size_kb"] += file_size / 1024
 
-        _atomic_write_json(reception_dir / ".rawbase.json", {"files": rawbase_entries})
+        rawbase = {"files": rawbase_entries}
+        if project_id is not None:
+            rawbase["project_id"] = project_id
+        _atomic_write_json(reception_dir / ".rawbase.json", rawbase)
         _atomic_write_json(reception_dir / ".rawbase_index.json", {"index": rawbase_index_entries})
 
         return {

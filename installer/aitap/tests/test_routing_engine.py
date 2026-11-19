@@ -40,6 +40,31 @@ class RoutingEngineTest(unittest.TestCase):
         with self.assertRaises(RoutingError):
             self.engine.supply_routes(selected)
 
+    def test_w4_destination_overrides_policy_backend_but_keeps_registry_checks(self):
+        from test_intelligence_service import request as supply_request
+        policy = copy.deepcopy(self.engine.policy)
+        registry = copy.deepcopy(self.engine.registry)
+        policy["intelligence_supply"]["backend_id"] = "anthropic_api"
+        policy["intelligence_supply"]["fallback"] = []
+        gemini = next(b for b in registry["intelligence_backends"] if b["backend_id"] == "gemini_api")
+        gemini["supply_enabled"] = True
+        engine = RoutingEngine(policy, registry)
+        selected = supply_request()
+        selected["routing"]["destination"] = {
+            "backend_id": "gemini_api", "provider": "google", "model": gemini["model"]}
+
+        routes = engine.supply_routes(selected)
+        self.assertEqual(routes[0]["effective_intelligence"]["backend_id"], "gemini_api")
+
+        gemini["supply_enabled"] = False
+        with self.assertRaises(RoutingError):
+            RoutingEngine(policy, registry).supply_routes(selected)
+
+        gemini["supply_enabled"] = True
+        gemini["capabilities"] = ["text.generate"]
+        with self.assertRaises(RoutingError):
+            RoutingEngine(policy, registry).supply_routes(selected)
+
     def test_approved_cloud_can_route_google_backend_selected_by_policy(self):
         from test_intelligence_service import request as supply_request
         policy = copy.deepcopy(self.engine.policy)

@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
 import json
 import os
+import shutil
 import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 BASE_URL = "http://localhost:8787"
 ORG_ID = "86cc32b9-3c6d-4208-ad57-a2a507a5c090"
 SUBJECT = "runner:elias-repos:32dc2743-4fdf-4d8a-ac63-322845a61acd"
 SERVICE_TOKEN = "236a3663651dc049f8376f014f19c2fe4d8b6af8111f5fa0854247fcabc27251"
+
+
+def find_nucleus_bin() -> str:
+    which = shutil.which("nucleus")
+    if which:
+        return which
+    installed = Path.home() / "AppData" / "Local" / "BloomNucleus" / "bin" / "nucleus" / "nucleus.exe"
+    if installed.exists():
+        return str(installed)
+    repo_bin = Path(__file__).resolve().parent.parent / "installer" / "nucleus" / "nucleus.exe"
+    if repo_bin.exists():
+        return str(repo_bin)
+    return "nucleus"
 
 
 def get_cookie(headers, name: str) -> str:
@@ -64,9 +79,10 @@ def main():
         print(f"[+] Emisión renovada a versión: {v}")
 
     print("[*] 3. Sincronizando Nucleus productivo...")
+    nucleus_bin = find_nucleus_bin()
     env = os.environ.copy()
     env["AUTHORITY_SERVICE_TOKEN"] = SERVICE_TOKEN
-    res = subprocess.run(["nucleus", "--json", "authority", "sync"], env=env, capture_output=True, text=True)
+    res = subprocess.run([nucleus_bin, "--json", "authority", "sync"], env=env, capture_output=True, text=True)
     print(res.stdout)
     if res.returncode != 0:
         print("[-] Error en sync:", res.stderr)
@@ -74,7 +90,7 @@ def main():
 
     print("[*] 4. Evaluando decisión W4...")
     res2 = subprocess.run(
-        ["nucleus", "--json", "authority", "decision", "mandate.resources.confirm", "63b53c33-d60c-40c1-8fb4-27ca884c1501", "mandate", "94cb7ee2-6377-4fb6-a695-da0566f9093f"],
+        [nucleus_bin, "--json", "authority", "decision", "mandate.resources.confirm", "63b53c33-d60c-40c1-8fb4-27ca884c1501", "mandate", "94cb7ee2-6377-4fb6-a695-da0566f9093f"],
         capture_output=True,
         text=True,
     )

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"nucleus/internal/authority"
 	"nucleus/internal/gene"
@@ -368,6 +369,377 @@ func TestIndependentDOCAfterINGRequiresCanonicalGeneReceiptAndIsIdempotent(t *te
 	if err != nil || !second.Ready || second.IntentID != result.IntentID || len(calls) != 3 {
 		t.Fatalf("completed ING DOC reopened: result=%#v calls=%d err=%v", second, len(calls), err)
 	}
+}
+
+func TestIndependentDOCAfterINGVerifiesBatchGeneReceipt(t *testing.T) {
+	docActivity, input, statePath, _ := prepareINGDOCFixture(t)
+	mandateDir := filepath.Join(input.MandatesRoot, input.MandateID)
+	envelope, err := mandatecontract.LoadVerified(mandateDir, docActivity.IdentityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultPath := filepath.Join(mandateDir, "ing_result.json")
+	ledgerPath := filepath.Join(mandateDir, "ing-ledger.json")
+	decisionItems := []map[string]string{{"cluster_id": "core-logic-and-testing", "human_decision": "approved"}}
+	decisionRaw, _ := json.Marshal(decisionItems)
+	decisionSum := sha256.Sum256(decisionRaw)
+	decisionDigest := hex.EncodeToString(decisionSum[:])
+	ledger := map[string]any{"state": "state_advanced", "state_advanced": true, "closure_semantics": "logical_contributions",
+		"identity": map[string]any{"intent_id": "ing-intent", "intent_type": "ing", "stage": "consolidation"},
+		"effects":  []any{map[string]any{"status": "applied"}, map[string]any{"status": "applied"}, map[string]any{"status": "applied"}}}
+	ledgerRaw, _ := json.Marshal(ledger)
+	ledgerCanonical, err := pythonCanonicalJSON(ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledgerSum := sha256.Sum256(ledgerCanonical)
+	result := map[string]any{"schema_version": "bloom.ing-result/v1", "status": "done", "mandate_id": input.MandateID, "intent_id": "ing-intent",
+		"effect_ledger_digest": "sha256:" + hex.EncodeToString(ledgerSum[:]),
+		"accepted_contributions": []any{map[string]any{"cluster_id": "core-logic-and-testing", "contribution_id": "44444444-4444-4444-8444-444444444444",
+			"decision_id": "decision-1", "gene_id": "33333333-3333-4333-8333-333333333333", "human_decision": "approved", "project_id": "11111111-1111-4111-8111-111111111111",
+			"contribution": map[string]any{"schema_version": gene.SchemaVersion, "contribution_id": "44444444-4444-4444-8444-444444444444", "gene_id": "33333333-3333-4333-8333-333333333333",
+				"project_id": "11111111-1111-4111-8111-111111111111", "mandate_id": input.MandateID, "intent_id": "ing-intent", "ratification": map[string]any{"decision_id": "decision-1"}}}}}
+	resultRaw, _ := json.Marshal(result)
+	resultSum := sha256.Sum256(resultRaw)
+	if err = os.WriteFile(resultPath, resultRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(ledgerPath, ledgerRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state map[string]any
+	if json.Unmarshal(stateRaw, &state) != nil {
+		t.Fatal("invalid fixture mandate state")
+	}
+	ingAction := state["actions"].(map[string]any)["ing-1"].(map[string]any)
+	ingAction["resultRef"], ingAction["resultSha256"] = resultPath, hex.EncodeToString(resultSum[:])
+	ingAction["ledgerRef"], ingAction["ledgerSha256"] = ledgerPath, hex.EncodeToString(ledgerSum[:])
+	ingAction["decisionDigest"] = decisionDigest
+	state["ingDecision"] = map[string]any{"actionId": "ing-1", "contractDigest": envelope.ContractDigest, "intentId": "ing-intent", "decisionDigest": decisionDigest,
+		"decisions": decisionItems}
+	updated, _ := json.Marshal(state)
+	if err = os.WriteFile(statePath, updated, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var stateAction struct {
+		IntentID              string `json:"intentId"`
+		Status                string `json:"status"`
+		ResultRef             string `json:"resultRef"`
+		ResultSHA             string `json:"resultSha256"`
+		LedgerRef             string `json:"ledgerRef"`
+		LedgerSHA             string `json:"ledgerSha256"`
+		DecisionDigest        string `json:"decisionDigest"`
+		MaterializationRef    string `json:"geneMaterializationReceiptRef"`
+		MaterializationDigest string `json:"geneMaterializationReceiptDigest"`
+	}
+	stateAction.IntentID, stateAction.Status, stateAction.ResultRef, stateAction.ResultSHA = "ing-intent", "completed", resultPath, hex.EncodeToString(resultSum[:])
+	stateAction.LedgerRef, stateAction.LedgerSHA, stateAction.DecisionDigest = ledgerPath, hex.EncodeToString(ledgerSum[:]), decisionDigest
+	expected, err := expectedINGMaterializationBatchBinding(mandateDir, envelope.Contract, envelope.ContractDigest, "ing-1", "ing-intent", decisionDigest,
+		hex.EncodeToString(resultSum[:]), hex.EncodeToString(ledgerSum[:]), resultPath, stateAction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := gene.INGMaterializationBatchReceipt{SchemaVersion: gene.INGMaterializationBatchReceiptSchema, Binding: expected,
+		ReceiptDigest: "sha256:" + strings.Repeat("a", 64)}
+	receiptRaw, _ := json.Marshal(receipt)
+	receiptPath := filepath.Join(mandateDir, "evidence", "gene-materialization.json")
+	if err = os.WriteFile(receiptPath, receiptRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	ingAction["geneMaterializationReceiptRef"], ingAction["geneMaterializationReceiptDigest"] = receiptPath, receipt.ReceiptDigest
+	updated, _ = json.Marshal(state)
+	if err = os.WriteFile(statePath, updated, 0600); err != nil {
+		t.Fatal(err)
+	}
+	verified := false
+	docActivity.VerifyINGMaterializationBatch = func(_ string, _ string, binding gene.INGMaterializationBatchBinding) (gene.INGMaterializationBatchReceipt, error) {
+		verified = true
+		if !equalDOCINGBatchBinding(binding, expected) {
+			t.Fatalf("unexpected batch binding: %#v", binding)
+		}
+		return receipt, nil
+	}
+	docActivity.RunBrain = func(_ string, args []string) ([]byte, []byte, int, error) {
+		operation := args[2]
+		data := map[string]any{"intent_id": "doc-ing-id", "folder_name": ".doc-after-ing", "doc": map[string]any{"doc_status": "created", "next_action": "hydrate"}}
+		if operation == "hydrate" {
+			data = map[string]any{"doc": map[string]any{"doc_status": "empty", "next_action": "finalize", "run_sha256": "sha256:run-ing"}}
+		}
+		if operation == "finalize" {
+			data = map[string]any{"doc": map[string]any{"doc_status": "completed", "next_action": "none", "run_sha256": "sha256:run-ing"}}
+		}
+		out, _ := json.Marshal(map[string]any{"status": "success", "operation": "intent_" + operation, "data": data})
+		return out, nil, 0, nil
+	}
+	resultDOC, err := docActivity.RunAfterING(context.Background(), input)
+	if err != nil || !verified || !resultDOC.Ready || resultDOC.ActionID != "doc-after-ing-1" {
+		t.Fatalf("DOC rejected valid batch receipt: result=%#v verified=%v err=%v", resultDOC, verified, err)
+	}
+}
+
+func TestINGGeneRatificationDeduplicatesRepositoryAcrossContributionAssets(t *testing.T) {
+	repositoryID := "e65c7f4f-1891-44ee-bcc5-d57aa4ab6385"
+	contribution := gene.Contribution{Assets: []gene.AssetRef{
+		{RepositoryID: repositoryID, RepositoryRelativePath: "tasks.py"},
+		{RepositoryID: repositoryID, RepositoryRelativePath: "test_tasks.py"},
+	}}
+
+	repositoryIDs := sortedUniqueAssetRepositoryIDs(contribution.Assets)
+	if len(repositoryIDs) != 1 || repositoryIDs[0] != repositoryID {
+		t.Fatalf("expected the shared repository exactly once, got %#v", repositoryIDs)
+	}
+}
+
+func TestMandateINGGeneMaterializationReceiptVerifiesFromResolvedNucleusRoot(t *testing.T) {
+	base := t.TempDir()
+	appDataRoot := filepath.Join(base, "appdata")
+	nucleusRoot := filepath.Join(base, "workspace", ".bloom", ".nucleus-fixture")
+	mandatesRoot := filepath.Join(nucleusRoot, ".mandates")
+	mandateID, organizationID, projectID := "00000000-0000-4000-8000-000000000301", "org-fixture", "00000000-0000-4000-8000-000000000302"
+	intentID, repositoryID, contributionID, geneID, decisionID := "00000000-0000-4000-8000-000000000303", "00000000-0000-4000-8000-000000000304", "00000000-0000-4000-8000-000000000305", "00000000-0000-4000-8000-000000000306", "00000000-0000-4000-8000-000000000307"
+	t.Setenv("BLOOM_APPDATA_DIR", appDataRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	mandateDir := filepath.Join(mandatesRoot, mandateID)
+	projectRoot := filepath.Join(base, "workspace", "project")
+	intentRoot := filepath.Join(nucleusRoot, ".intents", ".ing", "fixture-ing")
+	for _, dir := range []string{filepath.Join(mandateDir, "inputs"), filepath.Join(mandateDir, "evidence"), filepath.Join(nucleusRoot, ".core"), projectRoot, filepath.Join(intentRoot, ".consolidation", ".turn_1"), filepath.Join(appDataRoot, "authority")} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	identityPath := filepath.Join(appDataRoot, "authority", "installation-identity.json")
+	identity, err := authority.LoadOrCreateLocalIdentity(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("fixture project input\n")
+	inputRef := filepath.Join(mandateDir, "inputs", "README.md")
+	if err = os.WriteFile(inputRef, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(projectRoot, "README.md"), content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	inputSum := sha256.Sum256(content)
+	resource := []byte(`{}`)
+	policyPath, registryPath := filepath.Join(base, "policy.json"), filepath.Join(base, "registry.json")
+	for _, path := range []string{policyPath, registryPath} {
+		if err = os.WriteFile(path, resource, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resourceSum := sha256.Sum256(resource)
+	no := false
+	actions := make([]mandatecontract.Action, 8)
+	ids := []string{"ing-1", "doc-after-ing-1", "dis-2", "doc-after-dis-2", "exp-4", "dev-5", "doc-after-dev-5", "exp-6"}
+	types := []string{"ing", "doc", "dis", "doc", "exp", "dev", "doc", "exp"}
+	for i := range actions {
+		actions[i] = mandatecontract.Action{ActionID: ids[i], Type: "run_intent", IntentType: types[i], RequiresIntelligence: &no, DomainID: "domain-fixture", ArtifactRef: "domain_definition.json", IdempotencyKey: "fixture-" + ids[i]}
+		if i > 0 {
+			actions[i].DependsOn = []string{ids[i-1]}
+		}
+	}
+	actions[5].WhenResult = "remediation_required"
+	contract := mandatecontract.Contract{MandateID: mandateID, ContractVersion: 4, OrganizationID: organizationID, ProjectID: projectID,
+		ProjectBinding: "fixture-binding", Objective: "Verify G2 receipt root", Domain: mandatecontract.Domain{ID: "domain-fixture", Name: "Fixture"}, Actions: actions,
+		Intelligence: &mandatecontract.Intelligence{PolicyRef: policyPath, PolicyVersion: "fixture-v1", PolicySHA256: hex.EncodeToString(resourceSum[:]),
+			RegistryRef: registryPath, RegistrySHA256: hex.EncodeToString(resourceSum[:]), MaxTotalTokens: 1, MaxOutputTokens: 1},
+		Inputs:      []mandatecontract.Input{{Ref: "inputs/README.md", SHA256: hex.EncodeToString(inputSum[:]), Size: int64(len(content))}},
+		Fulfillment: mandatecontract.Fulfillment{Evaluator: "exp-ready", EvaluatorVersion: "1", RequiredFields: []string{"ing", "dis", "doc", "exp"}}}
+	envelope, err := mandatecontract.Sign(contract, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelopeRaw, _ := json.Marshal(envelope)
+	if err = os.WriteFile(filepath.Join(mandateDir, "mandate.json"), envelopeRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	writeINGMaterializationTestActReceipts(t, mandateDir, contract, envelope.ContractDigest, organizationID, identity, now)
+	for _, operation := range []string{"approve", "activate"} {
+		if _, err = mandatecontract.LoadActReceipt(mandateDir, operation); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	principalID, membershipID, roleID := "00000000-0000-4000-8000-000000000308", "00000000-0000-4000-8000-000000000309", "fixture-gene-ratifier"
+	projection := authority.FullContent{
+		Principals:      []authority.Principal{{PrincipalID: principalID, PrincipalType: "human", Status: "active", ExternalIdentities: []authority.ExternalIdentity{{Provider: "fixture", Subject: "human", DisplayHandle: "human", Status: "verified", VerifiedAt: now.Add(-time.Minute)}}}},
+		Memberships:     []authority.Membership{{MembershipID: membershipID, PrincipalID: principalID, OrganizationID: organizationID, Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}},
+		RoleDefinitions: []authority.RoleDefinition{{RoleID: roleID, RoleVersion: "1", RoleOrigin: "organization", DisplayName: "Fixture Gene Ratifier", Status: "active", Permissions: []string{authority.PermissionGeneContributionRatify}}},
+		RoleAssignments: []authority.RoleAssignment{{AssignmentID: "fixture-assignment", MembershipID: membershipID, RoleID: roleID, RoleVersion: "1", Scope: authority.Scope{Type: "project", ID: projectID}, Status: "active", ValidFrom: now.Add(-time.Hour), AcceptedAt: now.Add(-time.Hour)}},
+		Revocations:     []authority.Revocation{},
+	}
+	stateDigest, err := authority.StateDigest(projection, organizationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadDigest := base64.RawURLEncoding.EncodeToString(make([]byte, sha256.Size))
+	state := &authority.DurableState{Binding: authority.Binding{OrganizationID: organizationID, Issuer: "fixture-issuer", InstallationID: identity.InstallationID},
+		Projection: projection, Monotonic: authority.MonotonicState{HighWaterMark: "1", Digest: payloadDigest, StateDigest: stateDigest},
+		Emission: &authority.EmissionMetadata{Schema: "bloom.authority.snapshot", SchemaVersion: "1.0", SnapshotID: "fixture-snapshot", Issuer: "fixture-issuer", OrganizationID: organizationID, AuthorityVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), Audience: authority.Audience{OrganizationID: organizationID, InstallationIDs: []string{identity.InstallationID}}}}
+	authorityStore := &authority.Store{Path: filepath.Join(appDataRoot, "authority", "state.json")}
+	if err = authorityStore.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	stateRaw, err := os.ReadFile(authorityStore.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateSum := sha256.Sum256(stateRaw)
+	checkpoint := authority.Checkpoint{Schema: "bloom.authority.checkpoint/v1", Binding: state.Binding, HighWaterMark: "1", PayloadDigest: payloadDigest, StateDigest: stateDigest, StoreDigest: base64.RawURLEncoding.EncodeToString(stateSum[:])}
+	checkpointRaw, _ := json.Marshal(checkpoint)
+	if err = os.WriteFile(filepath.Join(appDataRoot, "authority", "checkpoint.json"), checkpointRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog, _ := json.Marshal(map[string]any{"projects": []any{map[string]any{"id": projectID, "absolutePath": projectRoot}}})
+	if err = os.WriteFile(filepath.Join(nucleusRoot, ".core", ".nucleus-config.json"), catalog, 0600); err != nil {
+		t.Fatal(err)
+	}
+	repositoryBinding := &authority.RepositoryBindingStore{Path: filepath.Join(appDataRoot, "authority", "repository-bindings.json")}
+	if err = repositoryBinding.Save(authority.RepositoryBinding{SchemaVersion: "bloom.repository-binding/v1", ProjectID: projectID, RepositoryID: repositoryID,
+		Root: projectRoot, InstallationID: identity.InstallationID, AuthorityVersion: "1", AuthorizedBy: principalID, Status: "active", Revision: 1, AuthorizedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	intentState, _ := json.Marshal(map[string]string{"mandate_id": mandateID, "intent_id": intentID})
+	if err = os.WriteFile(filepath.Join(intentRoot, ".ing_state.json"), intentState, 0600); err != nil {
+		t.Fatal(err)
+	}
+	ledger := map[string]any{"state": "state_advanced", "state_advanced": true, "closure_semantics": "logical_contributions",
+		"identity": map[string]any{"intent_id": intentID, "intent_type": "ing", "stage": "consolidation"},
+		"effects":  []any{map[string]any{"status": "applied"}, map[string]any{"status": "applied"}, map[string]any{"status": "applied"}}}
+	ledgerRaw, _ := json.Marshal(ledger)
+	ledgerCanonical, err := pythonCanonicalJSON(ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledgerCanonicalSum := sha256.Sum256(ledgerCanonical)
+	clusterID := "core-logic-and-testing"
+	asset := gene.AssetRef{ProjectID: projectID, RepositoryID: repositoryID, Kind: "document", RepositoryRelativePath: inputRef}
+	contribution := gene.Contribution{SchemaVersion: gene.SchemaVersion, ContributionID: contributionID, ProjectID: projectID, GeneID: geneID, MandateID: mandateID,
+		IntentID: intentID, DeclaredFunction: "Fixture accepted contribution", Assets: []gene.AssetRef{asset}, Ratification: gene.RatificationEvidence{DecisionID: decisionID}}
+	geneIdentity := gene.Identity{SchemaVersion: gene.SchemaVersion, ProjectID: projectID, GeneID: geneID, Function: "Fixture accepted contribution",
+		Origin: gene.Origin{MandateID: mandateID, IntentID: intentID, DecisionID: decisionID}}
+	decisions := []map[string]string{{"cluster_id": clusterID, "human_decision": "approved"}}
+	decisionRaw, _ := json.Marshal(decisions)
+	decisionCanonical, err := authority.Canonicalize(decisionRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionSum := sha256.Sum256(decisionCanonical)
+	decisionDigest := hex.EncodeToString(decisionSum[:])
+	result := map[string]any{"schema_version": "bloom.ing-result/v1", "status": "done", "mandate_id": mandateID, "intent_id": intentID,
+		"effect_ledger_digest":   "sha256:" + hex.EncodeToString(ledgerCanonicalSum[:]),
+		"accepted_contributions": []acceptedINGContribution{{ClusterID: clusterID, ContributionID: contributionID, DecisionID: decisionID, GeneID: geneID, HumanDecision: "approved", ProjectID: projectID, Contribution: contribution, Identity: geneIdentity}},
+		"rejected_clusters":      []any{}}
+	resultRaw, _ := json.Marshal(result)
+	resultSum, ledgerSum := sha256.Sum256(resultRaw), sha256.Sum256(ledgerRaw)
+	resultPath, ledgerPath := filepath.Join(intentRoot, "ing_result.json"), filepath.Join(intentRoot, ".consolidation", ".turn_1", ".effect_ledger.json")
+	if err = os.WriteFile(resultPath, resultRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(ledgerPath, ledgerRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	stateJournal := map[string]any{"mandateId": mandateID, "projectId": projectID, "stateVersion": 1, "status": "in_progress", "currentAction": "doc-after-ing-1",
+		"adoption":    map[string]any{"contractDigest": envelope.ContractDigest},
+		"preparation": map[string]any{"contractDigest": envelope.ContractDigest, "sourceFiles": []string{"README.md"}},
+		"activation":  map[string]any{"status": "active", "contractDigest": envelope.ContractDigest},
+		"actions": map[string]any{"ing-1": map[string]any{"intentId": intentID, "status": "completed", "resultRef": resultPath, "resultSha256": hex.EncodeToString(resultSum[:]),
+			"ledgerRef": ledgerPath, "ledgerSha256": hex.EncodeToString(ledgerSum[:]), "decisionDigest": decisionDigest}},
+		"ingDecision": map[string]any{"actionId": "ing-1", "contractDigest": envelope.ContractDigest, "intentId": intentID, "decisionDigest": decisionDigest, "decisions": decisions}}
+	statePath := filepath.Join(mandateDir, "mandate_state.json")
+	stateJournalRaw, _ := json.Marshal(stateJournal)
+	if err = os.WriteFile(statePath, stateJournalRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	activity := &MandateINGGeneMaterializationActivity{IdentityPath: identityPath, AppDataDir: appDataRoot, Now: func() time.Time { return now }}
+	resultActivity, err := activity.Run(context.Background(), MandateIntentInput{MandatesRoot: mandatesRoot, MandateID: mandateID, ActionID: "doc-after-ing-1", INGActionID: "ing-1"})
+	if err != nil {
+		t.Fatalf("materialization activity: %v", err)
+	}
+	if resultActivity.ReceiptRef != filepath.Join(mandateDir, "evidence", geneMaterializationReceiptName) {
+		t.Fatalf("unexpected receipt ref: %s", resultActivity.ReceiptRef)
+	}
+	var receipt gene.INGMaterializationBatchReceipt
+	receiptRaw, err := os.ReadFile(resultActivity.ReceiptRef)
+	if err != nil || json.Unmarshal(receiptRaw, &receipt) != nil {
+		t.Fatalf("read generated batch receipt: %v", err)
+	}
+	if receipt.SchemaVersion != gene.INGMaterializationBatchReceiptSchema || len(receipt.Materializations) != 1 {
+		t.Fatalf("generated receipt incomplete: %#v", receipt)
+	}
+	if _, err = (&gene.Store{Root: nucleusRoot}).VerifyINGMaterializationBatchReceipt(resultActivity.ReceiptRef, receipt.Binding); err != nil {
+		t.Fatalf("receipt did not verify from resolved Nucleus root %q: %v", nucleusRoot, err)
+	}
+	if _, err = (&gene.Store{Root: appDataRoot}).VerifyINGMaterializationBatchReceipt(resultActivity.ReceiptRef, receipt.Binding); err == nil {
+		t.Fatal("receipt unexpectedly verified from the unrelated AppData root")
+	}
+}
+
+func writeINGMaterializationTestActReceipts(t *testing.T, mandateDir string, contract mandatecontract.Contract, contractDigest, organizationID string, identity *authority.LocalIdentity, now time.Time) []byte {
+	t.Helper()
+	seed, _ := hex.DecodeString("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+	rootPrivate := ed25519.NewKeyFromSeed(seed)
+	actorPublic, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actorPublicText := base64.RawURLEncoding.EncodeToString(actorPublic)
+	manifest := authority.TrustManifestPayload{Schema: "bloom.authority.trust-manifest", SchemaVersion: "1.0", ManifestID: "fixture-manifest", Issuer: "fixture-issuer",
+		OrganizationID: organizationID, ManifestVersion: "1", IssuedAt: now.Add(-time.Minute), NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), RootKeyID: "development-rfc8032-root",
+		Keys: []authority.TrustKey{{KeyID: identity.InstallationID, PublicKey: base64.RawURLEncoding.EncodeToString(identity.PublicKey), Status: "active", ValidFrom: now.Add(-time.Hour)}}}
+	manifestRaw := signINGMaterializationTestEnvelope(t, manifest, "development-rfc8032-root", rootPrivate, "BLOOM-AUTHORITY-TRUST-MANIFEST-v1")
+	for _, operation := range []string{"approve", "activate"} {
+		challenge := "fixture-challenge-" + operation
+		challengeSum := sha256.Sum256([]byte(challenge))
+		attestation := authority.ActorAttestation{Schema: "bloom.authority.actor-attestation", SchemaVersion: "1.2", AttestationID: "fixture-attestation-" + operation, Issuer: "fixture-issuer",
+			OrganizationID: organizationID, InstallationID: identity.InstallationID, PrincipalID: "00000000-0000-4000-8000-000000000308", ActorPublicKey: actorPublicText,
+			Audience: "bloom.authority.mandate-consent", ChallengeDigest: base64.RawURLEncoding.EncodeToString(challengeSum[:]), IssuedAt: now.Add(-time.Second), ExpiresAt: now.Add(time.Hour),
+			Operation: operation, MandateID: contract.MandateID, ContractDigest: contractDigest}
+		attestationRaw := signINGMaterializationTestEnvelope(t, attestation, identity.InstallationID, identity.PrivateKey, "BLOOM-AUTHORITY-ACTOR-ATTESTATION-v1")
+		permission := "mandate.sign"
+		if operation == "activate" {
+			permission = "mandate.install"
+		}
+		decision := authority.AuthorityDecision{Outcome: authority.DecisionAllow, Reason: "permission_granted", Operation: permission, PrincipalID: attestation.PrincipalID,
+			Scope: authority.Scope{Type: "project", ID: contract.ProjectID}, AuthorityVersion: "1", EvaluatedAt: now, ControlRevisions: []string{}}
+		receipt, signErr := mandatecontract.SignActReceipt(mandatecontract.ActReceipt{Operation: operation, MandateID: contract.MandateID, ContractDigest: contractDigest, Contract: contract,
+			OrganizationID: organizationID, Attestation: attestationRaw, Manifest: manifestRaw, ActorChallenge: challenge, ActorPublicKey: actorPublicText, Decision: decision, RecordedAt: now}, identity)
+		if signErr != nil {
+			t.Fatal(signErr)
+		}
+		if saveErr := mandatecontract.SaveActReceipt(mandateDir, receipt); saveErr != nil {
+			t.Fatal(saveErr)
+		}
+	}
+	return manifestRaw
+}
+
+func signINGMaterializationTestEnvelope(t *testing.T, payload any, keyID string, privateKey ed25519.PrivateKey, domain string) []byte {
+	t.Helper()
+	payloadRaw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := authority.Canonicalize(payloadRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(canonical)
+	signature := ed25519.Sign(privateKey, append(append([]byte(domain), 0), canonical...))
+	envelope := authority.Envelope{Payload: payloadRaw, Integrity: authority.Integrity{Canonicalization: "JCS-RFC8785", DigestAlgorithm: "SHA-256",
+		Digest: base64.RawURLEncoding.EncodeToString(digest[:]), SignatureAlgorithm: "Ed25519", KeyID: keyID, Signature: base64.RawURLEncoding.EncodeToString(signature)}}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func TestIndependentDOCAfterINGFailsClosedWithoutOrWithAlteredReceipt(t *testing.T) {

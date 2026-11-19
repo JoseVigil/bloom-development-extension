@@ -40,6 +40,8 @@ class HydrateCommand(BaseCommand):
             briefing_file: Optional[Path] = typer.Option(None, "--briefing-file", "-B", help="Path to text file containing briefing"),
             files: Optional[List[str]] = typer.Option(None, "--files", "-F", help="Files to include in context (comma-separated)"),
             nucleus_path: Optional[Path] = typer.Option(None, "--nucleus-path", "-p", help="Path to Bloom project root"),
+            project_id: Optional[str] = typer.Option(None, "--project-id", help="Canonical governed Project UUID for ING reception assets"),
+            repository_id: Optional[str] = typer.Option(None, "--repository-id", help="Canonical governed Repository UUID shared by the supplied ING files"),
         ):
             """
             Hydrate an intent by processing source files and briefing.
@@ -94,6 +96,8 @@ class HydrateCommand(BaseCommand):
                     briefing=final_briefing,
                     files=file_list,
                     nucleus_path=nucleus_path,
+                    project_id=project_id,
+                    repository_id=repository_id,
                     verbose=gc.verbose
                 )
                 

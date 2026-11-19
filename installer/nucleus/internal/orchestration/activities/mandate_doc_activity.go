@@ -39,10 +39,11 @@ type MandateDOCResult struct {
 }
 
 type MandateDOCActivity struct {
-	IdentityPath             string
-	BrainPath                string
-	RunBrain                 brainCommandRunner
-	VerifyINGMaterialization func(root, evidencePath string, expected gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error)
+	IdentityPath                  string
+	BrainPath                     string
+	RunBrain                      brainCommandRunner
+	VerifyINGMaterialization      func(root, evidencePath string, expected gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error)
+	VerifyINGMaterializationBatch func(root, evidencePath string, expected gene.INGMaterializationBatchBinding) (gene.INGMaterializationBatchReceipt, error)
 }
 
 // RunAfterDIS creates or resumes one independent DOC only after the durable
@@ -81,7 +82,7 @@ func (a *MandateDOCActivity) RunAfterDIS(ctx context.Context, input MandateInten
 		} `json:"actions"`
 	}
 	if json.Unmarshal(stateRaw, &state) != nil || state.MandateID != input.MandateID || state.ProjectID != envelope.Contract.ProjectID ||
-		state.Adoption.ContractDigest != envelope.ContractDigest || state.Preparation == nil || state.Preparation.ContractDigest != envelope.ContractDigest || len(state.Preparation.SourceFiles) == 0 {
+		!boundJournal(stateRaw, envelope.ContractDigest) || state.Preparation == nil || state.Preparation.ContractDigest != envelope.ContractDigest || len(state.Preparation.SourceFiles) == 0 {
 		return result, fmt.Errorf("prepared DOC source binding invalid")
 	}
 	disAction, docAction, err := signedDOCFollowingDIS(envelope.Contract.Actions, input.DISActionID, input.ActionID)
@@ -152,7 +153,7 @@ func (a *MandateDOCActivity) RunAfterING(ctx context.Context, input MandateInten
 		} `json:"actions"`
 	}
 	if json.Unmarshal(stateRaw, &rawState) != nil || rawState.MandateID != input.MandateID || rawState.ProjectID != envelope.Contract.ProjectID ||
-		rawState.Adoption.ContractDigest != envelope.ContractDigest || rawState.Preparation == nil || rawState.Preparation.ContractDigest != envelope.ContractDigest || len(rawState.Preparation.SourceFiles) == 0 {
+		!boundJournal(stateRaw, envelope.ContractDigest) || rawState.Preparation == nil || rawState.Preparation.ContractDigest != envelope.ContractDigest || len(rawState.Preparation.SourceFiles) == 0 {
 		return result, fmt.Errorf("prepared DOC source binding invalid")
 	}
 	ing := rawState.Actions[ingAction.ActionID]
@@ -164,26 +165,57 @@ func (a *MandateDOCActivity) RunAfterING(ctx context.Context, input MandateInten
 	if err != nil {
 		return result, fmt.Errorf("ING canonical Gene materialization receipt missing: %w", err)
 	}
-	var receipt gene.INGMaterializationReceipt
-	if json.Unmarshal(receiptRaw, &receipt) != nil || receipt.ReceiptDigest != ing.MaterializationDigest {
-		return result, fmt.Errorf("ING canonical Gene materialization receipt digest mismatch")
-	}
-	expected := receipt.Binding
-	if expected.ProjectID != rawState.ProjectID || expected.MandateID != input.MandateID || expected.ContractDigest != envelope.ContractDigest ||
-		expected.INGActionID != ingAction.ActionID || expected.IntentID != ing.IntentID || expected.DecisionDigest != ing.DecisionDigest ||
-		expected.INGResultDigest != ing.ResultSHA || expected.INGLedgerDigest != ing.LedgerSHA {
-		return result, fmt.Errorf("ING canonical Gene materialization binding mismatch")
-	}
 	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
-	verify := a.VerifyINGMaterialization
-	if verify == nil {
-		verify = func(root, evidencePath string, binding gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error) {
-			return (&gene.Store{Root: root}).VerifyINGMaterializationReceipt(evidencePath, binding)
-		}
+	var receiptHeader struct {
+		SchemaVersion string `json:"schema_version"`
 	}
-	verified, err := verify(nucleusRoot, ing.MaterializationRef, expected)
-	if err != nil || verified.ReceiptDigest != ing.MaterializationDigest {
+	if json.Unmarshal(receiptRaw, &receiptHeader) != nil {
 		return result, fmt.Errorf("ING canonical Gene materialization receipt invalid")
+	}
+	switch receiptHeader.SchemaVersion {
+	case gene.INGMaterializationReceiptSchema:
+		var receipt gene.INGMaterializationReceipt
+		if json.Unmarshal(receiptRaw, &receipt) != nil || receipt.ReceiptDigest != ing.MaterializationDigest {
+			return result, fmt.Errorf("ING canonical Gene materialization receipt digest mismatch")
+		}
+		expected := receipt.Binding
+		if expected.ProjectID != rawState.ProjectID || expected.MandateID != input.MandateID || expected.ContractDigest != envelope.ContractDigest ||
+			expected.INGActionID != ingAction.ActionID || expected.IntentID != ing.IntentID || expected.DecisionDigest != ing.DecisionDigest ||
+			expected.INGResultDigest != ing.ResultSHA || expected.INGLedgerDigest != ing.LedgerSHA {
+			return result, fmt.Errorf("ING canonical Gene materialization binding mismatch")
+		}
+		verify := a.VerifyINGMaterialization
+		if verify == nil {
+			verify = func(root, evidencePath string, binding gene.INGMaterializationBinding) (gene.INGMaterializationReceipt, error) {
+				return (&gene.Store{Root: root}).VerifyINGMaterializationReceipt(evidencePath, binding)
+			}
+		}
+		verified, verifyErr := verify(nucleusRoot, ing.MaterializationRef, expected)
+		if verifyErr != nil || verified.ReceiptDigest != ing.MaterializationDigest {
+			return result, fmt.Errorf("ING canonical Gene materialization receipt invalid")
+		}
+	case gene.INGMaterializationBatchReceiptSchema:
+		var receipt gene.INGMaterializationBatchReceipt
+		if json.Unmarshal(receiptRaw, &receipt) != nil || receipt.ReceiptDigest != ing.MaterializationDigest {
+			return result, fmt.Errorf("ING canonical Gene batch receipt digest mismatch")
+		}
+		expected, bindingErr := expectedINGMaterializationBatchBinding(mandateDir, envelope.Contract, envelope.ContractDigest, ingAction.ActionID,
+			ing.IntentID, ing.DecisionDigest, ing.ResultSHA, ing.LedgerSHA, ing.ResultRef, rawState.Actions[ingAction.ActionID])
+		if bindingErr != nil || !equalDOCINGBatchBinding(receipt.Binding, expected) {
+			return result, fmt.Errorf("ING canonical Gene batch receipt binding mismatch")
+		}
+		verify := a.VerifyINGMaterializationBatch
+		if verify == nil {
+			verify = func(root, evidencePath string, binding gene.INGMaterializationBatchBinding) (gene.INGMaterializationBatchReceipt, error) {
+				return (&gene.Store{Root: root}).VerifyINGMaterializationBatchReceipt(evidencePath, binding)
+			}
+		}
+		verified, verifyErr := verify(nucleusRoot, ing.MaterializationRef, expected)
+		if verifyErr != nil || verified.ReceiptDigest != ing.MaterializationDigest {
+			return result, fmt.Errorf("ING canonical Gene batch receipt invalid")
+		}
+	default:
+		return result, fmt.Errorf("unsupported ING canonical Gene materialization receipt schema")
 	}
 	projectPath, err := resolvePreparedProject(nucleusRoot, rawState.ProjectID, rawState.Preparation.SourceFiles, envelope.Contract.Inputs)
 	if err != nil {
@@ -196,6 +228,103 @@ func (a *MandateDOCActivity) RunAfterING(ctx context.Context, input MandateInten
 	result = MandateDOCResult{MandateID: input.MandateID, ActionID: docAction.ActionID, INGActionID: ingAction.ActionID, FollowingActionID: following.ActionID, ContractDigest: envelope.ContractDigest,
 		TriggerIntent: ing.IntentID, Name: "doc-after-ing-" + ing.IntentID, ProjectID: rawState.ProjectID, ProjectPath: projectPath}
 	return a.runDOC(ctx, input, result, nucleusRoot, rawState.Preparation.SourceFiles)
+}
+
+func expectedINGMaterializationBatchBinding(mandateDir string, contract mandatecontract.Contract, contractDigest, actionID, intentID, decisionDigest, resultDigest, ledgerDigest, resultPath string,
+	ingState struct {
+		IntentID              string `json:"intentId"`
+		Status                string `json:"status"`
+		ResultRef             string `json:"resultRef"`
+		ResultSHA             string `json:"resultSha256"`
+		LedgerRef             string `json:"ledgerRef"`
+		LedgerSHA             string `json:"ledgerSha256"`
+		DecisionDigest        string `json:"decisionDigest"`
+		MaterializationRef    string `json:"geneMaterializationReceiptRef"`
+		MaterializationDigest string `json:"geneMaterializationReceiptDigest"`
+	}) (gene.INGMaterializationBatchBinding, error) {
+	var failed gene.INGMaterializationBatchBinding
+	resultRaw, err := os.ReadFile(resultPath)
+	if err != nil {
+		return failed, err
+	}
+	sum := sha256.Sum256(resultRaw)
+	if hex.EncodeToString(sum[:]) != resultDigest || ingState.ResultRef != resultPath || ingState.ResultSHA != resultDigest || ingState.LedgerSHA != ledgerDigest ||
+		ingState.DecisionDigest != decisionDigest || ingState.IntentID != intentID || ingState.Status != "completed" {
+		return failed, fmt.Errorf("persisted ING result binding changed")
+	}
+	ledgerRaw, err := os.ReadFile(ingState.LedgerRef)
+	if err != nil {
+		return failed, err
+	}
+	ledgerSum := sha256.Sum256(ledgerRaw)
+	if hex.EncodeToString(ledgerSum[:]) != ledgerDigest {
+		return failed, fmt.Errorf("persisted ING effect ledger digest changed")
+	}
+	var result acceptedINGResult
+	if json.Unmarshal(resultRaw, &result) != nil || result.SchemaVersion != "bloom.ing-result/v1" || result.Status != "done" || result.MandateID != contract.MandateID ||
+		result.IntentID != intentID || len(result.AcceptedContributions) == 0 || len(result.RejectedClusters) != 0 {
+		return failed, fmt.Errorf("persisted ING result invalid for batch receipt")
+	}
+	var resultMap map[string]any
+	if json.Unmarshal(resultRaw, &resultMap) != nil || verifyINGEffectLedger(ledgerRaw, resultMap, intentID) != nil {
+		return failed, fmt.Errorf("persisted ING effect ledger invalid for batch receipt")
+	}
+	stateRaw, err := os.ReadFile(filepath.Join(mandateDir, "mandate_state.json"))
+	if err != nil {
+		return failed, err
+	}
+	var journal struct {
+		INGDecision ingDecisionJournal `json:"ingDecision"`
+	}
+	if json.Unmarshal(stateRaw, &journal) != nil || journal.INGDecision.DecisionDigest != decisionDigest || journal.INGDecision.ActionID != actionID ||
+		journal.INGDecision.ContractDigest != contractDigest || journal.INGDecision.IntentID != intentID {
+		return failed, fmt.Errorf("persisted ING decision binding changed")
+	}
+	computedDecisionDigest, err := canonicalDecisionDigest(journal.INGDecision.Decisions)
+	if err != nil || computedDecisionDigest != decisionDigest {
+		return failed, fmt.Errorf("persisted ING decision digest changed")
+	}
+	decisions := map[string]string{}
+	for _, item := range journal.INGDecision.Decisions {
+		if item.ClusterID == "" || (item.HumanDecision != "approved" && item.HumanDecision != "overridden") || decisions[item.ClusterID] != "" {
+			return failed, fmt.Errorf("persisted ING decision invalid")
+		}
+		decisions[item.ClusterID] = item.HumanDecision
+	}
+	binding := gene.INGMaterializationBatchBinding{ProjectID: contract.ProjectID, MandateID: contract.MandateID, ContractDigest: strings.TrimPrefix(contractDigest, "sha256:"),
+		INGActionID: actionID, IntentID: intentID, DecisionDigest: strings.TrimPrefix(decisionDigest, "sha256:"),
+		INGResultDigest: strings.TrimPrefix(resultDigest, "sha256:"), INGLedgerDigest: strings.TrimPrefix(ledgerDigest, "sha256:"), Items: make([]gene.INGMaterializationBinding, 0, len(result.AcceptedContributions))}
+	seen := map[string]bool{}
+	for _, item := range result.AcceptedContributions {
+		decision := decisions[item.ClusterID]
+		if item.ProjectID != contract.ProjectID || item.Contribution.ProjectID != contract.ProjectID || item.Contribution.MandateID != contract.MandateID ||
+			item.Contribution.IntentID != intentID || item.ContributionID == "" || item.GeneID == "" || item.DecisionID == "" || item.HumanDecision != decision ||
+			item.Contribution.ContributionID != item.ContributionID || item.Contribution.GeneID != item.GeneID || item.Contribution.Ratification.DecisionID != item.DecisionID ||
+			(item.HumanDecision != "approved" && item.HumanDecision != "overridden") || seen[item.ContributionID] {
+			return failed, fmt.Errorf("accepted ING contribution binding invalid")
+		}
+		seen[item.ContributionID] = true
+		binding.Items = append(binding.Items, gene.INGMaterializationBinding{ProjectID: contract.ProjectID, GeneID: item.GeneID, ContributionID: item.ContributionID,
+			MandateID: contract.MandateID, ContractDigest: binding.ContractDigest, INGActionID: actionID, IntentID: intentID, DecisionID: item.DecisionID,
+			DecisionDigest: binding.DecisionDigest, HumanDecision: item.HumanDecision, INGResultDigest: binding.INGResultDigest, INGLedgerDigest: binding.INGLedgerDigest})
+	}
+	if len(seen) != len(decisions) {
+		return failed, fmt.Errorf("ING batch does not cover all persisted decisions")
+	}
+	return binding, nil
+}
+
+func equalDOCINGBatchBinding(a, b gene.INGMaterializationBatchBinding) bool {
+	if a.ProjectID != b.ProjectID || a.MandateID != b.MandateID || a.ContractDigest != b.ContractDigest || a.INGActionID != b.INGActionID ||
+		a.IntentID != b.IntentID || a.DecisionDigest != b.DecisionDigest || a.INGResultDigest != b.INGResultDigest || a.INGLedgerDigest != b.INGLedgerDigest || len(a.Items) != len(b.Items) {
+		return false
+	}
+	for i := range a.Items {
+		if a.Items[i] != b.Items[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *MandateDOCActivity) runDOC(ctx context.Context, input MandateIntentInput, result MandateDOCResult, nucleusRoot string, sourceFiles []string) (MandateDOCResult, error) {

@@ -45,6 +45,53 @@ func TestMandateINGDecisionJournalBindingReplayAndConflict(t *testing.T) {
 	}
 }
 
+func TestMandateINGDecisionJournalBindingAllowsLocalPreparationAndActivation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mandate_state.json")
+	fixture := []byte(`{"mandateId":"mandate-1","stateVersion":1,"organizationId":"org-1","preparation":{"contractDigest":"contract-1"},"activation":{"contractDigest":"contract-1","status":"active"},"actions":{"ing-1":{"status":"awaiting_human_decision","intentId":"intent-1","evidenceSha256":"classification-1"}}}`)
+	if err := os.WriteFile(path, fixture, 0600); err != nil {
+		t.Fatal(err)
+	}
+	binding := ingDecisionBinding{MandateID: "mandate-1", ActionID: "ing-1", ContractDigest: "contract-1", OrganizationID: "org-1", InstallationID: "install-1", IntentID: "intent-1", ClassificationDigest: "classification-1"}
+	record := map[string]any{"actionId": "ing-1", "decisionDigest": "decision-1"}
+	if err := persistINGDecision(path, binding, record); err != nil {
+		t.Fatalf("local prepared and activated binding rejected: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var journal map[string]any
+	if json.Unmarshal(data, &journal) != nil || journal["ingDecision"] == nil {
+		t.Fatalf("local decision was not persisted: %s", data)
+	}
+	for _, invalid := range []struct {
+		name   string
+		change func(map[string]any)
+	}{
+		{"wrong contract", func(state map[string]any) { state["preparation"].(map[string]any)["contractDigest"] = "other" }},
+		{"inactive activation", func(state map[string]any) { state["activation"].(map[string]any)["status"] = "prepared" }},
+	} {
+		t.Run(invalid.name, func(t *testing.T) {
+			var state map[string]any
+			if err := json.Unmarshal(fixture, &state); err != nil {
+				t.Fatal(err)
+			}
+			invalid.change(state)
+			mutated, err := json.Marshal(state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			badPath := filepath.Join(t.TempDir(), "mandate_state.json")
+			if err := os.WriteFile(badPath, mutated, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := persistINGDecision(badPath, binding, record); err == nil {
+				t.Fatal("invalid local binding accepted")
+			}
+		})
+	}
+}
+
 func TestMandateINGDecisionCommandHelpAndJSONMetadata(t *testing.T) {
 	cmd := createMandateCommand(nil)
 	child, _, err := cmd.Find([]string{"ing-decision"})

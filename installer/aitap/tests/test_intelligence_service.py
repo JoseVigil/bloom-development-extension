@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from aitap.accounting.store import AccountingStore, digest
-from aitap.intelligence.service import IntelligenceService
+from aitap.intelligence.service import IntelligenceService, vault_purpose
 from aitap.providers.base import ProviderResult, SupplyError
 from aitap.routing.engine import RoutingEngine
 
@@ -28,6 +28,10 @@ def request():
     value["logical_inference_id"] = digest(["intent-1", "classification", "1", value["input_digest"],
                                             value["routing"]["policy_version"]])
     return value
+
+
+def test_dis_mapping_uses_mandate_intelligence_vault_purpose():
+    assert vault_purpose({"intent_type": "dis", "phase": "mapping"}) == "mandate_intelligence"
 
 
 def gen_request():
@@ -116,6 +120,56 @@ def test_gen_crash_during_provider_call_blocks_replay(tmp_path):
     with pytest.raises(SupplyError, match="uncertain"):
         IntelligenceService(engine, AccountingStore(tmp_path), Vault(), recovered).supply(request_value)
     assert recovered.calls == 0
+
+
+def test_failed_pre_provider_vault_resolution_can_resume_same_inference(tmp_path):
+    supplied = service(tmp_path)
+
+    class FailOnceVault:
+        calls = 0
+
+        def resolve(self, reference, purpose=None):
+            self.calls += 1
+            if self.calls == 1:
+                raise SupplyError("VAULT_ACCESS_DENIED", "vault", "Grant not configured")
+            return "test-secret-not-a-real-credential"
+
+    vault = FailOnceVault()
+    supplied.vault = vault
+    request_value = request()
+
+    with pytest.raises(SupplyError) as first:
+        supplied.supply(request_value)
+    assert first.value.code == "VAULT_ACCESS_DENIED"
+    failed = supplied.store.read(request_value["logical_inference_id"])
+    assert failed["state"] == "failed" and failed["attempts"] == []
+    assert failed["error"]["details"]["delivery_uncertain"] is False
+
+    result = supplied.supply(request_value)
+    journal = supplied.store.read(request_value["logical_inference_id"])
+    assert result["outcome"] == "completed"
+    assert journal["state"] == "completed" and len(journal["attempts"]) == 1
+    assert vault.calls == 2 and supplied.provider.calls == 1
+
+
+def test_failed_zero_attempt_journal_with_uncertain_delivery_stays_blocked(tmp_path):
+    supplied = service(tmp_path)
+    request_value = request()
+    journal = {"schema_version": "cognituum.inference-accounting/v1",
+        "logical_inference_id": request_value["logical_inference_id"],
+        "request_digest": digest({k: v for k, v in request_value.items() if k != "request_id"}),
+        "consumer_id": request_value["consumer_id"], "intent": request_value["intent"],
+        "input_digest": request_value["input_digest"], "attempts": [], "state": "failed",
+        "error": {"code": "PROVIDER_TIMEOUT", "stage": "provider", "message": "uncertain",
+                  "details": {"delivery_uncertain": True}}}
+    supplied.store.write(request_value["logical_inference_id"], journal)
+
+    with pytest.raises(SupplyError) as exc:
+        supplied.supply(request_value)
+
+    assert exc.value.uncertain is True
+    assert supplied.vault.calls == 0 and supplied.provider.calls == 0
+    assert supplied.store.read(request_value["logical_inference_id"])["state"] == "failed"
 
 
 def test_gen_requires_generation_phase_before_vault_or_provider(tmp_path):
@@ -236,15 +290,15 @@ def test_ing_classification_uses_genesis_purpose_without_budget_context(tmp_path
     assert provider.calls == 1
 
 
-def test_unapproved_intent_contract_never_reaches_vault_or_provider(tmp_path):
+def test_invalid_dis_phase_fails_schema_before_vault_or_provider(tmp_path):
     supplied = service(tmp_path)
     request_value = request()
-    request_value["intent"].update(intent_type="dis", phase="mapping")
-    request_value["logical_inference_id"] = digest(["intent-1", "mapping", "1",
+    request_value["intent"].update(intent_type="dis", phase="classification")
+    request_value["logical_inference_id"] = digest(["intent-1", "classification", "1",
                                                      request_value["input_digest"],
                                                      request_value["routing"]["policy_version"]])
 
-    with pytest.raises(SupplyError, match="not authorized for Vault access"):
+    with pytest.raises(SupplyError, match="Transport schema validation failed"):
         supplied.supply(request_value)
 
     assert supplied.vault.calls == 0
@@ -271,6 +325,21 @@ def test_retry_policy(tmp_path, code, calls):
     else:
         supplied.supply(request())
     assert supplied.provider.calls == calls
+
+
+def test_pre_send_provider_auth_failure_is_persisted_as_failed_not_in_flight(tmp_path):
+    supplied = service(tmp_path, Provider([
+        SupplyError("PROVIDER_AUTH_FAILED", "provider", "Gemini API key encoding is invalid", uncertain=False)
+    ]))
+
+    with pytest.raises(SupplyError) as error:
+        supplied.supply(request())
+
+    assert error.value.code == "PROVIDER_AUTH_FAILED" and error.value.uncertain is False
+    journal = supplied.store.read(request()["logical_inference_id"])
+    assert journal["state"] == "failed"
+    assert journal["attempts"][0]["outcome"] == "error"
+    assert journal["error"]["details"]["delivery_uncertain"] is False
 
 
 def test_timeout_uncertainty_is_not_automatically_reinvoked(tmp_path):

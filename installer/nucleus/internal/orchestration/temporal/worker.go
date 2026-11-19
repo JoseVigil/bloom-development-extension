@@ -521,6 +521,10 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,
 			}).CompleteING, activity.RegisterOptions{Name: "MandateINGCompletionActivity"})
+			mandateWorker.RegisterActivityWithOptions((&activities.MandateINGGeneMaterializationActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				AppDataDir:   c.Paths.AppDataDir,
+			}).Run, activity.RegisterOptions{Name: "MandateINGGeneMaterializationActivity"})
 			mandateWorker.RegisterActivityWithOptions((&activities.MandateIntentActivity{
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,

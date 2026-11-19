@@ -13,6 +13,17 @@ from aitap.routing.engine import RoutingEngine, RoutingError
 from aitap.runtime_paths import resource_root
 
 
+def _default_routing_files(root: Path, policy_version: str | None) -> tuple[Path, Path]:
+    if policy_version == "initial-mandate/v1":
+        return (root / "policies/initial-mandate-v1.json",
+                root / "registry/initial-mandate-v1.json")
+    if policy_version == "mandate-gen/v1":
+        return (root / "policies/mandate-gen-v1.json",
+                root / "registry/genesis-pilot-v2.json")
+    return (root / "policies/genesis-runtime-intelligence-v2.json",
+            root / "registry/genesis-pilot-v2.json")
+
+
 class IntelligenceSupplyCommand(BaseCommand):
     def metadata(self):
         return CommandMetadata(name="supply", category=CommandCategory.ROUTE,
@@ -48,10 +59,9 @@ class IntelligenceSupplyCommand(BaseCommand):
                        for p in [resolved, *resolved.parents]):
                     raise SupplyError("INVALID_REQUEST", "configuration", "State directory must be outside projects")
                 policy_version = request_value.get("routing", {}).get("policy_version")
-                default_policy = (root / "policies/mandate-gen-v1.json" if policy_version == "mandate-gen/v1"
-                                  else root / "policies/genesis-runtime-intelligence-v2.json")
+                default_policy, default_registry = _default_routing_files(root, policy_version)
                 engine = RoutingEngine.from_files(policy or default_policy,
-                    registry or root / "registry/genesis-pilot-v2.json")
+                    registry or default_registry)
                 # La ruta local usa siempre la politica de acceso empaquetada, el catalogo
                 # y el host loopback de Ollama observado por el colector de la plataforma.
                 result = IntelligenceService(engine, AccountingStore(resolved), local=LocalSupplyContext()).supply(

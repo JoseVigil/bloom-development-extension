@@ -88,9 +88,11 @@ class RoutingEngine:
         rule = self.policy.get("intelligence_supply", {})
         backends = {b["backend_id"]: b for b in self.registry["intelligence_backends"]}
         routes = []
-        for backend_id in dict.fromkeys([rule.get("backend_id"), *rule.get("fallback", [])]):
+        selected = request["routing"].get("destination")
+        candidates = ([selected["backend_id"]] if selected else
+                      [rule.get("backend_id"), *rule.get("fallback", [])])
+        for backend_id in dict.fromkeys(candidates):
             backend = backends.get(backend_id)
-            selected = request["routing"].get("destination")
             if selected and (backend is None or any(backend.get(field) != selected[field]
                                                     for field in ("backend_id", "provider", "model"))):
                 continue

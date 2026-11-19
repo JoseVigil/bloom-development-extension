@@ -98,7 +98,7 @@ func (a *MandateIntentActivity) CompleteING(ctx context.Context, input MandateIn
 		return result, err
 	}
 	deliverySum := sha256.Sum256(mandateRaw)
-	if json.Unmarshal(raw, &journal) != nil || journal.Adoption.ContractDigest != envelope.ContractDigest || journal.Adoption.Digest != hex.EncodeToString(deliverySum[:]) || journal.Adoption.Version == "" || journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID {
+	if json.Unmarshal(raw, &journal) != nil || (!localJournal(raw, envelope.ContractDigest) && (journal.Adoption.ContractDigest != envelope.ContractDigest || journal.Adoption.Digest != hex.EncodeToString(deliverySum[:]) || journal.Adoption.Version == "" || journal.Adoption.OrganizationID != envelope.Contract.OrganizationID || journal.Adoption.InstallationID != envelope.SignatureKeyID)) {
 		return result, fmt.Errorf("adopted journal invalid")
 	}
 	action, actionIndex, err := uniqueSignedAction(envelope.Contract.Actions, "ing")
@@ -383,7 +383,7 @@ func (a *MandateIntentActivity) Run(ctx context.Context, input MandateIntentInpu
 		} `json:"adoption"`
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "mandate_state.json"))
-	if err != nil || json.Unmarshal(raw, &journal) != nil || journal.Adoption.ContractDigest != envelope.ContractDigest {
+	if err != nil || json.Unmarshal(raw, &journal) != nil || !boundJournal(raw, envelope.ContractDigest) {
 		return MandateIntentResult{}, fmt.Errorf("adopted journal does not match signed contract")
 	}
 	nucleusRoot := resolveNucleusRootFromMandatesRoot(input.MandatesRoot)
