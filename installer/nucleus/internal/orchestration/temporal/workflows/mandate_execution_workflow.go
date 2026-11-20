@@ -307,6 +307,7 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 		// It is unreachable until the terminal DIS gate has been verified and
 		// persisted, and its durable completion gates every following Action.
 		var docActionID string
+		var completedDOC activities.MandateDOCResult
 		for {
 			var doc activities.MandateDOCResult
 			if err := workflow.ExecuteActivity(ctx, "MandateDOCAfterDISActivity", activities.MandateIntentInput{
@@ -322,13 +323,31 @@ func MandateExecutionWorkflow(ctx workflow.Context, input MandateExecutionInput)
 				if doc.IntentID == "" || doc.RunDigest == "" {
 					return MandateExecutionResult{Success: false, Error: "DOC completion evidence incomplete"}, nil
 				}
+				completedDOC = doc
 				break
 			}
 			if err := workflow.Sleep(ctx, 5*time.Second); err != nil {
 				return MandateExecutionResult{Success: false, Error: err.Error()}, nil
 			}
 		}
-		return MandateExecutionResult{Success: true, Fulfilled: false}, nil
+		var exp activities.MandateEXPResult
+		if err := workflow.ExecuteActivity(ctx, "MandateEXPActivity", activities.MandateEXPInput{
+			MandatesRoot: input.MandatesRoot, MandateID: input.MandateID,
+		}).Get(ctx, &exp); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		if exp.MandateID != input.MandateID || exp.ActionID != "exp-4" || exp.ContractDigest != completedDOC.ContractDigest ||
+			exp.DOCActionID != completedDOC.ActionID || exp.DOCContractSHA256 == "" || exp.DOCContractSHA256 != completedDOC.ContractSHA256 || exp.ResultRef == "" || exp.ResultSHA256 == "" ||
+			(exp.EvaluationStatus != "ready" && exp.EvaluationStatus != "remediation_required") {
+			return MandateExecutionResult{Success: false, Error: "EXP returned incomplete or unbound evidence"}, nil
+		}
+		if err := workflow.ExecuteActivity(ctx, "PersistAdoptedEXPResultActivity", exp, input.MandatesRoot).Get(ctx, nil); err != nil {
+			return MandateExecutionResult{Success: false, Error: err.Error()}, nil
+		}
+		if exp.EvaluationStatus == "ready" {
+			return MandateExecutionResult{Success: true, Fulfilled: true}, nil
+		}
+		return MandateExecutionResult{Success: false, Error: "EXP requires remediation; signed DEV Action remains pending"}, nil
 	}
 	var genResult activities.MandateGenResult
 	if err := workflow.ExecuteActivity(ctx, "MandateGenActivity", activities.MandateGenInput{

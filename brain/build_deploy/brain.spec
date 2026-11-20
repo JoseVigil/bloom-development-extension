@@ -92,6 +92,7 @@ hiddenimports = [
     'brain.commands.intent.create',
     'brain.commands.intent.delete',
     'brain.commands.intent.download',
+    'brain.commands.intent.evaluate_exp',
     'brain.commands.intent.finalize',
     'brain.commands.intent.freeze',
     'brain.commands.intent.gen_domain',

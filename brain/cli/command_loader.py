@@ -359,6 +359,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load DownloadCommand: {e}")
     
     try:
+        from brain.commands.intent.evaluate_exp import EvaluateExpCommand
+        registry.register(EvaluateExpCommand())
+    except (ImportError, AttributeError) as e:
+        print(f"Warning: Could not load EvaluateExpCommand: {e}")
+
+    try:
         from brain.commands.intent.finalize import FinalizeCommand
         registry.register(FinalizeCommand())
     except (ImportError, AttributeError) as e:
@@ -901,6 +907,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.create',
         'brain.commands.intent.delete',
         'brain.commands.intent.download',
+        'brain.commands.intent.evaluate_exp',
         'brain.commands.intent.finalize',
         'brain.commands.intent.freeze',
         'brain.commands.intent.gen_domain',

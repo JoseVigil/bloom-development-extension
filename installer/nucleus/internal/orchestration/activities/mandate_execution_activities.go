@@ -322,6 +322,111 @@ func PersistAdoptedDISCompletionActivity(ctx context.Context, input MandateDISCo
 	return PersistExecutionResultResult{StateVersion: version}, nil
 }
 
+// PersistAdoptedEXPResultActivity records Brain's verified EXP result and
+// applies only the signed result branch. A ready evaluation closes the
+// Mandate and marks the signed remediation branch and its dependents skipped;
+// remediation_required leaves DEV pending for a human/product implementation.
+func PersistAdoptedEXPResultActivity(ctx context.Context, input MandateEXPResult, mandatesRoot string) (PersistExecutionResultResult, error) {
+	if ctx == nil || ctx.Err() != nil || mandatesRoot == "" || input.MandateID == "" || filepath.Base(input.MandateID) != input.MandateID ||
+		input.ActionID != "exp-4" || input.ContractDigest == "" || input.DOCActionID != "doc-after-dis-2" || input.DOCContractSHA256 == "" ||
+		input.ResultRef == "" || input.ResultSHA256 == "" || (input.EvaluationStatus != "ready" && input.EvaluationStatus != "remediation_required") {
+		return PersistExecutionResultResult{}, fmt.Errorf("adopted EXP result evidence is incomplete")
+	}
+	nucleusRoot := filepath.Dir(filepath.Clean(mandatesRoot))
+	verifiedPath, _, err := verifyEXPArtifact(nucleusRoot, input.ResultRef, input.ResultSHA256, input.MandateID, input.ActionID, input.EvaluationStatus)
+	if err != nil || !sameEvidencePath(verifiedPath, input.ResultRef) {
+		return PersistExecutionResultResult{}, fmt.Errorf("adopted EXP result evidence changed")
+	}
+
+	var skipRecords []map[string]interface{}
+	if input.EvaluationStatus == "ready" {
+		if input.ConditionalActionID != "" || len(input.ConditionalSkipActions) != 3 {
+			return PersistExecutionResultResult{}, fmt.Errorf("ready EXP conditional branch evidence invalid")
+		}
+		wantIDs := []string{"dev-5", "doc-after-dev-5", "exp-6"}
+		wantTypes := []string{"dev", "doc", "exp"}
+		wantDeps := []string{"exp-4", "dev-5", "doc-after-dev-5"}
+		for i, action := range input.ConditionalSkipActions {
+			if action.ActionID != wantIDs[i] || action.IntentType != wantTypes[i] || action.DependsOn != wantDeps[i] {
+				return PersistExecutionResultResult{}, fmt.Errorf("ready EXP conditional dependency chain changed")
+			}
+			if i == 0 && action.WhenResult != "remediation_required" || i > 0 && action.WhenResult != "" {
+				return PersistExecutionResultResult{}, fmt.Errorf("ready EXP conditional result binding invalid")
+			}
+			record := map[string]interface{}{"status": "skipped", "skipReason": "whenResult_not_matched", "dependsOn": action.DependsOn}
+			if action.WhenResult != "" {
+				record["whenResult"] = action.WhenResult
+			}
+			skipRecords = append(skipRecords, record)
+		}
+	} else if input.ConditionalActionID != "dev-5" || len(input.ConditionalSkipActions) != 0 {
+		return PersistExecutionResultResult{}, fmt.Errorf("remediation EXP result does not bind signed DEV Action")
+	}
+
+	path := filepath.Join(mandatesRoot, input.MandateID, "mandate_state.json")
+	version, err := mandatestate.Mutate(path, func(state map[string]interface{}) (bool, error) {
+		actions, _ := state["actions"].(map[string]interface{})
+		docAfterDIS, _ := state["docAfterDIS"].(map[string]interface{})
+		docAction, _ := actions[input.DOCActionID].(map[string]interface{})
+		prior, _ := actions[input.ActionID].(map[string]interface{})
+		currentActionOK := state["currentAction"] == input.DOCActionID ||
+			(state["currentAction"] == input.ActionID && prior != nil && prior["status"] == "completed")
+		if state["mandateId"] != input.MandateID || !journalBinding(state, input.ContractDigest) || actions == nil ||
+			!currentActionOK || docAction == nil || docAction["status"] != "completed" ||
+			docAction["contractSha256"] != input.DOCContractSHA256 || docAfterDIS == nil || docAfterDIS["completed"] != true ||
+			docAfterDIS["status"] != "completed" || docAfterDIS["actionId"] != input.DOCActionID || docAfterDIS["contractSha256"] != input.DOCContractSHA256 {
+			return false, fmt.Errorf("EXP journal does not match completed DOC-after-DIS")
+		}
+		record := map[string]interface{}{"status": "completed", "evaluationStatus": input.EvaluationStatus,
+			"resultRef": input.ResultRef, "resultSha256": input.ResultSHA256}
+		if prior != nil && prior["status"] == "completed" {
+			if !reflect.DeepEqual(prior, record) {
+				return false, fmt.Errorf("EXP result conflicts with prior evidence")
+			}
+			if input.EvaluationStatus == "ready" {
+				for i, skip := range input.ConditionalSkipActions {
+					existing, _ := actions[skip.ActionID].(map[string]interface{})
+					if existing == nil || !reflect.DeepEqual(existing, skipRecords[i]) {
+						return false, fmt.Errorf("EXP skipped branch conflicts with prior state")
+					}
+				}
+				if state["status"] != "completed" || state["fulfilled"] != true {
+					return false, fmt.Errorf("EXP ready terminal state changed")
+				}
+			} else if state["currentAction"] != input.ConditionalActionID || state["status"] == "completed" {
+				return false, fmt.Errorf("EXP remediation state changed")
+			}
+			return false, nil
+		}
+		if prior != nil && prior["status"] != "pending" {
+			return false, fmt.Errorf("EXP Action is not pending")
+		}
+		actions[input.ActionID] = record
+		if input.EvaluationStatus == "ready" {
+			for i, action := range input.ConditionalSkipActions {
+				existing, _ := actions[action.ActionID].(map[string]interface{})
+				if existing != nil && existing["status"] != "pending" && !reflect.DeepEqual(existing, skipRecords[i]) {
+					return false, fmt.Errorf("EXP conditional Action %s cannot be skipped from its current state", action.ActionID)
+				}
+				actions[action.ActionID] = skipRecords[i]
+			}
+			state["status"] = "completed"
+			state["fulfilled"] = true
+			state["currentAction"] = input.ActionID
+		} else {
+			if state["status"] == "completed" || state["fulfilled"] == true {
+				return false, fmt.Errorf("remediation-required EXP cannot fulfill the Mandate")
+			}
+			state["currentAction"] = input.ConditionalActionID
+		}
+		return true, nil
+	})
+	if err != nil {
+		return PersistExecutionResultResult{}, err
+	}
+	return PersistExecutionResultResult{StateVersion: version}, nil
+}
+
 func executionResultKey(input PersistExecutionResultInput) string {
 	if input.ActionID != "" {
 		return input.ActionID

@@ -541,6 +541,12 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
 				BrainPath:    genBrainPath,
 			}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
+			expActivity := &activities.MandateEXPActivity{
+				IdentityPath: filepath.Join(c.Paths.AppDataDir, "authority", "identity.json"),
+				BrainPath:    genBrainPath,
+			}
+			mandateWorker.RegisterActivityWithOptions(expActivity.Run, activity.RegisterOptions{Name: "MandateEXPActivity"})
+			mandateWorker.RegisterActivityWithOptions(activities.PersistAdoptedEXPResultActivity, activity.RegisterOptions{Name: "PersistAdoptedEXPResultActivity"})
 			// AdvancePhaseActivity — CAMBIO esta sesión (Paso 2, transición de
 			// fase: mandate_genesis_phase_activities.go). MandateBuildWorkflow
 			// ahora la invoca después de ingest/cluster/validate y, condicional a

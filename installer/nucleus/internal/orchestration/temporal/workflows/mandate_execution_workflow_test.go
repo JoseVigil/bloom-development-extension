@@ -49,7 +49,9 @@ func TestAdoptedExecutionRunsSignedDOCAfterINGBeforeDIS(t *testing.T) {
 	env.RegisterActivityWithOptions((&activities.MandateIntentActivity{}).ObserveDISTerminal, activity.RegisterOptions{Name: "MandateDISTerminalObservationActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterING, activity.RegisterOptions{Name: "MandateDOCAfterINGActivity"})
 	env.RegisterActivityWithOptions((&activities.MandateDOCActivity{}).RunAfterDIS, activity.RegisterOptions{Name: "MandateDOCAfterDISActivity"})
-	ingCalls, persistCalls, completionCalls, geneMaterializationCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls := 0, 0, 0, 0, 0, 0, 0, 0, 0
+	env.RegisterActivityWithOptions((&activities.MandateEXPActivity{}).Run, activity.RegisterOptions{Name: "MandateEXPActivity"})
+	env.RegisterActivityWithOptions(activities.PersistAdoptedEXPResultActivity, activity.RegisterOptions{Name: "PersistAdoptedEXPResultActivity"})
+	ingCalls, persistCalls, completionCalls, geneMaterializationCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls, expCalls, expPersistCalls := 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 	ingCompletionPersisted, ingGenesMaterialized := false, false
 	disPersisted := false
 	env.OnActivity("MandateIntentActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateIntentInput) (activities.MandateIntentResult, error) {
@@ -135,7 +137,19 @@ func TestAdoptedExecutionRunsSignedDOCAfterINGBeforeDIS(t *testing.T) {
 		if input.ActionID != "c" {
 			t.Errorf("DOC resume lost signed Action identity: %#v", input)
 		}
-		return activities.MandateDOCResult{Ready: true, MandateID: input.MandateID, ActionID: "c", DISActionID: "b", IntentID: "doc-1", DocStatus: "completed", NextAction: "none", RunDigest: "run-hash"}, nil
+		return activities.MandateDOCResult{Ready: true, MandateID: input.MandateID, ActionID: "c", DISActionID: "b", IntentID: "doc-1", ContractDigest: "digest", ContractSHA256: "doc-sha", DocStatus: "completed", NextAction: "none", RunDigest: "run-hash"}, nil
+	})
+	env.OnActivity("MandateEXPActivity", mock.Anything, mock.Anything).Return(func(_ context.Context, input activities.MandateEXPInput) (activities.MandateEXPResult, error) {
+		expCalls++
+		if disDocCalls != 2 || input.MandateID != "mandate-1" {
+			t.Errorf("EXP was dispatched before DOC-after-DIS completion: calls=%d input=%#v", disDocCalls, input)
+		}
+		return activities.MandateEXPResult{MandateID: "mandate-1", ActionID: "exp-4", ContractDigest: "digest", DOCActionID: "c",
+			DOCContractSHA256: "doc-sha", EvaluationStatus: "ready", ResultRef: "exp_result.json", ResultSHA256: "exp-sha"}, nil
+	})
+	env.OnActivity("PersistAdoptedEXPResultActivity", mock.Anything, mock.Anything, mock.Anything).Return(func(context.Context, activities.MandateEXPResult, string) (activities.PersistExecutionResultResult, error) {
+		expPersistCalls++
+		return activities.PersistExecutionResultResult{StateVersion: 6}, nil
 	})
 	env.RegisterDelayedCallback(func() { env.SignalWorkflow("mandate:ing:decision", "decision") }, time.Millisecond)
 	env.ExecuteWorkflow(MandateExecutionWorkflow, MandateExecutionInput{MandateID: "mandate-1", MandatesRoot: "isolated", Adopted: true})
@@ -146,8 +160,8 @@ func TestAdoptedExecutionRunsSignedDOCAfterINGBeforeDIS(t *testing.T) {
 	if err := env.GetWorkflowResult(&result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Success || result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || geneMaterializationCalls != 1 || ingDocCalls != 1 || disCalls != 1 || observeCalls != 2 || terminalPersistCalls != 1 || disDocCalls != 2 {
-		t.Fatalf("result=%#v ing=%d persist=%d complete=%d materialize=%d ingDoc=%d dis=%d observe=%d terminalPersist=%d disDoc=%d", result, ingCalls, persistCalls, completionCalls, geneMaterializationCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls)
+	if !result.Success || !result.Fulfilled || ingCalls != 1 || persistCalls != 1 || completionCalls != 1 || geneMaterializationCalls != 1 || ingDocCalls != 1 || disCalls != 1 || observeCalls != 2 || terminalPersistCalls != 1 || disDocCalls != 2 || expCalls != 1 || expPersistCalls != 1 {
+		t.Fatalf("result=%#v ing=%d persist=%d complete=%d materialize=%d ingDoc=%d dis=%d observe=%d terminalPersist=%d disDoc=%d exp=%d expPersist=%d", result, ingCalls, persistCalls, completionCalls, geneMaterializationCalls, ingDocCalls, disCalls, observeCalls, terminalPersistCalls, disDocCalls, expCalls, expPersistCalls)
 	}
 }
 
